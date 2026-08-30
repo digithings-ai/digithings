@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
@@ -107,7 +108,7 @@ def test_run_and_write_btc_sdca_skips_calibrations(
             (str(t)[:10], float(c), float(c), float(c), float(c))
             for t, c in zip(ts, closes, strict=True)
         ]
-        return _EmptyPositions(), bars, ohlc, {}
+        return _EmptyPositions(), bars, ohlc, {}, None
 
     monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
     settings = gts.load_settings()
@@ -123,9 +124,18 @@ def test_run_and_write_btc_sdca_skips_calibrations(
         )
     assert entry is not None
     assert entry["kind"] == "dca"
-    payload = (output / "btc_sdca.json").read_text()
-    assert "Coefficients" in payload
-    assert "Preset balanced" in payload
+    assert entry["win_rate_pct"] is None
+    assert entry["profit_factor"] is None
+    assert "vs_lump_pct" in entry
+    payload = json.loads((output / "btc_sdca.json").read_text())
+    assert payload["schema_version"] == "1.3"
+    assert payload["dca"] is not None
+    assert payload["win_rate_pct"] is None
+    assert payload["profit_factor"] is None
+    assert payload["long"] is None
+    assert payload["short"] is None
+    assert "Coefficients" in " ".join(payload["notes"])
+    assert "Preset balanced" in " ".join(payload["notes"])
     assert not any("calibrations.example" in rec.message for rec in caplog.records)
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
 

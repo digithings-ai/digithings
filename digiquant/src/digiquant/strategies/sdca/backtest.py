@@ -15,6 +15,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.curve import AccumDistCurve
+from digiquant.strategies.sdca.dca_metrics import flat_dca_mark_to_market
 
 
 class SdcaBacktestReport(BaseModel):
@@ -35,7 +36,18 @@ class SdcaBacktestReport(BaseModel):
     total_pnl: float = Field(..., description="Final portfolio value minus initial cash")
     total_return_pct: float = Field(..., description="total_pnl / initial_cash * 100")
     vs_lump_usd: float = Field(..., description="Final portfolio value minus lump-sum value")
-    vs_lump_pct: float = Field(..., description="% difference vs. the lump-sum benchmark")
+    vs_lump_pct: float = Field(
+        ...,
+        description="% difference vs. the lump-sum benchmark (×100; -15.0 means −15%)",
+    )
+    vs_flat_dca_usd: float = Field(
+        ...,
+        description="Final portfolio value minus the equal-daily-spend benchmark",
+    )
+    vs_flat_dca_pct: float = Field(
+        ...,
+        description="% difference vs. flat DCA (×100; same convention as vs_lump_pct)",
+    )
     dca_max_drawdown_pct: float = Field(..., description="Max peak-to-trough decline, e.g. -0.15")
     buy_hold_max_drawdown_pct: float = Field(..., description="Lump-sum benchmark's max drawdown")
     buy_days: int = Field(..., description="Days with rate > 0")
@@ -43,6 +55,18 @@ class SdcaBacktestReport(BaseModel):
     no_trade_days: int = Field(..., description="Days with null risk or rate == 0")
     avg_risk: float | None = Field(None, description="Mean risk over non-null days")
     avg_rate: float | None = Field(None, description="Mean curve rate (%) over non-null days")
+    avg_cost_basis: float | None = Field(
+        None, description="Total spent on buys / units acquired (quote per unit)"
+    )
+    final_cost_basis_vs_price: float | None = Field(
+        None,
+        description="avg_cost_basis / final price × 100 (percent of last close)",
+    )
+    capital_deployed_pct: float = Field(..., description="Final net deployed / initial cash × 100")
+    capital_deployed_peak_pct: float = Field(
+        ..., description="Peak net deployed / initial cash × 100"
+    )
+    units_accumulated: float = Field(..., description="Ending asset units")
 
 
 def _max_drawdown_pct(values: list[float]) -> float:
@@ -153,6 +177,8 @@ def run_backtest(
         portfolio_value_col.append(cash + asset_units * day_price)
         buy_hold_value_col.append(asset_units_bought_at_start * day_price)
 
+    flat_dca_value_col = flat_dca_mark_to_market(prices, initial_cash)
+
     frame = pl.DataFrame(
         {
             "date": dates,
@@ -165,18 +191,30 @@ def run_backtest(
             "net_deployed": net_deployed_col,
             "portfolio_value": portfolio_value_col,
             "buy_hold_value": buy_hold_value_col,
+            "flat_dca_value": flat_dca_value_col,
         }
     )
 
     final_portfolio_value = portfolio_value_col[-1]
     final_buy_hold_value = buy_hold_value_col[-1]
+    final_flat_dca_value = flat_dca_value_col[-1]
     total_pnl = final_portfolio_value - initial_cash
+
+    gross_spent = sum(u for u in daily_trade_usd if u > 0)
+    units_bought = 0.0
+    for trade_usd, day_price in zip(daily_trade_usd, prices, strict=True):
+        if trade_usd > 0:
+            units_bought += trade_usd / day_price
+    avg_cost = (gross_spent / units_bought) if units_bought > 0 else None
+    cost_vs_price = (avg_cost / prices[-1] * 100.0) if avg_cost is not None else None
 
     report = SdcaBacktestReport(
         total_pnl=total_pnl,
         total_return_pct=total_pnl / initial_cash * 100.0,
         vs_lump_usd=final_portfolio_value - final_buy_hold_value,
         vs_lump_pct=(final_portfolio_value / final_buy_hold_value - 1.0) * 100.0,
+        vs_flat_dca_usd=final_portfolio_value - final_flat_dca_value,
+        vs_flat_dca_pct=(final_portfolio_value / final_flat_dca_value - 1.0) * 100.0,
         dca_max_drawdown_pct=_max_drawdown_pct(portfolio_value_col),
         buy_hold_max_drawdown_pct=_max_drawdown_pct(buy_hold_value_col),
         buy_days=buy_days,
@@ -184,6 +222,11 @@ def run_backtest(
         no_trade_days=no_trade_days,
         avg_risk=risk_sum / non_null_days if non_null_days else None,
         avg_rate=rate_sum / non_null_days if non_null_days else None,
+        avg_cost_basis=avg_cost,
+        final_cost_basis_vs_price=cost_vs_price,
+        capital_deployed_pct=net_deployed_col[-1] / initial_cash * 100.0,
+        capital_deployed_peak_pct=max(net_deployed_col) / initial_cash * 100.0,
+        units_accumulated=asset_units_col[-1],
     )
     return report, frame
 

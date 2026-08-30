@@ -23,7 +23,10 @@ from pydantic import BaseModel, Field
 # 1.2 — added ``signal_delay_days`` (#1462): public tearsheets are generated with
 # the data end date shifted back N calendar days (end-date shift, no redaction),
 # and the payload declares that lag. Back-compatible: defaults to 0 (no delay).
-SCHEMA_VERSION = "1.2"
+# 1.3 — optional ``dca: TearsheetDcaBreakdown`` (#3171). Absent on every existing
+# payload, so 1.0–1.2 fixtures still validate. For ``kind == "dca"`` books,
+# ``win_rate_pct`` / ``profit_factor`` / ``long`` / ``short`` are JSON ``null``.
+SCHEMA_VERSION = "1.3"
 
 
 class SeriesPoint(BaseModel):
@@ -81,6 +84,51 @@ class TradeRecord(BaseModel):
     max_drawdown_pct: float | None = None
 
 
+class TearsheetDcaBreakdown(BaseModel):
+    """DCA-native metrics for ``kind == "dca"`` books (#3171).
+
+    Round-trip win rate / profit factor are meaningless on a continuous
+    accumulation. These fields answer: did the signal beat lump-sum and
+    beat averaging blindly?
+
+    ``_pct`` conventions — **not** uniform across ``TearsheetData`` (#2552,
+    #2549). Every field here that ends in ``_pct`` is a true percent (×100):
+    ``-15.0`` means −15%. A 100× error (storing ``-0.15``) is a bug; tests
+    pin hand-derived values that would fail under that mistake.
+    ``final_cost_basis_vs_price`` is likewise ×100 (``50.0`` = cost is 50%
+    of the final close). Absent / no-buys: ``avg_cost_basis`` and
+    ``final_cost_basis_vs_price`` are ``null``.
+    """
+
+    vs_lump_pct: float = Field(
+        ...,
+        description="Final value vs deploying all capital on day 1, ×100 percent",
+    )
+    vs_flat_dca_pct: float = Field(
+        ...,
+        description="Final value vs equal daily spend over the same window, ×100 percent",
+    )
+    avg_cost_basis: float | None = Field(
+        None, description="Total spent on buys / total units acquired (quote per unit)"
+    )
+    final_cost_basis_vs_price: float | None = Field(
+        None,
+        description="avg_cost_basis / final close × 100 (percent of last price)",
+    )
+    capital_deployed_pct: float = Field(
+        ..., description="Final net deployed / initial capital × 100"
+    )
+    capital_deployed_peak_pct: float = Field(
+        ..., description="Peak net deployed / initial capital × 100"
+    )
+    units_accumulated: float = Field(..., description="Ending position size")
+    buy_days: int = 0
+    sell_days: int = 0
+    no_trade_days: int = 0
+    avg_risk: float | None = None
+    avg_rate: float | None = None
+
+
 class TearsheetData(BaseModel):
     """Everything the renderer needs for one strategy/symbol backtest."""
 
@@ -110,7 +158,7 @@ class TearsheetData(BaseModel):
     sortino_ratio: float | None = None
     calmar_ratio: float | None = None
     profit_factor: float | None = None
-    win_rate_pct: float = 0.0
+    win_rate_pct: float | None = 0.0
     total_trades: int = 0
     avg_trade: float = 0.0
 
@@ -118,6 +166,9 @@ class TearsheetData(BaseModel):
     overall: StatBlock = Field(default_factory=StatBlock)
     long: StatBlock | None = None
     short: StatBlock | None = None
+
+    # ── DCA book (schema 1.3; absent on Slapper payloads) ─────────────────
+    dca: TearsheetDcaBreakdown | None = None
 
     # ── Series + trades ───────────────────────────────────────────────────
     equity_curve: list[SeriesPoint] = Field(default_factory=list)
@@ -184,6 +235,7 @@ def _build_tearsheet(
     notes: Sequence[str] | None = None,
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
     signal_delay_days: int = 0,
+    dca: TearsheetDcaBreakdown | None = None,
 ) -> TearsheetData:
     """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
@@ -194,6 +246,9 @@ def _build_tearsheet(
     candlestick price chart (raw tuples so callers need not import ``OHLCBar``).
     ``signal_delay_days`` declares how far the run's end date was shifted back
     from the freshest available bar (#1462); the caller shifts the data itself.
+    ``dca`` is the schema 1.3 DCA block; when set, trade-based KPIs
+    (``win_rate_pct``, ``profit_factor``, ``long``, ``short``) are forced to
+    ``None`` so a renderer cannot confuse "not applicable" with zero.
     """
     overall = summary.get("all")
     overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
@@ -223,6 +278,7 @@ def _build_tearsheet(
     initial_capital = float(summary.get("initial_capital", 0.0) or 0.0)
     long_block = summary.get("long")
     short_block = summary.get("short")
+    dca_mode = dca is not None
 
     return TearsheetData(
         strategy=str(summary.get("strategy", "")),
@@ -236,20 +292,27 @@ def _build_tearsheet(
         signal_delay_days=signal_delay_days,
         initial_capital=initial_capital,
         final_equity=float(summary.get("final_equity", 0.0) or 0.0),
-        net_profit=overall_block.net_profit,
+        net_profit=overall_block.net_profit
+        if not dca_mode
+        else (float(summary.get("final_equity", 0.0) or 0.0) - initial_capital),
         net_profit_pct=float(summary.get("net_profit_pct", 0.0) or 0.0),
         max_drawdown_pct=float(summary.get("max_drawdown_pct", 0.0) or 0.0),
-        profit_factor=overall_block.profit_factor,
-        win_rate_pct=overall_block.percent_profitable,
-        total_trades=overall_block.trades,
-        avg_trade=overall_block.avg_trade,
-        overall=overall_block,
-        long=_stat_block(long_block if isinstance(long_block, Mapping) else None),
-        short=_stat_block(short_block if isinstance(short_block, Mapping) else None),
+        profit_factor=None if dca_mode else overall_block.profit_factor,
+        win_rate_pct=None if dca_mode else overall_block.percent_profitable,
+        total_trades=0 if dca_mode else overall_block.trades,
+        avg_trade=0.0 if dca_mode else overall_block.avg_trade,
+        overall=StatBlock() if dca_mode else overall_block,
+        long=None
+        if dca_mode
+        else _stat_block(long_block if isinstance(long_block, Mapping) else None),
+        short=None
+        if dca_mode
+        else _stat_block(short_block if isinstance(short_block, Mapping) else None),
+        dca=dca,
         equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in equity_curve],
         drawdown_curve=_drawdown_from_equity(equity_curve, initial_capital),
         ohlc_bars=[OHLCBar(t=t, o=o, h=h, l=low, c=c) for t, o, h, low, c in (ohlc_bars or [])],
-        trades=trade_records,
+        trades=[] if dca_mode else trade_records,
         notes=list(notes or []),
     )
 
@@ -287,12 +350,15 @@ def from_nautilus_run(
     notes: Sequence[str] | None = None,
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
     signal_delay_days: int = 0,
+    dca: TearsheetDcaBreakdown | None = None,
 ) -> TearsheetData:
     """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
     ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
     ``from_pine`` so the renderer consumes one schema regardless of engine.
     ``signal_delay_days`` records the public end-date shift applied upstream
-    (#1462); pass 0 for undelayed (internal) runs."""
+    (#1462); pass 0 for undelayed (internal) runs. Pass ``dca`` for a
+    ``kind == "dca"`` book (#3171) — trade KPIs become ``null``.
+    """
     return _build_tearsheet(
         summary,
         trades,
@@ -303,6 +369,7 @@ def from_nautilus_run(
         notes=notes,
         ohlc_bars=ohlc_bars,
         signal_delay_days=signal_delay_days,
+        dca=dca,
     )
 
 
@@ -380,6 +447,7 @@ __all__ = [
     "OHLCBar",
     "SeriesPoint",
     "StatBlock",
+    "TearsheetDcaBreakdown",
     "TearsheetData",
     "TradeRecord",
     "from_nautilus",

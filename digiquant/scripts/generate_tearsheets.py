@@ -227,13 +227,16 @@ def _avg_trade_pct(trades: list[dict]) -> float:
 def run_nautilus(
     strategy: str, symbol: str, ohlcv, settings: dict, calibration: dict | None = None
 ):
-    """Run the Nautilus backtest; return (positions_report_df, bars_list, ohlc_bars, signal_log).
+    """Run the Nautilus backtest; return (positions, bars_list, ohlc_bars, signal_log, fills_report).
 
     ``bars_list`` is [(date_str, close_float), ...] for the mark-to-market curve.
     ``ohlc_bars`` is [(date_str, o, h, l, c), ...] for the candlestick chart.
     ``signal_log`` maps (entry_date, direction) -> signal type recorded by the
     strategy on entry ("mean_reversion"/"trend"/"trend+mr"/"reversal"); may be
     empty for strategies that do not populate ``_signal_log``.
+    ``fills_report`` is ``trader.generate_fills_report()`` (pandas, Nautilus
+    boundary) so the SDCA publish path can derive schema 1.3 metrics from
+    fills rather than ``SdcaBacktestReport``.
     """
     from datetime import datetime, timezone
 
@@ -352,10 +355,11 @@ def run_nautilus(
     engine.add_strategy(strat)
     engine.run()
     positions = engine.trader.generate_positions_report()
+    fills_report = engine.trader.generate_fills_report()
     # Read the strategy's signal-type side-channel BEFORE dispose() tears it down.
     signal_log = dict(getattr(strat, "_signal_log", {}) or {})
     engine.dispose()
-    return positions, bars_list, ohlc_bars, signal_log
+    return positions, bars_list, ohlc_bars, signal_log, fills_report
 
 
 def trades_from_positions(positions) -> list[dict]:
@@ -482,6 +486,58 @@ def build_equity_and_trades(
     return equity_curve, closed
 
 
+def _sdca_tearsheet_from_nautilus(
+    fills_report: object,
+    bars_list: list[tuple[str, float]],
+    initial_capital: float,
+    *,
+    calibration: dict | None,
+    trade_start: str,
+) -> tuple[object, list[tuple[str, float]], list[dict]]:
+    """DCA metrics + MTM equity from Nautilus fills, not ``SdcaBacktestReport``."""
+    from digiquant.strategies.sdca.curve import AccumDistCurve
+    from digiquant.strategies.sdca.dca_metrics import (
+        breakdown_from_daily,
+        daily_state_from_fills,
+        fills_from_nautilus_report,
+    )
+
+    windowed = [(d, c) for d, c in bars_list if not trade_start or d >= trade_start]
+    fills = fills_from_nautilus_report(fills_report)
+    state = daily_state_from_fills(fills, windowed, initial_capital)
+
+    risk_vals: list[float | None] = [None] * len(windowed)
+    rate_vals: list[float | None] = [None] * len(windowed)
+    risk_path = (calibration or {}).get("risk_path")
+    nodes = (calibration or {}).get("curve_nodes")
+    if risk_path and nodes is not None:
+        import polars as pl
+
+        risk_df = pl.read_parquet(risk_path).select(["date", "risk"])
+        by_date = {
+            str(d): (None if r is None else float(r))
+            for d, r in zip(risk_df["date"].to_list(), risk_df["risk"].to_list(), strict=True)
+        }
+        curve = AccumDistCurve(tuple(float(n) for n in nodes))
+        for i, (day, _close) in enumerate(windowed):
+            r = by_date.get(day)
+            risk_vals[i] = r
+            rate_vals[i] = None if r is None else curve.value_at_risk(r)
+
+    dca = breakdown_from_daily(
+        prices=state["prices"],
+        portfolio_values=state["portfolio_values"],
+        daily_trade_usd=state["daily_trade_usd"],
+        net_deployed=state["net_deployed"],
+        asset_units=state["asset_units"],
+        risk=risk_vals,
+        rate=rate_vals,
+        initial_cash=initial_capital,
+    )
+    equity_curve = [(d, v) for (d, _c), v in zip(windowed, state["portfolio_values"], strict=True)]
+    return dca, equity_curve, []
+
+
 def run_and_write(
     strategy: str,
     symbol: str,
@@ -564,12 +620,25 @@ def run_and_write(
         cal_label,
         signal_delay_days,
     )
-    positions, bars_list, ohlc_bars, signal_log = run_nautilus(
+    positions, bars_list, ohlc_bars, signal_log, fills_report = run_nautilus(
         strategy, symbol, ohlcv, settings, calibration=calibration
     )
     trades = trades_from_positions(positions)
     trades = carry_open_at_period_end(trades, bars_list, trade_start)
-    equity_curve, closed = build_equity_and_trades(trades, bars_list, initial_capital, trade_start)
+
+    dca_block = None
+    if family == "sdca":
+        dca_block, equity_curve, closed = _sdca_tearsheet_from_nautilus(
+            fills_report,
+            bars_list,
+            initial_capital,
+            calibration=calibration,
+            trade_start=trade_start,
+        )
+    else:
+        equity_curve, closed = build_equity_and_trades(
+            trades, bars_list, initial_capital, trade_start
+        )
 
     longs = [t for t in closed if t["direction"] == "long"]
     shorts = [t for t in closed if t["direction"] == "short"]
@@ -585,6 +654,11 @@ def run_and_write(
 
     window = [t for t in equity_curve]
     period = f"{window[0][0]} → {window[-1][0]}" if window else ""
+    net_profit_pct = (
+        (final_equity / initial_capital - 1.0) * 100.0
+        if family == "sdca"
+        else all_m["net_profit_pct"]
+    )
     summary = {
         "strategy": strategy,
         "symbol": symbol,
@@ -592,7 +666,7 @@ def run_and_write(
         "bars": len(window),
         "initial_capital": initial_capital,
         "final_equity": final_equity,
-        "net_profit_pct": all_m["net_profit_pct"],
+        "net_profit_pct": net_profit_pct,
         "max_drawdown_pct": max_dd,
         "all": all_m,
         "long": _dir_metrics(longs, initial_capital),
@@ -611,23 +685,36 @@ def run_and_write(
         for t in closed
     ]
 
-    # Current signal = the leg still open at period end (carry_open_at_period_end
-    # marks it exit_reason="open"); "flat" if the book is closed. last_price is the
-    # as-of (signal-delayed) daily close. This is the digiquant.io position banner.
-    open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
-    current_signal = {
-        "position": open_leg["direction"] if open_leg else "flat",
-        "entry_label": open_leg.get("entry_label", "") if open_leg else "",
-        "last_signal_date": (
-            open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
-        ),
-        "last_price": bars_list[-1][1] if bars_list else None,
-    }
+    # Current signal: slapper uses the open round-trip; SDCA uses units still held.
+    if dca_block is not None:
+        current_signal = {
+            "position": "long" if dca_block.units_accumulated > 0 else "flat",
+            "entry_label": "",
+            "last_signal_date": window[-1][0] if window else "",
+            "last_price": bars_list[-1][1] if bars_list else None,
+        }
+    else:
+        open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
+        current_signal = {
+            "position": open_leg["direction"] if open_leg else "flat",
+            "entry_label": open_leg.get("entry_label", "") if open_leg else "",
+            "last_signal_date": (
+                open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
+            ),
+            "last_price": bars_list[-1][1] if bars_list else None,
+        }
 
-    notes = [
-        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-        f"100% equity compounding, trade window from {trade_start}."
-    ]
+    if family == "sdca":
+        notes = [
+            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+            f"DCA book marked to market (not 100% equity compounding), "
+            f"trade window from {trade_start}."
+        ]
+    else:
+        notes = [
+            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+            f"100% equity compounding, trade window from {trade_start}."
+        ]
     notes.extend(provenance_notes)
     if signal_delay_days:
         notes.append(
@@ -642,22 +729,23 @@ def run_and_write(
         ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
         notes=notes,
         signal_delay_days=signal_delay_days,
+        dca=dca_block,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"{strategy}.json"
     out_path.write_text(td.to_json())
     logger.info(
-        "  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %.2f | win %.1f%% | %d trades",
+        "  Wrote %s | net %.0f%% | maxDD %.1f%% | PF %s | win %s | %d trades",
         out_path,
         td.net_profit_pct,
         td.max_drawdown_pct,
-        td.profit_factor or 0.0,
-        td.win_rate_pct,
+        f"{td.profit_factor:.2f}" if td.profit_factor is not None else "n/a",
+        f"{td.win_rate_pct:.1f}%" if td.win_rate_pct is not None else "n/a",
         td.total_trades,
     )
     baseline = _PUBLISHED_BASELINE.get(strategy)
-    if baseline is not None:
+    if baseline is not None and dca_block is None:
         exp_trades = int(baseline["trades"])
         min_pf = float(baseline["min_pf"])
         pf = float(td.profit_factor or 0.0)
@@ -685,11 +773,15 @@ def run_and_write(
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
         "win_rate_pct": td.win_rate_pct,
-        "avg_trade_pct": _avg_trade_pct(trade_dicts),
+        "avg_trade_pct": None if dca_block is not None else _avg_trade_pct(trade_dicts),
         "total_trades": td.total_trades,
         "generated_at": td.generated_at,
         "href": f"/strategies/{td.strategy}",
     }
+    if dca_block is not None:
+        index_entry["vs_lump_pct"] = dca_block.vs_lump_pct
+        index_entry["vs_flat_dca_pct"] = dca_block.vs_flat_dca_pct
+        index_entry["capital_deployed_pct"] = dca_block.capital_deployed_pct
 
     if push_supabase:
         _push_tearsheet_to_supabase(strategy, td, equity_curve, current_signal, index_entry)
@@ -726,6 +818,10 @@ def _push_tearsheet_to_supabase(
     payload["label"] = index_entry["label"]
     payload["kind"] = index_entry["kind"]
     payload["avg_trade_pct"] = index_entry["avg_trade_pct"]
+    if "vs_lump_pct" in index_entry:
+        payload["vs_lump_pct"] = index_entry["vs_lump_pct"]
+        payload["vs_flat_dca_pct"] = index_entry["vs_flat_dca_pct"]
+        payload["capital_deployed_pct"] = index_entry["capital_deployed_pct"]
 
     curve = [{"t": t, "v": v} for t, v in equity_curve]
     upsert_tearsheet(

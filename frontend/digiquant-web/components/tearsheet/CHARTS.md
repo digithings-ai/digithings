@@ -44,3 +44,16 @@ Screen-only reuse: the homepage preview deck
 (`components/landing/StrategySuite.tsx`) renders the same family
 `CandlestickChart` (compact) — one engine backs every price surface in this
 app. Do not fork the engine per surface.
+
+## Schema 1.3 — DCA block (#3171, renderer #3172)
+
+`TearsheetData.dca` is an optional `TearsheetDcaBreakdown`. Slapper payloads
+omit it and must render unchanged. When `dca` is present (`kind == "dca"`):
+
+- Headline trade KPIs (`win_rate_pct`, `profit_factor`, `long`, `short`) are
+  JSON `null` — hide those tiles; do **not** show a 0% win rate.
+- Library card: prefer `vs_lump_pct` and `capital_deployed_pct` over win rate
+  / trade count (index extras mirror these).
+- Charts to add in #3172: valuation rails, risk-band strip, accumulation
+  view, three-way equity (SDCA / lump / flat DCA). `dca.vs_flat_dca_pct` is
+  the signal-vs-blind-DCA number. All `dca.*_pct` fields are ×100 percents.

@@ -246,6 +246,25 @@ Structural settings (symbol, capital, sizing, 2018 trade window, precision) live
 - `ohlc_bars: list[OHLCBar]` (`{t,o,h,l,c}`) — full-history candlesticks for the price chart. Note this spans the **entire** price series, while `equity_curve`/`trades` are scoped to the `trade_start` window — the renderer must not assume a shared x-axis. Defaults to `[]`; absent on 1.0 fixtures and on adapter paths with no bars.
 - Per-trade signal type carried in `TradeRecord.entry_label` on the Nautilus path. `SlapperStrategy` records each entry's signal family in a metadata-only side-channel (`_signal_log`, keyed by `(entry_date, direction)`) — pure metadata, never fed back into a trade decision. `generate_tearsheets._entry_label` joins it onto round-trip trades and maps to the Pine display taxonomy (`MR Long`/`Trend Long`/`MR&T Long`/`Reversal Long` + Short variants), matching `scripts/validation/pine_backtest.py`. A join miss falls back to `""`.
 
+**Tearsheet schema 1.3** (`tearsheet_data.SCHEMA_VERSION`, #3171) adds an optional
+`dca: TearsheetDcaBreakdown | None` block for `kind == "dca"` books. Every existing
+Slapper payload omits it and still validates. The block carries `vs_lump_pct`,
+`vs_flat_dca_pct` (equal daily spend over the same window — the number that
+isolates the signal from DCA's own averaging), `avg_cost_basis`,
+`final_cost_basis_vs_price`, `capital_deployed_pct` / `capital_deployed_peak_pct`,
+`units_accumulated`, and `buy_days` / `sell_days` / `no_trade_days` /
+`avg_risk` / `avg_rate`. **Every `_pct` field in this block is a true percent
+(×100)** — the same convention as `TearsheetData.net_profit_pct` and
+`SdcaBacktestReport.vs_lump_pct`, and *not* the raw-fraction convention of
+`SdcaBacktestReport.dca_max_drawdown_pct` (#2552 / #2549). For a DCA book,
+`win_rate_pct`, `profit_factor`, `long`, and `short` are JSON `null` (not `0`)
+so a renderer can tell "not applicable" from zero. Published numbers come from
+Nautilus fills + mark-to-market equity (`sdca/dca_metrics.py`);
+`SdcaBacktestReport` remains CI-only. The CI harness adds a `flat_dca_value`
+column and matching report fields so tests can assert parity. Index extras
+mirror `vs_lump_pct` / `vs_flat_dca_pct` / `capital_deployed_pct` for the
+library card (#3172).
+
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
@@ -532,7 +551,8 @@ upstream for cached price history.
 | `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, git-ignored) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
 | `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
-| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. |
+| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
+| `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. |
 | `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`). `write_risk_index()` persists the two-column parquet under every validation `SdcaStrategy._load_risk_index()` already enforces (Date dtype, numeric finite-or-null risk, no null/duplicate dates). `RiskIndexBuildResult` is the Pydantic v2 JSON envelope the MCP tool returns. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. |
 | `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
@@ -558,13 +578,15 @@ Per-day export frame columns (`asset_units` rather than the issue's literal
 negative = sold), `cash`, `asset_units`, `net_deployed` (`initial_cash - cash`),
 `portfolio_value` (`cash + asset_units * price`), `buy_hold_value` (the
 lump-sum benchmark: all
-`initial_cash` deployed at day-0 price, marked to market thereafter).
-`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, and four fields whose shared
-`_pct` suffix spans **two unit systems**: `total_return_pct` and `vs_lump_pct` are
-true percents (×100 at `backtest.py:162,164`, so `-15.0` means −15%), while
-`dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative *fractions*
-(`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100). The drawdown
-pair is therefore **not** interchangeable with `BacktestResult.max_drawdown_pct`,
+`initial_cash` deployed at day-0 price, marked to market thereafter),
+`flat_dca_value` (equal remaining-cash spend each day, #3171).
+`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, `vs_flat_dca_usd`, and
+fields whose shared `_pct` suffix spans **two unit systems**: `total_return_pct`,
+`vs_lump_pct`, and `vs_flat_dca_pct` are true percents (×100, so `-15.0` means
+−15%), while `dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative
+*fractions* (`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100).
+The drawdown pair is therefore **not** interchangeable with
+`BacktestResult.max_drawdown_pct`,
 which is a negative percent — check each field's own docstring before comparing them. Also
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).

@@ -229,6 +229,31 @@ class TestSdcaStrategyNautilusParity:
 
         assert nautilus_portfolio_value == pytest.approx(standalone_portfolio_value, rel=0.01)
 
+        fills_report = engine.trader.generate_fills_report()
+        from digiquant.strategies.sdca.dca_metrics import (
+            breakdown_from_daily,
+            daily_state_from_fills,
+            fills_from_nautilus_report,
+        )
+
+        fills = fills_from_nautilus_report(fills_report)
+        bars = [(str(d), float(p)) for d, p in zip(dates, prices, strict=True)]
+        state = daily_state_from_fills(fills, bars, initial_cash)
+        dca = breakdown_from_daily(
+            prices=state["prices"],
+            portfolio_values=state["portfolio_values"],
+            daily_trade_usd=state["daily_trade_usd"],
+            net_deployed=state["net_deployed"],
+            asset_units=state["asset_units"],
+            risk=risks,
+            rate=[None] * n,  # rate not needed for vs_* / units parity
+            initial_cash=initial_cash,
+        )
+        assert dca.vs_lump_pct == pytest.approx(standalone_report.vs_lump_pct, rel=0.05, abs=0.5)
+        assert dca.units_accumulated == pytest.approx(
+            standalone_report.units_accumulated, rel=0.05, abs=0.01
+        )
+
         engine.dispose()
 
 
