@@ -142,9 +142,24 @@ class VectorizeBackend(DigiIndex):
 
     def add(self, chunks: list[Chunk]) -> None:
         start = time.perf_counter()
-        vectors = [c for c in chunks if c.embedding is not None]
-        if not vectors:
+        if not chunks:
             return
+
+        unembedded = [c for c in chunks if c.embedding is None]
+        if unembedded:
+            provider = self.embedding_provider or self._default_embedder()
+            embeddings = provider.embed([c.content for c in unembedded])  # type: ignore[attr-defined]
+            for chunk, embedding in zip(unembedded, embeddings, strict=True):
+                chunk.embedding = [float(v) for v in embedding]
+
+        vectors = [c for c in chunks if c.embedding is not None]
+        skipped = len(chunks) - len(vectors)
+        if skipped:
+            raise RuntimeError(
+                f"vectorize upsert skipped {skipped} of {len(chunks)} chunks with no embedding"
+            )
+        if not vectors:
+            raise RuntimeError("vectorize upsert received chunks but wrote nothing (no embeddings)")
         for offset in range(0, len(vectors), self._batch_size):
             batch = vectors[offset : offset + self._batch_size]
             ndjson = "\n".join(
