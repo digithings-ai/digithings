@@ -71,7 +71,7 @@ export function CodeTabs({ samples }: { samples: CodeSample[] }) {
               type="button"
               role="tab"
               aria-selected={i === sel}
-              className={`cursor-pointer rounded-t-[7px] border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] transition-colors duration-150 ease-brand ${
+              className={`cursor-pointer rounded-none border border-transparent px-[0.6rem] py-[0.2rem] font-mono text-[0.72rem] transition-colors duration-150 ease-brand ${
                 i === sel ? "bg-accent-weak text-ink" : "text-ink-mute hover:text-ink-soft"
               }`}
               onClick={() => setSel(i)}

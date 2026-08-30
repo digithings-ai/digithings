@@ -252,7 +252,7 @@
 @layer components {
   /* close button — digichat's Button variant=ghost size=icon-sm dress */
   .ctl-sheet-close {
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
   }
 
   .ctl-sheet-close:hover {
@@ -336,7 +336,7 @@
     position: relative;
     isolation: isolate;
     z-index: 50;
-    border-radius: var(--radius-sm, 0.25rem);
+    border-radius: 0;
   }
 
   .ctl-tip-arrow {

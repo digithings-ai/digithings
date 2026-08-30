@@ -167,7 +167,7 @@ export function PerformanceDashboard({
               <span className="min-w-0 truncate text-ink" title={a.name}>
                 {a.name}
               </span>
-              <span className="h-2 overflow-hidden rounded-full bg-ink/[0.08]">
+              <span className="h-2 overflow-hidden rounded-none bg-ink/[0.08]">
                 <span
                   className="block h-full rounded-none bg-accent"
                   style={{ width: `${a.pct}%` }}
