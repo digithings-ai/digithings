@@ -47,8 +47,8 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 
 ```
 §5 secrets + Auth providers + Stripe/Mailgun/Alpaca apps
-  → Edge Function deploys (§3)
-  → develop → main (Pages rebuild; db-migrate will no-op 096–105 already stamped)
+  → Edge Function secrets (needs sbp_) + optional full monorepo settings redeploy
+  → develop → main Pages promote (flag-off; no cutover 900) — human release gate (~191 commits)
   → §6 cutover (Access on → flag flip → anon-drop 900 → verify → Access off)
 ```
 
@@ -124,7 +124,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v9** (thin SHA-pinned GitHub-raw) | Notifications upsert live (PR #3161 merged). Smoke: missing/invalid JWT → gateway `401`. Prefer monorepo bundle once Cursor env has `SUPABASE_ACCESS_TOKEN`=`sbp_…`. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v10** (thin GitHub-raw → `origin/develop` tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401`. Prefer monorepo 9-file bundle once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Management API 403 without `sbp_`). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -236,11 +236,11 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — MCP auth fails (placeholder/unset key); desktop re-auth required | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
 | Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; Agent Mail inbox has no Alpaca verification thread; KYC/browser wall | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Blocked** — env has JWT only; CLI/Management secrets API need personal access token. **Unlock:** set Cursor Cloud environment secret `SUPABASE_ACCESS_TOKEN` (name only — value is a Supabase personal access token `sbp_…`, not the project JWT) via the environment dashboard, then re-run agents. | EF `secrets set`; monorepo `functions deploy` |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked this turn; no new secrets). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) merge | CI green / MERGEABLE; agent `gh` read-only — **human merge** | develop carries notifications wiring natively |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) | **Merged** to `develop` (2026-08-30) | notifications wiring + schema/docs align on develop; settings EF **v10** |
 
 ---
 

@@ -63,27 +63,30 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3161 + settings v9)
+## Agent delivery status (2026-08-30, post-#3161/#3177 + settings v10)
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Notifications wire **merged** as [#3161](https://github.com/digithings-ai/digithings/pull/3161). Docs/schema align open as [#3177](https://github.com/digithings-ai/digithings/pull/3177) (ready; human merge — agent `gh` read-only).
+**Code:** all 12 WPs on `develop` (promotion #3141). Notifications wire **merged** [#3161](https://github.com/digithings-ai/digithings/pull/3161). Docs/schema align **merged** [#3177](https://github.com/digithings-ai/digithings/pull/3177).
 
 **Schema (`core`):** migrations **096–106** applied + stamped on `olympus_schema_migrations` (106 = `notification_prefs` / `notification_log` canonical align). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v9** ACTIVE — thin SHA-pinned GitHub-raw import of #3161 tip (`41a57414…`) including `PATCH /notifications` → `notification_prefs`. Auth smoke: missing/invalid JWT → `401`. Full monorepo bundle preferred once `sbp_` PAT exists for CLI secrets + multi-file deploy hygiene. Project EF secrets still **unset** (Management API 403 without `sbp_`).
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v10** ACTIVE — thin GitHub-raw pin to `origin/develop` tip (`071b78fb…`) including `PATCH /notifications` → `notification_prefs`. Auth smoke: missing/invalid JWT → `401`. Full monorepo 9-file bundle still preferred once `sbp_` PAT exists (secrets + multi-file hygiene). Project EF secrets still **unset** (Management API 403 without `sbp_`; MCP OAuth has no secrets-set tool).
 
 **Secrets (names only):**
 - **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — cannot `supabase secrets set` / Management secrets API.
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — cannot `supabase secrets set` / Management secrets API. **No new secrets** this turn.
 - **Agent Mail:** `digithings@agentmail.to`.
-- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun MCP auth, Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
+- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun MCP auth (`MAILGUN_*` empty; MCP re-auth failed), Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
 
-**Acceptance evidence (re-run this turn, artifacts under `/opt/cursor/artifacts/`):**
+**Acceptance evidence (agent-reachable; artifacts under `/opt/cursor/artifacts/`):**
 - House olympus unit: **420 passed** (`house-olympus-unit.log`).
 - Vault + notify unit: **138 passed** (`kairos-vault-notify-unit.log`).
 - Brokers + contracts: **208 passed**, 2 skipped (`kairos-brokers-contracts.log`).
 - Olympus kairos unit: **67 passed** (`olympus-kairos-unit.log`).
-- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v9-smoke.log`).
-- RLS proof: re-run in progress / prior 61/61 harness (`rls_isolation_proof.log`).
-- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above.
+- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v10-smoke.log`).
+- RLS proof: **59/59 PASS** including migration 106 + staged 900 (`rls_isolation_proof.log`).
+- Olympus static export build: **OK** (`olympus-build.log`; `check:static-export` passed).
+- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above — not faked.
+
+**Pages promote (`develop` → `main`):** agent-reachable and **policy-safe without cutover 900** while `NEXT_PUBLIC_OLYMPUS_AUTH` stays unset (flag-off). `db-migrate` would no-op 096–106 already stamped; `migrations/cutover/` stays inert (`-maxdepth 1`). ~191 commits / ~392 files ahead of `main` — treat as a **human release-gate** promote PR (do not flip auth flag; do not apply 900). Prep notes: `pages-promote-prep.md` artifact.
 
 **Do not mark epic complete** until E2E + human/legal/IBKR gates clear.
