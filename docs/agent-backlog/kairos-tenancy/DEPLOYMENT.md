@@ -25,7 +25,7 @@
 | Chain + RLS harness | [#3140](https://github.com/digithings-ai/digithings/pull/3140) | `develop` via #3141 | 61/61 proof vs canonical chain |
 | 103 trigger fix | [#3147](https://github.com/digithings-ai/digithings/pull/3147) | `develop` | `trigger_set_updated_at` (prod apply found the typo) |
 
-### Schema on `core` (`rwagjbkvxkdwqmouagad`) — **096–105 applied 2026-08-30**
+### Schema on `core` (`rwagjbkvxkdwqmouagad`) — **096–110 + 112 applied (2026-09-01)**
 
 Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 `olympus_schema_migrations` stamps). `097` used the documented
@@ -42,6 +42,11 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 | 104 | `workspace_provider_credentials` (BYOK) | T4 | stamped |
 | 105 | `documents.workspace_id` | T4 | stamped |
 | 106 | align prefs/log to canonical 103 columns | K5/T3 | **applied 2026-08-30** (empty-table rebuild; 103 IF NOT EXISTS had no-op'd on drift) |
+| 107–110 | personal workspace trigger, entitlements, house teaser, anon house-only private books | T0/T1/T5 | stamped |
+| 111 | reserved Group A unique-drop | — | **no file** |
+| 112 | hashed FX Hub invite tables | product | **applied 2026-09-01** (`olympus_schema_migrations` `112_product_invite_codes.sql`; CLI name `112_product_invite_codes`; rows = 0) |
+| (cutover 113) | staged `migrations/cutover/113_drop_legacy_book_uniques.sql` | overlay persist | **not applied** |
+| 114 | `economic_calendar` authenticated SELECT | house | **not stamped** on olympus ledger; human [#3340](https://github.com/digithings-ai/digithings/pull/3340) `db-migrate` |
 | (cutover) | staged `migrations/cutover/900_…` | human | **not applied** |
 
 ### Remaining (human / production gates)

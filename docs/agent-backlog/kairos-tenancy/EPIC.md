@@ -101,8 +101,15 @@ production cron CLIs, remaining-hop proofs from Settings product state, staged
 900 §A2 membership-only restore, and a fail-closed GHA **spec** (not installed:
 `cursor/*` cannot write `.github/workflows/`).
 
-**Schema (`core`):** migrations **096–110** applied (`110_anon_house_only_private_books`
-narrows `anon_read` on private books to house; documents house+system). Live probe
+**Schema (`core`):** migrations **096–110** plus **112** applied. `110_anon_house_only_private_books`
+narrows `anon_read` on private books to house; documents house+system. **112**
+(`112_product_invite_codes.sql`, stamped 2026-09-01T01:10Z) adds hashed FX Hub
+invite tables (RLS on, `service_role` only; invite rows = 0). **111 unused**
+(reserved for Group A unique-drop). Staged cutover **113** (legacy book uniques)
+**not applied**. Repo **114** (calendar authenticated SELECT) is **not** on the
+olympus ledger — live policy already existed; stamp via human [#3340](https://github.com/digithings-ai/digithings/pull/3340)
+`db-migrate` on `main`. CLI also lists `113_economic_calendar_authenticated_select`
+(calendar SELECT applied under the **wrong number** — not the unique-drop). Live probe
 2026-08-31: overlay doc visible to service (1) and hidden from `anon` (0); house
 `positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
 (throwaway DB + 001–110 + staged 900 A2): **pre-cutover 110 8/8 + post-cutover 59/59 PASS** (2026-08-31).
