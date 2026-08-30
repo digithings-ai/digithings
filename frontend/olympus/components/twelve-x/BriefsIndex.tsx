@@ -121,7 +121,7 @@ export default function BriefsIndex({
       </header>
 
       {dayBriefs.length === 0 ? (
-        <div className="glass-card p-10 text-center text-sm text-ink-mute">
+        <div className="oly-slab p-10 text-center text-sm text-ink-mute">
           {activeDate
             ? `No research briefs for ${activeDate}.`
             : 'No research briefs in this window yet.'}
@@ -132,7 +132,7 @@ export default function BriefsIndex({
             <button
               key={`${b.source_file}-${b.run_date}-${i}`}
               type="button"
-              className="glass-card p-4 text-left transition-colors hover:border-accent/50"
+              className="oly-slab p-4 text-left transition-colors hover:border-accent/50"
               onClick={() => openBrief(b.source_file, b.run_date)}
             >
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">

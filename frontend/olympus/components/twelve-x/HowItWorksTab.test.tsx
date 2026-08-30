@@ -78,6 +78,7 @@ describe('HowItWorksTab', () => {
     const html = renderTab();
     expect(html).toContain('border-hair');
     expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('rounded-lg');
     expect(html).not.toContain('<main');
     expect(html).not.toContain('text-up');
     expect(html).not.toContain('text-down');

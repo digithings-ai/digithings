@@ -130,7 +130,7 @@ export default function EventDetailPanel({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
+            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
@@ -148,7 +148,7 @@ export default function EventDetailPanel({
             ).map(([label, value, valueClass]) => (
               <div
                 key={label}
-                className="rounded-lg border border-hair bg-ink/[0.02] px-3 py-2"
+                className="rounded-none border border-hair bg-ink/[0.02] px-3 py-2"
               >
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
                   {label}
@@ -184,7 +184,7 @@ export default function EventDetailPanel({
                   opinions!.citations.map((c, i) => (
                     <div
                       key={`${c.broker}-${c.source_file}-${i}`}
-                      className="rounded-lg border border-hair bg-ink/[0.02] p-3"
+                      className="rounded-none border border-hair bg-ink/[0.02] p-3"
                     >
                       <div className="mb-1.5 flex items-center justify-between gap-2">
                         <span className="font-mono text-xs font-semibold text-ink">

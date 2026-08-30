@@ -113,7 +113,7 @@ export default function TodayTab({
         </div>
 
         <div className="min-w-0 lg:relative lg:self-stretch">
-          <section className="glass-card flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
+          <section className="oly-slab flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
             <header className="mb-3 flex shrink-0 items-baseline gap-2">
               <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
               <span className="ml-auto font-mono text-[10px] text-ink-mute">
@@ -149,7 +149,7 @@ export default function TodayTab({
                       <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
                         <button
                           type="button"
-                          className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                          className="w-full rounded-none border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
                           onClick={() => openBrief(b.source_file, b.run_date)}
                         >
                           <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
@@ -181,7 +181,7 @@ export default function TodayTab({
       </div>
 
       {/* Full-width single-day timeline (replaces the old compact events tile). */}
-      <section className="glass-card p-4">
+      <section className="oly-slab p-4">
         <header className="mb-3 flex items-baseline gap-2">
           <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
           <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>

@@ -4,9 +4,9 @@
  * A compact run-over-run delta glyph (or a "NEW" badge when there's no prior).
  *
  * F5 ruling (#1450): stays LOCAL — no @digithings/web Badge variant renders
- * this dress. The NEW chip is a filled accent chip (bg-accent/15, 4px radius,
+ * this dress. The NEW chip is a filled accent chip (bg-accent/15, zero radius,
  * 10px type); the shared reference dress is the bordered .dg-tier mono
- * micro-caps pill (no fill) and the chat dress has no accent-fill variant.
+ * micro-caps hairline (no fill) and the chat dress has no accent-fill variant.
  * The delta glyph is bare money-tone typography, not a pill at all.
  */
 export interface DeltaChipProps {
@@ -22,7 +22,7 @@ export default function DeltaChip({ delta, decimals = 2, isNew, className }: Del
   if (isNew) {
     return (
       <span
-        className={`text-[10px] rounded bg-accent/15 text-accent px-1${
+        className={`text-[10px] rounded-none bg-accent/15 text-accent px-1${
           className ? ` ${className}` : ''
         }`}
       >

@@ -47,7 +47,7 @@ export default function MatrixTab({
       <div className="flex flex-wrap items-center gap-3 px-1">
         <Grid3x3 size={18} className="shrink-0 text-accent" aria-hidden />
         <h2 className="font-display text-2xl tracking-tight text-ink">Desk view matrix</h2>
-        <span className="rounded bg-term-bg px-1.5 py-0.5 text-[10px] font-medium text-ink-mute">
+        <span className="rounded-none bg-term-bg px-1.5 py-0.5 text-[10px] font-medium text-ink-mute">
           8 of 10 G10 · NOK/SEK omitted
         </span>
       </div>
@@ -61,7 +61,7 @@ export default function MatrixTab({
       </p>
 
       {hasData ? (
-        <div className="glass-card overflow-hidden p-0">
+        <div className="oly-slab overflow-hidden p-0">
           <div className="overflow-x-auto">
             <div role="table" className="min-w-[760px] text-sm" aria-label="Broker by currency view matrix">
               {/* Header row */}
@@ -147,7 +147,7 @@ export default function MatrixTab({
                                 ? setSelectedCell(cell)
                                 : onOpenBrief(cell.source_file, cell.run_date)
                             }
-                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} ${s.hoverBg} ${s.hoverBorder} px-1 py-1.5 text-center transition-colors`}
+                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-none border ${s.bg} ${s.border} ${s.hoverBg} ${s.hoverBorder} px-1 py-1.5 text-center transition-colors`}
                             style={{ opacity: convictionOpacity(cell.conviction) }}
                             title={title}
                           >
@@ -163,7 +163,7 @@ export default function MatrixTab({
                               {(cell.report_date ?? cell.run_date).slice(5)}
                             </span>
                             {hasHistory ? (
-                              <span className="rounded bg-accent/15 px-1 py-0.5 text-[8px] font-semibold tabular-nums text-accent">
+                              <span className="rounded-none bg-accent/15 px-1 py-0.5 text-[8px] font-semibold tabular-nums text-accent">
                                 {totalViews}
                               </span>
                             ) : null}
@@ -195,7 +195,7 @@ export default function MatrixTab({
           </div>
         </div>
       ) : (
-        <div className="glass-card p-10 text-center text-sm text-ink-mute">
+        <div className="oly-slab p-10 text-center text-sm text-ink-mute">
           No desk views available in the recent window.
         </div>
       )}

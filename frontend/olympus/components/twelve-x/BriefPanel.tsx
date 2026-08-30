@@ -58,7 +58,7 @@ export function BriefPanelBody({
 
       {/* Central thesis */}
       {brief.central_thesis ? (
-        <div className="rounded-lg border border-hair bg-ink/[0.02] p-3">
+        <div className="rounded-none border border-hair bg-ink/[0.02] p-3">
           <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-mute">
             Central thesis
           </h3>
