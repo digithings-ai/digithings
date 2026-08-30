@@ -26,11 +26,15 @@ from typing import Protocol, runtime_checkable
 
 from digiquant.brokers.contracts import (
     BrokerAccountSnapshot,
+    BrokerAuthError,
     BrokerFill,
     BrokerOrderAck,
+    BrokerOrderRejected,
     BrokerOrderRequest,
     BrokerOrderStatus,
     BrokerPosition,
+    BrokerRateLimited,
+    BrokerTransportError,
     OrderSide,
     OrderType,
     TimeInForce,
@@ -38,30 +42,7 @@ from digiquant.brokers.contracts import (
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Exception family — local until K1's shared contracts.py family merges
-# TODO(K-merge): unify with contracts.py exception family when K1 lands
-# ---------------------------------------------------------------------------
-
-
-class BrokerAuthError(Exception):
-    """Authentication or live-session failure after the one transparent re-auth attempt."""
-
-
-class BrokerTransportError(Exception):
-    """Non-auth HTTP / transport failure talking to IBKR."""
-
-
-class BrokerRateLimited(Exception):
-    """A paced endpoint was called sooner than the required spacing."""
-
-
-class BrokerOrderRejected(Exception):
-    """Venue refused the order, or a reply question was off the suppressible allowlist."""
-
-    def __init__(self, message: str, *, question_text: str | None = None) -> None:
-        super().__init__(message)
-        self.question_text = question_text if question_text is not None else message
+# IBKR-specific exceptions (not part of the shared contracts.py family).
 
 
 class IbkrOrdersDisabledError(Exception):
@@ -84,7 +65,7 @@ PACE_SECONDS = 5.0
 
 # Hard-coded suppressible reply message ids (IBKR Campus suppressible-id list).
 # Re-applied via POST /iserver/questions/suppress after every brokerage session init.
-# Anything off this list aborts with BrokerOrderRejected(question_text) — never auto-confirm.
+# Anything off this list aborts with BrokerOrderRejected(message) — never auto-confirm.
 SUPPRESSIBLE_MESSAGE_IDS: frozenset[str] = frozenset(
     {
         "o162",  # size / percentage of NAV caution
@@ -483,7 +464,7 @@ class IbkrAdapter:
         _fingerprint_log(path, response)
 
         if response.status_code == 429:
-            raise BrokerRateLimited(f"IBKR HTTP 429 on {path}")
+            raise BrokerRateLimited()
 
         if response.status_code in {401, 403} or self._looks_like_session_expiry(response):
             if allow_reauth and not _reauth_attempted:
@@ -550,10 +531,8 @@ class IbkrAdapter:
         now = float(self._clock())
         last = self._last_paced.get(key)
         if last is not None and (now - last) < PACE_SECONDS:
-            raise BrokerRateLimited(
-                f"IBKR pacing: {key} requires ≥{PACE_SECONDS:.0f}s between calls "
-                f"(elapsed {now - last:.3f}s)"
-            )
+            retry_after = PACE_SECONDS - (now - last)
+            raise BrokerRateLimited(retry_after=retry_after)
         self._last_paced[key] = now
 
     def _resolve_account_id(self) -> str:
@@ -795,14 +774,13 @@ class IbkrAdapter:
         if off_allowlist or not ids:
             raise BrokerOrderRejected(
                 question_text or f"IBKR reply off allowlist: {off_allowlist or 'empty messageIds'}",
-                question_text=question_text
-                or f"off-allowlist ids={off_allowlist or 'empty messageIds'}",
+                code="reply_off_allowlist",
             )
         reply_id = str(prompt.get("id") or "")
         if not reply_id:
             raise BrokerOrderRejected(
-                "IBKR reply prompt missing id",
-                question_text=question_text,
+                question_text or "IBKR reply prompt missing id",
+                code="reply_missing_id",
             )
         return self._call(
             "POST",

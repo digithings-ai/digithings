@@ -12,8 +12,12 @@ from decimal import Decimal
 import pytest
 from digiquant.brokers.base import BrokerAdapter
 from digiquant.brokers.contracts import (
+    BrokerAuthError,
+    BrokerOrderRejected,
     BrokerOrderRequest,
     BrokerOrderStatus,
+    BrokerRateLimited,
+    BrokerTransportError,
     OrderSide,
     OrderType,
 )
@@ -21,10 +25,6 @@ from digiquant.brokers.ibkr import (
     PACE_SECONDS,
     PACED_PATH_MARKERS,
     SUPPRESSIBLE_MESSAGE_IDS,
-    BrokerAuthError,
-    BrokerOrderRejected,
-    BrokerRateLimited,
-    BrokerTransportError,
     IbkrAdapter,
     IbkrHttpResponse,
     IbkrOrdersDisabledError,
@@ -313,8 +313,10 @@ class TestPacingGuard:
         transport.enqueue("GET", "/portfolio/accounts", _resp([{"id": "DU9"}]))
         transport.enqueue("GET", "/portfolio/accounts", _resp([{"id": "DU9"}]))
         adapter._call("GET", "/portfolio/accounts", pace=True, allow_reauth=False)
-        with pytest.raises(BrokerRateLimited, match="portfolio/accounts"):
+        with pytest.raises(BrokerRateLimited) as exc_info:
             adapter._call("GET", "/portfolio/accounts", pace=True, allow_reauth=False)
+        assert exc_info.value.retry_after is not None
+        assert 0 < exc_info.value.retry_after <= PACE_SECONDS
         clock.advance(PACE_SECONDS)
         transport.enqueue("GET", "/portfolio/accounts", _resp([{"id": "DU9"}]))
         adapter._call("GET", "/portfolio/accounts", pace=True, allow_reauth=False)
@@ -347,8 +349,10 @@ class TestPacingGuard:
             _resp([{"order_id": "b", "order_status": "Submitted"}]),
         )
         adapter.submit_order(_order_req())
-        with pytest.raises(BrokerRateLimited, match="iserver/orders"):
+        with pytest.raises(BrokerRateLimited) as exc_info:
             adapter.submit_order(_order_req())
+        assert exc_info.value.retry_after is not None
+        assert 0 < exc_info.value.retry_after <= PACE_SECONDS
 
 
 class TestOrderReplyChain:
