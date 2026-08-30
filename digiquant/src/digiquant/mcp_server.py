@@ -286,6 +286,85 @@ def create_mcp_server() -> Any:
         return json.dumps(out, indent=2, default=str)
 
     @mcp.tool()
+    def digiquant_fit_btc_power_law(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        output_path: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) rather than a bespoke fetch —
+        ``refresh=True`` (default) incrementally updates the cache first via the
+        same yfinance pipeline every other price-history consumer uses, bulk-fetching
+        ``bulk_period`` of history for a ticker that isn't cached yet (default ``"max"``,
+        since the fit requires at least 730 daily observations and a short bulk window
+        would leave a cold cache short of that); ``refresh=False`` fits directly from
+        whatever is already cached (useful when network access is unavailable). Persists
+        the fit to ``output_path`` (default: ``sdca/btc_power_law_coefficients.json``,
+        replacing the synthetic placeholder shipped with #1082 — pass an explicit
+        ``output_path`` under a non-editable/read-only install where the package source
+        tree isn't writable). Returns a JSON summary
+        (``{fit_start, fit_end, fit_rows, path}``) or ``{"error": ...}``.
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                fit_btc_power_law,
+                save_coefficients,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            coefficients = fit_btc_power_law(
+                prices["date"],
+                prices["close"],
+                notes=notes
+                or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
+            )
+            path = save_coefficients(coefficients, Path(output_path) if output_path else None)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        return json.dumps(
+            {
+                "fit_start": str(coefficients.fit_start),
+                "fit_end": str(coefficients.fit_end),
+                "fit_rows": coefficients.fit_rows,
+                "path": str(path),
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,

@@ -1,7 +1,7 @@
 /**
  * settings — authenticated Olympus Settings workspace backend (T3).
  *
- * verify_jwt = true. Routes: PATCH profile, GET/POST brokers, PATCH notifications.
+ * Routes: GET/PATCH profile, GET/POST brokers, GET/PATCH notifications.
  *
  * DEPLOY BLOCKED ON K3: sealing credentials requires the vault master key and
  * `broker_connections` table from K3. See README.md in this directory.
@@ -61,4 +61,4 @@ Deno.serve(async (req) => {
     console.error("settings error", err instanceof Error ? err.name : "unknown");
     return jsonError(500, "INTERNAL", "Settings request failed");
   }
-);
+});

@@ -92,9 +92,6 @@ body{
 .due-card .amt{font-family:var(--mono); font-size:22px; font-weight:500; letter-spacing:-.01em;
   color:var(--ink); font-variant-numeric:tabular-nums}
 .due-card .amt .cur{font-size:11px; color:var(--ink-mute); margin-right:5px; letter-spacing:.02em}
-.due-card .sub{margin-top:12px; font-size:10px; color:var(--ink-soft); display:flex;
-  justify-content:space-between; gap:16px; text-align:left}
-.due-card .sub b{font-weight:500; color:var(--ink)}
 
 /* Line items ---------------------------------------------------------------- */
 .items{width:100%; border-collapse:collapse; margin-top:22px}
@@ -106,8 +103,6 @@ body{
   font-variant-numeric:tabular-nums}
 .items .desc{line-height:1.5}
 .items .desc .h{display:inline; font-size:12px; font-weight:500; color:var(--ink); letter-spacing:-.01em}
-.items .desc .s{display:inline; color:var(--ink-soft); font-size:10.5px}
-.items .desc .s::before{content:"\2002\2014\2002"; color:var(--ink-mute)}
 .items .amt{width:120px; text-align:right; white-space:nowrap; font-family:var(--mono);
   font-size:12px; color:var(--ink); font-variant-numeric:tabular-nums; padding-left:12px}
 
@@ -131,10 +126,6 @@ body{
 .foot .body .row{display:flex; justify-content:space-between; gap:16px; max-width:270px; padding:1.5px 0}
 .foot .body .row span:first-child{color:var(--ink-mute)}
 .foot .body .row span:last-child{color:var(--ink); font-family:var(--mono); font-size:10px}
-.colophon{margin-top:14px; padding-top:12px; border-top:1px solid var(--hair);
-  display:flex; justify-content:space-between; align-items:center;
-  font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--ink-mute)}
-
 /* Optional supplement page — delivery breakdown ----------------------------- */
 .appendix{max-width:780px; margin:30px auto 0; background:var(--surface);
   border:1px solid var(--hair); box-shadow:none}
@@ -177,21 +168,15 @@ body{
     <header class="masthead">
       <div>
         <div class="brand"><span class="name">digithings</span></div>
-        <div class="brand-tag">AI systems · research automation</div>
         <div class="from">
           <div class="who">Chris Stefan</div>
           <div>chris.stefan@proton.me</div>
-          <div class="ph">[Business name · address]</div>
-          <div class="ph">[VAT / tax no. — if applicable]</div>
         </div>
       </div>
       <div class="doc-title">
-        <div class="word">Invoice</div>
         <dl class="meta">
           <dt>Invoice №</dt><dd class="ph">[INV-0000-000]</dd>
           <dt>Issue date</dt><dd class="ph">[00 Mon 0000]</dd>
-          <dt>Due date</dt><dd class="ph">[06 Aug 2026]</dd>
-          <dt>Terms</dt><dd class="ph">[Net 14]</dd>
         </dl>
       </div>
     </header>
@@ -202,16 +187,14 @@ body{
         <div class="kick">Bill to</div>
         <div class="client ph">[Client name]</div>
         <div class="lines">
-          <div class="ph">[Address line 1]</div>
-          <div class="ph">[Address line 2 · City · Country]</div>
-          <div class="ph">[billing@client.com]</div>
+          <div class="ph">[Contact name]</div>
+          <div class="ph">[Phone]</div>
+          <div class="ph">[Website / email]</div>
         </div>
       </div>
       <aside class="due-card">
         <div class="kick">Amount due</div>
         <div class="amt"><span class="cur">USD</span><span class="ph">0,000.00</span></div>
-        <div class="sub"><span>Engagement</span><b class="ph">[Phase name]</b></div>
-        <div class="sub"><span>Due by</span><b class="ph">[06 Aug 2026]</b></div>
       </aside>
     </section>
 
@@ -220,72 +203,45 @@ body{
       <thead>
         <tr>
           <th class="idx">#</th>
-          <th>Pilot scope &mdash; deliverables</th>
+          <th class="ph">[Phase name]</th>
         </tr>
       </thead>
       <tbody>
         <tr>
           <td class="idx">01</td>
-          <td class="desc">
-            <span class="h">Discovery &amp; technical scoping</span>
-            <span class="s">Requirements, data sources, architecture and delivery plan</span>
-          </td>
+          <td class="desc"><span class="h">Discovery &amp; technical scoping</span></td>
         </tr>
         <tr>
           <td class="idx">02</td>
-          <td class="desc">
-            <span class="h">Data ingestion pipeline</span>
-            <span class="s">Source connectors · extraction · validation · fault tolerance</span>
-          </td>
+          <td class="desc"><span class="h">Data ingestion pipeline</span></td>
         </tr>
         <tr>
           <td class="idx">03</td>
-          <td class="desc">
-            <span class="h">Core processing engine</span>
-            <span class="s">Domain logic, scoring and the primary output the client relies on</span>
-          </td>
+          <td class="desc"><span class="h">Core processing engine</span></td>
         </tr>
         <tr>
           <td class="idx">04</td>
-          <td class="desc">
-            <span class="h">Scheduling &amp; automation</span>
-            <span class="s">Recurring runs, retries and run-level observability</span>
-          </td>
+          <td class="desc"><span class="h">Scheduling &amp; automation</span></td>
         </tr>
         <tr>
           <td class="idx">05</td>
-          <td class="desc">
-            <span class="h">Third-party integrations</span>
-            <span class="s">External APIs and services wired into the pipeline</span>
-          </td>
+          <td class="desc"><span class="h">Third-party integrations</span></td>
         </tr>
         <tr>
           <td class="idx">06</td>
-          <td class="desc">
-            <span class="h">Client dashboard</span>
-            <span class="s">Bespoke front-end for reviewing outputs</span>
-          </td>
+          <td class="desc"><span class="h">Client dashboard</span></td>
         </tr>
         <tr>
           <td class="idx">07</td>
-          <td class="desc">
-            <span class="h">Data foundation</span>
-            <span class="s">Persistence layer and historical snapshots</span>
-          </td>
+          <td class="desc"><span class="h">Data foundation</span></td>
         </tr>
         <tr>
           <td class="idx">08</td>
-          <td class="desc">
-            <span class="h">Infrastructure &amp; CI</span>
-            <span class="s">Environments, pipelines, migrations and deployment</span>
-          </td>
+          <td class="desc"><span class="h">Infrastructure &amp; CI</span></td>
         </tr>
         <tr>
           <td class="idx">09</td>
-          <td class="desc">
-            <span class="h">Documentation</span>
-            <span class="s">Architecture notes, usage guide and handover material</span>
-          </td>
+          <td class="desc"><span class="h">Documentation</span></td>
         </tr>
       </tbody>
     </table>
@@ -330,11 +286,6 @@ body{
         </div>
       </div>
     </section>
-
-    <div class="colophon">
-      <span>digithings · AI systems &amp; research automation</span>
-      <span><span class="ph">[INV-0000-000]</span> · thank you</span>
-    </div>
 
   </div>
 </main>
@@ -400,11 +351,6 @@ body{
     <div class="apx-note">
       This breakdown itemises the work delivered in this phase &mdash; a scope
       reference only. It carries no charges; all amounts are on the invoice.
-    </div>
-
-    <div class="colophon">
-      <span>digithings · AI systems &amp; research automation</span>
-      <span><span class="ph">[INV-0000-000]</span> · delivery breakdown</span>
     </div>
 
   </div>

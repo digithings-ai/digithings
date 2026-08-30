@@ -38,7 +38,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 |---|---|
 | Claude Pro / Max | Bound to claude.ai + Claude Code CLI. Anthropic API billed separately. |
 | ChatGPT Plus | Bound to chatgpt.com. OpenAI API billed separately. |
-| GitHub Copilot | Editor-bound. Unofficial proxies violate ToS. See GitHub Models (below) for the legit free API. |
+| GitHub Copilot | Editor-bound. Unofficial proxies violate ToS. GitHub Models (the former free inference API) retired 2026-07-30 — use Groq / Gemini / Cerebras for free eval instead. |
 | Cursor Pro | Cursor editor only. |
 
 ---

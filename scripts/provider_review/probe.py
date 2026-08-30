@@ -65,11 +65,7 @@ PROVIDERS: dict[str, dict] = {
         "api_key_env": "DEEPSEEK_API_KEY",
         "model": "deepseek-chat",
     },
-    "github_models": {
-        "base_url": "https://models.inference.ai.azure.com",
-        "api_key_env": "GITHUB_TOKEN",
-        "model": "gpt-4o-mini",
-    },
+    # github_models removed — platform fully retired 2026-07-30 (#1589).
 }
 
 

@@ -396,6 +396,29 @@ class SetFrontmatterRequest(BaseModel):
     updates: dict[str, Any] = Field(..., description="Frontmatter keys to merge")
 
 
+class PruneChildrenRequest(BaseModel):
+    """Delete stale segment notes for one parent within one vault subdirectory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parent_doc: str = Field(..., min_length=1)
+    keep_names: list[str] = Field(default_factory=list)
+    subdir: str = Field(default="")
+
+
+class PruneChildrenResponse(BaseModel):
+    deleted: list[str]
+
+
+class CreateNotesBatchRequest(BaseModel):
+    """Note upserts and stale-child pruning sharing one vault index load."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    notes: list[CreateNoteRequest] = Field(default_factory=list)
+    prunes: list[PruneChildrenRequest] = Field(default_factory=list)
+
+
 class RenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -546,23 +569,54 @@ def get_note(name: str) -> Note:
     return note
 
 
-@app.post("/v1/notes", response_model=Note, status_code=201)
-def create_note(req: CreateNoteRequest) -> Note:
+def _write_note_request(vault: Vault, req: CreateNoteRequest) -> Note:
+    """Write one validated request through an already-open vault."""
     fm: dict[str, Any] = dict(req.frontmatter or {})
     if req.title:
         fm["title"] = req.title
     if req.tags:
         fm["tags"] = req.tags
+    return vault.write_note(
+        req.name,
+        frontmatter=fm,
+        body=req.body,
+        subdir=req.subdir,
+        overwrite=req.overwrite,
+    )
+
+
+@app.post("/v1/notes/batch", response_model=NoteList, status_code=201)
+def create_notes_batch(req: CreateNotesBatchRequest) -> NoteList:
+    """Upsert notes through one index load for efficient bulk ingest."""
     try:
-        return _open_vault().write_note(
-            req.name,
-            frontmatter=fm,
-            body=req.body,
-            subdir=req.subdir,
-            overwrite=req.overwrite,
+        vault = _open_vault()
+        notes = [_write_note_request(vault, note) for note in req.notes]
+        for prune in req.prunes:
+            vault.prune_children(prune.parent_doc, set(prune.keep_names), subdir=prune.subdir)
+        current_notes = [vault.get_note(note.name) for note in notes]
+        return NoteList(notes=[note for note in current_notes if note is not None])
+    except VaultError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/notes", response_model=Note, status_code=201)
+def create_note(req: CreateNoteRequest) -> Note:
+    try:
+        return _write_note_request(_open_vault(), req)
+    except VaultError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/notes/prune-children", response_model=PruneChildrenResponse)
+def prune_children(req: PruneChildrenRequest) -> PruneChildrenResponse:
+    """Remove stale segment children for one parent, scoped to a vault subdirectory."""
+    try:
+        deleted = _open_vault().prune_children(
+            req.parent_doc, set(req.keep_names), subdir=req.subdir
         )
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PruneChildrenResponse(deleted=deleted)
 
 
 @app.patch("/v1/notes/{name}/frontmatter", response_model=Note)

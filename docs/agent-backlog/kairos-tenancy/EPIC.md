@@ -47,7 +47,7 @@ Wave E
 ## Program-level acceptance
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
-- [x] RLS proof (pre-cutover harness vs canonical 001–105 + staged 900: 61/61; post-T1 anon-drop still human §6): user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
+- [x] RLS proof (pre-cutover harness vs canonical 001–106 + staged 900: 59/59 this turn; post-T1 anon-drop still human §6): user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
 - [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
@@ -63,20 +63,29 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30)
+## Agent delivery status (2026-08-30, E2E push)
 
-**Code:** all 12 WPs merged to `develop` (promotion #3141).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-e2e-push.md`.  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys only (bootstrap + vault seal path unlocked). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
+**Docs branch:** `cursor/kairos-audit-e2e-push-3d52`. Fix branch: `cursor/settings-uuid-bind-fix-3d52` (compare URL; `gh pr create` 403).
 
-**Schema (`core`):** migrations 096–105 applied + stamped in `olympus_schema_migrations`. Cutover 900 **not** applied.
+**Code:** all 12 WPs on `develop` (promotion #3141) + bootstrap [#3223](https://github.com/digithings-ai/digithings/pull/3223) **merged**. Settings uuid-bind fix deployed to `core` as **settings v21** (branch not yet PR-merged via agent).
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets). `settings` ACTIVE as NOT_READY placeholder — full `_shared` redeploy still required. `prices-live` pre-existing.
+**Schema (`core`):** migrations **096–107** applied (`ensure_personal_workspace`). Cutover **900 not applied**.
 
-**Olympus build:** green (flag off, static export check).
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v21 ACTIVE** — live vault seal **200** with fake api_key after uuid-bind fix.
 
-**Acceptance evidence:**
-- House regression: `pytest -m unit tests/dq/olympus/ tests/dq/brokers/ tests/dq/notify/ tests/integration/test_kairos_tenancy_chain.py` → 659 passed (artifact `house-regression-acceptance.log`).
-- Live venue gates: kairos router live/kill probes → 4 passed (`live-venue-gates.log`).
-- RLS isolation harness: 61/61 PASS against canonical chain (`rls_isolation_proof.log`).
-- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **blocked** on human secrets (§ Human-owned prerequisites).
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET profile/notifications/brokers **200**; PATCH notifications **200**; checkout **`PRICE_NOT_CONFIGURED`**.
 
-**Human blockers (unchanged):** Stripe test keys/prices/webhook secret, Mailgun, Auth providers (Google+GitHub), `DIGIQUANT_VAULT_MASTER_KEY`, Alpaca OAuth app, IBKR vendor email, legal read before live epic.
+**Secrets (names only):**
+- **`sbp_` path unlocked** — local PAT + process env nonempty this turn; Management API lists **12** EF names (no vendor).
+- **EF secrets on `core`:** vault + `APP_URL` + platform `SUPABASE_*` / `FINNHUB` only.
+- **GitHub Actions:** screenshots confirm **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*`; `gh` list **403**.
+- **Still empty / blocked:** Mailgun (MCP auth fail; env EMPTY), Stripe, Google OAuth, Alpaca OAuth.
+- **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
+
+**Closest real chain (NOT staging E2E):** Agentmail Auth → bootstrap → settings 200s → ops Custom elevation → live vault seal (fake api_key) → paper-fakes unit suites. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
+
+**Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until remaining vendor secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
+
+**Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.

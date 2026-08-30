@@ -194,7 +194,7 @@ describe("mapDigigraphTraceToSpans", () => {
     );
     expect(spans[0]).toMatchObject({
       label: "Sources",
-      toolName: "digivault",
+      toolName: "digivault_search_notes",
       query: "showcase",
       documents: [
         {
@@ -236,6 +236,31 @@ describe("mapDigigraphTraceToSpans", () => {
     ]);
   });
 
+  it("maps digivault_get_note rag_sources with a distinct tool name and loaded-path label", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "rag_sources",
+        payload: {
+          tool: "digivault_get_note",
+          query: "clients/digithings/p001",
+          sources: [
+            {
+              doc_id: "clients/digithings/p001",
+              metadata: { title: "Page one" },
+              snippet: "# Page one",
+            },
+          ],
+        },
+      },
+      "full",
+    );
+    expect(spans[0]).toMatchObject({
+      toolName: "digivault_get_note",
+      label: "Loaded full note: clients/digithings/p001",
+      query: "clients/digithings/p001",
+    });
+  });
+
   it("maps a zero-hit digivault_search_notes trace to a visible completed retrieve span", () => {
     const spans = mapDigigraphTraceToSpans(
       {
@@ -249,7 +274,7 @@ describe("mapDigigraphTraceToSpans", () => {
         operation: "retrieve",
         status: "completed",
         label: "Sources",
-        toolName: "digivault",
+        toolName: "digivault_search_notes",
         query: "nonexistent topic",
       },
     ]);

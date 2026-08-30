@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   HOUSE_PROFILE_KEY,
   validateAssetPreferences,
   validateInvestmentProfile,
 } from '@/lib/settings/validate-profile';
 import {
+  getProfile,
   saveProfile,
   SettingsHttpError,
+  type ProfileTip,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 
@@ -19,6 +21,8 @@ export type ProfileTabProps = {
   onVersionSaved?: (versionId: string) => void;
   /** Injected save for tests. */
   saveFn?: typeof saveProfile;
+  /** Injected GET for tests. */
+  getFn?: typeof getProfile;
 };
 
 const DEFAULT_INVESTMENT = {
@@ -33,11 +37,32 @@ const DEFAULT_INVESTMENT = {
   experience_level: 'intermediate',
 };
 
+function investmentFromTip(tip: ProfileTip): typeof DEFAULT_INVESTMENT {
+  const inv = tip.investment;
+  if (!inv || typeof inv !== 'object') return { ...DEFAULT_INVESTMENT };
+  return {
+    ...DEFAULT_INVESTMENT,
+    ...inv,
+    excluded_sectors: Array.isArray(inv.excluded_sectors)
+      ? (inv.excluded_sectors as string[])
+      : [],
+  };
+}
+
+function excludedTickersFromTip(tip: ProfileTip): string {
+  const assets = tip.assets;
+  if (!assets || typeof assets !== 'object') return '';
+  const tickers = assets.excluded_tickers;
+  if (!Array.isArray(tickers)) return '';
+  return tickers.filter((t): t is string => typeof t === 'string').join(', ');
+}
+
 export function ProfileTab({
   api,
   lastVersionId,
   onVersionSaved,
   saveFn = saveProfile,
+  getFn = getProfile,
 }: ProfileTabProps) {
   const [profileKey, setProfileKey] = useState('workspace');
   const [label, setLabel] = useState('Workspace overlay');
@@ -46,7 +71,51 @@ export function ProfileTab({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [savedVersion, setSavedVersion] = useState<string | null>(null);
+
+  const applyTip = useCallback(
+    (tip: ProfileTip) => {
+      if (typeof tip.profile_key === 'string' && tip.profile_key.trim()) {
+        setProfileKey(tip.profile_key);
+      }
+      if (typeof tip.label === 'string' && tip.label.trim()) {
+        setLabel(tip.label);
+      }
+      setInvestment(investmentFromTip(tip));
+      setExcludedTickers(excludedTickersFromTip(tip));
+      if (typeof tip.version_id === 'string' && tip.version_id) {
+        onVersionSaved?.(tip.version_id);
+      }
+    },
+    [onVersionSaved],
+  );
+
+  const hydrate = useCallback(async () => {
+    if (!api) return;
+    setLoading(true);
+    setFieldError(null);
+    try {
+      const tip = await getFn(api);
+      applyTip(tip);
+    } catch (err) {
+      if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
+        setFieldError(
+          'Profile backend is temporarily unavailable. Showing empty form.',
+        );
+      } else {
+        setFieldError(err instanceof Error ? err.message : 'Unable to load profile.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [api, getFn, applyTip]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate tip after mount */
+    void hydrate();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [hydrate]);
 
   async function onSave() {
     setFieldError(null);
@@ -120,6 +189,12 @@ export function ProfileTab({
           profile stays untouched.
         </p>
       </div>
+
+      {loading ? (
+        <p className="text-sm text-ink-soft" data-testid="profile-loading">
+          Loading saved overlay…
+        </p>
+      ) : null}
 
       <label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
@@ -225,7 +300,7 @@ export function ProfileTab({
       <button
         type="button"
         onClick={() => void onSave()}
-        disabled={saving}
+        disabled={saving || loading}
         className="border border-ink bg-ink px-4 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50"
         data-testid="profile-save"
       >

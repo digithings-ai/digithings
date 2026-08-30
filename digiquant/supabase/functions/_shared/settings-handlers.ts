@@ -2,14 +2,17 @@
  * Settings Edge Function handlers (T3) — extracted for Deno unit tests.
  *
  * Routes (mounted under /functions/v1/settings):
+ *   GET    /profile            — load tip olympus_profile_config (or empty defaults; no write)
  *   PATCH  /profile            — versioned olympus_profile_config append (workspace-scoped)
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
- *   PATCH  /notifications      — 503 NOT_READY until K5 lands notification_prefs
+ *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
+ *   PATCH  /notifications      — upsert notification_prefs (workspace member)
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
- * olympus_profile_config.workspace_id) and K3 vault + broker_connections.
+ * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
+ * K5 migration 103 (notification_prefs).
  */
 
 import {
@@ -92,6 +95,9 @@ export async function handleSettingsRequest(
   const path = pathOf(url);
   const method = req.method.toUpperCase();
 
+  if (method === "GET" && (path === "/profile" || path === "/profile/")) {
+    return getProfile(req, deps);
+  }
   if (method === "PATCH" && path === "/profile") {
     return patchProfile(req, deps);
   }
@@ -104,11 +110,23 @@ export async function handleSettingsRequest(
   if (method === "POST" && path === "/brokers/revoke") {
     return revokeBroker(req, deps);
   }
+  if (
+    method === "GET" &&
+    (path === "/notifications" || path === "/notifications/")
+  ) {
+    return getNotifications(req, deps);
+  }
   if (method === "PATCH" && path === "/notifications") {
-    return patchNotifications();
+    return patchNotifications(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
+
+/** Matches migration 103 CHECK (email ~ '^[^@]+@[^@]+\.[^@]+$'). */
+const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
+
+const PREFS_COLUMNS =
+  "workspace_id, email, daily_digest, holding_change_alerts, execution_alerts, digest_hour_utc, updated_at";
 
 async function resolveMember(
   deps: SettingsDeps,
@@ -118,16 +136,15 @@ async function resolveMember(
 }
 
 /**
- * Fail closed on plan tier. Prefer the T2-synced JWT claim (app_metadata.plan_tier);
- * fall back to workspace.plan_tier from the membership join.
+ * Fail closed on plan tier using the authoritative workspace row.
+ *
+ * `workspaces.plan_tier` is CAS-updated by the Stripe webhook. Preferring the
+ * JWT `app_metadata.plan_tier` claim here fails open after cancel when claim
+ * sync sets `claim_sync_pending` but leaves a stale elevated claim on the
+ * token — and fails closed incorrectly on upgrade when the claim lags.
  */
-function requireEligibleTier(
-  user: AuthUser,
-  workspacePlanTier: string,
-): Response | null {
-  const claim = (user.plan_tier ?? "").trim().toLowerCase();
-  const fromWs = (workspacePlanTier ?? "").trim().toLowerCase();
-  const tier = claim || fromWs;
+function requireEligibleTier(workspacePlanTier: string): Response | null {
+  const tier = (workspacePlanTier ?? "").trim().toLowerCase();
   if (!ELIGIBLE_TIERS.has(tier)) {
     return jsonError(
       403,
@@ -158,6 +175,88 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
   return msg.includes("unique") || msg.includes("duplicate");
 }
 
+const DEFAULT_PROFILE_KEY = "workspace";
+
+function emptyProfileBody(
+  workspaceId: string,
+  profileKey: string,
+): Record<string, unknown> {
+  return {
+    version_id: null,
+    workspace_id: workspaceId,
+    profile_key: profileKey,
+    schema_version: 1,
+    label: "",
+    supersedes_id: null,
+    recorded_at: null,
+    investment: null,
+    assets: null,
+  };
+}
+
+function profileResponseBody(row: Record<string, unknown>): Record<string, unknown> {
+  const payload =
+    row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? (row.payload as Record<string, unknown>)
+      : {};
+  return {
+    version_id: row.id ?? null,
+    workspace_id: row.workspace_id,
+    profile_key: row.profile_key,
+    schema_version: row.schema_version ?? payload.schema_version ?? 1,
+    label: typeof row.label === "string" ? row.label : String(payload.label ?? ""),
+    supersedes_id: row.supersedes_id ?? null,
+    recorded_at: row.recorded_at ?? null,
+    investment: payload.investment ?? null,
+    assets: payload.assets ?? null,
+  };
+}
+
+/**
+ * GET /profile — tip overlay for hydrate (member authz; no tier write gate).
+ * Empty contract: no tip → 200 with version_id/recorded_at null and empty label
+ * (never inserts). Optional `?profile_key=` (default `workspace`); `house` rejected.
+ */
+async function getProfile(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const rawKey = (url.searchParams.get("profile_key") ?? DEFAULT_PROFILE_KEY).trim();
+  const profileKey = rawKey || DEFAULT_PROFILE_KEY;
+  if (profileKey === HOUSE_PROFILE_KEY) {
+    return jsonError(
+      400,
+      "HOUSE_KEY_FORBIDDEN",
+      "overlay ProfileConfig cannot use the reserved house profile_key",
+    );
+  }
+  if (profileKey.length > 100) {
+    return jsonError(400, "INVALID_PROFILE_KEY", "profile_key too long");
+  }
+
+  const { data: tip, error: tipErr } = await deps.admin
+    .from("olympus_profile_config")
+    .select("id, workspace_id, profile_key, schema_version, label, supersedes_id, recorded_at, payload")
+    .eq("workspace_id", authz.workspace.id)
+    .eq("profile_key", profileKey)
+    .eq("is_house_default", false)
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (tipErr) {
+    return jsonError(503, "NOT_READY", "olympus_profile_config not available");
+  }
+
+  if (!tip) {
+    return jsonOk(emptyProfileBody(authz.workspace.id, profileKey));
+  }
+
+  return jsonOk(profileResponseBody(tip as Record<string, unknown>));
+}
+
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
   let body: {
     workspace_id?: string;
@@ -179,7 +278,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
   if (tierErr) return tierErr;
 
   const workspaceId = authz.workspace.id;
@@ -372,7 +471,7 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
   if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
@@ -632,13 +731,189 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
   });
 }
 
-function patchNotifications(): Response {
-  // notification_prefs table lands with K5 — return a clear 503 until then.
-  return jsonError(
-    503,
-    "NOT_READY",
-    "notification_prefs is not available until K5; prefs cannot be saved yet",
-  );
+/**
+ * Empty-prefs contract (no row yet): HTTP 200 with sensible defaults and
+ * `updated_at: null` — never writes. Clients hydrate the form from this body
+ * so an accidental Save does not overwrite with blank defaults unknowingly.
+ * Missing table → 503 NOT_READY (same as PATCH).
+ */
+function emptyNotificationPrefs(
+  workspaceId: string,
+  userEmail: string | null | undefined,
+): Record<string, unknown> {
+  const email =
+    typeof userEmail === "string" && userEmail.trim() ? userEmail.trim() : "";
+  return {
+    workspace_id: workspaceId,
+    email,
+    daily_digest: false,
+    holding_change_alerts: false,
+    execution_alerts: false,
+    digest_hour_utc: 12,
+    updated_at: null,
+  };
+}
+
+function prefsResponseBody(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    workspace_id: row.workspace_id,
+    email: row.email,
+    daily_digest: row.daily_digest,
+    holding_change_alerts: row.holding_change_alerts,
+    execution_alerts: row.execution_alerts,
+    digest_hour_utc: row.digest_hour_utc,
+    updated_at: row.updated_at ?? null,
+  };
+}
+
+async function getNotifications(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data: existing, error: lookupErr } = await deps.admin
+    .from("notification_prefs")
+    .select(PREFS_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (lookupErr) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "notification_prefs not available",
+    );
+  }
+
+  if (!existing) {
+    return jsonOk(emptyNotificationPrefs(authz.workspace.id, deps.user.email));
+  }
+
+  return jsonOk(prefsResponseBody(existing as Record<string, unknown>));
+}
+
+async function patchNotifications(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  let body: {
+    workspace_id?: string;
+    email?: string;
+    daily_digest?: boolean;
+    holding_change_alerts?: boolean;
+    execution_alerts?: boolean;
+    digest_hour_utc?: number;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const { data: existing, error: lookupErr } = await deps.admin
+    .from("notification_prefs")
+    .select(PREFS_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (lookupErr) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "notification_prefs not available",
+    );
+  }
+
+  const emailRaw = typeof body.email === "string" ? body.email.trim() : "";
+  const emailFallback =
+    typeof deps.user.email === "string" ? deps.user.email.trim() : "";
+  const email =
+    emailRaw ||
+    (typeof existing?.email === "string" ? existing.email : "") ||
+    emailFallback;
+  if (!email || !EMAIL_RE.test(email)) {
+    return jsonError(
+      400,
+      "INVALID_EMAIL",
+      "email is required and must be a valid address",
+    );
+  }
+
+  if (body.digest_hour_utc !== undefined) {
+    const hour = body.digest_hour_utc;
+    if (
+      typeof hour !== "number" ||
+      !Number.isInteger(hour) ||
+      hour < 0 ||
+      hour > 23
+    ) {
+      return jsonError(
+        400,
+        "INVALID_DIGEST_HOUR",
+        "digest_hour_utc must be an integer 0..23",
+      );
+    }
+  }
+
+  const asBool = (
+    incoming: boolean | undefined,
+    prior: unknown,
+    fallback: boolean,
+  ): boolean => {
+    if (typeof incoming === "boolean") return incoming;
+    if (typeof prior === "boolean") return prior;
+    return fallback;
+  };
+
+  const row = {
+    workspace_id: authz.workspace.id,
+    email,
+    daily_digest: asBool(body.daily_digest, existing?.daily_digest, false),
+    holding_change_alerts: asBool(
+      body.holding_change_alerts,
+      existing?.holding_change_alerts,
+      false,
+    ),
+    execution_alerts: asBool(
+      body.execution_alerts,
+      existing?.execution_alerts,
+      false,
+    ),
+    digest_hour_utc:
+      body.digest_hour_utc !== undefined
+        ? body.digest_hour_utc
+        : typeof existing?.digest_hour_utc === "number"
+        ? existing.digest_hour_utc
+        : 12,
+  };
+
+  const { data: upserted, error: upsertErr } = await deps.admin
+    .from("notification_prefs")
+    .upsert(row, { onConflict: "workspace_id" })
+    .select(PREFS_COLUMNS)
+    .single();
+
+  if (upsertErr) {
+    const msg = (upsertErr.message ?? "").toLowerCase();
+    if (msg.includes("email") || msg.includes("check")) {
+      return jsonError(
+        400,
+        "INVALID_EMAIL",
+        "email is required and must be a valid address",
+      );
+    }
+    console.error("notification_prefs upsert failed", upsertErr.code ?? "unknown");
+    return jsonError(500, "PREFS_WRITE_FAILED", "Unable to save notification preferences");
+  }
+
+  return jsonOk(prefsResponseBody(upserted as Record<string, unknown>));
 }
 
 async function exchangeAlpacaCodeDefault(args: {
