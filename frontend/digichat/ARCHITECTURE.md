@@ -667,7 +667,13 @@ registry there would leak every tenant's token.
 `DefaultAzureCredential` — the container's own managed identity, no stored
 key). Conversation state lives in Foundry; the client echoes the conversation
 id via `X-External-Conversation` / `data-externalConversation`. Foundry
-behavior polish is tracked separately from digithings digigraph work.
+maps `azure_ai_search` calls and returned chunks into the shared
+`data-digichatActivity` search/source rows. A reasoning disclosure appears
+only when the Foundry event includes summary text. Operators enable that
+summary on the agent definition: the Responses API refuses a per-call
+`reasoning.summary` request when using `agent_reference`. Empty reasoning
+items are intentionally omitted rather than rendered as empty “Thinking”
+chrome. This behavior remains separate from the digithings digigraph path.
 
 **Response language (#2103) — one feature, two independent implementations.**
 The embed header's language selector (`src/lib/languages.ts`'s curated
