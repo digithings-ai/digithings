@@ -28,7 +28,10 @@ node_modules/
 .venv-ci/
 venv/
 .env
+.env*
 projects/*/.env
+# Agent-local secrets / scratch (vault keys, signup drafts) — never commit
+.local/
 config/dogfood-digiproject.local.yaml
 docker-compose.override.yml
 
