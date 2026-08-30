@@ -40,6 +40,19 @@ export type ProfileSaveResult = {
   recorded_at: string;
 };
 
+/** GET /profile tip (or empty contract when no tip yet). */
+export type ProfileTip = {
+  version_id: string | null;
+  workspace_id: string;
+  profile_key: string;
+  schema_version: number;
+  label: string;
+  supersedes_id: string | null;
+  recorded_at: string | null;
+  investment: Record<string, unknown> | null;
+  assets: Record<string, unknown> | null;
+};
+
 export type SettingsApiOptions = {
   /** Absolute or relative functions base, e.g. https://xxx.supabase.co/functions/v1 */
   functionsBaseUrl?: string;
@@ -101,6 +114,17 @@ async function request<T>(
     });
   }
   return json as T;
+}
+
+export async function getProfile(
+  opts: SettingsApiOptions,
+  args?: { workspaceId?: string; profileKey?: string },
+): Promise<ProfileTip> {
+  const params = new URLSearchParams();
+  if (args?.workspaceId) params.set('workspace_id', args.workspaceId);
+  if (args?.profileKey) params.set('profile_key', args.profileKey);
+  const q = params.toString() ? `?${params.toString()}` : '';
+  return request<ProfileTip>(opts, 'GET', `/settings/profile${q}`);
 }
 
 export async function saveProfile(
