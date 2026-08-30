@@ -116,7 +116,10 @@ olympus ledger — live policy already existed; stamp via human [#3340](https://
 
 **Edge Functions (`core`):** `settings` **v32 ACTIVE** (`verify_jwt=true`, includes
 `GET /jobs` `/fills` `/notifications/log` `/app-urls` + public Alpaca client id).
-ESZIP source matches this branch (no redeploy this pass). Checkout **v8** / portal
+ESZIP source matches the v32 tree: **no** `POST /access/redeem-invite` (that
+route is on `develop` and needs the 112 tables, which are now on `core`). Do
+**not** redeploy settings to pick up redeem-invite while live Pages 404
+`/dashboard` — that deploy also pins app URLs. Checkout **v8** / portal
 **v9** / webhook **v7** (`verify_jwt=false`). Checkout/portal await Stripe price
 secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
 Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
