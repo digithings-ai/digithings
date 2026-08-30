@@ -4,9 +4,9 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — captured POST /ingest payloads
 
 import pytest
-
 from digisearch.ingestion.parsers.markdown import MarkdownParser
 from digisearch.ingestion.segmenters.heading import heading_segments
+
 from scripts.docs_onboard.models import (
     ClassifiedPage,
     DiscoveredPage,
