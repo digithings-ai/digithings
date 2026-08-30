@@ -1,13 +1,15 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30 E2E push) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + live vault seal (settings **v21**, ops Custom + fake api_key) unlocked. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30 staging-gap) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + live vault seal unlocked. Product misconfig codes + loud-fail staging harness landed. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-e2e-push.md`  
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-staging-gap.md`  
 Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-Docs branch: `cursor/kairos-audit-e2e-push-3d52`  
-Fix compare: https://github.com/digithings-ai/digithings/compare/develop...cursor/settings-uuid-bind-fix-3d52
+Branch: `cursor/kairos-staging-gap-2ec1`  
+Compare: https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-staging-gap-2ec1
+
+Loud-fail gate (after paste): `PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py`
 
 ---
 
@@ -32,7 +34,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 **Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
 **Done Auth:** GitHub provider **Enabled** on `core`. Google still Disabled. Email Enabled — Agentmail path works.  
-**Done product:** mig 107 bootstrap; settings GET/PATCH notifications with JWT; vault seal after uuid-bind (v21).
+**Done product:** mig 107 bootstrap; settings GET/PATCH; vault seal; **settings v22** (`OAUTH_NOT_CONFIGURED`); **create-checkout-session v5** (names missing price env).
 
 ---
 
@@ -65,7 +67,7 @@ Webhook URL: `https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webho
 
 ## 2) Redeploy billing Edge Functions (after Stripe secrets)
 
-Preferred order: `stripe-webhook` (no verify JWT) → `create-checkout-session` / `customer-portal`. Settings already **v21**.
+Preferred order: `stripe-webhook` (no verify JWT) → `create-checkout-session` / `customer-portal`. Settings already **v22**.
 
 Smoke: unauth → gateway `401`; Stripe webhook without key must not stay `STRIPE_NOT_CONFIGURED` once secret is set; checkout must clear `PRICE_NOT_CONFIGURED`.
 

@@ -259,8 +259,8 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
-| Agent unlock (2026-08-30) | **Partial** — `sbp_` + vault/APP_URL + settings **v19** + GitHub Auth + Agentmail user + **workspace bootstrap (mig 107)**; JWT settings **200**; docs through [#3217](https://github.com/digithings-ai/digithings/pull/3217) merged | Waiting `PARTIAL_UNLOCK`. Checkout `PRICE_NOT_CONFIGURED`. Vendors still empty. #3183 left draft. |
-| PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | Tip synced to `baa7766d` (= `origin/develop`). **Do not merge** until secrets live **and** intentional Pages cutover. |
+| Agent unlock (2026-08-30) | **Partial** — `sbp_` + vault/APP_URL + settings **v22** + checkout **v5** + GitHub Auth + Agentmail + bootstrap (mig 107) + loud-fail `scripts/kairos_staging_e2e.py`; JWT settings **200**; uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) merged | Waiting `PARTIAL_UNLOCK`. Checkout `PRICE_NOT_CONFIGURED`. Vendors still empty. #3183 left draft. |
+| PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 
 ## 6. Cutover checklist
@@ -348,19 +348,29 @@ Document the chosen approach on the epic before re-exposing the views.
 
 Per [EPIC.md](EPIC.md) program-level acceptance (staging / Stripe test mode):
 
+Agent-runnable loud-fail gate (names missing secrets; **never** paper-fakes):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+# or: pytest -m staging_e2e tests/dq/olympus/kairos/test_staging_e2e.py
+```
+
+Full manual chain once secrets land on Cursor env **and** core EF:
+
 ```bash
 # Skeleton — fill URLs/keys from staging; do not commit secrets.
 set -euo pipefail
-BASE_URL="${BASE_URL:-https://staging.example/olympus}"
-# 1) Signup / login (Supabase Auth Google or GitHub) — manual browser or supabase-js
+SUPABASE_FUNCTIONS="${SUPABASE_FUNCTIONS:-https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1}"
+# 1) Signup / login (Supabase Auth GitHub or Email/Agentmail) — manual browser or supabase-js
 # 2) Subscribe (Stripe test Checkout → Baseline or Custom)
 curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -H "Authorization: Bearer $USER_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"price_env":"STRIPE_PRICE_BASELINE_MONTHLY"}'
+  -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
-# 3) Connect Alpaca paper (Settings → brokers; OAuth or API key)
+# 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
 # 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
+#    (private persist needs OLYMPUS_OVERLAY_PERSIST=1 only after cutover 900)
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run

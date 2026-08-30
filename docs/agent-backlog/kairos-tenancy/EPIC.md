@@ -63,26 +63,26 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, E2E push)
+## Agent delivery status (2026-08-30, staging-gap)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-e2e-push.md`.  
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-staging-gap.md`.  
 **Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys only (bootstrap + vault seal path unlocked). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
-**Docs branch:** `cursor/kairos-audit-e2e-push-3d52`. Fix branch: `cursor/settings-uuid-bind-fix-3d52` (compare URL; `gh pr create` 403).
+**Branch:** `cursor/kairos-staging-gap-2ec1` — compare https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-staging-gap-2ec1 (`gh pr create` often 403).
 
-**Code:** all 12 WPs on `develop` (promotion #3141) + bootstrap [#3223](https://github.com/digithings-ai/digithings/pull/3223) **merged**. Settings uuid-bind fix deployed to `core` as **settings v21** (branch not yet PR-merged via agent).
+**Code:** all 12 WPs on `develop` (promotion #3141) + bootstrap [#3223](https://github.com/digithings-ai/digithings/pull/3223) + uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) **merged**. This turn: named `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + loud-fail staging harness (`scripts/kairos_staging_e2e.py`, `pytest -m staging_e2e`).
 
 **Schema (`core`):** migrations **096–107** applied (`ensure_personal_workspace`). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v21 ACTIVE** — live vault seal **200** with fake api_key after uuid-bind fix.
+**Edge Functions (`core`):** `settings` **v22 ACTIVE**; `create-checkout-session` **v5 ACTIVE**; billing EFs await Stripe secrets.
 
-**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET profile/notifications/brokers **200**; PATCH notifications **200**; checkout **`PRICE_NOT_CONFIGURED`**.
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET/PATCH **200**; checkout **`PRICE_NOT_CONFIGURED`**.
 
 **Secrets (names only):**
-- **`sbp_` path unlocked** — local PAT + process env nonempty this turn; Management API lists **12** EF names (no vendor).
+- **`sbp_` path unlocked** — local PAT + process env nonempty; Management API lists **12** EF names (no vendor).
 - **EF secrets on `core`:** vault + `APP_URL` + platform `SUPABASE_*` / `FINNHUB` only.
-- **GitHub Actions:** screenshots confirm **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*`; `gh` list **403**.
 - **Still empty / blocked:** Mailgun (MCP auth fail; env EMPTY), Stripe, Google OAuth, Alpaca OAuth.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
+- **Harness today:** `python scripts/kairos_staging_e2e.py` → exit **2** with named missing secrets (not silent pass).
 
 **Closest real chain (NOT staging E2E):** Agentmail Auth → bootstrap → settings 200s → ops Custom elevation → live vault seal (fake api_key) → paper-fakes unit suites. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
 
