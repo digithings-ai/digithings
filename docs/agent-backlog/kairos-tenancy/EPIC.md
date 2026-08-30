@@ -73,18 +73,20 @@ Wave E
 
 **Secrets (names only):**
 - **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — cannot `supabase secrets set` / Management secrets API. **No new secrets** this turn.
-- **Agent Mail:** `digithings@agentmail.to`.
-- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun MCP auth (`MAILGUN_*` empty; MCP re-auth failed), Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — Management API secrets list/set → `401 JWT failed verification`; CLI → invalid format (must be `sbp_…`). `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` **declared but empty** — MCP auth failed; nothing nonempty to copy into kairos.env / EF secrets.
+- **Agent Mail:** `digithings@agentmail.to` (controlled recipient only — no live Mailgun send this turn).
+- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun real API key + domain + `NOTIFY_FROM` (then EF push), Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
 
 **Acceptance evidence (agent-reachable; artifacts under `/opt/cursor/artifacts/`):**
 - House olympus unit: **420 passed** (`house-olympus-unit.log`).
 - Vault + notify unit: **138 passed** (`kairos-vault-notify-unit.log`).
+- Notify unit (this turn): **62 passed** (`mailgun-notify-unit.log`); fail-soft empty-env smoke PASS (`mailgun-failsoft-smoke.log`).
 - Brokers + contracts: **208 passed**, 2 skipped (`kairos-brokers-contracts.log`).
 - Olympus kairos unit: **67 passed** (`olympus-kairos-unit.log`).
-- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v10-smoke.log`).
+- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v10-smoke.log`). Settings EF still **v10**.
 - RLS proof: **59/59 PASS** including migration 106 + staged 900 (`rls_isolation_proof.log`).
 - Olympus static export build: **OK** (`olympus-build.log`; `check:static-export` passed).
+- EF secrets push attempt: **blocked** without `sbp_` (`supabase-secrets-set-attempt.log`).
 - E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above — not faked.
 
 **Pages promote (`develop` → `main`):** agent-reachable and **policy-safe without cutover 900** while `NEXT_PUBLIC_OLYMPUS_AUTH` stays unset (flag-off). `db-migrate` would no-op 096–106 already stamped; `migrations/cutover/` stays inert (`-maxdepth 1`). ~191 commits / ~392 files ahead of `main` — treat as a **human release-gate** promote PR (do not flip auth flag; do not apply 900). Prep notes: `pages-promote-prep.md` artifact.
