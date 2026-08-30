@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.notify.entitlements import (
     ARTIFACT_CLASSES,
     PLAN_TIERS,
