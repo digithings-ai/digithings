@@ -1,5 +1,5 @@
 provider: deepseek
-last_checked: 2026-07-19
+last_checked: 2026-08-30
 source: agent-research
 
 free_tier:
@@ -35,8 +35,8 @@ free_tier:
       max_output_tokens: 8192
       status: deprecated
       verified: false
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 679
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 676
       verification_error: "Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}"
     - name: deepseek-reasoner   # deprecated → deepseek-v4-pro (July 24 2026)
       context_window: 65536
@@ -72,11 +72,11 @@ paid_tier:
       context_window: 1000000
       max_input_tokens: 1000000
       max_output_tokens: 384000
-      cost_per_1m_input: 0.435
-      cost_per_1m_input_long: null
-      cost_per_1m_output: 0.87
-      cost_per_1m_output_long: null
-      cost_per_1m_input_cached: 0.003625  # cache hit reads
+      cost_per_1m_input: 1.32     # PEAK hours (01:00-04:00, 06:00-10:00 UTC), effective 2026-08-16; was flat $0.435
+      cost_per_1m_input_long: 0.66   # OFF-PEAK (all other hours) — repurposed this field for time-of-day, not a context-length tier
+      cost_per_1m_output: 3.96    # PEAK hours; was flat $0.87
+      cost_per_1m_output_long: 1.98  # OFF-PEAK
+      cost_per_1m_input_cached: 0.003625  # cache hit reads; peak/off-peak split not confirmed for cache reads
       status: active
   batching:
     available: true
@@ -119,4 +119,4 @@ verification:
   probe_model_alias: deepseek-chat
   github_secret_key: DEEPSEEK_API_KEY
 
-notes: "V4 generation launched April 24, 2026. deepseek-v4-flash replaces deepseek-chat: 1M ctx, 384K out (input price possibly $0.14 cache-miss vs the $0.07 recorded here — official pricing page and this snapshot's methodology disagree on cache-hit vs cache-miss framing; verify before relying on the exact figure). deepseek-v4-pro replaces deepseek-reasoner: $0.435/$0.87 (permanent 75% cut), 1M ctx. PROBE 2026-07-19: deepseek-chat probe returned 402 Insufficient Balance — confirmed this is an account balance issue (standard pay-as-you-go zero-balance error per DeepSeek's own error-code docs), NOT evidence the alias itself is dead; deepseek-chat/deepseek-reasoner remain live and route to v4-flash/v4-pro until the hard cutover at 2026-07-24 15:59 UTC (5 days after this check) — recommend checking the probe account's grant expiry/balance and re-running before treating this as a deprecation signal. Free tier corrected: it is a one-time 5M-token grant (~$8.40 value) expiring 30 days after signup, not open-ended credits. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."
+notes: "COST INCREASE 2026-08-30: effective 2026-08-16 16:00 UTC, DeepSeek replaced deepseek-v4-pro's flat $0.435/$0.87 rate with peak/off-peak billing — $1.32/$3.96 during peak hours (01:00-04:00 and 06:00-10:00 UTC, a 3x increase) and $0.66/$1.98 off-peak (still ~1.5x the old flat rate). Repurposed cost_per_1m_input_long/cost_per_1m_output_long above to carry the off-peak figures since there is no dedicated time-of-day field in this schema — do not read those as long-context pricing for this provider. deepseek-v4-flash pricing not reconfirmed this cycle (carried forward: input price possibly $0.14 cache-miss vs the $0.07 recorded above — official pricing page and this snapshot's methodology disagree on cache-hit vs cache-miss framing; verify before relying on the exact figure). PROBE 2026-08-30: deepseek-chat probe again returned 402 Insufficient Balance (676ms) — the 2026-07-24 hard cutover to v4-flash/v4-pro has now passed, so deepseek-chat/deepseek-reasoner may no longer route at all regardless of balance; this 402 does not by itself distinguish 'probe account out of funds' from 'alias fully retired' — recommend checking probe account balance/grant status directly, or repointing scripts/provider_review/probe.py:66 to deepseek-v4-flash so the probe exercises the current-generation model. Free tier: one-time 5M-token grant (~$8.40 value) expiring 30 days after signup, not open-ended credits. Cache discount 96% on v4-flash. Data jurisdiction: platform hosted in China; use Fireworks/Together/DeepInfra for Western-jurisdiction hosting."
