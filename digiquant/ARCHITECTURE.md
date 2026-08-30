@@ -214,6 +214,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
+| `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` is a string selector (`btc_power_law` today; #3175 adds providers). Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 | `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
@@ -446,9 +447,12 @@ path**, unlike every other entry in the strategy table above.
 depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
 `SdcaStrategy`, following the same precompute-then-drive pattern as
 `m2_liquidity.py`: a Polars DataFrame and a `RiskModel` cannot live in a frozen
-`StrategyConfig` (msgspec struct), so the caller runs `compute_composite_risk()`
-and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
-a parquet, and passes its path in as `risk_path`. `on_start()` loads that
+`StrategyConfig` (msgspec struct), so the caller runs
+`sdca/risk_index.py::build_risk_index()` (#3168) upstream (rails →
+`valuation_z_score()` → `compute_composite_risk()`), writes the two-column
+`date`/`risk` parquet with `write_risk_index()`, and passes its path in as
+`risk_path`. The MCP tool `digiquant_build_sdca_risk_index` is that upstream
+for cached price history; a notebook is no longer required. `on_start()` loads that
 parquet into a `date -> risk` map (validating the `date`/`risk` columns are
 present, rejecting duplicate dates, casting a `pl.Datetime` `date` column
 to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
@@ -508,10 +512,11 @@ users or dashboards as an actual backtest result. **`nautilus_strategy.py`
 rather than reimplementing them** — that is what keeps this module and the
 real Nautilus backtest from silently
 diverging into two sources of truth for the same allocation decision.
-`compute_composite_risk()`/`valuation_z_score()` are the caller's
-responsibility to invoke upstream of `SdcaStrategy` (to build the `risk_path`
+`build_risk_index()` / `write_risk_index()` (`sdca/risk_index.py`, #3168)
+are the caller's upstream of `SdcaStrategy` (to build the `risk_path`
 parquet), the same way `m2_liquidity`'s own signal computation happens outside
-its `Strategy` class.
+its `Strategy` class. The MCP tool `digiquant_build_sdca_risk_index` is that
+upstream for cached price history.
 
 | File | Role |
 |---|---|
@@ -521,7 +526,8 @@ its `Strategy` class.
 | `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. |
-| `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). |
+| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`). `write_risk_index()` persists the two-column parquet under every validation `SdcaStrategy._load_risk_index()` already enforces (Date dtype, numeric finite-or-null risk, no null/duplicate dates). `RiskIndexBuildResult` is the Pydantic v2 JSON envelope the MCP tool returns. |
+| `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. |
 | `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
