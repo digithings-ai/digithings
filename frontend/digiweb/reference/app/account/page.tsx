@@ -17,9 +17,9 @@ export default function AccountPage() {
           Account surfaces, <em>end to end.</em>
         </h1>
         <p>
-          Login, sign-up, session/logout, payment, settings, and profile templates — the
-          transactional pages every product surface eventually needs. Olympus OAuth and
-          tier-hidden settings tabs live here first.
+          Login, sign-up, session, payment, settings, and profile templates — the
+          transactional pages every product surface eventually needs. Compact AuthCard
+          (mark + digiquant wordmark) is the selected login grammar.
         </p>
       </header>
 
