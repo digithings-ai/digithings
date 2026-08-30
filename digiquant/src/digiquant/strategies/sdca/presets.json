@@ -46,5 +46,17 @@
       "buy_curvature": 1.0,
       "sell_curvature": 2.0
     }
+  },
+  "btc_optimized": {
+    "description": "Walk-forward search winner (#3174). Checked-in shape matches accumulate_and_distribute until an operator re-runs run_sdca_walk_forward with the Nautilus evaluator on real BTC history. Not a published digiquant.io number. Provenance: btc_optimized_provenance.json. Do not --push-supabase.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 10.0,
+      "buy_knee_risk": 35.0,
+      "sell_knee_risk": 80.0,
+      "sell_max_rate": 10.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0
+    }
   }
 }

@@ -191,6 +191,31 @@ for `SdcaStrategyConfig`.
    is the regression net.
 3. Run `pytest tests/dq/strategies/sdca/test_presets.py tests/dq/strategies/sdca/test_curve_shape.py -v`.
 
+### Re-running SDCA walk-forward (#3174)
+
+When new BTC history lands, do **not** reuse a full-history rail fit inside the
+optimizer (#3173: truncated quadratic log-time fits do not extrapolate).
+
+```bash
+# Injected-evaluator unit tests (no Nautilus, no statsmodels fit)
+pytest -m unit tests/dq/strategies/sdca/test_walk_forward.py tests/dq/strategies/sdca/test_optimize.py
+
+# Operator run (Nautilus; may SIGABRT on Linux — #42). Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" python -c "
+from pathlib import Path
+from digiquant.optimize import run_optimize
+from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_walk_forward
+# Prefer run_optimize(strategy_name='sdca', ...) which already refits rails per fold.
+"
+```
+
+`run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
+(`digiquant_run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
+a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
+Sharpe. Persist with `persist_btc_optimized()` and commit the provenance JSON
+even if OOS vs-flat-DCA is negative. Do not publish `btc_optimized` to
+digiquant.io from this WP.
+
 ### SDCA test commands
 
 ```bash

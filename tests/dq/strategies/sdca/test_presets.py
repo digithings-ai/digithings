@@ -11,6 +11,7 @@ EXPECTED_PRESET_NAMES = {
     "balanced",
     "aggressive_accumulate",
     "accumulate_and_distribute",
+    "btc_optimized",
 }
 
 

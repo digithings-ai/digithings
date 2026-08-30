@@ -79,6 +79,7 @@ digiquant owns the ordered quant workflow internally via a LangGraph `StateGraph
 | `ema`, `s`, `mean_reversion_tech`, `momentum_tech` | `ema_cross` |
 | `mean_reversion_stat_arb` | `bollinger_mr` |
 | `momentum_energy` | `rsi_momentum` |
+| `btc_sdca` | `sdca` (param specs / walk-forward optimize). Registry canonical remains `btc_sdca`; `sdca` is a registry alias. |
 
 **3 optimization engines** in `optimize.py` and `optimize_bayesian.py`:
 
@@ -111,11 +112,11 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `graph/pipeline.py` | LangGraph pipeline: validate → backtest → optimize → export |
 | `nautilus_runner.py` | NautilusTrader engine wiring, Polars↔pandas boundary |
 | `backtest.py` | `run_backtest()` entrypoint, optional result caching |
-| `optimize.py` | Grid/random optimization, `ProcessPoolExecutor` parallelism |
+| `optimize.py` | Grid/random optimization, `ProcessPoolExecutor` parallelism; SDCA dispatches to walk-forward (`sdca` / `btc_sdca`) |
 | `optimize_bayesian.py` | Optuna Bayesian optimization |
 | `export.py` | Artifact writing with path confinement |
 | `strategies/registry.py` | Strategy registration and lookup |
-| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference |
+| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference. `sdca` (#3174) holds the six shape params + `valuation_weight`; `btc_sdca` aliases to it. |
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
@@ -517,7 +518,11 @@ personalities as public config — `conservative_hold`, `balanced`,
 `SdcaCurveShape` parameters (dead zone + two knees + curvatures), not 21 free
 nodes; `load_preset(name)` still returns an `SdcaPreset` whose `curve_nodes`
 are generated at load so `AccumDistCurve` / `SdcaStrategyConfig` stay unchanged.
-These are documented personalities, not optimized parameters. To add a preset:
+These are documented personalities, not optimized parameters — except
+`btc_optimized` (#3174), which is the walk-forward winner plus a provenance
+sidecar (`btc_optimized_provenance.json`). The checked-in v1 file matches
+`accumulate_and_distribute` until an operator re-runs the Nautilus evaluator
+on real BTC; it is **not** a published digiquant.io number. To add a preset:
 append a `shape` object plus `long_only` and `description` to `presets.json`;
 `SdcaPreset` validates node count (always 21 after generation) and, if
 `long_only` is `true`, that every node is `>= 0` at load time. The four
@@ -556,7 +561,11 @@ upstream for cached price history.
 | `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. |
 | `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`). `write_risk_index()` persists the two-column parquet under every validation `SdcaStrategy._load_risk_index()` already enforces (Date dtype, numeric finite-or-null risk, no null/duplicate dates). `RiskIndexBuildResult` is the Pydantic v2 JSON envelope the MCP tool returns. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. |
-| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. |
+| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. `btc_optimized` (#3174) is the walk-forward slot. |
+| `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). |
+| `sdca/optimize.py` | Search loop, sensitivity, `persist_btc_optimized()`, `OptimizeResult` mapping. Injected `SdcaTrialEvaluator` — never `SdcaBacktestReport`. |
+| `sdca/nautilus_evaluator.py` | Production fitness: Nautilus fills → `dca_metrics`. pandas only at the BarDataWrangler boundary. |
+| `sdca/btc_optimized_provenance.json` | Fit window, folds, objective, OOS vs-flat-DCA, sensitivity. Honest even when OOS is negative. |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
 day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
@@ -596,10 +605,19 @@ non-null days only).
 
 The dispatch in `run_optimize()`:
 
-1. If `param_grid` is provided explicitly, skip method inference and run that grid directly
-2. If `method == "bayesian"`, delegate to `run_optimize_bayesian()` (Optuna)
-3. If `method == "random"`, call `sample_random_params()` then `_run_trials_parallel()`
-4. Otherwise (grid default), call `infer_param_grid()` then `_run_trials_parallel()`
+1. If the resolved strategy name is `sdca` (alias `btc_sdca`), run
+   `run_sdca_walk_forward()` with the Nautilus evaluator. The slapper
+   Sharpe/return path is not used. Objective is **maximize
+   `vs_flat_dca_pct`** subject to `capital_deployed_pct >= 10` and
+   `max_drawdown_pct <= 50` (magnitudes, ×100). `vs_lump_pct` is reported
+   never optimized — maximizing it collapses to lump-sum on an uptrend.
+   Auto-grid holds `buy_curvature`/`sell_curvature` at defaults (2-point
+   grid on the remaining params). `method=random`/`bayesian` samples all
+   seven. Rails are refit per fold on the IS window only.
+2. If `param_grid` is provided explicitly, skip method inference and run that grid directly
+3. If `method == "bayesian"`, delegate to `run_optimize_bayesian()` (Optuna)
+4. If `method == "random"`, call `sample_random_params()` then `_run_trials_parallel()`
+5. Otherwise (grid default), call `infer_param_grid()` then `_run_trials_parallel()`
 
 `infer_param_grid()` reads from `STRATEGY_PARAM_SPECS` in `strategy_specs.py`, which can be extended at runtime via a YAML file pointed to by `DIGIQUANT_STRATEGY_SPECS_PATH`. A hard cap of `MAX_GRID_SIZE = 10_000` prevents combinatorial explosion.
 
