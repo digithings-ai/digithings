@@ -1,4 +1,8 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { createElement, act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { BrokersTab, sanitizeConnection } from './brokers-tab';
@@ -72,6 +76,7 @@ describe('BrokersTab', () => {
     );
     expect(html).toContain('settings-brokers-tab');
     expect(html).toContain('IBKR (beta)');
+    expect(html).toContain('brokers-fills');
     expect(html).not.toContain(secret);
   });
 
@@ -111,5 +116,41 @@ describe('BrokersTab', () => {
       }),
     );
     expect(html).not.toContain('SHOULD-NOT-RENDER');
+  });
+
+  it('hydrates paper fills from GET /fills', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const fillsFn = vi.fn(async () => [
+      {
+        id: 'fill-1',
+        symbol: 'AAPL',
+        quantity: 1,
+        executed_at: '2026-08-31T14:00:00Z',
+        recorded_at: '2026-08-31T14:00:01Z',
+      },
+    ]);
+    await act(async () => {
+      root.render(
+        createElement(BrokersTab, {
+          api: { accessToken: 'tok' },
+          listFn: vi.fn(async () => []),
+          connectFn: vi.fn(),
+          revokeFn: vi.fn(),
+          fillsFn,
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fillsFn).toHaveBeenCalledOnce();
+    expect(host.querySelector('[data-testid="broker-fill-row"]')?.textContent).toMatch(/AAPL/);
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
   });
 });

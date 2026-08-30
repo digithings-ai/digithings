@@ -220,19 +220,25 @@ Cloudflare dashboard.
 
 ## Settings workspace (T3)
 
-`/settings` is a tabbed workspace — **Profile | Brokers | Notifications | Billing | About**.
+`/settings` is a tabbed workspace — **Profile | Pipeline | Keys | Brokers | Notifications | Billing | About**.
 The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** by the
 Kairos tenancy program: authenticated users edit versioned investment overlays, connect
-paper brokers, and open Stripe checkout/portal.
+paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 
 - **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the
   reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
   Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
+- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs, plus a read of
+  `GET /settings/jobs` (skip reasons such as `no_credentials` are visible; remaining-hop
+  proof is `succeeded` only).
+- **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save).
 - **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
   IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /
-  `last_used_at` only. Gated as Custom-tier (`broker_status`).
-- **Notifications** — PATCH prefs; function returns `503 NOT_READY` until K5.
+  `last_used_at` only, plus `GET /settings/fills` paper-fill fingerprints. Gated as
+  Custom-tier (`broker_status`).
+- **Notifications** — PATCH prefs; `GET /settings/notifications/log` delivery events
+  (digest remaining-hop needs a `digest:` log key **and** inbox confirmation).
 - **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
   "billing not configured" when Supabase/billing envs are absent.
 - **About** — prior ops/status/appearance card content.

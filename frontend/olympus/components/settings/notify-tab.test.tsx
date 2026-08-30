@@ -43,11 +43,13 @@ describe('NotifyTab', () => {
       updated_at: '2026-08-30T00:00:00Z',
     }));
     const patchFn = vi.fn();
+    const logFn = vi.fn(async () => []);
     const el = await mount(
       createElement(NotifyTab, {
         api: { accessToken: 'tok' },
         getFn,
         patchFn,
+        logFn,
       }),
     );
     await act(async () => {
@@ -63,6 +65,41 @@ describe('NotifyTab', () => {
     expect(execution.checked).toBe(true);
     expect(hour.value).toBe('9');
     expect(patchFn).not.toHaveBeenCalled();
+  });
+
+  it('hydrates delivery log from GET /notifications/log', async () => {
+    const getFn = vi.fn(async () => ({
+      workspace_id: 'ws-a',
+      email: 'pm@example.com',
+      daily_digest: true,
+      holding_change_alerts: false,
+      execution_alerts: false,
+      digest_hour_utc: 12,
+      updated_at: '2026-08-31T00:00:00Z',
+    }));
+    const logFn = vi.fn(async () => [
+      {
+        event_key: 'digest:ws-a:2026-08-31',
+        sent_date: '2026-08-31',
+        sent_at: '2026-08-31T12:00:00Z',
+      },
+    ]);
+    const el = await mount(
+      createElement(NotifyTab, {
+        api: { accessToken: 'tok' },
+        getFn,
+        patchFn: vi.fn(),
+        logFn,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(logFn).toHaveBeenCalledOnce();
+    expect(el.querySelector('[data-testid="notify-log-row"]')?.textContent).toMatch(
+      /digest:ws-a:2026-08-31/,
+    );
   });
 
   it('PATCH round-trip succeeds when function returns ok', async () => {
@@ -93,6 +130,7 @@ describe('NotifyTab', () => {
         api: { accessToken: 'tok' },
         getFn,
         patchFn,
+        logFn: vi.fn(async () => []),
       }),
     );
     await act(async () => {
@@ -136,6 +174,7 @@ describe('NotifyTab', () => {
         api: { accessToken: 'tok' },
         getFn,
         patchFn,
+        logFn: vi.fn(async () => []),
       }),
     );
     await act(async () => {
@@ -156,6 +195,7 @@ describe('NotifyTab', () => {
       createElement(NotifyTab, { api: null, getFn, patchFn: vi.fn() }),
     );
     expect(html).toContain('settings-notify-tab');
+    expect(html).toContain('notify-log');
     expect(getFn).not.toHaveBeenCalled();
   });
 });
