@@ -2891,7 +2891,9 @@ read and unseal, failing closed on a revoked or non-active row
 `list_connection_fingerprints` returns a display model that carries no sealed columns at
 all — it is built with `extra="forbid"` over a narrowed `select`, so a future widening of
 that projection breaks a test instead of leaking ciphertext into a UI payload.
-Re-connecting a broker is revoke + insert, never an update.
+Re-connecting a broker is revoke + insert, never an update — uniqueness is a partial
+unique index on `(workspace_id, broker, env) WHERE status = 'active'` so a revoked row
+and a new active row can coexist (DELETE is not granted to service_role).
 
 **Test vectors.** `tests/dq/vault/vectors.json` commits `(key, nonce, aad, plaintext,
 ciphertext)` tuples plus negative cases, generated deterministically from this

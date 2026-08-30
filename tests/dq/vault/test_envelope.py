@@ -49,6 +49,7 @@ from digiquant.vault import (
     fingerprint,
     load_master_key,
     open_bytes,
+    parse_credential,
     seal_bytes,
     seal_credential,
     unseal_credential,
@@ -362,6 +363,53 @@ def test_authentic_bytes_that_are_not_a_credential_fail_closed(aad: bytes) -> No
     assert "leak-me-if-you-can" not in rendered
 
 
+def test_payload_error_has_no_validation_context_carrying_secrets(aad: bytes) -> None:
+    """``raise … from None`` only suppresses display; ``__context__`` must also be cleared.
+
+    Pydantic's ``ValidationError.errors()`` embeds the rejected input (the decrypted JSON),
+    so leaving that error on ``__context__`` would keep the secret reachable on the
+    authentic-but-wrong-shape path even when the traceback looks clean.
+    """
+    secret = "leak-me-via-context-chain"
+    # Missing ``key_id``: ValidationError.errors() includes the whole input dict (secret).
+    envelope = seal_bytes(
+        f'{{"kind":"api_key","secret":"{secret}"}}'.encode(),
+        aad=aad,
+        key=KEY_ONE,
+    )
+    with pytest.raises(VaultPayloadError) as excinfo:
+        with unseal_credential(envelope, aad=aad, key=KEY_ONE):
+            pass
+    exc = excinfo.value
+    assert exc.__context__ is None
+    assert exc.__cause__ is None
+    chain = "".join(traceback.format_exception(exc))
+    assert secret not in chain
+    assert secret not in repr(exc.__context__)
+
+
+def test_parse_credential_accepts_valid_mappings() -> None:
+    oauth = parse_credential({"kind": "oauth", "access_token": "tok"})
+    assert isinstance(oauth, OAuthCredential)
+    assert oauth.access_token == "tok"
+    api = parse_credential({"kind": "api_key", "key_id": "k", "secret": "s"})
+    assert isinstance(api, ApiKeyCredential)
+    assert api.secret == "s"
+
+
+def test_parse_credential_raises_context_free_vault_payload_error() -> None:
+    """Ingest (T3) must use parse_credential so ValidationError never escapes with secrets."""
+    secret = "ingest-surface-must-not-echo-me"
+    with pytest.raises(VaultPayloadError) as excinfo:
+        parse_credential({"kind": "api_key", "secret": secret})
+    exc = excinfo.value
+    assert exc.__context__ is None
+    assert exc.__cause__ is None
+    assert secret not in str(exc)
+    assert secret not in "".join(traceback.format_exception(exc))
+    assert secret not in repr(exc.__context__)
+
+
 # --- lease lifetime ---------------------------------------------------------------
 
 
@@ -627,6 +675,11 @@ def test_plaintext_never_appears_in_any_observable_surface(
             assert lease.credential.secret == secret
         observed += [repr(lease), str(lease)]
 
+        wrong_shape = seal_bytes(
+            f'{{"kind":"api_key","secret":"{secret}"}}'.encode(),
+            aad=aad,
+            key=KEY_ONE,
+        )
         for failure in (
             lambda: open_bytes(
                 envelope, aad=build_aad(WORKSPACE_B, "alpaca", "paper"), key=KEY_ONE
@@ -643,6 +696,8 @@ def test_plaintext_never_appears_in_any_observable_surface(
             ),
             lambda: lease.credential,
             lambda: load_master_key({MASTER_KEY_ENV: secret}),
+            lambda: unseal_credential(wrong_shape, aad=aad, key=KEY_ONE).__enter__(),
+            lambda: parse_credential({"kind": "api_key", "secret": secret}),
         ):
             # Intentionally broad: the probe is "whatever this raises must not leak",
             # so pinning the type per lambda would narrow what the test is asserting.
@@ -651,6 +706,10 @@ def test_plaintext_never_appears_in_any_observable_surface(
             observed.append(str(excinfo.value))
             observed.append(repr(excinfo.value))
             observed.append("".join(traceback.format_exception(excinfo.value)))
+            # ``raise … from None`` still leaves ``__context__``; assert secrets are not
+            # reachable there either (VaultPayloadError must clear it entirely).
+            observed.append(repr(excinfo.value.__context__))
+            observed.append(repr(excinfo.value.__cause__))
 
     for record in caplog.records:
         observed += [record.getMessage(), str(record.args), record.name]

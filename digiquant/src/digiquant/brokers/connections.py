@@ -1,6 +1,6 @@
 """Broker connection store: sealed credentials in `broker_connections` (K3).
 
-One row per ``(workspace_id, broker, env)`` holding a credential sealed by
+At most one *active* row per ``(workspace_id, broker, env)`` holding a credential sealed by
 :mod:`digiquant.vault.envelope`. This module owns the four operations the rest of the
 program needs — create/seal, get, open (unseal) for the duration of one broker call,
 revoke — plus the display-safe listing that is the *only* thing an API or UI may show.
@@ -348,10 +348,11 @@ def create_connection(
     """Seal ``credential`` and insert one active `broker_connections` row.
 
     ``auth_kind`` and ``fingerprint`` are both derived from the credential, so neither can
-    disagree with the sealed bytes. The row's ``UNIQUE (workspace_id, broker, env)``
-    constraint is what makes a re-connect a conflict rather than a second shadow row:
-    reconnecting means revoking the old row and inserting a new one, deliberately not an
-    in-place credential update (the migration's trigger forbids that too).
+    disagree with the sealed bytes. The partial unique index on
+    ``(workspace_id, broker, env) WHERE status = 'active'`` is what makes a second *active*
+    re-connect a conflict rather than a shadow live credential: reconnecting means revoking
+    the old row and inserting a new one (revoked history may remain — DELETE is not granted),
+    deliberately not an in-place credential update (the migration's trigger forbids that too).
 
     Returns the stored record. The plaintext ``credential`` is not retained anywhere in
     the returned value — only its ciphertext and its 8-hex fingerprint.
@@ -364,8 +365,11 @@ def create_connection(
     display = fingerprint(credential)
 
     row = {
-        # Client-side id so the record is fully identified before the round-trip, and a
-        # retry of a failed insert collides on the primary key instead of duplicating.
+        # Client-side id so the record is fully identified before the round-trip. A retry
+        # after a commit-but-lost-response collides on the partial unique
+        # (workspace_id, broker, env) WHERE status = 'active' — each call mints a fresh
+        # UUID, so the active triple (not the primary key) is what prevents a second live
+        # credential row.
         "id": str(uuid4()),
         "workspace_id": str(resolved_workspace),
         "broker": resolved_broker.value,

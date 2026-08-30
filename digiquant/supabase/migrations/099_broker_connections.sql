@@ -1,6 +1,6 @@
 -- 099_broker_connections.sql
 --
--- Sealed broker credential store (K3, Kairos milestone 1). One row per
+-- Sealed broker credential store (K3, Kairos milestone 1). At most one *active* row per
 -- (workspace_id, broker, env); the credential itself is an AES-256-GCM envelope produced
 -- by `digiquant/src/digiquant/vault/envelope.py` and never exists in this table (or in any
 -- log, API response, or repr) as plaintext.
@@ -98,10 +98,6 @@ CREATE TABLE IF NOT EXISTS public.broker_connections (
     created_at timestamptz NOT NULL DEFAULT now(),
     revoked_at timestamptz,
     last_used_at timestamptz,
-    -- One connection per (workspace, broker, env): a re-connect collides here instead of
-    -- leaving a second, shadow credential row that nothing would ever revoke.
-    CONSTRAINT uq_broker_connections_workspace_broker_env
-        UNIQUE (workspace_id, broker, env),
     -- status is NOT NULL, so `IS NULL`/`IS NOT NULL` against it never evaluates to NULL
     -- and no three-valued-logic contamination is possible (see migration 069's header).
     CONSTRAINT chk_broker_connections_revoked_at
@@ -119,8 +115,12 @@ CREATE TABLE IF NOT EXISTS public.broker_connections (
 
 CREATE INDEX IF NOT EXISTS idx_broker_connections_workspace
     ON public.broker_connections (workspace_id);
--- Partial index over the only rows a runner ever resolves a credential from.
-CREATE INDEX IF NOT EXISTS idx_broker_connections_active
+-- One *active* connection per (workspace, broker, env). Partial so a revoked (or expired)
+-- row can coexist with a newly inserted active row: re-connect is revoke + insert, DELETE
+-- is deliberately not granted to service_role, and an unconditional UNIQUE would make that
+-- documented flow collide. This unique index also covers the active-row lookup the runner
+-- uses, so a separate non-unique active index is unnecessary.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_broker_connections_active
     ON public.broker_connections (workspace_id, broker, env) WHERE status = 'active';
 
 ALTER TABLE public.broker_connections ENABLE ROW LEVEL SECURITY;
@@ -183,11 +183,12 @@ REVOKE ALL ON FUNCTION public.reject_broker_connection_credential_mutation()
     FROM PUBLIC, anon, authenticated;
 
 COMMENT ON TABLE public.broker_connections IS
-    'Sealed broker credentials (K3). One row per (workspace_id, broker, env); the secret '
-    'lives only inside ciphertext as an AES-256-GCM envelope whose AAD is '
-    'workspace_id:broker:env, so a ciphertext cannot be replayed onto another row. '
-    'RLS on with no policies; service_role may SELECT/INSERT and UPDATE only '
-    '(status, revoked_at, last_used_at). Re-connecting is revoke + insert.';
+    'Sealed broker credentials (K3). At most one active row per (workspace_id, broker, env) '
+    '(partial unique index); revoked/expired history may coexist so re-connect is revoke + '
+    'insert without DELETE. The secret lives only inside ciphertext as an AES-256-GCM '
+    'envelope whose AAD is workspace_id:broker:env, so a ciphertext cannot be replayed '
+    'onto another row. RLS on with no policies; service_role may SELECT/INSERT and UPDATE '
+    'only (status, revoked_at, last_used_at).';
 
 COMMENT ON COLUMN public.broker_connections.key_id IS
     'Master-key version that sealed this row (DIGIQUANT_VAULT_KEY_ID, e.g. v1) — not a '

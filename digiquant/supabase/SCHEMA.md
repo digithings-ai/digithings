@@ -621,7 +621,7 @@ Postgres at all. The secret is an AES-256-GCM envelope produced by
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `broker_connections` | `(id UUID)` | Sealed per-workspace broker credential; `UNIQUE (workspace_id, broker, env)`. |
+| `broker_connections` | `(id UUID)` | Sealed per-workspace broker credential; partial unique on `(workspace_id, broker, env) WHERE status = 'active'`. |
 
 The envelope's AAD is the string `workspace_id:broker:env`, which makes the row's own
 identity part of what the tag authenticates. That is what stops the attack this table
@@ -642,8 +642,11 @@ storage layer rather than trusting the writer — `octet_length(nonce) = 12`,
 `octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
 `fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
 `revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.
-Re-connecting a broker is **revoke + insert**, never an update — which is why the unique
-constraint is enforced on the active row rather than on all history.
+Re-connecting a broker is **revoke + insert**, never an update — which is why uniqueness
+is a **partial** unique index on `(workspace_id, broker, env) WHERE status = 'active'`
+rather than a table-wide UNIQUE. DELETE is not granted to `service_role`, so an
+unconditional unique on the triple would make that documented reconnect flow collide;
+a revoked row and a new active row for the same triple must be able to coexist.
 
 There is no rotation path in this migration and no historical backfill; `key_id` exists
 so one can be added without a schema change. Nothing in a live-trading path reads this

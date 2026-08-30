@@ -195,10 +195,29 @@ def test_created_at_is_the_db_write_clock(table_body: str) -> None:
     assert re.search(r"created_at\s+timestamptz\s+NOT NULL\s+DEFAULT\s+now\(\)", table_body, re.I)
 
 
-def test_one_connection_per_workspace_broker_env(table_body: str) -> None:
-    """A re-connect must collide here rather than leave a second shadow credential row
-    that nothing would ever revoke."""
-    assert re.search(r"UNIQUE\s*\(workspace_id,\s*broker,\s*env\)", table_body, re.I)
+def test_one_active_connection_per_workspace_broker_env(table_body: str, sql: str) -> None:
+    """Uniqueness is conditional on ``status = 'active'`` so revoke + insert can reconnect.
+
+    An unconditional ``UNIQUE (workspace_id, broker, env)`` would collide once the old row
+    is revoked (DELETE is not granted), contradicting the documented reconnect flow. A
+    revoked row plus a new active row for the same triple must be able to coexist.
+    """
+    assert not re.search(
+        r"CONSTRAINT\s+uq_broker_connections_workspace_broker_env", table_body, re.I
+    )
+    assert not re.search(
+        r"UNIQUE\s*\(\s*workspace_id\s*,\s*broker\s*,\s*env\s*\)", table_body, re.I
+    ), "table-level UNIQUE on the triple blocks revoke→reinsert"
+    assert re.search(
+        rf"CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+uq_{TABLE}_active\s+"
+        rf"ON\s+public\.{TABLE}\s*\(\s*workspace_id\s*,\s*broker\s*,\s*env\s*\)\s*"
+        r"WHERE\s+status\s*=\s*'active'",
+        sql,
+        re.IGNORECASE,
+    )
+    # The unique partial index covers active-row lookup; a redundant non-unique twin must
+    # not exist (it would be dead weight and invite drift with the unique predicate).
+    assert not re.search(rf"idx_{TABLE}_active", sql, re.IGNORECASE)
 
 
 def test_revoked_at_is_tied_to_the_revoked_status(table_body: str) -> None:
@@ -381,9 +400,12 @@ def test_indexes_cover_workspace_lookup_and_the_active_row(sql: str) -> None:
         sql,
         re.IGNORECASE,
     )
+    # Active-row uniqueness + lookup share one partial unique index (see
+    # test_one_active_connection_per_workspace_broker_env).
     assert re.search(
-        rf"CREATE INDEX IF NOT EXISTS idx_{TABLE}_active\s+"
-        rf"ON public\.{TABLE} \(workspace_id, broker, env\)\s+WHERE status = 'active'",
+        rf"CREATE\s+UNIQUE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+uq_{TABLE}_active\s+"
+        rf"ON\s+public\.{TABLE}\s*\(\s*workspace_id\s*,\s*broker\s*,\s*env\s*\)\s*"
+        r"WHERE\s+status\s*=\s*'active'",
         sql,
         re.IGNORECASE,
     )
@@ -401,3 +423,5 @@ def test_table_comment_states_the_aad_binding_and_the_grant_shape(sql: str) -> N
     body = _comment_body(sql, rf"TABLE\s+public\.{TABLE}")
     assert "workspace_id:broker:env" in body
     assert "revoke + insert" in body
+    assert "active" in body.lower()
+    assert "partial" in body.lower() or "coexist" in body.lower()

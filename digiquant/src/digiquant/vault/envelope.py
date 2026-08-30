@@ -39,11 +39,16 @@ What this module never does
 ---------------------------
 No log record, ``repr``, or exception message here carries plaintext. Secret-bearing
 fields are declared ``repr=False``, so a payload model's ``repr`` shows only its ``kind``;
-:func:`fingerprint` (8 hex characters) is the only display-safe artifact; and every
-``ValidationError`` / ``InvalidTag`` raised underneath is re-raised with ``from None``
-because a chained exception would put the library's own message — which can echo the
-input it rejected — into the traceback. ``tests/dq/vault/test_envelope.py`` captures
-logging and asserts the absence of plaintext across all of those surfaces.
+:func:`fingerprint` (8 hex characters) is the only display-safe artifact. Library
+exceptions that can echo rejected input are never left on an exception chain:
+``InvalidTag`` is re-raised with ``from None``, and credential ``ValidationError`` is
+caught inside a helper that returns a sentinel so :class:`VaultPayloadError` is raised
+*outside* the ``except`` block (``raise … from None`` only suppresses display —
+``exc.__context__`` would still hold the ValidationError whose ``.errors()`` contains
+the decrypted JSON). Ingest surfaces (T3) MUST call :func:`parse_credential` and must
+never log a raw ``ValidationError``. ``tests/dq/vault/test_envelope.py`` captures logging
+and asserts the absence of plaintext across all of those surfaces, including
+``__context__``.
 
 Zeroization is deliberately *not* claimed. Python ``bytes`` and ``str`` are immutable and
 may be copied by the interpreter, so a decrypted token cannot be reliably scrubbed from
@@ -363,6 +368,37 @@ BrokerCredential: TypeAlias = Annotated[
 _CREDENTIAL_ADAPTER: Final = TypeAdapter(BrokerCredential)
 
 
+def _validated_credential_or_none(
+    raw: Mapping[str, object] | bytes,
+) -> OAuthCredential | ApiKeyCredential | None:
+    """Validate a credential mapping/JSON; return ``None`` on ``ValidationError``.
+
+    Extracts nothing from the ``ValidationError`` — its ``.errors()`` can echo the
+    rejected input, including secrets. Callers raise :class:`VaultPayloadError` *outside*
+    this function's ``except`` so ``__context__`` stays ``None``.
+    """
+    try:
+        if isinstance(raw, bytes):
+            return _CREDENTIAL_ADAPTER.validate_json(raw)
+        return _CREDENTIAL_ADAPTER.validate_python(dict(raw))
+    except ValidationError:
+        return None
+
+
+def parse_credential(raw: Mapping[str, object]) -> OAuthCredential | ApiKeyCredential:
+    """Validate a raw mapping into a credential without leaking secrets on failure.
+
+    Ingest surfaces (T3) MUST use this helper and must never log a raw
+    ``ValidationError`` — its ``.errors()`` can echo the rejected input, including
+    secrets. On failure this raises :class:`VaultPayloadError` with ``__context__``
+    cleared so the secret cannot ride an exception chain.
+    """
+    credential = _validated_credential_or_none(raw)
+    if credential is None:
+        raise VaultPayloadError("credential mapping is not a valid oauth/api_key payload")
+    return credential
+
+
 def canonical_json(credential: OAuthCredential | ApiKeyCredential) -> bytes:
     """Serialize a payload to the canonical plaintext form that gets sealed.
 
@@ -462,15 +498,16 @@ def unseal_credential(
     so no path leaves a usable handle behind.
     """
     plaintext = open_bytes(envelope, aad=aad, key=key)
-    try:
-        credential = _CREDENTIAL_ADAPTER.validate_json(plaintext)
-    except ValidationError:
-        # `from None`: a pydantic ValidationError echoes the input it rejected, which on
-        # this path is decrypted credential material.
+    # Validate in a helper that swallows ValidationError and returns None: raising
+    # VaultPayloadError from inside `except ValidationError` would leave the pydantic
+    # error on `__context__` even with `from None`, and `.errors()` carries the
+    # decrypted JSON (including secrets). Raise outside that except so context is None.
+    credential = _validated_credential_or_none(plaintext)
+    if credential is None:
         raise VaultPayloadError(
             "sealed payload authenticated but is not a valid credential "
             "(expected kind='oauth' or kind='api_key')"
-        ) from None
+        )
     lease = CredentialLease(credential)
     try:
         yield lease
@@ -504,6 +541,7 @@ __all__ = [
     "fingerprint",
     "load_master_key",
     "open_bytes",
+    "parse_credential",
     "seal_bytes",
     "seal_credential",
     "unseal_credential",
