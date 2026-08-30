@@ -27,7 +27,7 @@
 
 Four rungs: one free teaser, three paid. Each paid rung buys a **deeper cut of the same house**, then the right to run your own.
 
-| Stripe + UI name | Internal id | Monthly | Annual (2 months free) | What you get |
+| Stripe + UI name | Internal id | Monthly | Annual (17% off) | What you get |
 |------------------|-------------|---------|------------------------|--------------|
 | **Observer** | `free` | $0 | — | Teaser: digest *conclusions* + portfolio *names*. No weights, no pipeline, no brokers. Not a Stripe product. |
 | **Brief** | `brief` | **$10** | $100 ($8.33/mo) | Full daily **digest** + **house portfolio** (weights / NAV). Summary outputs only. No pipeline canvas, no brokers, no overlay. |
