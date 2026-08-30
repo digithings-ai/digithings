@@ -71,11 +71,11 @@ production cron CLIs, remaining-hop proofs from Settings product state, staged
 900 §A2 membership-only restore, and a fail-closed GHA **spec** (not installed:
 `cursor/*` cannot write `.github/workflows/`).
 
-**Schema (`core`):** migrations **096–109** applied (`109_authenticated_house_teaser_read`).
-This branch adds **110** (`anon_read` house-only on private books) so overlay
-persist does not leak to anon; apply to `core` with the file (never 900).
-Cutover **900 not applied**. Local RLS harness (throwaway DB + 001–110 + staged
-900 A2): **59/59 PASS** (2026-08-31). CI on this branch `6fcd7316`: **37/37 green**.
+**Schema (`core`):** migrations **096–110** applied (`110_anon_house_only_private_books`
+narrows `anon_read` on private books to house; documents house+system). Live probe
+2026-08-31: overlay doc visible to service (1) and hidden from `anon` (0); house
+`positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
+(throwaway DB + 001–110 + staged 900 A2): **59/59 PASS** (2026-08-31).
 
 **Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`, includes
 `GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price
@@ -95,7 +95,9 @@ unseal). BYOK rows on that workspace are still **0**, so `--execute` would skip
 `GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining
 hops are visible in the UI. Settings About shows the five remaining hops from
 member-scoped reads (Observer-visible; digest log without inbox confirmation
-stays unproven). Do not `--execute`.
+stays unproven). Overlay persist is now **safe to enable after 110** (anon cannot
+see overlay books; overlay publish skips `daily_snapshots`). Flag still **unset**
+because BYOK rows = **0** — do not `--execute`.
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
