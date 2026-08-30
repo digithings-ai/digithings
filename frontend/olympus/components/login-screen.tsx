@@ -36,7 +36,7 @@ export function LoginScreen() {
         </div>
 
         {!authEnabled ? (
-          <p className="rounded-lg border border-hair bg-surface/80 px-4 py-3 text-sm text-ink-mute">
+          <p className="border border-hair bg-surface/80 px-4 py-3 text-sm text-ink-mute">
             App auth is off. Set <code className="font-mono text-xs">NEXT_PUBLIC_OLYMPUS_AUTH=1</code>{' '}
             at build time to enable login.
           </p>
@@ -46,7 +46,7 @@ export function LoginScreen() {
               type="button"
               disabled={pending !== null}
               onClick={() => void start('google')}
-              className="inline-flex items-center justify-center rounded-lg border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:opacity-60"
+              className="inline-flex items-center justify-center border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:opacity-60"
             >
               {pending === 'google' ? 'Redirecting…' : 'Continue with Google'}
             </button>
@@ -54,7 +54,7 @@ export function LoginScreen() {
               type="button"
               disabled={pending !== null}
               onClick={() => void start('github')}
-              className="inline-flex items-center justify-center rounded-lg border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:opacity-60"
+              className="inline-flex items-center justify-center border border-hair bg-surface px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06] disabled:opacity-60"
             >
               {pending === 'github' ? 'Redirecting…' : 'Continue with GitHub'}
             </button>

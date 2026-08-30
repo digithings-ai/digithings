@@ -50,32 +50,34 @@ digichat and the marketing site render at identical contrast.
 
 ### Typography
 
-**Canonical fonts (all surfaces), per [`EVOLUTION.md` §4](EVOLUTION.md#4-typography-direction):**
+**Canonical fonts (all surfaces), utilitarian v0.1 — see [`BLEND.md`](BLEND.md):**
 
 | Role                    | Font                             | Weight  | Token(s)                       |
 | ------------------------ | -------------------------------- | ------- | ------------------------------- |
-| Marketing hero display    | Fraunces *or* Instrument Serif   | 400     | `--font-display`                |
-| Dashboard display         | Instrument Serif                 | 400     | `--font-display`                |
-| Body                      | Geist Sans                       | 400–500 | `--font-sans`                   |
-| Labels / eyebrows         | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
-| Data / metrics            | Geist Mono, tabular nums         | 400–600 | `--font-mono` + `qn-metric`     |
+| Display / claims          | Geist Mono                       | 400–500 | `--font-display`                |
+| Body                      | Geist Mono                       | 400     | `--font-sans`                   |
+| Chrome / labels           | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
+| Data / metrics            | Geist Mono, tabular nums         | 400–500 | `--font-mono` + `qn-metric`     |
 | Code                      | Geist Mono                       | 400     | `--font-mono`                   |
 
 `--font-sans`, `--font-mono`, `--font-display` are declared in the
-`[data-theme]` redesign layer of `tokens.css` and are already loaded in
-every Next.js app. **Rule:** serif is display-only on marketing pages;
-dashboards and twelve-x use sans + mono exclusively.
+`[data-theme]` redesign layer of `tokens.css` and all default to the Geist
+Mono stack. **Rule:** one mono voice; hierarchy is size and tracking, not a
+second face. Serif (`serif-legacy` / Instrument Serif or Fraunces) is an
+escape hatch for rare editorial moments — quotes, legal names — never the
+default marketing H1. Product apps that still override with Fraunces are
+Phase 2/3 debt ([`ROLLOUT.md`](ROLLOUT.md)).
 
-**Deprecated:** `--font-family` (`'Inter', …`) and `--font-family-mono`
-(`'JetBrains Mono', …`) are the legacy `:root` tokens — still resolved
-by pages that haven't adopted `[data-theme]` yet, but no longer the
-documented default. New and migrating components should reference
-`--font-sans` / `--font-mono` / `--font-display` instead of these two.
+**Deprecated:** `--font-family` and `--font-family-mono` are the legacy
+`:root` tokens. Unthemed pages still resolve `--font-family` to Inter
+(a sans escape hatch). Under `[data-theme]` they follow `--font-sans` /
+`--font-mono` (Geist Mono). New components should reference
+`--font-sans` / `--font-mono` / `--font-display`.
 
-| Token (legacy, deprecated) | Value                                 |
-| --------------------------- | ------------------------------------- |
-| `--font-family`             | `'Inter', system-ui, …`               |
-| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    |
+| Token (legacy, deprecated) | Unthemed `:root`                      | Themed `[data-theme]`     |
+| --------------------------- | ------------------------------------- | ------------------------- |
+| `--font-family`             | `'Inter', system-ui, …`               | `var(--font-sans)`        |
+| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    | `var(--font-mono)`        |
 
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |
@@ -546,17 +548,16 @@ build step).
 
 ### `invoice/` — invoice template
 
-An elegant **monochrome** single-page invoice — Geist / Instrument Serif voices,
-hairline rules, tabular figures, generous whitespace, `@page`/print rules for
-clean A4 output. No colour or logo mark. Line items read like an AI-services
-invoice (deliverable + compact scope), with an optional second-page delivery
-breakdown. Fill the `[bracketed]` placeholders, then
+A utilitarian **monochrome** single-page invoice — Geist Mono for claim, body,
+and chrome, hairline rules, zero radius, no glass. Line items read like an
+AI-services invoice (deliverable + compact scope), with an optional second-page
+delivery breakdown. Fill the `[bracketed]` placeholders, then
 `chromium --headless --print-to-pdf=invoice.pdf index.html`. See
 [`invoice/README.md`](./invoice/README.md).
 
 ### `quote/` — quote / statement-of-work template
 
-The forward-looking companion to `invoice/`, same monochrome style. One page:
+The forward-looking companion to `invoice/`, same utilitarian mono chrome. One page:
 priced scope rows (optional items carry an "optional" chip and total
 separately), headline figure, timeline, payment terms, and a running-costs /
 assumptions block for third-party services the client pays directly. See

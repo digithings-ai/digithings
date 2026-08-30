@@ -52,7 +52,7 @@ export function SettingsPanel() {
         hairline — red is reserved for it.
       </p>
 
-      <div className="mt-[1.2rem] rounded-[12px] border border-hair bg-surface">
+      <div className="mt-[1.2rem] rounded-none border border-hair bg-surface">
         <div className="acct-setting-row">
           <div>
             <p className="block text-[0.88rem] text-ink" id="setting-digests">

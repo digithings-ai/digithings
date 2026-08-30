@@ -118,7 +118,7 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <div
         ref={panelRef}
         style={panelStyleState}
-        className="rounded-xl border border-hair bg-surface/95 backdrop-blur-md shadow-[var(--shadow-glass)] p-4 max-h-[min(70vh,520px)] overflow-y-auto"
+        className="border border-hair bg-surface/95 backdrop-blur-md shadow-[var(--shadow-overlay)] p-4 max-h-[min(70vh,520px)] overflow-y-auto"
         role="dialog"
         aria-label="Settings"
       >
@@ -159,7 +159,7 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
         aria-expanded={open}
         aria-haspopup="dialog"
         className={`
-          flex items-center gap-3 w-full rounded-lg py-3 text-sm font-medium transition-colors
+          flex items-center gap-3 w-full py-3 text-sm font-medium transition-colors
           text-ink-soft hover:text-ink hover:bg-ink/[0.03]
           ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-3'}
           ${open ? 'bg-ink/[0.06] text-ink' : ''}

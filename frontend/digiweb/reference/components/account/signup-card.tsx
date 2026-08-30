@@ -39,14 +39,14 @@ export function SignupCard() {
         password field to see it move.
       </p>
       <p className="mt-4">
-        <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+        <span className="inline-block whitespace-nowrap rounded-none border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
           example data · not live
         </span>
       </p>
 
       <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(280px,380px))] items-start gap-[1.2rem]">
         <form
-          className="w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+          className="w-full max-w-[380px] rounded-none border border-hair bg-surface p-[1.2rem]"
           onSubmit={preventSubmit}
           noValidate
         >

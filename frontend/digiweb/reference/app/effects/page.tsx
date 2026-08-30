@@ -205,8 +205,8 @@ export default function EffectsPage() {
         <p className="kicker">{"// section transition · stacking panels"}</p>
         <h2 className="title">Panels that stack as you go.</h2>
         <p className="section-copy">
-          The layered variant: each panel pins, then the next slides up and over it — a rounded top
-          edge and a cast shadow marking the seam — while the covered panel scales back and dims
+          The layered variant: each panel pins, then the next slides up and over it — a hairline
+          and a cast shadow marking the seam — while the covered panel scales back and dims
           behind it. Scroll through the three below. Reduced motion renders a plain stack.
         </p>
         <StackingPanels />

@@ -71,7 +71,7 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
               color ? '' : 'bg-ink/[0.06] text-ink-mute border-hair'
             }`}
             style={
@@ -113,7 +113,7 @@ export function TodayActionsPanel({
   /** Per-ticker rationale from the PM rebalance memo (#704); the rationale line
    *  is omitted entirely for tickers with no memo entry. */
   rationaleByTicker?: Record<string, string>;
-  /** Hero/embedded mode: drop the panel's own glass-card frame and the
+  /** Hero/embedded mode: drop the panel's own slab frame and the
    *  "Today's actions" header (the host supplies the title and the frame). */
   bare?: boolean;
 }) {
@@ -136,7 +136,7 @@ export function TodayActionsPanel({
   return (
     <div
       className={
-        bare ? 'rounded-lg border border-hair/70 overflow-hidden' : 'glass-card p-0 overflow-hidden'
+        bare ? 'border border-hair/70 overflow-hidden' : 'oly-slab p-0 overflow-hidden'
       }
     >
       {!bare && (
@@ -146,7 +146,7 @@ export function TodayActionsPanel({
             <ListChecks size={15} className="text-accent" />
             <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
             {changes.length > 0 && (
-              <span className="rounded-full bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
+              <span className="bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
                 {changes.length}
               </span>
             )}

@@ -150,27 +150,27 @@ export function BrokersTab({
         </p>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-hair bg-term-bg/40 px-4 py-3">
+      <div className="space-y-3 border border-hair bg-term-bg/40 px-4 py-3">
         <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Alpaca paper — Connect with Alpaca
         </p>
         <button
           type="button"
           onClick={onAlpacaOAuth}
-          className="rounded-lg border border-accent/40 bg-accent/15 px-3 py-1.5 text-sm font-medium text-accent"
+          className="border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg"
           data-testid="alpaca-oauth-connect"
         >
           Connect Alpaca (paper)
         </button>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-hair bg-term-bg/40 px-4 py-3">
+      <div className="space-y-3 border border-hair bg-term-bg/40 px-4 py-3">
         <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           API key entry
         </p>
         <div className="flex flex-wrap gap-2">
           <select
-            className="rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+            className="border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
             value={broker}
             onChange={(e) => setBroker(e.target.value as 'alpaca' | 'ibkr')}
             data-testid="broker-select"
@@ -187,7 +187,7 @@ export function BrokersTab({
           </p>
         ) : null}
         <input
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           placeholder="Key id"
           value={keyId}
           onChange={(e) => setKeyId(e.target.value)}
@@ -196,7 +196,7 @@ export function BrokersTab({
         />
         <input
           type="password"
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           placeholder="Secret"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}
@@ -207,7 +207,7 @@ export function BrokersTab({
           type="button"
           disabled={busy || !keyId || !secret}
           onClick={() => void onConnectApiKey()}
-          className="rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
           data-testid="broker-api-key-connect"
         >
           Save API key (paper)
@@ -227,7 +227,7 @@ export function BrokersTab({
         {rows.length === 0 ? (
           <p className="text-sm text-ink-mute">No broker connections yet.</p>
         ) : (
-          <ul className="divide-y divide-hair rounded-lg border border-hair">
+          <ul className="divide-y divide-hair border border-hair">
             {rows.map((row) => (
               <li
                 key={row.id}

@@ -124,7 +124,7 @@ export function NotifyTab({
         </span>
         <input
           type="email"
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           data-testid="notify-email"
@@ -158,7 +158,7 @@ export function NotifyTab({
           type="number"
           min={0}
           max={23}
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm font-mono text-ink"
           value={digestHour}
           onChange={(e) => setDigestHour(Number(e.target.value))}
           data-testid="notify-hour"
@@ -179,7 +179,7 @@ export function NotifyTab({
         type="button"
         disabled={busy || loading}
         onClick={() => void onSave()}
-        className="rounded-lg border border-accent/40 bg-accent/15 px-4 py-2 text-sm font-medium text-accent disabled:opacity-50"
+        className="border border-ink bg-ink px-4 py-2 text-sm font-medium text-bg disabled:opacity-50"
         data-testid="notify-save"
       >
         {busy ? 'Saving…' : 'Save preferences'}
@@ -200,7 +200,7 @@ function Toggle({
   testId?: string;
 }) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-lg border border-hair bg-term-bg/40 px-3 py-2">
+    <label className="flex items-center justify-between gap-3 border border-hair bg-term-bg/40 px-3 py-2">
       <span className="text-sm text-ink-soft">{label}</span>
       <input
         type="checkbox"

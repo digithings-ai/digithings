@@ -133,7 +133,7 @@ export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
       aria-label="Loading daily investment brief"
       className={flat
         ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
-        : 'glass-card p-6 flex flex-col gap-4'}
+        : 'oly-slab p-6 flex flex-col gap-4'}
     >
       <Skeleton className="h-3 w-40" />
       <Skeleton className="h-6 w-3/4" />
@@ -160,7 +160,7 @@ export function SnapshotErrorBanner({
       role="alert"
       className={flat
         ? 'border-y border-warn/40 bg-warn/5 px-5 py-5'
-        : 'glass-card p-5 border-danger/30 bg-danger/5'}
+        : 'oly-slab p-5 border-danger/30 bg-danger/5'}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -175,8 +175,8 @@ export function SnapshotErrorBanner({
           type="button"
           onClick={onRetry}
           className={flat
-            ? 'shrink-0 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
-            : 'shrink-0 rounded-md border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
+            ? 'shrink-0 border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
+            : 'shrink-0 border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
         >
           Retry
         </button>
@@ -202,7 +202,7 @@ export function SnapshotEmptyBanner({
       role="status"
       className={flat
         ? 'border-y border-hair bg-term-bg/40 px-5 py-5'
-        : 'glass-card p-5 border-hair bg-term-bg/40'}
+        : 'oly-slab p-5 border-hair bg-term-bg/40'}
     >
       {flat ? (
         <h3 className="mb-3 font-display text-xl text-ink">No brief available</h3>
@@ -237,7 +237,7 @@ function SnapshotContent({
         <div
           data-testid="snapshot-stale-banner"
           role="status"
-          className="glass-card p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
+          className="oly-slab p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
         >
           <div>
             <p className="text-sm font-semibold text-warn">Stale brief</p>
@@ -250,7 +250,7 @@ function SnapshotContent({
         </div>
       )}
 
-      <article className="glass-card p-6 space-y-5">
+      <article className="oly-slab p-6 space-y-5">
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
@@ -339,7 +339,7 @@ export function ActionableList({ items, flat = false }: { items: ActionableItem[
             data-testid="snapshot-actionable-item"
             className={flat
               ? 'py-3 text-sm'
-              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
+              : ' border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">P{item.priority}</span>
@@ -372,7 +372,7 @@ export function RiskList({ items, flat = false }: { items: RiskItem[]; flat?: bo
             data-testid="snapshot-risk-item"
             className={flat
               ? 'py-3 text-sm'
-              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
+              : ' border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">{item.horizon_hours}h</span>

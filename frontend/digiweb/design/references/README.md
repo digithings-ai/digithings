@@ -9,6 +9,11 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 | [Graphite](graphite.com.md) | https://graphite.com | Scroll-pinned features, motion as brand, product-in-context | digiquant.io landing, marketing motion |
 | [Cursor](cursor.com.md) | https://cursor.com | Utilitarian bento layout, literal CTAs, product frames | digithings.ai, digichat, docs surfaces |
 | [xAI](x.ai.md) | https://x.ai | Brutalist restraint, mono display, capability demos | Olympus, twelve-x, API/developer pages |
+| [Herdr](herdr.dev.md) | https://herdr.dev | Diegetic terminal hero, ink/paper dual ground, sharp chrome | digichat, agent runtime surfaces, install CTAs |
+| [AgentMail](agentmail.to.md) | https://www.agentmail.to | Sparse dark API hero, white CTA, live code proof | digithings.ai API pages, digikey docs |
+| [Omarchy](omarchy.org.md) | https://omarchy.org | Mono-everything utilitarian voice, terminal colour as punctuation | olympus density, digichat transcript voice |
+
+**Active blend (2026-08):** utilitarian terminal simplicity — Instrument Panel tokens + herdr’s diegetic proof + agentmail’s sparse hero + omarchy’s mono confidence. Pick treatments live on the reference app’s [`/iterate`](../../reference/app/iterate/page.tsx) page; ledger lands in [`BLEND.md`](BLEND.md).
 
 **Deep scans (page-by-page, components, mobile, copy):** [`scans/INDEX.md`](scans/INDEX.md)
 

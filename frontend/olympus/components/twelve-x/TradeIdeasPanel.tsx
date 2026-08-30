@@ -46,7 +46,7 @@ function contributingDesks(citations: unknown[]): string[] {
 
 function ProvenanceChip({ label }: { label: string }) {
   return (
-    <span className="rounded border border-hair bg-surface/50 px-1 font-mono text-[10px] text-ink-mute">
+    <span className="rounded-none border border-hair bg-surface/50 px-1 font-mono text-[10px] text-ink-mute">
       {label}
     </span>
   );
@@ -73,7 +73,7 @@ function LadderRow({ row }: { row: IdeaDetailLevelRow }) {
     <div
       className={
         boxed
-          ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded border border-hair bg-surface/40 px-1.5 py-1 text-[11px]'
+          ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-none border border-hair bg-surface/40 px-1.5 py-1 text-[11px]'
           : 'flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-[11px]'
       }
     >
@@ -218,7 +218,7 @@ export default function TradeIdeasPanel({
 
   if (ideas.length === 0) {
     return (
-      <section className="glass-card p-5">
+      <section className="oly-slab p-5">
         <header className="mb-2 flex items-baseline gap-2">
           <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         </header>
@@ -230,7 +230,7 @@ export default function TradeIdeasPanel({
   const [top, ...rest] = ideas;
 
   return (
-    <section className="glass-card flex flex-col gap-3 p-5">
+    <section className="oly-slab flex flex-col gap-3 p-5">
       <header className="flex items-baseline gap-2">
         <TwelveXSectionHeading>Today&rsquo;s trade ideas</TwelveXSectionHeading>
         <span className="font-mono text-[10px] text-ink-mute">· {ideas.length}</span>
@@ -250,7 +250,7 @@ export default function TradeIdeasPanel({
         type="button"
         className={highlightClass(
           top.rank,
-          'rounded-lg border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50',
+          'rounded-none border border-accent/30 bg-accent/[0.06] p-4 text-left transition-colors hover:border-accent/50',
         )}
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
@@ -283,7 +283,7 @@ export default function TradeIdeasPanel({
           type="button"
           className={highlightClass(
             idea.rank,
-            'rounded-md border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50',
+            'rounded-none border border-hair px-3 py-2 text-left text-xs transition-colors hover:border-accent/50',
           )}
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
@@ -320,7 +320,7 @@ export default function TradeIdeasPanel({
               {confluence.map((c) => (
                 <li
                   key={`${c.run_date}-${c.rank}`}
-                  className="flex items-center gap-2 rounded-md border border-hair px-3 py-1.5 text-xs"
+                  className="flex items-center gap-2 rounded-none border border-hair px-3 py-1.5 text-xs"
                 >
                   <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
                   <span className="font-semibold text-ink">{c.currency}</span>

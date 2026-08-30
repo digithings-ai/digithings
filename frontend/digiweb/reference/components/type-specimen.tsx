@@ -23,7 +23,7 @@ export function TypeSpecimen() {
           switches. spec-row / spec-italic / spec-mono stay as classes — their
           :first-child divider and `em` / `p` child styling live in kept
           combinator rules in the CSS. */}
-      <div className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair bg-surface/40">
+      <div className="mt-[1.2rem] overflow-hidden rounded-none border border-hair bg-surface/40">
         <div className="spec-row grid grid-cols-[5rem_1fr] gap-[1.2rem] border-t border-hair px-[1.3rem] py-[1.4rem] max-[640px]:grid-cols-1 max-[640px]:gap-[0.6rem]">
           <span className="pt-[0.4rem] font-mono text-[0.58rem] uppercase tracking-[0.12em] text-ink-mute">
             display

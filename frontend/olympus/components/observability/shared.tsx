@@ -38,7 +38,7 @@ export function StatTile({
     <div
       className={flat
         ? 'flex flex-col gap-1 border-b border-r border-hair p-4'
-        : 'glass-card flex flex-col gap-1 p-4'}
+        : 'oly-slab flex flex-col gap-1 p-4'}
     >
       <span className="text-xs text-ink-mute">{label}</span>
       <span className={`text-xl font-semibold tabular-nums ${color ?? 'text-ink'}`}>
@@ -64,7 +64,7 @@ export function SectionCard({
 }) {
   return (
     <div
-      className={`${flat ? 'border-b border-hair py-5' : 'glass-card p-5'} flex flex-col gap-4 ${className ?? ''}`}
+      className={`${flat ? 'border-b border-hair py-5' : 'oly-slab p-5'} flex flex-col gap-4 ${className ?? ''}`}
     >
       <div className="flex flex-col gap-0.5">
         <h2 className="text-sm font-semibold text-ink">{title}</h2>
@@ -77,10 +77,10 @@ export function SectionCard({
 
 /**
  * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
- * reproduces the shipped observability card (sans title/body/italic note, no
- * glyph) exactly; the `.glass-card` surface stays a call-site class so the
- * app's motion-reveal hook keeps firing. The local title/message/note API is
- * preserved for consumers (AttributionTab, DecisionScorecardTab, SystemStatus).
+ * is the API name (type/spacing only — it must not look like glass). The
+ * `.oly-slab` surface is the call-site class so MotionLayer's reveal hook
+ * keeps firing. The local title/message/note API is preserved for consumers
+ * (AttributionTab, DecisionScorecardTab, SystemStatus).
  */
 export function EmptyState({
   title,
@@ -97,7 +97,7 @@ export function EmptyState({
   return (
     <WebEmptyState
       dress="glass"
-      className={flat ? 'border-y border-hair' : 'glass-card'}
+      className={flat ? 'border-y border-hair' : 'oly-slab'}
       title={title}
       body={message}
       note={note}

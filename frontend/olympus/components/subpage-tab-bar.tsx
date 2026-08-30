@@ -14,7 +14,7 @@ import { TabStrip } from '@digithings/web';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 
 export function subpageTabButtonClass(active: boolean): string {
-  return `flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm shrink-0 ${
+  return `flex items-center gap-1.5 border px-3 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-4 sm:py-2 sm:text-sm shrink-0 ${
     active
       ? 'bg-accent/15 text-accent border-accent/40'
       : 'text-ink-soft border-transparent hover:bg-ink/[0.04] hover:text-ink'

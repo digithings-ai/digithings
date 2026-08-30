@@ -172,6 +172,8 @@ the session itself has no storage or routing knowledge.
    the `ChatActivities` render tests pin the behaviour meanwhile.
 7. No primitive exists for the composer (`.dc-form` — asserted untouched by
    #1403 anyway), suggestions chips (`.dtc-chip`), or the status bar.
+   Composer chrome is utilitarian-terminal v0.1: radius 0, `.dc-send` is an
+   ink/paper rect, `.dtc-chip` is a hairline slab (not a pill).
    **Closed for diagrams and math:** `ChatMarkdown` gained mermaid and LaTeX in
    #1941, so `MermaidBlock` was deleted and `MiniMarkdown` became a delegate.
    An earlier revision of this section said the pair "must not be deleted" and

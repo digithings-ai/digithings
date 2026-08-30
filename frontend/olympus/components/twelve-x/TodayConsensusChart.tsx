@@ -59,7 +59,7 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
   const hasData = rows.length > 0;
 
   return (
-    <section className="glass-card p-4 flex flex-col flex-1">
+    <section className="oly-slab flex flex-1 flex-col p-4">
       <div className="mb-3.5">
         <TwelveXSectionHeading>Consensus</TwelveXSectionHeading>
       </div>
@@ -115,14 +115,14 @@ export function TodayConsensusChart({ series }: TodayConsensusChartProps) {
           <div className="tc-legend flex items-center flex-wrap gap-3.5 mt-3.5 pt-3 border-t border-hair text-[10.5px] text-ink-mute">
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-4 h-2 rounded-sm bg-accent"
+                className="inline-block h-2 w-4 rounded-none bg-accent"
                 aria-hidden="true"
               />
               Trailing 5-run average (bar)
             </span>
             <span className="flex items-center gap-1.5">
               <span
-                className="inline-block w-0.5 h-3 rounded-sm bg-ink"
+                className="inline-block h-3 w-0.5 rounded-none bg-ink"
                 aria-hidden="true"
               />
               Today&apos;s actual

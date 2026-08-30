@@ -155,7 +155,7 @@ export function buildLatestRunCards(
 
 /** Shared pill chrome — block + identical border box so empty/filled align. */
 const DAY_PILL_BASE =
-  'box-border block h-2.5 w-full shrink-0 rounded-sm border';
+  'box-border block h-2.5 w-full shrink-0 border';
 
 function WeekBar({
   diagnostics,

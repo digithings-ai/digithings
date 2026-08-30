@@ -16,7 +16,7 @@ export function CorpusPanel({ sampleKeys }: { sampleKeys: string[] }) {
         <h1 className="font-display text-xl font-normal tracking-tight text-ink">Shared corpus</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">{HOUSE_BOOK_IDENTITY.summary}</p>
       </div>
-      <div className="rounded-lg border border-hair bg-term-bg/40 px-4 py-3">
+      <div className="border border-hair bg-term-bg/40 px-4 py-3">
         <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
           Tenant-agnostic keys
         </p>
@@ -37,7 +37,7 @@ export function CorpusPanel({ sampleKeys }: { sampleKeys: string[] }) {
           <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-ink-mute">
             Sample keys from loaded docs
           </p>
-          <ul className="divide-y divide-hair/60 rounded-lg border border-hair">
+          <ul className="divide-y divide-hair/60 border border-hair">
             {shared.map((key) => (
               <li key={key} className="px-3 py-2 font-mono text-xs text-ink-soft">
                 {key}
@@ -96,7 +96,7 @@ export function ProfilePanel() {
         </h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">{HOUSE_PROFILE_PINS.note}</p>
       </div>
-      <dl className="grid gap-3 rounded-lg border border-hair bg-term-bg/40 px-4 py-3 sm:grid-cols-2">
+      <dl className="grid gap-3 border border-hair bg-term-bg/40 px-4 py-3 sm:grid-cols-2">
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-ink-mute">Profile id</dt>
           <dd className="font-mono text-sm text-ink">{HOUSE_PROFILE_PINS.profileId}</dd>
