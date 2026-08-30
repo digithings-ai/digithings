@@ -2123,3 +2123,12 @@ def test_empty_retry_new_name_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) 
         or "5.0"
     )
     assert float(backoff_raw) == 8.0, "new DIGILLM_EMPTY_RETRY_BACKOFF must win over legacy name"
+
+
+def test_client_compatibility_facade_reexports_split_helpers() -> None:
+    """The historic client import path remains valid after internal modules split."""
+    from digillm import cache, overrides, types
+
+    assert client_mod.ToolDefinition is types.ToolDefinition
+    assert client_mod.byok is overrides.byok
+    assert client_mod._llm_cache_key is cache.llm_cache_key
