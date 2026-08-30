@@ -424,6 +424,64 @@ def test_query_constructs_default_embedder_at_most_once() -> None:
 
 
 @pytest.mark.unit
+def test_default_embedder_singleton_is_thread_safe() -> None:
+    """#2225: concurrent cold-cache callers must construct MiniLMEmbedder once.
+
+    Without a lock, N threads can all observe None and each pay an ONNX load.
+    Slow the stub constructor so the race window is real under CI.
+    """
+    import threading
+    import time
+
+    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.indexes.backends.vectorize as vectorize_module
+
+    construction_count = 0
+    barrier = threading.Barrier(8)
+
+    class _SlowStubEmbedder:
+        def __init__(self) -> None:
+            nonlocal construction_count
+            time.sleep(0.05)
+            construction_count += 1
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[0.5] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    original = minilm_module.MiniLMEmbedder
+    minilm_module.MiniLMEmbedder = _SlowStubEmbedder  # type: ignore[misc]
+    vectorize_module._default_embedder_singleton = None
+    results: list[object] = []
+    errors: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            barrier.wait(timeout=5)
+            results.append(vectorize_module._get_default_embedder())
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(8)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+    finally:
+        minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
+        vectorize_module._default_embedder_singleton = None
+
+    assert not errors, f"worker errors: {errors}"
+    assert construction_count == 1, f"expected 1 construction, got {construction_count}"
+    assert len(results) == 8
+    assert all(r is results[0] for r in results)
+
+
+@pytest.mark.unit
 def test_query_treats_non_dict_metadata_as_empty() -> None:
     """FINDING 3 repro: a match with non-dict metadata (e.g. a string) must not
     raise ValueError from `dict(match.get("metadata") or {})`."""

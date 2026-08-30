@@ -190,6 +190,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     D1_API_TOKEN credential fallback chain — fixture prose only.
     Re-recorded at count 46 for CHR-88 / #403 (Chonkie chunking docs + module
     map in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 46) for #2225 embedder-lock note in the Vectorize
+    operational section — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -221,7 +223,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "819ebadc3320ecc2",
         "5a207132fd65bced",
         "8d9cefe0c746a4da",
-        "b56e3e5173fa2b82",
+        "3f0cb2fd8839c77a",
         "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",

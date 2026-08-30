@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -43,17 +44,26 @@ MAX_TOP_K = 50
 #: process-wide is safe. This cache is for the *default* embedder only -- an
 #: *injected* `embedding_provider` always stays on `self.embedding_provider`
 #: (per-instance) and is never read from or written into this global.
+#: Initialisation is guarded by `_default_embedder_lock` (double-checked locking)
+#: so concurrent first-query threads cannot each construct a MiniLMEmbedder.
 _default_embedder_singleton: object | None = None
+_default_embedder_lock = threading.Lock()
 
 
 def _get_default_embedder() -> object:
     """Return the module-level default embedder, constructing it at most once
-    per process (see `_default_embedder_singleton`)."""
+    per process (see `_default_embedder_singleton`).
+
+    Thread-safe: under concurrent first access, only one thread constructs the
+    embedder; others wait on the lock and reuse the winner's instance.
+    """
     global _default_embedder_singleton
     if _default_embedder_singleton is None:
-        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+        with _default_embedder_lock:
+            if _default_embedder_singleton is None:
+                from digisearch.embedding.providers.minilm import MiniLMEmbedder
 
-        _default_embedder_singleton = MiniLMEmbedder()
+                _default_embedder_singleton = MiniLMEmbedder()
     return _default_embedder_singleton
 
 
