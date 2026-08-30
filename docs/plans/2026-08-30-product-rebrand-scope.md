@@ -77,9 +77,9 @@ Treat “rename everything” as **thousands of edits across two branch hops**, 
 |-------|----------|----------------|
 | Python package | `digiquant.olympus.{atlas,hermes,kairos}` (~342 files under `olympus/`) | Wave 4, after the public name is live. Kairos package rename is **human-gated** (execution). |
 | CLI entry | `python -m digiquant.olympus.hermes.chain` | Cron + `pipeline-olympus.yml`. Alias the old module if renamed. |
-| Env vars | ~40 `OLYMPUS_*` plus `NEXT_PUBLIC_OLYMPUS_*`, `OLYMPUS_KAIROS_ROUTING` | Keep names; add aliases only if a public contract requires it. |
+| Env vars | ~40 `OLYMPUS_*` (Python/CLI, wave 5) plus `OLYMPUS_KAIROS_ROUTING`. Public dashboard keys are `NEXT_PUBLIC_DASHBOARD_*` — do not add `NEXT_PUBLIC_OLYMPUS_*` aliases. |
 | CSS | `.oly-*` (~20 classes), `.accent-atlas`, `.olympus-mark` | Keep `.oly-` as an internal prefix. Users never see it. |
-| npm | workspace folder `frontend/dashboard`, package name `olympus` | Wave 3 with the URL, not before. |
+| npm | workspace folder `frontend/dashboard`, package name `dashboard` | Shipped with wave 3. |
 | CI | `test-dashboard.yml` (was `test-olympus.yml`), `pipeline-olympus.yml`, `test-atlas-graph.yml`, `validate-olympus-pools.yml`, `pipeline-atlas-metrics.yml` | Frontend workflow renamed with the folder. Pipeline names stay until wave 4. |
 | Config | `config/olympus_models.yaml` | Internal; rename with the Python package. |
 | Phase IDs | A0–A4, H1–H9 | **Keep.** These are graph coordinates, not brands. |

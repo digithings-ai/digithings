@@ -41,7 +41,7 @@ if [ -f frontend/dashboard/public/dashboard-data.json ]; then
   exit 1
 fi
 
-# Olympus inlines NEXT_PUBLIC_* into the static bundle at build time. Fail
+# The dashboard inlines NEXT_PUBLIC_* into the static bundle at build time. Fail
 # PRODUCTION deploys when the Supabase vars are missing (preview/local may proceed).
 if [ "${CF_PAGES:-}" = "1" ]; then
   if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then

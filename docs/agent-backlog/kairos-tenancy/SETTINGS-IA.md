@@ -67,7 +67,7 @@ returns `TIER_FORBIDDEN` if a hidden path is called directly.
 
 Deep links: in-app CTAs use `/settings#billing` (and `#notifications`, `#about`,
 plus Custom+ `#profile` / `#pipeline` / `#keys` / `#brokers`). Core Stripe
-checkout/portal returns `/olympus/settings/?tab=billing` (and `?checkout=success|cancel`).
+checkout/portal returns `/dashboard/settings/?tab=billing` (and `?checkout=success|cancel`).
 Query wins over hash. A gated hash or `?tab=` (e.g. Observer `#profile`) is ignored.
 
 **Supersedes prior note:** baseline does **not** unlock broker connect. Free is
@@ -86,7 +86,7 @@ Stripe**; paying customers still go through Checkout.
 
 Maintain grants in Supabase (`core`) near auth. Optional later: sync from the
 twelve-x repo. Env fallbacks for UI before migration apply:
-`NEXT_PUBLIC_OLYMPUS_CREATOR_EMAILS`, `NEXT_PUBLIC_OLYMPUS_PRODUCT_GRANTS`.
+`NEXT_PUBLIC_DASHBOARD_CREATOR_EMAILS`, `NEXT_PUBLIC_DASHBOARD_PRODUCT_GRANTS`.
 
 ## API surface (settings Edge Function)
 

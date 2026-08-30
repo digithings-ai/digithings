@@ -10,7 +10,9 @@ import {
   type ReactNode,
 } from 'react';
 
-const STORAGE_KEY = 'atlas-sidebar-collapsed';
+const STORAGE_KEY = 'dashboard-sidebar-collapsed';
+/** Pre-rebrand key. Read once so a collapsed sidebar survives the rename; never write. */
+const LEGACY_STORAGE_KEY = 'atlas-sidebar-collapsed';
 
 type AppShellContextValue = {
   sidebarCollapsed: boolean;
@@ -30,7 +32,9 @@ const AppShellContext = createContext<AppShellContextValue | null>(null);
 function readSidebarCollapsed(): boolean {
   if (typeof window === 'undefined') return false;
   try {
-    return localStorage.getItem(STORAGE_KEY) === '1';
+    const current = localStorage.getItem(STORAGE_KEY);
+    if (current === '1' || current === '0') return current === '1';
+    return localStorage.getItem(LEGACY_STORAGE_KEY) === '1';
   } catch {
     return false;
   }
@@ -48,6 +52,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       const next = !c;
       try {
         localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
       } catch {
         /* ignore */
       }

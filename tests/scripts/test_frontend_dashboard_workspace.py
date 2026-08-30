@@ -1,8 +1,7 @@
 """Pin wave 3: the dashboard workspace lives at frontend/dashboard.
 
-ADR-0026 wave 3. Public URL stays /dashboard/; Python digiquant.olympus
-and CSS .oly-* are unchanged. Cloudflare 308s still map /olympus/* onto
-/dashboard/.
+ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.olympus
+and CSS .oly-* are unchanged. /olympus/ is retired (no 308).
 """
 
 from __future__ import annotations
@@ -56,3 +55,18 @@ def test_canon_census_app_is_dashboard_folder() -> None:
     assert '"dashboard"' in text or "'dashboard'" in text
     assert "frontend/dashboard/lib/chart-colors.ts" in text
     assert "frontend/olympus/" not in text
+
+
+def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
+    env = (REPO_ROOT / "frontend" / "dashboard" / ".env.local.example").read_text(
+        encoding="utf-8"
+    )
+    assert "NEXT_PUBLIC_OLYMPUS" not in env
+    assert "NEXT_PUBLIC_DASHBOARD_AUTH" in env
+    build = BUILD.read_text(encoding="utf-8")
+    assert "NEXT_PUBLIC_OLYMPUS" not in build
+    shell = (REPO_ROOT / "frontend" / "dashboard" / "components" / "app-shell-context.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "dashboard-sidebar-collapsed" in shell
+    assert "localStorage.setItem(STORAGE_KEY" in shell
