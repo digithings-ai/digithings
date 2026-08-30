@@ -635,7 +635,7 @@ T0/T1 release train is reviewed.
 | `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
 | `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
-| `job_runs` | `(id uuid)` | Per-workspace job telemetry stub (T4 dispatch). |
+| `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here; status vocabulary is extended in migration 104 (`skipped`, `budget_exhausted`). Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |
 | `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
 
 **Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
@@ -650,7 +650,8 @@ to Stripe after marking `applied_at`. Migrations: `100_workspaces_claim_sync_pen
 `101_stripe_webhook_applied_and_ordering.sql` (099 reserved for K3).
 Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
-BYOK `workspace_provider_credentials` and `profiles` are out of scope (K3/T3).
+`profiles` remains out of scope (T3). BYOK LLM keys land in migration 104
+(`workspace_provider_credentials`).
 
 ### Notification prefs — migration 103 (K5, Kairos tenancy)
 
@@ -755,6 +756,20 @@ number 102 originally skipped 100/101 for the sibling T2 branch; those migration
 now live in-tree (`100_workspaces_claim_sync_pending.sql`,
 `101_stripe_webhook_applied_and_ordering.sql`). Structural tests:
 `tests/dq/olympus/kairos/test_migration_102.py`.
+
+### BYOK LLM keys + job_runs status — migration 104 (T4)
+
+Sealed overlay LLM credentials. Mirrors 099 (`broker_connections`): RLS-none,
+column-level UPDATE on lifecycle columns only, partial unique on the active row,
+credential-column immutability trigger. Crypto is K3's envelope unchanged.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `workspace_provider_credentials` | `(id uuid)` | Sealed BYOK LLM key; partial unique on `(workspace_id, provider) WHERE status = 'active'`. AAD = `workspace_id:provider:llm`. FK → `workspaces`. |
+
+`job_runs.status` CHECK is extended to `skipped` (reason in `error`:
+`not_entitled` / `no_credentials`) and `budget_exhausted` (research budget hard
+stop). Structural tests: `tests/dq/olympus/overlay/test_migration_104.py`.
 
 ## RLS (consistent across all tables above)
 
