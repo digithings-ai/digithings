@@ -97,7 +97,11 @@ hops are visible in the UI. Settings About shows the five remaining hops from
 member-scoped reads (Observer-visible; digest log without inbox confirmation
 stays unproven). Overlay persist is now **safe to enable after 110** (anon cannot
 see overlay books; overlay publish skips `daily_snapshots`). Flag still **unset**
-because BYOK rows = **0** — do not `--execute`.
+because BYOK rows = **0** — do not `--execute`. Seal resume path:
+`python scripts/kairos_seal_byok.py` → exit **2** until gitignored
+`digithings-byok.env` exists. Do not seal a placeholder; `--apply` only against
+an overlay-entitled workspace (GitHub creator `plan_floor=custom`, not Observer
+free, not house/system, not ops-custom `custom`/`none` without a grant).
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
@@ -116,7 +120,10 @@ still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-ke
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
 gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
-pushes names onto core EF secrets). Observer Settings hops all ok.
+pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
+**2** until `digithings-byok.env` exists. Observer Settings hops all ok. A fifth
+personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
+it does not prove Stripe.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /

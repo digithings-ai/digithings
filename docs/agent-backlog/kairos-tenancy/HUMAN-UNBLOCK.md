@@ -19,6 +19,9 @@ Loud-fail gates (after paste):
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
 # when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
+# when .local/secrets/digithings-byok.env exists (BYOK_PROVIDER + BYOK_API_KEY):
+# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py --apply --workspace-id <entitled-uuid>
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check

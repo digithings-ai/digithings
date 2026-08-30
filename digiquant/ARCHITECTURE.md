@@ -3242,6 +3242,17 @@ A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
 
+**BYOK seal CLI (`byok_seal.py`, `scripts/kairos_seal_byok.py`).** Resume path when
+a real user LLM key lands and Settings Keys is not yet on production Pages.
+Default `--check` requires gitignored `.local/secrets/digithings-byok.env`
+(`BYOK_PROVIDER` + `BYOK_API_KEY`, names only in logs). `--apply` seals with
+the K3 vault (AAD `workspace_id:provider:llm`), verifies unseal, and inserts
+one active `workspace_provider_credentials` row (unique-conflict = revoke then
+insert, same as the settings Edge Function). House/system and non-entitled
+workspaces (Observer free without `plan_floor`) are refused. Do not seal a
+placeholder or a house process-env key. Overlay `--execute` still requires
+`present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110.
+
 **Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
 for `None` / house / system UUIDs. Overlay tenant routing threads
 `workspace_id` into `_pending_order_heads` after those gates.
