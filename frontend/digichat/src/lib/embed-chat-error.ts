@@ -24,6 +24,7 @@ export type EmbedChatErrorCode =
   | "rate_limit_exceeded"
   | "byok_model_required"
   | "byok_default_model_provider_mismatch"
+  | "byok_model_provider_mismatch"
   | string;
 
 /**
@@ -39,6 +40,7 @@ export type EmbedChatErrorCode =
 export const BYOK_MODEL_REMEDIABLE_CODES: ReadonlySet<string> = new Set([
   "byok_model_required",
   "byok_default_model_provider_mismatch",
+  "byok_model_provider_mismatch",
 ]);
 
 /**

@@ -20,6 +20,7 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { resetOpenRouterCatalogCache } from "@/lib/openrouter-catalog-cache";
 
 function req(url: string, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${url}`, { headers });
@@ -27,6 +28,7 @@ function req(url: string, headers: Record<string, string> = {}) {
 
 describe("GET /api/byok/models", () => {
   beforeEach(() => {
+    resetOpenRouterCatalogCache();
     vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
   });
@@ -85,6 +87,24 @@ describe("GET /api/byok/models", () => {
       const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toBe("https://openrouter.ai/api/v1/models");
       expect((init.headers as Record<string, string> | undefined)?.["Authorization"]).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("memoizes the bucketed catalog in-process (#2408)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ id: "openai/gpt-oss-20b:free", pricing: { prompt: "0", completion: "0" } }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const res1 = await GET(req("/api/byok/models?provider=openrouter"));
+      const res2 = await GET(req("/api/byok/models?provider=openrouter"));
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     } finally {
       fetchSpy.mockRestore();
     }
