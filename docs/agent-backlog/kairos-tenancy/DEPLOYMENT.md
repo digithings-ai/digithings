@@ -124,7 +124,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v10** (thin GitHub-raw → `origin/develop` tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401`. Prefer monorepo 9-file bundle once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Management API 403 without `sbp_`). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v11** (thin GitHub-raw → `0f235935…` / post-#3179 develop tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged; prefer once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Supabase MCP has no secrets tool; Management API 403 without `sbp_`). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -240,7 +240,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) | **Merged** to `develop` (2026-08-30) | notifications wiring + schema/docs align on develop; settings EF **v10** |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) + [#3179](https://github.com/digithings-ai/digithings/pull/3179) | **Merged** to `develop` (2026-08-30) | notifications + schema/docs + cred-push status; settings EF **v11** |
 
 ---
 
