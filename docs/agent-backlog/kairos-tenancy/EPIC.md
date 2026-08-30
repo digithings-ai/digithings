@@ -104,7 +104,8 @@ Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
 under **`/olympus`**, no loopback). Live Pages still serve `/olympus/*`
-(`build-info.json` commit `2df473110` / `2026-08-31T11:27:05Z`); `/dashboard/*`
+(site `/build-info.json` commit `9f898ec1d` / `2026-08-31T20:13:43Z` after the
+#3331 Pages rebuild; `/olympus/build-info.json` is 404 HTML). `/dashboard/*`
 is **404**. Develop `app-url.ts` and the staging harness pin `/dashboard/...`.
 **Do not redeploy** settings EF with `/dashboard` URLs while live Pages 404
 that path — Alpaca/billing returns would miss. Do **not** weaken
@@ -218,8 +219,9 @@ squash-merged from `cursor/dashboard-rebrand-rebase-3d52`. Combines #3320
 sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_build_digiquant_dashboard_path.py`,
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
-`2df473110`) still serve `/olympus/` until a **human** coordinates Pages+EF
-`/dashboard` cutover. **Do not** weaken `public_app_urls_ok` to `/olympus`.
+`9f898ec1d`, site `/build-info.json`) still serve `/olympus/` until a **human**
+coordinates Pages+EF `/dashboard` cutover. **Do not** weaken `public_app_urls_ok`
+to `/olympus`.
 House GHA `33426508863` (schedule on default `develop`, checkout `ref: main`)
 **failed** (`23502` null `workspace_id` on `portfolio_ledger_commits`; book not
 committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on
@@ -234,9 +236,10 @@ applied. House documents upsert hotfix [#3278](https://github.com/digithings-ai/
 on `main` (`2df473110`). Ledger stamp hotfix
 [#3331](https://github.com/digithings-ai/digithings/pull/3331) on `main`
 (`9f898ec1d`); `on_conflict` still `date` / `date,ticker`. Live Pages still
-`/olympus` 200 / `/dashboard` 404 (`build-info.json` 404 HTML — Python-only
-main hotfix does not change the Pages path). Staging E2E exit **3** (app-urls
-path contract). Vendor secrets still missing.
+`/olympus` 200 / `/dashboard` 404. Site `/build-info.json` is `9f898ec1d`
+(`2026-08-31T20:13:43Z`) — Cloudflare rebuilt after #3331, but that tree still
+serves `/olympus/` (Python-only). `/olympus/build-info.json` is 404 HTML.
+Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
