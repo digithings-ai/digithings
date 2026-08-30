@@ -8,8 +8,10 @@
  * ``daily_digest`` on; dispatch skips prefs that are off. Paper fills do not
  * prove the hop unless an Alpaca paper OAuth connection is also present.
  * Baseline Stripe does not prove checkout — broker connect and overlay stay
- * Custom-gated. Unproven hops show a closed-vocabulary blocker code, never
- * Stripe ids.
+ * Custom-gated. Persist-disabled overlay names ``overlay_persist_disabled``;
+ * a failed overlay with ``error=legacy_book_unique`` names
+ * ``overlay_legacy_book_unique`` (cutover 113 not applied). Unproven hops show
+ * a closed-vocabulary blocker code, never Stripe ids.
  */
 
 export const REMAINING_LIVE_HOPS = [
@@ -32,6 +34,7 @@ export const REMAINING_HOP_BLOCKER_CODES = [
   'alpaca_api_key_not_oauth',
   'no_alpaca_paper_oauth',
   'overlay_persist_disabled',
+  'overlay_legacy_book_unique',
   'overlay_not_succeeded',
   'fill_without_oauth',
   'no_paper_fill',
@@ -48,6 +51,7 @@ export type RemainingHopEvidence = {
   plan_tier?: string | null;
   connections?: readonly (readonly [string, string, string, string])[];
   jobs?: readonly (readonly [string, string])[];
+  overlay_job_errors?: readonly string[];
   fill_count?: number;
   digest_event_keys?: readonly string[];
   digest_inbox_confirmed?: boolean;
@@ -125,9 +129,13 @@ export function remainingHopBlockers(evidence: RemainingHopEvidence): RemainingH
         .filter(([jobType]) => jobType === 'overlay_daily')
         .map(([, status]) => status),
     );
-    blockers.overlay_daily_claimed = overlayStatuses.has('persist_disabled')
-      ? 'overlay_persist_disabled'
-      : 'overlay_not_succeeded';
+    if (overlayStatuses.has('persist_disabled')) {
+      blockers.overlay_daily_claimed = 'overlay_persist_disabled';
+    } else if ((evidence.overlay_job_errors ?? []).includes('legacy_book_unique')) {
+      blockers.overlay_daily_claimed = 'overlay_legacy_book_unique';
+    } else {
+      blockers.overlay_daily_claimed = 'overlay_not_succeeded';
+    }
   }
   if (!proven.paper_fill_mirrored) {
     blockers.paper_fill_mirrored = (evidence.fill_count ?? 0) > 0 ? 'fill_without_oauth' : 'no_paper_fill';
@@ -159,6 +167,7 @@ export const REMAINING_HOP_BLOCKER_LABELS: Record<RemainingHopBlockerCode, strin
   alpaca_api_key_not_oauth: 'api_key paper does not prove OAuth',
   no_alpaca_paper_oauth: 'no Alpaca paper OAuth',
   overlay_persist_disabled: 'overlay persist disabled',
+  overlay_legacy_book_unique: 'legacy UNIQUE(date) still blocks overlay',
   overlay_not_succeeded: 'no succeeded overlay_daily job',
   fill_without_oauth: 'fill without Alpaca paper OAuth',
   no_paper_fill: 'no paper fill',

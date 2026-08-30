@@ -333,12 +333,17 @@ def collect_remaining_evidence(
                 )
             )
     jobs: list[tuple[str, str]] = []
+    overlay_errors: list[str] = []
     raw_jobs = jobs_body.get("jobs")
     if isinstance(raw_jobs, list):
         for row in raw_jobs:
             if not isinstance(row, dict):
                 continue
-            jobs.append((str(row.get("job_type") or ""), str(row.get("status") or "")))
+            job_type = str(row.get("job_type") or "")
+            jobs.append((job_type, str(row.get("status") or "")))
+            err = row.get("error")
+            if job_type == "overlay_daily" and isinstance(err, str) and err.strip():
+                overlay_errors.append(err)
     fill_count = 0
     fills = fills_body.get("fills")
     if isinstance(fills, list):
@@ -359,6 +364,7 @@ def collect_remaining_evidence(
         plan_tier=str(raw_tier) if isinstance(raw_tier, str) else None,
         connections=tuple(connections),
         jobs=tuple(jobs),
+        overlay_job_errors=tuple(overlay_errors),
         fill_count=fill_count,
         digest_event_keys=tuple(keys),
         daily_digest_enabled=prefs_body.get("daily_digest") is True,

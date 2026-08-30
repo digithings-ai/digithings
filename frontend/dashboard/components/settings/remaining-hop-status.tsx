@@ -36,7 +36,7 @@ function evidenceFromPayloads(args: {
   has_stripe_subscription?: boolean;
   plan_tier?: string | null;
   connections: { broker: string; env: string; status: string; auth_kind?: string }[];
-  jobs: { job_type: string; status: string }[];
+  jobs: { job_type: string; status: string; error?: string | null }[];
   fills: { symbol: string }[];
   events: { event_key: string }[];
   daily_digest_enabled: boolean;
@@ -52,6 +52,9 @@ function evidenceFromPayloads(args: {
       row.auth_kind ?? '',
     ]),
     jobs: args.jobs.map((row) => [row.job_type, row.status]),
+    overlay_job_errors: args.jobs
+      .filter((row) => row.job_type === 'overlay_daily' && Boolean(row.error?.trim()))
+      .map((row) => row.error as string),
     fill_count: args.fills.filter((row) => row.symbol.trim()).length,
     digest_event_keys: args.events.map((row) => row.event_key),
     digest_inbox_confirmed: false,

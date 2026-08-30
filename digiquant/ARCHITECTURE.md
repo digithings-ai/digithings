@@ -3321,7 +3321,10 @@ seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
 Baseline Stripe also must not — broker connect and overlay stay
 `TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
 Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
-(not `running` / `skipped` / `persist_disabled` / `not_entitled`); a fill
+(not `running` / `skipped` / `persist_disabled` / `not_entitled`). Persist-on
+that finishes `failed` with `error=legacy_book_unique` names
+`overlay_legacy_book_unique` (staged cutover 113 not applied) instead of the
+generic `overlay_not_succeeded`; a fill
 fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
 do not prove the hop); a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
@@ -3591,7 +3594,9 @@ hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
 `on_conflict=date` / `date,ticker`). Staging 113 does **not** lift
 `require_overlay_legacy_book_safe`. `daily_snapshots` stays `UNIQUE(date)`
 (house-only). Until 113 is applied, overlay persist-on cannot prove the
-remaining hop. Overlay publish
+remaining hop — Settings About and the staging harness name
+`overlay_legacy_book_unique` when `job_runs.error` is `legacy_book_unique`
+(persist-disabled still wins). Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
 `analyst_coverage`, and `thesis_vehicles` for a private workspace

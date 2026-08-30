@@ -151,7 +151,9 @@ so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 **Remaining hops (Observer JWT, re-audit 2026-08-31T08:36Z):** all five unproven.
 Unproven hops now carry closed-vocabulary blocker codes in Settings About and
 the staging harness (Observer live: `plan_tier_not_custom`,
-`no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`,
+`no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`
+(or `overlay_legacy_book_unique` once persist-on fails against leftover
+`UNIQUE(date)`),
 `no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E
 **exit 3** (Observer `GET /settings/app-urls` path contract: live `/olympus` vs
 develop `/dashboard` pin; `POST /settings/access/redeem-invite` is also 404 on

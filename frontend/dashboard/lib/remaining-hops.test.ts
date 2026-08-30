@@ -170,6 +170,24 @@ describe('provenRemainingHops', () => {
     ).toBe('overlay_persist_disabled');
     expect(
       remainingHopBlockers({
+        jobs: [['overlay_daily', 'persist_disabled']],
+        overlay_job_errors: ['legacy_book_unique'],
+      }).overlay_daily_claimed,
+    ).toBe('overlay_persist_disabled');
+    expect(
+      remainingHopBlockers({
+        jobs: [['overlay_daily', 'failed']],
+        overlay_job_errors: ['legacy_book_unique'],
+      }).overlay_daily_claimed,
+    ).toBe('overlay_legacy_book_unique');
+    expect(
+      remainingHopBlockers({
+        jobs: [['overlay_daily', 'failed']],
+        overlay_job_errors: ['BudgetExhausted'],
+      }).overlay_daily_claimed,
+    ).toBe('overlay_not_succeeded');
+    expect(
+      remainingHopBlockers({
         digest_event_keys: ['digest:2026-08-31'],
         digest_inbox_confirmed: true,
         daily_digest_enabled: false,
