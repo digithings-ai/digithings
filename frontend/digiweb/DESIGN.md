@@ -114,7 +114,7 @@ As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicit
 - **Sparse section rhythm** via `--section-y`; dashboards may tighten locally.
 - Still reject glass, violet washes, synthwave, Inter-as-brand, and multi-accent chrome.
 
-Phases 2–3 still clear product-local debt (digichat shadcn radius, olympus `.glass-card`, Fraunces heroes on marketing sites). Gallery `uv-` CSS stays reference-only.
+Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, olympus `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
 
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 

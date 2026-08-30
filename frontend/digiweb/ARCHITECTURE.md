@@ -33,9 +33,11 @@ locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
 rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
 
 Live apps import `@digithings/design` tokens and `@digithings/web` primitives —
-they do not fork a second look. Remaining override debt is Phase 3: digichat
-shadcn `--radius` / local `@theme`, olympus `.glass-card`, leftover `rounded-*`
-on twelve-x / FX Hub. Marketing Fraunces heroes are gone (Phase 2).
+they do not fork a second look. Phase 3 product-local fights on this branch:
+digichat shadcn `--radius` pinned to 0, olympus `.glass-card` retired, leftover
+`rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
+Themed `--font-family` follows `--font-sans` (mono); unthemed `:root` Inter
+remains a sans escape hatch.
 
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:

@@ -49,7 +49,11 @@ digithings-web + digiquant-web already import NavShell / tokens. This pass dropp
 
 ## Phase 3 — Product apps (strip local overrides)
 
-digichat (local shadcn `--radius` / `@theme` leftovers), olympus (retire `.glass-card` call-site class), twelve-x / FX Hub (replace leftover `rounded-*` utilities that never went through `@digithings/web`). Shared primitives they already import pick up Phase 1 automatically.
+digichat (local shadcn `--radius` / `@theme` leftovers — pinned to 0), olympus
+(retired `.glass-card`; dashboard chrome `rounded-*` stripped to slabs;
+loud actions ink/paper), twelve-x / FX Hub (hairline slabs). Shared
+primitives they already import pick up Phase 1 automatically. Remaining
+circles are geometry only (live dots, avatars, spinners).
 
 ## Non-goals per phase
 
@@ -61,10 +65,10 @@ digichat (local shadcn `--radius` / `@theme` leftovers), olympus (retire `.glass
 ## Acceptance (whole program)
 
 - [ ] design-reference `/` and `/iterate` composite match BLEND v0.1
-- [ ] `tokens.css` ships radius 0 + mono display
+- [x] `tokens.css` ships radius 0 + mono display
 - [x] digithings.ai / digiquant.io heroes use claim+install grammar
-- [ ] digichat transcript + chrome are zero-radius mono (composer may keep sans island if still needed)
-- [ ] olympus + FX Hub: no glass, no pill chrome, same type stack
+- [x] digichat transcript + chrome are zero-radius mono (composer may keep sans island if still needed)
+- [x] olympus + FX Hub: no glass, no pill chrome, same type stack
 - [ ] `scripts/check_frontend_canon.py` still green; update allowlists only with comment
 
 ## How to run the next wave

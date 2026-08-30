@@ -54,6 +54,9 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
+  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
+     under :root[data-theme] so Inter is not the live body default. Override
+     --font-sans locally for a sans/serif escape hatch; --font-family follows. */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
 
@@ -298,10 +301,14 @@
   --accent-kairos: var(--ink);
 
   /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
-     Serif/sans escape hatches set --font-display / --font-sans locally. */
+     Serif/sans escape hatches set --font-display / --font-sans locally.
+     Legacy --font-family follows --font-sans so themed consumers of
+     components.css / app-shell-terminal do not fall through to Inter. */
   --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-family: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   --wrap: 1180px;
   --wrap-wide: 1280px;

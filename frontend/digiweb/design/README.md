@@ -68,16 +68,16 @@ escape hatch for rare editorial moments — quotes, legal names — never the
 default marketing H1. Product apps that still override with Fraunces are
 Phase 2/3 debt ([`ROLLOUT.md`](ROLLOUT.md)).
 
-**Deprecated:** `--font-family` (`'Inter', …`) and `--font-family-mono`
-(`'JetBrains Mono', …`) are the legacy `:root` tokens — still resolved
-by pages that haven't adopted `[data-theme]` yet, but no longer the
-documented default. New and migrating components should reference
-`--font-sans` / `--font-mono` / `--font-display` instead of these two.
+**Deprecated:** `--font-family` and `--font-family-mono` are the legacy
+`:root` tokens. Unthemed pages still resolve `--font-family` to Inter
+(a sans escape hatch). Under `[data-theme]` they follow `--font-sans` /
+`--font-mono` (Geist Mono). New components should reference
+`--font-sans` / `--font-mono` / `--font-display`.
 
-| Token (legacy, deprecated) | Value                                 |
-| --------------------------- | ------------------------------------- |
-| `--font-family`             | `'Inter', system-ui, …`               |
-| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    |
+| Token (legacy, deprecated) | Unthemed `:root`                      | Themed `[data-theme]`     |
+| --------------------------- | ------------------------------------- | ------------------------- |
+| `--font-family`             | `'Inter', system-ui, …`               | `var(--font-sans)`        |
+| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    | `var(--font-mono)`        |
 
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |
