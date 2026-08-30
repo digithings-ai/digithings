@@ -139,6 +139,11 @@ describe('BrokersTab', () => {
           connectFn: vi.fn(),
           revokeFn: vi.fn(),
           fillsFn,
+          appUrlsFn: vi.fn(async () => ({
+            alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
+            billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+            alpaca_oauth_client_id: '',
+          })),
         }),
       );
     });
@@ -148,6 +153,52 @@ describe('BrokersTab', () => {
     });
     expect(fillsFn).toHaveBeenCalledOnce();
     expect(host.querySelector('[data-testid="broker-fill-row"]')?.textContent).toMatch(/AAPL/);
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  it('starts Alpaca OAuth with public client id from GET /app-urls', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const navigated: string[] = [];
+    const appUrlsFn = vi.fn(async () => ({
+      alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
+      billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+      alpaca_oauth_client_id: 'cid-from-ef',
+    }));
+    await act(async () => {
+      root.render(
+        createElement(BrokersTab, {
+          api: { accessToken: 'tok' },
+          listFn: vi.fn(async () => []),
+          connectFn: vi.fn(),
+          revokeFn: vi.fn(),
+          fillsFn: vi.fn(async () => []),
+          appUrlsFn,
+          onAuthorizeNavigate: (url) => {
+            navigated.push(url);
+          },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(appUrlsFn).toHaveBeenCalledOnce();
+    const button = host.querySelector('[data-testid="alpaca-oauth-connect"]');
+    expect(button).toBeTruthy();
+    await act(async () => {
+      (button as HTMLButtonElement).click();
+    });
+    expect(navigated).toHaveLength(1);
+    const u = new URL(navigated[0]!);
+    expect(u.searchParams.get('client_id')).toBe('cid-from-ef');
+    expect(u.searchParams.get('env')).toBe('paper');
+    expect(navigated[0]).not.toMatch(/secret/i);
     act(() => {
       root.unmount();
     });

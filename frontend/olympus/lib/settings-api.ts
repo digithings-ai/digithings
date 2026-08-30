@@ -332,6 +332,21 @@ export async function getNotificationLog(
   return data.events ?? [];
 }
 
+export type AppUrls = {
+  alpaca_redirect_uri: string;
+  billing_return_url: string;
+  /** Public Alpaca OAuth client id; empty when EF secret is unset. Never the secret. */
+  alpaca_oauth_client_id: string;
+};
+
+export async function getAppUrls(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<AppUrls> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  return request<AppUrls>(opts, 'GET', `/settings/app-urls${q}`);
+}
+
 export async function patchNotifications(
   opts: SettingsApiOptions,
   payload: {

@@ -3105,7 +3105,9 @@ spec D1) and denormalized `workspaces` billing columns for RLS.
 `APP_URL` / `NEXT_PUBLIC_APP_URL` is the **site origin** (`https://digiquant.io`).
 Helpers strip a trailing `/olympus` so a mistaken path does not double the basePath.
 Loopback origins (`127.0.0.1`) break Alpaca `redirect_uri` and Stripe return URLs;
-`GET /settings/app-urls` is the Observer probe. Settings UI opens the Billing tab from
+`GET /settings/app-urls` is the Observer probe. It also returns the public
+Alpaca OAuth client id (never the secret) so Brokers connect can start as soon
+as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab from
 `?tab=billing` / `?checkout=success|cancel`.
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.

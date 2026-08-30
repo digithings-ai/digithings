@@ -85,7 +85,9 @@ Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
 under `/olympus`, no loopback). Checkout return URLs are
-`/olympus/settings/?tab=billing`.
+`/olympus/settings/?tab=billing`. Brokers tab reads the **public** Alpaca OAuth
+client id from `GET /app-urls` (empty until EF secrets land; never the secret)
+so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
 **Remaining hops (Observer JWT, re-audit 2026-08-31T07:02Z):** all five unproven.
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK

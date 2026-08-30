@@ -5,10 +5,11 @@ import {
   ALPACA_OAUTH_STATE_KEY,
   alpacaOAuthRedirectUri,
   buildAlpacaAuthorizeUrl,
-  publicAlpacaClientId,
+  resolveAlpacaOauthClientId,
 } from '@/lib/settings/alpaca-oauth';
 import {
   connectBrokerApiKey,
+  getAppUrls,
   getFills,
   listBrokers,
   revokeBroker,
@@ -23,6 +24,8 @@ export type BrokersTabProps = {
   connectFn?: typeof connectBrokerApiKey;
   revokeFn?: typeof revokeBroker;
   fillsFn?: typeof getFills;
+  /** Test seam: GET /app-urls (public Alpaca client id). */
+  appUrlsFn?: typeof getAppUrls;
   /** Test seam: capture authorize URL instead of navigating. */
   onAuthorizeNavigate?: (url: string) => void;
 };
@@ -54,6 +57,7 @@ export function BrokersTab({
   connectFn = connectBrokerApiKey,
   revokeFn = revokeBroker,
   fillsFn = getFills,
+  appUrlsFn = getAppUrls,
   onAuthorizeNavigate,
 }: BrokersTabProps) {
   const [rows, setRows] = useState<BrokerConnectionView[]>([]);
@@ -63,6 +67,7 @@ export function BrokersTab({
   const [keyId, setKeyId] = useState('');
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
+  const [oauthClientId, setOauthClientId] = useState('');
 
   const refresh = useCallback(async () => {
     if (!api) return;
@@ -74,11 +79,17 @@ export function BrokersTab({
       } catch {
         setFills([]);
       }
+      try {
+        const urls = await appUrlsFn(api);
+        setOauthClientId(urls.alpaca_oauth_client_id ?? '');
+      } catch {
+        setOauthClientId('');
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load connections');
     }
-  }, [api, listFn, fillsFn]);
+  }, [api, listFn, fillsFn, appUrlsFn]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- load connections after mount */
@@ -111,7 +122,7 @@ export function BrokersTab({
   }
 
   function onAlpacaOAuth() {
-    const clientId = publicAlpacaClientId();
+    const clientId = resolveAlpacaOauthClientId(oauthClientId);
     if (!clientId) {
       setError('Alpaca OAuth client id is not configured.');
       return;

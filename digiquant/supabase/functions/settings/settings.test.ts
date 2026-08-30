@@ -1440,4 +1440,26 @@ Deno.test("GET /app-urls: pinned Alpaca + billing return under /olympus", async 
     json.billing_return_url,
     "https://app.example/olympus/settings/?tab=billing",
   );
+  assertEquals(json.alpaca_oauth_client_id, "");
+});
+
+Deno.test("GET /app-urls: public client id only (secret never in body)", async () => {
+  const previousId = Deno.env.get("ALPACA_OAUTH_CLIENT_ID");
+  const previousSecret = Deno.env.get("ALPACA_OAUTH_CLIENT_SECRET");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_ID", "cid-public");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", "must-not-leak");
+  try {
+    const store = freshStore();
+    const { status, json } = await call(store, "GET", "/app-urls");
+    assertEquals(status, 200);
+    assertEquals(json.alpaca_oauth_client_id, "cid-public");
+    const blob = JSON.stringify(json);
+    assertEquals(blob.includes("must-not-leak"), false);
+    assertEquals(blob.includes("CLIENT_SECRET"), false);
+  } finally {
+    if (previousId === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_ID");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_ID", previousId);
+    if (previousSecret === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", previousSecret);
+  }
 });

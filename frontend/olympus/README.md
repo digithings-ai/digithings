@@ -270,7 +270,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
 | `NEXT_PUBLIC_OLYMPUS_AUTH`        | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
-| `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Public Alpaca OAuth client id for Brokers connect (secret stays on the Edge Function).               |
+| `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Optional fallback public Alpaca OAuth client id. Brokers tab prefers `GET /settings/app-urls` (EF `ALPACA_OAUTH_CLIENT_ID`; never the secret). |
 | `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
 | `NEXT_PUBLIC_STRIPE_BILLING_ENABLED` | Set `0` to force Billing "not configured"; otherwise inferred from Supabase URL.                     |
 

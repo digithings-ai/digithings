@@ -6,6 +6,7 @@ import { assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert
 import {
   ALPACA_OAUTH_CALLBACK_PATH,
   pinnedAlpacaRedirectUriFromOrigin,
+  publicAlpacaOauthClientId,
   publicAppOrigin,
   settingsBillingReturnUrl,
 } from "./app-url.ts";
@@ -50,4 +51,21 @@ Deno.test("billing return URL lands on Settings billing tab", () => {
 Deno.test("empty APP_URL throws", () => {
   assertThrows(() => pinnedAlpacaRedirectUriFromOrigin(""), Error, "APP_URL unset");
   assertThrows(() => settingsBillingReturnUrl("  "), Error, "APP_URL unset");
+});
+
+Deno.test("public Alpaca client id trims and never uses the secret", () => {
+  assertEquals(publicAlpacaOauthClientId(""), "");
+  assertEquals(publicAlpacaOauthClientId("  cid-public  "), "cid-public");
+  const previousId = Deno.env.get("ALPACA_OAUTH_CLIENT_ID");
+  const previousSecret = Deno.env.get("ALPACA_OAUTH_CLIENT_SECRET");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_ID", " from-env ");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", "must-not-leak");
+  try {
+    assertEquals(publicAlpacaOauthClientId(), "from-env");
+  } finally {
+    if (previousId === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_ID");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_ID", previousId);
+    if (previousSecret === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", previousSecret);
+  }
 });

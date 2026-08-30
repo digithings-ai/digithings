@@ -16,6 +16,7 @@
  *   GET    /jobs               — job_runs for the caller's workspace (overlay hop proof)
  *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
  *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
+ *                                + public Alpaca OAuth client id (never the secret)
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -55,6 +56,7 @@ import {
 } from "./vault.ts";
 import {
   pinnedAlpacaRedirectUriFromOrigin,
+  publicAlpacaOauthClientId,
   settingsBillingReturnUrl,
 } from "./app-url.ts";
 
@@ -323,7 +325,7 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
   };
 }
 
-/** GET /app-urls — member read of pinned Alpaca + billing URLs (no secrets). */
+/** GET /app-urls — member read of pinned Alpaca + billing URLs + public client id. */
 async function getAppUrls(req: Request, deps: SettingsDeps): Promise<Response> {
   const url = new URL(req.url);
   const workspaceId = url.searchParams.get("workspace_id");
@@ -338,6 +340,8 @@ async function getAppUrls(req: Request, deps: SettingsDeps): Promise<Response> {
     return jsonOk({
       alpaca_redirect_uri: pinnedAlpacaRedirectUri(raw),
       billing_return_url: settingsBillingReturnUrl(raw),
+      // Public client id only — never ALPACA_OAUTH_CLIENT_SECRET.
+      alpaca_oauth_client_id: publicAlpacaOauthClientId(),
     });
   } catch {
     return jsonError(500, "APP_URL_NOT_CONFIGURED", "APP_URL is not configured");

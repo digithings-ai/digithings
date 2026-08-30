@@ -34,7 +34,7 @@ no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / 
 Member-scoped service-role reads: `GET /jobs` (`job_runs`), `GET /fills`
 (`broker_executions` fingerprints, no `external_fill_id`), `GET /notifications/log`
 (event keys only), `GET /app-urls` (pinned Alpaca redirect_uri + billing return
-URL under `/olympus`). `GET /profile` includes workspace `plan_tier` +
+URL under `/olympus`, plus the public Alpaca OAuth client id — never the secret). `GET /profile` includes workspace `plan_tier` +
 `subscription_status` and `has_stripe_subscription` (boolean only) and never Stripe ids.
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`

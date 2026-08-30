@@ -147,6 +147,11 @@ def test_public_app_urls_ok_requires_digiquant_origin() -> None:
         "billing_return_url": "https://digiquant.io/settings/billing",
     }
     assert public_app_urls_ok(200, missing_olympus) is False
+    extra_public_client = {
+        **good,
+        "alpaca_oauth_client_id": "cid-public",
+    }
+    assert public_app_urls_ok(200, extra_public_client) is True
 
 
 class _FakeHttp:

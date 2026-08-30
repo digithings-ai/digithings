@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   connectBrokerApiKey,
   connectProviderKey,
+  getAppUrls,
   getFills,
   getJobs,
   getNotificationLog,
@@ -265,5 +266,26 @@ describe('settings-api', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     expect(isBillingConfigured()).toBe(false);
     process.env.NEXT_PUBLIC_SUPABASE_URL = prev;
+  });
+
+  it('getAppUrls returns public client id and never a secret field', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/app-urls');
+      return new Response(
+        JSON.stringify({
+          alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
+          billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+          alpaca_oauth_client_id: 'cid-public',
+        }),
+        { status: 200 },
+      );
+    });
+    const urls = await getAppUrls({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(urls.alpaca_oauth_client_id).toBe('cid-public');
+    expect(JSON.stringify(urls)).not.toMatch(/secret/i);
   });
 });

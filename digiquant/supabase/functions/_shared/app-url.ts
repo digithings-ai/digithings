@@ -43,3 +43,16 @@ export function settingsBillingReturnUrl(
   }
   return `${origin}${SETTINGS_PATH}?${params.toString()}`;
 }
+
+/**
+ * Public Alpaca OAuth client id for the authorize URL.
+ * Never reads ``ALPACA_OAUTH_CLIENT_SECRET``.
+ */
+export function publicAlpacaOauthClientId(raw?: string): string {
+  const value =
+    raw ??
+    Deno.env.get("ALPACA_OAUTH_CLIENT_ID") ??
+    Deno.env.get("NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID") ??
+    "";
+  return value.trim();
+}
