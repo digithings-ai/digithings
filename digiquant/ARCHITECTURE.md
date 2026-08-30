@@ -3104,10 +3104,10 @@ receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
 house paper fills are the `execute_at_open` job (date-scoped, house stamp);
-external venue submit is K4's router, which already takes `workspace_id` and
-resolves via untouched `policy.py`. `_pending_order_heads` is house-scoped when
-`workspace_id` is omitted (same as `_rows_for_date`). `documents.workspace_id`
-landed in migration 105; overlay isolation is the column plus the
-`overlay/{workspace_id}/…` key prefix.
+external venue submit is K4's router, which takes `workspace_id`, resolves via
+untouched `policy.py`, and scopes `_pending_order_heads` /
+`_directions_by_order` to that workspace (omitted ⇒ house, same as
+`_rows_for_date`). `documents.workspace_id` landed in migration 105; overlay
+isolation is the column plus the `overlay/{workspace_id}/…` key prefix.
 
 Tests: `tests/dq/olympus/overlay/`.

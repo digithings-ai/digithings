@@ -236,11 +236,16 @@ def _chain_store(
     order_id: UUID | None = None,
     quantity: str = "10",
 ) -> tuple[dict[str, list[dict[str, Any]]], UUID]:
-    """Minimal ledger chain: decision → requested → approved → pending order."""
+    """Minimal ledger chain: decision → requested → approved → pending order.
+
+    Rows carry ``workspace_id=_WS`` so they match the connection-scoped reads
+    ``route_pending_orders`` issues via ``_pending_order_heads``.
+    """
     decision_id = uuid4()
     requested_id = uuid4()
     approved_id = uuid4()
     oid = order_id or uuid4()
+    ws = str(_WS)
     store: dict[str, list[dict[str, Any]]] = {
         "portfolio_ledger_decision_intents": [
             {
@@ -248,6 +253,7 @@ def _chain_store(
                 "run_date": _RUN.isoformat(),
                 "symbol": "AAPL",
                 "action": action.value,
+                "workspace_id": ws,
             }
         ],
         "portfolio_ledger_requested_targets": [
@@ -256,6 +262,7 @@ def _chain_store(
                 "run_date": _RUN.isoformat(),
                 "decision_intent_id": str(decision_id),
                 "symbol": "AAPL",
+                "workspace_id": ws,
             }
         ],
         "portfolio_ledger_approved_targets": [
@@ -265,6 +272,7 @@ def _chain_store(
                 "requested_target_id": str(requested_id),
                 "symbol": "AAPL",
                 "supersedes_id": None,
+                "workspace_id": ws,
             }
         ],
         "portfolio_ledger_order_intents": [
@@ -276,10 +284,11 @@ def _chain_store(
                 "quantity": quantity,
                 "status": "pending",
                 "supersedes_id": None,
+                "workspace_id": ws,
             }
         ],
         "portfolio_ledger_commits": [
-            {"id": str(uuid4()), "run_date": _RUN.isoformat()},
+            {"id": str(uuid4()), "run_date": _RUN.isoformat(), "workspace_id": ws},
         ],
         BROKER_ORDERS: [],
     }
