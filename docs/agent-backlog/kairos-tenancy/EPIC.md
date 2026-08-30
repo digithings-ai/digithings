@@ -92,6 +92,8 @@ Stripe ids — must not prove checkout.
   (overlay + sync + Mailgun)
 - House daily (`hermes.chain` CLI success) now fail-soft dispatches K5 digest
   (`force_digest=True`). Overlay nested chain does not. Mailgun still empty → skip.
+  House GHA must still splice `pipeline-olympus-mailgun.env.yml` into the chain
+  step on a `chore/`/`feat/` branch or the close-out never sees Mailgun secrets.
 - Scheduled GHA spec: `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
   (`15 12 * * *`, `--check`/`--dry-run` only, separate process from
   `pipeline-olympus.yml`). `cursor/*` cannot write `.github/workflows/`; copy onto a

@@ -3080,6 +3080,12 @@ configured.
 | Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
+House GHA (`pipeline-olympus.yml`) does not yet pass `MAILGUN_API_KEY` /
+`MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` on a
+`chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
+close-out is fail-soft skip.
+
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 
 ## Billing (T2)

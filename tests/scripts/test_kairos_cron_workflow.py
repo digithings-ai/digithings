@@ -25,6 +25,10 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "kairos-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-olympus.yml"
+MAILGUN_FRAGMENT = (
+    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
+)
+MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
 
 FORBIDDEN_APPLY = ("--execute", "--all", "hermes.chain")
 
@@ -125,3 +129,45 @@ class TestHousePipelineDoesNotRunOverlay:
         assert "kairos.sync_cron" not in blob
         assert "kairos_cron_check" not in blob
         assert "notify.dispatch" not in blob
+
+
+def _house_chain_step_env() -> dict[str, object]:
+    doc = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
+    for job in doc["jobs"].values():
+        for step in job.get("steps", []):
+            if not isinstance(step, dict):
+                continue
+            if "hermes.chain" in str(step.get("run") or ""):
+                env = step.get("env") or {}
+                assert isinstance(env, dict)
+                return env
+    raise AssertionError("house hermes.chain step not found")
+
+
+class TestHousePipelineMailgunEnvFragment:
+    def test_fragment_is_secrets_only(self) -> None:
+        frag = yaml.safe_load(MAILGUN_FRAGMENT.read_text(encoding="utf-8"))
+        assert tuple(frag) == MAILGUN_KEYS
+        for key, value in frag.items():
+            assert isinstance(value, str)
+            assert f"secrets.{key}" in value
+            assert "sk_" not in value
+            assert "key-" not in value
+
+    def test_house_chain_env_absent_or_matches_fragment(self) -> None:
+        """cursor/* cannot splice the fragment; when installed it must be complete."""
+        env = _house_chain_step_env()
+        frag = yaml.safe_load(MAILGUN_FRAGMENT.read_text(encoding="utf-8"))
+        present = [key for key in MAILGUN_KEYS if key in env]
+        if not present:
+            return
+        for key in MAILGUN_KEYS:
+            assert env[key] == frag[key], key
+
+    def test_docs_name_the_splice_hop(self) -> None:
+        unblock = (
+            REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "HUMAN-UNBLOCK.md"
+        ).read_text(encoding="utf-8")
+        assert "pipeline-olympus-mailgun.env.yml" in unblock
+        for key in MAILGUN_KEYS:
+            assert key in unblock

@@ -31,6 +31,12 @@ copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` to
 `.github/workflows/kairos-cron-check.yml` on a `chore/` or `feat/` branch. Probe is
 `--check` / `--dry-run` only; house daily stays on `pipeline-olympus.yml`.
 
+House digest send (after Mailgun GitHub secrets exist): splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` into the
+"Run Olympus research pipeline" `env:` on the same `chore/`/`feat/` branch.
+Without those names, `hermes.chain` close-out logs `MAILGUN_NOT_CONFIGURED` and
+skips (fail-soft; the book still commits).
+
 ### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
 
 [#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI (Google + GitHub). Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183).
