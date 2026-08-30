@@ -1,6 +1,6 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: WAITING_HUMAN_CAPTCHA (2026-08-30) — NOT COMPLETE.** Identity: **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged). Captchas still block Stripe/Mailgun/Alpaca. No vendor EF secrets set. Staging E2E loud-fails named secrets. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-30T21:18Z) — NOT COMPLETE.** Identity: **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged). Forms re-filled as `digithings@agentmail.to`; captchas still block Stripe (hCaptcha), Mailgun (reCAPTCHA), Alpaca (Turnstile). No vendor EF secrets set. Staging E2E exit **2** (9 named secrets). Olympus Auth Pages live (#3231) — **GitHub login proven on prod** (`auth.users` github + mig 107 Personal `plan_tier=free`; Email UI absent). Captcha-ask [#3239](https://github.com/digithings-ai/digithings/pull/3239) merged; this audit supersedes. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
 
 **Secret files (when obtained):** `.local/secrets/digithings-stripe.env`, `digithings-mailgun.env`, `digithings-alpaca.env` — **not** `cursor-cloud-agent-*.env`.  
 **Canonical inbox:** `digithings@agentmail.to` (interim `cursor-cloud-agent6060@agentmail.to` = accidental only).  
@@ -8,7 +8,7 @@
 **Human captcha ask:** `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
 **Vendor map:** [`VENDOR_MAP.md`](VENDOR_MAP.md) · `/opt/cursor/artifacts/kairos-VENDOR-MAP.md`  
 **Waiting:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`identity=digithings`)  
-**Vendor docs PR:** [#3233](https://github.com/digithings-ai/digithings/pull/3233) · branch `cursor/kairos-vendor-onboard-3d52`  
+**Vendor docs:** [#3233](https://github.com/digithings-ai/digithings/pull/3233) + captcha-ask [#3239](https://github.com/digithings-ai/digithings/pull/3239) landed · GitHub proof follow-up `cursor/kairos-github-auth-proof-3d52`  
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
 Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
@@ -19,9 +19,11 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
 ```
 
-### 0a) Auth Pages on `main` — DONE (#3231)
+### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
 
-[#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI. Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183).
+[#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI (Google + GitHub). Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183).
+
+**GitHub Auth (2026-08-30T21:15Z):** human signed in on prod. `core` DB: `auth.users` = 2 (1 github / 1 email); GitHub user `chrizefan` / `chris.stefan@proton.me` → Personal workspace owner `plan_tier=free` via mig 107 trigger. No bootstrap fix needed. Evidence: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`.
 
 ---
 
