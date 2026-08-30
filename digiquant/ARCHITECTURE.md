@@ -502,7 +502,9 @@ position:** `buy_usd = remaining_cash * rate / 100` and
 `sell_units = remaining_holdings * |rate| / 100`, each clamped so a buy
 cannot exceed cash and a sell cannot exceed units held (#2552). Two
 consecutive 50% days therefore leave 25% of the prior remaining cash (or
-holdings), not zero. SDCA is **not** a long/short book. Pin:
+holdings), not zero. When remaining-book size falls below the instrument
+`size_increment`, `on_bar()` skips the order instead of letting Nautilus
+`make_qty` raise (dust after a cheap window). SDCA is **not** a long/short book. Pin:
 `tests/dq/strategies/sdca/test_remaining_pct.py`. `long_only=True` clamps the rate
 to `>= 0` regardless of the curve's own sign, as a safety override independent
 of which curve is configured. `on_bar()` skips sizing a new order while a

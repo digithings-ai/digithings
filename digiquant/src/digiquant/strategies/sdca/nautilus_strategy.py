@@ -183,8 +183,18 @@ class SdcaStrategy(Strategy):
             self._submit_market(OrderSide.SELL, sell_units)
 
     def _submit_market(self, side: OrderSide, quantity: float) -> None:
-        """Submit a market order sized from the sdca allocation loop."""
+        """Submit a market order sized from the sdca allocation loop.
+
+        Remaining-book compounding can size below the instrument increment
+        (balanced ``buy_max_rate`` drains cash toward dust). ``make_qty``
+        raises if the value rounds to zero — skip those bars instead.
+        """
         assert self._instrument is not None
+        if quantity <= 0:
+            return
+        increment = self._instrument.size_increment.as_double()
+        if increment > 0 and quantity < increment:
+            return
         qty = self._instrument.make_qty(Decimal(str(quantity)))
         if qty.as_double() <= 0:
             return
