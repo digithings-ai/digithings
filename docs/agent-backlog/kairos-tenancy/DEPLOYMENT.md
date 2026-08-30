@@ -1,0 +1,300 @@
+# Kairos + tenancy — deployment runbook
+
+> **Preparation artifact only.** Nothing here is auto-applied. Execute steps in
+> order when promoting the program to the live `core` Supabase project and
+> digiquant.io. Cross-links:
+> [EPIC](EPIC.md) ·
+> [issue pack README](README.md) ·
+> [implementation spec](../../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md)
+> (D1–D10 locked).
+
+---
+
+## 1. Merge-state snapshot (as of 2026-08-30)
+
+### Merged (8 work packages + plan)
+
+| WP | PR | Landed on | Notes |
+|----|-----|-----------|-------|
+| Plan / spec | [#3081](https://github.com/digithings-ai/digithings/pull/3081) | `develop` | Locked decisions |
+| K0 contracts | [#3098](https://github.com/digithings-ai/digithings/pull/3098) | `module/digiquant` | |
+| K1 Alpaca paper | [#3114](https://github.com/digithings-ai/digithings/pull/3114) | `module/digiquant` | |
+| K2 IBKR read-first | [#3116](https://github.com/digithings-ai/digithings/pull/3116) | `module/digiquant` | |
+| T0 workspaces + RLS | [#3115](https://github.com/digithings-ai/digithings/pull/3115) | `module/digiquant` | Migrations **096–098**; anon policies untouched |
+| T1 Auth login | [#3099](https://github.com/digithings-ai/digithings/pull/3099) | `develop` | Flag-gated UI only; anon-drop deferred |
+| T2 Stripe tiers | [#3118](https://github.com/digithings-ai/digithings/pull/3118) | `module/digiquant` | Migrations **100–101** + Edge Functions |
+| T5 Tier UI | [#3119](https://github.com/digithings-ai/digithings/pull/3119) | `develop` | |
+| T3 Settings UI | [#3120](https://github.com/digithings-ai/digithings/pull/3120) | `develop` | `settings` Edge Function; deploy blocked on K3 |
+
+### Remaining queue (merge order)
+
+```
+K3 (#3117, open on module/digiquant)
+  → K4 (broker mirror + router)
+  → K5 (notification prefs + Mailgun digest)
+  → T4 (overlay runs + documents.workspace_id)
+  → module/digiquant → develop promotion
+  → develop → main (schema via db-migrate; Pages rebuild)
+```
+
+Expected migration numbers once the queue lands (allocated on feature branches;
+renumber at merge if gaps fill differently):
+
+| # | File | WP |
+|---|------|-----|
+| 096–098 | workspaces / tenant columns / RLS | T0 |
+| 099 | `broker_connections` | K3 |
+| 100–101 | Stripe claim sync + webhook ordering | T2 |
+| 102 | `broker_orders` / executions / snapshots | K4 |
+| 103 | `notification_prefs` + `notification_log` | K5 |
+| 104 | `workspace_provider_credentials` (BYOK) | T4 |
+| 105 | `documents.workspace_id` | T4 |
+| (cutover) | staged `migrations/cutover/900_drop_anon_read_cutover.sql` → rename to next free | human |
+
+---
+
+## 2. DB migrations 096–105 — apply path
+
+### How `db-migrate.yml` actually triggers
+
+Workflow: [`.github/workflows/db-migrate.yml`](../../../.github/workflows/db-migrate.yml).
+
+1. **Trigger:** `push` to `main` with path `digiquant/supabase/migrations/**`, or
+   `workflow_dispatch`.
+2. **Environment:** `production` (required-reviewer gate — human must approve).
+3. **Ledger:** table `olympus_schema_migrations (version text PRIMARY KEY)` —
+   version = **full basename** (e.g. `096_workspaces_tenancy_tables.sql`).
+4. **Discovery (inert for subdirs):**
+   ```bash
+   find digiquant/supabase/migrations -maxdepth 1 -name '*.sql' | sort
+   ```
+   Only top-level `NNN_*.sql` files. `migrations/cutover/` is never applied
+   (same `-maxdepth 1` in `verify-supabase-migrations.sh`).
+5. **Apply loop:** skip if ledger has the basename; else run file under
+   `--single-transaction` (or self-`BEGIN` path) and `INSERT` the ledger row
+   atomically with the DDL for unwrapped files.
+6. **Secret:** `DIGI_CHECKPOINTER_POSTGRES_URI` (prod DB URI for project `core`).
+
+So: merge migrations to `develop` → promote `develop` → `main` → approve the
+`db-migrate` production run. Do **not** put the anon-drop file at top level until
+cutover (§6).
+
+### Manual alternative (`core` project `rwagjbkvxkdwqmouagad`)
+
+Use only when the workflow cannot run (emergency) or for a staging clone.
+
+```bash
+# Link CLI to core (project ref from frontend/olympus/lib/database.types.ts)
+supabase link --project-ref rwagjbkvxkdwqmouagad
+
+# Option A — Supabase CLI (applies pending files the CLI tracks; still prefer
+# the GHA ledger path for prod so olympus_schema_migrations stays authoritative)
+supabase db push
+
+# Option B — psql against the same URI the workflow uses (one file at a time)
+psql "$DIGI_CHECKPOINTER_POSTGRES_URI" -v ON_ERROR_STOP=1 --single-transaction <<'SQL'
+-- paste one migration file body, then:
+INSERT INTO olympus_schema_migrations(version)
+VALUES ('096_workspaces_tenancy_tables.sql');
+SQL
+```
+
+Apply **096 → 105 in numeric order**. Never stamp a ledger row without executing
+the file (`db-migrate.yml` header / #1814).
+
+Verify:
+
+```sql
+SELECT version, applied_at
+FROM olympus_schema_migrations
+WHERE version ~ '^(09[6-9]|10[0-5])_'
+ORDER BY version;
+```
+
+---
+
+## 3. Edge Function deploys
+
+Functions live under `digiquant/supabase/functions/`. Deploy from a checkout that
+already contains the merged function code + migrations on the target DB.
+
+```bash
+cd digiquant/supabase
+supabase link --project-ref rwagjbkvxkdwqmouagad
+
+# Secrets first (names only — values from §5 human prerequisites)
+supabase secrets set \
+  STRIPE_SECRET_KEY=… \
+  STRIPE_WEBHOOK_SECRET=… \
+  STRIPE_PRICE_BASELINE_MONTHLY=… \
+  STRIPE_PRICE_BASELINE_ANNUAL=… \
+  STRIPE_PRICE_CUSTOM_MONTHLY=… \
+  STRIPE_PRICE_CUSTOM_ANNUAL=… \
+  NEXT_PUBLIC_APP_URL=… \
+  APP_URL=… \
+  DIGIQUANT_VAULT_MASTER_KEY=… \
+  DIGIQUANT_VAULT_KEY_ID=v1 \
+  ALPACA_OAUTH_CLIENT_ID=… \
+  ALPACA_OAUTH_CLIENT_SECRET=…
+
+# Deploys (order: webhook → checkout/portal → settings)
+supabase functions deploy stripe-webhook --no-verify-jwt
+supabase functions deploy create-checkout-session
+supabase functions deploy customer-portal
+# settings: BLOCKED until K3 + 096–099 are on the target (see functions/settings/README.md)
+supabase functions deploy settings
+```
+
+### Secrets required per function (names only)
+
+| Function | Secrets |
+|----------|---------|
+| `stripe-webhook` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_BASELINE_ANNUAL`, `STRIPE_PRICE_CUSTOM_MONTHLY`, `STRIPE_PRICE_CUSTOM_ANNUAL` (+ platform `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`) |
+| `create-checkout-session` | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_*` (via tiers map), `NEXT_PUBLIC_APP_URL` |
+| `customer-portal` | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_APP_URL` |
+| `settings` | `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID` (optional, default `v1`), `APP_URL` (or `NEXT_PUBLIC_APP_URL`), `ALPACA_OAUTH_CLIENT_ID`, `ALPACA_OAUTH_CLIENT_SECRET` |
+
+`prices-live` is pre-existing (`FINNHUB_API_KEY`) — not part of this program’s
+cutover, but leave it deployed.
+
+Point Stripe Dashboard webhook →
+`https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webhook`
+(test mode first).
+
+---
+
+## 4. Olympus build / deploy (digiquant.io Cloudflare Pages)
+
+Primary path: Cloudflare Pages git integration on `main`, build command
+`bash scripts/build-digiquant.sh` (see
+[`.github/workflows/deploy-digiquant-cloudflare.yml`](../../../.github/workflows/deploy-digiquant-cloudflare.yml)
+— PR build-check only; dashboard owns production publish).
+
+### Flag off (pre-cutover — default)
+
+Cloudflare Pages env for the digiquant.io project:
+
+| Var | Value |
+|-----|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://rwagjbkvxkdwqmouagad.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (anon publishable key) |
+| `NEXT_PUBLIC_OLYMPUS_AUTH` | unset / empty |
+
+Behavior: classic anon client; Cloudflare Access may still gate `/olympus/*`.
+
+### Flag on (cutover)
+
+| Var | Value |
+|-----|-------|
+| `NEXT_PUBLIC_OLYMPUS_AUTH` | `1` |
+| (same URL + anon key) | |
+
+Then **Retry deployment** / push to `main` so `scripts/build-digiquant.sh`
+rebuilds `frontend/olympus` with the flag inlined (static export).
+
+Local verify:
+
+```bash
+cd frontend/olympus
+NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
+# out/ must still be static-export clean
+```
+
+---
+
+## 5. Human-owned prerequisites
+
+| Prerequisite | Owner action | Blocks |
+|--------------|--------------|--------|
+| Stripe products + price ids (Baseline / Custom, monthly + annual) + `STRIPE_SECRET_KEY` + webhook signing secret | Stripe Dashboard (test mode first) | T2 Edge Functions; checkout/portal; claim sync |
+| Mailgun API key fix + sending domain | Mailgun control panel; set `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` on runners | K5 digest / alerts |
+| Supabase Auth providers (Google, GitHub) on `core` + redirect URLs | Supabase Auth → Providers / URL config | T1 login when flag on |
+| Vault master key | `openssl rand -base64 32` → `DIGIQUANT_VAULT_MASTER_KEY` (optional `DIGIQUANT_VAULT_KEY_ID=v1`) | K3 seal/unseal; `settings` broker connect; T4 BYOK |
+| Alpaca Connect / OAuth app (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | Alpaca developer dashboard; redirect `{APP_URL}/olympus/settings/brokers/callback/` | Product broker connect (K1 unit tests mock) |
+| IBKR vendor / OAuth 1.0a onboarding email | Email IBKR; longest pole | K2 live verify; paper orders remain flag-gated off |
+| Cloudflare Access decision (D7) | Zero Trust: remove prod `/olympus/*`; keep staging | Cutover §6 |
+| Legal read on adviser status | Counsel | Any **live** trading epic (out of this program) |
+
+---
+
+## 6. Cutover checklist
+
+Execute only after §1 queue is on `main`, §2 migrations 096–105 are in the
+ledger, §3 functions are live, and §5 rows needed for launch are green.
+
+- [ ] **Flag flip:** set `NEXT_PUBLIC_OLYMPUS_AUTH=1` on Cloudflare Pages; rebuild
+      digiquant.io (`scripts/build-digiquant.sh`).
+- [ ] **Smoke login:** Google + GitHub PKCE → `/olympus/auth/callback/` → session.
+- [ ] **Anon-drop migration application (manual):**
+      1. Confirm preconditions in
+         [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
+         header.
+      2. Copy to `digiquant/supabase/migrations/<next>_drop_anon_read_cutover.sql`
+         (next free after 105).
+      3. PR → `main` → approve `db-migrate` **or** apply via psql + ledger INSERT.
+- [ ] **Cloudflare Access:** remove production `/olympus/*` application; retain
+      staging overlay (D7).
+- [ ] **Verification queries** (from the staged SQL verification block): as
+      `anon`, counts on `positions`, `position_events`, `nav_history`,
+      `portfolio_metrics`, `current_book_lookback`, non-house `documents`, and
+      `public_portfolio_positions` / `public_nav_history` are **0**; shared
+      `price_history` / house `documents` / `daily_snapshots` still readable.
+- [ ] **Authenticated smoke:** member JWT reads own workspace book; cannot read
+      another workspace’s private rows.
+
+---
+
+## 7. E2E acceptance script skeleton
+
+Per [EPIC.md](EPIC.md) program-level acceptance (staging / Stripe test mode):
+
+```bash
+# Skeleton — fill URLs/keys from staging; do not commit secrets.
+set -euo pipefail
+BASE_URL="${BASE_URL:-https://staging.example/olympus}"
+# 1) Signup / login (Supabase Auth Google or GitHub) — manual browser or supabase-js
+# 2) Subscribe (Stripe test Checkout → Baseline or Custom)
+curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
+  -H "Authorization: Bearer $USER_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"price_env":"STRIPE_PRICE_BASELINE_MONTHLY"}'
+# Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
+# 3) Connect Alpaca paper (Settings → brokers; OAuth or API key)
+# 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
+# 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
+# 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
+# 7) Digest email (K5): enable notification_prefs.daily_digest; run
+#    python -m digiquant.notify.dispatch ; assert Mailgun accept + notification_log
+echo "E2E skeleton complete — attach screenshots / Mailgun event ids to the epic"
+```
+
+House regression (every promotion):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" pytest -m unit tests/dq/olympus/ -q
+```
+
+---
+
+## 8. Rollback notes (per phase)
+
+| Phase | Failure mode | Rollback |
+|-------|--------------|----------|
+| Migrations 096–105 on `main` | Apply error mid-chain | Fix forward (new migration). Do **not** delete ledger rows. Self-wrapping / IF NOT EXISTS files are replay-safe; cancel-in-progress only loses a ledger INSERT (next run retries). |
+| Edge Functions | Bad deploy / secret miss | `supabase functions deploy <name>` prior known-good SHA; unset bad secrets carefully. Stripe webhook: disable endpoint in Dashboard if signatures fail. |
+| Olympus flag on | Login broken / empty chrome | Set `NEXT_PUBLIC_OLYMPUS_AUTH=` empty; rebuild Pages → anon path restored **only if** anon policies still exist. |
+| Anon-drop applied | Dashboard blank for signed-out / Access already removed | Re-create dropped policies from migration 001/073/050 grants via a new forward migration (do not rewrite history). Prefer: keep Access on until verification passes. |
+| Cloudflare Access removed too early | Public URL + anon key still reads private rows | Re-enable Access application on `/olympus/*` immediately; then finish anon-drop. |
+| Stripe / vault | Wrong keys | Rotate Stripe webhook secret; generate new vault key only with a re-seal plan (K3 rotation out of scope — avoid rotating after seal without a job). |
+
+**Ordering tip:** flip the auth flag and verify login **while Access still protects
+prod**, apply the anon-drop, verify queries, **then** remove Access.
+
+---
+
+## Related
+
+- Staged SQL:
+  [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
+- T1 cutover notes: [`frontend/olympus/AUTH.md`](../../../frontend/olympus/AUTH.md)
+- db-migrate mechanics: [`digiquant/supabase/README.md`](../../../digiquant/supabase/README.md)
