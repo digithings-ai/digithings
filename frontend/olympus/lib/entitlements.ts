@@ -190,3 +190,21 @@ export function settingsTabsVisible(tier: PlanTier): readonly SettingsTabDef[] {
 export function defaultSettingsTab(tier: PlanTier): SettingsTabId {
   return settingsTabsVisible(tier)[0]?.id ?? 'about';
 }
+
+function isSettingsTabId(value: string): value is SettingsTabId {
+  return SETTINGS_TAB_DEFS.some((tab) => tab.id === value);
+}
+
+/**
+ * Resolve `/settings#billing` (and sibling tab hashes) to a visible tab.
+ * Unknown or gated hashes return null so the page keeps its default.
+ */
+export function settingsTabFromLocationHash(
+  hash: string,
+  visibleIds: readonly SettingsTabId[],
+): SettingsTabId | null {
+  const raw = (hash.startsWith('#') ? hash.slice(1) : hash).trim();
+  const id = raw.split(/[?&]/, 1)[0] ?? '';
+  if (!isSettingsTabId(id)) return null;
+  return visibleIds.includes(id) ? id : null;
+}

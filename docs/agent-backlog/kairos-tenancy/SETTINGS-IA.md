@@ -65,6 +65,11 @@ not greyed or locked. Observer (free) and Baseline see Notifications | Billing |
 About only. Custom / enterprise / creator floor see the full set. Server still
 returns `TIER_FORBIDDEN` if a hidden path is called directly.
 
+Deep links: `/settings#billing` (and `#notifications`, `#about`, plus Custom+
+`#profile` / `#pipeline` / `#keys` / `#brokers`) select that tab when it is
+visible. Upgrade CTAs in `LockedSurface` / `ClientProductGate` use `#billing`.
+A gated hash (e.g. Observer `#profile`) is ignored.
+
 **Supersedes prior note:** baseline does **not** unlock broker connect. Free is
 teaser-only (digest conclusions + light portfolio glimpse — not enough to
 reverse-engineer the PM product). Full product for everyone else requires a

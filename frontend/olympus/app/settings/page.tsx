@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SettingsContent } from '@/components/settings-content';
 import { ProfileTab } from '@/components/settings/profile-tab';
@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth-context';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   defaultSettingsTab,
+  settingsTabFromLocationHash,
   settingsTabsVisible,
   type SettingsTabId,
 } from '@/lib/entitlements';
@@ -28,10 +29,37 @@ export default function SettingsPage() {
   const { session } = useAuth();
   const tier = usePlanTier();
   const tabs = useMemo(() => settingsTabsVisible(tier), [tier]);
+  const visibleIds = useMemo(() => tabs.map((item) => item.id), [tabs]);
   const meta = data?.portfolio?.meta ?? null;
-  const [tab, setTab] = useState<SettingsTabId>(() => defaultSettingsTab(tier));
+  const [tab, setTab] = useState<SettingsTabId>(() => {
+    const ids = settingsTabsVisible(tier).map((item) => item.id);
+    const fromHash =
+      typeof window === 'undefined'
+        ? null
+        : settingsTabFromLocationHash(window.location.hash, ids);
+    return fromHash ?? defaultSettingsTab(tier);
+  });
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
-  const activeTab = tabs.some((item) => item.id === tab) ? tab : defaultSettingsTab(tier);
+  const activeTab = visibleIds.includes(tab) ? tab : defaultSettingsTab(tier);
+
+  useEffect(() => {
+    const applyHash = () => {
+      const fromHash = settingsTabFromLocationHash(window.location.hash, visibleIds);
+      if (fromHash) setTab(fromHash);
+    };
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    return () => window.removeEventListener('hashchange', applyHash);
+  }, [visibleIds]);
+
+  const selectTab = (id: SettingsTabId) => {
+    setTab(id);
+    if (typeof window === 'undefined') return;
+    const next = `#${id}`;
+    if (window.location.hash !== next) {
+      window.history.replaceState(null, '', next);
+    }
+  };
 
   const api: SettingsApiOptions | null = useMemo(() => {
     const token = session?.access_token;
@@ -58,7 +86,7 @@ export default function SettingsPage() {
             key={item.id}
             type="button"
             className={subpageTabButtonClass(activeTab === item.id)}
-            onClick={() => setTab(item.id)}
+            onClick={() => selectTab(item.id)}
             data-testid={`settings-tab-${item.id}`}
           >
             {item.label}
@@ -66,7 +94,7 @@ export default function SettingsPage() {
         ))}
       </SubpageStickyTabBar>
 
-      <div className="acct-settings-panel max-w-2xl">
+      <div className="acct-settings-panel max-w-2xl" id={activeTab}>
         {activeTab === 'profile' ? (
           <ProfileTab
             api={api}
@@ -84,11 +112,7 @@ export default function SettingsPage() {
         {activeTab === 'keys' ? <KeysTab api={api} /> : null}
         {activeTab === 'brokers' ? <BrokersTab api={api} /> : null}
         {activeTab === 'notifications' ? <NotifyTab api={api} /> : null}
-        {activeTab === 'billing' ? (
-          <div id="billing">
-            <BillingTab api={api} />
-          </div>
-        ) : null}
+        {activeTab === 'billing' ? <BillingTab api={api} /> : null}
         {activeTab === 'about' ? (
           <div data-testid="settings-about">
             <SettingsContent

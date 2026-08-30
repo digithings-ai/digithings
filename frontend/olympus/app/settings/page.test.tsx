@@ -68,6 +68,7 @@ describe('Settings page tab visibility', () => {
       root.unmount();
     });
     container.remove();
+    window.location.hash = '';
   });
 
   it('Observer sees Notifications / Billing / About only — no Profile or Brokers', async () => {
@@ -94,5 +95,38 @@ describe('Settings page tab visibility', () => {
     expect(container.querySelector('[data-testid="settings-tab-brokers"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="settings-tab-keys"]')).not.toBeNull();
     expect(container.textContent).toContain('profile-body');
+  });
+
+  it('opens Billing when the URL hash is #billing', async () => {
+    window.location.hash = 'billing';
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.textContent).toContain('billing-body');
+    expect(container.textContent).not.toContain('notify-body');
+    expect(container.querySelector('#billing')).not.toBeNull();
+  });
+
+  it('ignores a gated hash on Observer instead of showing Profile', async () => {
+    window.location.hash = 'profile';
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.textContent).toContain('notify-body');
+    expect(container.textContent).not.toContain('profile-body');
+  });
+
+  it('clicking Billing writes #billing and shows the billing body', async () => {
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    const billing = container.querySelector('[data-testid="settings-tab-billing"]');
+    expect(billing).not.toBeNull();
+    await act(async () => {
+      (billing as HTMLButtonElement).click();
+    });
+    expect(window.location.hash).toBe('#billing');
+    expect(container.textContent).toContain('billing-body');
+    expect(container.textContent).not.toContain('notify-body');
   });
 });

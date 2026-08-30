@@ -7,6 +7,7 @@ import {
   defaultSettingsTab,
   effectivePlanTier,
   requiredTierFor,
+  settingsTabFromLocationHash,
   settingsTabsVisible,
   tierFromSession,
   type ArtifactClass,
@@ -199,6 +200,17 @@ describe('settingsTabsVisible', () => {
   it('defaults Observer to Notifications, Custom to Profile', () => {
     expect(defaultSettingsTab('free')).toBe('notifications');
     expect(defaultSettingsTab('custom')).toBe('profile');
+  });
+
+  it('settingsTabFromLocationHash selects a visible tab and ignores gated ones', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    const custom = settingsTabsVisible('custom').map((t) => t.id);
+    expect(settingsTabFromLocationHash('#billing', free)).toBe('billing');
+    expect(settingsTabFromLocationHash('billing', free)).toBe('billing');
+    expect(settingsTabFromLocationHash('#profile', free)).toBeNull();
+    expect(settingsTabFromLocationHash('#profile', custom)).toBe('profile');
+    expect(settingsTabFromLocationHash('#nope', free)).toBeNull();
+    expect(settingsTabFromLocationHash('', free)).toBeNull();
   });
 });
 
