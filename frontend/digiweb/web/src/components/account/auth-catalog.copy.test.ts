@@ -16,12 +16,21 @@ const FORBIDDEN = [
   /olympus kicker/i,
   /oauth-first \(olympus\)/i,
   /oauth first \(olympus\)/i,
+  /not selected/i,
+  /· selected/i,
+  /is selected/i,
+  /selected login/i,
+  /product card/i,
+  /data-proposal/i,
+  /data-selected/i,
+  /letter:\s*"A"/,
   /\bincumbent\b/i,
   /owner pick/i,
   /owner hop/i,
   /dashboard import waits/i,
   /rejected specimen/i,
   /live here first/i,
+  /chosen product/i,
   /\btoday\b/i,
 ];
 
@@ -36,10 +45,10 @@ describe("account auth catalog copy", () => {
     expect(src).toContain('"compact"');
     expect(src).toContain('"icons-first"');
     expect(src).toContain('"desk"');
-    expect(src).toContain("product card");
-    expect(src).toContain("digiquant");
+    expect(src).toContain("{`// ${id}`}");
     expect(src).toContain('mode="signin"');
     expect(src).toContain('mode="signup"');
+    expect(src).toContain("Three layouts, one card.");
     for (const pattern of FORBIDDEN) {
       expect(src).not.toMatch(pattern);
     }
@@ -47,8 +56,8 @@ describe("account auth catalog copy", () => {
 
   it("account page hero is a family catalog, not a sprint note", () => {
     const src = load(accountPage);
-    expect(src).toContain("digiquant");
-    expect(src).not.toContain("olympus");
+    expect(src).toContain("three layouts");
+    expect(src).not.toContain("selected login");
     for (const pattern of FORBIDDEN) {
       expect(src).not.toMatch(pattern);
     }
