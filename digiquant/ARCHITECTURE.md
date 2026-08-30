@@ -1192,13 +1192,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   serializer includes assessment; legacy priors without typed forecast force
   full; skip preserves identity; partial nested forecast edits are rejected).
   H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
-  Out-of-range H6 `conviction_delta` (live `-3` on `DeliberationAnalystTurn`) clamps
-  to `[-2, 2]` at the model boundary so the debate is kept.
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
   dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so H9 can
-  re-persist after registry fail-soft (#2790). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  re-persist after registry fail-soft (#2790). Out-of-range H6 `conviction_delta`
+  (live `-3` on `DeliberationAnalystTurn`) clamps to `[-2, 2]` at the model
+  boundary so the debate is kept. **H7 forecast-reference-only (#2660 / WP4.5):** after the
   PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
   typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
   (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
@@ -1489,10 +1489,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
-  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
-  Digest `RiskItem` maps the live typo `horizon_hourse` onto `horizon_hours`
-  (house GHA 33426508863; otherwise the edit merge fell back to full). A segment
-  whose patch cannot merge falls back to full-mode regeneration
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
+  and a segment whose patch cannot merge falls back to full-mode regeneration
   instead of carrying + degrading the run (#1641). That fallback is **counted, not
   silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
   `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
@@ -1502,6 +1500,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   status is unchanged — a fallback that then succeeds in full mode is still `ok` —
   but a segment that paid for a patch call *and* a full regeneration is now visible
   to a cost audit.
+  Digest `RiskItem` maps the live typo `horizon_hourse` onto `horizon_hours`
+  (house GHA 33426508863; otherwise the edit merge fell back to full).
 
   **Content identity (#1749/#1751).** A merge can succeed structurally and change nothing:
   the model emits `set` ops whose values already hold, or declares `status="skipped"`.
