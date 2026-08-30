@@ -1571,7 +1571,10 @@ def completion(
             _EMPTY_RETRY_MAX,
             _EMPTY_RETRY_DELAY,
         )
-        _record_usage(kind="empty_retry", model=effective_model)
+        _record_usage(
+            kind="empty_retry",
+            model=getattr(r, "model", None) or effective_model,
+        )
         time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
         attempt_scope = _attempt_scope.get()
         if attempt_scope is not None:
