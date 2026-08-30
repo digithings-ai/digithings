@@ -18,6 +18,8 @@ import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+from digiquant.olympus.tenancy import house_workspace_id
 from unittest.mock import MagicMock
 
 import pytest
@@ -158,6 +160,8 @@ class TestUpsertPortfolioMetricsDaily:
         # the poison magnitude but comes from nav — prove lookback is ignored by
         # also poisoning a divergent sum below.
         assert row["pnl_pct"] == pytest.approx(0.6, abs=1e-4)
+        assert row["_on_conflict"] == "workspace_id,date"
+        assert row["workspace_id"] == str(house_workspace_id())
 
     def test_pnl_pct_lookback_cannot_override_nav(self) -> None:
         # Divergent lookback (+9.99) must not win over nav day return (+1.0%).
@@ -681,7 +685,7 @@ class TestResolveScheduledMetricsDate:
     """The flagless cron path resolves *today UTC*, never ``max(positions.date)``.
 
     Falling back to the latest existing book let ``portfolio_metrics``' upsert
-    ``on_conflict='date'`` rewrite an older row: 22 of 33 green prod runs advanced no
+    ``on_conflict='workspace_id,date'`` rewrite an older row: 22 of 33 green prod runs advanced no
     date, and 2026-06-26's row was re-stamped on 2026-07-16.
     """
 
