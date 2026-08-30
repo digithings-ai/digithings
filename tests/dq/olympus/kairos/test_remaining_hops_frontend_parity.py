@@ -1,0 +1,54 @@
+"""Pin Olympus Settings remaining-hop predicates to the Python source of truth.
+
+The About panel copies ``proven_remaining_hops``. A fill-only TS predicate
+would light ``paper_fill_mirrored`` from an ``api_key`` row the cron now holds.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+from digiquant.olympus.kairos.remaining_hops import OVERLAY_RUN_STATUSES, REMAINING_LIVE_HOPS
+
+pytestmark = pytest.mark.unit
+
+_TS = Path("frontend/olympus/lib/remaining-hops.ts")
+
+
+def _ts_source() -> str:
+    return _TS.read_text(encoding="utf-8")
+
+
+def test_frontend_remaining_hop_names_match_python() -> None:
+    match = re.search(
+        r"export const REMAINING_LIVE_HOPS = \[([^\]]+)\] as const",
+        _ts_source(),
+        re.S,
+    )
+    assert match is not None
+    names = tuple(re.findall(r"'([^']+)'", match.group(1)))
+    assert names == REMAINING_LIVE_HOPS
+
+
+def test_frontend_overlay_run_statuses_match_python() -> None:
+    match = re.search(
+        r"export const OVERLAY_RUN_STATUSES = new Set\(\[([^\]]+)\]\)",
+        _ts_source(),
+    )
+    assert match is not None
+    names = frozenset(re.findall(r"'([^']+)'", match.group(1)))
+    assert names == OVERLAY_RUN_STATUSES
+
+
+def test_frontend_fill_hop_requires_oauth() -> None:
+    source = _ts_source()
+    assert "paper_fill_mirrored: (evidence.fill_count ?? 0) > 0 && alpaca" in source
+    assert (
+        re.search(
+            r"paper_fill_mirrored:\s*\(evidence\.fill_count \?\? 0\) > 0\s*,",
+            source,
+        )
+        is None
+    )
