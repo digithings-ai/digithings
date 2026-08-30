@@ -2395,7 +2395,9 @@ that metrics/attribution job order cannot alter meaning.
   deprecated compatibility VIEW over that table (delete after readers migrate).
   `daily_realized_attribution` is a `security_invoker` VIEW over the finalized accounting
   tip only (`service_role` SELECT; public twin `public_daily_realized_attribution`). Writers:
-  `refresh_attribution.py` → `current_book_lookback`; accounting finalizer → periods/
+  `refresh_attribution.py` → `current_book_lookback` (house `workspace_id` on
+  the `positions` read so overlay same-date weights cannot seed the house
+  lookback); accounting finalizer → periods/
   contributions. Pure core: `compute_current_book_lookback` in `atlas/attribution.py`.
 - **Schema**: migration `072_olympus_period_accounting.sql` —
   `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
@@ -3223,7 +3225,9 @@ must never pass `--execute`, `--all`, or invoke `hermes.chain`.
 argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
 `_prior_nav`, `_recent_navs` / `breaker_scale_from_nav_history`,
 `opening_snapshot` Group A reads, `_prune_orphan_positions`, `_rows_for_date`,
-`_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
+`_pending_order_heads`, `refresh_attribution.py` positions, and
+`finalize_period_accounting.py` Group A nav/positions) filter **and** stamp
+`house_workspace_id()`. They never
 mean "every row". The olympus dashboard Group A readers
 (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`) go through
 `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom member's overlay
