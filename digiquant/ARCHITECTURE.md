@@ -3301,7 +3301,9 @@ skip of the count. `--workspace-id` filters the plan. Missing store env exits
 `python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
 route `--check` + Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing
 which probes failed. Route `--check` logs `routing_enabled=true|false` and
-never calls `submit_order`.
+never calls `submit_order`. The copy-paste GHA spec also runs
+``python -m digiquant.notify.dispatch --dry-run`` (no send, no
+``notification_log`` claim).
 Staging inventory also covers these names in
 `digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
