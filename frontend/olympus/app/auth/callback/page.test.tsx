@@ -111,6 +111,33 @@ describe('AuthCallbackPage', () => {
     expect(replace).toHaveBeenCalledWith('/');
   });
 
+  it('does not navigate on INITIAL_SESSION while a PKCE code is still exchanging', async () => {
+    let finishExchange: ((value: { data: { session: { access_token: string } }; error: null }) => void)
+      | undefined;
+    supabaseMock.auth.exchangeCodeForSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishExchange = resolve;
+        }),
+    );
+    window.history.replaceState({}, '', '/olympus/auth/callback/?code=pkce-pending');
+    await mount();
+    expect(supabaseMock.auth.exchangeCodeForSession).toHaveBeenCalledWith('pkce-pending');
+    await act(async () => {
+      for (const cb of supabaseMock.listeners) {
+        cb('INITIAL_SESSION', { access_token: 'stale' });
+        cb('TOKEN_REFRESHED', { access_token: 'stale' });
+      }
+    });
+    expect(replace).not.toHaveBeenCalled();
+    await act(async () => {
+      finishExchange?.({ data: { session: { access_token: 't' } }, error: null });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(replace).toHaveBeenCalledWith('/');
+  });
+
   it('fails closed when the URL has neither code nor session', async () => {
     await mount();
     expect(container.textContent).toContain('Completing sign-in…');
