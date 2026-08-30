@@ -1,13 +1,16 @@
 # digiquant consumer pricing (Stripe + UI)
 
-> **Status:** proposed 2026-09-01. Owner pick before creating Stripe products.
-> Amends D1 display names and the paid ladder. Does **not** yet change
-> `workspaces.plan_tier` (`free | baseline | custom | enterprise`) — that is a
-> follow-up entitlement hop after the names lock.
+> **Status:** implemented 2026-09-01. Live Stripe catalog is Brief / Desk /
+> Studio at **$10 / $30 / $100** per month (annual = ten months — two months
+> free). Observer stays free and is not a Stripe product. Enterprise is invoice.
 >
-> Product surface is **digiquant**. Stripe product names must match the Billing
-> tab and locked-state copy. Internal house-run jargon (**baseline** = the house
+> Product surface is **digiquant**. Stripe product names match the Billing tab
+> and locked-state copy. Internal house-run jargon (**baseline** = the house
 > book, not a SKU) stays in code and research docs.
+>
+> Annual is shown as a **discount over monthly**: equivalent `$/mo` with the
+> monthly list struck through, plus `billed $N/yr · 2 months free`. Checkout
+> defaults to annual; the toggle still offers monthly.
 
 ## Why not the old SKU names
 
@@ -20,17 +23,21 @@
 | **Observer** | Free teaser. Not a paid product. |
 | **olympus** | Retired in product UI. |
 
-## Ladder (recommended)
+## Ladder (live)
 
 Four rungs: one free teaser, three paid. Each paid rung buys a **deeper cut of the same house**, then the right to run your own.
 
-| Stripe + UI name | Internal id (next hop) | Monthly | Annual (2 months free) | What you get |
-|------------------|------------------------|---------|------------------------|--------------|
+| Stripe + UI name | Internal id | Monthly | Annual (2 months free) | What you get |
+|------------------|-------------|---------|------------------------|--------------|
 | **Observer** | `free` | $0 | — | Teaser: digest *conclusions* + portfolio *names*. No weights, no pipeline, no brokers. Not a Stripe product. |
-| **Brief** | `brief` | **$9** | $90 | Full daily **digest** + **house portfolio** (weights / NAV). Summary outputs only. No pipeline canvas, no brokers, no overlay. |
-| **Desk** | `desk` | **$29** | $290 | Everything in Brief, plus the **full house pipeline** (research, deliberation, glass-box). **Paper broker connect.** |
-| **Studio** | `studio` | **$99** | $990 | Everything in Desk, plus **your overlay pipeline**, private book, BYOK. |
+| **Brief** | `brief` | **$10** | $100 ($8.33/mo) | Full daily **digest** + **house portfolio** (weights / NAV). Summary outputs only. No pipeline canvas, no brokers, no overlay. |
+| **Desk** | `desk` | **$30** | $300 ($25/mo) | Everything in Brief, plus the **full house pipeline** (research, deliberation, glass-box). **Paper broker connect.** |
+| **Studio** | `studio` | **$100** | $1000 ($83.33/mo) | Everything in Desk, plus **your overlay pipeline**, private book, BYOK. |
 | **Enterprise** | `enterprise` | invoice | — | Seats / SLA. Not self-serve. |
+
+Observer stays free so Brief is not selling the same teaser twice. Billing UI never lists annual as a second sticker price — it shows the equivalent monthly versus the struck monthly list.
+
+The earlier $9 / $29 / $99 recommendation was a list-price nudge. Live products shipped at round tens; changing a Stripe *price* later is easy; do not rename the products.
 
 Observer stays free so Brief is not selling the same teaser twice.
 
@@ -58,9 +65,9 @@ Runner-up if Brief feels too editorial: **Digest / Glassbox / Overlay**. Do not 
 
 Test mode. Recurring USD. Product name = UI name.
 
-1. **Brief** — “Daily house digest and house portfolio.” Recurring $9 / month. Optional annual $90. Metadata `plan_tier=brief`.
-2. **Desk** — “Full house pipeline, research, and paper broker connect.” Recurring $29 / month. Optional annual $290. Metadata `plan_tier=desk`.
-3. **Studio** — “Your overlay pipeline, private book, and BYOK.” Recurring $99 / month. Optional annual $990. Metadata `plan_tier=studio`.
+1. **Brief** — “Daily house digest and house portfolio.” Recurring $10 / month. Annual $100 (two months free). Metadata `plan_tier=brief`.
+2. **Desk** — “Full house pipeline, research, and paper broker connect.” Recurring $30 / month. Annual $300. Metadata `plan_tier=desk`.
+3. **Studio** — “Your overlay pipeline, private book, and BYOK.” Recurring $100 / month. Annual $1000. Metadata `plan_tier=studio`.
 
 Paste the `price_…` ids into `.local/secrets/digithings-stripe.env` as:
 
@@ -74,7 +81,10 @@ STRIPE_PRICE_DESK_ANNUAL=price_…
 STRIPE_PRICE_STUDIO_ANNUAL=price_…
 ```
 
-Today’s Edge Functions still read `STRIPE_PRICE_BASELINE_*` / `STRIPE_PRICE_CUSTOM_*` and map to `plan_tier=baseline|custom`. **Do not** name the Stripe products Baseline or Custom. After this doc is accepted, a follow-up hop adds `brief`, remaps Desk←today’s baseline surfaces + paper brokers, Studio←today’s custom, and switches the env names.
+Today’s Edge Functions read `STRIPE_PRICE_BRIEF_*` / `STRIPE_PRICE_DESK_*` /
+`STRIPE_PRICE_STUDIO_*` and map to `plan_tier=brief|desk|studio`. Do **not**
+name Stripe products Baseline, Custom, or Observer. Apply **migration 115**
+before the webhook writes the new ids (old CHECKs reject them).
 
 ## What this changes vs D1 / SETTINGS-IA
 
@@ -101,7 +111,7 @@ Paper broker on Desk is the one entitlement move. Live trading stays human-gated
 
 ADR-0004’s Atlas Pro $99 / Team $299 is the **metered API** seat table, not this consumer ladder.
 
-## Follow-up (not this doc)
+## Follow-up (ops)
 
-- Enum + RLS + `entitlements.ts` + settings Billing copy + checkout EF (three paid tiers).
-- Do not `--apply` Stripe secrets until the owner confirms the file.
+- Apply migration 115 on `core`; set EF secrets from `.local/secrets/digithings-stripe.env`; redeploy `stripe-webhook`, `create-checkout-session`, `customer-portal`.
+- Do not `--apply` cutover 113/900 from this hop.

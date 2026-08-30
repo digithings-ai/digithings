@@ -115,7 +115,7 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
         latestDecision: decision(),
         dossierHref: '/portfolio/tickers?ticker=AAA',
         deliberationHref: '/pipeline',
-        tier: 'baseline',
+        tier: 'brief',
       }),
     );
     expect(html).toContain('vehicle-weight-panel');

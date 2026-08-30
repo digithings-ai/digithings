@@ -73,7 +73,7 @@ describe('PortfolioLedgerPage tier gate', () => {
     } as ReturnType<typeof useDashboard>);
 
     const html = renderToStaticMarkup(
-      createElement(PortfolioLedgerPage, { tier: 'baseline' }),
+      createElement(PortfolioLedgerPage, { tier: 'brief' }),
     );
     expect(html).toContain('page-skeleton');
     expect(html).not.toContain('locked-surface');

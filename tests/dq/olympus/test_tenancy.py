@@ -41,9 +41,11 @@ def test_system_and_house_ids_are_stable() -> None:
     assert workspace_id_for_slug(HOUSE_WORKSPACE_SLUG) == _HOUSE_ID
 
 
-def test_plan_tier_vocabulary_matches_spec_d1() -> None:
-    assert {t.value for t in PlanTier} == {"free", "baseline", "custom", "enterprise"}
+def test_plan_tier_vocabulary_matches_brief_desk_studio() -> None:
+    assert {t.value for t in PlanTier} == {"free", "brief", "desk", "studio", "enterprise"}
     assert "pro" not in {t.value for t in PlanTier}
+    assert "baseline" not in {t.value for t in PlanTier}
+    assert "custom" not in {t.value for t in PlanTier}
 
 
 def test_workspace_types_and_subscription_status() -> None:

@@ -172,10 +172,12 @@ supabase link --project-ref rwagjbkvxkdwqmouagad
 supabase secrets set \
   STRIPE_SECRET_KEY=… \
   STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… \
-  STRIPE_PRICE_BASELINE_ANNUAL=… \
-  STRIPE_PRICE_CUSTOM_MONTHLY=… \
-  STRIPE_PRICE_CUSTOM_ANNUAL=… \
+  STRIPE_PRICE_BRIEF_MONTHLY=… \
+  STRIPE_PRICE_BRIEF_ANNUAL=… \
+  STRIPE_PRICE_DESK_MONTHLY=… \
+  STRIPE_PRICE_DESK_ANNUAL=… \
+  STRIPE_PRICE_STUDIO_MONTHLY=… \
+  STRIPE_PRICE_STUDIO_ANNUAL=… \
   NEXT_PUBLIC_APP_URL=… \
   APP_URL=… \
   DIGIQUANT_VAULT_MASTER_KEY=… \
@@ -195,7 +197,7 @@ supabase functions deploy settings
 
 | Function | Secrets |
 |----------|---------|
-| `stripe-webhook` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_BASELINE_ANNUAL`, `STRIPE_PRICE_CUSTOM_MONTHLY`, `STRIPE_PRICE_CUSTOM_ANNUAL` (+ platform `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`) |
+| `stripe-webhook` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BRIEF_MONTHLY`, `STRIPE_PRICE_BRIEF_ANNUAL`, `STRIPE_PRICE_DESK_MONTHLY`, `STRIPE_PRICE_DESK_ANNUAL`, `STRIPE_PRICE_STUDIO_MONTHLY`, `STRIPE_PRICE_STUDIO_ANNUAL` (+ platform `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`) |
 | `create-checkout-session` | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_*` (via tiers map), `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_APP_URL` |
 | `settings` | `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID` (optional, default `v1`), `APP_URL` (or `NEXT_PUBLIC_APP_URL`), `ALPACA_OAUTH_CLIENT_ID`, `ALPACA_OAUTH_CLIENT_SECRET` |
@@ -379,11 +381,11 @@ Full manual chain once secrets land on Cursor env **and** core EF:
 set -euo pipefail
 SUPABASE_FUNCTIONS="${SUPABASE_FUNCTIONS:-https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1}"
 # 1) Signup / login (Supabase Auth GitHub or Email/Agentmail) — manual browser or supabase-js
-# 2) Subscribe (Stripe test Checkout → Baseline or Custom)
+# 2) Subscribe (Stripe Checkout → Studio for overlay proof; Brief/Desk also valid SKUs)
 curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -H "Authorization: Bearer $USER_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"tier":"baseline","interval":"monthly"}'
+  -d '{"tier":"studio","interval":"annual"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
 # 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
 # 4) Overlay run (T4): `DIGIQUANT_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`

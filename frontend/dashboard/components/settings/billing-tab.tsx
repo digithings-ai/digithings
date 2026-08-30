@@ -7,12 +7,20 @@ import {
   isBillingConfigured,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
+import {
+  annualToggleLabel,
+  PAID_PLAN_CATALOG,
+  planPriceLines,
+  type BillingInterval,
+  type PaidCheckoutTier,
+} from '@/lib/pricing-catalog';
 
 export type BillingTabProps = {
   api: SettingsApiOptions | null;
   configured?: boolean;
   checkoutFn?: typeof createCheckoutSession;
   portalFn?: typeof createCustomerPortal;
+  defaultInterval?: BillingInterval;
 };
 
 export function BillingTab({
@@ -20,9 +28,11 @@ export function BillingTab({
   configured = isBillingConfigured(),
   checkoutFn = createCheckoutSession,
   portalFn = createCustomerPortal,
+  defaultInterval = 'annual',
 }: BillingTabProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [interval, setInterval] = useState<BillingInterval>(defaultInterval);
 
   if (!configured) {
     return (
@@ -36,7 +46,7 @@ export function BillingTab({
     );
   }
 
-  async function startCheckout(tier: 'baseline' | 'custom') {
+  async function startCheckout(tier: PaidCheckoutTier) {
     if (!api) {
       setMessage('Sign in to manage billing.');
       return;
@@ -44,7 +54,7 @@ export function BillingTab({
     setBusy(true);
     setMessage(null);
     try {
-      const session = await checkoutFn(api, { tier, interval: 'monthly' });
+      const session = await checkoutFn(api, { tier, interval });
       if (session.url) {
         window.location.assign(session.url);
       } else {
@@ -77,44 +87,116 @@ export function BillingTab({
   }
 
   return (
-    <div className="space-y-5" data-testid="settings-billing-tab">
+    <div
+      className="space-y-5"
+      data-testid="settings-billing-tab"
+      data-interval={interval}
+    >
       <div>
         <h2 className="font-display text-xl text-ink tracking-tight">Billing</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Baseline unlocks the house book. Custom adds private books, broker connect, and
-          overlays — broker connect and overlays need Custom, not Baseline.
+          Brief unlocks the house digest and portfolio. Desk adds the house pipeline and
+          paper brokers. Studio adds your overlay, private book, and BYOK.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div
+        className="inline-flex border border-hair"
+        role="group"
+        aria-label="Billing interval"
+      >
         <button
           type="button"
+          aria-pressed={interval === 'monthly'}
           disabled={busy}
-          onClick={() => void startCheckout('custom')}
-          className="border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
-          data-testid="billing-checkout-custom"
+          onClick={() => setInterval('monthly')}
+          className={
+            interval === 'monthly'
+              ? 'bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
+              : 'px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
+          }
+          data-testid="billing-interval-monthly"
         >
-          Upgrade to Custom
+          Monthly
         </button>
         <button
           type="button"
+          aria-pressed={interval === 'annual'}
           disabled={busy}
-          onClick={() => void startCheckout('baseline')}
-          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
-          data-testid="billing-checkout-baseline"
+          onClick={() => setInterval('annual')}
+          className={
+            interval === 'annual'
+              ? 'bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
+              : 'px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
+          }
+          data-testid="billing-interval-annual"
         >
-          Upgrade to Baseline
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void openPortal()}
-          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
-          data-testid="billing-portal"
-        >
-          Customer portal
+          {annualToggleLabel()}
         </button>
       </div>
+
+      <div className="border border-hair divide-y divide-hair">
+        {PAID_PLAN_CATALOG.map((plan) => {
+          const lines = planPriceLines(plan, interval);
+          const primary = plan.id === 'studio';
+          return (
+            <div
+              key={plan.id}
+              className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3"
+              data-testid={`billing-plan-${plan.id}`}
+            >
+              <div className="min-w-[10rem] flex-1">
+                <p className="text-sm font-medium text-ink">{plan.name}</p>
+                <p className="text-sm text-ink-soft">{plan.blurb}</p>
+              </div>
+              <div className="min-w-[7.5rem]" data-testid={`billing-price-${plan.id}`}>
+                <p className="font-mono text-sm text-ink tabular-nums">
+                  <span data-testid="billing-price-hero">{lines.hero}</span>
+                  {lines.listStruck ? (
+                    <>
+                      {' '}
+                      <s
+                        className="text-ink-mute"
+                        data-testid="billing-price-list"
+                      >
+                        {lines.listStruck}
+                      </s>
+                    </>
+                  ) : null}
+                </p>
+                {lines.caption ? (
+                  <p className="text-xs text-ink-mute" data-testid="billing-price-caption">
+                    {lines.caption}
+                  </p>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void startCheckout(plan.id)}
+                className={
+                  primary
+                    ? 'border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
+                    : 'border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
+                }
+                data-testid={`billing-checkout-${plan.id}`}
+              >
+                Upgrade to {plan.name}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void openPortal()}
+        className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+        data-testid="billing-portal"
+      >
+        Customer portal
+      </button>
 
       {message ? (
         <p className="text-sm text-ink-soft" role="status" data-testid="billing-message">

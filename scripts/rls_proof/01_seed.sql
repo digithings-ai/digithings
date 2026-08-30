@@ -39,8 +39,8 @@ BEGIN
 
   INSERT INTO public.workspaces (id, slug, type, name, plan_tier, subscription_status)
   VALUES
-    (ws_a, 'tenant-a-custom', 'user', 'Tenant A Custom', 'custom', 'active'),
-    (ws_b, 'tenant-b-baseline', 'user', 'Tenant B Baseline', 'baseline', 'active'),
+    (ws_a, 'tenant-a-studio', 'user', 'Tenant A Studio', 'studio', 'active'),
+    (ws_b, 'tenant-b-desk', 'user', 'Tenant B Desk', 'desk', 'active'),
     (ws_c, 'tenant-c-free', 'user', 'Tenant C Free', 'free', 'none')
   ON CONFLICT (id) DO NOTHING;
 

@@ -15,8 +15,8 @@ describe('LockedSurface', () => {
     expect(html).toContain('data-artifact-class="house_weights_nav"');
     expect(html).toContain('data-plan-tier="free"');
     expect(html).toContain('Observer');
-    expect(html).toContain('Baseline');
-    expect(html).toContain('House weights, NAV, tearsheet, ledger, and attribution unlock on Baseline.');
+    expect(html).toContain('Brief');
+    expect(html).toContain('House weights, NAV, tearsheet, ledger, and attribution unlock on Brief.');
     expect(html).toContain('href="/settings#billing"');
     expect(html).toContain('Upgrade in Settings → Billing');
     // No money-tone / alarm vocabulary in the locked chrome
@@ -25,15 +25,15 @@ describe('LockedSurface', () => {
     expect(html).not.toContain('!');
   });
 
-  it('uses Custom unlock copy for private workspace classes', () => {
+  it('uses Desk unlock copy for broker status', () => {
     const html = renderToStaticMarkup(
       createElement(LockedSurface, {
-        tier: 'baseline',
+        tier: 'brief',
         artifactClass: 'broker_status',
       }),
     );
-    expect(html).toContain('Baseline');
-    expect(html).toContain('Custom');
-    expect(html).toContain('Broker connection status unlocks on Custom.');
+    expect(html).toContain('Brief');
+    expect(html).toContain('Desk');
+    expect(html).toContain('Broker connection status unlocks on Desk.');
   });
 });

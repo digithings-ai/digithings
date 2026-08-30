@@ -78,9 +78,9 @@ describe('AllocationsTab', () => {
     expect(html).not.toContain('data-region="holdings-frame"');
   });
 
-  it('passthrough when Baseline may see house weights', () => {
+  it('passthrough when Brief may see house weights', () => {
     const html = renderToStaticMarkup(
-      createElement(AllocationsTab, { ...base, tier: 'baseline' }),
+      createElement(AllocationsTab, { ...base, tier: 'brief' }),
     );
     expect(html).toContain('data-region="holdings-frame"');
     expect(html).not.toContain('locked-surface');

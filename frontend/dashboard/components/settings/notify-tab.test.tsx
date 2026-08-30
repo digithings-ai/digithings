@@ -201,15 +201,7 @@ describe('NotifyTab', () => {
 });
 
 describe('BillingTab', () => {
-  it('renders billing not configured when envs absent', () => {
-    const html = renderToStaticMarkup(
-      createElement(BillingTab, { api: null, configured: false }),
-    );
-    expect(html).toContain('billing-not-configured');
-    expect(html).toContain('Billing is not configured');
-  });
-
-  it('links checkout/portal when configured', () => {
+  it('links Brief / Desk / Studio checkout when configured', () => {
     const html = renderToStaticMarkup(
       createElement(BillingTab, {
         api: { accessToken: 'tok' },
@@ -218,14 +210,17 @@ describe('BillingTab', () => {
         portalFn: vi.fn(),
       }),
     );
-    expect(html).toContain('billing-checkout-custom');
-    expect(html).toContain('billing-checkout-baseline');
+    expect(html).toContain('billing-checkout-studio');
+    expect(html).toContain('billing-checkout-desk');
+    expect(html).toContain('billing-checkout-brief');
     expect(html).toContain('billing-portal');
     expect(html).not.toContain('billing-not-configured');
-    const customAt = html.indexOf('billing-checkout-custom');
-    const baselineAt = html.indexOf('billing-checkout-baseline');
-    expect(customAt).toBeGreaterThan(-1);
-    expect(baselineAt).toBeGreaterThan(customAt);
-    expect(html).toContain('broker connect and overlays need Custom');
+    const briefAt = html.indexOf('billing-checkout-brief');
+    const deskAt = html.indexOf('billing-checkout-desk');
+    const studioAt = html.indexOf('billing-checkout-studio');
+    expect(briefAt).toBeGreaterThan(-1);
+    expect(deskAt).toBeGreaterThan(briefAt);
+    expect(studioAt).toBeGreaterThan(deskAt);
+    expect(html).toContain('Annual · 2 months free');
   });
 });

@@ -57,8 +57,9 @@ def test_staging_secret_inventory_lists_vendor_blockers() -> None:
     required = set(KAIROS_STAGING_REQUIRED_SECRETS)
     assert "STRIPE_SECRET_KEY" in required
     assert "STRIPE_WEBHOOK_SECRET" in required
-    assert "STRIPE_PRICE_BASELINE_MONTHLY" in required
-    assert "STRIPE_PRICE_CUSTOM_MONTHLY" in required
+    assert "STRIPE_PRICE_BRIEF_MONTHLY" in required
+    assert "STRIPE_PRICE_DESK_MONTHLY" in required
+    assert "STRIPE_PRICE_STUDIO_MONTHLY" in required
     assert "MAILGUN_API_KEY" in required
     assert "MAILGUN_DOMAIN" in required
     assert "NOTIFY_FROM" in required
@@ -143,13 +144,14 @@ def test_prefs_digest_on_requires_daily_digest_true() -> None:
 
 
 @pytest.mark.unit
-def test_staging_checkout_is_custom_not_baseline() -> None:
-    """Broker/overlay/fill remaining hops are Custom+; Baseline would dead-end Observer."""
-    assert STAGING_CHECKOUT_BODY == {"tier": "custom", "interval": "monthly"}
+def test_staging_checkout_is_studio_not_brief() -> None:
+    """Overlay remaining hops are Studio+; Brief/Desk checkout would not prove overlay."""
+    assert STAGING_CHECKOUT_BODY == {"tier": "studio", "interval": "monthly"}
     hop = next(row for row in OBSERVER_HOPS if row.path == "/create-checkout-session")
     assert hop.body == STAGING_CHECKOUT_BODY
     assert hop.body is not None
-    assert hop.body.get("tier") != "baseline"
+    assert hop.body.get("tier") != "brief"
+    assert hop.body.get("tier") != "desk"
 
 
 @pytest.mark.unit
@@ -201,7 +203,7 @@ def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
     # Live 2026-09-01: Observer JWT Settings GETs are 200 while app-urls pin
     # /olympus and redeem-invite 404s — hiding hops behind exit 3 hid E2E state.
     assert "remaining hop product-state" in blob
-    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=plan_tier_not_studio" in blob
     assert "blocker=overlay_not_succeeded" in blob
 
 
@@ -344,7 +346,7 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" in blob
     assert "browser_stripe_checkout" in blob
     assert "digest_email_received" in blob
-    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=plan_tier_not_studio" in blob
     assert "blocker=no_alpaca_paper_oauth" in blob
     assert "blocker=overlay_not_succeeded" in blob
     assert "blocker=no_paper_fill" in blob
@@ -382,15 +384,15 @@ def test_remaining_hops_unproven_filters_proven_map() -> None:
 
 
 @pytest.mark.unit
-def test_proven_remaining_hops_ops_custom_none_does_not_count_as_stripe() -> None:
+def test_proven_remaining_hops_ops_studio_none_does_not_count_as_stripe() -> None:
     proven = proven_remaining_hops(RemainingHopEvidence(subscription_status="none"))
     assert proven["browser_stripe_checkout"] is False
     assert remaining_hops_unproven(proven) == REMAINING_LIVE_HOPS
-    # Live ops-custom workspace is plan_tier=custom with subscription_status=none
-    # and no Stripe ids — grant/ops custom must not prove checkout.
+    # Live ops-studio workspace is plan_tier=studio with subscription_status=none
+    # and no Stripe ids — grant/ops studio must not prove checkout.
     grant = proven_remaining_hops(
         RemainingHopEvidence(
-            plan_tier="custom",
+            plan_tier="studio",
             subscription_status="none",
             has_stripe_subscription=False,
         )
@@ -407,23 +409,23 @@ def test_proven_remaining_hops_house_active_without_stripe_does_not_count() -> N
 
 
 @pytest.mark.unit
-def test_proven_remaining_hops_baseline_stripe_does_not_count() -> None:
+def test_proven_remaining_hops_desk_stripe_does_not_count() -> None:
     proven = proven_remaining_hops(
         RemainingHopEvidence(
             subscription_status="active",
             has_stripe_subscription=True,
-            plan_tier="baseline",
+            plan_tier="desk",
         )
     )
     assert proven["browser_stripe_checkout"] is False
-    custom = proven_remaining_hops(
+    studio = proven_remaining_hops(
         RemainingHopEvidence(
             subscription_status="active",
             has_stripe_subscription=True,
-            plan_tier="custom",
+            plan_tier="studio",
         )
     )
-    assert custom["browser_stripe_checkout"] is True
+    assert studio["browser_stripe_checkout"] is True
 
 
 @pytest.mark.unit
@@ -514,7 +516,7 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
         RemainingHopEvidence(
             subscription_status="active",
             has_stripe_subscription=True,
-            plan_tier="custom",
+            plan_tier="studio",
             connections=(("alpaca", "paper", "active", "oauth"),),
             jobs=(("overlay_daily", "succeeded"),),
             fill_count=1,
@@ -530,7 +532,7 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
             RemainingHopEvidence(
                 subscription_status="active",
                 has_stripe_subscription=True,
-                plan_tier="custom",
+                plan_tier="studio",
                 connections=(("alpaca", "paper", "active", "oauth"),),
                 jobs=(("overlay_daily", "succeeded"),),
                 fill_count=1,
@@ -555,7 +557,7 @@ def test_remaining_hop_blockers_observer_and_house_gates() -> None:
             daily_digest_enabled=True,
         )
     )
-    assert observer["browser_stripe_checkout"] == "plan_tier_not_custom"
+    assert observer["browser_stripe_checkout"] == "plan_tier_not_studio"
     assert observer["alpaca_paper_oauth_connect"] == "alpaca_api_key_not_oauth"
     assert observer["overlay_daily_claimed"] == "overlay_not_succeeded"
     assert observer["paper_fill_mirrored"] == "fill_without_oauth"
@@ -570,7 +572,7 @@ def test_remaining_hop_blockers_observer_and_house_gates() -> None:
     assert house["browser_stripe_checkout"] == "missing_stripe_ids"
     grant = remaining_hop_blockers(
         RemainingHopEvidence(
-            plan_tier="custom",
+            plan_tier="studio",
             subscription_status="none",
             has_stripe_subscription=False,
         )
@@ -695,7 +697,7 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
         {
             "workspace_id": "ws",
             "subscription_status": "active",
-            "plan_tier": "custom",
+            "plan_tier": "studio",
             "has_stripe_subscription": True,
         },
     )

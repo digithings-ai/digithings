@@ -363,7 +363,7 @@ export async function patchNotifications(
 
 export async function createCheckoutSession(
   opts: SettingsApiOptions,
-  payload: { tier: 'baseline' | 'custom'; interval?: 'monthly' | 'annual'; workspace_id?: string },
+  payload: { tier: 'brief' | 'desk' | 'studio'; interval?: 'monthly' | 'annual'; workspace_id?: string },
 ): Promise<{ id: string; url: string }> {
   return request(opts, 'POST', '/create-checkout-session', payload);
 }

@@ -73,12 +73,17 @@ _OBSERVER_FORBIDDEN = (
     [
         (PlanTier.FREE, _OBSERVER_FORBIDDEN, ("Market Regime", "Research Narrative")),
         (
-            PlanTier.BASELINE,
+            PlanTier.BRIEF,
+            ("fingerprint", "api_key", "broker_order", "Pipeline attempts"),
+            ("House Weights", "NAV:"),
+        ),
+        (
+            PlanTier.DESK,
             ("fingerprint", "api_key", "broker_order"),
             ("House Weights", "NAV:", "Pipeline attempts"),
         ),
         (
-            PlanTier.CUSTOM,
+            PlanTier.STUDIO,
             ("fingerprint", "api_key"),
             ("House Weights", "NAV:"),
         ),

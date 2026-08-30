@@ -60,10 +60,12 @@ webhook deploy is belt-and-suspenders for older CLI versions.
 supabase secrets set \
   STRIPE_SECRET_KEY=sk_live_… \
   STRIPE_WEBHOOK_SECRET=whsec_… \
-  STRIPE_PRICE_BASELINE_MONTHLY=price_… \
-  STRIPE_PRICE_BASELINE_ANNUAL=price_… \
-  STRIPE_PRICE_CUSTOM_MONTHLY=price_… \
-  STRIPE_PRICE_CUSTOM_ANNUAL=price_… \
+  STRIPE_PRICE_BRIEF_MONTHLY=price_… \
+  STRIPE_PRICE_BRIEF_ANNUAL=price_… \
+  STRIPE_PRICE_DESK_MONTHLY=price_… \
+  STRIPE_PRICE_DESK_ANNUAL=price_… \
+  STRIPE_PRICE_STUDIO_MONTHLY=price_… \
+  STRIPE_PRICE_STUDIO_ANNUAL=price_… \
   NEXT_PUBLIC_APP_URL=https://digiquant.io \
   DIGIQUANT_VAULT_MASTER_KEY="$(openssl rand -base64 32)" \
   ALPACA_OAUTH_CLIENT_ID=… \

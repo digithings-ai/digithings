@@ -39,12 +39,12 @@ describe('UnassignedShelf tier gate', () => {
     expect(html).not.toContain('8.5%');
   });
 
-  it('passthrough weights for Baseline', () => {
+  it('passthrough weights for Brief', () => {
     const html = renderToStaticMarkup(
       createElement(UnassignedShelf, {
         heldUnmapped: held,
         proposedUnheld: [],
-        tier: 'baseline',
+        tier: 'brief',
       }),
     );
     expect(html).toContain('TLT');

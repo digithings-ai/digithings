@@ -56,7 +56,7 @@ def test_budget_hard_stop_mid_run_carries_remaining() -> None:
     store = MemoryJobRunStore()
     workspace = WorkspaceEntitlement(
         workspace_id=uuid4(),
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     claimed = dispatch_overlay_daily(
@@ -97,7 +97,7 @@ def test_budget_snapshot_is_run_scoped_not_process_global() -> None:
         store = MemoryJobRunStore()
         workspace = WorkspaceEntitlement(
             workspace_id=uuid4(),
-            plan_tier=PlanTier.CUSTOM,
+            plan_tier=PlanTier.STUDIO,
             subscription_status=SubscriptionStatus.ACTIVE,
         )
         claimed = dispatch_overlay_daily(
@@ -141,7 +141,7 @@ def test_budget_checked_after_chain(monkeypatch: pytest.MonkeyPatch) -> None:
     store = MemoryJobRunStore()
     workspace = WorkspaceEntitlement(
         workspace_id=uuid4(),
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     claimed = dispatch_overlay_daily(

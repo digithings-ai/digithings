@@ -5,14 +5,15 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   canAccessProduct,
   maxPlanTier,
-  requireCustomEligible,
+  requireDeskEligible,
+  requireStudioEligible,
   resolveAccessSnapshot,
   type AccessAdmin,
 } from "./access.ts";
 
 Deno.test("maxPlanTier picks the higher tier", () => {
-  assertEquals(maxPlanTier("free", "baseline"), "baseline");
-  assertEquals(maxPlanTier("custom", "baseline"), "custom");
+  assertEquals(maxPlanTier("free", "brief"), "brief");
+  assertEquals(maxPlanTier("studio", "desk"), "studio");
   assertEquals(maxPlanTier("enterprise", null), "enterprise");
   assertEquals(maxPlanTier("free", undefined), "free");
 });
@@ -23,11 +24,20 @@ Deno.test("canAccessProduct is case-insensitive", () => {
   assertEquals(canAccessProduct([], "fx_hub"), false);
 });
 
-Deno.test("requireCustomEligible allows custom/enterprise only", () => {
-  assertEquals(requireCustomEligible("custom").ok, true);
-  assertEquals(requireCustomEligible("enterprise").ok, true);
-  assertEquals(requireCustomEligible("baseline").ok, false);
-  assertEquals(requireCustomEligible("free").ok, false);
+Deno.test("requireDeskEligible allows desk+", () => {
+  assertEquals(requireDeskEligible("desk").ok, true);
+  assertEquals(requireDeskEligible("studio").ok, true);
+  assertEquals(requireDeskEligible("enterprise").ok, true);
+  assertEquals(requireDeskEligible("brief").ok, false);
+  assertEquals(requireDeskEligible("free").ok, false);
+});
+
+Deno.test("requireStudioEligible allows studio/enterprise only", () => {
+  assertEquals(requireStudioEligible("studio").ok, true);
+  assertEquals(requireStudioEligible("enterprise").ok, true);
+  assertEquals(requireStudioEligible("desk").ok, false);
+  assertEquals(requireStudioEligible("brief").ok, false);
+  assertEquals(requireStudioEligible("free").ok, false);
 });
 
 Deno.test("resolveAccessSnapshot elevates free workspace via plan_floor", async () => {
@@ -37,7 +47,7 @@ Deno.test("resolveAccessSnapshot elevates free workspace via plan_floor", async 
         eq: (_col: string, _val: string) => ({
           maybeSingle: async () => {
             if (table === "entitlement_grants") {
-              return { data: { plan_floor: "custom" }, error: null };
+              return { data: { plan_floor: "studio" }, error: null };
             }
             return { data: null, error: null };
           },
@@ -53,8 +63,8 @@ Deno.test("resolveAccessSnapshot elevates free workspace via plan_floor", async 
     workspaceId: "ws-1",
     workspacePlanTier: "free",
   });
-  assertEquals(snap.effectivePlanTier, "custom");
-  assertEquals(snap.planFloor, "custom");
+  assertEquals(snap.effectivePlanTier, "studio");
+  assertEquals(snap.planFloor, "studio");
   assertEquals(canAccessProduct(snap.products, "fx_hub"), true);
 });
 
@@ -85,8 +95,8 @@ Deno.test("resolveAccessSnapshot prefers my_access RPC", async () => {
         email: "ops@example.com",
         workspace_id: "ws-9",
         workspace_plan_tier: "free",
-        plan_floor: "baseline",
-        effective_plan_tier: "baseline",
+        plan_floor: "brief",
+        effective_plan_tier: "brief",
         products: ["fx_hub"],
       },
       error: null,
@@ -101,6 +111,6 @@ Deno.test("resolveAccessSnapshot prefers my_access RPC", async () => {
     workspaceId: "ws-9",
     workspacePlanTier: "free",
   });
-  assertEquals(snap.effectivePlanTier, "baseline");
+  assertEquals(snap.effectivePlanTier, "brief");
   assertEquals(canAccessProduct(snap.products, "fx_hub"), true);
 });

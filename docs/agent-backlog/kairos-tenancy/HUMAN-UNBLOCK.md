@@ -87,10 +87,12 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/digithings-supabase-pat` (label **digithings**) works; re-paste into Cursor env if process env drops it. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
-| `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
-| `STRIPE_PRICE_CUSTOM_MONTHLY` | `price_…` |
-| `STRIPE_PRICE_BASELINE_ANNUAL` | `price_…` (optional) |
-| `STRIPE_PRICE_CUSTOM_ANNUAL` | `price_…` (optional) |
+| `STRIPE_PRICE_BRIEF_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_DESK_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_STUDIO_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_BRIEF_ANNUAL` | `price_…` (optional) |
+| `STRIPE_PRICE_DESK_ANNUAL` | `price_…` (optional) |
+| `STRIPE_PRICE_STUDIO_ANNUAL` | `price_…` (optional) |
 | `MAILGUN_API_KEY` | Mailgun private API key (MCP currently auth-fails; env EMPTY) |
 | `MAILGUN_DOMAIN` | Verified sending domain |
 | `NOTIFY_FROM` | Verified From address on that domain |
@@ -117,8 +119,9 @@ mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200*
 supabase secrets set \
   STRIPE_SECRET_KEY=… \
   STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… \
-  STRIPE_PRICE_CUSTOM_MONTHLY=… \
+  STRIPE_PRICE_BRIEF_MONTHLY=… \
+  STRIPE_PRICE_DESK_MONTHLY=… \
+  STRIPE_PRICE_STUDIO_MONTHLY=… \
   MAILGUN_API_KEY=… \
   MAILGUN_DOMAIN=… \
   NOTIFY_FROM=… \
