@@ -312,6 +312,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **2026-09-01T08:41Z — [#3384](https://github.com/digithings-ai/digithings/pull/3384) on `develop` (`5574b9394`):** house proof exit 5 prints `failsofts=` mergeability. Live probe house **5** (stack ready, do not merge from authoring agent); pages **3**; cron check **2**. Routing still defaults **off**. `pipeline-olympus.yml` filename unchanged until after the 12:00 UTC house proof.
 
+**2026-09-01T09:00Z — [#3356](https://github.com/digithings-ai/digithings/pull/3356) HEAD `ebbb311b5`:** Pages twin fail-closes unless `/dashboard/settings/brokers/callback/` exports. CI green (review coverage + Pages build). Live `/olympus/.../callback/` **200**, `/dashboard/.../callback/` **404**. **Human-merge only.** Do not `--apply` until both `/dashboard/` and the Alpaca callback are 200.
+
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
 [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
