@@ -252,6 +252,50 @@ class TestPersistAndDispatch:
         assert opt.strategy_name == "btc_sdca"
         assert "mean_oos_vs_flat_dca_pct" in opt.message
 
+    def test_run_optimize_freezes_stage_a_weight_params(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_walk_forward(
+            dates: list[date],
+            prices: list[float],
+            trials: list[dict[str, float | int | str]],
+            **kwargs: object,
+        ) -> SdcaWalkForwardResult:
+            captured["trials"] = trials
+            dates_l = list(dates)
+            prices_l = list(prices)
+            return run_sdca_walk_forward(
+                dates_l,
+                prices_l,
+                [dict(_HIDDEN)],
+                rails_fitter=_fitter,
+                evaluator=_evaluator,
+                evaluator_label="injected",
+            )
+
+        monkeypatch.setattr(
+            "digiquant.strategies.sdca.optimize.run_sdca_walk_forward", fake_walk_forward
+        )
+        csv = tmp_path / "BTC-USD.csv"
+        rows = ["timestamp,open,high,low,close,volume,symbol"]
+        for i in range(60):
+            d = date(2020, 1, 1) + timedelta(days=i)
+            rows.append(f"{d},100,101,99,100,1,BTC-USD")
+        csv.write_text("\n".join(rows) + "\n")
+        run_optimize(
+            strategy_name="sdca",
+            symbols=["BTC-USD"],
+            data_path=csv,
+            param_grid=[dict(SDCA_SHAPE_DEFAULTS), dict(_HIDDEN)],
+            base_params={"weekly_rsi_weight": 0.4, "valuation_weight": 0.6},
+        )
+        trials = captured["trials"]
+        assert isinstance(trials, list)
+        assert all(t.get("weekly_rsi_weight") == 0.4 for t in trials)
+        assert all(t.get("valuation_weight") == 0.6 for t in trials)
+
     def test_sdca_auto_grid_excludes_curvatures(self) -> None:
         trials = _sdca_trials(None, "grid", 10, None)
         assert trials

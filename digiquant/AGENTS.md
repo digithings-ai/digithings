@@ -190,11 +190,17 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A (`profile.cycle_windows`) → Stage B → `regularize`. Do not
-   publish until the backtest looks comfortable.
+5. Stage A (`digiquant_fit_sdca_weights` / `profile.cycle_windows`) → Stage B
+   (`digiquant_run_optimize` strategy `sdca`, freeze `*_weight` keys) →
+   `regularize`. Do not publish until the backtest looks comfortable.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
+
+On-chain extras (#1086): `digiquant_fetch_bitview_series` is the ingest tool
+(Bitview/BRK `mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL;
+no HTML scrape; fail-soft). They are not composite votes yet. Coin Metrics
+community CC BY-NC stays research-only.
 
 `pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
 multi-asset smoke (ETH Coinbase cache if present, else a synthetic second
@@ -236,23 +242,27 @@ from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_w
 ```
 
 `run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
-(`digiquant_run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
+(`digiquant_run_optimize`) — Stage B. Stage A is
+`digiquant_fit_sdca_weights` (cycle-window overlap; cannot honestly live
+inside `run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
 a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
 Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
 `weekly_rsi_weight`, `weekly_macd_weight`, `sma_band_weight`) are searched by
 `method=random`/`bayesian` or an explicit `param_grid`; auto-grid holds them
-at 0 (valuation-only, current BTC charts). Weekly RSI/MACD/SMA-band z are
+at 0 (valuation-only, current BTC charts) unless Stage A weights are passed
+as `strategy_params` (frozen onto every trial). Weekly RSI/MACD/SMA-band z are
 computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
 file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
 OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
-that need them. Two-stage fit: Stage A (`optimize_stage_a_weights`) aligns
+that need them. Two-stage fit: Stage A (`optimize_stage_a_weights` via
+`digiquant_fit_sdca_weights`) aligns
 composite troughs/peaks with `SdcaAssetProfile.cycle_windows` (BTC:
 `SdcaCycleWindows.btc_v1()`); Stage B freezes those weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
-from this WP.
+from this WP. No live-trading.
 
 ### SDCA test commands
 

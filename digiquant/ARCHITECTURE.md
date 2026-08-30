@@ -210,12 +210,14 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 |---|---|
 | `digiquant_list_strategies` | Returns JSON array of registered strategies |
 | `digiquant_run_backtest` | Runs Nautilus backtest; `symbols_json` is a JSON array string |
-| `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random) |
+| `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random). `strategy_name=sdca` is Stage B walk-forward (vs-flat-DCA). Freeze Stage A weights via `strategy_params` `*_weight` keys |
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
+| `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused (monotone of MVRV). Fail-soft + timeout. Hosted bitview.space is optional / no SLA. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
+| `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 | `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
@@ -564,6 +566,8 @@ upstream for cached price history.
 | `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly resample + SMA-band z. Completed ISO weeks only; `join_asof(..., strategy="backward")`. Defaults are BTC v1 (RSI 14 / MACD 12-26-9 / 90d SMA); pass a spec to calibrate to another asset's cycle. |
 | `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
 | `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). |
+| `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
+| `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
 | `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
@@ -607,16 +611,19 @@ that default unless callers pass extras. Walk-forward (`method=random` /
 explicit `param_grid`) searches the extra weights; auto-grid does not, so a
 default optimize run still matches the power-law-only chart.
 
-**Two-stage fit.** Stage A (`stage_a.py`) searches indicator weights so
+**Two-stage fit.** Stage A (`digiquant_fit_sdca_weights` /
+`sdca/fit_weights.py`) searches indicator weights so
 composite risk troughs overlap that **asset's** cycle lows and peaks overlap
 cycle highs (`SdcaAssetProfile.cycle_windows` — BTC uses
 `SdcaCycleWindows.btc_v1()`, ETH research uses `eth_research_v1()`). Stage B
-freezes those weights and runs the existing walk-forward curve optimize
-(`vs_flat_dca_pct`, floors/caps, IS-only rails). After the aggressive fit,
-`regularize.py` rounds weights to tenths and shrinks max rates (rounded to
-one decimal); both variants are persisted. Equal Stage A scores prefer fewer
-extras. The aggressive fit will overfit — that is expected. Do not publish a
-second asset until that backtest looks comfortable.
+is `digiquant_run_optimize` with `strategy_name=sdca` (existing walk-forward
+curve optimize, `vs_flat_dca_pct`, floors/caps, IS-only rails). Freeze Stage A
+weights by passing `regularized_weight_params` as `strategy_params` `*_weight`
+keys. After the aggressive fit, `regularize.py` rounds weights to tenths and
+shrinks max rates (rounded to one decimal); both variants are persisted. Equal
+Stage A scores prefer fewer extras. The aggressive fit will overfit — that is
+expected. Do not publish a second asset until that backtest looks comfortable.
+There is no separate SDCA app or second optimizer product.
 
 **How to add an asset.** The reusable core is technicals + composite +
 two-stage weight/curve fit + regularize. Extra series per asset is manual
