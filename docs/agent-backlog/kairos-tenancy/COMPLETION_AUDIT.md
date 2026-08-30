@@ -1,6 +1,8 @@
 # Kairos epic — completion audit (GitHub Auth proven, 2026-08-30T21:18Z)
 
-**Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets. Observer `GET /settings/app-urls` currently fails the develop `/dashboard` pin against live `/olympus` Pages+EF (exit 3). Live house book commit is still unproven (last schedule failed; #3331 stamp + #3334 UUID stringify are on `main` awaiting next cron).
+**Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets. Observer `GET /settings/app-urls` currently fails the develop `/dashboard` pin against live `/olympus` Pages+EF (exit 3). Scheduled house GHA book-commit is still unproven (last schedule failed; #3331 stamp + #3334 UUID stringify are on `main` awaiting next cron). Monday 2026-08-31 ledger was recovered operator-side (`8ab9840f-0946-4026-860b-cce20f75eb93` / `commit-run/52066e03-6c50-44bb-af18-e263664eacd4`); that is not a green `pipeline-olympus.yml` run.
+
+**2026-08-31T20:50Z — Monday ledger recovered on `core` (not GHA):** house `portfolio_ledger_commits` `8ab9840f-0946-4026-860b-cce20f75eb93` + `documents` `commit-run/52066e03-6c50-44bb-af18-e263664eacd4` for 2026-08-31. Positions match the booked book (VGK 25 / XLF 20 / CASH 20.663). Recovery CLI from [#3332](https://github.com/digithings-ai/digithings/pull/3332) applied live; that PR is CONFLICTING + atlas-graph red (`recover_ledger` is a second `append_commit_chain(` caller). Rebase onto develop without duplicating #3335 `_json_safe`, allowlist the operator recovery caller.
 
 **2026-08-31T20:39Z — [#3334](https://github.com/digithings-ai/digithings/pull/3334) on `main` (`3601f72df`):** `_json_safe` stringifies `UUID` at the PostgREST write boundary (same helper that already coerced `date`/`datetime`). Fixes the `33426508863` retry `TypeError` in `publish_document`. Keeps `on_conflict=date`. Do **not** apply 113. Do **not** `workflow_dispatch`.
 
