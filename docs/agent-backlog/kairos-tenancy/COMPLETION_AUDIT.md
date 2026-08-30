@@ -2,6 +2,8 @@
 
 **Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets.
 
+**2026-08-31T11:24Z house upsert:** live `pipeline-olympus` on `main` failed `42P10` after core 105 replaced `UNIQUE(date, document_key)`. [#3278](https://github.com/digithings-ai/digithings/pull/3278) squash-merged to `main` (`2df473110`). Next 12:00 UTC cron is the live book-commit proof. Overlay **documents** are anon-safe after 110; **positions/nav/ledger** still collide on 097 `UNIQUE(date)` — persist-on cannot prove `overlay_daily` `succeeded` until P6.
+
 **2026-08-30 product-gates follow-up:** creator/ops `entitlement_grants` + free-teaser + FX Hub
 `client_product_grants` implemented on branch `cursor/kairos-product-gates-3d52` (migration 108).
 Full gap: [`KAIROS-ALPACA-FINALIZE-GAP.md`](KAIROS-ALPACA-FINALIZE-GAP.md) and
