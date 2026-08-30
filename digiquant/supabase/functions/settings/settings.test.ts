@@ -1157,6 +1157,21 @@ Deno.test("PATCH notifications: partial update merges prior row", async () => {
   assertEquals(json.digest_hour_utc, 12);
 });
 
+Deno.test("PATCH notifications: free Observer can enable daily_digest", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "observer@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: false,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.holding_change_alerts, false);
+  assertEquals(json.execution_alerts, false);
+});
+
 Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "PATCH", "/notifications", {

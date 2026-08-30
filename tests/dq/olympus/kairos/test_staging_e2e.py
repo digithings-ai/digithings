@@ -119,10 +119,19 @@ def test_empty_and_placeholder_values_count_as_missing(
         (HopExpectation.NOT_FOUND, 404, "NOT_FOUND", True),
         (HopExpectation.NOT_FOUND, 403, "TIER_FORBIDDEN", False),
         (HopExpectation.PUBLIC_URLS_OK, 200, None, False),
+        (HopExpectation.PREFS_DIGEST_ON, 200, None, False),
+        (HopExpectation.PREFS_DIGEST_ON, 403, "TIER_FORBIDDEN", False),
     ),
 )
 def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
     assert hop_ok(kind, http, code) is expected
+
+
+@pytest.mark.unit
+def test_prefs_digest_on_requires_daily_digest_true() -> None:
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {"daily_digest": True}) is True
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {"daily_digest": False}) is False
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {}) is False
 
 
 @pytest.mark.unit
@@ -183,8 +192,12 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
     forbidden = (403, {"code": "TIER_FORBIDDEN"})
     return {
         ("GET", "/settings/profile"): (200, {"workspace_id": "ws"}),
-        ("GET", "/settings/notifications"): (200, {"workspace_id": "ws"}),
+        ("GET", "/settings/notifications"): (
+            200,
+            {"workspace_id": "ws", "daily_digest": True},
+        ),
         ("GET", "/settings/notifications/log"): (200, {"events": []}),
+        ("PATCH", "/settings/notifications"): (200, {"daily_digest": True}),
         ("GET", "/settings/brokers"): (200, {"connections": []}),
         ("GET", "/settings/keys"): (200, {"keys": []}),
         ("GET", "/settings/app-urls"): (
@@ -301,6 +314,26 @@ def test_proven_remaining_hops_digest_log_without_inbox_is_not_received() -> Non
 
 
 @pytest.mark.unit
+def test_proven_remaining_hops_digest_requires_pref_on() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(
+            digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
+            daily_digest_enabled=False,
+        )
+    )
+    assert proven["digest_email_received"] is False
+    on = proven_remaining_hops(
+        RemainingHopEvidence(
+            digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
+            daily_digest_enabled=True,
+        )
+    )
+    assert on["digest_email_received"] is True
+
+
+@pytest.mark.unit
 def test_proven_remaining_hops_skipped_overlay_is_not_claimed() -> None:
     skipped = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "skipped"),)))
     assert skipped["overlay_daily_claimed"] is False
@@ -367,6 +400,7 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
             fill_count=1,
             digest_event_keys=("digest:2026-08-31",),
             digest_inbox_confirmed=True,
+            daily_digest_enabled=True,
         )
     )
     assert remaining_hops_unproven(proven) == ()
@@ -389,6 +423,7 @@ def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
     assert evidence.subscription_status == "none"
     assert evidence.has_stripe_subscription is False
     assert evidence.fill_count == 0
+    assert evidence.daily_digest_enabled is True
     assert evidence.surface_http_ok is True
     assert proven_remaining_hops(evidence)["browser_stripe_checkout"] is False
 

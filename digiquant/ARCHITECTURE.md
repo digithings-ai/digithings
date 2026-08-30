@@ -3068,7 +3068,9 @@ Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
 fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
 do not prove the hop); a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
-(claim-ledger rows are inserted before Mailgun send). Remaining-hop GETs that
+**and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
+off; Observer PATCH `/settings/notifications` is not Custom-gated).
+Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are
 proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.

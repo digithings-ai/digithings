@@ -83,6 +83,7 @@ class HopExpectation(StrEnum):
     PRICE_OR_SESSION = "price_or_session"
     NOT_FOUND = "not_found"
     PUBLIC_URLS_OK = "public_urls_ok"
+    PREFS_DIGEST_ON = "prefs_digest_on"
 
 
 class ObserverHop(BaseModel):
@@ -122,6 +123,17 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         method="GET",
         path="/settings/notifications",
         kind=HopExpectation.READ_OK,
+    ),
+    ObserverHop(
+        label="PATCH /settings/notifications (digest on)",
+        method="PATCH",
+        path="/settings/notifications",
+        kind=HopExpectation.PREFS_DIGEST_ON,
+        body={
+            "daily_digest": True,
+            "holding_change_alerts": False,
+            "execution_alerts": False,
+        },
     ),
     ObserverHop(
         label="GET /settings/brokers",
@@ -199,6 +211,8 @@ def hop_ok(
         return http == 404 and code == "NOT_FOUND"
     if kind is HopExpectation.PUBLIC_URLS_OK:
         return public_app_urls_ok(http, body or {})
+    if kind is HopExpectation.PREFS_DIGEST_ON:
+        return http == 200 and (body or {}).get("daily_digest") is True
     unhandled: HopExpectation = kind
     raise AssertionError(f"unhandled hop kind {unhandled}")
 
@@ -275,6 +289,7 @@ def collect_remaining_evidence(
     brokers = _get("/settings/brokers")
     jobs_body = _get("/settings/jobs")
     fills_body = _get("/settings/fills")
+    prefs_body = _get("/settings/notifications")
     log_body = _get("/settings/notifications/log")
     connections: list[tuple[str, str, str, str]] = []
     raw_conns = brokers.get("connections")
@@ -317,6 +332,7 @@ def collect_remaining_evidence(
         jobs=tuple(jobs),
         fill_count=fill_count,
         digest_event_keys=tuple(keys),
+        daily_digest_enabled=prefs_body.get("daily_digest") is True,
         surface_http_ok=surface_ok,
     )
 

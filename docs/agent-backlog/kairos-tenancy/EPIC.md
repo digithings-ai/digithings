@@ -131,6 +131,8 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
 still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
+Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
+Custom-gated). Digest remaining-hop also requires that pref, plus log + inbox.
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
 gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
 pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
