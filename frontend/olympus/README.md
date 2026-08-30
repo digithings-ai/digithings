@@ -240,8 +240,10 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 - **Notifications** — PATCH prefs; `GET /settings/notifications/log` delivery events
   (digest remaining-hop needs a `digest:` log key **and** inbox confirmation **and**
   `daily_digest` on).
-- **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
-  "billing not configured" when Supabase/billing envs are absent.
+- **Billing** — links T2 `create-checkout-session` / `customer-portal`; Custom is
+  the primary checkout CTA (broker connect + overlay are Custom+; Baseline would
+  leave those remaining hops `TIER_FORBIDDEN`). Shows "billing not configured"
+  when Supabase/billing envs are absent.
 - **About** — remaining-hop product state (member-scoped Settings reads; Observer can
   see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes)
   plus prior ops/status/appearance card content.

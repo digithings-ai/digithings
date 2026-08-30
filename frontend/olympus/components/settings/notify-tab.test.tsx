@@ -218,8 +218,14 @@ describe('BillingTab', () => {
         portalFn: vi.fn(),
       }),
     );
+    expect(html).toContain('billing-checkout-custom');
     expect(html).toContain('billing-checkout-baseline');
     expect(html).toContain('billing-portal');
     expect(html).not.toContain('billing-not-configured');
+    const customAt = html.indexOf('billing-checkout-custom');
+    const baselineAt = html.indexOf('billing-checkout-baseline');
+    expect(customAt).toBeGreaterThan(-1);
+    expect(baselineAt).toBeGreaterThan(customAt);
+    expect(html).toContain('broker connect and overlays need Custom');
   });
 });
