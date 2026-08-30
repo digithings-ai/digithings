@@ -12,17 +12,23 @@ to discover, copy, and extend standardized components.
 frontend/digiweb/
 ├── README.md              suite overview + the pass-through rule
 ├── ARCHITECTURE.md        this file
+├── DESIGN.md              agent-readable design system (Stitch / Refero shape)
 ├── MANIFEST.json          generated machine index of every reference component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
 ├── design/                @digithings/design — tokens.css + CSS primitives
+│   ├── BLEND.md           utilitarian-terminal preference ledger (iterating)
+│   └── references/        external north-star scans (Cursor, herdr, …)
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/<family>/       one page per design family (foundations, controls, …)
+    ├── app/<family>/       one page per design family (foundations, iterate, controls, …)
     ├── components/         the reusable patterns (one file each, docblock-headed)
     └── README.md           the canon: tokens, livery, type, motion, chart rules
 ```
 
+The **`/iterate`** family is the human preference gallery for the utilitarian
+terminal blend (`uv-` CSS only). Picks persist in `localStorage` and are meant
+to be pasted into `design/BLEND.md` before any token/`DESIGN.md` lock.
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:
 

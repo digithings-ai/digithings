@@ -25,6 +25,7 @@ is the only shared chrome.
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
+| `/iterate`         | Iterate     | utilitarian terminal blend gallery — pick corners, type, CTAs, nav, heroes, density (herdr / agentmail / omarchy); preference ledger → `design/BLEND.md` |
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer), empty/error states |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |

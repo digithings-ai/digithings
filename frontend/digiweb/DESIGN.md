@@ -102,6 +102,20 @@ components:
 
 digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — black, white, and a three-step ink hierarchy — with color held in reserve as a signal, never spent as decoration. Every affordance from a button to a candlestick chart is built out of the same restrained kit: hairline borders, pill controls, one mono type voice for anything that is chrome or data, and a single serif voice reserved for the moments the product actually wants to make a human claim. The system does not perform enthusiasm; it reports state precisely and gets out of the way.
 
+### Active blend — utilitarian terminal (iterating)
+
+As of 2026-08-30 we are **tightening** the Instrument Panel toward utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside the existing Cursor / Graphite / xAI north stars.
+
+Working preference (not fully locked — pick live on the reference `/iterate` page; ledger in [`design/BLEND.md`](design/BLEND.md)):
+
+- Prefer **basic fonts** (Geist Sans + Geist Mono, or JetBrains Mono for full-terminal surfaces) over special display faces as the default claim voice; serif becomes opt-in.
+- Prefer **sharp / zero-radius marketing chrome** over soft pill theater; shape meaning (actionable vs container) may move from pill→sharp rectangle.
+- Prefer **diegetic product proof** (terminal, curl install, live code) over atmospheric mesh and decorative motion.
+- Prefer **sparse API heroes** (one white or ink CTA; docs as ghost/bracket sibling) over multi-CTA clusters.
+- Still reject glass, violet washes, synthwave, Inter-as-brand, and multi-accent chrome.
+
+Until picks are locked into this file’s frontmatter and `tokens.css`, production surfaces keep the current Instrument Panel tokens. Gallery CSS uses the `uv-` prefix and ships only in the design-reference app.
+
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
 digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue gradient heroes, no glassmorphism, no floating gradient blobs, no Inter-as-brand-font, no decorative box-shadow lifted off nothing in particular. Depth comes from hairline borders and tonal layering; when a shadow does appear, it means something specific (see Elevation & Depth).
@@ -109,9 +123,9 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 **Key Characteristics:**
 - Monochrome-by-default livery; color is opt-in per surface and always routes through `--accent`, never a hardcoded hex.
 - Three color domains that never blend: **identity** (`--accent` / module liveries), **money** (`--up` / `--down`, fixed literals, livery-proof), and **diff** (`--rv-add` / `--rv-del`, a third pastel-only palette reserved for code review).
-- One mono voice for chrome and data (labels, buttons, tables, terminal text), one serif voice for the rare human claim (marketing headlines, markdown headings, an account holder's name) — never both competing on the same element.
-- Pill shape means "you can act on this"; rectangular 8–16px radius means "this is a container." Shape carries the same meaning everywhere in the system.
-- "One loud thing per viewport": exactly one solid-fill, accent-colored control is allowed on screen at a time. Every sibling recedes to a transparent, hairline-bordered outline.
+- One mono voice for chrome and data (labels, buttons, tables, terminal text), one serif voice for the rare human claim (marketing headlines, markdown headings, an account holder's name) — never both competing on the same element. *(Under iterate: serif may become opt-in; utilitarian sans / mono-all are candidate defaults.)*
+- Pill shape means "you can act on this"; rectangular 8–16px radius means "this is a container." Shape carries the same meaning everywhere in the system. *(Under iterate: sharp/zero radius may replace pills for marketing chrome.)*
+- "One loud thing per viewport": exactly one solid-fill, accent-colored control is allowed on screen at a time. Every sibling recedes to a transparent, hairline-bordered outline. *(Under iterate: the loud fill may be white/ink rather than accent.)*
 - Flat by default; a black shadow means "this is a floating overlay," an accent glow means "this is alive right now" — the two never substitute for each other.
 
 ## Colors
@@ -170,7 +184,7 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 - **Mono / Label** (400, 0.56–0.86rem depending on context, 0.08–0.14em tracking, uppercase for labels): the system's workhorse — kickers, eyebrows, button labels, form field labels, table headers, terminal transcript, tabular numerals (`font-variant-numeric: tabular-nums` wherever a digit might change).
 
 ### Named Rules
-**The Normative Display Rule.** `tokens.css` sets `--font-display` to **Instrument Serif** — this is what digithings.ai, digiquant.io, digichat, and olympus actually ship. A demo override to Fraunces exists only inside the design-reference app's own `globals.css` (and as that app's "default" type-suite option among five swappable suites: plex, editorial, grotesk, terminal). Treat Fraunces as an interchangeable reference-app furnishing, never as the production default — a new surface being built for a real product should assume Instrument Serif unless a task explicitly says otherwise.
+**The Normative Display Rule.** `tokens.css` sets `--font-display` to **Instrument Serif** — this is what digithings.ai, digiquant.io, digichat, and olympus actually ship. A demo override to Fraunces exists only inside the design-reference app's own `globals.css` (and as that app's type-suite options among suites: default, plex, editorial, grotesk, terminal, utilitarian, omarchy). Treat Fraunces as an interchangeable reference-app furnishing, never as the production default — a new surface being built for a real product should assume Instrument Serif unless a task explicitly says otherwise. The **utilitarian** and **omarchy** suites exist for the `/iterate` blend: Geist-only and JetBrains-everywhere candidates while the display default is under review.
 
 **The Mono-First Rule.** Serif is for marketing hero display and rare human-identity moments only. Dashboards, data, and chrome are set in sans + mono — never serif — a rule stated explicitly in the project's own copy guide.
 

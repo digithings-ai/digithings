@@ -64,6 +64,22 @@ export const TYPE_SUITES: TypeSuite[] = [
     body: GEIST_SANS,
     mono: "var(--font-jetbrains), ui-monospace, monospace",
   },
+  {
+    id: "utilitarian",
+    label: "utilitarian",
+    note: "Geist Sans display + body · Geist Mono chrome (no special serif)",
+    display: GEIST_SANS,
+    body: GEIST_SANS,
+    mono: GEIST_MONO,
+  },
+  {
+    id: "omarchy",
+    label: "omarchy",
+    note: "JetBrains Mono everywhere — omarchy.org voice",
+    display: "var(--font-jetbrains), ui-monospace, monospace",
+    body: "var(--font-jetbrains), ui-monospace, monospace",
+    mono: "var(--font-jetbrains), ui-monospace, monospace",
+  },
 ];
 
 const KEY = "dr-type";
