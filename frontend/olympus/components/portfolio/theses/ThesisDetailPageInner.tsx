@@ -115,7 +115,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
-      <div className="flex items-center justify-center min-h-[40vh] text-down">
+      <div className="flex items-center justify-center min-h-[40vh] text-danger">
         {error || 'Failed to load'}
       </div>
     );
