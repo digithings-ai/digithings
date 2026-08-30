@@ -237,7 +237,7 @@ real node executions rather than compiled graph nodes.
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
 | `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
-| `trading_profile` | `dict[str, Any]` | User/tenant trading profile; merged into `optimization_constraints` |
+| `trading_profile` | `dict[str, Any]` | User/tenant trading profile; its `max_drawdown_pct` is a negative fraction (e.g. `-0.15` is −15%) and is converted to a negative percent before merging into `optimization_constraints` |
 | `research_note` | `str` | Research path label (`"LLM-extracted"`, `"document-mode"`, `"error"`) |
 | `research_response` | `str` | Freeform LLM answer in document/RAG mode |
 | `rag_sources` | `list[dict]` | Aggregated digisearch citations |
