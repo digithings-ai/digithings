@@ -13,6 +13,14 @@ from pathlib import Path
 from digiquant.backtest import run_backtest
 from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizationConstraints, OptimizeResult
+from digiquant.strategies.sdca.indicator_catalog import WEIGHT_PARAM_BY_NAME
+from digiquant.strategies.sdca.optimize import (
+    btc_power_law_rails_fitter,
+    load_sdca_extra_z,
+    load_sdca_ohlcv,
+    run_sdca_walk_forward,
+    walk_forward_to_optimize_result,
+)
 from digiquant.strategy_specs import (
     _resolve_strategy_name,
     infer_param_grid,
@@ -343,15 +351,8 @@ def _run_sdca_optimize(
     base_params: dict[str, float | int | str] | None,
 ) -> OptimizeResult:
     """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
-    from digiquant.strategies.sdca.indicator_catalog import WEIGHT_PARAM_BY_NAME
-    from digiquant.strategies.sdca.optimize import (
-        btc_power_law_rails_fitter,
-        load_sdca_extra_z,
-        load_sdca_ohlcv,
-        run_sdca_walk_forward,
-        walk_forward_to_optimize_result,
-    )
-
+    # nautilus_trader is an optional extra; importing at module load would
+    # pull Nautilus into every optimize caller.
     try:
         from digiquant.strategies.sdca.nautilus_evaluator import evaluate_sdca_trial_nautilus
     except ImportError as exc:

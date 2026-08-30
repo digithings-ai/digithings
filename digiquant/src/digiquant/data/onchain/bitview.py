@@ -20,8 +20,7 @@ import logging
 import os
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any  # score:allow untyped any — Bitview SeriesData JSON payloads
-from typing import Protocol
+from typing import Any, Protocol  # score:allow untyped any — Bitview SeriesData JSON payloads
 
 import httpx
 import polars as pl
@@ -184,8 +183,7 @@ def _forbidden_result(series_id: str) -> BitviewSeriesResult:
     return BitviewSeriesResult(
         series_id=series_id,
         error=(
-            f"{series_id} is a monotone of mvrv (NUPL = 1 − 1/MVRV); "
-            "do not dual-count (Refs #1086)"
+            f"{series_id} is a monotone of mvrv (NUPL = 1 − 1/MVRV); do not dual-count (Refs #1086)"
         ),
     )
 
@@ -271,6 +269,13 @@ class BitviewClient:
                 results[series_id] = BitviewSeriesResult(series_id=series_id, error=err)
             return BitviewFetchResult(series=results, error=err)
         results.update(fetched)
+        allowed_hits = [results[sid] for sid in allowed]
+        if allowed_hits and not any(row.has_data for row in allowed_hits):
+            first_err = next(
+                (row.error for row in allowed_hits if row.error),
+                "no series returned data",
+            )
+            return BitviewFetchResult(series=results, error=first_err)
         return BitviewFetchResult(series=results)
 
     def _fetch_allowed(
@@ -300,17 +305,13 @@ class BitviewClient:
             out[series_id] = self._result_from_payload(series_id, payload)
         return out
 
-    def _fetch_one(
-        self, series_id: str, *, params: dict[str, str | int]
-    ) -> BitviewSeriesResult:
+    def _fetch_one(self, series_id: str, *, params: dict[str, str | int]) -> BitviewSeriesResult:
         url = f"{self.base_url}/api/series/{series_id}/{DEFAULT_INDEX}"
         try:
             payload = _get_json(url, timeout=self.timeout, session=self.session, params=params)
         except Exception as exc:
             logger.warning("Bitview series %s failed: %s", series_id, exc)
-            return BitviewSeriesResult(
-                series_id=series_id, error=f"{type(exc).__name__}: {exc}"
-            )
+            return BitviewSeriesResult(series_id=series_id, error=f"{type(exc).__name__}: {exc}")
         return self._result_from_payload(series_id, payload)
 
     def _result_from_payload(self, series_id: str, payload: object) -> BitviewSeriesResult:
@@ -344,16 +345,12 @@ def fetch_bitview_series(
         ids = _normalize_ids(series_ids)
         return BitviewFetchResult(
             series={
-                sid: BitviewSeriesResult(
-                    series_id=sid, error=f"{_ENV_FLAG} disabled (no network)"
-                )
+                sid: BitviewSeriesResult(series_id=sid, error=f"{_ENV_FLAG} disabled (no network)")
                 for sid in ids
             },
             error=f"{_ENV_FLAG} disabled",
         )
-    client = BitviewClient(
-        base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir
-    )
+    client = BitviewClient(base_url=base_url, timeout=timeout, session=session, cache_dir=cache_dir)
     return client.fetch(series_ids, start=start, end=end)
 
 

@@ -85,13 +85,14 @@ class TestFitSdcaWeightsFromCache:
             fit_sdca_weights_from_cache(_research_profile(), cache_dir=tmp_path)
 
     def test_fits_and_regularizes(self, tmp_path: Path) -> None:
-        save_cached("ETH-USD", _ohlcv("ETH-USD", 90, start=date(2020, 1, 1)), tmp_path)
+        save_cached("ETH-USD", _ohlcv("ETH-USD", 220, start=date(2020, 1, 1)), tmp_path)
         out = tmp_path / "weights.json"
         result = fit_sdca_weights_from_cache(
             _research_profile(),
             cache_dir=tmp_path,
             output_path=out,
             profile_name="eth_research_v1",
+            rolling_window=10,
         )
         assert result.symbol == "ETH-USD"
         assert result.num_evaluations > 0

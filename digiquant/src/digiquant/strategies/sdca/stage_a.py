@@ -156,8 +156,12 @@ def optimize_stage_a_weights(
             if any(name not in extra_z for name in weights.enabled_extras()):
                 continue
             evaluated += 1
-            risk = risk_from_weighted_z(dates, valuation_z, extra_z, weights)
-            score = cycle_overlap_score(dates, risk, windows)
+            try:
+                risk = risk_from_weighted_z(dates, valuation_z, extra_z, weights)
+                score = cycle_overlap_score(dates, risk, windows)
+            except ValueError:
+                # Warmup / missing extra z can leave windows all-null; skip that combo.
+                continue
             if _is_better(score, weights, best):
                 best = StageAResult(weights=weights, score=score, num_evaluations=evaluated)
     if best is None:

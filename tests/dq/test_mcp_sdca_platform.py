@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -129,6 +130,15 @@ class TestPlatformToolRegistration:
         missing_orch = _PLATFORM - manifest
         assert not missing_orch, f"missing orchestrator tools: {sorted(missing_orch)}"
 
+    def test_run_optimize_exposes_stage_b_freeze_kwargs(self) -> None:
+        sig = inspect.signature(_mcp("digiquant_run_optimize"))
+        assert "param_grid_json" in sig.parameters
+        assert "strategy_params_json" in sig.parameters
+        rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
+        props = rows["digiquant_run_optimize"]["function"]["parameters"]["properties"]
+        assert "strategy_params" in props
+        assert "param_grid" in props
+
 
 class TestFetchBitviewMcp:
     def test_mocked_http_writes_parquet(self, tmp_path: Path) -> None:
@@ -172,7 +182,7 @@ class TestFitSdcaWeightsMcp:
         assert "no cached price history" in payload["error"]
 
     def test_profile_json_fits(self, tmp_path: Path) -> None:
-        save_cached("ETH-USD", _ohlcv("ETH-USD", 90, date(2020, 1, 1)), tmp_path)
+        save_cached("ETH-USD", _ohlcv("ETH-USD", 220, date(2020, 1, 1)), tmp_path)
         payload = json.loads(
             run_fit_sdca_weights(
                 profile="custom",
