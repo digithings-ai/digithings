@@ -1629,7 +1629,11 @@ portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
 
 Supabase is the system of record. Preflight loads **pointers and slim summaries**;
 phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
-multi-day document dumps into every prompt.
+multi-day document dumps into every prompt. Group A books (`positions`,
+`nav_history`, `position_events`, `portfolio_metrics`) default to the house
+`workspace_id` when `eq` omits it, so overlay same-date rows cannot seed house
+research agents or `digiquant_query_data`. Pass `eq.workspace_id` to read
+another book. Market-data tables and `theses` are not injected.
 
 ```mermaid
 flowchart LR
@@ -3233,10 +3237,12 @@ mean "every row". House atlas ops readers (`repair_supabase_portfolio_data`,
 `ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
 `validate_db_first` Group A checks, `backfill_export_state` positions export,
 `backfill_pm_rebalance_and_activity` thesis map) pin via `eq_house_workspace()`
-(omitted id = house). The olympus dashboard Group A readers
-(`frontend/olympus/lib/queries.ts`, `observability-queries.ts`) go through
-`houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom member's overlay
-rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
+(omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
+stamps house `workspace_id` on those same Group A tables when `eq` omits it
+(`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). The olympus dashboard
+Group A readers (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`)
+go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
+member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later
 view rewrite).
 
