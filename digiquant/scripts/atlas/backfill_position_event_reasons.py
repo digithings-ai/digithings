@@ -22,7 +22,8 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from datetime import date as dt_date, timedelta
+from datetime import date as dt_date
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -34,8 +35,31 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    src = str(_REPO_ROOT / "digiquant" / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+
+
+_ensure_importable()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import execute_at_open as eat  # noqa: E402
+
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+
+def _house_event_page(sb, start: int, page: int) -> List[Dict[str, Any]]:
+    """House ``position_events`` page. Overlay same-date rows must not be rewritten."""
+    res = (
+        eq_house_workspace(sb.table("position_events").select("id,date,ticker,event,reason"))
+        .order("date", desc=True)
+        .range(start, start + page - 1)
+        .execute()
+    )
+    return getattr(res, "data", None) or []
 
 
 def _rebalance_json_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, Any]]:
@@ -55,6 +79,7 @@ def _rebalance_json_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[s
     if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision":
         return p
     return None
+
 
 # Reasons produced by tearsheet diffs or stale pipelines (single token, not real prose).
 _PLACEHOLDER_UPPER = frozenset(
@@ -333,9 +358,7 @@ def _is_short_generic_rebalance_only(reason: str, threshold: int = 90) -> bool:
     return len(s) <= 45
 
 
-def _needs_update(
-    reason: Any, force: bool, repair_placeholders: bool
-) -> bool:
+def _needs_update(reason: Any, force: bool, repair_placeholders: bool) -> bool:
     if force:
         return True
     if repair_placeholders:
@@ -395,14 +418,7 @@ def main() -> int:
     start = 0
     page = 800
     while True:
-        res = (
-            sb.table("position_events")
-            .select("id,date,ticker,event,reason")
-            .order("date", desc=True)
-            .range(start, start + page - 1)
-            .execute()
-        )
-        rows: List[Dict[str, Any]] = getattr(res, "data", None) or []
+        rows = _house_event_page(sb, start, page)
         if not rows:
             break
 
@@ -424,8 +440,7 @@ def main() -> int:
                 if args.no_enrich:
                     continue
                 if not (
-                    _is_placeholder_reason(reason)
-                    or _is_short_generic_rebalance_only(reason or "")
+                    _is_placeholder_reason(reason) or _is_short_generic_rebalance_only(reason or "")
                 ):
                     continue
             else:

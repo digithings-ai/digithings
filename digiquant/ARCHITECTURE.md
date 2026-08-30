@@ -3236,7 +3236,9 @@ mean "every row". House atlas ops readers (`repair_supabase_portfolio_data`,
 `seed_ledger_opening_snapshot`, `backfill_position_events`,
 `ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
 `validate_db_first` Group A checks, `backfill_export_state` positions export,
-`backfill_pm_rebalance_and_activity` thesis map) pin via `eq_house_workspace()`
+`backfill_pm_rebalance_and_activity` thesis map, `backfill_position_event_reasons`
+house event pages, `audit_activity_coverage_api` Group A max-dates) pin via
+`eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
 stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). The olympus dashboard
