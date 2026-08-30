@@ -76,8 +76,10 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 - **Vault root:** `DIGIVAULT_ROOT` (required for filesystem-backed note routes;
   those return 503 when unset). **Exception:** `POST /v1/notes/by-path` is D1-only
   and opens D1 directly (`_fetch_note_by_path`) — it needs no `DIGIVAULT_ROOT` at
-  all. The vault is re-read from disk per request — small docs vault, correctness
-  over caching.
+  all. Single HTTP requests build a fresh vault for cross-process filesystem
+  correctness. `POST /v1/notes/batch` opens it once and applies its writes and
+  stale-child pruning incrementally, so bulk ingest is linear rather than
+  rescanning the corpus for every note.
 - **Note upsert:** `POST /v1/notes` accepts `overwrite: true` (and optional
   `frontmatter`) so docs_onboard can idempotently upsert via
   `Vault.write_note(..., overwrite=True)`. Default `overwrite: false` preserves
@@ -248,9 +250,12 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 
 - **Core/service split.** The vault semantics are useful as a library (CI doc
   linting, scripts, other services); FastAPI is an optional delivery surface.
-- **Re-read per request.** A documentation vault is small; recomputing the index
-  from disk avoids a whole class of cache-coherency bugs. If a large vault ever
-  needs it, add an explicit cache behind `reindex`.
+- **Fresh request index, incremental write batch.** A standalone HTTP request
+  rebuilds its index from disk, avoiding a cross-process cache-coherency contract.
+  Within a `POST /v1/notes/batch` request, `Vault.write_note` and
+  `Vault.prune_children` update the in-memory link and parent-child indexes
+  incrementally. This keeps bulk ingest linear while preserving a fresh index at
+  the next request boundary.
 - **Storage is pluggable (filesystem + Supabase).** digivault owns *how knowledge
   is organized and traversed* (frontmatter, wikilinks, backlinks, taxonomy). The
   on-disk `Vault(root)` is the default; `Vault.from_sources` builds the same index

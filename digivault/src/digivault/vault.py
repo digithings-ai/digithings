@@ -63,6 +63,8 @@ class Vault:
         self.config = self._load_config()
         self._notes: dict[str, Note] = {}
         self._duplicates: dict[str, list[str]] = {}
+        self._link_sources: dict[str, set[str]] = {}
+        self._parent_children: dict[str, set[str]] = {}
         # Populated only for store-backed (read-only) vaults built via from_sources,
         # where note bodies cannot be re-read from disk. None => filesystem-backed.
         self._raw_text: dict[str, str] | None = None
@@ -87,6 +89,8 @@ class Vault:
         obj.config = config or VaultConfig()
         obj._notes = {}
         obj._duplicates = {}
+        obj._link_sources = {}
+        obj._parent_children = {}
         obj._raw_text = {}
         obj._build_index(sorted(sources, key=lambda pair: pair[0]))
         return obj
@@ -149,15 +153,94 @@ class Vault:
             )
         # Compute backlinks: name -> names that link to it.
         backlinks: dict[str, set[str]] = {n: set() for n in notes}
+        link_sources: dict[str, set[str]] = {}
+        parent_children: dict[str, set[str]] = {}
         for src, links in raw_outlinks.items():
             for link in links:
+                link_sources.setdefault(link.target, set()).add(src)
                 if link.target in backlinks:
                     backlinks[link.target].add(src)
+        for name, note in notes.items():
+            parent = note.frontmatter.get("parent_doc")
+            if isinstance(parent, str) and parent:
+                parent_children.setdefault(parent, set()).add(name)
         self._notes = {
             name: note.model_copy(update={"backlinks": tuple(sorted(backlinks[name]))})
             for name, note in notes.items()
         }
         self._duplicates = duplicates
+        self._link_sources = link_sources
+        self._parent_children = parent_children
+
+    def _refresh_backlinks(self, names: set[str]) -> None:
+        """Refresh resolved backlinks for the changed notes and their link targets."""
+        for name in names:
+            note = self._notes.get(name)
+            if note is None:
+                continue
+            backlinks = tuple(
+                sorted(src for src in self._link_sources.get(name, set()) if src in self._notes)
+            )
+            self._notes[name] = note.model_copy(update={"backlinks": backlinks})
+
+    def _update_index_after_write(self, name: str, rel_path: str, text: str) -> None:
+        """Apply one filesystem write to the index without rescanning the vault."""
+        previous = self._notes.get(name)
+        affected = {name}
+        if previous is not None:
+            parent = previous.frontmatter.get("parent_doc")
+            if isinstance(parent, str):
+                children = self._parent_children.get(parent)
+                if children is not None:
+                    children.discard(name)
+                    if not children:
+                        del self._parent_children[parent]
+            for link in previous.outlinks:
+                sources = self._link_sources.get(link.target)
+                if sources is not None:
+                    sources.discard(name)
+                    if not sources:
+                        del self._link_sources[link.target]
+                affected.add(link.target)
+
+        frontmatter, body = _fm.split_frontmatter(text)
+        links = _wl.parse_links(body)
+        self._notes[name] = Note(
+            name=name,
+            rel_path=rel_path,
+            title=frontmatter.get("title"),
+            tags=_normalize_tags(frontmatter.get("tags")),
+            aliases=_normalize_aliases(frontmatter.get("aliases")),
+            frontmatter=frontmatter,
+            outlinks=tuple(links),
+        )
+        parent = frontmatter.get("parent_doc")
+        if isinstance(parent, str) and parent:
+            self._parent_children.setdefault(parent, set()).add(name)
+        for link in links:
+            self._link_sources.setdefault(link.target, set()).add(name)
+            affected.add(link.target)
+        self._refresh_backlinks(affected)
+
+    def _remove_note_from_index(self, name: str) -> None:
+        """Drop a deleted note while retaining unresolved inbound-link sources."""
+        note = self._notes.pop(name)
+        parent = note.frontmatter.get("parent_doc")
+        if isinstance(parent, str):
+            children = self._parent_children.get(parent)
+            if children is not None:
+                children.discard(name)
+                if not children:
+                    del self._parent_children[parent]
+        affected: set[str] = set()
+        for link in note.outlinks:
+            sources = self._link_sources.get(link.target)
+            if sources is not None:
+                sources.discard(name)
+                if not sources:
+                    del self._link_sources[link.target]
+            affected.add(link.target)
+        self._refresh_backlinks(affected)
 
     # ── reads ──────────────────────────────────────────────────────────────
     def list_notes(self) -> list[Note]:
@@ -225,7 +308,8 @@ class Vault:
 
         When ``overwrite`` is False (default), behaves like :meth:`create_note`
         and raises if the stem already exists. When True, replaces the on-disk
-        file (and reindexes) so idempotent ingest re-runs can upsert by slug.
+        file and incrementally refreshes the affected link graph so idempotent
+        ingest re-runs can upsert by slug without rescanning the whole vault.
         """
         self._require_writable()
         clean = name.strip()
@@ -243,7 +327,7 @@ class Vault:
         path.parent.mkdir(parents=True, exist_ok=True)
         text = _fm.dump_frontmatter(frontmatter or {}, body)
         path.write_text(text, encoding="utf-8")
-        self.reindex()
+        self._update_index_after_write(clean, rel, text)
         created = self._notes.get(clean)
         if created is None:  # pragma: no cover - defensive
             raise VaultError(f"Failed to write note: {clean!r}")
@@ -278,7 +362,8 @@ class Vault:
         clean_subdir = subdir.strip("/")
         subdir_path = self._safe_path(clean_subdir or ".")
         deleted: list[str] = []
-        for name, note in self._notes.items():
+        for name in sorted(self._parent_children.get(parent, set())):
+            note = self._notes[name]
             path = self._safe_path(note.rel_path)
             if (
                 name.startswith(prefix)
@@ -288,8 +373,8 @@ class Vault:
             ):
                 path.unlink()
                 deleted.append(name)
-        if deleted:
-            self.reindex()
+        for name in deleted:
+            self._remove_note_from_index(name)
         return sorted(deleted)
 
     def rename(self, old_name: str, new_name: str) -> Note:
