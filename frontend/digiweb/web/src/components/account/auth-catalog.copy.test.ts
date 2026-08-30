@@ -72,5 +72,9 @@ describe("account auth catalog copy", () => {
     expect(signup).not.toMatch(/oauth first \(olympus\)/i);
     expect(login).not.toMatch(/oauth-first \(olympus\)/i);
     expect(signup).not.toMatch(/incumbent/i);
+    expect(login).not.toMatch(/\bolympus\b/i);
+    expect(signup).not.toMatch(/\bolympus\b/i);
+    const session = load("session-card.tsx");
+    expect(session).not.toMatch(/\bolympus\b/i);
   });
 });

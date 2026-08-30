@@ -63,7 +63,7 @@ export function GoogleGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** X (Twitter) mark. currentColor so it tracks ink. Decorative. */
+/** X mark. currentColor so it tracks ink. Decorative. */
 export function XGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

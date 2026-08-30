@@ -25,6 +25,15 @@ describe("AuthCard", () => {
     expect(html).not.toContain("Open the desk");
     expect(html).not.toContain("Continue with Google</button>");
     expect(html).not.toContain("Continue with Google");
+    expect(html).not.toContain("acct-auth-strength");
+  });
+
+  it("compact sign-up still has no strength meter", () => {
+    const html = renderToStaticMarkup(
+      <AuthCard layout="compact" mode="signup" productName="digiquant" password="Aa1xxxxx" />,
+    );
+    expect(html).toContain("Sign up");
+    expect(html).not.toContain("acct-auth-strength");
   });
 
   it("icons-first puts oauth above email", () => {

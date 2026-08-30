@@ -53,7 +53,7 @@ export function SignupCard() {
             noValidate
           >
             <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-              olympus <span className="text-ink-mute">· create account</span>
+              digiquant <span className="text-ink-mute">· create account</span>
             </p>
             <p className="mt-2 font-display text-[1.45rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink">
               From zero to the desk.
