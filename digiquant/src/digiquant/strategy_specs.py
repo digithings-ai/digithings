@@ -109,11 +109,10 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "trailing_atr_multiple": (1.0, 3.0, 2.0, 0.5, "float"),
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
-    # SDCA (#3174 + composite weights): six SdcaCurveShape params plus
-    # valuation/m2/rs_eth/dxy weights in [0, 1] (composite normalizes). Zero
-    # extra weight = disabled. Default valuation=1 / extras=0 matches today's
-    # BTC charts. Bounds keep buy_knee_risk < sell_knee_risk so samples stay
-    # feasible.
+    # SDCA (#3174 + composite + price oscillators): six SdcaCurveShape params
+    # plus valuation/macro/oscillator weights in [0, 1] (composite normalizes).
+    # Zero extra weight = disabled. weekly_macd defaults 0 (correlated with RSI).
+    # Default valuation=1 / extras=0 matches today's BTC charts.
     "sdca": {
         "buy_max_rate": (1.0, 20.0, 10.0, 1.0, "float"),
         "buy_knee_risk": (15.0, 50.0, 35.0, 5.0, "float"),
@@ -125,6 +124,9 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "m2_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "rs_eth_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "dxy_weight": (0.0, 1.0, 0.0, 0.1, "float"),
+        "weekly_rsi_weight": (0.0, 1.0, 0.0, 0.1, "float"),
+        "weekly_macd_weight": (0.0, 1.0, 0.0, 0.1, "float"),
+        "sma_band_weight": (0.0, 1.0, 0.0, 0.1, "float"),
     },
 }
 

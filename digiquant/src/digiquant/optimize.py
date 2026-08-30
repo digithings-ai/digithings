@@ -296,7 +296,14 @@ def _sdca_trials(
     weights (held at defaults: valuation=1, extras=0) so the grid stays small.
     Random/bayesian and an explicit ``param_grid`` search the extra weights.
     """
-    extra_weight_keys = {"m2_weight", "rs_eth_weight", "dxy_weight"}
+    extra_weight_keys = {
+        "m2_weight",
+        "rs_eth_weight",
+        "dxy_weight",
+        "weekly_rsi_weight",
+        "weekly_macd_weight",
+        "sma_band_weight",
+    }
     if param_grid is not None:
         return param_grid
     if method in {"random", "bayesian"}:
@@ -309,6 +316,9 @@ def _sdca_trials(
             "m2_weight": 0.0,
             "rs_eth_weight": 0.0,
             "dxy_weight": 0.0,
+            "weekly_rsi_weight": 0.0,
+            "weekly_macd_weight": 0.0,
+            "sma_band_weight": 0.0,
             **dict(base_params or {}),
         },
         num_points_per_param=2,

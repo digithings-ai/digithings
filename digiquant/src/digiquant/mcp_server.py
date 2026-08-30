@@ -386,11 +386,14 @@ def create_mcp_server() -> Any:
         ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
         string selector so later providers (#3175) can be added without changing
         this signature; currently only ``"btc_power_law"`` is implemented.
-        ``indicator_weights`` is a JSON object ``{valuation, m2, rs_eth, dxy}``.
+        ``indicator_weights`` is a JSON object
+        ``{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}``.
         Default ``valuation=1`` and extras ``0`` keeps the published BTC chart
         on a single rail. Positive extra weights require ``m2_path`` /
         ``dxy_path`` (FRED CSV/parquet already on disk) and/or cached
-        ``eth_ticker`` in the same ``cache_dir``. Writes the two-column parquet
+        ``eth_ticker`` in the same ``cache_dir``. Price oscillators
+        (weekly RSI/MACD, 90d SMA-band) are computed from the BTC cache
+        itself. Writes the two-column parquet
         ``SdcaStrategy`` loads via ``risk_path``.
         Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
         or ``{"error": ...}`` (never raises — missing cache / coefficients /

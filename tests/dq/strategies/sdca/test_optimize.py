@@ -110,6 +110,9 @@ class TestStrategySpecsSdca:
             "m2_weight",
             "rs_eth_weight",
             "dxy_weight",
+            "weekly_rsi_weight",
+            "weekly_macd_weight",
+            "sma_band_weight",
         ):
             assert name in specs
         lo_buy, hi_buy, _, _, _ = specs["buy_knee_risk"]
@@ -253,7 +256,14 @@ class TestPersistAndDispatch:
         trials = _sdca_trials(None, "grid", 10, None)
         assert trials
         assert all("buy_curvature" not in t or t["buy_curvature"] == 1.0 for t in trials)
-        extra_keys = {"m2_weight", "rs_eth_weight", "dxy_weight"}
+        extra_keys = {
+            "m2_weight",
+            "rs_eth_weight",
+            "dxy_weight",
+            "weekly_rsi_weight",
+            "weekly_macd_weight",
+            "sma_band_weight",
+        }
         assert all(t.get(k, 0.0) == 0.0 for t in trials for k in extra_keys)
         assert len(trials) == len(
             infer_param_grid(
@@ -271,6 +281,9 @@ class TestPersistAndDispatch:
                     "m2_weight": 0.0,
                     "rs_eth_weight": 0.0,
                     "dxy_weight": 0.0,
+                    "weekly_rsi_weight": 0.0,
+                    "weekly_macd_weight": 0.0,
+                    "sma_band_weight": 0.0,
                 },
             )
         )

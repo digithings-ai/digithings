@@ -2,10 +2,11 @@
 
 The owner's curve *shape* is frozen (#3169). This module searches the six
 bounded parameters plus composite indicator weights (``valuation_weight`` and
-optional ``m2_weight`` / ``rs_eth_weight`` / ``dxy_weight``). The primary score
-is ``vs_flat_dca_pct`` (did the signal beat blind averaging?) subject to a
-capital-deployed floor and a drawdown cap. ``vs_lump_pct`` is reported, never
-optimized — maximizing it collapses to lump-sum on an uptrend.
+optional ``m2_weight`` / ``rs_eth_weight`` / ``dxy_weight`` plus price
+oscillators ``weekly_rsi_weight`` / ``weekly_macd_weight`` / ``sma_band_weight``).
+The primary score is ``vs_flat_dca_pct`` (did the signal beat blind averaging?)
+subject to a capital-deployed floor and a drawdown cap. ``vs_lump_pct`` is
+reported, never optimized — maximizing it collapses to lump-sum on an uptrend.
 
 Rails leakage (#3173): a quadratic log-time fit on truncated history does
 not extrapolate. Callers **must** refit rails on each fold's in-sample

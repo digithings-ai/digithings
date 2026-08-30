@@ -72,8 +72,9 @@ class TestSdcaCompositeWeights:
         assert w.rs_eth == pytest.approx(0.0)
 
     def test_catalog_names_are_independent_series(self) -> None:
-        assert EXTRA_INDICATOR_NAMES == ("m2", "rs_eth", "dxy")
+        assert EXTRA_INDICATOR_NAMES[:3] == ("m2", "rs_eth", "dxy")
         assert "rolling_z" not in EXTRA_INDICATOR_NAMES
+        assert "mayer" not in EXTRA_INDICATOR_NAMES
 
 
 class TestCausalRollingZ:

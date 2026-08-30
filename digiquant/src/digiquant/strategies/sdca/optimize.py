@@ -28,6 +28,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
+from digiquant.strategies.sdca.price_oscillators import price_oscillator_z_vectors
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -67,6 +68,9 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
+    "weekly_rsi_weight": 0.0,
+    "weekly_macd_weight": 0.0,
+    "sma_band_weight": 0.0,
 }
 
 
@@ -184,8 +188,11 @@ def load_sdca_extra_z(
     root = Path(data_path).parent if data_path is not None else None
     if root is None and data_dir is not None:
         root = Path(data_dir)
+    date_s = pl.Series("date", list(dates), dtype=pl.Date)
+    price_s = pl.Series("price", list(prices), dtype=pl.Float64)
+    extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s)
     if root is None:
-        return {}
+        return extra
     m2_path = _first_existing(root, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
     eth_path = _first_existing(root, ("ETH-USD.csv", "ETH-USD.parquet"))
     dxy_path = _first_existing(root, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
@@ -198,21 +205,22 @@ def load_sdca_extra_z(
         rs_eth=1.0 if eth_dates is not None else 0.0,
         dxy=1.0 if dxy_dates is not None else 0.0,
     )
-    if not weights.enabled_extras():
-        return {}
-    return extra_z_vectors(
-        pl.Series("date", list(dates), dtype=pl.Date),
-        pl.Series("price", list(prices), dtype=pl.Float64),
-        weights,
-        ExtraIndicatorSources(
-            m2_dates=m2_dates,
-            m2_values=m2_values,
-            eth_dates=eth_dates,
-            eth_close=eth_close,
-            dxy_dates=dxy_dates,
-            dxy_values=dxy_values,
-        ),
+    extra.update(
+        extra_z_vectors(
+            date_s,
+            price_s,
+            weights,
+            ExtraIndicatorSources(
+                m2_dates=m2_dates,
+                m2_values=m2_values,
+                eth_dates=eth_dates,
+                eth_close=eth_close,
+                dxy_dates=dxy_dates,
+                dxy_values=dxy_values,
+            ),
+        )
     )
+    return extra
 
 
 def _mean_oos(scores: list[FoldScore]) -> float:

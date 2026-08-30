@@ -598,8 +598,14 @@ def run_and_write(
     if family == "sdca":
         import tempfile
 
+        import polars as pl
+
         from digiquant.strategies.sdca.btc_power_law import load_coefficients
-        from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
+        from digiquant.strategies.sdca.indicator_catalog import (
+            ExtraIndicatorSources,
+            SdcaCompositeWeights,
+            build_extra_indicators,
+        )
         from digiquant.strategies.sdca.presets import load_preset
 
         sdca_cfg = entry.get("sdca") or {}
@@ -612,8 +618,31 @@ def run_and_write(
             m2=float(raw_w.get("m2", 0.0)),
             rs_eth=float(raw_w.get("rs_eth", 0.0)),
             dxy=float(raw_w.get("dxy", 0.0)),
+            weekly_rsi=float(raw_w.get("weekly_rsi", 0.0)),
+            weekly_macd=float(raw_w.get("weekly_macd", 0.0)),
+            sma_band=float(raw_w.get("sma_band", 0.0)),
         )
-        index = materialize_sdca_risk_index(ohlcv, tmp_risk, valuation_weight=weights.valuation)
+        ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+        idx_dates = ohlcv[ts_col]
+        if idx_dates.dtype != pl.Date:
+            idx_dates = idx_dates.cast(pl.Date)
+        # Price oscillators need only this OHLCV frame. Macro extras stay off
+        # on the publish path unless a later change supplies FRED/ETH files.
+        osc_only = SdcaCompositeWeights(
+            valuation=weights.valuation,
+            weekly_rsi=weights.weekly_rsi,
+            weekly_macd=weights.weekly_macd,
+            sma_band=weights.sma_band,
+        )
+        extras = build_extra_indicators(
+            idx_dates, ohlcv["close"], osc_only, ExtraIndicatorSources()
+        )
+        index = materialize_sdca_risk_index(
+            ohlcv,
+            tmp_risk,
+            extra_indicators=extras or None,
+            valuation_weight=weights.valuation,
+        )
         coefficients = load_coefficients()
         calibration = {
             "risk_path": str(tmp_risk),
@@ -626,7 +655,9 @@ def run_and_write(
             f"{index['date'].min()} → {index['date'].max()} "
             f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')}, "
             f"weights=valuation:{weights.valuation}/m2:{weights.m2}/"
-            f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy})."
+            f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy}/"
+            f"weekly_rsi:{weights.weekly_rsi}/weekly_macd:{weights.weekly_macd}/"
+            f"sma_band:{weights.sma_band})."
         )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
