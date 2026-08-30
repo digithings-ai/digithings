@@ -67,6 +67,25 @@ def _get_default_embedder() -> object:
     return _default_embedder_singleton
 
 
+def _reject_unsupported_query_filters(query: Query) -> None:
+    """Raise if *query* carries filters Vectorize cannot honour.
+
+    Acceptance for #2219 allows a fail-loud stub until metadata-filter translation
+    lands. An empty ``filters`` dict and a blank ``workspace_id`` are fine — those
+    are the single-tenant / per-index isolation path used in production today.
+    """
+    workspace = (query.workspace_id or "").strip()
+    filters = query.filters or {}
+    if not workspace and not filters:
+        return
+    raise VectorizeBackendError(
+        "VectorizeBackend does not support Query.filters or workspace_id isolation "
+        "(see digisearch ARCHITECTURE.md §6 / #2219). Use a per-workspace Vectorize "
+        "index, query without filters, or switch to Chroma/Azure until metadata "
+        "filter translation lands."
+    )
+
+
 def _default_http_post(
     url: str, headers: dict[str, str], body: bytes, content_type: str
 ) -> tuple[int, str]:
@@ -272,6 +291,12 @@ class VectorizeBackend(DigiIndex):
         return _get_default_embedder()
 
     def query(self, query: Query) -> list[Result]:
+        # Filters / workspace_id are not translated into Vectorize's metadata
+        # `filter` yet (#2219). Refuse rather than silently returning matches from
+        # every workspace in the index — Chroma/Azure honour these; Vectorize must
+        # not pretend it does. Production corpora today isolate by *separate*
+        # indexes, so unfiltered queries (no filters, no workspace_id) stay valid.
+        _reject_unsupported_query_filters(query)
         perf_start = time.perf_counter()
         vector = list(query.embedding or [])
         if not vector:
