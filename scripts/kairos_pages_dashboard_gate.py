@@ -3,10 +3,10 @@
 
 Default ``--check`` exits 3 while live ``/dashboard`` 404s. ``--apply`` deploys
 settings / checkout / portal only after those paths return 200, this checkout
-pins ``/dashboard`` + ``POST /access/redeem-invite``, **and** the live settings
-ESZIP contains those same executable markers. Never prints secret values.
-Never weakens ``public_app_urls_ok``. Exit 5 = stale checkout; exit 6 = live
-bundle still looks like settings v32.
+pins ``/dashboard`` + ``POST /access/redeem-invite``, **and** each live
+settings / checkout / portal ESZIP contains those executable markers. Never
+prints secret values. Never weakens ``public_app_urls_ok``. Exit 5 = stale
+checkout; exit 6 = a live bundle still looks like v32.
 
 Usage (repo root)::
 

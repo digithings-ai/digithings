@@ -9,8 +9,9 @@ Default is ``--check`` (probe only). ``--apply`` deploys the three APP_URL
 functions only after every required path returns 200 on the public origin
 **and** this checkout pins ``/dashboard`` URLs and mounts
 ``POST /access/redeem-invite`` (migration 112 tables are already on ``core``)
-**and** the live settings ESZIP still contains those executable markers after
-deploy (settings v32 has neither). Never weakens ``public_app_urls_ok``.
+**and** the live ESZIP for each of settings / checkout / portal still contains
+those executable markers after deploy (settings also needs redeem-invite;
+live v32 has ``/olympus`` on all three). Never weakens ``public_app_urls_ok``.
 """
 
 from __future__ import annotations
@@ -80,7 +81,7 @@ _PROBE_HEADERS = {
 
 ProbeFn = Callable[[str], tuple[int, str]]
 RunArgv = Callable[[Sequence[str]], None]
-LiveSourceFn = Callable[[], str]
+LiveSourceFn = Callable[[str], str]
 HttpBytesFn = Callable[[str], bytes]
 
 
@@ -172,16 +173,8 @@ def _regex_in_code(source: str, pattern: re.Pattern[str]) -> bool:
     return pattern.search(text) is not None
 
 
-def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str]:
-    """Executable redeem-invite + ``/dashboard`` pins; ``/olympus`` pins fail."""
-    where = "live settings bundle" if live else "checkout"
-    extra = (
-        " — deploy did not mount 112 redeem"
-        if live
-        else " — do not deploy settings from this tree (112 tables would sit unused)"
-    )
-    if not _regex_in_code(source, _REDEEM_INVITE_RE):
-        return False, f"pages dashboard gate: {where} missing POST /access/redeem-invite{extra}"
+def app_url_bundle_ready(source: str, *, where: str) -> tuple[bool, str]:
+    """Executable ``/dashboard`` app-url pins; ``/olympus`` pins fail."""
     if not _regex_in_code(source, _ALPACA_DASHBOARD_RE):
         return (
             False,
@@ -197,6 +190,19 @@ def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str
     if _regex_in_code(source, _SETTINGS_OLYMPUS_RE):
         return False, f"pages dashboard gate: {where} still pins /olympus settings path"
     return True, ""
+
+
+def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str]:
+    """Executable redeem-invite + ``/dashboard`` pins; ``/olympus`` pins fail."""
+    where = "live settings bundle" if live else "checkout"
+    extra = (
+        " — deploy did not mount 112 redeem"
+        if live
+        else " — do not deploy settings from this tree (112 tables would sit unused)"
+    )
+    if not _regex_in_code(source, _REDEEM_INVITE_RE):
+        return False, f"pages dashboard gate: {where} missing POST /access/redeem-invite{extra}"
+    return app_url_bundle_ready(source, where=where)
 
 
 def checkout_ready_for_ef_apply(repo_root: Path) -> tuple[bool, str]:
@@ -247,6 +253,27 @@ def _http_bytes(url: str, *, token: str, timeout: float = 60.0) -> bytes:
         raise LiveSettingsFetchError("live settings bundle fetch failed") from None
 
 
+def fetch_live_function_bundle(
+    function: str,
+    *,
+    project_ref: str = CORE_PROJECT_REF,
+    token: str | None = None,
+    http_bytes: HttpBytesFn | None = None,
+) -> str:
+    """Download one live EF ESZIP. Never logs the token or bundle."""
+    if function not in DASHBOARD_URL_FUNCTIONS:
+        raise LiveSettingsFetchError("unknown function")
+    secret = (token if token is not None else os.environ.get("SUPABASE_ACCESS_TOKEN", "")).strip()
+    if not secret:
+        raise LiveSettingsFetchError("SUPABASE_ACCESS_TOKEN missing")
+    url = f"{MANAGEMENT_API_ORIGIN}/v1/projects/{project_ref}/functions/{function}/body"
+    getter: HttpBytesFn = http_bytes or (lambda u: _http_bytes(u, token=secret))
+    raw = getter(url)
+    if not raw:
+        raise LiveSettingsFetchError("live settings bundle empty")
+    return raw.decode("latin-1")
+
+
 def fetch_live_settings_bundle(
     *,
     project_ref: str = CORE_PROJECT_REF,
@@ -254,15 +281,18 @@ def fetch_live_settings_bundle(
     http_bytes: HttpBytesFn | None = None,
 ) -> str:
     """Download the live settings ESZIP. Never logs the token or bundle."""
-    secret = (token if token is not None else os.environ.get("SUPABASE_ACCESS_TOKEN", "")).strip()
-    if not secret:
-        raise LiveSettingsFetchError("SUPABASE_ACCESS_TOKEN missing")
-    url = f"{MANAGEMENT_API_ORIGIN}/v1/projects/{project_ref}/functions/settings/body"
-    getter: HttpBytesFn = http_bytes or (lambda u: _http_bytes(u, token=secret))
-    raw = getter(url)
-    if not raw:
-        raise LiveSettingsFetchError("live settings bundle empty")
-    return raw.decode("latin-1")
+    return fetch_live_function_bundle(
+        "settings",
+        project_ref=project_ref,
+        token=token,
+        http_bytes=http_bytes,
+    )
+
+
+def _bundle_ready_for_function(function: str, source: str) -> tuple[bool, str]:
+    if function == "settings":
+        return settings_bundle_ready(source, live=True)
+    return app_url_bundle_ready(source, where=f"live {function} bundle")
 
 
 def _verify_live_settings(
@@ -274,20 +304,21 @@ def _verify_live_settings(
     if live_source is None and os.environ.get("PYTEST_CURRENT_TEST"):
         log("pages dashboard gate: live_source required under pytest")
         return EXIT_LIVE_EF_STALE
-    try:
-        bundle = (
-            live_source()
-            if live_source is not None
-            else fetch_live_settings_bundle(project_ref=project_ref)
-        )
-    except LiveSettingsFetchError as exc:
-        log(f"pages dashboard gate: live settings fetch failed ({exc})")
-        return EXIT_LIVE_EF_STALE
-    ready, reason = settings_bundle_ready(bundle, live=True)
-    if not ready:
-        log(reason)
-        return EXIT_LIVE_EF_STALE
-    log("pages dashboard gate: live settings bundle has redeem-invite + /dashboard pins")
+    for function in DASHBOARD_URL_FUNCTIONS:
+        try:
+            bundle = (
+                live_source(function)
+                if live_source is not None
+                else fetch_live_function_bundle(function, project_ref=project_ref)
+            )
+        except LiveSettingsFetchError as exc:
+            log(f"pages dashboard gate: live {function} fetch failed ({exc})")
+            return EXIT_LIVE_EF_STALE
+        ready, reason = _bundle_ready_for_function(function, bundle)
+        if not ready:
+            log(reason)
+            return EXIT_LIVE_EF_STALE
+        log(f"pages dashboard gate: live {function} bundle pins ok")
     return 0
 
 
@@ -332,8 +363,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--apply",
         action="store_true",
         help="Deploy settings/checkout/portal only if live /dashboard paths are 200, "
-        "this checkout has redeem-invite + /dashboard app URLs, and the live "
-        "settings ESZIP contains those same executable markers",
+        "this checkout has redeem-invite + /dashboard app URLs, and each live "
+        "ESZIP contains those executable markers",
     )
     parser.add_argument(
         "--origin",
