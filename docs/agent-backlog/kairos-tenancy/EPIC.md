@@ -48,13 +48,16 @@ Wave E
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
       Live GHA (`pipeline-olympus.yml` `ref: main`) was red 2026-08-30 after core
-      105 dropped `UNIQUE(date, document_key)` — [#3278](https://github.com/digithings-ai/digithings/pull/3278)
-      squash-merged to `main` as `2df473110` (2026-08-31T11:24Z). Scheduled
-      house daily `33426508863` (2026-08-31 12:00 UTC cron; started 18:42Z) is
-      the pending live publish proof (still in_progress) — observe only; do not
-      `workflow_dispatch`. Do not
-      treat unit green as a substitute for that run. `origin/main` book writers
-      still upsert `on_conflict=date`; do not apply staged 113.
+      105 (`42P10` documents unique) — [#3278](https://github.com/digithings-ai/digithings/pull/3278)
+      squash-merged to `main` as `2df473110`. Scheduled house daily
+      `33426508863` (2026-08-31, `ref: main`) **failed** at H9 ledger insert:
+      `23502` null `workspace_id` on `portfolio_ledger_commits` (097 NOT NULL,
+      no column default; `origin/main` `ledger_io.py` does not stamp house).
+      Book not materialized. Retries then `TypeError: Object of type UUID is
+      not JSON serializable`. **Not** leftover `UNIQUE(date)` / `42P10`.
+      Develop already stamps house `workspace_id` on ledger insert. Do **not**
+      hotfix `main` from this session; do **not** `workflow_dispatch`; do **not**
+      apply staged 113. Unit green is not a substitute for a green house publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
@@ -207,9 +210,10 @@ sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
 `2df473110`) still serve `/olympus/` until a **human** coordinates Pages+EF
 `/dashboard` cutover. **Do not** weaken `public_app_urls_ok` to `/olympus`.
-House GHA `33426508863` (schedule, `ref: main`) is the pending live publish
-proof for [#3278](https://github.com/digithings-ai/digithings/pull/3278)
-(still in_progress) — observe only; do not `workflow_dispatch`.
+House GHA `33426508863` (schedule, `ref: main`) **failed** (`23502` null
+`workspace_id` on `portfolio_ledger_commits`; book not committed). Develop
+already stamps house on ledger insert. Do **not** hotfix `main` from this
+session; do not `workflow_dispatch`.
 
 **Landed 2026-08-31T14:30Z (not epic-complete):** staged unique-drop **113**
 under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
