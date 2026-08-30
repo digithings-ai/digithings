@@ -19,7 +19,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 WORKFLOW_FILE: str = "pipeline-olympus.yml"
-# Inclusive cutoff: runs at-or-before this instant are pre-#3334 main.
+# Exclusive cutoff: runs at-or-before this instant are pre-#3334 main.
 UUID_HOTFIX_MERGED_AT: datetime = datetime(2026, 8, 31, 20, 39, tzinfo=UTC)
 EXIT_PROVEN: int = 0
 EXIT_SCHEDULE_FAILED: int = 2

@@ -61,6 +61,18 @@ def test_pre_hotfix_schedule_is_not_proof() -> None:
     assert failed.created_at < UUID_HOTFIX_MERGED_AT
 
 
+def test_cutoff_instant_is_not_proof() -> None:
+    run = _run(
+        database_id=3,
+        event="schedule",
+        status="completed",
+        conclusion="success",
+        created_at=UUID_HOTFIX_MERGED_AT,
+    )
+    assert select_proof_run((run,)) is None
+    assert evaluate_proof((run,)).reason == "waiting_next_schedule"
+
+
 def test_post_hotfix_schedule_success_is_proof() -> None:
     run = _run(
         database_id=99,
