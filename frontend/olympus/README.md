@@ -238,6 +238,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
+| `NEXT_PUBLIC_OLYMPUS_AUTH`        | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
@@ -341,12 +342,14 @@ Across both routes, accent and warning tokens describe workflow state and
 argument stance. `--up` and `--down` remain reserved for signed P&L or return
 values.
 
-> **Sharing:** the static export embeds the Supabase anon key and every table
-> has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it
-> with **Cloudflare Access** before sharing — see [`AUTH.md`](AUTH.md) for the
-> runbook and the exact exposure. Migration `033` drops the anon SELECT RLS
-> policy on the operator cost/token telemetry table (`atlas_run_diagnostics`);
-> `pm_notes` is intentionally kept (it's PM commentary the dashboard renders).
+> **Sharing / auth:** Olympus is a static export (`output: 'export'`). Product
+> login is **Supabase Auth** (Google + GitHub PKCE) behind
+> `NEXT_PUBLIC_OLYMPUS_AUTH=1` — see [`AUTH.md`](AUTH.md) § App auth (T1). Flag
+> off (default) keeps today's anon client. Until cutover, anon RLS
+> `USING (true)` still applies; gate shared hosts with **Cloudflare Access**
+> (staging overlay after T1; production Access comes off at cutover — D7).
+> Migration `033` drops anon SELECT on operator cost telemetry
+> (`atlas_run_diagnostics`); `pm_notes` is intentionally kept.
 
 ## Daily snapshot envelope
 
