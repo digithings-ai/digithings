@@ -2842,6 +2842,72 @@ The package imports without the extra (`brokers/__init__.py` lazy-exports `Alpac
 `tests/dq/brokers/test_alpaca_integration.py` behind the `alpaca_paper` marker + env keys
 (excluded from CI).
 
+### Credential vault (K3)
+
+`digiquant/src/digiquant/vault/envelope.py` seals broker credentials so that the
+plaintext exists only inside a process, only for the duration of a `with` block, and
+never in Postgres, a log record, a `repr`, or a traceback. `brokers/connections.py` is
+the store that puts sealed rows in `public.broker_connections` (migration 099) through
+the same Supabase client seam Atlas uses (`olympus/atlas/supabase_io.py`), and the
+vault has no database import of its own — the crypto is testable without a DB and the
+store is testable without a key.
+
+**Envelope.** AES-256-GCM (`cryptography`), a fresh 96-bit random nonce per seal, and
+AAD = `f"{workspace_id}:{broker}:{env}"`. The AAD is the design's load-bearing part: it
+binds a ciphertext to the row that holds it, so bytes lifted from another workspace's
+row — or from the same workspace's `paper` row pasted onto its `live` row — fail
+authentication rather than decrypt. Nonces are never reused because they are never
+derived; a seal that cannot obtain 12 fresh random bytes fails instead of falling back.
+
+**Master key.** `DIGIQUANT_VAULT_MASTER_KEY`, base64 of exactly 32 raw bytes, read at
+first use with **no default and no fallback**: a wrong length, bad base64, or missing
+variable raises `VaultConfigurationError` naming the problem without echoing the value.
+`DIGIQUANT_VAULT_KEY_ID` (default `v1`) is recorded on every row as `key_id` so a later
+rotation can tell which rows are sealed under which key; opening a row whose `key_id`
+does not match the loaded key raises `VaultKeyMismatchError` rather than attempting a
+decrypt that would fail confusingly. There is no rotation implementation in K3 — only
+the field that makes one possible without a schema change.
+
+**Payloads.** Plaintext is canonical JSON (sorted keys, no spaces) of a Pydantic tagged
+union with `extra="forbid"`: `OAuthCredential` (`kind="oauth"`) or `ApiKeyCredential`
+(`kind="api_key"`). Validation happens *before* the seal, so a malformed credential
+cannot be stored as an opaque blob that only fails at unseal time on a live path.
+Unseal re-validates, because a row is untrusted input even after its tag verifies.
+
+**Fingerprint.** First 8 hex chars of `sha256` over the secret material — the only
+displayable artifact anywhere in this subsystem. It is a label, not an identity: 32 bits
+collide, so nothing compares fingerprints to conclude two rows hold the same credential.
+
+**Lease.** `unseal_credential` yields a `CredentialLease` context manager rather than
+returning the credential, and the lease refuses to hand out plaintext after the block
+exits (`CredentialLeaseExpiredError`). This does not "erase" the secret — CPython gives
+no such guarantee, and the docstring says so instead of implying it. What it does buy is
+that a caller cannot *accidentally* hold a credential past its use site, and that the
+plaintext has an explicit, greppable lifetime in every caller.
+
+**Store.** `create_connection` seals and inserts; `get_connection` / `open_credential`
+read and unseal, failing closed on a revoked or non-active row
+(`ConnectionRevokedError`); `revoke_connection` sets `status`/`revoked_at`;
+`list_connection_fingerprints` returns a display model that carries no sealed columns at
+all — it is built with `extra="forbid"` over a narrowed `select`, so a future widening of
+that projection breaks a test instead of leaking ciphertext into a UI payload.
+Re-connecting a broker is revoke + insert, never an update — uniqueness is a partial
+unique index on `(workspace_id, broker, env) WHERE status = 'active'` so a revoked row
+and a new active row can coexist (DELETE is not granted to service_role).
+
+**Test vectors.** `tests/dq/vault/vectors.json` commits `(key, nonce, aad, plaintext,
+ciphertext)` tuples plus negative cases, generated deterministically from this
+implementation with synthetic keys. The K4-era Supabase Edge Function TypeScript
+implementation must pass the identical suite — that file, not this prose, is the
+cross-language contract. `tests/dq/vault/test_envelope.py` verifies the vectors
+round-trip, and covers wrong-key, wrong-AAD, truncated-ciphertext, flipped-bit, and
+key-id-mismatch failures alongside a test that captures logging across seal/unseal and
+asserts no plaintext reaches any log record, `repr`, or exception message.
+
+**Not in K3:** no key rotation, no broker adapter wiring, no Edge Function, no HTTP
+surface, and nothing on a live-trading path. Migration 099 is not applied live without
+the repository's human migration review gate.
+
 ### IBKR adapter
 
 `digiquant/src/digiquant/brokers/ibkr.py` (K2) implements `BrokerAdapter` against IBKR's

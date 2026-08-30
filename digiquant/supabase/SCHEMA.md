@@ -683,6 +683,49 @@ or narrowed in this WP** — that cutover ships inside T1's release train. Two-J
 executable proof is documented in the 098 header; structural assertions live in
 `tests/dq/olympus/test_migration_tenancy.py`.
 
+### Broker credential vault — migration 099 (K3, Kairos tenancy)
+
+Sealed broker credentials, one row per `(workspace_id, broker, env)`. This is the only
+table in the schema whose contents are a *secret* rather than research output, so it is
+built to a different standard than everything above it: the plaintext never exists in
+Postgres at all. The secret is an AES-256-GCM envelope produced by
+`digiquant.vault.envelope` before the row is written, and the row stores only
+`ciphertext`, `nonce`, `key_id`, and a `fingerprint`.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_connections` | `(id UUID)` | Sealed per-workspace broker credential; partial unique on `(workspace_id, broker, env) WHERE status = 'active'`. |
+
+The envelope's AAD is the string `workspace_id:broker:env`, which makes the row's own
+identity part of what the tag authenticates. That is what stops the attack this table
+would otherwise invite: a `ciphertext`/`nonce` pair copied from another row (another
+workspace, or the same workspace's paper row pasted onto its live row) fails
+authentication instead of decrypting, so a writer who can INSERT cannot promote a
+paper credential to live by moving bytes between rows. `key_id` names the *master-key
+version* that sealed the row (`DIGIQUANT_VAULT_KEY_ID`, e.g. `v1`) — it is not a
+broker-side key identifier; an API key's own key id lives *inside* the sealed payload,
+and conflating the two is the fastest way for a reviewer to conclude a secret is in
+the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret material
+and is the only display-safe artifact: a label, never an identity — 32 bits collide,
+so it must never be compared to decide two rows hold the same credential.
+
+`workspace_id` **REFERENCES `public.workspaces(id)`** (T0 migrations 096–098 land first
+on this branch, so 099 constrains at CREATE time rather than staying FK-less). `CHECK`
+constraints pin the envelope's shape at the storage layer rather than trusting the
+writer — `octet_length(nonce) = 12`,
+`octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
+`fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
+`revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.
+Re-connecting a broker is **revoke + insert**, never an update — which is why uniqueness
+is a **partial** unique index on `(workspace_id, broker, env) WHERE status = 'active'`
+rather than a table-wide UNIQUE. DELETE is not granted to `service_role`, so an
+unconditional unique on the triple would make that documented reconnect flow collide;
+a revoked row and a new active row for the same triple must be able to coexist.
+
+There is no rotation path in this migration and no historical backfill; `key_id` exists
+so one can be added without a schema change. Nothing in a live-trading path reads this
+table yet — K3 is the vault and its store, and a broker adapter wiring comes later.
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -773,6 +816,23 @@ executable proof is documented in the 098 header; structural assertions live in
   revoked. It is harmless only because nothing subscribes to it any more; a message pushed
   there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
   hole in full. See [`README.md`](README.md), "The transport is a table we own".
+- **Exception — `broker_connections` (migration 099, K3): RLS enabled with ZERO policies,
+  every client grant revoked, and `service_role`'s UPDATE narrowed to three columns.**
+  Follows the `prices_live_lease` idiom above (no policy at all, so only `rolbypassrls`
+  holders get past row security, and `REVOKE ALL … FROM PUBLIC, anon, authenticated` means
+  anon never reaches RLS in the first place) and then goes further, because the failure mode
+  here is credential disclosure rather than a burned lease. `service_role` gets `SELECT` and
+  `INSERT`, but **no table-wide `UPDATE` and no `DELETE`**; `UPDATE` is granted
+  column-level on exactly `(status, revoked_at, last_used_at)`. So the compromise of a
+  service-role key still cannot rewrite `ciphertext`, `nonce`, `key_id`, `fingerprint`,
+  `workspace_id`, `broker`, or `env` — the lifecycle is writable and the credential is not.
+  A `BEFORE UPDATE` trigger re-rejects any change to those columns anyway: the
+  column-level grant is the control, and the trigger is the thing that still holds if a
+  future migration widens the grant by accident. `DELETE` is **deliberately not blocked**,
+  unlike every append-only table above — those are audit history, whereas a credential
+  store must stay erasable, and "we cannot delete your broker credential" is not a
+  position this schema should be able to take. Do not "complete" the policy set and do not
+  add a DELETE-blocking trigger by analogy with 069/094.
 - **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags
