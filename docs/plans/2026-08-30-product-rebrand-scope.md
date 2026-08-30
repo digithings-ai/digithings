@@ -1,7 +1,7 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`): public path is `/dashboard/` only — `/olympus/` 308s and the `dist/olympus` twin are retired; workspace is `frontend/dashboard` (package `dashboard`). Live Pages (`main` `2df473110`) still serve `/olympus/` until a coordinated Pages+EF cutover.
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`): public path is `/dashboard/` only — `/olympus/` 308s and the `dist/olympus` twin are retired; workspace is `frontend/dashboard` (package `dashboard`). Live Pages still serve `/olympus/` (200) and `/dashboard/` (404) until a coordinated Pages+EF cutover. Python-only `main` hotfix [#3331](https://github.com/digithings-ai/digithings/pull/3331) (`9f898ec1d`) does not change that path.
 > **Does not:** rewrite Python packages, SQL tables, or live-trading paths
 > **Human gate:** yes — kairos **package** rename later touches execution
 

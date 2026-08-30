@@ -47,17 +47,24 @@ Wave E
 ## Program-level acceptance
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
-      Live GHA (`pipeline-olympus.yml` `ref: main`) was red 2026-08-30 after core
-      105 (`42P10` documents unique) — [#3278](https://github.com/digithings-ai/digithings/pull/3278)
-      squash-merged to `main` as `2df473110`. Scheduled house daily
-      `33426508863` (2026-08-31, `ref: main`) **failed** at H9 ledger insert:
-      `23502` null `workspace_id` on `portfolio_ledger_commits` (097 NOT NULL,
-      no column default; `origin/main` `ledger_io.py` does not stamp house).
-      Book not materialized. Retries then `TypeError: Object of type UUID is
-      not JSON serializable`. **Not** leftover `UNIQUE(date)` / `42P10`.
-      Develop already stamps house `workspace_id` on ledger insert. Do **not**
-      hotfix `main` from this session; do **not** `workflow_dispatch`; do **not**
-      apply staged 113. Unit green is not a substitute for a green house publish.
+      Live GHA (`pipeline-olympus.yml`) **checks out `ref: main`** even though
+      schedule events fire from default branch `develop` (#814). Documents upsert
+      hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278) is on
+      `main` (`2df473110`). Scheduled house daily `33426508863` (2026-08-31,
+      event on `develop` `b363ea16`, code from pre-#3331 `main`) **failed** at
+      H9 ledger insert: `23502` null `workspace_id` on `portfolio_ledger_commits`
+      (097 NOT NULL, no column default). Book not materialized
+      (`book_materialized: false`, `book_committed: false`). Retries then
+      `TypeError: Object of type UUID is not JSON serializable`. **Not** leftover
+      `UNIQUE(date)` / `42P10`. Ledger stamp hotfix
+      [#3331](https://github.com/digithings-ai/digithings/pull/3331) squash-merged
+      to `main` as `9f898ec1d` (2026-08-31T20:10Z): stamps house UUID
+      `6b753576-ced9-5319-9bfa-c5d0aacd9319` in `_insert` / nav / positions /
+      metrics; **keeps** `on_conflict=date` / `date,ticker`. Next scheduled GHA
+      (`cron: "0 12 * * *"`, ~12:00 UTC) is the live book-commit proof. Do
+      **not** `workflow_dispatch`; do **not** apply staged 113 while main writers
+      still upsert date-only. Unit green is not a substitute for a green house
+      publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
@@ -111,7 +118,10 @@ so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 Unproven hops now carry closed-vocabulary blocker codes in Settings About and
 the staging harness (Observer live: `plan_tier_not_custom`,
 `no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`,
-`no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E **exit 2** (9 named vendor secrets); Observer hops all ok including
+`no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E
+**exit 3** (Observer `GET /settings/app-urls` path contract: live `/olympus` vs
+develop `/dashboard` pin). After Pages+EF cutover the next miss is **exit 2**
+(9 named vendor secrets). Observer hops still match, including
 Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
 has an Alpaca **paper `api_key`** connection (1 active + 2 revoked; not OAuth;
@@ -210,21 +220,27 @@ sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
 `2df473110`) still serve `/olympus/` until a **human** coordinates Pages+EF
 `/dashboard` cutover. **Do not** weaken `public_app_urls_ok` to `/olympus`.
-House GHA `33426508863` (schedule, `ref: main`) **failed** (`23502` null
-`workspace_id` on `portfolio_ledger_commits`; book not committed). Develop
-already stamps house on ledger insert. Do **not** hotfix `main` from this
-session; do not `workflow_dispatch`.
+House GHA `33426508863` (schedule on default `develop`, checkout `ref: main`)
+**failed** (`23502` null `workspace_id` on `portfolio_ledger_commits`; book not
+committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on
+`origin/main` (`9f898ec1d`) — stamp is live in the tree the next schedule will
+check out. Do **not** `workflow_dispatch`. Live book commit is still **unproven**.
 
 **Landed 2026-08-31T14:30Z (not epic-complete):** staged unique-drop **113**
 under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
 `core`). Overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277)
 on `develop` (`11d45bfb0`) still raises `legacy_book_unique` until 113 is
 applied. House documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278)
-on `main` (`2df473110`). Live Pages `build-info.json` is `2df473110` /
-`2026-08-31T11:27:05Z` (`/olympus` 200, `/dashboard` 404). Staging E2E exit
-**3** (app-urls path contract). Vendor secrets still missing.
+on `main` (`2df473110`). Ledger stamp hotfix
+[#3331](https://github.com/digithings-ai/digithings/pull/3331) on `main`
+(`9f898ec1d`); `on_conflict` still `date` / `date,ticker`. Live Pages still
+`/olympus` 200 / `/dashboard` 404 (`build-info.json` 404 HTML — Python-only
+main hotfix does not change the Pages path). Staging E2E exit **3** (app-urls
+path contract). Vendor secrets still missing.
 
-**Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
-Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
-[#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply cutover 900.
-Never apply staged 113 on `core` while `main` house writers are date-only.
+**Do not mark epic complete** until the next scheduled house GHA is green,
+staging E2E + human/legal/IBKR gates clear. Do not merge draft
+[#3183](https://github.com/digithings-ai/digithings/pull/3183) /
+[#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply
+cutover 900. Never apply staged 113 on `core` while `main` house writers are
+date-only.
