@@ -593,6 +593,9 @@ def _row(
         breakdown["by_kind"] = usage["by_kind"]
     if usage.get("cached_tokens") is not None:  # include an explicit 0 (distinct from absent)
         breakdown["cached_tokens"] = usage["cached_tokens"]
+    # Empty-completion self-heal retries (#1639): rising counts on an ``ok`` run are the earliest
+    # provider-degradation signal — always present so operators need not parse logs.
+    breakdown["empty_retries"] = usage.get("empty_retries") or {"total": 0, "by_model": {}}
     # Spend alert (#1764). Computed HERE rather than through the ``register_breakdown_contributor``
     # seam because that seam is ``state -> dict`` and spend does not live in state — it comes
     # from the ``digigraph.usage`` snapshot, which is only in scope at this call site. ``models``,

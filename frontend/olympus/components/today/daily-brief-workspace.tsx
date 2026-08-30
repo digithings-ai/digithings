@@ -20,6 +20,7 @@ import type {
   RebalanceAction,
   RiskItem,
 } from '@/lib/types';
+import type { PlanTier } from '@/lib/entitlements';
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
@@ -29,6 +30,7 @@ import {
   thesisDetailHref,
   tickerDossierHref,
 } from '@/lib/portfolio-url-state';
+import { EntitledSurface } from '@/components/entitled-surface';
 import {
   BriefPipelineHealth,
   type BriefRunHealth,
@@ -130,6 +132,8 @@ export interface DailyBriefWorkspaceProps {
   runHealth: BriefRunHealth | null | undefined;
   /** Recent run diagnostics for the Pipeline Health week bar (optional). */
   runDiagnostics?: AtlasRunDiagnostics[];
+  /** Test override for house book gates; production reads the session. */
+  tier?: PlanTier;
 }
 
 type Tone = 'neutral' | 'positive' | 'negative' | 'warning';
@@ -231,6 +235,7 @@ export function DailyBriefWorkspace({
   ledgerDayEvents,
   runHealth,
   runDiagnostics = [],
+  tier,
 }: DailyBriefWorkspaceProps) {
   // `regime`, `regimeLabel`, `confidence`, and `runType` remain on the props
   // contract for callers; the Brief header keeps only the as-of date — no
@@ -375,24 +380,26 @@ export function DailyBriefWorkspace({
         </div>
       </header>
 
-      <BriefCardLink
-        href="/portfolio/performance"
-        aria-label="Open performance tearsheet"
-        data-testid="brief-scoreboard-link"
-        className="border-b border-hair"
-      >
-        <dl
-          data-brief-section="scoreboard"
-          className="grid grid-cols-2 divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
+      <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+        <BriefCardLink
+          href="/portfolio/performance"
+          aria-label="Open performance tearsheet"
+          data-testid="brief-scoreboard-link"
+          className="border-b border-hair"
         >
-          <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
-          <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
-          <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
-          <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
-          <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
-          <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
-        </dl>
-      </BriefCardLink>
+          <dl
+            data-brief-section="scoreboard"
+            className="grid grid-cols-2 divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
+          >
+            <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
+            <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
+            <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
+            <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
+            <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
+            <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
+          </dl>
+        </BriefCardLink>
+      </EntitledSurface>
 
       <section data-brief-section="monitor" className="grid border-b border-hair lg:grid-cols-2 lg:divide-x lg:divide-hair">
         <BriefCardLink
@@ -494,6 +501,7 @@ export function DailyBriefWorkspace({
         </div>
       </section>
 
+      <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
       <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -615,6 +623,7 @@ export function DailyBriefWorkspace({
           </div>
         </div>
       </section>
+      </EntitledSurface>
 
       <nav aria-label="Brief drill-ins" className="grid grid-cols-2 divide-x divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
         {DESTINATIONS.map(({ label, href, icon: Icon }) => (
