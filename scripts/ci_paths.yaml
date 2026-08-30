@@ -48,6 +48,7 @@ digisearch:
 digigraph:
   - digigraph/**
   - tests/dg/**
+  - tests/contracts/**
   - .github/workflows/test-digigraph.yml
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
   # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and

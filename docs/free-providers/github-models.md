@@ -5,8 +5,8 @@ url: https://github.com/marketplace/models
 api_base: https://models.inference.ai.azure.com
 litellm_prefix: github
 openai_compatible: true
-free_tier: true
-free_tier_type: standing
+free_tier: false
+free_tier_type: retired
 access_requirements:
   - github_account
 data_privacy_on_free: unknown
@@ -16,14 +16,27 @@ source_urls:
   - https://docs.github.com/en/github-models/prototyping-with-ai-models
 ---
 
-# GitHub Models
+# GitHub Models — **retired 2026-07-30**
+
+> **⚠️ RETIRED.** Playground, model catalog, inference API, and BYOK endpoints
+> shut down for everyone on 2026-07-30 (confirmed dead by probe 2026-08-30).
+> Do not configure. See the setup tombstone:
+> [`../providers/github_models.md`](../providers/github_models.md) and tracker
+> [#1589](https://github.com/digithings-ai/digithings/issues/1589).
+>
+> Prefer Groq / Gemini Flash / Cerebras for free eval, GitHub Copilot for PR
+> review, or Microsoft Foundry for Azure-backed production.
+
+<!-- Historical content below retained for archaeology; ignore for configuration. -->
+
+# GitHub Models (historical)
 
 > **Free tier type:** standing — free for any GitHub account  
 > **Access:** GitHub account (PAT with `models:read` scope)  
 > **Privacy:** routes through Azure AI; check Microsoft/Azure data policy  
 > **⚠️ ToS:** explicitly restricted to **evaluation and prototyping only** — not production use
 
-GitHub Models provides free access to GPT-5, Claude (subset), Llama, Mistral, and others via a GitHub Personal Access Token. Rate limits are intentionally tight to enforce the eval-only posture. The key strength is native integration into GitHub Actions workflows for code review and PR automation — no separate API key management. For production workloads, graduate to Azure AI Foundry.
+GitHub Models provided free access to GPT-5, Claude (subset), Llama, Mistral, and others via a GitHub Personal Access Token. Rate limits were intentionally tight to enforce the eval-only posture.
 
 ---
 
