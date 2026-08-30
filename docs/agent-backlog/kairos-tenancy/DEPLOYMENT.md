@@ -123,7 +123,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
+| `settings` | ACTIVE (full sources v3+) | Vault + handlers deployed; wire `PATCH /notifications` → `notification_prefs` (this branch). Runtime needs `DIGIQUANT_VAULT_MASTER_KEY`, `APP_URL`, Alpaca OAuth secrets |
 
 ### Deploy commands
 

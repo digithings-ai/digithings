@@ -69,7 +69,11 @@ Wave E
 
 **Schema (`core`):** migrations 096–105 applied + stamped in `olympus_schema_migrations`. Cutover 900 **not** applied.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets). `settings` ACTIVE as NOT_READY placeholder — full `_shared` redeploy still required. `prices-live` pre-existing.
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`,
+`customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets).
+`settings` ACTIVE with full `_shared` sources (v3+); `PATCH /notifications`
+writes `notification_prefs` once this PR lands and is redeployed. Runtime still
+needs vault / Alpaca / `APP_URL` secrets. `prices-live` pre-existing.
 
 **Olympus build:** green (flag off, static export check).
 

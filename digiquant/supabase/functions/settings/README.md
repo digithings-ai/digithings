@@ -20,6 +20,8 @@ This function seals broker credentials with the K3 vault public contract
 1. Module migrations **096–098** (workspaces foundation, tenant columns including
    `olympus_profile_config.workspace_id`, RLS hardening).
 2. K3 (`digiquant.vault.envelope` + migration `099_broker_connections.sql`).
+3. K5 migration **103** (`notification_prefs` + `notification_log`) for
+   `PATCH /notifications`.
 
 Until then:
 
@@ -49,7 +51,7 @@ Profile schema re-validation imports the real
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
 | `POST` | `/brokers/revoke` | Fail closed on unknown row |
-| `PATCH` | `/notifications` | **503 `NOT_READY`** until K5 lands `notification_prefs` |
+| `PATCH` | `/notifications` | Upsert `notification_prefs` (member authz; validates email + `digest_hour_utc` 0–23) |
 
 ## Tier gate
 
