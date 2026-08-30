@@ -3276,7 +3276,7 @@ Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
 requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
+invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
 
@@ -3501,9 +3501,10 @@ not import `byok`/`digillm` (digiquant-only CI). Production apply passes
 `pipeline-olympus.yml`'s Hermes chain job (`usage.start` is process-global).
 The fail-closed GHA spec is
 `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
-(`15 12 * * *`, `make kairos-cron-check` / overlay `--dry-run` / sync
-`--dry-run`). `cursor/*` cannot write `.github/workflows/`; copy the spec
-to `kairos-cron-check.yml` on a `chore/` or `feat/` branch. Missing
+(`15 12 * * *`, `make digiquant-cron-check` / overlay `--dry-run` / sync
+`--dry-run`). `cursor/*` cannot write `.github/workflows/`; the installed
+job still runs `scripts/kairos_cron_check.py` (wrapper) until a `chore/` or
+`feat/` hop copies a renamed spec. Missing
 `CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
 must never pass `--execute`, `--all`, or invoke `hermes.chain`.
 
