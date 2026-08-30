@@ -52,10 +52,10 @@ PAT-fetched file under `.local/secrets/` for those two names only. Do **not**
 Alpaca `auth_kind=api_key` (`ALPACA_API_KEY_SYNC_HELD` / `alpaca_api_key_held`);
 `--all` will not poll the ops-custom paper row. The oauth hop is still unproven.
 
-Scheduled probe (not installed from `cursor/*` — `.github/workflows/` is protected):
-copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` to
-`.github/workflows/kairos-cron-check.yml` on a `chore/` or `feat/` branch. Probe is
-`--check` / `--dry-run` only (overlay, sync, route, digest); house daily stays on `pipeline-olympus.yml`.
+Scheduled probe (``.github/workflows/kairos-cron-check.yml``): fail-closed
+`--check` / `--dry-run` only (overlay, sync, route, digest). Expected red until
+GitHub secrets include `CORE_SUPABASE_*` plus Mailgun names. House daily stays
+on `pipeline-olympus.yml`. Do not `workflow_dispatch` the house pipeline.
 
 House digest send (after Mailgun GitHub secrets exist): splice
 `docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` into the
