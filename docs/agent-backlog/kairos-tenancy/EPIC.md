@@ -215,7 +215,8 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
   `ALPACA_API_KEY_SYNC_HELD`. Fill remaining-hop also requires Alpaca paper
   OAuth (an `api_key` fill cannot prove it).
 - Combined `kairos_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
-  + sync store probes pass once `CORE_SUPABASE_*` are set.
+  + sync + route store probes pass once `CORE_SUPABASE_*` are set. Route `--check`
+  logs `routing_enabled=false` and does not submit.
 - Route `--check` / `--dry-run` never submit. `--all` requires
   `OLYMPUS_KAIROS_ROUTING=1` (default off → exit 3 `KAIROS_ROUTING_DISABLED`).
   `python scripts/kairos_route_cron.py`. Do not add the kill switch to
