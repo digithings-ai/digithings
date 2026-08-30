@@ -61,10 +61,10 @@ not greyed or locked. Observer (free) and Baseline see Notifications | Billing |
 About only. Custom / enterprise / creator floor see the full set. Server still
 returns `TIER_FORBIDDEN` if a hidden path is called directly.
 
-Deep links: `/settings#billing` (and `#notifications`, `#about`, plus Custom+
-`#profile` / `#pipeline` / `#keys` / `#brokers`) select that tab when it is
-visible. Upgrade CTAs in `LockedSurface` / `ClientProductGate` use `#billing`.
-A gated hash (e.g. Observer `#profile`) is ignored.
+Deep links: in-app CTAs use `/settings#billing` (and `#notifications`, `#about`,
+plus Custom+ `#profile` / `#pipeline` / `#keys` / `#brokers`). Core Stripe
+checkout/portal returns `/olympus/settings/?tab=billing` (and `?checkout=success|cancel`).
+Query wins over hash. A gated hash or `?tab=` (e.g. Observer `#profile`) is ignored.
 
 **Supersedes prior note:** baseline does **not** unlock broker connect. Free is
 teaser-only (digest conclusions + light portfolio glimpse — not enough to

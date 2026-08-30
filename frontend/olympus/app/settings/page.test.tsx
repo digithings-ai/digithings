@@ -69,6 +69,7 @@ describe('Settings page tab visibility', () => {
     });
     container.remove();
     window.location.hash = '';
+    window.history.replaceState(null, '', '/settings');
   });
 
   it('Observer sees Notifications / Billing / About only — no Profile or Brokers', async () => {
@@ -114,6 +115,32 @@ describe('Settings page tab visibility', () => {
     });
     expect(container.textContent).toContain('notify-body');
     expect(container.textContent).not.toContain('profile-body');
+  });
+
+  it('opens Billing from Stripe return ?tab=billing&checkout=success', async () => {
+    window.history.replaceState(null, '', '/settings/?tab=billing&checkout=success');
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.textContent).toContain('billing-body');
+    expect(container.textContent).not.toContain('notify-body');
+  });
+
+  it('opens Billing from ?checkout=cancel when tab is omitted', async () => {
+    window.history.replaceState(null, '', '/settings/?checkout=cancel');
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.textContent).toContain('billing-body');
+  });
+
+  it('query tab wins over a conflicting hash', async () => {
+    window.history.replaceState(null, '', '/settings/?tab=billing#about');
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.textContent).toContain('billing-body');
+    expect(container.textContent).not.toContain('about-body');
   });
 
   it('clicking Billing writes #billing and shows the billing body', async () => {

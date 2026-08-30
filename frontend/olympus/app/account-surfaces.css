@@ -54,7 +54,7 @@
   width: 100%;
   max-width: 380px;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 1.2rem;
 }

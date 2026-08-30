@@ -15,12 +15,12 @@ export function SessionCard() {
         ghost control on the same hairline. No avatar stack, no toast on exit.
       </p>
       <p className="mt-4">
-        <span className="inline-block whitespace-nowrap rounded-full border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+        <span className="inline-block whitespace-nowrap rounded-none border border-hair px-[0.6rem] py-[0.22rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
           example data · not live
         </span>
       </p>
 
-      <div className="mt-4 w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+      <div className="mt-4 w-full max-w-[380px] rounded-none border border-hair bg-surface p-[1.2rem]">
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
           olympus <span className="text-ink-mute">· signed in</span>
         </p>

@@ -17,7 +17,7 @@ import { useAuth } from '@/lib/auth-context';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   defaultSettingsTab,
-  settingsTabFromLocationHash,
+  resolveSettingsTab,
   settingsTabsVisible,
   type SettingsTabId,
 } from '@/lib/entitlements';
@@ -33,24 +33,35 @@ export default function SettingsPage() {
   const meta = data?.portfolio?.meta ?? null;
   const [tab, setTab] = useState<SettingsTabId>(() => {
     const ids = settingsTabsVisible(tier).map((item) => item.id);
-    const fromHash =
-      typeof window === 'undefined'
-        ? null
-        : settingsTabFromLocationHash(window.location.hash, ids);
-    return fromHash ?? defaultSettingsTab(tier);
+    if (typeof window === 'undefined') return defaultSettingsTab(tier);
+    return resolveSettingsTab(
+      window.location.search,
+      window.location.hash,
+      ids,
+      defaultSettingsTab(tier),
+    );
   });
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
   const activeTab = visibleIds.includes(tab) ? tab : defaultSettingsTab(tier);
 
   useEffect(() => {
-    const applyHash = () => {
-      const fromHash = settingsTabFromLocationHash(window.location.hash, visibleIds);
-      if (fromHash) setTab(fromHash);
+    const applyLocation = () => {
+      const next = resolveSettingsTab(
+        window.location.search,
+        window.location.hash,
+        visibleIds,
+        defaultSettingsTab(tier),
+      );
+      setTab(next);
     };
-    applyHash();
-    window.addEventListener('hashchange', applyHash);
-    return () => window.removeEventListener('hashchange', applyHash);
-  }, [visibleIds]);
+    applyLocation();
+    window.addEventListener('hashchange', applyLocation);
+    window.addEventListener('popstate', applyLocation);
+    return () => {
+      window.removeEventListener('hashchange', applyLocation);
+      window.removeEventListener('popstate', applyLocation);
+    };
+  }, [tier, visibleIds]);
 
   const selectTab = (id: SettingsTabId) => {
     setTab(id);

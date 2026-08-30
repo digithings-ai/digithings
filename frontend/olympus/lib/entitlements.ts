@@ -172,3 +172,41 @@ export function settingsTabFromLocationHash(
   if (!isSettingsTabId(id)) return null;
   return visibleIds.includes(id) ? id : null;
 }
+
+/**
+ * Resolve Stripe checkout/portal return URLs (`?tab=billing`, `?checkout=`).
+ * Query wins over hash. Gated or unknown tabs return null.
+ */
+export function settingsTabFromSearch(
+  search: string,
+  visibleIds: readonly SettingsTabId[],
+): SettingsTabId | null {
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(raw);
+  const tab = params.get('tab');
+  if (tab !== null && isSettingsTabId(tab) && visibleIds.includes(tab)) {
+    return tab;
+  }
+  const checkout = params.get('checkout');
+  if (
+    (checkout === 'success' || checkout === 'cancel') &&
+    visibleIds.includes('billing')
+  ) {
+    return 'billing';
+  }
+  return null;
+}
+
+/** Query (`?tab=` / `?checkout=`) then hash (`#billing`), then the plan default. */
+export function resolveSettingsTab(
+  search: string,
+  hash: string,
+  visibleIds: readonly SettingsTabId[],
+  fallback: SettingsTabId,
+): SettingsTabId {
+  return (
+    settingsTabFromSearch(search, visibleIds) ??
+    settingsTabFromLocationHash(hash, visibleIds) ??
+    fallback
+  );
+}
