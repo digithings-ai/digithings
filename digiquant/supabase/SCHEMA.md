@@ -698,9 +698,10 @@ the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret ma
 and is the only display-safe artifact: a label, never an identity — 32 bits collide,
 so it must never be compared to decide two rows hold the same credential.
 
-`workspace_id` is deliberately **FK-less**: `public.workspaces` does not exist yet, and
-T0 will constrain it when it lands. `CHECK` constraints pin the envelope's shape at the
-storage layer rather than trusting the writer — `octet_length(nonce) = 12`,
+`workspace_id` **REFERENCES `public.workspaces(id)`** (T0 migrations 096–098 land first
+on this branch, so 099 constrains at CREATE time rather than staying FK-less). `CHECK`
+constraints pin the envelope's shape at the storage layer rather than trusting the
+writer — `octet_length(nonce) = 12`,
 `octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
 `fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
 `revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.
