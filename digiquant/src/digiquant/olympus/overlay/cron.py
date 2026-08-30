@@ -148,7 +148,10 @@ def _auth_emails_by_user_id(client: object) -> dict[str, str]:
     list_users = getattr(admin, "list_users", None) if admin is not None else None
     if not callable(list_users):
         return {}
-    raw = list_users()
+    try:
+        raw = list_users()
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return {}
     users = getattr(raw, "users", raw)
     if not isinstance(users, list):
         return {}
