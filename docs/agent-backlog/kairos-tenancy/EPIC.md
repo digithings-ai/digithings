@@ -63,29 +63,29 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, Agentmail Auth unlock)
+## Agent delivery status (2026-08-30, E2E push)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca; settings JWT hits `WORKSPACE_FORBIDDEN`). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-fresh.md`.  
-**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys + Cursor env `sbp_…` paste + **workspace bootstrap** for Observer. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
-**Docs branch:** `cursor/kairos-audit-agentmail-auth-3d52` (prior docs [#3209](https://github.com/digithings-ai/digithings/pull/3209)/[#3211](https://github.com/digithings-ai/digithings/pull/3211)/[#3213](https://github.com/digithings-ai/digithings/pull/3213)/[#3214](https://github.com/digithings-ai/digithings/pull/3214) **merged**).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-e2e-push.md`.  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys only (bootstrap + vault seal path unlocked). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
+**Docs branch:** `cursor/kairos-audit-e2e-push-3d52`. Fix branch: `cursor/settings-uuid-bind-fix-3d52` (compare URL; `gh pr create` 403).
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Wins-hunt [#3191](https://github.com/digithings-ai/digithings/pull/3191) + profile GET [#3187](https://github.com/digithings-ai/digithings/pull/3187) + settings tier gate [#3196](https://github.com/digithings-ai/digithings/pull/3196) — **merged**. Entitlement uses `workspaces.plan_tier` only (no JWT fail-open after cancel).
+**Code:** all 12 WPs on `develop` (promotion #3141) + bootstrap [#3223](https://github.com/digithings-ai/digithings/pull/3223) **merged**. Settings uuid-bind fix deployed to `core` as **settings v21** (branch not yet PR-merged via agent).
 
-**Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
+**Schema (`core`):** migrations **096–107** applied (`ensure_personal_workspace`). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v18** ACTIVE (unauth 401 — `settings-v18-smoke-fresh.log`).
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v21 ACTIVE** — live vault seal **200** with fake api_key after uuid-bind fix.
 
-**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Site URL `https://digiquant.io`; Olympus redirect allow-list set. **`auth.users=1`** via agent-owned **Agentmail** signup/confirm (not invented SQL). Real JWT → settings **403 WORKSPACE_FORBIDDEN** (`workspace_members=0`). Evidence: `settings-jwt-e2e-agentmail.log`.
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET profile/notifications/brokers **200**; PATCH notifications **200**; checkout **`PRICE_NOT_CONFIGURED`**.
 
 **Secrets (names only):**
-- **`sbp_` path unlocked** — local `.local/secrets/cursor-cloud-agent-supabase-pat` works; Management API lists 12 EF names. **Cursor process env still missing** `SUPABASE_ACCESS_TOKEN` (re-paste).
-- **EF secrets on `core`:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ platform `SUPABASE_*` / `FINNHUB_API_KEY`).
-- **GitHub Actions:** `gh` list **403**; prior dashboard scan had **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*` names.
-- **Still empty / blocked:** Mailgun (MCP auth fail), Stripe, Google OAuth, Alpaca OAuth.
+- **`sbp_` path unlocked** — local PAT + process env nonempty this turn; Management API lists **12** EF names (no vendor).
+- **EF secrets on `core`:** vault + `APP_URL` + platform `SUPABASE_*` / `FINNHUB` only.
+- **GitHub Actions:** screenshots confirm **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*`; `gh` list **403**.
+- **Still empty / blocked:** Mailgun (MCP auth fail; env EMPTY), Stripe, Google OAuth, Alpaca OAuth.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 
-**Agent-reachable paper E2E (fakes/mocks — NOT live staging):** refreshed — `kairos-e2e-paper-fakes-fresh.log` (chain/alpaca/contracts/kairos/ibkr). Staging E2E still **BLOCKED**.
+**Closest real chain (NOT staging E2E):** Agentmail Auth → bootstrap → settings 200s → ops Custom elevation → live vault seal (fake api_key) → paper-fakes unit suites. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
 
 **Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until remaining vendor secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
 
-**Do not mark epic complete** until staging E2E + workspace bootstrap + human/legal/IBKR gates clear.
+**Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
