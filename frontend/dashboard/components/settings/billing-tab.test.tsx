@@ -26,7 +26,9 @@ describe('BillingTab (static)', () => {
       }),
     );
     expect(html).toContain('data-interval="annual"');
-    expect(html).toContain('Annual · 2 months free');
+    expect(html).toContain('Annual · 17% off');
+    expect(html).toContain('billing-plan-table');
+    expect(html).toContain('grid-cols-[minmax(0,1fr)_9.5rem_10.5rem]');
     expect(html).toContain('billing-checkout-studio');
     expect(html).toContain('billing-checkout-desk');
     expect(html).toContain('billing-checkout-brief');
@@ -36,12 +38,14 @@ describe('BillingTab (static)', () => {
     expect(html).toContain('$8.33/mo');
     expect(html).toContain('$25/mo');
     expect(html).toContain('$83.33/mo');
-    expect(html).toContain('billed $100/yr · 2 months free');
-    expect(html).toContain('billed $300/yr · 2 months free');
-    expect(html).toContain('billed $1000/yr · 2 months free');
-    expect(html).toContain('<s class="text-ink-mute" data-testid="billing-price-list">$10</s>');
-    expect(html).toContain('<s class="text-ink-mute" data-testid="billing-price-list">$30</s>');
-    expect(html).toContain('<s class="text-ink-mute" data-testid="billing-price-list">$100</s>');
+    expect(html).toContain('billed $100/yr');
+    expect(html).toContain('billed $300/yr');
+    expect(html).toContain('billed $1000/yr');
+    expect(html).not.toContain('2 months free');
+    expect(html).toContain('data-testid="billing-price-discount">17% off');
+    expect(html).toContain('<s data-testid="billing-price-list">$10/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$30/mo</s>');
+    expect(html).toContain('<s data-testid="billing-price-list">$100/mo</s>');
   });
 });
 

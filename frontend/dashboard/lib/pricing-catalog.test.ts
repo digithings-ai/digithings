@@ -38,26 +38,30 @@ describe('pricing catalog', () => {
     expect(planPriceLines(brief, 'monthly')).toEqual({
       hero: '$10/mo',
       listStruck: null,
+      discount: null,
       caption: null,
     });
     expect(planPriceLines(brief, 'annual')).toEqual({
       hero: '$8.33/mo',
-      listStruck: '$10',
-      caption: 'billed $100/yr · 2 months free',
+      listStruck: '$10/mo',
+      discount: '17% off',
+      caption: 'billed $100/yr',
     });
     expect(planPriceLines(PAID_PLAN_CATALOG[1]!, 'annual')).toEqual({
       hero: '$25/mo',
-      listStruck: '$30',
-      caption: 'billed $300/yr · 2 months free',
+      listStruck: '$30/mo',
+      discount: '17% off',
+      caption: 'billed $300/yr',
     });
     expect(planPriceLines(PAID_PLAN_CATALOG[2]!, 'annual')).toEqual({
       hero: '$83.33/mo',
-      listStruck: '$100',
-      caption: 'billed $1000/yr · 2 months free',
+      listStruck: '$100/mo',
+      discount: '17% off',
+      caption: 'billed $1000/yr',
     });
   });
 
-  it('names the annual toggle as a discount over monthly', () => {
-    expect(annualToggleLabel()).toBe('Annual · 2 months free');
+  it('names the annual toggle as a percent off monthly', () => {
+    expect(annualToggleLabel()).toBe('Annual · 17% off');
   });
 });

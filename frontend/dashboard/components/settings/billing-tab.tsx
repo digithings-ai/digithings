@@ -135,35 +135,40 @@ export function BillingTab({
         </button>
       </div>
 
-      <div className="border border-hair divide-y divide-hair">
+      <div
+        className="border border-hair divide-y divide-hair"
+        data-testid="billing-plan-table"
+      >
         {PAID_PLAN_CATALOG.map((plan) => {
           const lines = planPriceLines(plan, interval);
           const primary = plan.id === 'studio';
           return (
             <div
               key={plan.id}
-              className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3"
+              className="grid grid-cols-[minmax(0,1fr)_9.5rem_10.5rem] items-center gap-x-4 px-4 py-3"
               data-testid={`billing-plan-${plan.id}`}
             >
-              <div className="min-w-[10rem] flex-1">
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-ink">{plan.name}</p>
                 <p className="text-sm text-ink-soft">{plan.blurb}</p>
               </div>
-              <div className="min-w-[7.5rem]" data-testid={`billing-price-${plan.id}`}>
+              <div className="text-right" data-testid={`billing-price-${plan.id}`}>
                 <p className="font-mono text-sm text-ink tabular-nums">
                   <span data-testid="billing-price-hero">{lines.hero}</span>
-                  {lines.listStruck ? (
-                    <>
-                      {' '}
-                      <s
-                        className="text-ink-mute"
-                        data-testid="billing-price-list"
-                      >
-                        {lines.listStruck}
-                      </s>
-                    </>
-                  ) : null}
                 </p>
+                {lines.listStruck || lines.discount ? (
+                  <p className="text-xs text-ink-mute tabular-nums">
+                    {lines.listStruck ? (
+                      <s data-testid="billing-price-list">{lines.listStruck}</s>
+                    ) : null}
+                    {lines.discount ? (
+                      <>
+                        {lines.listStruck ? ' ' : null}
+                        <span data-testid="billing-price-discount">{lines.discount}</span>
+                      </>
+                    ) : null}
+                  </p>
+                ) : null}
                 {lines.caption ? (
                   <p className="text-xs text-ink-mute" data-testid="billing-price-caption">
                     {lines.caption}
@@ -176,8 +181,8 @@ export function BillingTab({
                 onClick={() => void startCheckout(plan.id)}
                 className={
                   primary
-                    ? 'border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
-                    : 'border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
+                    ? 'w-full border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50'
+                    : 'w-full border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50'
                 }
                 data-testid={`billing-checkout-${plan.id}`}
               >

@@ -4,7 +4,7 @@
  * Display only — Checkout still charges the Stripe `price_…` ids in Edge
  * Function secrets. Keep these cents in lockstep with the live Stripe
  * products (Brief $10/mo $100/yr, Desk $30/mo $300/yr, Studio $100/mo $1000/yr).
- * Annual is ten months of the monthly list (two months free).
+ * Annual is ten months of the monthly list (17% off monthly).
  */
 
 export type PaidCheckoutTier = 'brief' | 'desk' | 'studio';
@@ -80,7 +80,9 @@ export type PlanPriceLines = {
   hero: string;
   /** Struck monthly list when showing annual; null on monthly. */
   listStruck: string | null;
-  /** Caption under the hero ("billed $100/yr · 2 months free"). */
+  /** Percent off the monthly list ("17% off"); null on monthly. */
+  discount: string | null;
+  /** Caption under the hero ("billed $100/yr"). */
   caption: string | null;
 };
 
@@ -92,28 +94,26 @@ export function planPriceLines(
     return {
       hero: `${formatUsdFromCents(plan.monthlyCents)}/mo`,
       listStruck: null,
+      discount: null,
       caption: null,
     };
   }
   const offer = annualDiscount(plan.monthlyCents, plan.annualCents);
-  const months =
-    Number.isInteger(offer.monthsFree) && offer.monthsFree > 0
-      ? `${offer.monthsFree} month${offer.monthsFree === 1 ? '' : 's'} free`
-      : `save ${offer.discountPercent}%`;
   return {
     hero: `${formatUsdFromCents(offer.equivalentMonthlyCents)}/mo`,
-    listStruck: formatUsdFromCents(plan.monthlyCents),
-    caption: `billed ${formatUsdFromCents(plan.annualCents)}/yr · ${months}`,
+    listStruck: `${formatUsdFromCents(plan.monthlyCents)}/mo`,
+    discount: offer.discountPercent > 0 ? `${offer.discountPercent}% off` : null,
+    caption: `billed ${formatUsdFromCents(plan.annualCents)}/yr`,
   };
 }
 
-/** Shared toggle label — every paid SKU is two months free on the live catalog. */
+/** Shared toggle label — live catalog is 17% off monthly (ten months of twelve). */
 export function annualToggleLabel(): string {
   const first = PAID_PLAN_CATALOG[0];
   if (!first) return 'Annual';
   const offer = annualDiscount(first.monthlyCents, first.annualCents);
-  if (Number.isInteger(offer.monthsFree) && offer.monthsFree > 0) {
-    return `Annual · ${offer.monthsFree} months free`;
+  if (offer.discountPercent > 0) {
+    return `Annual · ${offer.discountPercent}% off`;
   }
-  return `Annual · ${offer.discountPercent}% off`;
+  return 'Annual';
 }

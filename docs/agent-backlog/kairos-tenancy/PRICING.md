@@ -8,8 +8,8 @@
 > and locked-state copy. Internal house-run jargon (**baseline** = the house
 > book, not a SKU) stays in code and research docs.
 >
-> Annual is shown as a **discount over monthly**: equivalent `$/mo` with the
-> monthly list struck through, plus `billed $N/yr · 2 months free`. Checkout
+> Annual is shown as a **percent off the monthly list**: equivalent `$/mo` with
+> the monthly list struck through and `N% off`, plus `billed $N/yr`. Checkout
 > defaults to annual; the toggle still offers monthly.
 
 ## Why not the old SKU names
@@ -35,7 +35,9 @@ Four rungs: one free teaser, three paid. Each paid rung buys a **deeper cut of t
 | **Studio** | `studio` | **$100** | $1000 ($83.33/mo) | Everything in Desk, plus **your overlay pipeline**, private book, BYOK. |
 | **Enterprise** | `enterprise` | invoice | — | Seats / SLA. Not self-serve. |
 
-Observer stays free so Brief is not selling the same teaser twice. Billing UI never lists annual as a second sticker price — it shows the equivalent monthly versus the struck monthly list.
+Observer stays free so Brief is not selling the same teaser twice. Billing UI
+shows annual as **17% off** the monthly list (equivalent `$ /mo` vs struck
+`$ /mo`), billed yearly.
 
 The earlier $9 / $29 / $99 recommendation was a list-price nudge. Live products shipped at round tens; changing a Stripe *price* later is easy; do not rename the products.
 

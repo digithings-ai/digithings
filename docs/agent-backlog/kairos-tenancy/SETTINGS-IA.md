@@ -71,8 +71,9 @@ plus Desk `#brokers`, Studio+ `#profile` / `#pipeline` / `#keys`). Core Stripe
 checkout/portal returns `/dashboard/settings/?tab=billing` (and `?checkout=success|cancel`).
 Query wins over hash. A gated hash or `?tab=` (e.g. Observer `#profile`) is ignored.
 
-**Annual display:** Billing shows annual as a discount over monthly (equivalent
-`$ /mo` vs struck monthly list; `billed $N/yr · 2 months free`). Default interval is annual.
+**Annual display:** Billing shows annual as a percent off the monthly list
+(equivalent `$ /mo` vs struck `$ /mo` plus `N% off`; `billed $N/yr`). Default
+interval is annual.
 
 **Supersedes prior note:** Brief does **not** unlock broker connect — Desk does.
 Free is teaser-only (digest conclusions + light portfolio glimpse — not enough to
