@@ -94,28 +94,38 @@ connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversatio
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
 **Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
-`src/components/providers.tsx` — #1403): the app runs on the shared digithings token
-canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
-tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
-bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
-set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
-`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
-wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
-`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
-both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
-`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
-`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
-variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
-token names, the reverse direction) is no longer imported; `/embed` sets
-`[data-theme]` on the root from the effective theme (URL `?theme=`, parent
-`digichat:theme` postMessage, or tenant `theme` — its own iframe document) and
-per-tenant accent hexes still override at the wrapper. Because the shared
-`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
-keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
-whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
-`/embed` re-asserts the effective theme with a `MutationObserver` on `html[data-theme]`
-(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
-can't silently override a parent- or tenant-forced theme (#1434).
+`src/components/providers.tsx` — #1403, Phase 3 utilitarian-terminal v0.1):
+the app runs on the shared digithings token canon. `@digithings/design/tokens.css`
+defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings/web/styles/web-theme.css`
+is the single Tailwind `@theme inline` bridge for token-named utilities;
+digichat's `globals.css` derives the shadcn variable set from those tokens under
+`:root[data-theme]` scopes (`--background: var(--bg)`, `--border: var(--hair)`,
+`--destructive: var(--danger)`, …). **Loud CTA fill** is ink/paper
+(`--primary: var(--ink)` / `--primary-foreground: var(--bg)`); rose livery
+(`.accent-digichat` / `--accent-digichat`) is **accent only** — `--ring`,
+`--chart-1`, `--sidebar-primary`, live dots, transcript markers — never the
+default button fill. Local `@theme` `--radius-*` pins to `0` (true circles
+keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
+(`--font-sans`/`--font-display`/`--font-family` remap to `--font-geist-mono`).
+`<html>` ships `data-theme="dark"` + `.dark` as SSR defaults; the shared
+`themeInitScript` re-points both pre-paint (`dt-theme` localStorage key, shared
+with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
+`providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
+classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
+`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) is
+no longer imported; `/embed` sets `[data-theme]` on the root from the effective
+theme (URL `?theme=`, parent `digichat:theme` postMessage, or tenant `theme` —
+its own iframe document) and per-tenant accent hexes still override at the
+wrapper. Because the shared `ThemeProvider` (in `providers.tsx`, which wraps
+`/embed` too via the root layout) keeps a `prefers-color-scheme` listener that
+rewrites `[data-theme]` to the OS scheme whenever there is no `dt-theme` key —
+always true for an anonymous embed visitor — `/embed` re-asserts the effective
+theme with a `MutationObserver` on `html[data-theme]` (guarded write, so the
+observer never loops), so a mid-session OS light↔dark flip can't silently
+override a parent- or tenant-forced theme (#1434). Composer send (imported
+`.dc-send` plus the authenticated ↵ kbd) is overridden locally to an ink/paper
+rect because `@digithings/digichat-ui` session.css still ships an 8px
+accent-tinted pill.
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -298,7 +308,7 @@ present, allowing LiteLLM to route models per-tenant.
 
 ```
 src/app/
-  layout.tsx            # Root layout (Providers, Inter font)
+  layout.tsx            # Root layout (Providers, Geist Mono)
   page.tsx              # Server component: default → /embed; optional root auth → ChatShell
   login/                # Login page (only when DIGICHAT_REQUIRE_ROOT_AUTH=1)
   api/
