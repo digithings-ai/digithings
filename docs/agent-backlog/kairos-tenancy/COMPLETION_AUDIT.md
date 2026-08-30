@@ -1,8 +1,10 @@
 # Kairos epic — completion audit (GitHub Auth proven, 2026-08-30T21:18Z)
 
-**Verdict: DELIVERED (owner closed 2026-09-01)** — live E2E and house schedule proof were **not** obtained. Follow-up [#3388](https://github.com/digithings-ai/digithings/issues/3388) stays open: pick it up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"` schedule and stamp this file with the run id and probe exits. Do not claim house GHA or staging E2E passed. Do not re-open the epic unless a probe contradicts delivery.
+**Verdict: DELIVERED (owner closed 2026-09-01)** — live E2E and house schedule proof were **not** obtained. Follow-up [#3391](https://github.com/digithings-ai/digithings/issues/3391) stays open: pick it up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"` schedule and stamp this file with the run id and probe exits. Do not claim house GHA or staging E2E passed. Do not re-open the epic unless a probe contradicts delivery.
 
-**2026-09-01T09:30Z — owner close.** Issue [#3388](https://github.com/digithings-ai/digithings/issues/3388) opened (`[agent] validate execution/tenancy on next house pipeline run`). Epic / INDEX / HUMAN-UNBLOCK stamped delivered. Last live probes (still true, **not** proof): house proof exit **5** (`failsofts=#3343 OPEN MERGEABLE CLEAN #3348 OPEN MERGEABLE CLEAN #3351 OPEN MERGEABLE CLEAN #3354 OPEN MERGEABLE CLEAN stack ready (do not merge from authoring agent)`); `--dispatch` **4**; pages gate **3** (all `/dashboard/*` 404 including Alpaca callback; `/olympus/.../callback/` **200**); route `--check` **0** (`routing_enabled=false`); overlay `--check` **0**; cron check **2** (`MAILGUN_NOT_CONFIGURED`). `origin/main` still `3601f72df`. Unique-conflict writers [#3387](https://github.com/digithings-ai/digithings/pull/3387) are draft on `main` — merge **after** fail-softs, never from the authoring agent. Labels / Project #1 add on #3388 failed from this agent token.
+**2026-09-01T09:45Z — live-proof issue retarget.** [#3388](https://github.com/digithings-ai/digithings/issues/3388) auto-closed when [#3390](https://github.com/digithings-ai/digithings/pull/3390) squash-merged (`close` in the subject plus `#3388`). Replacement [#3391](https://github.com/digithings-ai/digithings/issues/3391) is the open follow-up. Agent token cannot reopen #3388.
+
+**2026-09-01T09:30Z — owner close.** Issue [#3388](https://github.com/digithings-ai/digithings/issues/3388) opened (`[agent] validate execution/tenancy on next house pipeline run`), later replaced by #3391. Epic / INDEX / HUMAN-UNBLOCK stamped delivered on `develop` (`9a3b7d2cf`, [#3390](https://github.com/digithings-ai/digithings/pull/3390)). Last live probes (still true, **not** proof): house proof exit **5** (`failsofts=#3343 OPEN MERGEABLE CLEAN #3348 OPEN MERGEABLE CLEAN #3351 OPEN MERGEABLE CLEAN #3354 OPEN MERGEABLE CLEAN stack ready (do not merge from authoring agent)`); `--dispatch` **4**; pages gate **3** (all `/dashboard/*` 404 including Alpaca callback; `/olympus/.../callback/` **200**); route `--check` **0** (`routing_enabled=false`); overlay `--check` **0**; cron check **2** (`MAILGUN_NOT_CONFIGURED`). `origin/main` still `3601f72df`. Unique-conflict writers [#3387](https://github.com/digithings-ai/digithings/pull/3387) are draft on `main` — merge **after** fail-softs, never from the authoring agent. Labels / Project #1 add on the follow-up issue failed from this agent token.
 
 **2026-09-01T09:00Z — [#3356](https://github.com/digithings-ai/digithings/pull/3356) HEAD `ebbb311b5`.** Pages twin now fail-closes unless `dist/dashboard/settings/brokers/callback/` exports with `alpaca-oauth-callback`. CI green (review coverage + `bash scripts/build-digiquant.sh`); Next listed `○ /settings/brokers/callback` on both `/olympus` and `/dashboard` passes. Live `/olympus/settings/brokers/callback/` **200**, `/dashboard/.../callback/` **404**. **Human-merge only** (parallel to house fail-softs). Do not `--apply` until live `/dashboard/` **and** `/dashboard/settings/brokers/callback/` are 200. Authoring agent must not merge #3356.
 
@@ -83,7 +85,7 @@ Captcha-ask docs: [#3239](https://github.com/digithings-ai/digithings/pull/3239)
 | Identity | **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged) |
 | Stripe / Mailgun / Alpaca API secrets | **MISSING** — captchas (forms re-filled digithings@) |
 | Core EF vendor secrets | **not set** (vault / APP_URL / SUPABASE_* only) |
-| Staging E2E | exit **3** — not proven; deferred to [#3388](https://github.com/digithings-ai/digithings/issues/3388) |
+| Staging E2E | exit **3** — not proven; deferred to [#3391](https://github.com/digithings-ai/digithings/issues/3391) |
 | Mailgun notify loud-fail | exit **2** — `MAILGUN_NOT_CONFIGURED` |
 | Olympus Auth Pages (#3231) | live on prod Pages |
 | **GitHub Auth login** | **PROVEN** on `digiquant.io` + `core` DB |
@@ -91,7 +93,7 @@ Captcha-ask docs: [#3239](https://github.com/digithings-ai/digithings/pull/3239)
 | Email/password on login UI | **absent** (Google + GitHub only) — cannot use digithings@ Agentmail password path |
 | Draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) | left draft |
 | Cutover `900` | **not applied** |
-| Epic | **DELIVERED** (owner closed 2026-09-01) — live house/E2E proof is [#3388](https://github.com/digithings-ai/digithings/issues/3388) |
+| Epic | **DELIVERED** (owner closed 2026-09-01) — live house/E2E proof is [#3391](https://github.com/digithings-ai/digithings/issues/3391) |
 
 ## GitHub Auth — prod evidence (no secrets)
 
@@ -123,9 +125,9 @@ None of the staging-required vendor API secrets. Present locally (not EF vendors
 
 **Yes — all three.** Reply `Stripe captcha done` / `Mailgun captcha done` / `Alpaca turnstile done` after solving in open Cloud Agent browser tabs (do not close sibling vendor tabs).
 
-## Next steps (live proof — [#3388](https://github.com/digithings-ai/digithings/issues/3388))
+## Next steps (live proof — [#3391](https://github.com/digithings-ai/digithings/issues/3391))
 
-The epic is closed. On the next house schedule, pick up #3388:
+The epic is delivered. On the next house schedule, pick up #3391:
 
 1. Run `python scripts/digiquant_house_pipeline_proof.py` (never `workflow_dispatch`; `--dispatch` must stay **4**). Stamp the schedule run id and exit.
 2. Re-probe Pages gate, staging E2E (`python scripts/digiquant_staging_e2e.py`), route/overlay/cron. Do not `--apply` while `/dashboard/` or the Alpaca callback 404. Do not weaken `public_app_urls_ok`.
@@ -135,5 +137,5 @@ The epic is closed. On the next house schedule, pick up #3388:
 
 ## Docs branch
 
-`cursor/kairos-epic-complete-validate-3d52` — compare  
-https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-epic-complete-validate-3d52
+`cursor/kairos-live-proof-issue-3391-3d52` — compare  
+https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-live-proof-issue-3391-3d52

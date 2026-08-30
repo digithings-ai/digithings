@@ -1,7 +1,7 @@
 # Kairos + Alpaca finalize — gap audit (2026-08-30)
 
 **Superseded 2026-09-01:** owner closed the epic as delivered without live E2E.
-Live-proof follow-up is [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+Live-proof follow-up is [#3391](https://github.com/digithings-ai/digithings/issues/3391).
 The 2026-08-30 snapshot below is historical (vendor secrets / remaining hops still
 unproven; do not treat this file as an open epic).
 

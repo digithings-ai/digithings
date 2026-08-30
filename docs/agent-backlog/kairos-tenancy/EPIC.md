@@ -25,7 +25,7 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
 **DELIVERED** — owner closed without a live end-to-end pipeline run. All 12 work
 packages are on `develop`. Live house GHA book-commit, Pages `/dashboard/` cutover
 (including Alpaca callback), and staging E2E remaining hops are **not** proven;
-they are tracked in [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+they are tracked in [#3391](https://github.com/digithings-ai/digithings/issues/3391).
 Pick that issue up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"`
 schedule. Do not claim those probes passed. Do not re-open this epic unless a
 probe contradicts delivery (house GHA red for a new writer bug, or Pages/EF
@@ -104,7 +104,7 @@ Wave E
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
       **Not proven.** Owner closed the epic anyway; live proof is
-      [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+      [#3391](https://github.com/digithings-ai/digithings/issues/3391).
 - [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
 
 ## Human-owned prerequisites (tracked here, not blocking child code)
@@ -123,7 +123,7 @@ Wave E
 **Verdict: DELIVERED** — owner closed without waiting on live E2E or a green house
 schedule. Staging E2E, vendor captchas/secrets, Pages `/dashboard/` 404s, and
 house proof exit **5** remain true as of 2026-09-01T09:26Z; they are
-[#3388](https://github.com/digithings-ai/digithings/issues/3388), not an open
+[#3391](https://github.com/digithings-ai/digithings/issues/3391), not an open
 epic. All 12 WPs have code on `develop`. Production cron CLIs, remaining-hop
 proofs from Settings product state, and staged 900 §A2 membership-only restore
 are on `develop`. House cron-check GHA is installed
@@ -297,7 +297,7 @@ committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on
 `origin/main` (`9f898ec1d`) — stamp is live in the tree the next schedule will
 check out. Do **not** `workflow_dispatch`. Live book commit is still **unproven**.
 
-**Landed 2026-08-31T14:30Z (not live-proven; epic later owner-closed, see #3388):** staged unique-drop **113**
+**Landed 2026-08-31T14:30Z (not live-proven; epic later owner-closed, see #3391):** staged unique-drop **113**
 under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
 `core`). Overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277)
 on `develop` (`11d45bfb0`) still raises `legacy_book_unique` until 113 is
@@ -331,7 +331,7 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 **2026-09-01T09:00Z — [#3356](https://github.com/digithings-ai/digithings/pull/3356) HEAD `ebbb311b5`:** Pages twin fail-closes unless `/dashboard/settings/brokers/callback/` exports. CI green (review coverage + Pages build). Live `/olympus/.../callback/` **200**, `/dashboard/.../callback/` **404**. **Human-merge only.** Do not `--apply` until both `/dashboard/` and the Alpaca callback are 200.
 
 **Epic delivered 2026-09-01 (owner closed).** Live house GHA / Pages `/dashboard/` /
-staging E2E proof is [#3388](https://github.com/digithings-ai/digithings/issues/3388)
+staging E2E proof is [#3391](https://github.com/digithings-ai/digithings/issues/3391)
 — pick it up after the next `0 12 * * *` schedule. Do not claim those probes
 passed. Do not re-open this epic unless a probe contradicts delivery. Do not
 merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
