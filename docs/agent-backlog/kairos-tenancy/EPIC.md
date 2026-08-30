@@ -58,25 +58,26 @@ Wave E
 - [ ] IBKR OAuth 1.0a vendor onboarding email sent (longest pole; scope to include trading)
 - [ ] Stripe test-mode products (Baseline, Custom) + webhook secret provisioned
 - [ ] Mailgun API key fixed + sending domain confirmed
-- [ ] Supabase Auth providers (Google, GitHub) enabled on `core`
-- [ ] `DIGIQUANT_VAULT_MASTER_KEY` generated into deploy secrets
+- [x] GitHub Auth provider enabled on `core` (Google still **Disabled**)
+- [ ] Google Auth provider enabled on `core` + Cloud OAuth client redirect
+- [x] `DIGIQUANT_VAULT_MASTER_KEY` generated into deploy secrets
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, Auth Pages)
+## Agent delivery status (2026-08-31)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca; prod Auth login awaits merge to `main`). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`.  
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca captchas + secrets). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
 **Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-**Auth Pages (T1 deploy gap):** Prod `/olympus/login` **404** because login routes never landed on `main` (Pages @ `980e3e18`). Narrow branch **`cursor/olympus-auth-pages-e036`** → `main` (T1 cherry-pick + CF_PAGES AUTH default + export asserts; **no** cutover 900). Compare: https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036. **Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183)** for this gap. Local AUTH=1 `/olympus/login/` → **200**. Docs/audit branch: `cursor/kairos-auth-pages-audit-e036`.
+**Auth Pages:** Prod `/olympus/login/` **200** (#3231). GitHub login proven. Email/oauth-first dress is **not** on Pages until [#3266](https://github.com/digithings-ai/digithings/pull/3266) merges to `main` (develop twin [#3264](https://github.com/digithings-ai/digithings/pull/3264)). Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) or rolling promote [#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply cutover 900.
 
 **Code:** all 12 WPs on `develop` + notify `MAILGUN_NOT_CONFIGURED` loud-fail CLI. Prior: `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + `scripts/kairos_staging_e2e.py`.
 
-**Schema (`core`):** migrations **096–107** applied. Cutover **900 not applied**.
+**Schema (`core`):** migrations **096–109** applied (108 entitlement grants, 109 house anon_read). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `settings` **v22 ACTIVE**; `create-checkout-session` **v5 ACTIVE**; billing EFs await Stripe secrets.
+**Edge Functions (`core`):** `settings` **v27 ACTIVE**; `create-checkout-session` **v6 ACTIVE**; `customer-portal` **v7**; `stripe-webhook` **v6**. Billing EFs still loud-fail without Stripe secrets.
 
-**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET/PATCH **200**; checkout **`PRICE_NOT_CONFIGURED`**.
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Redirect allow-list includes `/olympus/auth/callback`. Checkout **`PRICE_NOT_CONFIGURED`**.
 
 **Secrets (names only):**
 - **`sbp_` path unlocked** — Management API lists **12** EF names (no vendor).
@@ -87,4 +88,4 @@ Wave E
 
 **Closest real chain (NOT staging E2E):** Agentmail Auth → settings 200s → ops Custom (≠ Stripe) → `TIER_FORBIDDEN` on free → vault seal → notify prefs→Agentmail → overlay/router units + local Auth Login UI. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
 
-**Do not mark epic complete** until staging E2E + prod Auth Pages smoke + human/legal/IBKR gates clear.
+**Do not mark epic complete** until staging E2E (signup → Stripe → Alpaca paper → overlay → digest) plus Google Auth, legal, and IBKR vendor gates clear. Prod Auth Pages login route already smokes (#3231); email UI waits on #3266.
