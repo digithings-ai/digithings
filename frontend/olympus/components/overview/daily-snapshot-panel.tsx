@@ -175,8 +175,8 @@ export function SnapshotErrorBanner({
           type="button"
           onClick={onRetry}
           className={flat
-            ? 'shrink-0 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
-            : 'shrink-0 rounded-md border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
+            ? 'shrink-0 border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
+            : 'shrink-0 border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
         >
           Retry
         </button>
@@ -339,7 +339,7 @@ export function ActionableList({ items, flat = false }: { items: ActionableItem[
             data-testid="snapshot-actionable-item"
             className={flat
               ? 'py-3 text-sm'
-              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
+              : ' border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">P{item.priority}</span>
@@ -372,7 +372,7 @@ export function RiskList({ items, flat = false }: { items: RiskItem[]; flat?: bo
             data-testid="snapshot-risk-item"
             className={flat
               ? 'py-3 text-sm'
-              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
+              : ' border border-hair bg-term-bg/30 p-3 text-sm'}
           >
             <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">{item.horizon_hours}h</span>

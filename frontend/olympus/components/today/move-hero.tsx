@@ -140,7 +140,7 @@ export function MoveHero({
         </h1>
         {confidence != null ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
+            <span className="border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
               {confidence.toFixed(1)} confidence
             </span>
           </div>

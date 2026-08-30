@@ -71,7 +71,7 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
               color ? '' : 'bg-ink/[0.06] text-ink-mute border-hair'
             }`}
             style={
@@ -146,7 +146,7 @@ export function TodayActionsPanel({
             <ListChecks size={15} className="text-accent" />
             <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
             {changes.length > 0 && (
-              <span className="rounded-full bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
+              <span className="bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
                 {changes.length}
               </span>
             )}

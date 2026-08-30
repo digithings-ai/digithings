@@ -150,7 +150,7 @@ export default function AnalystDossierCard({
             <h3 className="mb-3 font-mono text-[0.6rem] font-bold uppercase tracking-[0.12em] text-ink-mute">
               Evidence assessment
             </h3>
-            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair md:grid-cols-5">
+            <dl className="grid grid-cols-2 gap-px overflow-hidden border border-hair bg-hair md:grid-cols-5">
               <EvidenceCell
                 label="Confirming"
                 value={payload.evidence.independent_confirming_signals}

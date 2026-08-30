@@ -91,7 +91,7 @@ export function BillingTab({
           type="button"
           disabled={busy}
           onClick={() => void startCheckout('baseline')}
-          className="rounded-lg border border-accent/40 bg-accent/15 px-3 py-1.5 text-sm font-medium text-accent disabled:opacity-50"
+          className="border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
           data-testid="billing-checkout-baseline"
         >
           Upgrade to Baseline
@@ -100,7 +100,7 @@ export function BillingTab({
           type="button"
           disabled={busy}
           onClick={() => void startCheckout('custom')}
-          className="rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
           data-testid="billing-checkout-custom"
         >
           Upgrade to Custom
@@ -109,7 +109,7 @@ export function BillingTab({
           type="button"
           disabled={busy}
           onClick={() => void openPortal()}
-          className="rounded-lg border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
+          className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
           data-testid="billing-portal"
         >
           Customer portal

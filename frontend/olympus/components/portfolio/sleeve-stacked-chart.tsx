@@ -40,7 +40,7 @@ function SleeveTooltipBody({
   if (!entries.length) return null;
 
   return (
-    <div className="rounded-lg border border-hair bg-term-bg px-3 py-2 text-xs shadow-lg min-w-[160px]">
+    <div className="border border-hair bg-term-bg px-3 py-2 text-xs shadow-lg min-w-[160px]">
       <p className="font-medium text-ink mb-1.5 font-mono">{date}</p>
       <ul className="space-y-0.5 max-h-48 overflow-y-auto">
         {entries.map(({ k, v }) => (

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -40,12 +40,8 @@ describe('canon token hygiene (#1402)', () => {
   });
 
   it('olympus core has no glass-card class (tonal slabs are .oly-slab)', () => {
-    // twelve-x / FX Hub is a parallel Phase 3 owner; they still have call sites
-    // until they switch to .oly-slab. Tests keep `not.toContain('glass-card')`.
     const appFiles = walk(join(__dirname, '..', 'app'));
-    const core = [...files, ...appFiles]
-      .filter((f) => !f.includes(`${sep}twelve-x${sep}`))
-      .filter((f) => !/\.test\.tsx?$/.test(f));
+    const core = [...files, ...appFiles].filter((f) => !/\.test\.tsx?$/.test(f));
     const offenders = core.filter((f) => {
       const stripped = readFileSync(f, 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -53,6 +49,14 @@ describe('canon token hygiene (#1402)', () => {
         .replace(/\/\/.*$/gm, '');
       return /\bglass-card\b/.test(stripped);
     });
+    expect(offenders).toEqual([]);
+  });
+
+  it('dashboard chrome has no rounded-sm/md/lg/xl (true circles may keep rounded-full)', () => {
+    const chrome = /\brounded-(?:sm|md|lg|xl|2xl|3xl|4xl)\b/;
+    const offenders = files
+      .filter((f) => !/\.test\.tsx?$/.test(f))
+      .filter((f) => chrome.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
   });
 });

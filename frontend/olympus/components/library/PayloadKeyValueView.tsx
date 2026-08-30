@@ -39,7 +39,7 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
       <button
         type="button"
         onClick={() => setDeepBranchOpen(true)}
-        className="rounded-md border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+        className="border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
       >
         Show nested details · {itemCount} {itemCount === 1 ? 'item' : 'items'}
       </button>
@@ -63,7 +63,7 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + COLLECTION_PAGE_SIZE)}
-            className="mt-2 rounded-md border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+            className="mt-2 border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
           >
             Show {Math.min(COLLECTION_PAGE_SIZE, remaining)} more · {remaining} remaining
           </button>
@@ -94,7 +94,7 @@ function Node({ value, depth }: { value: unknown; depth: number }) {
           <button
             type="button"
             onClick={() => setVisibleCount((count) => count + COLLECTION_PAGE_SIZE)}
-            className="mt-3 rounded-md border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
+            className="mt-3 border border-hair px-2.5 py-1.5 font-mono text-xs text-accent transition-colors hover:border-accent/50"
           >
             Show {Math.min(COLLECTION_PAGE_SIZE, remaining)} more · {remaining} remaining
           </button>

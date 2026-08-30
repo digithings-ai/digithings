@@ -126,7 +126,7 @@ export function ProfileTab({
           Overlay key
         </span>
         <input
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
           value={profileKey}
           onChange={(e) => setProfileKey(e.target.value)}
           data-testid="profile-key-input"
@@ -138,7 +138,7 @@ export function ProfileTab({
           Label
         </span>
         <input
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
@@ -160,7 +160,7 @@ export function ProfileTab({
             type="number"
             min={1}
             max={50}
-            className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+            className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
             value={investment.horizon_years}
             onChange={(e) =>
               setInvestment((s) => ({ ...s, horizon_years: Number(e.target.value) }))
@@ -199,7 +199,7 @@ export function ProfileTab({
           Excluded tickers
         </span>
         <input
-          className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
+          className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink font-mono"
           placeholder="TSLA, GME"
           value={excludedTickers}
           onChange={(e) => setExcludedTickers(e.target.value)}
@@ -226,7 +226,7 @@ export function ProfileTab({
         type="button"
         onClick={() => void onSave()}
         disabled={saving}
-        className="rounded-lg border border-accent/40 bg-accent/15 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/25 disabled:opacity-50"
+        className="border border-ink bg-ink px-4 py-2 text-sm font-medium text-bg hover:opacity-90 disabled:opacity-50"
         data-testid="profile-save"
       >
         {saving ? 'Saving…' : 'Save overlay'}
@@ -254,7 +254,7 @@ function SelectField({
         {label}
       </span>
       <select
-        className="w-full rounded-lg border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
+        className="w-full border border-hair bg-term-bg/50 px-3 py-2 text-sm text-ink"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         data-testid={testId}

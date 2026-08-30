@@ -103,7 +103,7 @@ export default function BrokerProfilePanel({
         className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
       >
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
-          <span className="h-1 w-9 rounded-full bg-ink/20" />
+          <span className="h-1 w-9 bg-ink/20" />
         </div>
         <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
           <Building2 size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />

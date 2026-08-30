@@ -80,7 +80,7 @@ export function ThesisStoryCard({
             <h3 className="font-display text-xl leading-snug text-ink">{thesis.name}</h3>
           </div>
           {isNonActive(thesis.status) ? (
-            <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
+            <span className="shrink-0 border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
               {thesis.status}
             </span>
           ) : null}

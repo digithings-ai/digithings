@@ -316,7 +316,7 @@ export default function CommandPalette() {
         <button
           type="button"
           onClick={closeCommandPalette}
-          className="rounded-md p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
+          className="p-1.5 text-ink-mute hover:text-ink hover:bg-ink/[0.07]"
           aria-label="Close"
         >
           <X size={16} />

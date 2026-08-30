@@ -106,7 +106,7 @@ export default function PipelineNode({
 
         {/* count badge — accent chrome only, softened (no font-bold) */}
         {count != null && (
-          <span className="flex-shrink-0 rounded-full bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
+          <span className="flex-shrink-0 bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
             {count}
           </span>
         )}
