@@ -9,10 +9,14 @@ import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
 
 /** Exact auth routes (Next usePathname strips basePath). */
-const AUTH_PATHS = new Set(['/login', '/auth/callback']);
+const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
 
 /** Prefixed forms if a caller ever passes a full path including basePath. */
-const AUTH_PATHS_WITH_BASE = new Set(['/olympus/login', '/olympus/auth/callback']);
+const AUTH_PATHS_WITH_BASE = new Set([
+  '/olympus/login',
+  '/olympus/signup',
+  '/olympus/auth/callback',
+]);
 
 /**
  * Paths that complete or start OAuth without a session (no dashboard chrome).

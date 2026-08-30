@@ -4,8 +4,10 @@ import {
   ALL_PLAN_TIERS,
   ARTIFACT_CLASSES,
   can,
+  defaultSettingsTab,
   effectivePlanTier,
   requiredTierFor,
+  settingsTabsVisible,
   tierFromSession,
   type ArtifactClass,
   type PlanTier,
@@ -165,6 +167,38 @@ describe('tierFromSession', () => {
     expect(tier(null)).toBe('free');
     expect(tier(sessionWithTier(undefined))).toBe('free');
     expect(tier(sessionWithTier('gold'))).toBe('free');
+  });
+});
+
+describe('settingsTabsVisible', () => {
+  it('omits Custom+ tabs for Observer and Baseline; shows them for Custom+', () => {
+    expect(settingsTabsVisible('free').map((t) => t.id)).toEqual([
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('baseline').map((t) => t.id)).toEqual([
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('custom').map((t) => t.id)).toEqual([
+      'profile',
+      'pipeline',
+      'keys',
+      'brokers',
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('enterprise').map((t) => t.id)).toEqual(
+      settingsTabsVisible('custom').map((t) => t.id),
+    );
+  });
+
+  it('defaults Observer to Notifications, Custom to Profile', () => {
+    expect(defaultSettingsTab('free')).toBe('notifications');
+    expect(defaultSettingsTab('custom')).toBe('profile');
   });
 });
 

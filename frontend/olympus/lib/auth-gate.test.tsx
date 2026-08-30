@@ -72,15 +72,18 @@ function renderGate(child = 'protected-child'): string {
 }
 
 describe('isOlympusAuthPath', () => {
-  it('allows exact login and callback paths (with/without trailing slash)', () => {
+  it('allows exact login, signup, and callback paths (with/without trailing slash)', () => {
     expect(isOlympusAuthPath('/login')).toBe(true);
     expect(isOlympusAuthPath('/login/')).toBe(true);
+    expect(isOlympusAuthPath('/signup')).toBe(true);
+    expect(isOlympusAuthPath('/signup/')).toBe(true);
     expect(isOlympusAuthPath('/auth/callback')).toBe(true);
     expect(isOlympusAuthPath('/auth/callback/')).toBe(true);
   });
 
   it('allows basePath-prefixed exact forms', () => {
     expect(isOlympusAuthPath('/olympus/login')).toBe(true);
+    expect(isOlympusAuthPath('/olympus/signup')).toBe(true);
     expect(isOlympusAuthPath('/olympus/auth/callback/')).toBe(true);
   });
 

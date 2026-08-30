@@ -55,10 +55,15 @@ settings EF (migration 108). JWT `app_metadata.plan_tier` alone is **not** enoug
 | House weights / glass-box pipeline | — | ✓ | ✓ | ✓ if floor ≥ baseline |
 | Notifications GET/PATCH | ✓ (member) | ✓ | ✓ | ✓ |
 | Billing links | ✓ | ✓ | ✓ | ✓ |
-| Profile / Pipeline write | locked + `TIER_FORBIDDEN` | locked + `TIER_FORBIDDEN` | ✓ | ✓ if floor ≥ custom |
-| Keys (BYOK) seal/revoke | locked | locked | ✓ | ✓ if floor ≥ custom |
-| Brokers connect/revoke | locked — **no connections on free** | locked | ✓ | ✓ if floor ≥ custom |
+| Profile / Pipeline write | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
+| Keys (BYOK) seal/revoke | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
+| Brokers connect/revoke | omitted (no tab) — **no connections on free** | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
 | Automations / overlay runs | — | — | ✓ | ✓ if floor ≥ custom |
+
+**UI rule:** Settings tabs the current *effective* tier cannot use are **omitted**,
+not greyed or locked. Observer (free) and Baseline see Notifications | Billing |
+About only. Custom / enterprise / creator floor see the full set. Server still
+returns `TIER_FORBIDDEN` if a hidden path is called directly.
 
 **Supersedes prior note:** baseline does **not** unlock broker connect. Free is
 teaser-only (digest conclusions + light portfolio glimpse — not enough to

@@ -9,43 +9,29 @@ import { KeysTab } from '@/components/settings/keys-tab';
 import { BrokersTab } from '@/components/settings/brokers-tab';
 import { NotifyTab } from '@/components/settings/notify-tab';
 import { BillingTab } from '@/components/settings/billing-tab';
-import {
-  BrokerStatusSurface,
-  OverlayProfileSurface,
-} from '@/components/tier/custom-workspace-surfaces';
 import { subpageTabButtonClass, SubpageStickyTabBar } from '@/components/subpage-tab-bar';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { dataSourceHost } from '@/lib/data-source-host';
 import { useAuth } from '@/lib/auth-context';
+import { usePlanTier } from '@/lib/use-entitlement';
+import {
+  defaultSettingsTab,
+  settingsTabsVisible,
+  type SettingsTabId,
+} from '@/lib/entitlements';
 import type { SettingsApiOptions } from '@/lib/settings-api';
-
-type SettingsTab =
-  | 'profile'
-  | 'pipeline'
-  | 'keys'
-  | 'brokers'
-  | 'notifications'
-  | 'billing'
-  | 'about';
-
-const TABS: { id: SettingsTab; label: string }[] = [
-  { id: 'profile', label: 'Profile' },
-  { id: 'pipeline', label: 'Pipeline' },
-  { id: 'keys', label: 'Keys' },
-  { id: 'brokers', label: 'Brokers' },
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'billing', label: 'Billing' },
-  { id: 'about', label: 'About' },
-];
 
 export default function SettingsPage() {
   const { data } = useDashboard();
   const { openCommandPalette } = useAppShell();
   const { session } = useAuth();
+  const tier = usePlanTier();
+  const tabs = useMemo(() => settingsTabsVisible(tier), [tier]);
   const meta = data?.portfolio?.meta ?? null;
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [tab, setTab] = useState<SettingsTabId>(() => defaultSettingsTab(tier));
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
+  const activeTab = tabs.some((item) => item.id === tab) ? tab : defaultSettingsTab(tier);
 
   const api: SettingsApiOptions | null = useMemo(() => {
     const token = session?.access_token;
@@ -55,59 +41,56 @@ export default function SettingsPage() {
 
   return (
     <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
-      <h1 className="font-display text-3xl tracking-tight text-ink">Settings</h1>
+      <header className="space-y-2">
+        <p className="acct-settings-kicker">
+          olympus <span className="text-ink-mute">· settings</span>
+        </p>
+        <h1 className="font-display text-3xl tracking-tight text-ink">The desk, not the product.</h1>
+        <p className="acct-settings-copy">
+          Notifications and billing on every plan. Pipeline, keys, and brokers only appear when this
+          workspace can use them.
+        </p>
+      </header>
 
       <SubpageStickyTabBar aria-label="Settings sections">
-        {TABS.map((t) => (
+        {tabs.map((item) => (
           <button
-            key={t.id}
+            key={item.id}
             type="button"
-            className={subpageTabButtonClass(tab === t.id)}
-            onClick={() => setTab(t.id)}
-            data-testid={`settings-tab-${t.id}`}
+            className={subpageTabButtonClass(activeTab === item.id)}
+            onClick={() => setTab(item.id)}
+            data-testid={`settings-tab-${item.id}`}
           >
-            {t.label}
+            {item.label}
           </button>
         ))}
       </SubpageStickyTabBar>
 
-      <div className="max-w-2xl">
-        {tab === 'profile' ? (
-          <OverlayProfileSurface>
-            <ProfileTab
-              api={api}
-              lastVersionId={lastVersionId}
-              onVersionSaved={setLastVersionId}
-            />
-          </OverlayProfileSurface>
+      <div className="acct-settings-panel max-w-2xl">
+        {activeTab === 'profile' ? (
+          <ProfileTab
+            api={api}
+            lastVersionId={lastVersionId}
+            onVersionSaved={setLastVersionId}
+          />
         ) : null}
-        {tab === 'pipeline' ? (
-          <OverlayProfileSurface>
-            <PipelineTab
-              api={api}
-              lastVersionId={lastVersionId}
-              onVersionSaved={setLastVersionId}
-            />
-          </OverlayProfileSurface>
+        {activeTab === 'pipeline' ? (
+          <PipelineTab
+            api={api}
+            lastVersionId={lastVersionId}
+            onVersionSaved={setLastVersionId}
+          />
         ) : null}
-        {tab === 'keys' ? (
-          <OverlayProfileSurface>
-            <KeysTab api={api} />
-          </OverlayProfileSurface>
-        ) : null}
-        {tab === 'brokers' ? (
-          <BrokerStatusSurface>
-            <BrokersTab api={api} />
-          </BrokerStatusSurface>
-        ) : null}
-        {tab === 'notifications' ? <NotifyTab api={api} /> : null}
-        {tab === 'billing' ? (
+        {activeTab === 'keys' ? <KeysTab api={api} /> : null}
+        {activeTab === 'brokers' ? <BrokersTab api={api} /> : null}
+        {activeTab === 'notifications' ? <NotifyTab api={api} /> : null}
+        {activeTab === 'billing' ? (
           <div id="billing">
             <BillingTab api={api} />
           </div>
         ) : null}
-        {tab === 'about' ? (
-          <div className="oly-slab p-6 max-w-lg" data-testid="settings-about">
+        {activeTab === 'about' ? (
+          <div data-testid="settings-about">
             <SettingsContent
               variant="popover"
               lastRunDate={meta?.last_updated ?? null}
