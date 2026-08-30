@@ -435,3 +435,64 @@ class TestVerifyCanonicalPinsHouse:
             'sb.table("documents").select("date,document_key")\n        .like("document_key"'
             not in text
         )
+
+
+class TestPublishResearchListIgnoresOverlay:
+    def test_library_rows_drop_overlay_listed_first(self) -> None:
+        mod = _load("publish_research")
+        key = "research/deep-dives/NVDA-2026-08-31"
+        overlay = _doc(workspace_id=_OVERLAY, document_key=key, content="OVERLAY")
+        overlay["title"] = "Overlay NVDA"
+        overlay["segment"] = "deep-dive"
+        house = _doc(workspace_id=_HOUSE, document_key=key, content="HOUSE")
+        house["title"] = "House NVDA"
+        house["segment"] = "deep-dive"
+        sb = FakeSupabaseClient(canned_reads={"documents": [overlay, house]})
+        rows = mod.house_research_library_rows(sb, 10)
+        assert [r["title"] for r in rows] == ["House NVDA"]
+
+    def test_overlay_only_list_is_empty(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        mod = _load("publish_research")
+        key = "research/deep-dives/NVDA-2026-08-31"
+        overlay = _doc(workspace_id=_OVERLAY, document_key=key, content="OVERLAY")
+        overlay["title"] = "Overlay NVDA"
+        overlay["segment"] = "deep-dive"
+        sb = FakeSupabaseClient(canned_reads={"documents": [overlay]})
+        monkeypatch.setattr(mod, "_sb", lambda: sb)
+        rc = mod.cmd_list(argparse.Namespace(limit=10))
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert captured.out.strip() == "No research documents found."
+
+
+class TestBackfillResearchStateIgnoresOverlay:
+    def test_load_sources_drops_overlay_listed_first(self) -> None:
+        mod = _load("backfill_research_state")
+        key = "research/deep-dives/NVDA-2026-08-31"
+        overlay = _doc(
+            workspace_id=_OVERLAY,
+            document_key=key,
+            payload={"marker": "overlay"},
+        )
+        house = _doc(
+            workspace_id=_HOUSE,
+            document_key=key,
+            payload={"marker": "house"},
+        )
+        sb = FakeSupabaseClient(canned_reads={"documents": [overlay, house]})
+        sources = mod._load_sources_from_supabase(client=sb)
+        assert [s.payload["marker"] for s in sources] == ["house"]
+        assert [s.document_key for s in sources] == [key]
+
+    def test_overlay_only_inventory_is_empty(self) -> None:
+        mod = _load("backfill_research_state")
+        overlay = _doc(
+            workspace_id=_OVERLAY,
+            document_key="research/deep-dives/NVDA-2026-08-31",
+            payload={"marker": "overlay"},
+        )
+        sb = FakeSupabaseClient(canned_reads={"documents": [overlay]})
+        sources = mod._load_sources_from_supabase(client=sb)
+        assert sources == []
