@@ -82,7 +82,7 @@ class TestRemainingHoldingsCompounding:
     def test_two_rich_days_at_50_pct_leave_quarter_holdings_not_zero(self) -> None:
         """50% of remaining holdings twice → 25% of the post-buy position.
 
-        Day 0 buys 100% of cash (10 units @ 100). Days 1–1 sell 50% of
+        Day 0 buys 100% of cash (10 units @ 100). Days 1–2 sell 50% of
         whatever is still held. Applying 50% of the *original* 10 units
         twice would flatten to zero; remaining-position sizing leaves 2.5.
         """

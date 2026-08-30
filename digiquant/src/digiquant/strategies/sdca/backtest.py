@@ -55,11 +55,18 @@ def _max_drawdown_pct(values: list[float]) -> float:
 
 
 def size_trade(rate: float, cash: float, asset_units: float) -> tuple[float, float]:
-    """Size a buy (USD) or sell (asset units) from the curve rate, cash, and holdings.
+    """Size a buy (USD) or sell (asset units) from the curve rate and current book.
+
+    ``cash`` and ``asset_units`` are the *remaining* balances, never initial
+    cash or the original position. A positive ``rate`` spends
+    ``buy_usd = cash * rate / 100`` (clamped to cash). A negative ``rate``
+    sells ``sell_units = asset_units * |rate| / 100`` of current holdings
+    (clamped to units held, #2552). Two consecutive 50% days therefore leave
+    25% of the prior remaining book, not zero — cash/units only reach
+    exact zero at a 100% rate or via the clamp.
 
     Returns ``(buy_usd, sell_units)`` — exactly one is non-zero (both zero at
-    ``rate == 0``). This is the single source of truth for the allocation
-    sizing math: both ``run_backtest()`` below and
+    ``rate == 0``). Both ``run_backtest()`` below and
     ``nautilus_strategy.py::SdcaStrategy.on_bar()`` call this instead of
     reimplementing the clamping.
     """

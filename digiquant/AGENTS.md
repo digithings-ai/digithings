@@ -143,6 +143,13 @@ the full module map.
   reimplement it.** This is what keeps the Nautilus-run result and the
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
+- **Sizing is remaining-book, not initial.** `size_trade(rate, cash, units)`
+  does `buy_usd = cash * rate / 100` and `sell_units = holdings * |rate| / 100`.
+  Both `run_backtest` and `on_bar` pass the running cash/holdings, never
+  `initial_cash`. A high daily buy rate (balanced `buy_max_rate=8`) compounds
+  remaining cash toward dust during a cheap window — that is intended
+  remaining-% math, not a percent-of-initial bug. Pin:
+  `tests/dq/strategies/sdca/test_remaining_pct.py`.
 
 ### RiskModel providers (#1082)
 
