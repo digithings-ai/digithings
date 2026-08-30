@@ -124,7 +124,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v7** (thin GitHub-raw) | Notifications upsert live via PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) raw imports. Prefer monorepo bundle redeploy once Cursor env has `SUPABASE_ACCESS_TOKEN`=`sbp_…` (or MCP full-file deploy succeeds). EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. Migration `106` / `notification_prefs_align_canonical` already applied on `core`. |
+| `settings` | ACTIVE **v8** (thin GitHub-raw) | Notifications upsert live via PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) raw imports. Smoke: missing/invalid JWT → gateway `401`. Prefer monorepo bundle redeploy once Cursor env has `SUPABASE_ACCESS_TOKEN`=`sbp_…` (CLI) or MCP accepts full multi-file payload. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. Migration `106` / `notification_prefs_align_canonical` already applied on `core`. |
 
 ### Schema alignment (agent, 2026-08-30)
 
