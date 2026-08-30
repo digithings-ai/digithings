@@ -2,7 +2,7 @@ import { createElement, act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { BrokersTab, sanitizeConnection } from './brokers-tab';
-import { buildAlpacaAuthorizeUrl } from '@/lib/settings-api';
+import { buildAlpacaAuthorizeUrl } from '@/lib/settings/alpaca-oauth';
 
 describe('BrokersTab', () => {
   it('sanitizeConnection drops secret / ciphertext fields', () => {

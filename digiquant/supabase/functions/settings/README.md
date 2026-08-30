@@ -6,47 +6,68 @@ connect/revoke, and notification prefs.
 | Setting | Value |
 |---------|-------|
 | `verify_jwt` | **true** |
-| Deploy | **BLOCKED ON K3 MERGE** |
+| Deploy | **BLOCKED ON K3 MERGE** + module migrations **096–098** |
 
-## Deploy gate — blocked on K3
+## Deploy gate — blocked on K3 + tenancy migrations
 
 This function seals broker credentials with the K3 vault public contract
 (`parseCredential` / `sealCredential` / AAD binding) and writes
-`broker_connections`. Until K3 (`digiquant.vault.envelope` + migration
-`099_broker_connections.sql`) is merged onto the deploy target
-(`module/digiquant` → develop):
+`broker_connections`. It also stamps `olympus_profile_config.workspace_id`
+(added in migration **097**).
+
+**Do not deploy until all of the following are on the deploy target:**
+
+1. Module migrations **096–098** (workspaces foundation, tenant columns including
+   `olympus_profile_config.workspace_id`, RLS hardening).
+2. K3 (`digiquant.vault.envelope` + migration `099_broker_connections.sql`).
+
+Until then:
 
 1. **Do not** `supabase functions deploy settings`.
 2. Frontend may still call the URL — the function returns clear errors
    (`NOT_READY` / `ADMIN_NOT_CONFIGURED`) when tables or vault key are absent.
-3. After K3 merges: set `DIGIQUANT_VAULT_MASTER_KEY` (and optional
-   `DIGIQUANT_VAULT_KEY_ID`), then deploy:
+3. After preconditions land: set `DIGIQUANT_VAULT_MASTER_KEY` (and optional
+   `DIGIQUANT_VAULT_KEY_ID`), `APP_URL` (pinned OAuth `redirect_uri`), then:
 
 ```bash
 supabase functions deploy settings
 ```
 
 The TypeScript vault under `_shared/vault.ts` mirrors the Python public API and
-must pass `_shared/vault-vectors.json` (copied from K3's `tests/dq/vault/vectors.json`).
+must pass `_shared/vault-vectors.json` (copied from K3's `tests/dq/vault/vectors.json`),
+including `negative_cases`.
+
+Profile schema re-validation imports the real
+`digiquant/docs/schemas/{investment_profile,asset_preferences}.v1.json` files
+(no hand-copied TS transcription).
 
 ## Routes
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `PATCH` | `/profile` | Schema re-validate; append `olympus_profile_config` version; reject `house` key; 409 on version conflict |
+| `PATCH` | `/profile` | Tier gate; schema re-validate; append workspace-scoped version; reject `house` key; 409 on version/supersedes conflict |
 | `GET` | `/brokers` | Fingerprint projection only |
-| `POST` | `/brokers/connect` | `api_key` or Alpaca `oauth` (server-side code exchange); seal via vault |
+| `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
 | `POST` | `/brokers/revoke` | Fail closed on unknown row |
 | `PATCH` | `/notifications` | **503 `NOT_READY`** until K5 lands `notification_prefs` |
+
+## Tier gate
+
+`plan_tier ∈ {custom, enterprise}` is required for profile writes and broker
+connect (JWT `app_metadata.plan_tier` from T2 sync, else workspace row).
+Otherwise **403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
 
 ## Secrets
 
 ```bash
 supabase secrets set \
   DIGIQUANT_VAULT_MASTER_KEY="$(openssl rand -base64 32)" \
+  APP_URL=https://app.example \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…   # never NEXT_PUBLIC_
 ```
+
+Pinned OAuth callback: `{APP_URL}/olympus/settings/brokers/callback/`.
 
 ## Tests
 

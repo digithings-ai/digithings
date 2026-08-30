@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  buildAlpacaAuthorizeUrl,
   connectBrokerApiKey,
   isBillingConfigured,
   saveProfile,
@@ -8,20 +7,6 @@ import {
 } from './settings-api';
 
 describe('settings-api', () => {
-  it('buildAlpacaAuthorizeUrl forces env=paper and includes state', () => {
-    const url = buildAlpacaAuthorizeUrl({
-      clientId: 'cid',
-      redirectUri: 'https://app.example/settings/brokers/callback',
-      state: 'nonce-1',
-    });
-    const u = new URL(url);
-    expect(u.origin + u.pathname).toBe('https://app.alpaca.markets/oauth/authorize');
-    expect(u.searchParams.get('env')).toBe('paper');
-    expect(u.searchParams.get('state')).toBe('nonce-1');
-    expect(u.searchParams.get('client_id')).toBe('cid');
-    expect(u.searchParams.get('scope')).toContain('trading');
-  });
-
   it('saveProfile sends Authorization and versioned payload', async () => {
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({

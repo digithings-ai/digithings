@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ALPACA_OAUTH_STATE_KEY,
+  alpacaOAuthRedirectUri,
   buildAlpacaAuthorizeUrl,
+  publicAlpacaClientId,
+} from '@/lib/settings/alpaca-oauth';
+import {
   connectBrokerApiKey,
   listBrokers,
-  publicAlpacaClientId,
   revokeBroker,
   type BrokerConnectionView,
   type SettingsApiOptions,
@@ -113,7 +116,7 @@ export function BrokersTab({
       setError('Unable to store OAuth state (sessionStorage).');
       return;
     }
-    const redirectUri = `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/settings/brokers/callback`;
+    const redirectUri = alpacaOAuthRedirectUri(window.location.origin);
     const url = buildAlpacaAuthorizeUrl({ clientId, redirectUri, state });
     if (onAuthorizeNavigate) {
       onAuthorizeNavigate(url);

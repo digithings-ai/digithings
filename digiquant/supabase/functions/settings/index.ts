@@ -45,10 +45,20 @@ Deno.serve(async (req) => {
   try {
     return await handleSettingsRequest(
       req,
-      createDefaultDeps({ id: userData.user.id, email: userData.user.email }, admin),
+      createDefaultDeps(
+        {
+          id: userData.user.id,
+          email: userData.user.email,
+          plan_tier:
+            typeof userData.user.app_metadata?.plan_tier === "string"
+              ? userData.user.app_metadata.plan_tier
+              : null,
+        },
+        admin,
+      ),
     );
   } catch (err) {
     console.error("settings error", err instanceof Error ? err.name : "unknown");
     return jsonError(500, "INTERNAL", "Settings request failed");
   }
-});
+);

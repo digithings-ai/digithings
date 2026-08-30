@@ -2,11 +2,14 @@
  * Settings Edge Function handlers (T3) — extracted for Deno unit tests.
  *
  * Routes (mounted under /functions/v1/settings):
- *   PATCH  /profile            — versioned olympus_profile_config append
+ *   PATCH  /profile            — versioned olympus_profile_config append (workspace-scoped)
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
  *   PATCH  /notifications      — 503 NOT_READY until K5 lands notification_prefs
+ *
+ * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
+ * olympus_profile_config.workspace_id) and K3 vault + broker_connections.
  */
 
 import {
@@ -49,10 +52,18 @@ export type SettingsDeps = {
   /** crypto.randomUUID override for deterministic tests. */
   uuid?: () => string;
   now?: () => Date;
+  /** Override APP_URL for pinned OAuth redirect_uri (tests). */
+  appUrl?: string;
 };
 
 const FINGERPRINT_COLUMNS =
   "id, workspace_id, broker, env, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
+
+/** Custom/enterprise only — baseline cannot write profiles or connect brokers. */
+const ELIGIBLE_TIERS = new Set(["custom", "enterprise"]);
+
+/** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
+export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";
 
 function pathOf(url: URL): string {
   // Supabase mounts at /settings or /functions/v1/settings — strip both prefixes.
@@ -100,11 +111,51 @@ export async function handleSettingsRequest(
 }
 
 async function resolveMember(
-  req: Request,
   deps: SettingsDeps,
   bodyWorkspaceId: string | null,
 ) {
   return requireWorkspaceMember(deps.admin, deps.user, bodyWorkspaceId);
+}
+
+/**
+ * Fail closed on plan tier. Prefer the T2-synced JWT claim (app_metadata.plan_tier);
+ * fall back to workspace.plan_tier from the membership join.
+ */
+function requireEligibleTier(
+  user: AuthUser,
+  workspacePlanTier: string,
+): Response | null {
+  const claim = (user.plan_tier ?? "").trim().toLowerCase();
+  const fromWs = (workspacePlanTier ?? "").trim().toLowerCase();
+  const tier = claim || fromWs;
+  if (!ELIGIBLE_TIERS.has(tier)) {
+    return jsonError(
+      403,
+      "TIER_FORBIDDEN",
+      "plan_tier must be custom or enterprise for this settings action",
+    );
+  }
+  return null;
+}
+
+/** Server-pinned OAuth redirect_uri — rejects client mismatches. */
+export function pinnedAlpacaRedirectUri(appUrl?: string): string {
+  const raw =
+    appUrl ??
+    Deno.env.get("APP_URL") ??
+    Deno.env.get("NEXT_PUBLIC_APP_URL") ??
+    "";
+  const base = raw.replace(/\/+$/, "");
+  if (!base) {
+    throw new Error("APP_URL unset");
+  }
+  return `${base}${ALPACA_OAUTH_CALLBACK_PATH}`;
+}
+
+function isUniqueViolation(err: { code?: string; message?: string }): boolean {
+  if (err.code === "23505") return true;
+  const msg = (err.message ?? "").toLowerCase();
+  return msg.includes("unique") || msg.includes("duplicate");
 }
 
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
@@ -125,9 +176,13 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
   }
 
-  const authz = await resolveMember(req, deps, body.workspace_id ?? null);
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
+  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  if (tierErr) return tierErr;
+
+  const workspaceId = authz.workspace.id;
   const profileKey = (body.profile_key ?? "").trim();
   if (!profileKey) {
     return jsonError(400, "INVALID_PROFILE_KEY", "profile_key is required");
@@ -164,12 +219,12 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const expected =
     body.expected_version_id ?? body.supersedes_id ?? null;
 
-  // Optimistic concurrency: when a last-seen version is provided, it must still
-  // be the tip for this profile_key (no newer superseding row).
+  // Optimistic concurrency: tip is scoped by (workspace_id, profile_key).
   if (expected) {
     const { data: tip, error: tipErr } = await deps.admin
       .from("olympus_profile_config")
       .select("id, supersedes_id")
+      .eq("workspace_id", workspaceId)
       .eq("profile_key", profileKey)
       .eq("is_house_default", false)
       .order("recorded_at", { ascending: false })
@@ -179,8 +234,6 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
       return jsonError(500, "PROFILE_LOOKUP_FAILED", "Unable to load profile tip");
     }
     if (tip && tip.id !== expected) {
-      // Also accept when expected is the tip's supersedes chain head and tip is expected
-      // — mismatch means another writer landed first.
       return jsonError(
         409,
         "VERSION_CONFLICT",
@@ -188,12 +241,11 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
       );
     }
     if (!tip && expected) {
-      // Client thinks there is a tip but none exists yet — still conflict if they
-      // sent a non-null expected that isn't found as a row at all.
       const { data: row } = await deps.admin
         .from("olympus_profile_config")
         .select("id")
         .eq("id", expected)
+        .eq("workspace_id", workspaceId)
         .maybeSingle();
       if (!row) {
         return jsonError(
@@ -223,6 +275,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     .from("olympus_profile_config")
     .insert({
       id: versionId,
+      workspace_id: workspaceId,
       profile_key: profileKey,
       schema_version: 1,
       is_house_default: false,
@@ -230,7 +283,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
       payload,
       supersedes_id: expected,
     })
-    .select("id, profile_key, schema_version, label, supersedes_id, recorded_at")
+    .select("id, profile_key, schema_version, label, supersedes_id, recorded_at, workspace_id")
     .single();
 
   if (insertErr) {
@@ -240,6 +293,14 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
         400,
         "HOUSE_KEY_FORBIDDEN",
         "overlay ProfileConfig cannot use the reserved house profile_key",
+      );
+    }
+    if (isUniqueViolation(insertErr)) {
+      // supersedes_id unique (or tip race) → stable 409, never 500.
+      return jsonError(
+        409,
+        "VERSION_CONFLICT",
+        "profile changed elsewhere — reload",
       );
     }
     console.error("profile insert failed", insertErr.code ?? "unknown");
@@ -253,13 +314,14 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     label: inserted.label,
     supersedes_id: inserted.supersedes_id,
     recorded_at: inserted.recorded_at,
+    workspace_id: inserted.workspace_id,
   });
 }
 
 async function listBrokers(req: Request, deps: SettingsDeps): Promise<Response> {
   const url = new URL(req.url);
   const workspaceId = url.searchParams.get("workspace_id");
-  const authz = await resolveMember(req, deps, workspaceId);
+  const authz = await resolveMember(deps, workspaceId);
   if (!authz.ok) return authz.response;
 
   const { data, error } = await deps.admin
@@ -307,8 +369,11 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
     return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
   }
 
-  const authz = await resolveMember(req, deps, body.workspace_id ?? null);
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
+
+  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
   if (broker !== "alpaca" && broker !== "ibkr") {
@@ -339,14 +404,33 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
         );
       }
       const code = body.code;
-      const redirectUri = body.redirect_uri;
-      if (typeof code !== "string" || !code || typeof redirectUri !== "string" || !redirectUri) {
-        return jsonError(400, "INVALID_PAYLOAD", "oauth connect requires code and redirect_uri");
+      if (typeof code !== "string" || !code) {
+        return jsonError(400, "INVALID_PAYLOAD", "oauth connect requires code");
       }
+
+      let expectedRedirect: string;
+      try {
+        expectedRedirect = pinnedAlpacaRedirectUri(deps.appUrl);
+      } catch {
+        return jsonError(500, "OAUTH_MISCONFIGURED", "APP_URL is not configured");
+      }
+      const clientRedirect = body.redirect_uri;
+      if (
+        typeof clientRedirect === "string" &&
+        clientRedirect.length > 0 &&
+        clientRedirect !== expectedRedirect
+      ) {
+        return jsonError(
+          400,
+          "REDIRECT_URI_MISMATCH",
+          "redirect_uri must match the server-pinned OAuth callback",
+        );
+      }
+      // Always exchange with the pinned URI (ignore client even when matching).
       const exchanger = deps.exchangeAlpacaCode ?? exchangeAlpacaCodeDefault;
       let tokens: { access_token: string; refresh_token?: string };
       try {
-        tokens = await exchanger({ code, redirectUri });
+        tokens = await exchanger({ code, redirectUri: expectedRedirect });
       } catch (err) {
         console.error(
           "alpaca oauth exchange failed",
@@ -379,19 +463,42 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
     key: deps.vaultKey,
   });
   const fp = await fingerprint(credential);
-  const id = (deps.uuid ?? crypto.randomUUID)();
 
-  const row = {
-    id,
-    workspace_id: authz.workspace.id,
+  return insertBrokerConnection(deps, {
+    workspaceId: authz.workspace.id,
     broker,
     env,
-    auth_kind: credential.kind,
-    ciphertext: encodeBytea(envelope.ciphertext),
-    nonce: encodeBytea(envelope.nonce),
-    key_id: envelope.key_id,
+    credentialKind: credential.kind,
+    envelope,
     fingerprint: fp,
     scopes,
+  });
+}
+
+async function insertBrokerConnection(
+  deps: SettingsDeps,
+  args: {
+    workspaceId: string;
+    broker: string;
+    env: string;
+    credentialKind: string;
+    envelope: { ciphertext: Uint8Array; nonce: Uint8Array; key_id: string };
+    fingerprint: string;
+    scopes: string[];
+  },
+): Promise<Response> {
+  const id = (deps.uuid ?? crypto.randomUUID)();
+  const row = {
+    id,
+    workspace_id: args.workspaceId,
+    broker: args.broker,
+    env: args.env,
+    auth_kind: args.credentialKind,
+    ciphertext: encodeBytea(args.envelope.ciphertext),
+    nonce: encodeBytea(args.envelope.nonce),
+    key_id: args.envelope.key_id,
+    fingerprint: args.fingerprint,
+    scopes: args.scopes,
     status: "active",
   };
 
@@ -401,21 +508,61 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
     .select(FINGERPRINT_COLUMNS)
     .single();
 
-  if (insertErr) {
+  if (!insertErr) {
+    return jsonOk({
+      id: inserted.id,
+      broker: inserted.broker,
+      env: inserted.env,
+      auth_kind: inserted.auth_kind,
+      fingerprint: inserted.fingerprint,
+      status: inserted.status,
+      last_used_at: inserted.last_used_at,
+      created_at: inserted.created_at,
+    });
+  }
+
+  if (!isUniqueViolation(insertErr)) {
     console.error("broker connect insert failed", insertErr.code ?? "unknown");
     return jsonError(500, "CONNECT_FAILED", "Unable to store broker connection");
   }
 
-  // Return fingerprint projection ONLY — no ciphertext/nonce/secret.
+  // Active-row unique on (workspace, broker, env) — K3 reconnect: revoke then insert.
+  const stamp = (deps.now ?? (() => new Date))().toISOString();
+  const { error: revokeErr } = await deps.admin
+    .from("broker_connections")
+    .update({ status: "revoked", revoked_at: stamp })
+    .eq("workspace_id", args.workspaceId)
+    .eq("broker", args.broker)
+    .eq("env", args.env)
+    .eq("status", "active");
+
+  if (revokeErr) {
+    console.error("broker reconnect revoke failed", revokeErr.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to revoke prior connection");
+  }
+
+  const retryId = (deps.uuid ?? crypto.randomUUID)();
+  const retryRow = { ...row, id: retryId };
+  const { data: retried, error: retryErr } = await deps.admin
+    .from("broker_connections")
+    .insert(retryRow)
+    .select(FINGERPRINT_COLUMNS)
+    .single();
+
+  if (retryErr) {
+    console.error("broker reconnect insert failed", retryErr.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store broker connection");
+  }
+
   return jsonOk({
-    id: inserted.id,
-    broker: inserted.broker,
-    env: inserted.env,
-    auth_kind: inserted.auth_kind,
-    fingerprint: inserted.fingerprint,
-    status: inserted.status,
-    last_used_at: inserted.last_used_at,
-    created_at: inserted.created_at,
+    id: retried.id,
+    broker: retried.broker,
+    env: retried.env,
+    auth_kind: retried.auth_kind,
+    fingerprint: retried.fingerprint,
+    status: retried.status,
+    last_used_at: retried.last_used_at,
+    created_at: retried.created_at,
   });
 }
 
@@ -427,7 +574,7 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
     return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
   }
 
-  const authz = await resolveMember(req, deps, body.workspace_id ?? null);
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
   const connectionId = body.connection_id;

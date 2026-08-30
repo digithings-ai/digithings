@@ -142,11 +142,20 @@ export function buildAad(workspaceId: string, broker: string, env: string): Uint
 
 /**
  * Validate a raw mapping into a credential without leaking secrets on failure.
- * Mirrors Python `parse_credential` — MUST be used at every ingest surface.
+ * Mirrors Python `parse_credential` (Pydantic `extra="forbid"`) — MUST be used
+ * at every ingest surface.
  */
 export function parseCredential(raw: Record<string, unknown>): BrokerCredential {
   const kind = raw.kind;
   if (kind === "oauth") {
+    const allowed = new Set(["kind", "access_token", "refresh_token"]);
+    for (const key of Object.keys(raw)) {
+      if (!allowed.has(key)) {
+        throw new VaultPayloadError(
+          "credential mapping is not a valid oauth/api_key payload",
+        );
+      }
+    }
     const access = raw.access_token;
     if (typeof access !== "string" || access.length < 1 || access.length > 4096) {
       throw new VaultPayloadError(
@@ -165,6 +174,14 @@ export function parseCredential(raw: Record<string, unknown>): BrokerCredential 
     return { kind: "oauth", access_token: access };
   }
   if (kind === "api_key") {
+    const allowed = new Set(["kind", "key_id", "secret"]);
+    for (const key of Object.keys(raw)) {
+      if (!allowed.has(key)) {
+        throw new VaultPayloadError(
+          "credential mapping is not a valid oauth/api_key payload",
+        );
+      }
+    }
     const keyId = raw.key_id;
     const secret = raw.secret;
     if (

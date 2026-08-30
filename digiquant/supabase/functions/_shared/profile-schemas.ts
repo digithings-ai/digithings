@@ -1,56 +1,19 @@
 /**
- * Bundled InvestmentProfile / AssetPreferences v1 JSON schemas for server
- * re-validation (T3). Source of truth:
- *   digiquant/docs/schemas/{investment_profile,asset_preferences}.v1.json
+ * Server re-validation of InvestmentProfile / AssetPreferences v1.
  *
- * Keep field rules in sync with those files — do not invent a second schema.
+ * Imports the REAL digiquant/docs/schemas/*.v1.json files (Deno JSON import) —
+ * no hand-transcribed TS duplicate that can drift from Python.
  */
 
-export const INVESTMENT_PROFILE_V1 = {
-  type: "object",
-  additionalProperties: false,
-  required: [
-    "risk_tolerance",
-    "horizon_years",
-    "liquidity_needs",
-    "base_currency",
-    "tax_jurisdiction",
-    "esg_preference",
-    "experience_level",
-  ],
-  properties: {
-    schema_version: { type: "integer", minimum: 1, default: 1 },
-    risk_tolerance: {
-      type: "string",
-      enum: ["conservative", "moderate", "aggressive"],
-    },
-    horizon_years: { type: "integer", minimum: 1, maximum: 50 },
-    liquidity_needs: { type: "string", enum: ["low", "medium", "high"] },
-    base_currency: { type: "string", pattern: "^[A-Z]{3}$" },
-    tax_jurisdiction: { type: "string", enum: ["US", "EU", "UK", "CA", "AU", "OTHER"] },
-    esg_preference: { type: "string", enum: ["none", "tilt", "strict"] },
-    excluded_sectors: { type: "array", items: { type: "string" } },
-    experience_level: {
-      type: "string",
-      enum: ["novice", "intermediate", "expert"],
-    },
-  },
-} as const;
+import investmentProfileSchema from "../../../docs/schemas/investment_profile.v1.json" with {
+  type: "json",
+};
+import assetPreferencesSchema from "../../../docs/schemas/asset_preferences.v1.json" with {
+  type: "json",
+};
 
-export const ASSET_PREFERENCES_V1 = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    schema_version: { type: "integer", minimum: 1, default: 1 },
-    watchlists: {
-      type: "object",
-      additionalProperties: { type: "array", items: { type: "string" } },
-    },
-    custom_universe: { type: "array", items: { type: "string" } },
-    excluded_tickers: { type: "array", items: { type: "string" } },
-    excluded_sectors: { type: "array", items: { type: "string" } },
-  },
-} as const;
+export const INVESTMENT_PROFILE_V1 = investmentProfileSchema as SchemaNode;
+export const ASSET_PREFERENCES_V1 = assetPreferencesSchema as SchemaNode;
 
 export type FieldError = { path: string; message: string };
 

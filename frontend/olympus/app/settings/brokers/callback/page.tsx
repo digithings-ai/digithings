@@ -1,8 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ALPACA_OAUTH_STATE_KEY,
+  alpacaOAuthRedirectUri,
+  resolveAlpacaOAuthCallback,
+  settingsHomeHref,
+} from '@/lib/settings/alpaca-oauth';
+import {
   connectBrokerOAuth,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
@@ -12,56 +17,67 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
 /**
  * Alpaca OAuth callback — posts the authorization code to the settings Edge
  * Function. The client secret never enters this page.
+ *
+ * Auth hydration: wait until `loading === false` before reading/removing the
+ * sessionStorage nonce. Consume the nonce ONLY after a successful exchange.
  */
 export default function AlpacaOAuthCallbackPage() {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
   const [status, setStatus] = useState<'working' | 'ok' | 'error'>('working');
   const [detail, setDetail] = useState('Completing Alpaca paper connect…');
+  const started = useRef(false);
 
   useEffect(() => {
+    if (loading) return;
+    if (started.current) return;
+
     let cancelled = false;
 
     async function finish() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const state = params.get('state');
       const stored = sessionStorage.getItem(ALPACA_OAUTH_STATE_KEY);
-      sessionStorage.removeItem(ALPACA_OAUTH_STATE_KEY);
+      const phase = resolveAlpacaOAuthCallback({
+        loading: false,
+        accessToken: session?.access_token,
+        search: window.location.search,
+        storedState: stored,
+        origin: window.location.origin,
+      });
 
-      if (!code || !state || !stored || state !== stored) {
+      if (phase.kind === 'wait_auth') return;
+
+      if (phase.kind === 'error') {
+        // Do not remove the nonce on mismatch/sign-in failure so a later
+        // hydration with a session can still succeed if this was a false start.
+        // (State mismatch leaves the nonce for a fresh Brokers connect.)
         if (!cancelled) {
           setStatus('error');
-          setDetail('OAuth state mismatch — return to Brokers and try again.');
+          setDetail(phase.message);
         }
         return;
       }
-      const token = session?.access_token;
-      if (!token) {
-        if (!cancelled) {
-          setStatus('error');
-          setDetail('Sign in required to finish broker connect.');
-        }
-        return;
-      }
 
-      const api: SettingsApiOptions = { accessToken: token };
-      const redirectUri = `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/settings/brokers/callback`;
+      started.current = true;
+      const api: SettingsApiOptions = { accessToken: session!.access_token! };
+      const redirectUri = alpacaOAuthRedirectUri(window.location.origin);
 
       try {
         const row = await connectBrokerOAuth(api, {
           broker: 'alpaca',
-          code,
+          code: phase.code,
           redirect_uri: redirectUri,
         });
+        // Consume nonce only after successful exchange.
+        sessionStorage.removeItem(ALPACA_OAUTH_STATE_KEY);
         if (cancelled) return;
         setStatus('ok');
         setDetail(
           `Connected ${row.broker} (${row.env}) — fingerprint ${row.fingerprint}. Returning to Brokers…`,
         );
         window.setTimeout(() => {
-          window.location.assign(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/settings`);
+          window.location.assign(settingsHomeHref());
         }, 1200);
       } catch (err: unknown) {
+        // Leave nonce in place so the user can retry from Brokers (fresh state).
         if (cancelled) return;
         setStatus('error');
         setDetail(err instanceof Error ? err.message : 'OAuth exchange failed.');
@@ -73,7 +89,7 @@ export default function AlpacaOAuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [session?.access_token]);
+  }, [loading, session]);
 
   return (
     <div className={`${SUBPAGE_MAX} py-10`} data-testid="alpaca-oauth-callback">

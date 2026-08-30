@@ -13,6 +13,11 @@ import {
 export type AuthUser = {
   id: string;
   email?: string | null;
+  /**
+   * plan_tier from auth.users.app_metadata (T2 claim sync).
+   * Fail-closed gates in settings read this claim — UI `can()` is presentation only.
+   */
+  plan_tier?: string | null;
 };
 
 export type AuthedOwner =

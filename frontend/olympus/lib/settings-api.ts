@@ -56,23 +56,11 @@ function functionsBase(): string {
   return `${supabase}/functions/v1`;
 }
 
-function billingConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      (process.env.NEXT_PUBLIC_STRIPE_BILLING_ENABLED === '1' ||
-        process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL ||
-        process.env.NEXT_PUBLIC_SUPABASE_URL),
-  );
-}
-
 /** True when checkout/portal Edge Functions are addressable from the client. */
 export function isBillingConfigured(): boolean {
-  // Absent Supabase URL ⇒ cannot call T2 functions.
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return false;
-  // Explicit off switch for local demos.
   if (process.env.NEXT_PUBLIC_STRIPE_BILLING_ENABLED === '0') return false;
-  // Default: configured when URL present; "billing not configured" when envs absent.
-  return billingConfigured();
+  return true;
 }
 
 async function request<T>(
@@ -208,27 +196,4 @@ export async function createCustomerPortal(
   payload: { workspace_id?: string } = {},
 ): Promise<{ url: string }> {
   return request(opts, 'POST', '/customer-portal', payload);
-}
-
-/** Alpaca OAuth authorize URL (paper). Client id is public; secret stays server-side. */
-export function buildAlpacaAuthorizeUrl(args: {
-  clientId: string;
-  redirectUri: string;
-  state: string;
-}): string {
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: args.clientId,
-    redirect_uri: args.redirectUri,
-    scope: 'account:write trading',
-    state: args.state,
-    env: 'paper',
-  });
-  return `https://app.alpaca.markets/oauth/authorize?${params.toString()}`;
-}
-
-export const ALPACA_OAUTH_STATE_KEY = 'olympus_alpaca_oauth_state';
-
-export function publicAlpacaClientId(): string {
-  return process.env.NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID ?? '';
 }
