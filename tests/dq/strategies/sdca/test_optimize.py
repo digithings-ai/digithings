@@ -221,7 +221,7 @@ class TestPersistAndDispatch:
             )
 
         monkeypatch.setattr(
-            "digiquant.optimize.run_sdca_walk_forward", fake_walk_forward
+            "digiquant.strategies.sdca.optimize.run_sdca_walk_forward", fake_walk_forward
         )
         csv = tmp_path / "BTC-USD.csv"
         n = 60
