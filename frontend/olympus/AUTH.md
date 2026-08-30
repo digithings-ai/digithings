@@ -32,7 +32,10 @@ Google also sends `queryParams.access_type=offline` and `prompt=select_account`.
 The PKCE client sets `detectSessionInUrl: false` so only the callback page
 exchanges `?code=` (`exchangeCodeForSession`). Auto-detect would race the
 one-shot code. The callback reads `error` / `error_description`, and fails
-closed if neither a code nor a session appears. If Google still fails after
+closed if neither a code nor a session appears. While `?code=` is present,
+`onAuthStateChange` ignores `INITIAL_SESSION` / `TOKEN_REFRESHED` from a
+persisted session so PKCE can finish; `SIGNED_IN` (or a successful
+`exchangeCodeForSession`) is what navigates home. If Google still fails after
 that, the provider is disabled or the Google Cloud client redirect
 (`https://<ref>.supabase.co/auth/v1/callback`) is missing — dashboard work,
 not an app bug. Email/password sign-in replaces to `/` (AuthGate will not

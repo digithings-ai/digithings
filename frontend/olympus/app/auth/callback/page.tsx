@@ -84,10 +84,12 @@ export default function AuthCallbackPage() {
       data: { subscription },
     } = client.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
-      if (
-        session &&
-        (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED')
-      ) {
+      if (!session) return;
+      // A persisted session's INITIAL_SESSION / TOKEN_REFRESHED must not
+      // navigate away while `?code=` is still being exchanged — AuthGate
+      // keeps this page mounted so PKCE can finish.
+      if (code && event !== 'SIGNED_IN') return;
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         goHome();
       }
     });
