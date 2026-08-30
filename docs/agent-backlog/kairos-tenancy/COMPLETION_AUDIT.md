@@ -2,24 +2,47 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-Agent run: https://cursor.com/agents/bc-c5b145ca-ac4a-56ed-ab78-919d4208ab35  
-Develop tip at audit: `0f235935` (merge of #3179)  
-Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin to `0f235935…`)
+Agent run (audit write): https://cursor.com/agents/bc-c5b145ca-ac4a-56ed-ab78-919d4208ab35  
+Agent run (merge + unlock hunt): https://cursor.com/agents/bc-cc69ce13-26ad-5258-9eda-8d2f22c2b5bb  
+Develop tip: `bf34c015` (merge of [#3180](https://github.com/digithings-ai/digithings/pull/3180))  
+Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin; tip advanced by docs-only #3180 — no EF redeploy this turn)
 
 ---
 
-## This-turn objective checklist
+## Follow-up turn (merge audit + unlock hunt)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Merge #3180 if CI green | **PASS** | Marked ready; Required CI + CodeQL green; `gh pr merge --merge` → `bf34c015` (2026-08-30T16:14:52Z). |
+| 2 | Re-scan env / `.env` / `.local/secrets` for **new nonempty** secrets | **PASS (no unlocks)** | Names + nonempty only. **No** value prefix `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT (`eyJ…`). `MAILGUN_*` / `NOTIFY_FROM` still **empty**. No `STRIPE_*` / `ALPACA_*` API keys (signup-note files only). Vault + `APP_URL` still SET in VM (unchanged). |
+| 3 | Push EF secrets + full settings bundle if `sbp_` appeared | **SKIPPED** | No `sbp_` → no Management API / CLI secrets push; settings remains **v11** thin pin. |
+| 4 | cursor-cloud `environment-info` / `get-message-queue` / setup-actions | **PASS** | Env linked (`ea5347f2-…`); `get-message-queue` → legacy workflow unsupported; events empty. Setup-action list **unchanged** → **no** `request-environment-setup-actions`. |
+| 5 | Mailgun smoke to Agent Mail if keys nonempty | **SKIPPED** | Keys still empty; no send. Captcha signup **not** re-attempted. |
+| 6 | Review gate (`reviewed:agent`) for later main | **DOCUMENTED** | See § Review gate. Labels **not** applied (CODE_REVIEW_POLICY requires `<!-- in-session-review -->` findings comment; this turn did not run fresh-context `/review`). |
+| 7 | Goal complete? | **FAIL** | Same blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM`; no `STRIPE_*` / `ALPACA_*` API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ LLM keys in `.env` unrelated to Kairos E2E) | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
+
+---
+
+## Prior-turn objective checklist (cred-push / audit write)
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
 | 1 | Inspect develop vs #3179; merge if CI green | **PASS** | PR [#3179](https://github.com/digithings-ai/digithings/pull/3179) marked ready + merged (`0f235935`, 2026-08-30T16:00:32Z). Required CI + CodeQL green before merge. |
-| 2a | Supabase MCP: secrets/env tools? | **FAIL / absent** | Full `GetDynamicTools(Supabase)` catalog: **no** secrets/env tools (only migrate/SQL/EF/branch/project). Cross-namespace search: no Supabase secrets tool. |
+| 2a | Supabase MCP: secrets/env tools? | **FAIL / absent** | Full `GetDynamicTools(Supabase)` catalog: **no** secrets/env tools (only migrate/SQL/EF/branch/project). Cross-namespace search: no Supabase secrets tool. Reconfirmed this follow-up. |
 | 2b | Push `DIGIQUANT_VAULT_*`, `APP_URL`/`NEXT_PUBLIC_APP_URL` to project EF secrets | **BLOCKED** | Values **present** in VM env / `.local/secrets` (names only; not logged). Management API `GET /v1/projects/…/secrets` → **403** (JWT `eyJ…`, not `sbp_`). CLI deploy also rejects non-`sbp_` token. |
 | 2c | Redeploy full settings monorepo bundle; smoke 401 | **PASS (thin fallback)** | Full 9-file payload prepared (`/opt/cursor/artifacts/settings-deploy-final.json`, content hash `2fc5f9bb62727c7c`). MCP `deploy_edge_function` **thin** pin to post-#3179 tip → settings **v11**. Smoke: `settings-v11-smoke.log` — GET no-auth **401**, POST invalid JWT **401**. Direct Management API / raw MCP HTTP blocked (403). |
 | 3 | Mailgun MCP `mcp_auth` if `needsAuth` | **PASS (skip)** | `namespaceStatus: ready` — no auth attempt (per instructions). Captcha/signup walls not re-burned. |
 | 4 | Completion audit + EPIC delivery update | **PASS** | This file + `docs/agent-backlog/kairos-tenancy/EPIC.md` delivery section. |
-| 5 | Re-run stale agent-reachable proofs | **PASS** | Chain / tier / live-venue refreshed this turn (below). E2E paper **not** faked. |
-| 6 | Branch `cursor/*-3d52`, push docs | **PASS** | `cursor/kairos-completion-audit-3d52` (compare URL in PR notes). |
+| 5 | Re-run stale agent-reachable proofs | **PASS** | Chain / tier / live-venue refreshed prior turn. E2E paper **not** faked. |
+| 6 | Branch `cursor/*-3d52`, push docs | **PASS** | `cursor/kairos-completion-audit-3d52` merged as #3180. |
 | 7 | Goal complete? | **FAIL** | Epic end-state still blocked on human/vendor secrets + E2E. |
 
 ---
@@ -82,13 +105,35 @@ Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin to `0f235935…`)
 
 ---
 
-## Merges this turn
+## Merges
 
 | PR | Result |
 |----|--------|
 | [#3179](https://github.com/digithings-ai/digithings/pull/3179) `cursor/kairos-cred-push-3d52` → `develop` | **MERGED** (`0f235935`) |
+| [#3180](https://github.com/digithings-ai/digithings/pull/3180) `cursor/kairos-completion-audit-3d52` → `develop` | **MERGED** (`bf34c015`) |
 
 Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema align, #3178 unlock status.
+
+---
+
+## Review gate (for later `main` promotion)
+
+`ci-review-coverage.yml` requires each non-bot commit reaching `main` to clear a review hatch (`reviewed:agent` + findings comment, Bugbot success, APPROVED, `reviewed:owner`, or `risk:low`). See [`docs/agents/CODE_REVIEW_POLICY.md`](../../agents/CODE_REVIEW_POLICY.md).
+
+| Merged → `develop` (Kairos-adjacent) | `reviewed:agent` / hatch? | Note |
+|--------------------------------------|---------------------------|------|
+| #3120 T3 Settings, #3099 T1, #3119 T5, #3125 RLS, #3121 cutover docs | **yes** | OK for later main |
+| #3141 digiquant promote | **no** | Needs hatch before main |
+| #3161 notifications wire | **no** | Needs hatch before main |
+| #3177 schema align docs | **no** | Docs; still needs hatch or `risk:low` if warranted |
+| #3178 unlock status docs | **no** | Docs |
+| #3179 cred-push status docs | **no** | Docs |
+| #3180 completion audit docs | **no** | Just merged; docs |
+| #3156 WP delivery docs | `needs-human-review` only | Not a coverage hatch |
+
+**This turn:** did **not** apply `reviewed:agent` — policy forbids label without a fresh-context findings comment opening with `<!-- in-session-review -->`. Parent should run `/review <N>` (or Bugbot / owner label) on the unhatched PRs above before any `develop`→`main` promote.
+
+Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) similarly lack hatches; not blocking Kairos code path until merge.
 
 ---
 
@@ -96,7 +141,7 @@ Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema
 
 | Function | Version | Notes |
 |----------|---------|-------|
-| `settings` | **v11** | Thin GitHub-raw → `0f235935…/_shared/*`. Full 9-file bundle staged; CLI needs `sbp_`. |
+| `settings` | **v11** | Thin GitHub-raw pin (post-#3179 tip). Full 9-file bundle staged; CLI needs `sbp_`. No redeploy this follow-up (docs-only tip move). |
 | `stripe-webhook` | v3 | Awaits Stripe secrets |
 | `create-checkout-session` | v1 | Awaits Stripe secrets |
 | `customer-portal` | v3 | Awaits Stripe secrets |
@@ -113,7 +158,8 @@ Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema
 5. **Auth providers** Google+GitHub on `core`.
 6. **IBKR vendor** + **legal** (human; live-cutover gated).
 7. **E2E staging paper chain** — depends on 1–5; not agent-fakeable.
-8. **Pages promote** `develop`→`main` — human release-gate (auth flag off; cutover 900 inert).
+8. **Review hatches** on unhatched develop merges before `main` promote (#3141, #3161, #3177–#3180, …).
+9. **Pages promote** `develop`→`main` — human release-gate (auth flag off; cutover 900 inert).
 
 ---
 
@@ -122,6 +168,7 @@ Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema
 - [ ] Obtain `sbp_` PAT → push vault + APP_URL EF secrets → optional full 9-file settings redeploy
 - [ ] Human: Stripe TEST + Mailgun + Auth providers + Alpaca OAuth (outside captcha re-burn)
 - [ ] Staging E2E paper chain once secrets land
+- [ ] Fresh-context `/review` (or Bugbot / `reviewed:owner`) on unhatched Kairos merges before main
 - [ ] Human: IBKR vendor + legal before any live epic
 - [ ] Human: pages promote when ready (no 900, auth flag off)
 - [ ] **Do not** mark goal complete until E2E + human gates clear

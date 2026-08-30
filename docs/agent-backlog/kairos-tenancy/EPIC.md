@@ -63,21 +63,22 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3179 + completion audit)
+## Agent delivery status (2026-08-30, post-#3180 + unlock re-scan)
 
 **Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-epic-completion-audit.md`.
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Notifications [#3161](https://github.com/digithings-ai/digithings/pull/3161), schema align [#3177](https://github.com/digithings-ai/digithings/pull/3177), unlock docs [#3178](https://github.com/digithings-ai/digithings/pull/3178), cred-push status [#3179](https://github.com/digithings-ai/digithings/pull/3179) — **all merged**.
+**Code:** all 12 WPs on `develop` (promotion #3141). Notifications [#3161](https://github.com/digithings-ai/digithings/pull/3161), schema align [#3177](https://github.com/digithings-ai/digithings/pull/3177), unlock docs [#3178](https://github.com/digithings-ai/digithings/pull/3178), cred-push status [#3179](https://github.com/digithings-ai/digithings/pull/3179), completion audit [#3180](https://github.com/digithings-ai/digithings/pull/3180) — **all merged** (develop tip `bf34c015`).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `stripe-webhook` v3, `create-checkout-session` v1, `customer-portal` v3 ACTIVE (await Stripe secrets). `settings` **v11** ACTIVE — thin GitHub-raw pin to develop tip `0f235935…` (post-#3179). Auth smoke: missing/invalid JWT → `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged (`settings-deploy-final.json`); CLI/Management API need `sbp_` PAT. Supabase MCP has **no secrets tool**; project EF secrets still **unset**.
+**Edge Functions (`core`):** `stripe-webhook` v3, `create-checkout-session` v1, `customer-portal` v3 ACTIVE (await Stripe secrets). `settings` **v11** ACTIVE — thin GitHub-raw pin (post-#3179). Auth smoke: missing/invalid JWT → `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged (`settings-deploy-final.json`); CLI/Management API need `sbp_` PAT. Supabase MCP has **no secrets tool**; project EF secrets still **unset**. No EF redeploy on docs-only #3180.
 
-**Secrets (names only):**
+**Secrets (names only; re-scanned post-#3180):**
 - **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **No new nonempty secrets this turn.** Captcha/signup walls **not** re-burned.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (not `sbp_`) → Management API **403**. Mailgun MCP `namespaceStatus: ready` but `MAILGUN_*` / `NOTIFY_FROM` **empty**.
+- **No new nonempty secrets** vs prior turn. Captcha/signup walls **not** re-burned.
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (not `sbp_`) → Management API **403**. Mailgun MCP ready but `MAILGUN_*` / `NOTIFY_FROM` **empty** — no Agent Mail smoke.
 - **Still blocked:** Stripe TEST, Mailgun key+domain, Auth providers, Alpaca OAuth/keys, `sbp_` PAT, IBKR vendor, legal. Vault key **not** on EF secrets.
+- **Review gate:** several Kairos merges lack `reviewed:agent` / hatch — document in audit; required before `main` promote.
 
 **Acceptance evidence (agent-reachable; `/opt/cursor/artifacts/`):**
 - House olympus unit: **420 passed** (`house-olympus-unit.log`).

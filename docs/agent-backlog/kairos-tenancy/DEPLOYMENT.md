@@ -236,11 +236,11 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — Cursor/VM env **declares** the names but values are **empty** (re-checked 2026-08-30 follow-up); MCP `GET /v4/domains` → auth failed. Fail-soft notify path OK (`MailgunConfig.from_env()` → `None`). **Not** in `.local/secrets/kairos.env` (nothing nonempty to persist). **Not yet** on Supabase EF secrets (needs real key + `sbp_`). No live send attempted. | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
 | Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; Agent Mail inbox has no Alpaca verification thread; KYC/browser wall | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked this turn; no new secrets). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked post-#3180; no `sbp_` value prefix; no new secrets). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) + [#3179](https://github.com/digithings-ai/digithings/pull/3179) | **Merged** to `develop` (2026-08-30) | notifications + schema/docs + cred-push status; settings EF **v11** |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) + [#3179](https://github.com/digithings-ai/digithings/pull/3179) + [#3180](https://github.com/digithings-ai/digithings/pull/3180) | **Merged** to `develop` (2026-08-30; tip `bf34c015`) | notifications + schema/docs + cred-push + completion audit; settings EF **v11** (no redeploy on #3180) |
 
 ---
 
