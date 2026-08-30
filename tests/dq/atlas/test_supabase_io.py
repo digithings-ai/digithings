@@ -7,11 +7,13 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any  # score:allow untyped any — used for fake-client payload dict shape
+from uuid import UUID
 
 import pytest
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
+    _json_safe,
     load_active_theses_rows,
     load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
@@ -217,11 +219,9 @@ class TestSupabaseConfig:
 @pytest.mark.unit
 class TestJsonSafe:
     """`_json_safe` is the write-boundary coercion that keeps date/datetime
-    objects out of the JSON body the Supabase client hands to httpx."""
+    and UUID objects out of the JSON body the Supabase client hands to httpx."""
 
     def test_coerces_date_and_datetime_recursively(self) -> None:
-        from digiquant.olympus.atlas.supabase_io import _json_safe
-
         out = _json_safe(
             {
                 "date": date(2026, 6, 22),
@@ -239,6 +239,25 @@ class TestJsonSafe:
             "weight": None,
         }
         json.dumps(out)  # the whole structure must be JSON-encodable
+
+    def test_coerces_uuid_recursively(self) -> None:
+        """Regression (house GHA 33426508863 retry): checkpoint-rehydrated
+        payloads carry raw ``UUID`` (workspace / commit ids). httpx json.dumps
+        raises ``TypeError: Object of type UUID is not JSON serializable``."""
+        ws = UUID("6b753576-ced9-5319-9bfa-c5d0aacd9319")
+        out = _json_safe(
+            {
+                "workspace_id": ws,
+                "nested": [{"commit_id": ws}],
+                "label": "house",
+            }
+        )
+        assert out == {
+            "workspace_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319",
+            "nested": [{"commit_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319"}],
+            "label": "house",
+        }
+        json.dumps(out)
 
 
 @pytest.mark.unit
@@ -264,6 +283,28 @@ class TestPublishDocument:
         row = client.store["documents"][0]
         json.dumps(row)  # mirrors the real client's encode step — must not raise
         assert row["payload"]["date"] == "2026-06-22"
+
+    def test_serializes_uuid_objects_nested_in_payload(self) -> None:
+        """Regression (house GHA 33426508863): H9 ``publish_hermes_documents``
+        retry after ledger ``23502`` died in httpx because a nested UUID was
+        still in the upsert body."""
+        client = FakeSupabaseClient()
+        ws = UUID("6b753576-ced9-5319-9bfa-c5d0aacd9319")
+        publish_document(
+            client=client,
+            document_key="analyst/SPY",
+            payload={"workspace_id": ws, "ticker": "SPY"},
+            doc_type=None,
+            run_type="delta",
+            title="SPY analyst 2026-08-31",
+            date_str="2026-08-31",
+            category="deep-dive",
+            segment="analyst",
+            sector="SPY",
+        )
+        row = client.store["documents"][0]
+        json.dumps(row)
+        assert row["payload"]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
     def test_idempotent_on_date_plus_document_key(self) -> None:
         client = FakeSupabaseClient()
