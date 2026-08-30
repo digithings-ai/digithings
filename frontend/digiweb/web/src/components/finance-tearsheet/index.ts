@@ -17,6 +17,8 @@
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -32,15 +34,21 @@ export {
   viewsNear,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
   type TradeReturnChartProps,
   type ChartScale,
   type ChartTone,
+  type OverlayTone,
+  type ChartLegendKind,
   type ViewWindow,
   type LookbackPreset,
 } from "./charts";
+export { RISK_BANDS, riskBandLabel, dcaRateCopy, type RiskBand } from "./risk-bands";
 export { ReturnsMatrix, type ReturnsPeriod, type MatrixMetric } from "./ReturnsMatrix";
 export { KpiStrip, Kpi, type KpiStripProps, type KpiProps } from "./KpiStrip";
 export {

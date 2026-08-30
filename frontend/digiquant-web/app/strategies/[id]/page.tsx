@@ -14,6 +14,7 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_slapper: { label: "BTC Slapper", symbol: "BTC-USD" },
   eth_slapper: { label: "ETH Slapper", symbol: "ETH-USD" },
   sol_slapper: { label: "SOL Slapper", symbol: "SOL-USD" },
+  btc_sdca: { label: "BTC SDCA", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
