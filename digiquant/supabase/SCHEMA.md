@@ -727,6 +727,21 @@ or narrowed in this WP** — that cutover ships inside T1's release train. Two-J
 executable proof is documented in the 098 header; structural assertions live in
 `tests/dq/olympus/test_migration_tenancy.py`.
 
+### Authenticated house teaser read — migration 109 (hotfix)
+
+Auth Pages JWT (`role=authenticated`) emptied Brief/Portfolio because classic
+`anon_read` policies are `TO anon` only. Pre-cutover **900** (do **not** apply
+cutover here), migration 109 adds:
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `authenticated_read_house_teaser` | `daily_snapshots`, `theses`, `instruments` | `true` (shared teaser; no `workspace_id`) |
+| `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
+
+`anon_read` is untouched. Proof: `tests/dq/olympus/test_migration_109_house_teaser.py`.
+Numbering: **108** is creator/product grants (independent); **109** is this RLS
+hotfix. Both files are required.
+
 ### Broker credential vault — migration 099 (K3, Kairos tenancy)
 
 Sealed broker credentials, one row per `(workspace_id, broker, env)`. This is the only
@@ -849,6 +864,13 @@ in the same change.
   `olympus_accounting_*` / `olympus_profile_config` / `workspaces` /
   `workspace_members` (previously fully revoked) so the new policies can fire; write
   grants stay `service_role`-only.
+- **Exception — Authenticated house teaser (migration 109, hotfix):** Auth Pages
+  JWT (`role=authenticated`) could not SELECT house Brief/Portfolio rows because
+  `anon_read` is `TO anon` only. 109 adds `authenticated_read_house_teaser`
+  (`USING (true)`) on `daily_snapshots` / `theses` / `instruments`, and expands
+  `authenticated_select_own_workspace` on `positions` / `position_events` /
+  `nav_history` / `portfolio_metrics` with a house-workspace OR. **Anon policies
+  and cutover 900 are untouched.**
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
