@@ -46,8 +46,8 @@ echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # an app bug. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digithings-web run build
 
-# Assemble dist/ from the static export (includes /design/assets/og.png for the
-# stable OG URL, and self-hosted fonts under /_next/static/media).
+# Assemble dist/ from the static export (includes /og.png for the stable OG
+# URL, and self-hosted fonts under /_next/static/media).
 rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/

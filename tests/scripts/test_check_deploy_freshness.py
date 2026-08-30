@@ -263,6 +263,21 @@ class TestWorkflowWiring:
         assert _site_of(live_url) in creates
 
 
+class TestOgAssetCanaries:
+    """Pin the #671 MIME-masking canaries to the live OG paths (#800).
+
+    Brand OG cards ship as ``public/og.png`` at each static-export root. The
+    smoke job used to probe ``/design/assets/og.png``, which 404'd after the
+    brand move and kept filing daily false alarms on #800.
+    """
+
+    def test_smoke_probes_root_og_png_not_legacy_design_assets(self) -> None:
+        runs = "\n".join(_run_blocks(_workflow(_SMOKE_WORKFLOW)["jobs"]["smoke"]))
+        assert "https://digithings.ai/og.png" in runs
+        assert "https://digiquant.io/og.png" in runs
+        assert "design/assets/og.png" not in runs
+
+
 class TestPerSiteIsolation:
     """One stale site must not mask, cancel, or misattribute the other."""
 
