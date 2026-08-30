@@ -32,6 +32,7 @@ from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
 from digiquant.olympus.overlay.persist import (
     hermes_document_key,
+    is_private_workspace,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
@@ -608,13 +609,33 @@ def book_portfolio(
 OVERLAY_MANIFEST_PREFIX = "overlay-commit/"
 
 
+def _manifest_key_prefix(workspace_id: UUID | str | None) -> str:
+    """House (omitted or house UUID) stays ``commit-run/``. Private overlay only."""
+    if is_private_workspace(workspace_id):
+        return f"{OVERLAY_MANIFEST_PREFIX}{resolved_workspace_id(workspace_id)}/"
+    return _MANIFEST_DOC_PREFIX
+
+
+def _manifest_row_in_workspace(row: dict[str, Any], workspace_id: UUID | str | None) -> bool:
+    """Store-path tenancy: overlay requires its id; house accepts omitted/house."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    row_ws = row.get("workspace_id")
+    if is_private_workspace(workspace_id):
+        return str(row_ws or "") == scoped
+    return row_ws is None or str(row_ws) == scoped
+
+
 def manifest_document_key(source_run_id: str, workspace_id: str | None = None) -> str:
     """House keys stay ``commit-run/{run_id}``. Overlay is namespaced so a
     date-scoped house lookup cannot see (or last-writer-wins over) a private book.
+
+    Uses :func:`is_private_workspace`, not a truthy *workspace_id*. A house UUID
+    (or omitted id) must keep the house prefix — same rule as
+    :func:`hermes_document_key`. A truthy check would write house manifests under
+    ``overlay-commit/{house}/`` and ``load_commit_manifests`` would miss
+    existing ``commit-run/`` rows.
     """
-    if workspace_id:
-        return f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/{source_run_id}"
-    return f"{_MANIFEST_DOC_PREFIX}{source_run_id}"
+    return f"{_manifest_key_prefix(workspace_id)}{source_run_id}"
 
 
 def load_commit_manifests(
@@ -636,19 +657,30 @@ def load_commit_manifests(
 
     The manifest *document* stays per-run (``commit-run/{source_run_id}``) so each
     attempt keeps its own audit artefact; only the idempotency lookup is date-scoped.
+    Prefix follows :func:`is_private_workspace` (house UUID is not overlay). The
+    PostgREST path also pins ``documents.workspace_id`` so an overlay same-date
+    row cannot satisfy a house ``commit-run/%`` like.
     """
     date_str = run_date.isoformat()
-    prefix = f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/" if workspace_id else _MANIFEST_DOC_PREFIX
+    prefix = _manifest_key_prefix(workspace_id)
+    scoped = str(resolved_workspace_id(workspace_id))
     out: list[dict[str, Any]] = []
 
     store = getattr(client, "store", None)
     if isinstance(store, dict):
         for row in store.get("documents", []):
             key = row.get("document_key")
-            if row.get("date") == date_str and isinstance(key, str) and key.startswith(prefix):
-                payload = row.get("payload")
-                if isinstance(payload, dict):
-                    out.append(dict(payload))
+            if (
+                row.get("date") != date_str
+                or not isinstance(key, str)
+                or not key.startswith(prefix)
+            ):
+                continue
+            if not _manifest_row_in_workspace(row, workspace_id):
+                continue
+            payload = row.get("payload")
+            if isinstance(payload, dict):
+                out.append(dict(payload))
     if out:
         return out
 
@@ -656,6 +688,7 @@ def load_commit_manifests(
         client.table("documents")
         .select("payload")
         .eq("date", date_str)
+        .eq("workspace_id", scoped)
         .like("document_key", f"{prefix}%")
         .execute()
     )

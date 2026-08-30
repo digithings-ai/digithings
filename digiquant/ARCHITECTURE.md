@@ -3280,8 +3280,13 @@ at the preflight seam — the pin loader is unchanged) → publish-if-missing in
 shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
 A write-time assertion rejects any corpus key containing the workspace or user id.
 House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
-Overlay commit manifests use `overlay-commit/{workspace_id}/…`; H7/H8 document
-keys use `overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
+Overlay commit manifests use `overlay-commit/{workspace_id}/…` **only** when
+`is_private_workspace(workspace_id)` is true. House UUID and omitted
+`workspace_id` keep `commit-run/{run_id}` — a truthy house id must not flip the
+prefix (same rule as `hermes_document_key`). `load_commit_manifests` pins
+`documents.workspace_id` on the PostgREST path so an overlay same-date row
+cannot satisfy a house `commit-run/%` like. H7/H8 document keys use
+`overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
 `pm-rebalance`, `analyst/…`, `deliberation/…`) so they cannot collide with house
 keys after the documents unique is `(workspace_id, date, document_key)`.
 

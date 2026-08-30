@@ -429,8 +429,9 @@ reason (#947); this closes the same hole in the commit manifest.
 
 Two things stay separate:
 
-- the manifest **document** remains per-run (`commit-run/{source_run_id}`), so every
-  attempt keeps its own audit artefact;
+- the manifest **document** remains per-run (`commit-run/{source_run_id}` for
+  house / house UUID; `overlay-commit/{workspace_id}/{source_run_id}` only when
+  `is_private_workspace` is true), so every attempt keeps its own audit artefact;
 - the **guard** is date-scoped: `commit_io.load_commit_manifests` returns every manifest
   for the date and `commit_io.resolve_prior_commit` picks the last writer.
 

@@ -12,6 +12,7 @@ from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState,
 from digiquant.olympus.hermes.writers.commit_io import (
     OVERLAY_MANIFEST_PREFIX,
     book_portfolio,
+    load_commit_manifests,
     manifest_document_key,
 )
 from digiquant.olympus.overlay.byok import ByokProbe
@@ -217,6 +218,50 @@ def test_overlay_manifest_key_is_namespaced() -> None:
     assert key.startswith(OVERLAY_MANIFEST_PREFIX)
     assert str(workspace) in key
     assert manifest_document_key("run-1") == "commit-run/run-1"
+    # House UUID is truthy — must still use the house prefix, not overlay-commit/.
+    assert manifest_document_key("run-1", str(house_workspace_id())) == "commit-run/run-1"
+
+
+def test_load_commit_manifests_house_uuid_ignores_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House lookup (omitted or house UUID) must not see overlay-commit rows.
+
+    Persist-on does not lift this. A truthy house UUID used to search
+    overlay-commit/{house}/ and miss existing commit-run/ manifests.
+    Overlay listed first so dropping the is_private_workspace prefix fails.
+    """
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay = uuid4()
+    run_date = date(2026, 8, 30)
+    iso = run_date.isoformat()
+    house = str(house_workspace_id())
+    client = FakeSupabaseClient(
+        canned_reads={
+            "documents": [
+                {
+                    "date": iso,
+                    "document_key": f"overlay-commit/{overlay}/ov-run",
+                    "workspace_id": str(overlay),
+                    "payload": {"weights_fingerprint": "overlay"},
+                },
+                {
+                    "date": iso,
+                    "document_key": "commit-run/house-run",
+                    "workspace_id": house,
+                    "payload": {"weights_fingerprint": "house"},
+                },
+            ]
+        }
+    )
+    overlay_found = load_commit_manifests(
+        client=client, run_date=run_date, workspace_id=str(overlay)
+    )
+    house_omitted = load_commit_manifests(client=client, run_date=run_date)
+    house_pinned = load_commit_manifests(client=client, run_date=run_date, workspace_id=house)
+    assert [m["weights_fingerprint"] for m in overlay_found] == ["overlay"]
+    assert [m["weights_fingerprint"] for m in house_omitted] == ["house"]
+    assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
 
 
 def _book_state(*, workspace_id: str | None = None) -> AtlasResearchState:
