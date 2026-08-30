@@ -73,7 +73,7 @@ Wave E
 
 **Code:** all 12 WPs on `develop` + notify `MAILGUN_NOT_CONFIGURED` loud-fail CLI. Prior: `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + `scripts/kairos_staging_e2e.py`.
 
-**Schema (`core`):** migrations **096–109** applied (108 entitlement grants, 109 house anon_read). Cutover **900 not applied**.
+**Schema (`core`):** migrations **096–109** applied (107 ledger row stamped 2026-08-31 — function/trigger already live; 108 entitlement grants, 109 house teaser). Cutover **900 not applied**. Local RLS harness vs 001–109 + staged 900 **59/59** after [#3268](https://github.com/digithings-ai/digithings/pull/3268) (membership-only book SELECT post-cutover).
 
 **Edge Functions (`core`):** `settings` **v27 ACTIVE**; `create-checkout-session` **v6 ACTIVE**; `customer-portal` **v7**; `stripe-webhook` **v6**. Billing EFs still loud-fail without Stripe secrets.
 
@@ -86,6 +86,6 @@ Wave E
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 - **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2**; notify `--require-mailgun` → exit **2**.
 
-**Closest real chain (NOT staging E2E):** Agentmail Auth → settings 200s → ops Custom (≠ Stripe) → `TIER_FORBIDDEN` on free → vault seal → notify prefs→Agentmail → overlay/router units + local Auth Login UI. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
+**Closest real chain (NOT staging E2E):** Agentmail email signup + confirm → JWT → settings profile/notifications/brokers **200** + free personal workspace (107) → checkout **`PRICE_NOT_CONFIGURED`**. Prior: ops Custom (≠ Stripe) → vault seal. Staging signup→Stripe→Alpaca OAuth→overlay→digest still **BLOCKED**.
 
 **Do not mark epic complete** until staging E2E (signup → Stripe → Alpaca paper → overlay → digest) plus Google Auth, legal, and IBKR vendor gates clear. Prod Auth Pages login route already smokes (#3231); email UI waits on #3266.
