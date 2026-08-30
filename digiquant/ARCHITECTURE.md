@@ -3074,8 +3074,10 @@ configured.
 | Caller | Function | Digest hour gate |
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| House CLI `python -m digiquant.olympus.hermes.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
 | Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.

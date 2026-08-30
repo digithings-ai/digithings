@@ -90,6 +90,8 @@ Stripe ids — must not prove checkout.
 - `python -m digiquant.olympus.kairos.sync_cron` — Alpaca paper fill mirror
 - `python scripts/kairos_cron_check.py` / `make kairos-cron-check` — combined `--check`
   (overlay + sync + Mailgun)
+- House daily (`hermes.chain` CLI success) now fail-soft dispatches K5 digest
+  (`force_digest=True`). Overlay nested chain does not. Mailgun still empty → skip.
 - Scheduled GHA spec: `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
   (`15 12 * * *`, `--check`/`--dry-run` only, separate process from
   `pipeline-olympus.yml`). `cursor/*` cannot write `.github/workflows/`; copy onto a

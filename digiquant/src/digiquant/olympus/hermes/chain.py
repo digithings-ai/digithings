@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import (
@@ -45,6 +45,7 @@ _logger = logging.getLogger(__name__)
 __all__ = [
     "ChainDeps",
     "cli_main",
+    "dispatch_house_notifications_after_chain",
     "run_atlas_then_hermes",
     "run_beliefs_distillation_if_triggered",
 ]
@@ -563,6 +564,30 @@ def _build_cli_parser():
     return parser
 
 
+def dispatch_house_notifications_after_chain(
+    run_date: date,
+    *,
+    dispatch: Callable[..., None] | None = None,
+) -> None:
+    """Fail-soft K5 close-out for the house CLI only.
+
+    Overlay invokes :func:`run_atlas_then_hermes` (not ``cli_main``), so nested
+    overlay runs never send house digests. Notify is imported here rather than
+    at module import so ``import chain`` on the overlay path does not load
+    Mailgun. ``dispatch_notifications`` is itself fail-soft; this wrapper also
+    swallows ImportError.
+    """
+    try:
+        if dispatch is not None:
+            dispatch(run_date=run_date, force_digest=True)
+            return
+        from digiquant.notify.dispatch import dispatch_notifications
+
+        dispatch_notifications(run_date=run_date, force_digest=True)
+    except Exception:
+        _logger.warning("notify: house chain close-out failed", exc_info=True)
+
+
 def cli_main(argv: list[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     import json
@@ -685,6 +710,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     summary["book_committed"] = run_summary.book_committed
     json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
+    # K5: production cron is this CLI, not run_db_first.py. Only on a
+    # non-retry exit so a failed attempt that CI will redo does not email.
+    if not retry_worthy:
+        dispatch_house_notifications_after_chain(atlas_input.run_date)
     return 1 if retry_worthy else 0
 
 
