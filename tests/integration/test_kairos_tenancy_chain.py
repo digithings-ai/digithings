@@ -34,7 +34,7 @@ import copy
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — heterogeneous PostgREST row dicts
 from uuid import UUID, uuid4
 
 import pytest
@@ -56,7 +56,8 @@ from digiquant.brokers.contracts import (
     OrderSide,
 )
 from digiquant.notify.dispatch import dispatch_workspace
-from digiquant.notify.entitlements import ArtifactClass, PlanTier as NotifyPlanTier, can
+from digiquant.notify.entitlements import ArtifactClass, can
+from digiquant.notify.entitlements import PlanTier as NotifyPlanTier
 from digiquant.notify.mailgun import MailgunConfig
 from digiquant.olympus.hermes.models.portfolio_ledger import (
     ApprovedTarget,
@@ -285,9 +286,7 @@ class CapturingMailgun:
         return False
 
     def send_message(self, to: str, subject: str, text_body: str, html_body: str) -> None:
-        self.sent.append(
-            {"to": to, "subject": subject, "text": text_body, "html": html_body}
-        )
+        self.sent.append({"to": to, "subject": subject, "text": text_body, "html": html_body})
 
 
 class MockBrokerAdapter:
@@ -671,9 +670,7 @@ def test_entitled_overlay_to_paper_fill_to_alert(
         assert workspace_id == custom_ws_id
         assert run_date == _RUN
         assert requested_version_id is not None
-        order_intent_id_box["id"] = _emit_pending_order_chain(
-            client=sb, workspace_id=workspace_id
-        )
+        order_intent_id_box["id"] = _emit_pending_order_chain(client=sb, workspace_id=workspace_id)
 
     profile_version = uuid4()
     overlay_result = run_overlay(
@@ -815,16 +812,16 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     assert _SYMBOL in custom_body or "Market Regime" in custom_body
 
     # --- House isolation: house rows unchanged by the whole chain ---
-    house_after_positions = [
-        r for r in sb.tables["positions"] if r["workspace_id"] == house
-    ]
+    house_after_positions = [r for r in sb.tables["positions"] if r["workspace_id"] == house]
     house_after_nav = [r for r in sb.tables["nav_history"] if r["workspace_id"] == house]
     assert house_after_positions == house_positions_before
     assert house_after_nav == house_nav_before
     assert not any(r.get("workspace_id") == house for r in sb.tables[BROKER_ORDERS])
     assert not any(r.get("workspace_id") == house for r in sb.tables[BROKER_EXECUTIONS])
     assert not any(
-        r.get("workspace_id") == house for r in sb.tables[ORDER_INTENTS] if r.get("symbol") == _SYMBOL
+        r.get("workspace_id") == house
+        for r in sb.tables[ORDER_INTENTS]
+        if r.get("symbol") == _SYMBOL
     )
 
 
