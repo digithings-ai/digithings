@@ -111,6 +111,11 @@ def test_run_and_write_btc_sdca_skips_calibrations(
         return _EmptyPositions(), bars, ohlc, {}, None
 
     monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    def _boom_round_trips(*_args: object, **_kwargs: object) -> list:
+        raise AssertionError("sdca is not a round-trip book")
+
+    monkeypatch.setattr(gts, "trades_from_positions", _boom_round_trips)
     settings = gts.load_settings()
     with caplog.at_level(logging.WARNING):
         entry = gts.run_and_write(

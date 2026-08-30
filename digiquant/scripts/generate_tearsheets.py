@@ -805,8 +805,13 @@ def run_and_write(
     positions, bars_list, ohlc_bars, signal_log, fills_report = run_nautilus(
         strategy, symbol, engine_ohlcv, settings, calibration=calibration
     )
-    trades = trades_from_positions(positions)
-    trades = carry_open_at_period_end(trades, bars_list, trade_start)
+    if family == "sdca":
+        # DCA is remaining-cash / remaining-holdings, not round-trip legs.
+        # An open spot book leaves pandas NA on ts_closed; skip the slapper parser.
+        trades = []
+    else:
+        trades = trades_from_positions(positions)
+        trades = carry_open_at_period_end(trades, bars_list, trade_start)
 
     dca_block = None
     sdca_overlays: dict = {}

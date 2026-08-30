@@ -530,7 +530,8 @@ the Slapper margin perpetual): remaining quote is spent, remaining base is
 held. `on_stop()` cancels open orders but does **not** `close_all_positions`
 — flattening would invent a round-trip that is not the DCA product. Fill
 replay seeds any pre-window fills onto the opening book, then walks the
-published calendar. `m2_liquidity` stays unregistered;
+published calendar. Round-trip `trades_from_positions` is skipped for SDCA
+(an open spot book leaves pandas NA on `ts_closed`). `m2_liquidity` stays unregistered;
 `trade_size` is only passed into configs that declare it
 (`registry.config_declares_field`).
 
