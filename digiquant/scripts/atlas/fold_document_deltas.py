@@ -24,7 +24,7 @@ import re
 import subprocess
 import sys
 from copy import deepcopy
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -44,7 +44,18 @@ except ImportError:
     _HAS_SB = False
 
 ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _sb():
@@ -80,9 +91,9 @@ def prior_document_key(target_key: str, prior_date: str) -> str:
 
 
 def fetch_payload(sb, doc_date: str, document_key: str) -> Optional[Dict[str, Any]]:
+    """House payload for ``document_key`` on ``doc_date``. Overlay same-key rows must not win."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", doc_date)
         .eq("document_key", document_key)
         .limit(1)
@@ -96,14 +107,13 @@ def fetch_payload(sb, doc_date: str, document_key: str) -> Optional[Dict[str, An
 
 
 def fetch_all_document_deltas(sb, d: str) -> List[Tuple[str, Dict[str, Any]]]:
-    """Return (document_key, payload) for document_delta rows on date d."""
+    """House ``document_delta`` rows on date d. Overlay deltas must not publish into house."""
     out: List[Tuple[str, Dict[str, Any]]] = []
     start = 0
     page = 500
     while True:
         res = (
-            sb.table("documents")
-            .select("document_key,payload")
+            eq_house_workspace(sb.table("documents").select("document_key,payload"))
             .eq("date", d)
             .range(start, start + page - 1)
             .execute()

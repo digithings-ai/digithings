@@ -3241,6 +3241,9 @@ and documents export, `backfill_pm_rebalance_and_activity` thesis map,
 `backfill_position_event_reasons` house event pages and document payload
 lookups, `materialize_snapshot.house_digest_documents` (digest sync must not
 copy overlay ``DIGEST.md`` into house ``daily_snapshots.digest_markdown``),
+`fold_document_deltas` house delta/base payloads (overlay deltas must not
+publish into the house book), `validate_pipeline_step.fetch_document_rows`,
+`backfill_pm_rebalance_and_activity` document payload lookups,
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`

@@ -210,3 +210,75 @@ class TestExportStateDocsIgnoresOverlay:
         rows = mod.house_documents_in_range(sb, "2026-08-01", "2026-08-31")
         assert [r["content"] for r in rows] == ["hs"]
         assert [r["workspace_id"] for r in rows] == [_HOUSE]
+
+
+class TestFoldDocumentDeltasIgnoresOverlay:
+    def test_fetch_payload_drops_overlay_listed_first(self) -> None:
+        mod = _load("fold_document_deltas")
+        key = "macro"
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(workspace_id=_OVERLAY, document_key=key, payload={"marker": "overlay"}),
+                    _doc(workspace_id=_HOUSE, document_key=key, payload={"marker": "house"}),
+                ]
+            }
+        )
+        assert mod.fetch_payload(sb, _DATE, key) == {"marker": "house"}
+
+    def test_fetch_all_document_deltas_drops_overlay_listed_first(self) -> None:
+        mod = _load("fold_document_deltas")
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(
+                        workspace_id=_OVERLAY,
+                        document_key="document-deltas/overlay.json",
+                        payload={"doc_type": "document_delta", "ops": ["overlay"]},
+                    ),
+                    _doc(
+                        workspace_id=_HOUSE,
+                        document_key="document-deltas/house.json",
+                        payload={"doc_type": "document_delta", "ops": ["house"]},
+                    ),
+                ]
+            }
+        )
+        deltas = mod.fetch_all_document_deltas(sb, _DATE)
+        assert [key for key, _p in deltas] == ["document-deltas/house.json"]
+        assert deltas[0][1]["ops"] == ["house"]
+
+
+class TestValidatePipelineStepDocsIgnoresOverlay:
+    def test_fetch_document_rows_drops_overlay_listed_first(self) -> None:
+        mod = _load("validate_pipeline_step")
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(
+                        workspace_id=_OVERLAY,
+                        document_key="digest",
+                        payload={"doc_type": "digest", "marker": "overlay"},
+                    ),
+                    _doc(
+                        workspace_id=_HOUSE,
+                        document_key="digest",
+                        payload={"doc_type": "digest", "marker": "house"},
+                    ),
+                ]
+            }
+        )
+        rows = mod.fetch_document_rows(sb, _DATE)
+        assert [r["payload"]["marker"] for r in rows] == ["house"]
+
+
+class TestBackfillPmDocsIgnoresOverlay:
+    def test_document_payload_pins_eq_house_workspace(self) -> None:
+        # Module import loads execute_at_open via a ROOT/scripts path that is
+        # not importable from tests/_load; pin the house filter in source.
+        text = (_SCRIPTS / "backfill_pm_rebalance_and_activity.py").read_text(encoding="utf-8")
+        assert 'eq_house_workspace(sb.table("documents").select("payload"))' in text
+        assert (
+            'sb.table("documents")\n        .select("payload")\n        .eq("date", date_iso)'
+            not in text
+        )
