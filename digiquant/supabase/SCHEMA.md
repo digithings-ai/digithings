@@ -632,11 +632,19 @@ T0/T1 release train is reviewed.
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_*`, `subscription_status`) land here for T2. Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
+| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
-| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). |
+| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created` for out-of-order guards. |
 | `job_runs` | `(id uuid)` | Per-workspace job telemetry stub (T4 dispatch). |
 | `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
+
+**Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
+`stripe-webhook` (signature-verified, `verify_jwt=false`), `create-checkout-session`,
+`customer-portal`. Webhook inserts `stripe_events` first (duplicate ⇒ no-op), applies
+roadmap P4 column mapping (`baseline`/`custom` from env price ids; deleted ⇒ `free`),
+then syncs Supabase Auth `app_metadata.plan_tier` for every workspace member. Claim-sync
+failure sets `workspaces.claim_sync_pending=true` and still returns HTTP 200 to Stripe.
+Migration `100_workspaces_claim_sync_pending.sql` adds that column (099 is reserved for K3).
 
 Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
