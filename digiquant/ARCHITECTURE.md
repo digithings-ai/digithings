@@ -3003,6 +3003,13 @@ side, quantity, order_type)` call. This work package is **contracts and typing o
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
 
+Operator env names live in `digiquant.olympus.envcompat`. Canonical names are
+`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
+Retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` names remain readable so live empty
+kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
+enable it without an explicit human decision. `pipeline-olympus.yml` still
+exports `OLYMPUS_ATTEMPT`; readers accept `DIGIQUANT_ATTEMPT` first.
+
 ### Vocabulary and models
 
 - `ExecutionVenue` (`StrEnum`): `paper_internal`, `alpaca_paper`, `ibkr_paper`,
@@ -3197,7 +3204,7 @@ append-only (D10). The internal `paper_internal` path is unchanged.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of `OLYMPUS_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
@@ -3242,11 +3249,11 @@ Overlay persist writes order intents; this is the production submit seam
 paper OAuth only; house/system never; `env=live` refused; IBKR held; Alpaca
 `api_key` held. `--check` logs `routing_enabled=true|false` and exits **2**
 when store env names are missing. `--dry-run` never unseals. `--all` /
-`--connection-id` with `OLYMPUS_KAIROS_ROUTING` off exit **3**
+`--connection-id` with `DIGIQUANT_EXECUTION_ROUTING` off exit **3**
 (`KAIROS_ROUTING_DISABLED`) and do not call `submit_order`. Operator
 `--connection-id` errors use the ``kairos route:`` prefix (not ``kairos sync:``).
 `--dispatch` / `--apply` exit **4**. Kill switch still defaults **off**. Do not add
-`OLYMPUS_KAIROS_ROUTING` to `KAIROS_STAGING_REQUIRED_SECRETS` (that list is
+`DIGIQUANT_EXECUTION_ROUTING` to `KAIROS_STAGING_REQUIRED_SECRETS` (that list is
 vendor EF secrets). Paper-fill remaining hop can still prove via sync of
 Alpaca UI fills without this cron.
 
@@ -3298,17 +3305,17 @@ candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
 `notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
 skip of the count. `--workspace-id` filters the plan. Missing store env exits
 **2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
-`python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
+`python scripts/digiquant_cron_check.py` (overlay `--check` + execution sync `--check` +
 route `--check` + Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing
 which probes failed. Route `--check` logs `routing_enabled=true|false` and
 never calls `submit_order`. The copy-paste GHA spec also runs
 ``python -m digiquant.notify.dispatch --dry-run`` (no send, no
 ``notification_log`` claim).
 Staging inventory also covers these names in
-`digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
-Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
+`digiquant.olympus.kairos.staging_secrets`. `scripts/digiquant_staging_e2e.py` runs
+Observer Settings hops first (when `DIGIQUANT_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
-vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
+vendor secrets are missing (and prints `DIGIQUANT_STAGING_E2E_REMAINING_HOPS` so
 the five live hops are named even before secrets land). Observer also POSTs
 `/settings/access/redeem-invite` with a short dummy code (`short`, under the
 Deno min length) and requires `INVITE_INVALID` or `EMAIL_REQUIRED` — live
@@ -3344,7 +3351,7 @@ leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
 Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
-**House pipeline proof:** `python scripts/kairos_house_pipeline_proof.py` lists
+**House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
 `pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
 on `develop` `207dd0a68`). Exit **0** only for a **schedule** success strictly
 after #3334 on `main` (`2026-08-31T20:39Z`). `workflow_dispatch` never counts.
@@ -3396,7 +3403,7 @@ Alpaca OAuth client id (never the secret) so Brokers connect can start as soon
 as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab from
 `?tab=billing` / `?checkout=success|cancel`.
 
-**Pages `/dashboard` cutover.** `scripts/kairos_pages_dashboard_gate.py` probes
+**Pages `/dashboard` cutover.** `scripts/digiquant_pages_dashboard_gate.py` probes
 live Pages. `--apply` deploys `settings` / `create-checkout-session` /
 `customer-portal` only when `/dashboard` login / auth callback / settings /
 Alpaca brokers callback are 200, this
@@ -3480,7 +3487,7 @@ exception fails that claimed row (`job_runs.error` = structured code or
 exception type name, never the payload) and continues the batch. Persist-off
 finishes `persist_disabled`, which the staging harness does **not** treat
 as proven (hop requires `succeeded` only). `--execute` apply also requires
-`DIGIQUANT_VAULT_MASTER_KEY` and `OLYMPUS_OVERLAY_PERSIST=1` (documents-safe
+`DIGIQUANT_VAULT_MASTER_KEY` and `DIGIQUANT_OVERLAY_PERSIST=1` (documents-safe
 after migration 110; positions/NAV/ledger still blocked by legacy single-tenant
 UNIQUEs until P6 — see Persist flag; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either
 is missing) so a
@@ -3575,7 +3582,7 @@ workspace-scoped private books to house (documents: house+system) so overlay
 rows cannot leak to anon. Cutover 900 still DROPs those policies.
 
 **Persist flag.** Overlay private-phase **document** writes require
-`OLYMPUS_OVERLAY_PERSIST=1` (default off). Production may enable that flag
+`DIGIQUANT_OVERLAY_PERSIST=1` (default off). Production may enable that flag
 **after migration 110** is applied on the target (anon house-only on private
 books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 **positions / nav_history / portfolio_metrics / ledger** writes remain refused
@@ -3648,7 +3655,7 @@ A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
 
-**BYOK seal CLI (`byok_seal.py`, `scripts/kairos_seal_byok.py`).** Resume path when
+**BYOK seal CLI (`byok_seal.py`, `scripts/digiquant_seal_byok.py`).** Resume path when
 a real user LLM key lands and Settings Keys is not yet on production Pages.
 Default `--check` requires gitignored `.local/secrets/digithings-byok.env`
 (`BYOK_PROVIDER` + `BYOK_API_KEY`, names only in logs). `--apply` seals with
@@ -3657,7 +3664,7 @@ one active `workspace_provider_credentials` row (unique-conflict = revoke then
 insert, same as the settings Edge Function). House/system and non-entitled
 workspaces (Observer free without `plan_floor`) are refused. Do not seal a
 placeholder or a house process-env key. Overlay `--execute` still requires
-`present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110
+`present_and_unsealable` plus `DIGIQUANT_OVERLAY_PERSIST=1` after migration 110
 (documents only; book/ledger stay `legacy_book_unique` until staged cutover 113
 is applied on the target).
 

@@ -347,7 +347,7 @@ def recover_ledger_from_book(
             weights=weights,
             cash_pct=cash_pct,
             nav=nav,
-            message="OLYMPUS_PORTFOLIO_LEDGER disabled; no commit written",
+            message="DIGIQUANT_PORTFOLIO_LEDGER disabled; no commit written",
         )
     ledger = appended
 

@@ -49,6 +49,7 @@ def test_require_overlay_persist_refuses_private_when_flag_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
+    monkeypatch.delenv("DIGIQUANT_OVERLAY_PERSIST", raising=False)
     with pytest.raises(OverlayPersistDisabled) as exc:
         require_overlay_persist(uuid4())
     assert exc.value.code == JobStatus.PERSIST_DISABLED.value
@@ -140,6 +141,7 @@ def test_overlay_persist_disabled_after_corpus(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
+    monkeypatch.delenv("DIGIQUANT_OVERLAY_PERSIST", raising=False)
     called = {"chain": False}
 
     def chain(**_kwargs: object) -> None:

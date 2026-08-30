@@ -9,7 +9,6 @@ converting legacy conviction scores inside ``decision_log``.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date
 from typing import (  # score:allow untyped any — used for heterogeneous node-update dict shape
@@ -53,6 +52,7 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
 from digiquant.olympus.overlay.persist import skip_overlay_shared_register
@@ -131,7 +131,7 @@ def _market_context_tickers() -> list[str]:
 def _refresh_on_demand_enabled() -> bool:
     """``ATLAS_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
     default; the CI pre-baseline step is the primary freshness mechanism)."""
-    return os.environ.get("ATLAS_REFRESH_ON_DEMAND", "").strip().lower() in (
+    return env_lookup(REFRESH_ON_DEMAND).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -425,7 +425,7 @@ def _resolve_research_state_attempt_id(deps: PreflightDeps) -> str:
     """Outer-retry attempt string for ResearchStatePin.attempt_id."""
     if deps.research_state_attempt_id is not None and deps.research_state_attempt_id.strip():
         return deps.research_state_attempt_id.strip()
-    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    raw = env_lookup(ATTEMPT).strip()
     if raw:
         return raw
     return "1"

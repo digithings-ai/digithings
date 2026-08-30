@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""GHA pin for ``.github/workflows/kairos-cron-check.yml``.
+"""Agent-runnable loud-fail probe for overlay, execution sync, route, and Mailgun cron env.
 
-cursor/* cannot rewrite workflow files. The canonical CLI is
-``scripts/digiquant_cron_check.py``. This wrapper keeps the installed probe
-green until a feat/ or human hop renames the workflow.
+Usage (repo root)::
+
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_cron_check.py
+
+Exit 0 when all four --check probes pass (names only; no dispatch / no send).
+Exit 2 when any probe is unconfigured.
 """
 
 from __future__ import annotations

@@ -292,9 +292,9 @@ parse-error:
 hooks-install:
 	@scripts/install-hooks.sh
 
-.PHONY: kairos-cron-check
-kairos-cron-check:
-	python scripts/kairos_cron_check.py
+.PHONY: digiquant-cron-check
+digiquant-cron-check:
+	python scripts/digiquant_cron_check.py
 
 # Run gitleaks locally against the working tree. Mirrors the CI scan so
 # developers can reproduce findings before pushing.

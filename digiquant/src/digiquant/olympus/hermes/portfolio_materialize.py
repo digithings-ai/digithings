@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import (
@@ -42,6 +41,7 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
@@ -66,14 +66,14 @@ _ALPHA_BENCHMARK = "SPY"
 # (migration 039) and entry_price/entry_date population only land when the flag is on AND
 # the migration has been applied to prod — so merging this code never breaks the scheduled
 # delta/baseline materialize (which would otherwise upsert columns that don't exist yet).
-_RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
+_RISK_FIELDS_ENV = POSITION_RISK_FIELDS
 _ATR_STOP_MULT = 2.0  # advisory stop at ~2× daily ATR below entry
 _ATR_TARGET_MULT = 3.0  # advisory target at ~3× daily ATR above entry (1.5 R:R)
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 
 def _position_risk_fields_enabled() -> bool:
-    return os.environ.get(_RISK_FIELDS_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    return env_lookup(_RISK_FIELDS_ENV).strip().lower() in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)

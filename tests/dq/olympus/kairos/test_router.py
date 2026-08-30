@@ -170,6 +170,7 @@ def _connection(*, broker: Broker = Broker.ALPACA) -> BrokerConnection:
 @pytest.fixture(autouse=True)
 def _clear_routing_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_KAIROS_ROUTING", raising=False)
+    monkeypatch.delenv("DIGIQUANT_EXECUTION_ROUTING", raising=False)
 
 
 def test_routing_enabled_defaults_off() -> None:

@@ -7,7 +7,6 @@ optional ``triage_gate`` / ``state.triage`` carry-forward.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
@@ -62,6 +61,7 @@ from digiquant.olympus.edit_mode.content_identity import (
     prior_content_date,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
+from digiquant.olympus.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
 from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 
 def _data_tools_enabled() -> bool:
     """Master kill-switch for tool grounding (env ATLAS_DATA_TOOLS, default on)."""
-    return os.environ.get("ATLAS_DATA_TOOLS", "1").strip().lower() not in ("0", "false", "")
+    return env_lookup(RESEARCH_DATA_TOOLS, default="1").strip().lower() not in ("0", "false", "")
 
 
 @lru_cache(maxsize=1)
@@ -103,7 +103,7 @@ a week. Override via ``ATLAS_MACRO_STALE_DAYS``."""
 
 
 def _macro_stale_days() -> int:
-    raw = os.environ.get("ATLAS_MACRO_STALE_DAYS", "").strip()
+    raw = env_lookup(MACRO_STALE_DAYS).strip()
     if raw:
         try:
             return max(0, int(raw))

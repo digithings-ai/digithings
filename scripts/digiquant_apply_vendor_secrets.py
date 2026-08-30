@@ -7,8 +7,8 @@ redeploys billing/settings functions. Never prints secret values.
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py --apply
 """
 
 from __future__ import annotations

@@ -158,8 +158,8 @@ already contains the merged function code + migrations on the target DB.
 Fail-closed probe (exit 3 while `/dashboard` 404s; `--apply` only after 200):
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
-# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_pages_dashboard_gate.py
+# PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_pages_dashboard_gate.py --apply
 ```
 
 ```bash
@@ -366,7 +366,7 @@ Per [EPIC.md](EPIC.md) program-level acceptance (staging / Stripe test mode):
 Agent-runnable loud-fail gate (names missing secrets; **never** paper-fakes):
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
 # or: pytest -m staging_e2e tests/dq/olympus/kairos/test_staging_e2e.py
 ```
 
@@ -384,9 +384,9 @@ curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
 # 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
-# 4) Overlay run (T4): `OLYMPUS_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`
+# 4) Overlay run (T4): `DIGIQUANT_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`
 #    Persist is safe after migration **110** (not 900). `--execute` refuses without the flag
-#    (`OVERLAY_EXECUTE_NOT_CONFIGURED: OLYMPUS_OVERLAY_PERSIST`) so the hop cannot be
+#    (`OVERLAY_EXECUTE_NOT_CONFIGURED: DIGIQUANT_OVERLAY_PERSIST`) so the hop cannot be
 #    `persist_disabled`. Requires BYOK present_and_unsealable. Never `--execute --all`.
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated

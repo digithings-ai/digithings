@@ -3,7 +3,8 @@
 Production entry: ``python -m digiquant.olympus.kairos.route_cron``. Overlay
 books persist order intents; this CLI is the missing submit seam. House and
 system workspaces, live env rows, IBKR paper, and Alpaca ``api_key`` rows are
-never submitted. ``OLYMPUS_KAIROS_ROUTING`` defaults **off** — ``--all`` then
+never submitted. ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``)
+defaults **off** — ``--all`` then
 exits 3 without calling ``submit_order``. This module does not import Alpaca
 adapters at module level.
 """
@@ -17,6 +18,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
+from digiquant.olympus.envcompat import EXECUTION_ROUTING
 from digiquant.olympus.kairos.policy import routing_enabled_in
 from digiquant.olympus.kairos.sync_cron import (
     ALPACA_API_KEY_HOLD_REASON,
@@ -147,7 +149,7 @@ def main(
         return 0
 
     if not routing_on:
-        err(f"{KAIROS_ROUTING_DISABLED}: OLYMPUS_KAIROS_ROUTING is off (no submit_order)")
+        err(f"{KAIROS_ROUTING_DISABLED}: {EXECUTION_ROUTING} is off (no submit_order)")
         return EXIT_ROUTING_DISABLED
 
     loaded = _load_rows(

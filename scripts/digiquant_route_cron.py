@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Agent-runnable Kairos overlay order-intent route cron (K4).
+"""Agent-runnable overlay order-intent route cron (K4).
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_route_cron.py --check
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_route_cron.py --dry-run
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_route_cron.py --check
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_route_cron.py --dry-run
 
-``--all`` submits only when ``OLYMPUS_KAIROS_ROUTING`` is on. Kill switch
+``--all`` submits only when ``DIGIQUANT_EXECUTION_ROUTING`` is on. Kill switch
 defaults off. Never ``workflow_dispatch``.
 """
 

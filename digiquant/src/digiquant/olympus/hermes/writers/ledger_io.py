@@ -29,7 +29,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -42,6 +41,7 @@ from uuid import UUID, uuid4
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.envcompat import PORTFOLIO_LEDGER, env_lookup
 from digiquant.olympus.hermes.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -75,7 +75,7 @@ ORDER_INTENTS = "portfolio_ledger_order_intents"
 PAPER_EXECUTIONS = "portfolio_ledger_paper_executions"
 
 _PRICE_HISTORY = "price_history"
-_LEDGER_ENV = "OLYMPUS_PORTFOLIO_LEDGER"
+_LEDGER_ENV = PORTFOLIO_LEDGER
 _OFF_VALUES = frozenset({"0", "off", "false", "no", "disabled"})
 _CASH = "CASH"
 _WEIGHT_EPSILON = 1e-9
@@ -104,7 +104,7 @@ def ledger_enabled() -> bool:
     unset env var must mean **on** — otherwise a deploy that forgets to set it stops
     writing lineage while every projection still looks healthy.
     """
-    return os.environ.get(_LEDGER_ENV, "").strip().lower() not in _OFF_VALUES
+    return env_lookup(_LEDGER_ENV).strip().lower() not in _OFF_VALUES
 
 
 @dataclass(frozen=True)

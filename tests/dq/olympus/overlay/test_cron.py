@@ -774,5 +774,5 @@ def test_execute_production_missing_persist_exits_2_before_dispatch() -> None:
     assert rc == 2
     assert err
     assert "OVERLAY_EXECUTE_NOT_CONFIGURED" in err[0]
-    assert "OLYMPUS_OVERLAY_PERSIST" in err[0]
+    assert "DIGIQUANT_OVERLAY_PERSIST" in err[0]
     assert "persist_disabled" not in "\n".join(err)

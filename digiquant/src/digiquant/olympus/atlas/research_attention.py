@@ -8,7 +8,6 @@ provider-owning nodes. ``off`` / ``shadow`` / ``enforce`` via
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, date, datetime
 from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
     Any,
@@ -29,6 +28,7 @@ from digiquant.olympus.edit_mode.content_identity import prior_content_date
 from digiquant.olympus.edit_mode.models import PriorPublished, TriageSignal
 from digiquant.olympus.edit_mode.prior import artifact_document_key
 from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
+from digiquant.olympus.envcompat import RESEARCH_ATTENTION_MODE, env_lookup
 from digiquant.olympus.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
@@ -63,7 +63,7 @@ def attention_store_for_run(run_id: str) -> AttentionStore:
 
 def resolve_research_attention_rollout_mode() -> AttentionRolloutMode:
     """Read ``OLYMPUS_RESEARCH_ATTENTION_MODE``; unknown values → shadow."""
-    raw = os.environ.get(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow").strip().lower()
+    raw = env_lookup(RESEARCH_ATTENTION_MODE, default="shadow").strip().lower()
     try:
         return AttentionRolloutMode(raw)
     except ValueError:
