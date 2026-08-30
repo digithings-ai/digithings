@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS public.notification_prefs (
 DROP TRIGGER IF EXISTS set_updated_at_notification_prefs ON public.notification_prefs;
 CREATE TRIGGER set_updated_at_notification_prefs
     BEFORE UPDATE ON public.notification_prefs
-    FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION public.trigger_set_updated_at();
 
 ALTER TABLE public.notification_prefs ENABLE ROW LEVEL SECURITY;
 
