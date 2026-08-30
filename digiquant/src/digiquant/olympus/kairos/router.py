@@ -26,12 +26,13 @@ from typing import (
 from uuid import UUID, uuid5
 
 from digiquant.brokers.base import BrokerAdapter
-from digiquant.brokers.connections import Broker, BrokerConnection
+from digiquant.brokers.connections import Broker, BrokerConnection, ConnectionEnv
 from digiquant.brokers.contracts import (
     BrokerOrderAck,
     BrokerOrderRequest,
     BrokerOrderStatus,
     ExecutionVenue,
+    LiveVenueNotAuthorizedError,
     OrderSide,
     OrderType,
     TimeInForce,
@@ -41,8 +42,12 @@ from digiquant.olympus.hermes.writers.execution_io import (
     _directions_by_order,
     _pending_order_heads,
 )
-from digiquant.olympus.hermes.writers.ledger_io import _insert
-from digiquant.olympus.kairos.policy import InconsistentOrderChainError, resolve_venue
+from digiquant.olympus.hermes.writers.ledger_io import ORDER_INTENTS, _insert
+from digiquant.olympus.kairos.policy import (
+    ForeignWorkspaceIntentError,
+    InconsistentOrderChainError,
+    resolve_venue,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +217,76 @@ def _existing_broker_order_ids(
     return {str(row["id"]) for row in (resp.data or []) if row.get("id")}
 
 
+def _scope_ledger_rows_to_workspace(
+    *,
+    pending: list[dict[str, Any]],
+    order_rows: list[dict[str, Any]],
+    workspace_id: UUID,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Keep only ``workspace_id`` rows; raise on missing id among candidates.
+
+    After venue gates resolve a non-internal overlay workspace, the helpers
+    are threaded with that id (T4 omitted-workspace reads are house-only).
+    This post-filter is belt-and-braces on the scoped result: foreign-workspace
+    intents are never consumed; a pending row with a null ``workspace_id`` is a
+    disagreement and raises rather than being skipped silently.
+    """
+    expected = str(workspace_id)
+    for row in pending:
+        wid = row.get("workspace_id")
+        if wid is None or str(wid).strip() == "":
+            raise ForeignWorkspaceIntentError(
+                f"pending order intent id={row.get('id')!r} has no workspace_id; "
+                f"refusing to route for connection workspace {expected}"
+            )
+    own_pending = [row for row in pending if str(row.get("workspace_id")) == expected]
+    own_orders = [row for row in order_rows if str(row.get("workspace_id") or "") == expected]
+    foreign = len(pending) - len(own_pending)
+    if foreign:
+        logger.warning(
+            "kairos router scoped out %d foreign-workspace pending intent(s); "
+            "connection workspace_id=%s",
+            foreign,
+            expected,
+        )
+    # Defense in depth: every row we will consume must match.
+    for row in own_pending:
+        if str(row.get("workspace_id")) != expected:
+            raise ForeignWorkspaceIntentError(
+                f"pending order intent id={row.get('id')!r} workspace_id="
+                f"{row.get('workspace_id')!r} does not match connection "
+                f"workspace {expected}"
+            )
+    return own_pending, own_orders
+
+
+def _pending_heads_missing_workspace(*, client: Any, run_date: date) -> list[dict[str, Any]]:
+    """Same-date pending heads whose ``workspace_id`` is absent.
+
+    Scoped ``_rows_for_date`` uses PostgREST ``eq(workspace_id, uuid)``, which
+    cannot observe a null column. Missing id is an authority disagreement, not
+    a silent drop — this scan never submits; the caller raises.
+    """
+    resp = (
+        client.table(ORDER_INTENTS)
+        .select("id,workspace_id,status,supersedes_id,symbol")
+        .eq("run_date", run_date.isoformat())
+        .execute()
+    )
+    rows = list(resp.data or [])
+    superseded = {str(r.get("supersedes_id")) for r in rows if r.get("supersedes_id")}
+    missing: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("id") or "") in superseded:
+            continue
+        if str(row.get("status") or "") != "pending":
+            continue
+        wid = row.get("workspace_id")
+        if wid is None or str(wid).strip() == "":
+            missing.append(row)
+    return missing
+
+
 def route_pending_orders(
     *,
     client: Any,
@@ -221,20 +296,38 @@ def route_pending_orders(
     submitted_date: date,
     now: datetime,
     workspace_id: UUID | None = None,
-    active_paper_brokers: list[Broker | str] | None = None,
+    active_paper_brokers: list[Broker | str | ExecutionVenue] | None = None,
 ) -> RouteResult:
     """Route pending ledger order intents to ``connection``'s venue.
 
+    Authority boundary
+    ------------------
+    * ``workspace_id`` is passed to :func:`resolve_venue` **unchanged** —
+      ``None`` / house / system ⇒ ``PAPER_INTERNAL``; never substituted with
+      ``connection.workspace_id``.
+    * ``connection.env`` must be ``paper`` before any ``submit_order``; live
+      raises :class:`LiveVenueNotAuthorizedError`.
+    * After a non-internal venue is resolved for a real overlay workspace,
+      ledger reads are threaded with that ``workspace_id`` (T4 omitted
+      workspace ⇒ house). ``_scope_ledger_rows_to_workspace`` then asserts
+      every returned row matches; a same-date pending head missing
+      ``workspace_id`` raises :class:`ForeignWorkspaceIntentError`.
+
     When :func:`resolve_venue` returns ``PAPER_INTERNAL``, this function returns
     immediately with ``skipped_paper_internal=True`` and writes nothing — the
-    caller keeps the existing ``execution_io`` path. External venues submit via
-    ``adapter`` and append one ``broker_orders`` row per intent.
+    caller keeps the existing ``execution_io`` path.
     """
-    resolved_workspace = workspace_id if workspace_id is not None else connection.workspace_id
+    if connection.env is not ConnectionEnv.PAPER:
+        raise LiveVenueNotAuthorizedError(
+            f"route_pending_orders refused connection env={connection.env.value!r}; "
+            "only paper connections may reach submit_order"
+        )
+
+    # Pass the caller's workspace_id through unchanged (None stays None).
     brokers = active_paper_brokers
     if brokers is None:
-        brokers = [connection.broker] if connection.env.value == "paper" else []
-    venue = resolve_venue(resolved_workspace, active_paper_brokers=brokers)
+        brokers = [connection.broker]
+    venue = resolve_venue(workspace_id, active_paper_brokers=brokers)
     if venue is ExecutionVenue.PAPER_INTERNAL:
         return RouteResult(venue=venue, skipped_paper_internal=True)
 
@@ -244,17 +337,29 @@ def route_pending_orders(
             f"connection broker {connection.broker.value!r} does not match "
             f"resolved venue {venue.value!r}"
         )
+    if connection.workspace_id != workspace_id:
+        # External routing requires an explicit tenant workspace that matches
+        # the connection — a mismatched pair is a caller bug, not a silent remap.
+        raise ForeignWorkspaceIntentError(
+            f"route_pending_orders workspace_id={workspace_id!r} does not match "
+            f"connection.workspace_id={connection.workspace_id!r}"
+        )
 
-    # Overlay / Kairos: scope ledger reads to the connection's workspace. Omitted
-    # workspace_id on the house paper path keeps `_rows_for_date`'s house default.
+    # Threading applies only after a non-internal venue for a real overlay workspace.
     pending, order_rows = _pending_order_heads(
-        client=client, run_date=run_date, workspace_id=resolved_workspace
+        client=client, run_date=run_date, workspace_id=workspace_id
+    )
+    missing = _pending_heads_missing_workspace(client=client, run_date=run_date)
+    pending, order_rows = _scope_ledger_rows_to_workspace(
+        pending=[*pending, *missing],
+        order_rows=order_rows,
+        workspace_id=connection.workspace_id,
     )
     actions, stale = _directions_by_order(
         client=client,
         run_date=run_date,
         order_rows=order_rows,
-        workspace_id=resolved_workspace,
+        workspace_id=workspace_id,
     )
 
     intent_ids = [str(row["id"]) for row in pending if row.get("id")]
@@ -311,7 +416,6 @@ def route_pending_orders(
             side=side,
         )
         ack = adapter.submit_order(request)
-        status = ack.status if ack.status is not BrokerOrderStatus.SUBMITTED else ack.status
         payload = _order_row(
             row_id=row_id,
             workspace_id=connection.workspace_id,
@@ -319,7 +423,7 @@ def route_pending_orders(
             order_intent_id=order_intent_id,
             request=request,
             ack=ack,
-            status=status,
+            status=ack.status,
             submitted_at=ack.submitted_at,
             recorded_at=now,
         )
@@ -339,6 +443,7 @@ def route_pending_orders(
 
 __all__ = [
     "BROKER_ORDERS",
+    "ForeignWorkspaceIntentError",
     "RouteResult",
     "RoutedOrder",
     "broker_order_id",

@@ -82,3 +82,12 @@ def test_notification_log_append_only(sql: str) -> None:
 
 def test_notification_prefs_digest_hour_check(sql: str) -> None:
     assert "digest_hour_utc BETWEEN 0 AND 23" in sql
+
+
+def test_notification_log_append_only_triggers(sql: str) -> None:
+    assert "reject_notification_log_mutation" in sql
+    assert re.search(
+        r"BEFORE\s+UPDATE\s+OR\s+DELETE\s+ON\s+public\.notification_log",
+        sql,
+        re.IGNORECASE,
+    )

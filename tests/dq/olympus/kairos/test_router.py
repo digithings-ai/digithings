@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -26,8 +27,13 @@ from digiquant.brokers.contracts import (
     OrderSide,
 )
 from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
+from digiquant.olympus.hermes.writers.execution_io import (
+    _pending_order_heads,
+    execute_pending_orders,
+)
 from digiquant.olympus.kairos.policy import (
     AmbiguousVenueError,
+    ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
     resolve_venue,
     routing_enabled,
@@ -235,6 +241,7 @@ def _chain_store(
     action: DecisionAction,
     order_id: UUID | None = None,
     quantity: str = "10",
+    workspace_id: UUID = _WS,
 ) -> tuple[dict[str, list[dict[str, Any]]], UUID]:
     """Minimal ledger chain: decision → requested → approved → pending order.
 
@@ -245,7 +252,7 @@ def _chain_store(
     requested_id = uuid4()
     approved_id = uuid4()
     oid = order_id or uuid4()
-    ws = str(_WS)
+    ws = str(workspace_id)
     store: dict[str, list[dict[str, Any]]] = {
         "portfolio_ledger_decision_intents": [
             {
@@ -293,6 +300,16 @@ def _chain_store(
         BROKER_ORDERS: [],
     }
     return store, oid
+
+
+def _merge_stores(
+    *stores: dict[str, list[dict[str, Any]]],
+) -> dict[str, list[dict[str, Any]]]:
+    merged: dict[str, list[dict[str, Any]]] = {}
+    for store in stores:
+        for table, rows in store.items():
+            merged.setdefault(table, []).extend(rows)
+    return merged
 
 
 def test_route_skips_when_paper_internal() -> None:
@@ -400,3 +417,206 @@ def test_router_module_has_no_upsert() -> None:
     for path in src.glob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert ".upsert(" not in text, f"upsert forbidden in {path.name}"
+
+
+# --- Review probes (authority boundary) -----------------------------------------
+
+
+def test_foreign_workspace_intents_never_submitted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tenant-A connection must not submit tenant-B's same-date pending intents."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    ws_a = _WS
+    ws_b = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    store_a, oid_a = _chain_store(action=DecisionAction.ADD, workspace_id=ws_a)
+    store_b, oid_b = _chain_store(action=DecisionAction.ADD, workspace_id=ws_b)
+    # Give B a distinct symbol so a mistaken cross-submit is obvious in side/symbol.
+    store_b["portfolio_ledger_order_intents"][0]["symbol"] = "MSFT"
+    store_b["portfolio_ledger_decision_intents"][0]["symbol"] = "MSFT"
+    store_b["portfolio_ledger_requested_targets"][0]["symbol"] = "MSFT"
+    store_b["portfolio_ledger_approved_targets"][0]["symbol"] = "MSFT"
+    store = _merge_stores(store_a, store_b)
+    adapter = _FakeAdapter()
+    result = route_pending_orders(
+        client=_FakeClient(store),
+        adapter=adapter,
+        connection=_connection(),  # workspace A
+        run_date=_RUN,
+        submitted_date=_RUN,
+        now=_NOW,
+        workspace_id=ws_a,
+        active_paper_brokers=[Broker.ALPACA],
+    )
+    assert result.skipped_paper_internal is False
+    submitted_ids = {req.client_order_id for req in adapter.submitted}
+    assert str(oid_a) in submitted_ids
+    assert str(oid_b) not in submitted_ids
+    assert all(req.symbol == "AAPL" for req in adapter.submitted)
+
+
+def test_workspace_none_never_substituted_with_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """workspace_id=None must stay house ⇒ PAPER_INTERNAL (no connection.workspace remap)."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    store, _ = _chain_store(action=DecisionAction.ADD)
+    adapter = _FakeAdapter()
+    result = route_pending_orders(
+        client=_FakeClient(store),
+        adapter=adapter,
+        connection=_connection(),
+        run_date=_RUN,
+        submitted_date=_RUN,
+        now=_NOW,
+        workspace_id=None,
+        active_paper_brokers=[Broker.ALPACA],
+    )
+    assert result.venue is ExecutionVenue.PAPER_INTERNAL
+    assert result.skipped_paper_internal is True
+    assert adapter.submitted == []
+
+
+def test_house_and_system_uuids_never_route_externally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    assert (
+        resolve_venue(house_workspace_id(), active_paper_brokers=[Broker.ALPACA])
+        is ExecutionVenue.PAPER_INTERNAL
+    )
+    assert (
+        resolve_venue(system_workspace_id(), active_paper_brokers=[Broker.IBKR])
+        is ExecutionVenue.PAPER_INTERNAL
+    )
+
+
+def test_live_env_connection_with_explicit_brokers_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    store, _ = _chain_store(action=DecisionAction.ADD)
+    adapter = _FakeAdapter()
+    live_conn = BrokerConnection(
+        id=_CONN,
+        workspace_id=_WS,
+        broker=Broker.ALPACA,
+        env=ConnectionEnv.LIVE,
+        auth_kind=AuthKind.API_KEY,
+        ciphertext=b"\x00" * 32,
+        nonce=b"\x00" * 12,
+        key_id="v1",
+        fingerprint="deadbeef",
+        scopes=(),
+        status=ConnectionStatus.ACTIVE,
+        created_at=_NOW,
+    )
+    with pytest.raises(LiveVenueNotAuthorizedError):
+        route_pending_orders(
+            client=_FakeClient(store),
+            adapter=adapter,
+            connection=live_conn,
+            run_date=_RUN,
+            submitted_date=_RUN,
+            now=_NOW,
+            workspace_id=_WS,
+            active_paper_brokers=[Broker.ALPACA],
+        )
+    assert adapter.submitted == []
+
+
+def test_public_resolve_venue_raises_live_venue_not_authorized() -> None:
+    with pytest.raises(LiveVenueNotAuthorizedError):
+        resolve_venue(_WS, active_paper_brokers=["alpaca_live"])
+    with pytest.raises(LiveVenueNotAuthorizedError):
+        resolve_venue(_WS, active_paper_brokers=[ExecutionVenue.ALPACA_LIVE])
+    with pytest.raises(LiveVenueNotAuthorizedError):
+        resolve_venue(_WS, active_paper_brokers=[ExecutionVenue.IBKR_LIVE])
+
+
+def test_pending_missing_workspace_id_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    store, _ = _chain_store(action=DecisionAction.ADD)
+    store["portfolio_ledger_order_intents"][0].pop("workspace_id")
+    adapter = _FakeAdapter()
+
+    with pytest.raises(ForeignWorkspaceIntentError):
+        route_pending_orders(
+            client=_FakeClient(store),
+            adapter=adapter,
+            connection=_connection(),
+            run_date=_RUN,
+            submitted_date=_RUN,
+            now=_NOW,
+            workspace_id=_WS,
+            active_paper_brokers=[Broker.ALPACA],
+        )
+    assert adapter.submitted == []
+
+
+def test_missing_workspace_id_raises_under_threaded_scoped_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scoped ``eq(workspace_id)`` would silently drop a null-id row; router must raise."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    store, oid = _chain_store(action=DecisionAction.ADD)
+    store["portfolio_ledger_order_intents"][0].pop("workspace_id")
+    client = _FakeClient(store)
+    scoped, _ = _pending_order_heads(client=client, run_date=_RUN, workspace_id=_WS)
+    assert all(str(row.get("id")) != str(oid) for row in scoped)
+
+    adapter = _FakeAdapter()
+    with pytest.raises(ForeignWorkspaceIntentError):
+        route_pending_orders(
+            client=client,
+            adapter=adapter,
+            connection=_connection(),
+            run_date=_RUN,
+            submitted_date=_RUN,
+            now=_NOW,
+            workspace_id=_WS,
+            active_paper_brokers=[Broker.ALPACA],
+        )
+    assert adapter.submitted == []
+
+
+def test_overlay_pending_routed_via_own_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overlay workspace pending routes on its connection; house sibling is unseen."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    overlay = _WS
+    house = house_workspace_id()
+    store_o, oid_o = _chain_store(action=DecisionAction.ADD, workspace_id=overlay)
+    store_h, oid_h = _chain_store(action=DecisionAction.ADD, workspace_id=house)
+    store_h["portfolio_ledger_order_intents"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_decision_intents"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_requested_targets"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_approved_targets"][0]["symbol"] = "TLT"
+    store = _merge_stores(store_o, store_h)
+    adapter = _FakeAdapter()
+    result = route_pending_orders(
+        client=_FakeClient(store),
+        adapter=adapter,
+        connection=_connection(),
+        run_date=_RUN,
+        submitted_date=_RUN,
+        now=_NOW,
+        workspace_id=overlay,
+        active_paper_brokers=[Broker.ALPACA],
+    )
+    submitted = {req.client_order_id for req in adapter.submitted}
+    assert result.skipped_paper_internal is False
+    assert result.venue is ExecutionVenue.ALPACA_PAPER
+    assert str(oid_o) in submitted
+    assert str(oid_h) not in submitted
+    assert all(req.symbol == "AAPL" for req in adapter.submitted)
+
+
+def test_execute_pending_orders_house_path_omits_workspace_id() -> None:
+    src = inspect.getsource(execute_pending_orders)
+    pending_calls = [
+        line.strip()
+        for line in src.splitlines()
+        if "_pending_order_heads" in line or "_directions_by_order" in line
+    ]
+    assert len(pending_calls) >= 2
+    assert all("workspace_id" not in line for line in pending_calls)
