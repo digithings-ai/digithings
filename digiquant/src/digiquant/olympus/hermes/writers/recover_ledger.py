@@ -31,11 +31,14 @@ from digiquant.olympus.atlas.supabase_io import (
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
 from digiquant.olympus.hermes.writers.commit_io import (
     load_commit_manifests,
+    resolve_prior_commit,
     weights_fingerprint,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
     APPROVED_TARGETS,
+    COMMITS,
     LedgerAppend,
+    _heads,
     _rows_for_date,
     append_commit_chain,
 )
@@ -162,6 +165,8 @@ def _manifest(
     nav: float,
     ledger: LedgerAppend,
     decision_log_rows: int,
+    commit_seq: int,
+    supersedes: list[str],
 ) -> dict[str, object]:
     booked = {**{k: round(v, 4) for k, v in sorted(weights.items())}}
     return {
@@ -174,8 +179,8 @@ def _manifest(
         "cash_pct": cash_pct,
         "nav": nav,
         "decision_log_rows": decision_log_rows,
-        "commit_seq": 1,
-        "supersedes": [],
+        "commit_seq": commit_seq,
+        "supersedes": list(supersedes),
         "pruned_tickers": [],
         "ledger_commit_id": ledger.commit_id,
         "ledger_frozen_symbols": list(ledger.frozen_symbols),
@@ -220,32 +225,6 @@ def _approved_covers_book(
     return bool(needed) and needed <= symbols
 
 
-def _matching_complete_commit(
-    *,
-    manifests: list[dict[str, object]],
-    weights: dict[str, float],
-    chain_complete: bool,
-) -> tuple[str | None, str | None, bool]:
-    """Return ``(commit_id, source_run_id, fingerprint_conflict)`` for committed manifests."""
-    committed = [row for row in manifests if row.get("status") == "committed"]
-    if not committed:
-        return None, None, False
-    latest = committed[0]
-    book_fp = weights_fingerprint(weights)
-    manifest_fp = str(latest.get("weights_fingerprint") or "")
-    if manifest_fp != book_fp:
-        return (
-            str(latest.get("ledger_commit_id") or "") or None,
-            str(latest.get("source_run_id") or "") or None,
-            True,
-        )
-    commit_id = str(latest.get("ledger_commit_id") or "") or None
-    source_run_id = str(latest.get("source_run_id") or "") or None
-    if commit_id and chain_complete:
-        return commit_id, source_run_id, False
-    return None, source_run_id, False
-
-
 def recover_ledger_from_book(
     *,
     client: SupabaseClient,
@@ -272,42 +251,61 @@ def recover_ledger_from_book(
         )
 
     manifests = load_commit_manifests(client=client, run_date=run_date, workspace_id=overlay)
+    latest, next_seq = resolve_prior_commit(manifests)
+    prior_commits = _rows_for_date(
+        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay
+    )
+    head_ids = {str(row.get("id")) for row in _heads(prior_commits) if row.get("id")}
     chain_complete = _approved_covers_book(
         client=client, run_date=run_date, workspace_id=overlay, weights=weights
     )
-    existing_id, existing_source, conflict = _matching_complete_commit(
-        manifests=manifests, weights=weights, chain_complete=chain_complete
-    )
-    if conflict:
-        logger.warning(
-            "recover_ledger: fingerprint mismatch for %s (commit=%s)",
-            run_date.isoformat(),
-            existing_id,
-        )
+    book_fp = weights_fingerprint(weights)
+    latest_id = str((latest or {}).get("ledger_commit_id") or "") or None
+    latest_source = str((latest or {}).get("source_run_id") or "") or None
+    if latest is None and manifests:
         return LedgerRecovery(
             run_date=run_date,
             status="conflict",
-            commit_id=existing_id,
-            source_run_id=existing_source,
+            commit_id=latest_id,
+            source_run_id=latest_source,
             weights=weights,
             cash_pct=cash_pct,
             nav=nav,
-            message=(
-                f"committed manifest fingerprint does not match booked positions "
-                f"for {run_date.isoformat()}"
-            ),
+            message=f"ambiguous commit_seq for {run_date.isoformat()}; will not guess the head",
         )
-    if existing_id:
-        return LedgerRecovery(
-            run_date=run_date,
-            status="already_committed",
-            commit_id=existing_id,
-            source_run_id=existing_source,
-            weights=weights,
-            cash_pct=cash_pct,
-            nav=nav,
-            message=f"ledger commit {existing_id} already present for {run_date.isoformat()}",
-        )
+    if latest is not None and latest.get("status") == "committed":
+        manifest_fp = str(latest.get("weights_fingerprint") or "")
+        if manifest_fp != book_fp:
+            logger.warning(
+                "recover_ledger: fingerprint mismatch for %s (commit=%s)",
+                run_date.isoformat(),
+                latest_id,
+            )
+            return LedgerRecovery(
+                run_date=run_date,
+                status="conflict",
+                commit_id=latest_id,
+                source_run_id=latest_source,
+                weights=weights,
+                cash_pct=cash_pct,
+                nav=nav,
+                message=(
+                    f"committed manifest fingerprint does not match booked positions "
+                    f"for {run_date.isoformat()}"
+                ),
+            )
+        if latest_id and latest_id in head_ids and chain_complete:
+            return LedgerRecovery(
+                run_date=run_date,
+                status="already_committed",
+                commit_id=latest_id,
+                source_run_id=latest_source,
+                weights=weights,
+                cash_pct=cash_pct,
+                nav=nav,
+                message=(f"ledger commit {latest_id} already present for {run_date.isoformat()}"),
+            )
+    superseded = [book_fp] if latest is not None else []
 
     source_run_id = uuid4()
     state = _recovery_state(
@@ -364,6 +362,8 @@ def recover_ledger_from_book(
             nav=nav,
             ledger=ledger,
             decision_log_rows=n_decisions,
+            commit_seq=next_seq,
+            supersedes=superseded,
         ),
     )
     return LedgerRecovery(

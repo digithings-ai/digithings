@@ -2181,8 +2181,9 @@ operator recovery *caller* of the same writer, not a second implementation.
 a committed manifest fingerprint matches the booked weights **and** approved-target rows
 cover that book; a fingerprint mismatch is `conflict` (nonzero exit); a commit row without
 children falls through to `append_commit_chain` (supersede), never a false-finalized
-manifest. Prior weights are mark-to-market (`query_price_deltas` + `mark_to_market_weights`)
-and house `portfolio.json` hydrates `policy_version_id`.
+manifest. The matching commit must also be the current ledger `_heads()` tip;
+`resolve_prior_commit` orders manifests by `commit_seq` (ambiguous seq → `conflict`).
+Recovery manifests carry the next `commit_seq` and `supersedes` fingerprints.
 
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an

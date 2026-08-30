@@ -127,6 +127,8 @@ class TestRecoverLedgerFromBook:
         assert payload["recovery"] == "append_from_existing_book"
         assert payload["weights"]["VGK"] == 25.0
         assert payload["ledger_commit_id"] == result.commit_id
+        assert payload["commit_seq"] == 1
+        assert payload["supersedes"] == []
         assert client.store.get("positions", []) == []
 
     def test_second_apply_is_noop_when_manifest_exists(self) -> None:
@@ -218,6 +220,133 @@ class TestRecoverLedgerFromBook:
         result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
         assert result.status == "no_book"
         assert client.store.get(COMMITS, []) == []
+
+    def test_newer_incomplete_head_is_not_already_committed(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        book = {
+            "EWZ": 5.0771,
+            "FXI": 5.0,
+            "GLD": 9.4215,
+            "VGK": 25.0,
+            "XLF": 20.0,
+            "XLV": 14.8384,
+        }
+        book_fp = weights_fingerprint(book)
+        client.canned_reads[COMMITS] = [
+            {
+                "id": "11111111-2222-3333-4444-555555555555",
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+            {
+                "id": "22222222-3333-4444-5555-666666666666",
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": "11111111-2222-3333-4444-555555555555",
+            },
+        ]
+        client.canned_reads[APPROVED_TARGETS] = [
+            {
+                "run_date": RUN_DATE.isoformat(),
+                "symbol": ticker,
+                "approved_weight": pct / 100.0,
+                "workspace_id": HOUSE,
+            }
+            for ticker, pct in {**book, "CASH": 20.663}.items()
+        ]
+        client.store["documents"] = [
+            {
+                "date": RUN_DATE.isoformat(),
+                "document_key": "commit-run/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "workspace_id": HOUSE,
+                "payload": {
+                    "status": "committed",
+                    "commit_seq": 1,
+                    "weights_fingerprint": book_fp,
+                    "ledger_commit_id": "11111111-2222-3333-4444-555555555555",
+                    "source_run_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                },
+            }
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "committed"
+        assert result.commit_id not in {
+            "11111111-2222-3333-4444-555555555555",
+            "22222222-3333-4444-5555-666666666666",
+        }
+        payload = next(
+            r["payload"]
+            for r in client.store.get("documents", [])
+            if str(r.get("document_key", "")).startswith("commit-run/")
+            and r["payload"].get("ledger_commit_id") == result.commit_id
+        )
+        assert payload["commit_seq"] == 2
+        assert payload["supersedes"] == [book_fp]
+
+    def test_ambiguous_commit_seq_is_conflict(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        payload = {
+            "status": "committed",
+            "commit_seq": 1,
+            "weights_fingerprint": "aaaaaaaa",
+            "ledger_commit_id": "11111111-2222-3333-4444-555555555555",
+        }
+        client.store["documents"] = [
+            {
+                "date": RUN_DATE.isoformat(),
+                "document_key": f"commit-run/{suffix}",
+                "workspace_id": HOUSE,
+                "payload": dict(payload),
+            }
+            for suffix in (
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+            )
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "conflict"
+        assert client.store.get(COMMITS, []) == []
+
+    def test_recovery_manifest_increments_commit_seq(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        book_fp = weights_fingerprint(
+            {"EWZ": 5.0771, "FXI": 5.0, "GLD": 9.4215, "VGK": 25.0, "XLF": 20.0, "XLV": 14.8384}
+        )
+        client.canned_reads[COMMITS] = [
+            {
+                "id": "11111111-2222-3333-4444-555555555555",
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            }
+        ]
+        client.store["documents"] = [
+            {
+                "date": RUN_DATE.isoformat(),
+                "document_key": "commit-run/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "workspace_id": HOUSE,
+                "payload": {
+                    "status": "committed",
+                    "commit_seq": 4,
+                    "weights_fingerprint": book_fp,
+                    "ledger_commit_id": "11111111-2222-3333-4444-555555555555",
+                    "source_run_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                },
+            }
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "committed"
+        written = next(
+            r["payload"]
+            for r in client.store.get("documents", [])
+            if r["payload"].get("ledger_commit_id") == result.commit_id
+        )
+        assert written["commit_seq"] == 5
+        assert written["supersedes"] == [book_fp]
 
     def test_recovery_module_does_not_call_book_portfolio(self) -> None:
         source = Path(
