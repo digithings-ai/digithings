@@ -309,7 +309,7 @@ async function sign(body: string, secret: string, ts: number): Promise<string> {
 // ---------------------------------------------------------------------------
 
 Deno.test("verifyStripeSignature rejects missing / bad signatures", async () => {
-  const secret = "whsec_test_secret";
+  const secret = "test_webhook_signing_key";
   const body = '{"id":"evt_1"}';
   await assertRejects(
     () => verifyStripeSignature(body, null, secret),
@@ -322,7 +322,7 @@ Deno.test("verifyStripeSignature rejects missing / bad signatures", async () => 
 });
 
 Deno.test("verifyStripeSignature accepts a valid HMAC", async () => {
-  const secret = "whsec_test_secret";
+  const secret = "test_webhook_signing_key";
   const body = '{"id":"evt_ok","type":"ping","created":1}';
   const ts = 1_700_000_000;
   const header = await sign(body, secret, ts);
