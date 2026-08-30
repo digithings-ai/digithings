@@ -65,11 +65,17 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 3. **Loud control:** one white (paper) filled rectangle per viewport on dark; dark ink label. Sibling docs control uses bracket corners.
 4. **Nav:** few links, ghost/hairline; one filled Login/Install max.
 5. **Kicker:** `// section` mono comment — keep.
-6. **Hero:** claim + curl/install box + quiet trust meta; optional quiet stat row below the fold or under the install band — never competing in the hero.
+6. **Hero:** claim + curl/install box + quiet trust meta; optional quiet stat row below the fold or under the install band — never competing in the hero. Quiet stats are **figure-forward**: oversized tabular numerals, tiny uppercase labels (not near-title weight).
 7. **Surfaces:** tonal slabs — `--surface` fill, 1px hairline, **0 radius**. Not glass, not soft round cards.
 8. **Inputs:** 0–2px (prefer 0), mono value, canvas fill, hairline; focus via accent ring only.
 9. **Accent:** phosphor/module colour for focus, live, selected, money-adjacent identity — **not** primary CTA fill.
 10. **Density:** sparse section rhythm on landings; instrument rhythm inside dashboards — same atoms.
+
+### Round-1 refinements (post-composite)
+
+| Item | Feedback | Lock |
+|------|----------|------|
+| Quiet stat strip | Numerals too close in weight/size to labels | **Figure-forward quiet row** — numeral ~2× label optical size; labels shrink + track out |
 
 ### Explicit non-goals (for now)
 

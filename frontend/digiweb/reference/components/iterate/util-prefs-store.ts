@@ -281,7 +281,7 @@ export const UTIL_AXES: UtilAxis[] = [
         id: "quiet-row",
         label: "Quiet row",
         inspiredBy: "digiweb current",
-        note: "Modest mono figures",
+        note: "Figure-forward: large tabular nums, tiny labels",
       },
       {
         id: "huge-mono",
