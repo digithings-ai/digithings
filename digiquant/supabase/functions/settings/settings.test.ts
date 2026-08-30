@@ -47,6 +47,8 @@ interface Store {
   prefs: Array<Record<string, unknown>>;
   /** When true, notification_prefs lookups fail as if the table is missing. */
   prefsMissing?: boolean;
+  /** When true, olympus_profile_config lookups fail as if the table is missing. */
+  profilesMissing?: boolean;
 }
 
 function wsRow(id: string, planTier = "custom"): WorkspaceRow {
@@ -151,6 +153,12 @@ function mockAdmin(store: Store): AdminClient {
       }
 
       if (table === "olympus_profile_config") {
+        if (store.profilesMissing) {
+          return {
+            data: null,
+            error: { message: 'relation "olympus_profile_config" does not exist', code: "42P01" },
+          };
+        }
         if (pendingInsert) {
           if (pendingInsert.profile_key === "house" && pendingInsert.is_house_default === false) {
             return {
@@ -643,6 +651,70 @@ Deno.test("POST brokers/revoke: fails closed on unknown row", async () => {
   });
   assertEquals(status, 404);
   assertEquals(json.code, "CONNECTION_NOT_FOUND");
+});
+
+Deno.test("GET profile: empty contract — 200 defaults, version_id null, no write", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.profile_key, "workspace");
+  assertEquals(json.version_id, null);
+  assertEquals(json.recorded_at, null);
+  assertEquals(json.label, "");
+  assertEquals(json.investment, null);
+  assertEquals(json.assets, null);
+  assertEquals(store.profiles.length, 0);
+});
+
+Deno.test("GET profile: returns tip for workspace member", async () => {
+  const store = freshStore();
+  store.profiles.push({
+    id: "tip-v1",
+    workspace_id: WS_A,
+    profile_key: "workspace",
+    schema_version: 1,
+    is_house_default: false,
+    label: "My overlay",
+    supersedes_id: null,
+    recorded_at: "2026-08-30T12:00:00Z",
+    payload: {
+      version_id: "tip-v1",
+      profile_key: "workspace",
+      label: "My overlay",
+      investment: validInvestment,
+      assets: { schema_version: 1, excluded_tickers: ["XYZ"] },
+    },
+  });
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.version_id, "tip-v1");
+  assertEquals(json.label, "My overlay");
+  assertEquals(json.profile_key, "workspace");
+  assertEquals((json.investment as { risk_tolerance: string }).risk_tolerance, "moderate");
+  assertEquals((json.assets as { excluded_tickers: string[] }).excluded_tickers[0], "XYZ");
+});
+
+Deno.test("GET profile: house profile_key rejected", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/profile?profile_key=house");
+  assertEquals(status, 400);
+  assertEquals(json.code, "HOUSE_KEY_FORBIDDEN");
+});
+
+Deno.test("GET profile: 503 when olympus_profile_config missing", async () => {
+  const store = freshStore();
+  store.profilesMissing = true;
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 503);
+  assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("GET profile: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", `/profile?workspace_id=${WS_B}`);
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
 });
 
 Deno.test("GET notifications: returns row for workspace member", async () => {
