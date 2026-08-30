@@ -15,6 +15,7 @@ Never weakens ``public_app_urls_ok``.
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import urllib.error
 import urllib.request
@@ -39,7 +40,15 @@ _SETTINGS_HANDLERS = (
     Path("digiquant") / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
 )
 _APP_URL_TS = Path("digiquant") / "supabase" / "functions" / "_shared" / "app-url.ts"
-_REDEEM_INVITE_MARKER = "/access/redeem-invite"
+_REDEEM_INVITE_RE = re.compile(r'path\s*===\s*"/access/redeem-invite"')
+_ALPACA_DASHBOARD_RE = re.compile(
+    r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/dashboard/settings/brokers/callback/"\s*;'
+)
+_SETTINGS_DASHBOARD_RE = re.compile(
+    r'export\s+const\s+SETTINGS_PATH\s*=\s*"/dashboard/settings/"\s*;'
+)
+_ALPACA_OLYMPUS_RE = re.compile(r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/')
+_SETTINGS_OLYMPUS_RE = re.compile(r'export\s+const\s+SETTINGS_PATH\s*=\s*"/olympus/')
 
 DASHBOARD_PATHS: tuple[str, ...] = (
     "/dashboard/",
@@ -135,44 +144,54 @@ def probe_pages_dashboard(
     return PagesDashboardReport(origin=base, results=tuple(results))
 
 
+def _strip_ts_comments(source: str) -> str:
+    without_block = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    stripped: list[str] = []
+    for line in without_block.splitlines():
+        if "//" in line:
+            line = line[: line.index("//")]
+        stripped.append(line)
+    return "\n".join(stripped)
+
+
 def checkout_ready_for_ef_apply(repo_root: Path) -> tuple[bool, str]:
     """True when this tree can deploy settings after /dashboard is live.
 
     112 invite tables are on ``core``. Live settings v32 has no redeem-invite
     route. ``--apply`` must not deploy a checkout that still pins ``/olympus``
-    or omits ``POST /access/redeem-invite``.
+    or omits ``POST /access/redeem-invite``. Comment-only mentions do not count.
     """
     handlers = repo_root / _SETTINGS_HANDLERS
     app_url = repo_root / _APP_URL_TS
     try:
-        handlers_text = handlers.read_text(encoding="utf-8")
-        app_url_text = app_url.read_text(encoding="utf-8")
+        handlers_text = _strip_ts_comments(handlers.read_text(encoding="utf-8"))
+        app_url_text = _strip_ts_comments(app_url.read_text(encoding="utf-8"))
     except OSError:
         return False, "pages dashboard gate: settings EF source unreadable"
-    if _REDEEM_INVITE_MARKER not in handlers_text:
+    if _REDEEM_INVITE_RE.search(handlers_text) is None:
         return (
             False,
             "pages dashboard gate: checkout missing POST /access/redeem-invite — "
             "do not deploy settings from this tree (112 tables would sit unused)",
         )
-    if 'ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/' not in app_url_text:
+    if _ALPACA_DASHBOARD_RE.search(app_url_text) is None:
         return (
             False,
             "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
             "Alpaca callback — do not deploy settings from this tree",
         )
-    if 'SETTINGS_PATH = "/dashboard/' not in app_url_text:
+    if _SETTINGS_DASHBOARD_RE.search(app_url_text) is None:
         return (
             False,
             "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
             "settings path — do not deploy settings from this tree",
         )
-    if 'ALPACA_OAUTH_CALLBACK_PATH = "/olympus/' in app_url_text:
+    if _ALPACA_OLYMPUS_RE.search(app_url_text) is not None:
         return (
             False,
             "pages dashboard gate: checkout still pins /olympus Alpaca callback",
         )
-    if 'SETTINGS_PATH = "/olympus/' in app_url_text:
+    if _SETTINGS_OLYMPUS_RE.search(app_url_text) is not None:
         return (
             False,
             "pages dashboard gate: checkout still pins /olympus settings path",

@@ -204,3 +204,54 @@ def test_check_does_not_require_redeem_invite_source(tmp_path: Path) -> None:
     )
     assert code == 0
     assert deployed == []
+
+
+def test_apply_refuses_comment_only_redeem_invite(tmp_path: Path) -> None:
+    deployed: list[str] = []
+
+    def run(argv: list[str] | tuple[str, ...]) -> None:
+        deployed.append(" ".join(argv))
+
+    root = _write_ef_checkout(tmp_path, redeem=False, dashboard=True)
+    handlers = root / "digiquant" / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
+    handlers.write_text(
+        "// POST /access/redeem-invite — docs only\nexport async function handleSettingsRequest() {}\n",
+        encoding="utf-8",
+    )
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=lambda _msg: None,
+        probe=_ok_probe,
+        run=run,
+        repo_root=root,
+    )
+    assert code == EXIT_CHECKOUT_STALE
+    assert deployed == []
+
+
+def test_apply_refuses_comment_only_dashboard_paths(tmp_path: Path) -> None:
+    deployed: list[str] = []
+
+    def run(argv: list[str] | tuple[str, ...]) -> None:
+        deployed.append(" ".join(argv))
+
+    root = _write_ef_checkout(tmp_path, redeem=True, dashboard=True)
+    app_url = root / "digiquant" / "supabase" / "functions" / "_shared" / "app-url.ts"
+    app_url.write_text(
+        (
+            '// export const ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/settings/brokers/callback/";\n'
+            '// export const SETTINGS_PATH = "/dashboard/settings/";\n'
+            "export const ALPACA_OAUTH_CALLBACK_PATH = undefined;\n"
+            "export const SETTINGS_PATH = undefined;\n"
+        ),
+        encoding="utf-8",
+    )
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=lambda _msg: None,
+        probe=_ok_probe,
+        run=run,
+        repo_root=root,
+    )
+    assert code == EXIT_CHECKOUT_STALE
+    assert deployed == []
