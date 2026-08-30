@@ -68,38 +68,37 @@ export interface SnapshotSource {
 }
 
 /**
- * Frontend-facing copy of the Phase 7 master synthesis payload.
+ * Frontend-facing copy of the Phase 7 master briefing.
  * Mirrors `digiquant.atlas.snapshot.DigestPayload`.
  */
 export interface DigestPayload {
-  /* SegmentReport core */
-  segment: string;
+  segment?: string;
   /** ISO date `YYYY-MM-DD`. */
   date: string;
-  bias: SnapshotBias;
-  headline: string;
-  material_findings: SnapshotFinding[];
-  sources: SnapshotSource[];
-  notes: string;
-
-  /* Digest-specific narrative sections */
-  market_regime_snapshot: string;
-  alt_data_dashboard: string;
-  institutional_summary: string;
-  asset_classes_summary: string;
-  us_equities_summary: string;
-  thesis_tracker: string;
-  portfolio_recommendations: string;
-  actionable_summary: ActionableItem[];
-  risk_radar: RiskItem[];
-  segment_freshness: Record<string, SegmentFreshness>;
+  /** Stitched markdown briefing (WP-E). */
+  body?: string;
+  sources?: SnapshotSource[];
+  segment_freshness?: Record<string, SegmentFreshness>;
   /**
    * Short regime label (e.g. "Risk-Off Consolidation") added by the backend
    * pipeline when it populates the digest.  Optional because rows written before
-   * this field was introduced will not have it; the frontend falls back to the
-   * full `market_regime_snapshot` paragraph.
+   * this field was introduced will not have it.
    */
   regime_label?: string;
+  /* Historical SegmentReport slots — optional so old snapshots still type-check. */
+  bias?: SnapshotBias;
+  headline?: string;
+  material_findings?: SnapshotFinding[];
+  notes?: string;
+  market_regime_snapshot?: string;
+  alt_data_dashboard?: string;
+  institutional_summary?: string;
+  asset_classes_summary?: string;
+  us_equities_summary?: string;
+  thesis_tracker?: string;
+  portfolio_recommendations?: string;
+  actionable_summary?: ActionableItem[];
+  risk_radar?: RiskItem[];
 }
 
 /**

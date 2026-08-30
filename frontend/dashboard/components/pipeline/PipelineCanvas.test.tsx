@@ -93,9 +93,11 @@ describe('PipelineCanvas', () => {
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
     // Decision/commit is graph-hidden; walkthrough is stages + visible sub-steps.
-    expect(html).toContain('1 of 23');
+    // Sector-scorecard is no longer a research leaf (WP-D), so empty-day length is 22.
+    expect(html).toContain('1 of 22');
     expect(buildPipelineWalkthrough(emptyDay).map((node) => node.label)).toContain('Risk sizing');
     expect(buildPipelineWalkthrough(emptyDay).some((node) => node.id === 'decision:commit')).toBe(false);
+    expect(buildPipelineWalkthrough(emptyDay).some((node) => node.id === 'research:scorecard')).toBe(false);
   });
 
   it('adds real fan-out artifacts to the walkthrough without placeholder stops', () => {
@@ -107,7 +109,7 @@ describe('PipelineCanvas', () => {
     };
     const nodes = buildPipelineWalkthrough(day);
 
-    expect(nodes).toHaveLength(24);
+    expect(nodes).toHaveLength(23);
     expect(nodes.find((node) => node.documentKey === 'alt-onchain-positioning')).toBeDefined();
     expect(nodes.some((node) => node.label === 'Alt-data 2')).toBe(false);
   });
@@ -160,7 +162,7 @@ describe('PipelineCanvas', () => {
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    expect(html).toContain('1 of 23');
+    expect(html).toContain('1 of 22');
     expect(html).toContain('Preflight / market data');
     expect(html).toContain('md:hidden');
     expect(html).toContain('fixed inset-x-0 bottom-0');
@@ -173,9 +175,9 @@ describe('PipelineCanvas', () => {
   });
 
   it('clamps full walkthrough keyboard navigation at both ends', () => {
-    expect(movePipelineWalkthrough(0, -1, 23)).toBe(0);
-    expect(movePipelineWalkthrough(0, 1, 23)).toBe(1);
-    expect(movePipelineWalkthrough(22, 1, 23)).toBe(22);
+    expect(movePipelineWalkthrough(0, -1, 22)).toBe(0);
+    expect(movePipelineWalkthrough(0, 1, 22)).toBe(1);
+    expect(movePipelineWalkthrough(21, 1, 22)).toBe(21);
   });
 
   it('opens the selected walkthrough stop during desktop arrow traversal', () => {

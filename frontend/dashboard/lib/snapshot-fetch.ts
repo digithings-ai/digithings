@@ -63,39 +63,34 @@ function isObjectRecord(v: unknown): v is Record<string, unknown> {
 /** Validate the jsonb payload looks like {@link DigestPayload}. Defensive — does not deep-validate. */
 function asDigestPayload(raw: unknown): DigestPayload | null {
   if (!isObjectRecord(raw)) return null;
-  const requiredStringKeys: Array<keyof DigestPayload> = [
-    'segment',
-    'date',
-    'bias',
-    'headline',
-    'market_regime_snapshot',
-    'alt_data_dashboard',
-    'institutional_summary',
-    'asset_classes_summary',
-    'us_equities_summary',
-  ];
-  for (const k of requiredStringKeys) {
-    if (typeof raw[k as string] !== 'string') return null;
-  }
+  if (typeof raw.date !== 'string') return null;
+  const body = typeof raw.body === 'string' ? raw.body : '';
+  const hasBody = body.trim().length > 0;
+  const hasLegacy =
+    typeof raw.headline === 'string' || typeof raw.market_regime_snapshot === 'string';
+  if (!hasBody && !hasLegacy) return null;
 
-  // Provide defaults for optional list / map fields so the renderer can rely
-  // on iterating without null-checks. The pipeline always emits these, but
-  // historical / hand-edited rows may not.
   const safe: DigestPayload = {
-    segment: raw.segment as string,
-    date: raw.date as string,
+    segment: typeof raw.segment === 'string' ? raw.segment : 'master-digest',
+    date: raw.date,
+    body: hasBody ? body : undefined,
+    sources: Array.isArray(raw.sources) ? (raw.sources as DigestPayload['sources']) : [],
+    notes: typeof raw.notes === 'string' ? raw.notes : '',
     bias: raw.bias as DigestPayload['bias'],
-    headline: raw.headline as string,
+    headline: typeof raw.headline === 'string' ? raw.headline : undefined,
     material_findings: Array.isArray(raw.material_findings)
       ? (raw.material_findings as DigestPayload['material_findings'])
       : [],
-    sources: Array.isArray(raw.sources) ? (raw.sources as DigestPayload['sources']) : [],
-    notes: typeof raw.notes === 'string' ? raw.notes : '',
-    market_regime_snapshot: raw.market_regime_snapshot as string,
-    alt_data_dashboard: raw.alt_data_dashboard as string,
-    institutional_summary: raw.institutional_summary as string,
-    asset_classes_summary: raw.asset_classes_summary as string,
-    us_equities_summary: raw.us_equities_summary as string,
+    market_regime_snapshot:
+      typeof raw.market_regime_snapshot === 'string' ? raw.market_regime_snapshot : undefined,
+    alt_data_dashboard:
+      typeof raw.alt_data_dashboard === 'string' ? raw.alt_data_dashboard : undefined,
+    institutional_summary:
+      typeof raw.institutional_summary === 'string' ? raw.institutional_summary : undefined,
+    asset_classes_summary:
+      typeof raw.asset_classes_summary === 'string' ? raw.asset_classes_summary : undefined,
+    us_equities_summary:
+      typeof raw.us_equities_summary === 'string' ? raw.us_equities_summary : undefined,
     thesis_tracker: typeof raw.thesis_tracker === 'string' ? raw.thesis_tracker : '',
     portfolio_recommendations:
       typeof raw.portfolio_recommendations === 'string' ? raw.portfolio_recommendations : '',
@@ -107,6 +102,7 @@ function asDigestPayload(raw: unknown): DigestPayload | null {
       ? (raw.segment_freshness as DigestPayload['segment_freshness'])
       : {},
   };
+  if (typeof raw.regime_label === 'string') safe.regime_label = raw.regime_label;
   return safe;
 }
 

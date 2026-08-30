@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from datetime import date
 from typing import (
@@ -25,6 +26,19 @@ logger = logging.getLogger(__name__)
 _VALID_THESIS_STATUSES = frozenset(
     {"ACTIVE", "MONITORING", "CHALLENGED", "CLOSED", "INVALIDATED", "PAUSED", "NEW"}
 )
+# ``vehicle-{ticker}`` plus the live typo ``veicle-{ticker}`` (missing 'h').
+_VEHICLE_SHAPED_ID = re.compile(r"^veh?icle-(.+)$", re.IGNORECASE)
+
+
+def vehicle_shaped_ticker(thesis_id: str | None) -> str | None:
+    """Ticker if ``thesis_id`` is a vehicle row id (or the ``veicle-`` misspelling)."""
+    if not thesis_id:
+        return None
+    match = _VEHICLE_SHAPED_ID.fullmatch(str(thesis_id).strip())
+    if match is None:
+        return None
+    ticker = match.group(1).strip()
+    return ticker.lower() if ticker else None
 
 
 def normalize_thesis_status(raw: str | None) -> str:
@@ -252,7 +266,19 @@ def persist_thesis_review(
     prior_by_id = {str(r.get("thesis_id")): r for r in active_theses}
     count = 0
     for update in review.reviewed_theses:
-        prior_row = prior_by_id.get(update.thesis_id, {})
+        if vehicle_shaped_ticker(update.thesis_id) is not None:
+            logger.info(
+                "H1 skip vehicle-shaped thesis_id %s (H5 owns vehicle rows)",
+                update.thesis_id,
+            )
+            continue
+        prior_row = prior_by_id.get(update.thesis_id)
+        if not prior_row:
+            logger.info(
+                "H1 skip unknown thesis_id %s (does not mint market rows)",
+                update.thesis_id,
+            )
+            continue
         name = str(prior_row.get("name") or update.thesis_id)
         invalidation = str(prior_row.get("invalidation") or "")
         notes = "; ".join(update.evidence) if update.evidence else str(prior_row.get("notes") or "")
@@ -302,6 +328,9 @@ def validate_market_thesis_proposals(
     proposed_ids: set[str] = set()
 
     for proposal in proposals:
+        if vehicle_shaped_ticker(proposal.thesis_id) is not None:
+            errors.append(f"{proposal.thesis_id}: vehicle-shaped id cannot be a market thesis")
+            continue
         if proposal.thesis_id in proposed_ids:
             errors.append(f"{proposal.thesis_id}: thesis_id is already proposed in this run")
             continue

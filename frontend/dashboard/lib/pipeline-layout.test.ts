@@ -36,7 +36,6 @@ describe('layoutPipeline', () => {
       'Macro',
       'Asset-classes',
       'Sectors',
-      'Sector scorecard',
     ]);
     expect(subs.every((n) => n.x === research!.x)).toBe(true);
     const ys = subs.map((n) => n.y);
@@ -83,7 +82,7 @@ describe('layoutPipeline', () => {
       { expandedStages: new Set(['synthesis']), expandedFanouts: new Set() },
     );
     expect(l.nodes.find((node) => node.id === 'synthesis:consolidate')?.runStatus)
-      .toBe('state-only');
+      .toBe('expected-artifact-missing');
     expect(l.nodes.find((node) => node.id === 'synthesis:digest')?.runStatus)
       .toBe('expected-artifact-missing');
   });
@@ -136,7 +135,7 @@ describe('layoutPipeline', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},
-      presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-scorecard', 'beliefs', 'commit-run/123', 'commit-run/999']),
+      presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-technology', 'beliefs', 'commit-run/123', 'commit-run/999']),
       artifacts: [],
     };
     const exp: ExpansionState = {
@@ -152,23 +151,50 @@ describe('layoutPipeline', () => {
     // digest absent that day -> no documentKey (golden rule)
     expect(byId('synthesis:digest')?.documentKey).toBeUndefined();
     expect(byId('synthesis:digest')?.runStatus).toBe('expected-artifact-missing');
-    // sector-scorecard is a research leaf (Phase-5 equities output, #1538)
-    expect(byId('research:scorecard')?.documentKey).toBe('sector-scorecard');
-    // consolidate is state-only: never keyed, even when scorecard is present
+    // sector memos are fan-out branches; the scorecard leaf is gone (WP-D)
+    expect(byId('research:scorecard')).toBeUndefined();
+    // consolidate is a real document once bias-row is present
     expect(byId('synthesis:consolidate')?.documentKey).toBeUndefined();
-    expect(byId('synthesis:consolidate')?.stateOnly).toBe(true);
-    expect(byId('synthesis:consolidate')?.runStatus).toBe('state-only');
-    // beliefs fold resolves when the on-demand doc is present (#1383)
+    expect(byId('synthesis:consolidate')?.stateOnly).toBeUndefined();
+    expect(byId('synthesis:consolidate')?.runStatus).toBe('expected-artifact-missing');
+    // beliefs fold resolves when the same-date daily document is present (WP-I)
     expect(byId('learning:beliefs')?.documentKey).toBe('beliefs');
     expect(byId('learning:beliefs')?.runStatus).toBe('persisted-artifact');
     // Decision collapses onto the booked book; commit-run is not a graph node.
     expect(byId('decision')?.documentKey).toBeUndefined();
     expect(byId('decision:commit')).toBeUndefined();
     expect(l.nodes.some((n) => n.documentKey?.startsWith('commit-run/'))).toBe(false);
-    // thesis/screener are state-only: never keyed
     expect(byId('selection:thesis')?.documentKey).toBeUndefined();
-    expect(byId('selection:thesis')?.stateOnly).toBe(true);
+    expect(byId('selection:thesis')?.stateOnly).toBeUndefined();
     expect(byId('selection:screener')?.documentKey).toBeUndefined();
+  });
+
+  it('WP-B leaves resolve documentKey when inputs/bias-row/thesis/screener are present', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set([
+        'inputs',
+        'bias-row',
+        'thesis/thesis-review',
+        'opportunity-screener',
+        'macro',
+      ]),
+      artifacts: [],
+    };
+    const l = layoutPipeline(day, {
+      expandedStages: new Set(['inputs', 'synthesis', 'selection']),
+      expandedFanouts: new Set(),
+    });
+    const byId = (id: string) => l.nodes.find((n) => n.id === id);
+    expect(byId('inputs:preflight')?.documentKey).toBe('inputs');
+    expect(byId('inputs:preflight')?.runStatus).toBe('persisted-artifact');
+    expect(byId('synthesis:consolidate')?.documentKey).toBe('bias-row');
+    expect(byId('synthesis:consolidate')?.runStatus).toBe('persisted-artifact');
+    expect(byId('selection:thesis')?.documentKey).toBe('thesis/thesis-review');
+    expect(byId('selection:thesis')?.runStatus).toBe('persisted-artifact');
+    expect(byId('selection:screener')?.documentKey).toBe('opportunity-screener');
+    expect(byId('selection:screener')?.runStatus).toBe('persisted-artifact');
   });
 
   it('Decision stage focuses pm-rebalance and never exposes commit-run on the graph', () => {
@@ -188,7 +214,7 @@ describe('layoutPipeline', () => {
     expect(l.nodes.some((n) => n.documentKey?.startsWith('commit-run/'))).toBe(false);
   });
 
-  it('beliefs node is inert (no documentKey) on non-trigger days', () => {
+  it('beliefs node has no documentKey until the same-date fold publishes', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},

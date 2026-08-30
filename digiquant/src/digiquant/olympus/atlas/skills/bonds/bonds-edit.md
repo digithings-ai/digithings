@@ -10,7 +10,7 @@ Update an **existing** bonds document; do not rewrite from scratch.
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"bonds"`.
-Patch paths: `/headline`, `/bias`, `/yield_curve_shape`, `/two_ten_spread_bps`, `/credit_ig_spread_bps`, `/credit_hy_spread_bps`, `/material_findings`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

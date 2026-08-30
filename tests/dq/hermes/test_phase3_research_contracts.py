@@ -84,6 +84,8 @@ def test_atlas_graph_topology_unchanged_by_phase3() -> None:
     nodes = _graph_node_names(graph)
     assert FORBIDDEN_PHASE3_NODES.isdisjoint(nodes)
     assert ATLAS_COMPILED_NODES.issubset(nodes)
+    assert "sector-scorecard" not in nodes
+    assert "sector-technology" in nodes
 
 
 def test_hermes_graph_topology_unchanged_by_phase3() -> None:

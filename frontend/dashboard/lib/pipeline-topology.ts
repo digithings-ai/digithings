@@ -43,7 +43,7 @@ export interface PipelineNodeExplanation {
 
 // Mirrors the real backend graph: Atlas phases (preflight → research fan-outs →
 // consolidate → digest) then Hermes H1–H9 (thesis framing → screener → analysts →
-// deliberation → PM direction → risk sizing → commit) then the on-demand beliefs
+// deliberation → PM direction → risk sizing → commit) then the daily beliefs
 // fold (learning/beliefs_distillation.py, runs after the terminal publish).
 export const PIPELINE_TOPOLOGY: StageDef[] = [
   {
@@ -55,7 +55,6 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       id: 'preflight',
       label: 'Preflight / market data',
       description: 'Checks that the run has complete, current inputs and records readiness in pipeline state.',
-      stateOnly: true,
     },
     // WP13-class AttentionPlan shadow (#1945 glass-box): published as
     // `attention-plan` when the shadow planner runs. Absence is expected until
@@ -103,25 +102,17 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       description: 'Dispatches sector specialists in parallel to compare leadership, risk, and relative opportunity.',
       fanout: { id: 'sectors', label: 'Sectors', defaultCount: 11 },
     },
-    // Phase-5 equities output — published as `sector-scorecard` (category "sector"),
-    // a research artifact, NOT the Phase-6 consolidate output it was once wired to.
-    {
-      id: 'scorecard',
-      label: 'Sector scorecard',
-      description: 'Ranks the sector research into a compact comparative scorecard for downstream synthesis.',
-    },
   ]},
   {
     id: 'synthesis',
     label: 'Synthesis',
     description: 'Reconciles the research set into one directional read and a daily narrative for decision-makers.',
     subSteps: [
-    // Phase 6 emits only the in-state bias row (phase6_bias_row) — no document.
+    // Phase 6 bias row is published as `bias-row` from Atlas publish_phase.
     {
       id: 'consolidate',
       label: 'Consolidate bias',
       description: 'Combines specialist signals into the directional bias carried forward in pipeline state.',
-      stateOnly: true,
     },
     {
       id: 'digest',
@@ -134,18 +125,16 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
     label: 'Selection',
     description: 'Turns the synthesized view into challenged, screened, and risk-sized portfolio candidates.',
     subSteps: [
-    // H1–H3 build thesis documents into state slots only; H4 screener likewise.
+    // H1 publishes `thesis/thesis-review`; H4 publishes `opportunity-screener`.
     {
       id: 'thesis',
       label: 'Thesis framing',
       description: 'Frames candidate investment theses and the evidence each candidate must satisfy.',
-      stateOnly: true,
     },
     {
       id: 'screener',
       label: 'Screener',
       description: 'Applies the run criteria to narrow the candidate set before deeper analyst work.',
-      stateOnly: true,
     },
     {
       id: 'analysts',
@@ -185,16 +174,14 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
   {
     id: 'learning',
     label: 'Learning',
-    description: 'Folds resolved outcomes back into durable beliefs when the learning trigger is active.',
+    description: 'Folds resolved outcomes into a same-date beliefs document on every house run.',
     subSteps: [
-    // On-demand beliefs distillation (#1383): publishes document_key `beliefs`
-    // only on trigger days (resolved backlog > threshold or refresh_scope=beliefs),
-    // so the node renders inert on most days — that is expected, not drift.
+    // Daily short fold (WP-I): publishes document_key `beliefs` on every house
+    // run date. Full rewrite remains refresh_scope=beliefs (or backlog > 20).
     {
       id: 'beliefs',
       label: 'Beliefs fold',
-      description: 'Distills eligible resolved evidence into updated beliefs for use by future runs.',
-      conditionalArtifact: true,
+      description: 'Distills newly resolved lessons into updated beliefs, or carries prior beliefs when nothing new landed.',
     },
   ]},
 ];

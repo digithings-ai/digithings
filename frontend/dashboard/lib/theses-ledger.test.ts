@@ -22,6 +22,23 @@ describe('splitTheses', () => {
     expect(out.market.map((t) => t.id)).toEqual(['MT1', 'LEGACY']);
     expect(out.vehicle.map((t) => t.id)).toEqual(['vehicle-ewt']);
   });
+
+  it('routes vehicle-shaped ids to vehicle even when thesis_kind is null', () => {
+    const out = splitTheses([
+      mk({ id: 'veicle-ewg', name: 'veicle-ewg', thesis_kind: null }),
+      mk({ id: 'veicle-gld', name: 'veicle-gld', thesis_kind: null }),
+      mk({ id: 'veicle-xlb', name: 'veicle-xlb', thesis_kind: null }),
+      mk({ id: 'vehicle-ewt', name: 'EWT vehicle thesis', thesis_kind: null }),
+      mk({ id: 'gold-silver-structural-rally', name: 'Gold rally', thesis_kind: 'market' }),
+    ]);
+    expect(out.market.map((t) => t.id)).toEqual(['gold-silver-structural-rally']);
+    expect(out.vehicle.map((t) => t.id)).toEqual([
+      'veicle-ewg',
+      'veicle-gld',
+      'veicle-xlb',
+      'vehicle-ewt',
+    ]);
+  });
 });
 
 describe('sortByConfidenceDesc', () => {

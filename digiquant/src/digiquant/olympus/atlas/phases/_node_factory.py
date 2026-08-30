@@ -519,7 +519,7 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
     """In-place: trim fat from ``latest_segments`` payloads on delta runs (#949).
 
     On a delta run, each segment's prior payload is carried in shared_context for
-    continuity. The full body text (``notes``, detailed ``material_findings``
+    continuity. The full memo ``body`` (and leftover ``notes`` / findings) is noise
     summaries) is noise for a delta phase that only needs the prior stance + source
     provenance. This function trims the payload while *explicitly* preserving every
     source's ``id``, ``title``, and ``url`` — the provenance chain the synthesis
@@ -542,9 +542,10 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
                 for s in sources
             ]
         # Trim fat text fields that a delta node doesn't need in shared context.
-        notes = payload.get("notes")
-        if isinstance(notes, str) and len(notes) > 120:
-            payload["notes"] = notes[:120] + "..."
+        for key in ("body", "notes", "narrative"):
+            text = payload.get(key)
+            if isinstance(text, str) and len(text) > 120:
+                payload[key] = text[:120] + "..."
 
 
 def _shared_context(

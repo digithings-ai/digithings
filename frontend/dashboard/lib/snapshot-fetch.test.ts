@@ -34,6 +34,20 @@ describe('envelopeFromRow', () => {
     expect(env?.digest.headline).toBe(fixtureDigest().headline);
   });
 
+  it('accepts a stitched markdown body without bias/headline slots', () => {
+    const row = fixtureSnapshotRow();
+    row.snapshot = {
+      segment: 'master-digest',
+      date: '2026-04-27',
+      body: '# Daily Digest — 2026-04-27\n\n## Market regime\n\nSlowing.\n',
+      regime_label: 'Slowing / Cooling',
+    };
+    const env = envelopeFromRow(row, NOW);
+    expect(env).not.toBeNull();
+    expect(env?.digest.body).toContain('Slowing');
+    expect(env?.digest.bias).toBeUndefined();
+  });
+
   it('returns null when run_type is not baseline/delta', () => {
     const row = fixtureSnapshotRow();
     row.run_type = 'invalid';

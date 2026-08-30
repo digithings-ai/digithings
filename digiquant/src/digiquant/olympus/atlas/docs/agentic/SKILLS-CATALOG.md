@@ -17,7 +17,8 @@
 
 | Slug | Role |
 |------|------|
-| `digest` | Phase 7 synthesis |
+| `digest` | Phase 7 stitcher — long markdown briefing |
+| `digest-subsection` | Phase 7 topical subsection writer (macro / alt-data / institutional / asset-classes / US equities) |
 | `monthly-synthesis` | Month-end rollup |
 | `macro` | Phase 3 macro |
 | `bonds` | 4A rates / credit |
@@ -58,6 +59,8 @@
 | Slug | Role |
 |------|------|
 | `decision-reflector` | Post-decision review |
+| `beliefs-distillation-daily` | Daily short fold of new lessons into prior beliefs |
+| `beliefs-distillation` | Full beliefs rewrite (`refresh_scope=beliefs` / backlog catch-up) |
 | `pipeline-evolution` | Pipeline improvement tracking |
 
 ---

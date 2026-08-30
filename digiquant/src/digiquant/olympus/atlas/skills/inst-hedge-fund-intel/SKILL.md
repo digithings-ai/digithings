@@ -56,33 +56,17 @@ Identify consensus, divergence, and regime read across funds.
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Cite filings and posts with [title](url). Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Hedge fund intelligence — {as-of date of the data}
+
+## Active signals
+What tracked funds said or filed in-window.
+
+## Consensus and divergence
+Shared theme vs the notable dissenting view.
+
+## Implication
+How this colors today's research — not a copy-trade list.
 ```
-### 🏦 HEDGE FUND INTELLIGENCE (7-Day Scan)
-
-**Active Signals This Period:**
-
-**Category A: Value & Generalist**
-- Berkshire: [signal] / [No new]
-- Pershing (Ackman): [signal]
-
-**Category B: Quant & Systematic**
-- Bridgewater (Dalio): [signal]
-- AQR (Asness): [signal]
-
-**Category C: Long/Short Equity**
-- Tiger Global: [13F highlights]
-- Coatue: [AI/tech conviction]
-
-**Category D: Macro Legends**
-- Druckenmiller: [comment]
-- Paul Tudor Jones: [comment]
-
-**Cross-Fund Synthesis:**
-- **Consensus theme**: [...]
-- **Divergent view**: [...]
-- **Macro regime read**: [...]
-
-**Implication for Portfolio:**
-[2-3 sentences]
-```
-
