@@ -89,7 +89,9 @@ rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connect
 creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
 also prints `byok_present` (active credential rows among entitled targets; no
 unseal). BYOK rows on that workspace are still **0**, so `--execute` would skip
-`no_credentials`. Do not `--execute`.
+`no_credentials`. Settings Pipeline / Brokers / Notifications tabs now read
+`GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining
+hops are visible in the UI. Do not `--execute`.
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
