@@ -217,6 +217,30 @@ describe('AuthProvider', () => {
     expect(assign).toHaveBeenCalledTimes(1);
   });
 
+  it('signInWithOAuth(x) sends provider id x (not legacy twitter) without Google queryParams', async () => {
+    // #3400: Supabase OAuth 2.0 for X is `x`; sending `twitter` breaks the button.
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
+    const assign = vi.fn();
+    vi.stubGlobal('location', {
+      origin: 'http://localhost:3000',
+      assign,
+    });
+    await mountProbe();
+    await act(async () => {
+      await latest!.signInWithOAuth('x');
+    });
+    const call = supabaseMock.auth.signInWithOAuth.mock.calls[0]?.[0] as {
+      provider: string;
+      options: { queryParams?: Record<string, string>; skipBrowserRedirect?: boolean; redirectTo: string };
+    };
+    expect(call.provider).toBe('x');
+    expect(call.provider).not.toBe('twitter');
+    expect(call.options.skipBrowserRedirect).toBe(true);
+    expect(call.options.queryParams).toBeUndefined();
+    expect(call.options.redirectTo).toBe('http://localhost:3000/dashboard/auth/callback/');
+    expect(assign).toHaveBeenCalledWith('https://accounts.example.test/oauth?state=1');
+  });
+
   it('signInWithOAuth throws when the provider returns no URL', async () => {
     supabaseMock.auth.signInWithOAuth.mockResolvedValueOnce({ data: {}, error: null });
     await mountProbe();
