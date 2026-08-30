@@ -207,7 +207,10 @@ def _filter_connection_id(
     loaded: list[SyncTarget],
     connection_id: str,
 ) -> list[SyncTarget] | str:
-    wanted = UUID(connection_id)
+    try:
+        wanted = UUID(connection_id)
+    except ValueError:
+        return "kairos sync: connection not found"
     selected = [row for row in loaded if row.connection_id == wanted]
     if not selected:
         return "kairos sync: connection not found"
@@ -299,6 +302,16 @@ def _production_sync_batch(
     environ: Mapping[str, str],
 ) -> int:
     """Unseal Alpaca paper connections and poll fills. Lazy adapter import."""
+    alpaca_paper = [
+        target
+        for target in runnable
+        if target.broker is Broker.ALPACA
+        and target.env is ConnectionEnv.PAPER
+        and target.status is ConnectionStatus.ACTIVE
+        and target.workspace_id not in reserved_sync_workspace_ids()
+    ]
+    if not alpaca_paper:
+        return 0
     from digiquant.brokers.alpaca import AlpacaAdapter, ApiKeyAuth, OAuthAuth
     from digiquant.brokers.base import BrokerAdapter
     from digiquant.brokers.connections import BrokerConnection, get_connection, open_credential
@@ -308,14 +321,21 @@ def _production_sync_batch(
     client = _supabase_client_from_env(environ)
     cursor = SyncCursor(fills_since=datetime.now(tz=UTC) - timedelta(days=7))
     cycles: list[tuple[BrokerAdapter, BrokerConnection, SyncCursor]] = []
-    for target in runnable:
+    reserved = reserved_sync_workspace_ids()
+    for target in alpaca_paper:
         connection = get_connection(
             client=client,
             workspace_id=target.workspace_id,
             broker=target.broker,
             env=target.env,
         )
-        if connection.env is not ConnectionEnv.PAPER:
+        if (
+            connection.id != target.connection_id
+            or connection.workspace_id in reserved
+            or connection.broker is not Broker.ALPACA
+            or connection.env is not ConnectionEnv.PAPER
+            or connection.status is not ConnectionStatus.ACTIVE
+        ):
             continue
         with open_credential(client=client, connection=connection) as lease:
             cred = lease.credential

@@ -246,6 +246,44 @@ def test_connection_id_live_exits_3() -> None:
     assert "live" in err[0]
 
 
+def test_connection_id_invalid_exits_3() -> None:
+    err: list[str] = []
+    rc = main(
+        ["--connection-id", "not-a-uuid"],
+        environ={},
+        targets=[_target()],
+        sync_batch=lambda _rows: 0,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 3
+    assert "not found" in err[0]
+
+
+def test_production_empty_does_not_import_alpaca() -> None:
+    import sys
+
+    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+
+    sys.modules.pop("digiquant.brokers.alpaca", None)
+    synced = _production_sync_batch([], environ={})
+    assert synced == 0
+    assert "digiquant.brokers.alpaca" not in sys.modules
+
+
+def test_production_refuses_house_and_ibkr_before_unseal() -> None:
+    import sys
+
+    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+
+    sys.modules.pop("digiquant.brokers.alpaca", None)
+    house = _target(workspace_id=house_workspace_id())
+    ibkr = _target(connection_id=_IBKR, broker=Broker.IBKR)
+    synced = _production_sync_batch((house, ibkr), environ={})
+    assert synced == 0
+    assert "digiquant.brokers.alpaca" not in sys.modules
+
+
 class _Query:
     def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
