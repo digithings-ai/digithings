@@ -266,7 +266,13 @@ def openrouter_web_search(
     max_results: int = 8,
     engine: str = "exa",
 ) -> tuple[str, list[str]] | None:
-    """Run OpenRouter web grounding without double-counting its nested completion."""
+    """OpenRouter web grounding (digillm toolkit wrapper).
+
+    Native-search models (``perplexity/*``, ``:online``) use built-in search —
+    Olympus grounding. Non-native models use the Exa ``openrouter:web_search``
+    server tool as a digillm toolkit fallback (#2567). Do not pass ``engine`` /
+    ``max_results`` from Olympus call sites.
+    """
     with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
         return _digillm_openrouter_web_search(
             resolve_request_model(model),

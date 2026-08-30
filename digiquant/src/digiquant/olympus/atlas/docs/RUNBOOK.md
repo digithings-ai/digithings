@@ -341,16 +341,18 @@ provider yields a step **failure**, not a 240-minute job **cancellation**.
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
 | **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass (unreachable from production — see below) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra); production grounding uses built-in search on `perplexity/sonar` or `:online` models from `get_grounding_model()` / `web_search_models` — billed per that model's page |
+| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** Olympus production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding** resolves via `get_grounding_model()` from the tier's `web_search_models`
-pool. Every production pool entry is `perplexity/sonar` or an `:online` variant, so
-digillm uses built-in provider search — not the `openrouter:web_search` Exa server tool
-(which remains the path for non-`:online`/non-Perplexity models and is what check 4 in
-`validate-providers.py` exercises).
+**Web grounding (Olympus)** resolves via `get_grounding_model()` from the tier's
+`web_search_models` pool. Every production pool entry is `perplexity/sonar` or an
+`:online` variant — **web-search-capable models only** (#2567). digillm uses
+built-in provider search; Olympus call sites do **not** pass Exa `engine` /
+`max_results`. The Exa `openrouter:web_search` server tool remains a digillm /
+digigraph toolkit fallback for non-native models (opt-in / diagnostics). Check 4
+in `validate-providers.py` exercises the **native** Olympus path.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
