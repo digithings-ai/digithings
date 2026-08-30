@@ -25,6 +25,7 @@ from digiquant.olympus.kairos.sync import (
     SyncResult,
     broker_execution_id,
     broker_snapshot_id,
+    run_sync_batch,
     sync_connection,
 )
 
@@ -41,5 +42,6 @@ __all__ = [
     "route_pending_orders",
     "routing_enabled",
     "resolve_venue",
+    "run_sync_batch",
     "sync_connection",
 ]

@@ -528,6 +528,45 @@ def _resolve_order_for_fill(
     return hist[0] if len(hist) == 1 else None
 
 
+def run_sync_batch(
+    *,
+    client: Any,
+    cycles: list[tuple[BrokerAdapter, BrokerConnection, SyncCursor]],
+    now: datetime | None = None,
+    pull_snapshot: bool = True,
+) -> list[SyncResult]:
+    """Cron batch entry: sync each active connection, then fail-soft execution alerts.
+
+      ``cycles`` is built by the caller (cron runner) from active ``broker_connections``
+    rows + credential leases. This function does not load connections itself.
+    """
+    stamp = now or datetime.now(UTC)
+    results: list[SyncResult] = []
+    for adapter, connection, cursor in cycles:
+        results.append(
+            sync_connection(
+                client=client,
+                adapter=adapter,
+                connection=connection,
+                cursor=cursor,
+                now=stamp,
+                pull_snapshot=pull_snapshot,
+            )
+        )
+
+    # -------------------------------------------------------------------------
+    # K5: mid-day execution-alert dispatch — fail-soft; never fails the sync batch.
+    # -------------------------------------------------------------------------
+    try:
+        from digiquant.notify.dispatch import dispatch_execution_alerts
+
+        dispatch_execution_alerts(run_date=stamp.date())
+    except Exception:
+        logger.warning("kairos sync: execution-alert dispatch skipped", exc_info=True)
+
+    return results
+
+
 __all__ = [
     "ALPACA_MAX_CALLS_PER_CYCLE",
     "BROKER_EXECUTIONS",
@@ -537,5 +576,6 @@ __all__ = [
     "SyncResult",
     "broker_execution_id",
     "broker_snapshot_id",
+    "run_sync_batch",
     "sync_connection",
 ]

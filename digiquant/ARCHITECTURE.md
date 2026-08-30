@@ -2984,10 +2984,17 @@ Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
 
 **Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
 dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
-suppression check before send; tier-filtered digest content (`can(tier, class)`);
-templates carry unsubscribe link, no broker ids/tokens/keys.
+suppression checked **before** claim (skipped sends do not burn dedupe slots); tier gates
+on digest sections and event types (`house_weights_nav` for holding-change,
+`private_book` for execution alerts); templates carry unsubscribe link, no broker
+ids/tokens/keys.
 
-**Entry points:** `python -m digiquant.notify.dispatch` (cron); `run_db_first.py`
-close-out calls `dispatch_notifications(run_date=…, hour_utc=None)` after DB validation.
+**Entry points:**
+
+| Caller | Function | Digest hour gate |
+|--------|----------|------------------|
+| Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.

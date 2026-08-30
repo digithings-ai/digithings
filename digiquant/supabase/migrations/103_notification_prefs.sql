@@ -62,4 +62,30 @@ GRANT SELECT, INSERT ON public.notification_log TO service_role;
 
 COMMENT ON TABLE public.notification_log IS
     'K5 dedupe ledger: one row per (workspace, event_key, calendar day). Writers insert '
-    'before send; duplicate PK means skip. Append-only — no UPDATE grant.';
+    'before send; duplicate PK means skip. Append-only — triggers reject UPDATE/DELETE.';
+
+-- ---------------------------------------------------------------------------
+-- notification_log append-only enforcement (102 broker_mirror pattern)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.reject_notification_log_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+    RAISE EXCEPTION 'notification_log is append-only'
+        USING ERRCODE = '55000';
+END
+$$;
+
+DROP TRIGGER IF EXISTS reject_notification_log_mutation ON public.notification_log;
+CREATE TRIGGER reject_notification_log_mutation
+    BEFORE UPDATE OR DELETE ON public.notification_log
+    FOR EACH ROW EXECUTE FUNCTION public.reject_notification_log_mutation();
+DROP TRIGGER IF EXISTS reject_notification_log_truncate ON public.notification_log;
+CREATE TRIGGER reject_notification_log_truncate
+    BEFORE TRUNCATE ON public.notification_log
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_notification_log_mutation();
+
+REVOKE ALL ON FUNCTION public.reject_notification_log_mutation()
+    FROM PUBLIC, anon, authenticated;

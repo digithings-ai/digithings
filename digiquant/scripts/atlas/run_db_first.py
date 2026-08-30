@@ -290,7 +290,7 @@ def main() -> int:
         try:
             from digiquant.notify.dispatch import dispatch_notifications
 
-            dispatch_notifications(run_date=dt_date.fromisoformat(d), hour_utc=None)
+            dispatch_notifications(run_date=dt_date.fromisoformat(d), force_digest=True)
         except Exception as exc:
             print(f"⚠️ notify dispatch skipped: {exc}", file=sys.stderr)
 
