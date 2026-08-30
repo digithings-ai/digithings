@@ -29,10 +29,14 @@ rows after the coordinated anon-policy drop.
 OAuth starts with `skipBrowserRedirect: true` so the app assigns `data.url`
 itself (Google otherwise drops the redirect on the static `/olympus/` basePath).
 Google also sends `queryParams.access_type=offline` and `prompt=select_account`.
-The callback page reads `error` / `error_description` and exchanges `?code=` via
-`exchangeCodeForSession`. If Google still fails after that, the provider is
-disabled or the Google Cloud client redirect (`https://<ref>.supabase.co/auth/v1/callback`)
-is missing — dashboard work, not an app bug.
+The PKCE client sets `detectSessionInUrl: false` so only the callback page
+exchanges `?code=` (`exchangeCodeForSession`). Auto-detect would race the
+one-shot code. The callback reads `error` / `error_description`, and fails
+closed if neither a code nor a session appears. If Google still fails after
+that, the provider is disabled or the Google Cloud client redirect
+(`https://<ref>.supabase.co/auth/v1/callback`) is missing — dashboard work,
+not an app bug. Email/password sign-in replaces to `/` (AuthGate will not
+keep a signed-in user on `/login/` or `/signup/`).
 
 ### Env / build
 

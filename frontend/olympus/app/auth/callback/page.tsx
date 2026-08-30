@@ -12,6 +12,8 @@ import {
 
 const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
 
+export const AUTH_CALLBACK_SETTLE_MS = 8_000;
+
 function callbackErrorMessage(): string | null {
   if (typeof window === 'undefined') return null;
   return oauthCallbackErrorFromLocation(window.location.search, window.location.hash);
@@ -90,8 +92,13 @@ export default function AuthCallbackPage() {
       }
     });
 
+    const hang = window.setTimeout(() => {
+      fail(SIGN_IN_FAILED);
+    }, AUTH_CALLBACK_SETTLE_MS);
+
     return () => {
       cancelled = true;
+      window.clearTimeout(hang);
       subscription.unsubscribe();
     };
   }, [client, router]);

@@ -25,6 +25,11 @@ vi.mock('next/link', () => ({
     ),
 }));
 
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace }),
+}));
+
 vi.mock('@/components/atlas-mark', () => ({ AtlasMark: () => createElement('span', null, 'mark') }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -42,6 +47,7 @@ describe('LoginScreen', () => {
     authMock.signInWithOAuth.mockClear();
     authMock.signInWithPassword.mockClear();
     authMock.signUpWithPassword.mockClear();
+    replace.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -86,15 +92,38 @@ describe('LoginScreen', () => {
     expect(container.textContent).toContain('Already on the desk?');
   });
 
-  it('email submit on sign-in calls signInWithPassword', async () => {
+  it('empty email submit is refused without calling supabase', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen));
     });
     const form = container.querySelector('form');
-    expect(form).not.toBeNull();
+    expect(form?.hasAttribute('novalidate')).toBe(false);
     await act(async () => {
       form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
-    expect(authMock.signInWithPassword).toHaveBeenCalled();
+    expect(authMock.signInWithPassword).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('8+ character password are required');
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('valid email submit signs in and replaces home', async () => {
+    await act(async () => {
+      root.render(createElement(LoginScreen));
+    });
+    const email = container.querySelector('#acct-email') as HTMLInputElement;
+    const password = container.querySelector('#acct-password') as HTMLInputElement;
+    await act(async () => {
+      const proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      proto?.call(email, 'you@desk.tld');
+      email.dispatchEvent(new Event('input', { bubbles: true }));
+      proto?.call(password, 'secret12');
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const form = container.querySelector('form');
+    await act(async () => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(authMock.signInWithPassword).toHaveBeenCalledWith('you@desk.tld', 'secret12');
+    expect(replace).toHaveBeenCalledWith('/');
   });
 });

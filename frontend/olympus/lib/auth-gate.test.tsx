@@ -31,6 +31,7 @@ vi.mock('react', async () => {
 
 vi.mock('next/navigation', () => ({
   usePathname: () => pathnameState.value,
+  useRouter: () => ({ replace: vi.fn() }),
 }));
 
 vi.mock('@/lib/auth-context', () => ({
@@ -65,7 +66,7 @@ vi.mock('@/components/login-screen', () => ({
 
 vi.mock('@/components/atlas-mark', () => ({ AtlasMark: () => null }));
 
-import { AuthGate, isOlympusAuthPath } from './auth-gate';
+import { AuthGate, isOlympusAuthCallbackPath, isOlympusAuthPath } from './auth-gate';
 
 function renderGate(child = 'protected-child'): string {
   return renderToStaticMarkup(createElement(AuthGate, null, child));
@@ -79,6 +80,14 @@ describe('isOlympusAuthPath', () => {
     expect(isOlympusAuthPath('/signup/')).toBe(true);
     expect(isOlympusAuthPath('/auth/callback')).toBe(true);
     expect(isOlympusAuthPath('/auth/callback/')).toBe(true);
+  });
+
+  it('identifies only the PKCE callback as the exchange route', () => {
+    expect(isOlympusAuthCallbackPath('/auth/callback')).toBe(true);
+    expect(isOlympusAuthCallbackPath('/auth/callback/')).toBe(true);
+    expect(isOlympusAuthCallbackPath('/olympus/auth/callback')).toBe(true);
+    expect(isOlympusAuthCallbackPath('/login')).toBe(false);
+    expect(isOlympusAuthCallbackPath('/signup')).toBe(false);
   });
 
   it('allows basePath-prefixed exact forms', () => {
@@ -163,7 +172,7 @@ describe('AuthGate', () => {
     expect(html).not.toContain('data-login');
   });
 
-  it('flag on + auth route: renders children without shell (even unsigned)', () => {
+  it('flag on + auth route unsigned: renders children without shell', () => {
     authState.authEnabled = true;
     authState.session = null;
     pathnameState.value = '/login';
@@ -172,5 +181,28 @@ describe('AuthGate', () => {
     expect(html).toContain('protected-child');
     expect(html).not.toContain('data-frame');
     expect(html).not.toContain('data-login');
+  });
+
+  it('flag on + session on /login: leaves the auth card (email sign-in must not trap)', () => {
+    authState.authEnabled = true;
+    authState.session = { access_token: 't' } as Session;
+    authState.user = { id: 'u1', email: 'a@example.com' } as User;
+    authState.loading = false;
+    pathnameState.value = '/login';
+    mountedState.client = true;
+    const html = renderGate();
+    expect(html).toContain('Checking session');
+    expect(html).not.toContain('protected-child');
+    expect(html).not.toContain('data-frame');
+  });
+
+  it('flag on + session on /auth/callback: still renders the callback page', () => {
+    authState.authEnabled = true;
+    authState.session = { access_token: 't' } as Session;
+    pathnameState.value = '/auth/callback';
+    mountedState.client = true;
+    const html = renderGate();
+    expect(html).toContain('protected-child');
+    expect(html).not.toContain('data-frame');
   });
 });

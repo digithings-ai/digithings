@@ -40,7 +40,9 @@ export function buildSupabaseClient(
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Callback page owns `exchangeCodeForSession`. Auto-detect would
+        // race the one-shot PKCE code (see PipelineClient).
+        detectSessionInUrl: false,
       },
     });
   }

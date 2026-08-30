@@ -33,8 +33,11 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     createClient.mockClear();
     buildSupabaseClient('https://example.supabase.co', 'anon-key', true);
     expect(createClient).toHaveBeenCalledTimes(1);
-    const opts = createClient.mock.calls[0]?.[2] as { auth?: { flowType?: string } };
+    const opts = createClient.mock.calls[0]?.[2] as {
+      auth?: { flowType?: string; detectSessionInUrl?: boolean };
+    };
     expect(opts?.auth?.flowType).toBe('pkce');
+    expect(opts?.auth?.detectSessionInUrl).toBe(false);
   });
 
   it('oauthRedirectTo includes /olympus basePath (real implementation)', async () => {

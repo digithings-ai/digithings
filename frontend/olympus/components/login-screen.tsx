@@ -2,16 +2,19 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAuth, type OAuthProvider } from '@/lib/auth-context';
 
 const STRENGTH_WORDS = ['', 'weak', 'fair', 'good', 'strong'] as const;
-const STRENGTH_COLORS = ['', 'var(--down)', 'var(--warn)', 'var(--warn)', 'var(--up)'] as const;
+/** Ink/accent/danger — not P&L `--up`/`--down`. */
+const STRENGTH_COLORS = ['', 'var(--danger)', 'var(--accent)', 'var(--accent)', 'var(--ink)'] as const;
+export const MIN_PASSWORD_LENGTH = 8;
 
 function passwordStrength(password: string): number {
   if (password.length === 0) return 0;
   let score = 1;
-  if (password.length >= 8) score += 1;
+  if (password.length >= MIN_PASSWORD_LENGTH) score += 1;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
   if (/\d/.test(password) || /[^a-zA-Z0-9]/.test(password)) score += 1;
   return Math.min(score, 4);
@@ -24,6 +27,7 @@ export type LoginScreenMode = 'signin' | 'signup';
  * Grammar from digiweb account LoginCard / SignupCard (oauth-first).
  */
 export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScreenMode }) {
+  const router = useRouter();
   const { signInWithOAuth, signInWithPassword, signUpWithPassword, authEnabled } = useAuth();
   const [mode, setMode] = useState<LoginScreenMode>(initialMode);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +54,19 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
     event.preventDefault();
     setError(null);
     setInfo(null);
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Email and an ${MIN_PASSWORD_LENGTH}+ character password are required.`);
+      return;
+    }
     setPending('email');
     try {
       if (signUp) {
-        await signUpWithPassword(email, password);
+        await signUpWithPassword(trimmedEmail, password);
         setInfo('Check your email to confirm the account, then sign in.');
       } else {
-        await signInWithPassword(email, password);
+        await signInWithPassword(trimmedEmail, password);
+        router.replace('/');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : signUp ? 'Sign-up failed' : 'Sign-in failed');
@@ -110,7 +120,7 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
               {pending === 'github' ? 'Redirecting…' : 'Continue with GitHub'}
             </button>
 
-            <form onSubmit={(event) => void onEmailSubmit(event)} noValidate>
+            <form onSubmit={(event) => void onEmailSubmit(event)}>
               <div className="acct-divider">
                 <span>or email</span>
               </div>
@@ -147,10 +157,12 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
                   type="password"
                   autoComplete={signUp ? 'new-password' : 'current-password'}
                   required
-                  minLength={8}
+                  minLength={MIN_PASSWORD_LENGTH}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  placeholder={signUp ? '12+ chars, mixed case, a digit' : '••••••••••'}
+                  placeholder={
+                    signUp ? `${MIN_PASSWORD_LENGTH}+ chars, mixed case, a digit` : '••••••••••'
+                  }
                   aria-describedby={signUp ? 'acct-strength' : undefined}
                 />
                 {signUp ? (

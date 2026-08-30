@@ -8,7 +8,7 @@ import { useState, type FormEvent } from "react";
  */
 
 const STRENGTH_WORDS = ["", "weak", "fair", "good", "strong"] as const;
-const STRENGTH_COLORS = ["", "var(--down)", "var(--warn)", "var(--warn)", "var(--up)"] as const;
+const STRENGTH_COLORS = ["", "var(--danger)", "var(--accent)", "var(--accent)", "var(--ink)"] as const;
 
 function passwordStrength(password: string): number {
   if (password.length === 0) return 0;
@@ -98,7 +98,7 @@ export function SignupCard() {
                 id="signup-oauth-password"
                 name="password"
                 type="password"
-                placeholder="12+ chars, mixed case, a digit"
+                placeholder="8+ chars, mixed case, a digit"
                 autoComplete="off"
               />
             </div>
@@ -148,7 +148,7 @@ export function SignupCard() {
               id="signup-password"
               name="password"
               type="password"
-              placeholder="12+ chars, mixed case, a digit"
+              placeholder="8+ chars, mixed case, a digit"
               autoComplete="off"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
