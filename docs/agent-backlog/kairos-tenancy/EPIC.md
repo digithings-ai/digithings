@@ -147,7 +147,8 @@ the staging harness (Observer live: `plan_tier_not_custom`,
 `no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`,
 `no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E
 **exit 3** (Observer `GET /settings/app-urls` path contract: live `/olympus` vs
-develop `/dashboard` pin). After Pages+EF cutover the next miss is **exit 2**
+develop `/dashboard` pin; `POST /settings/access/redeem-invite` is also 404 on
+v32). After Pages+EF cutover the next miss is **exit 2**
 (9 named vendor secrets). Observer hops still match, including
 Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
@@ -216,7 +217,8 @@ still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-ke
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **3** (Observer
 `GET /settings/app-urls` fails `public_app_urls_ok`: live EF still returns
-`/olympus/settings/...` while develop pins `/dashboard/settings/...`). Live
+`/olympus/settings/...` while develop pins `/dashboard/settings/...`; live
+settings v32 also 404s `POST /settings/access/redeem-invite`). Live
 Pages `/olympus/settings/` **200**, `/dashboard/settings/` **404**. After the
 Pages+EF path cutover lands together, the next expected miss is exit **2**
 (9 named vendor secrets). Observer checkout hop and Phase C both POST

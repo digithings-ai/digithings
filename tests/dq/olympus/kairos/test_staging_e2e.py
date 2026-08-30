@@ -25,8 +25,10 @@ from digiquant.olympus.kairos.remaining_hops import (
 )
 from digiquant.olympus.kairos.staging_e2e import (
     OBSERVER_HOPS,
+    REDEEM_INVITE_MOUNTED_CODES,
     REMAINING_LIVE_HOPS,
     STAGING_CHECKOUT_BODY,
+    STAGING_REDEEM_INVITE_BODY,
     HopExpectation,
     collect_remaining_evidence,
     format_remaining_hops_failure,
@@ -123,6 +125,11 @@ def test_empty_and_placeholder_values_count_as_missing(
         (HopExpectation.PUBLIC_URLS_OK, 200, None, False),
         (HopExpectation.PREFS_DIGEST_ON, 200, None, False),
         (HopExpectation.PREFS_DIGEST_ON, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 403, "INVITE_INVALID", True),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 400, "EMAIL_REQUIRED", True),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 404, "NOT_FOUND", False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 200, None, False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 429, "INVITE_RATE_LIMIT", False),
     ),
 )
 def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
@@ -144,6 +151,36 @@ def test_staging_checkout_is_custom_not_baseline() -> None:
     assert hop.body == STAGING_CHECKOUT_BODY
     assert hop.body is not None
     assert hop.body.get("tier") != "baseline"
+
+
+@pytest.mark.unit
+def test_redeem_invite_hop_uses_short_code_without_secrets() -> None:
+    """Short dummy must not grant, hash, or count toward INVITE_MAX_ATTEMPTS."""
+    hop = next(row for row in OBSERVER_HOPS if row.path == "/settings/access/redeem-invite")
+    assert hop.method == "POST"
+    assert hop.kind is HopExpectation.REDEEM_INVITE_MOUNTED
+    assert hop.body == STAGING_REDEEM_INVITE_BODY
+    code = str(STAGING_REDEEM_INVITE_BODY["code"])
+    assert len(code) < 10
+    assert hop.body is not None
+    assert set(hop.body) == {"code"}
+    assert "INVITE_INVALID" in REDEEM_INVITE_MOUNTED_CODES
+    assert "EMAIL_REQUIRED" in REDEEM_INVITE_MOUNTED_CODES
+
+
+@pytest.mark.unit
+def test_observer_hops_fail_when_redeem_invite_is_missing() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/access/redeem-invite")] = (404, {"code": "NOT_FOUND"})
+    results = run_observer_hops(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key="anon",
+        functions_base="https://example.test/functions/v1",
+    )
+    redeem = next(row for row in results if row.kind is HopExpectation.REDEEM_INVITE_MOUNTED)
+    assert redeem.ok is False
+    assert redeem.http == 404
 
 
 @pytest.mark.unit
@@ -238,6 +275,7 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
         ("POST", "/settings/keys/connect"): forbidden,
         ("POST", "/create-checkout-session"): (500, {"code": "PRICE_NOT_CONFIGURED"}),
         ("POST", "/settings/brokers"): (404, {"code": "NOT_FOUND"}),
+        ("POST", "/settings/access/redeem-invite"): (403, {"code": "INVITE_INVALID"}),
     }
 
 

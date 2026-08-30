@@ -30,6 +30,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
 # when .local/secrets/digithings-byok.env exists (BYOK_PROVIDER + BYOK_API_KEY):
 # PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py --apply --workspace-id <entitled-uuid>
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+# Observer also requires POST /settings/access/redeem-invite (short dummy →
+# INVITE_INVALID). Live v32 404s that route until --apply.
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
