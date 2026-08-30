@@ -377,6 +377,8 @@ def create_mcp_server() -> Any:
         m2_path: str | None = None,
         dxy_path: str | None = None,
         eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
     ) -> str:
         """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
 
@@ -384,16 +386,16 @@ def create_mcp_server() -> Any:
         (``digiquant.data.prices.history_cache``) — never a bespoke fetch.
         ``refresh=True`` (default) incrementally updates the cache first;
         ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
-        string selector so later providers (#3175) can be added without changing
-        this signature; currently only ``"btc_power_law"`` is implemented.
+        string selector: ``btc_power_law`` (fitted coefficients),
+        ``generic_valuation`` (log-price trend from the first cached bar), or
+        ``rolling_z`` (short-history fallback). Oscillators are computed from
+        **that ticker's** OHLCV (generic technicals), not a BTC-only path.
         ``indicator_weights`` is a JSON object
         ``{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}``.
         Default ``valuation=1`` and extras ``0`` keeps the published BTC chart
         on a single rail. Positive extra weights require ``m2_path`` /
         ``dxy_path`` (FRED CSV/parquet already on disk) and/or cached
-        ``eth_ticker`` in the same ``cache_dir``. Price oscillators
-        (weekly RSI/MACD, 90d SMA-band) are computed from the BTC cache
-        itself. Writes the two-column parquet
+        ``eth_ticker`` in the same ``cache_dir``. Writes the two-column parquet
         ``SdcaStrategy`` loads via ``risk_path``.
         Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
         or ``{"error": ...}`` (never raises — missing cache / coefficients /
@@ -402,21 +404,20 @@ def create_mcp_server() -> Any:
         from pathlib import Path
 
         try:
-            import polars as pl
-
             from digiquant.data.prices.history_cache import (
                 DEFAULT_CACHE_DIR,
                 incremental_update,
                 load_cached,
             )
-            from digiquant.strategies.sdca.btc_power_law import (
-                BtcPowerLawRiskModel,
-                load_coefficients,
-            )
+            from digiquant.strategies.sdca.asset_profile import daily_closes_from_ohlcv
             from digiquant.strategies.sdca.indicator_catalog import (
                 build_extra_indicators,
                 parse_indicator_weights_json,
                 sources_from_optional_paths,
+            )
+            from digiquant.strategies.sdca.providers import (
+                KNOWN_SDCA_RISK_MODELS,
+                resolve_sdca_risk_model,
             )
             from digiquant.strategies.sdca.risk_index import (
                 RiskIndexBuildResult,
@@ -426,7 +427,7 @@ def create_mcp_server() -> Any:
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
-        if risk_model != "btc_power_law":
+        if risk_model not in KNOWN_SDCA_RISK_MODELS:
             return json.dumps({"error": f"unknown risk_model {risk_model!r}"})
 
         cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
@@ -442,15 +443,15 @@ def create_mcp_server() -> Any:
             if coeff_path is not None and not coeff_path.exists():
                 return json.dumps({"error": f"coefficients file not found: {coeff_path}"})
 
-            prices = (
-                df.select(
-                    pl.col("timestamp").cast(pl.Date).alias("date"),
-                    pl.col("close"),
-                )
-                .unique(subset=["date"], keep="last")
-                .sort("date")
+            dates, close = daily_closes_from_ohlcv(df)
+            model = resolve_sdca_risk_model(
+                risk_model,
+                dates=dates,
+                price=close,
+                coefficients_path=coeff_path,
+                form=valuation_form,
+                rolling_window=rolling_window,
             )
-            model = BtcPowerLawRiskModel(load_coefficients(coeff_path))
             weights = parse_indicator_weights_json(indicator_weights)
             eth_dates = eth_close = None
             if weights.rs_eth > 0.0:
@@ -459,18 +460,10 @@ def create_mcp_server() -> Any:
                     return json.dumps(
                         {"error": f"no cached price history for {eth_ticker!r} (rs_eth weight > 0)"}
                     )
-                eth_frame = (
-                    eth_df.select(
-                        pl.col("timestamp").cast(pl.Date).alias("date"),
-                        pl.col("close"),
-                    )
-                    .unique(subset=["date"], keep="last")
-                    .sort("date")
-                )
-                eth_dates, eth_close = eth_frame["date"], eth_frame["close"]
+                eth_dates, eth_close = daily_closes_from_ohlcv(eth_df)
             extras = build_extra_indicators(
-                prices["date"],
-                prices["close"],
+                dates,
+                close,
                 weights,
                 sources_from_optional_paths(
                     m2_path=m2_path,
@@ -480,8 +473,8 @@ def create_mcp_server() -> Any:
                 ),
             )
             frame = build_risk_index(
-                prices["date"],
-                prices["close"],
+                dates,
+                close,
                 model,
                 extra_indicators=extras,
                 valuation_weight=weights.valuation,

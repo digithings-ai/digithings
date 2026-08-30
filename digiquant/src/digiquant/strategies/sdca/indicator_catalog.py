@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
     price_oscillator_z_vectors,
     sma_band_z,
     weekly_macd_z,
@@ -40,6 +41,8 @@ from digiquant.strategies.sdca.price_oscillators import (
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
+GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
+BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
 EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATOR_NAMES
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
@@ -225,9 +228,22 @@ def build_extra_indicators(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
     roc_days: int = 365,
+    oscillators: SdcaOscillatorSpec | None = None,
+    allowlist: Sequence[str] | None = None,
 ) -> list[IndicatorWeight]:
-    """Materialize enabled extras. Weight 0 is omitted (does not null the blend)."""
+    """Materialize enabled extras. Weight 0 is omitted (does not null the blend).
+
+    ``btc_price`` is the *asset* close (BTC, ETH, or another series). Macro
+    extras (M2 / rs_eth / DXY) are BTC-oriented plugins; pass ``allowlist``
+    from ``SdcaAssetProfile.extra_indicators`` so a second asset cannot
+    silently vote with BTC-only series.
+    """
+    spec = oscillators or SdcaOscillatorSpec()
     enabled = weights.enabled_extras()
+    if allowlist is not None:
+        forbidden = [name for name in enabled if name not in allowlist]
+        if forbidden:
+            raise ValueError(f"{forbidden} not in extra_indicators allowlist")
     extras: list[IndicatorWeight] = []
     if "m2" in enabled:
         m2_dates = _require_pair(sources.m2_dates, sources.m2_values, "m2")
@@ -280,7 +296,7 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="weekly_rsi",
-                z=weekly_rsi_z(dates, btc_price),
+                z=weekly_rsi_z(dates, btc_price, length=spec.rsi_length),
                 weight=enabled["weekly_rsi"],
             )
         )
@@ -288,7 +304,14 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="weekly_macd",
-                z=weekly_macd_z(dates, btc_price),
+                z=weekly_macd_z(
+                    dates,
+                    btc_price,
+                    fast=spec.macd_fast,
+                    slow=spec.macd_slow,
+                    signal=spec.macd_signal,
+                    z_window=spec.macd_z_window,
+                ),
                 weight=enabled["weekly_macd"],
             )
         )
@@ -296,7 +319,12 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="sma_band",
-                z=sma_band_z(dates, btc_price, window=window, min_samples=min_samples),
+                z=sma_band_z(
+                    dates,
+                    btc_price,
+                    window=spec.sma_band_window,
+                    min_samples=spec.sma_band_min_samples,
+                ),
                 weight=enabled["sma_band"],
             )
         )
@@ -345,6 +373,8 @@ def extra_z_vectors(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
     roc_days: int = 365,
+    oscillators: SdcaOscillatorSpec | None = None,
+    allowlist: Sequence[str] | None = None,
 ) -> dict[str, list[float | None]]:
     """Full-calendar extra-z for walk-forward slicing (causal; no OOS leak)."""
     extras = build_extra_indicators(
@@ -355,10 +385,12 @@ def extra_z_vectors(
         window=window,
         min_samples=min_samples,
         roc_days=roc_days,
+        oscillators=oscillators,
+        allowlist=allowlist,
     )
     vectors = {ind.name: ind.z.to_list() for ind in extras}
     # Always precompute oscillators from close so a later trial can enable them.
-    vectors.update(price_oscillator_z_vectors(dates, btc_price))
+    vectors.update(price_oscillator_z_vectors(dates, btc_price, oscillators=oscillators))
     return vectors
 
 
@@ -432,8 +464,10 @@ def _require_pair(dates: pl.Series | None, values: pl.Series | None, name: str) 
 
 
 __all__ = [
+    "BTC_PLUGIN_INDICATOR_NAMES",
     "DEFAULT_ROLLING_WINDOW",
     "EXTRA_INDICATOR_NAMES",
+    "GENERIC_TECHNICAL_NAMES",
     "MACRO_INDICATOR_NAMES",
     "PRICE_OSCILLATOR_NAMES",
     "WEIGHT_PARAM_BY_NAME",

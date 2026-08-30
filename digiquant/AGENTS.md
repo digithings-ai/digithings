@@ -171,8 +171,34 @@ the full module map.
   judgment call**, not verified against the reference artifact's corridor —
   revisit once that artifact is reachable, don't assume the default is
   correct.
-- The other two #1082 providers (generic per-asset valuation-z, RS-driven
-  risk) are not implemented yet.
+- The per-asset ladder is `btc_power_law` → `generic_valuation` →
+  `rolling_z` (`sdca/providers.py`, #3175). RS-driven risk is still #1084,
+  not this WP. Equity CAPE is #3176 — do not add it here.
+
+### Adding an asset (SDCA framework)
+
+SDCA is a **repurposable framework**, not a Bitcoin-only strategy. The shared
+core is generic technicals + composite + two-stage fit + regularize.
+Asset-specific series (BTC on-chain SOPR/MVRV, later stock put/call) plug in
+on the extra-indicator allowlist.
+
+1. Cache OHLCV in `data/prices/history_cache.py` (never a bespoke fetch).
+2. Pick `risk_model`: `btc_power_law` (BTC), `generic_valuation`, or
+   `rolling_z`.
+3. Pin `SdcaCycleWindows` from that asset's history; set
+   `SdcaOscillatorSpec` (RSI / MACD / SMA-band windows) to its cycle.
+4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
+   plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
+   in this WP.
+5. Stage A (`profile.cycle_windows`) → Stage B → `regularize`. Do not
+   publish until the backtest looks comfortable.
+6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
+   research-only — not `eth_sdca` in settings, no `--push-supabase`, no
+   live-trading. Do not change publish `signal_delay_days`.
+
+`pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
+multi-asset smoke (ETH Coinbase cache if present, else a synthetic second
+series — document "add ETH when cache is present").
 
 ### Adding a preset
 
@@ -216,11 +242,12 @@ Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
 `weekly_rsi_weight`, `weekly_macd_weight`, `sma_band_weight`) are searched by
 `method=random`/`bayesian` or an explicit `param_grid`; auto-grid holds them
 at 0 (valuation-only, current BTC charts). Weekly RSI/MACD/SMA-band z are
-computed from BTC close (no sibling file). Place `M2SL.csv`, `ETH-USD.csv`,
-and/or `DTWEXBGS.csv` next to the BTC OHLCV file to enable those macro rails —
-missing files skip trials that need them. Two-stage fit: Stage A
-(`optimize_stage_a_weights`) aligns composite troughs/peaks with
-`SdcaCycleWindows.btc_v1()`; Stage B freezes those weights and runs this
+computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
+file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
+OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
+that need them. Two-stage fit: Stage A (`optimize_stage_a_weights`) aligns
+composite troughs/peaks with `SdcaAssetProfile.cycle_windows` (BTC:
+`SdcaCycleWindows.btc_v1()`); Stage B freezes those weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is

@@ -162,3 +162,23 @@ class TestBuildSdcaRiskIndexTool:
         solo = pl.read_parquet(out_solo)["risk"]
         blend = pl.read_parquet(out_blend)["risk"]
         assert solo.to_list() != blend.to_list()
+
+    def test_rolling_z_selector_builds_parquet(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, n=40)
+        out = tmp_path / "risk_z.parquet"
+        payload = json.loads(
+            _tool()(
+                ticker="BTC-USD",
+                cache_dir=str(tmp_path),
+                refresh=False,
+                risk_model="rolling_z",
+                rolling_window=10,
+                output_path=str(out),
+            )
+        )
+        assert "error" not in payload
+        assert payload["row_count"] == 40
+        assert payload["null_risk_days"] >= 1
+        loaded = pl.read_parquet(out)
+        assert loaded.height == 40
+        assert loaded["risk"].null_count() >= 1
