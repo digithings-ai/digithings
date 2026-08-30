@@ -63,20 +63,22 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30)
+## Agent delivery status (2026-08-30, secrets/deploy pass)
 
-**Code:** all 12 WPs merged to `develop` (promotion #3141).
+**Code:** all 12 WPs merged to `develop` (promotion #3141). Notifications wire open as [#3161](https://github.com/digithings-ai/digithings/pull/3161) (CI green; human merge — agent `gh` read-only).
 
-**Schema (`core`):** migrations 096–105 applied + stamped in `olympus_schema_migrations`. Cutover 900 **not** applied.
+**Schema (`core`):** migrations 096–105 applied + stamped. **106** applied (align `notification_prefs` / `notification_log` to canonical 103 after IF NOT EXISTS drift). Cutover 900 **not** applied.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets). `settings` ACTIVE as NOT_READY placeholder — full `_shared` redeploy still required. `prices-live` pre-existing.
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v7** ACTIVE — thin GitHub-import of #3161 handlers; auth smoke `401` OK. Project EF secrets still unset (need `sbp_` PAT).
 
-**Olympus build:** green (flag off, static export check).
+**Secrets (names only):**
+- **SET in VM `.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (`http://127.0.0.1:3001`).
+- **Agent Mail:** `digithings@agentmail.to`.
+- **Still blocked:** Stripe test keys/prices/webhook, Mailgun, Auth providers (Google+GitHub), Alpaca OAuth, Supabase `sbp_` PAT, IBKR vendor, legal read.
 
 **Acceptance evidence:**
-- House regression: `pytest -m unit tests/dq/olympus/ tests/dq/brokers/ tests/dq/notify/ tests/integration/test_kairos_tenancy_chain.py` → 659 passed (artifact `house-regression-acceptance.log`).
-- Live venue gates: kairos router live/kill probes → 4 passed (`live-venue-gates.log`).
-- RLS isolation harness: 61/61 PASS against canonical chain (`rls_isolation_proof.log`).
-- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **blocked** on human secrets (§ Human-owned prerequisites).
+- House/notify/vault unit: notify 62 passed; vault+103 86 passed (`kairos-secrets-unit.log`).
+- SQL prefs upsert smoke on `core` succeeded post-106.
+- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above.
 
-**Human blockers (unchanged):** Stripe test keys/prices/webhook secret, Mailgun, Auth providers (Google+GitHub), `DIGIQUANT_VAULT_MASTER_KEY`, Alpaca OAuth app, IBKR vendor email, legal read before live epic.
+**Do not mark epic complete** until E2E + human/legal/IBKR gates clear.

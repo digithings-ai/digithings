@@ -40,6 +40,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 | 103 | `notification_prefs` + `notification_log` | K5 | stamped (fixed function name) |
 | 104 | `workspace_provider_credentials` (BYOK) | T4 | stamped |
 | 105 | `documents.workspace_id` | T4 | stamped |
+| 106 | align prefs/log to canonical 103 columns | K5/T3 | **applied 2026-08-30** (empty-table rebuild; 103 IF NOT EXISTS had no-op'd on drift) |
 | (cutover) | staged `migrations/cutover/900_…` | human | **not applied** |
 
 ### Remaining (human / production gates)
@@ -115,7 +116,7 @@ ORDER BY version;
 
 ## 3. Edge Function deploys
 
-### Live status on `core` (2026-08-30)
+### Live status on `core` (2026-08-30, agent update)
 
 | Function | Status | Notes |
 |----------|--------|-------|
@@ -123,7 +124,14 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
+| `settings` | ACTIVE **v7** | Thin entry imports PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) `_shared/*` from GitHub raw (notifications upsert wired). Smoke: missing/invalid JWT → `401`. Replace with monorepo bundle once `sbp_` PAT or merge+#3161+CLI available. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. |
+
+### Schema alignment (agent, 2026-08-30)
+
+`103` was stamped while live tables already existed under a **different** column set
+(`digest_enabled` / …). Empty tables were rebuilt to canonical 103 via
+`106_notification_prefs_align_canonical.sql` (applied + stamped on `core`).
+SQL prefs upsert smoke succeeded (service-role path).
 
 ### Deploy commands
 
@@ -214,18 +222,25 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 
 ---
 
-## 5. Human-owned prerequisites
+## 5. Prerequisites — agent progress vs still blocked (names only)
 
-| Prerequisite | Owner action | Blocks |
-|--------------|--------------|--------|
-| Stripe products + price ids (Baseline / Custom, monthly + annual) + `STRIPE_SECRET_KEY` + webhook signing secret | Stripe Dashboard (test mode first) | T2 Edge Functions; checkout/portal; claim sync |
-| Mailgun API key fix + sending domain | Mailgun control panel; set `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` on runners | K5 digest / alerts |
-| Supabase Auth providers (Google, GitHub) on `core` + redirect URLs | Supabase Auth → Providers / URL config | T1 login when flag on |
-| Vault master key | `openssl rand -base64 32` → `DIGIQUANT_VAULT_MASTER_KEY` (optional `DIGIQUANT_VAULT_KEY_ID=v1`) | K3 seal/unseal; `settings` broker connect; T4 BYOK |
-| Alpaca Connect / OAuth app (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | Alpaca developer dashboard; redirect `{APP_URL}/olympus/settings/brokers/callback/` | Product broker connect (K1 unit tests mock) |
-| IBKR vendor / OAuth 1.0a onboarding email | Email IBKR; longest pole | K2 live verify; paper orders remain flag-gated off |
-| Cloudflare Access (D7) | Keep prod `/olympus/*` Access **on** through flag flip + anon-drop + verification; remove only as the last §6 step; retain staging overlay | Ungated prod URL while weight/NAV paths still open |
-| Legal read on adviser status | Counsel | Any **live** trading epic (out of this program) |
+> Secret **values** live in VM `.env` / `.local/secrets/` (gitignored) and must be
+> copied into Supabase EF secrets + Cursor environment secret store. Never commit values.
+
+| Prerequisite | Status (2026-08-30) | Blocks |
+|--------------|---------------------|--------|
+| Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** (agent-generated). **Not yet** on Supabase EF secrets (needs `sbp_` PAT or dashboard). | K3 seal; settings brokers; T4 BYOK at runtime |
+| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET in VM** → `http://127.0.0.1:3001` (local Olympus staging until preview/prod URL chosen). **Not yet** on EF secrets. | OAuth redirect pin; checkout return URLs |
+| Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
+| Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
+| Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — MCP auth fails (placeholder/unset key); desktop re-auth required | K5 digest / alerts |
+| Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
+| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — signup tab open; not completed | Product broker connect |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Blocked** — env has JWT only; CLI/Management secrets API need personal access token | EF `secrets set`; monorepo `functions deploy` |
+| IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
+| Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
+| Legal read on adviser status | Human / counsel | Any **live** trading epic |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) merge | CI green / MERGEABLE; agent `gh` read-only — **human merge** | develop carries notifications wiring natively |
 
 ---
 
