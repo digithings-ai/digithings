@@ -123,7 +123,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | **not deployed** | Payload ready at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json`; needs `supabase functions deploy settings` with access token **or** MCP deploy with full files; runtime needs vault + Alpaca OAuth secrets |
+| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
 
 ### Deploy commands
 
