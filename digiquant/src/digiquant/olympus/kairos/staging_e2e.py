@@ -29,6 +29,13 @@ from digiquant.olympus.kairos.staging_secrets import (
 
 DEFAULT_FUNCTIONS_BASE = "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
 DEFAULT_SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
+CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
+    {
+        "PRICE_NOT_CONFIGURED",
+        "STRIPE_NOT_CONFIGURED",
+        "APP_URL_NOT_CONFIGURED",
+    }
+)
 
 
 class HttpJson(Protocol):
@@ -114,8 +121,6 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
             "broker": "alpaca",
             "env": "paper",
             "kind": "api_key",
-            "key_id": "PKPROBE",
-            "secret": "sk-probe",
         },
     ),
     ObserverHop(
@@ -123,7 +128,7 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         method="POST",
         path="/settings/keys/connect",
         kind=HopExpectation.TIER_FORBIDDEN,
-        body={"provider": "openai", "kind": "api_key", "secret": "sk-probe-not-real"},
+        body={"provider": "openai", "kind": "api_key"},
     ),
     ObserverHop(
         label="POST /create-checkout-session",
@@ -149,7 +154,7 @@ def hop_ok(kind: HopExpectation, http: int, code: str | None) -> bool:
     if kind is HopExpectation.TIER_FORBIDDEN:
         return http == 403 and code == "TIER_FORBIDDEN"
     if kind is HopExpectation.PRICE_OR_SESSION:
-        if http >= 500 and code == "PRICE_NOT_CONFIGURED":
+        if http >= 500 and code in CHECKOUT_CONFIG_MISS_CODES:
             return True
         return http in {200, 201}
     if kind is HopExpectation.NOT_FOUND:
@@ -199,6 +204,16 @@ def run_observer_hops(
     return results
 
 
+class JwtResolution(BaseModel):
+    """JWT lookup outcome — never includes the token in logs (caller must not)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    token: str | None = None
+    attempted_grant: bool = False
+    grant_http: int | None = None
+
+
 def password_grant_access_token(
     *,
     http: HttpJson,
@@ -206,8 +221,8 @@ def password_grant_access_token(
     anon_key: str,
     email: str,
     password: str,
-) -> str | None:
-    """Exchange email/password for an access token. Returns None on failure."""
+) -> tuple[str | None, int]:
+    """Exchange email/password for an access token. Returns (token, http)."""
     status, body = http(
         "POST",
         f"{supabase_url.rstrip('/')}/auth/v1/token?grant_type=password",
@@ -215,35 +230,32 @@ def password_grant_access_token(
         body={"email": email, "password": password},
     )
     if status != 200:
-        return None
+        return None, status
     token = body.get("access_token")
     if not isinstance(token, str) or not token.strip():
-        return None
-    return token.strip()
+        return None, status
+    return token.strip(), status
 
 
-def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> str | None:
+def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> JwtResolution:
     """JWT from env, or password grant when email/password/anon are set."""
     direct = (environ.get("KAIROS_STAGING_USER_JWT") or "").strip()
     if direct:
-        return direct
+        return JwtResolution(token=direct)
     email = (environ.get("KAIROS_STAGING_EMAIL") or "").strip()
     password = (environ.get("KAIROS_STAGING_PASSWORD") or "").strip()
-    anon = (
-        (environ.get("CORE_SUPABASE_ANON_KEY") or "").strip()
-        or (environ.get("SUPABASE_ANON_KEY") or "").strip()
-        or (environ.get("KAIROS_STAGING_ANON_KEY") or "").strip()
-    )
+    anon = _anon_from_env(environ)
     supabase_url = (environ.get("CORE_SUPABASE_URL") or DEFAULT_SUPABASE_URL).strip()
     if not (email and password and anon):
-        return None
-    return password_grant_access_token(
+        return JwtResolution()
+    token, grant_http = password_grant_access_token(
         http=http,
         supabase_url=supabase_url,
         anon_key=anon,
         email=email,
         password=password,
     )
+    return JwtResolution(token=token, attempted_grant=True, grant_http=grant_http)
 
 
 def _anon_from_env(environ: Mapping[str, str]) -> str | None:
@@ -268,7 +280,15 @@ def run_staging_e2e(
         "/"
     )
 
-    jwt = resolve_staging_jwt(http=http, environ=env)
+    resolved = resolve_staging_jwt(http=http, environ=env)
+    if resolved.attempted_grant and not resolved.token:
+        err(
+            "Password grant failed "
+            f"HTTP {resolved.grant_http} — credentials not logged. "
+            "Check KAIROS_STAGING_EMAIL/PASSWORD."
+        )
+        return 3
+    jwt = resolved.token
     if jwt:
         log("kairos_staging_e2e: Observer hops (Settings + checkout, no vendor secrets required)")
         results = run_observer_hops(
@@ -311,10 +331,7 @@ def run_staging_e2e(
     )
     code = _response_code(body) or "ok"
     log(f"  checkout_http={status} code={code}")
-    if status >= 500 and _response_code(body) in {
-        "PRICE_NOT_CONFIGURED",
-        "STRIPE_NOT_CONFIGURED",
-    }:
+    if status >= 500 and _response_code(body) in CHECKOUT_CONFIG_MISS_CODES:
         err(
             "Checkout still misconfigured on core EF — set the same secret names "
             f"via `supabase secrets set` (code={_response_code(body)})."
@@ -344,10 +361,12 @@ def run_staging_e2e(
 
 
 __all__ = [
+    "CHECKOUT_CONFIG_MISS_CODES",
     "DEFAULT_FUNCTIONS_BASE",
     "OBSERVER_HOPS",
     "HopExpectation",
     "HttpJson",
+    "JwtResolution",
     "ObserverHop",
     "ProbeResult",
     "hop_ok",

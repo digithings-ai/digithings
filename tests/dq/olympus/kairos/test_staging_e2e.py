@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 from digiquant.olympus.kairos.staging_e2e import (
+    OBSERVER_HOPS,
     HopExpectation,
     hop_ok,
     resolve_staging_jwt,
@@ -102,6 +103,8 @@ def test_empty_and_placeholder_values_count_as_missing(
         (HopExpectation.TIER_FORBIDDEN, 200, None, False),
         (HopExpectation.TIER_FORBIDDEN, 404, "NOT_FOUND", False),
         (HopExpectation.PRICE_OR_SESSION, 500, "PRICE_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 500, "STRIPE_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 500, "APP_URL_NOT_CONFIGURED", True),
         (HopExpectation.PRICE_OR_SESSION, 200, None, True),
         (HopExpectation.PRICE_OR_SESSION, 403, "TIER_FORBIDDEN", False),
         (HopExpectation.NOT_FOUND, 404, "NOT_FOUND", True),
@@ -208,11 +211,39 @@ def test_run_staging_e2e_observer_regression_exits_3() -> None:
 
 @pytest.mark.unit
 def test_resolve_staging_jwt_prefers_env_token() -> None:
-    token = resolve_staging_jwt(
+    resolved = resolve_staging_jwt(
         http=_FakeHttp({}),
         environ={"KAIROS_STAGING_USER_JWT": "  abc  "},
     )
-    assert token == "abc"
+    assert resolved.token == "abc"
+    assert resolved.attempted_grant is False
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_password_grant_failure_exits_3() -> None:
+    rc = run_staging_e2e(
+        http=_FakeHttp(
+            {("POST", "/auth/v1/token?grant_type=password"): (400, {"error": "invalid"})}
+        ),
+        environ={
+            "KAIROS_STAGING_EMAIL": "user@example.test",
+            "KAIROS_STAGING_PASSWORD": "not-logged",
+            "CORE_SUPABASE_ANON_KEY": "anon",
+        },
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
+
+
+@pytest.mark.unit
+@pytest.mark.unit
+def test_observer_connect_hops_omit_secret_fields() -> None:
+    connect = [hop for hop in OBSERVER_HOPS if hop.kind is HopExpectation.TIER_FORBIDDEN]
+    for hop in connect:
+        body = hop.body or {}
+        assert "secret" not in body
+        assert "key_id" not in body
 
 
 def _http_json(
