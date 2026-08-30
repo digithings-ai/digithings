@@ -112,7 +112,14 @@ export default function PipelineClient() {
         const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         if (!url || !key) return;
 
-        const supabase = createClient(url, key);
+        // Secondary client — do not share GoTrue storage with the auth singleton.
+        const supabase = createClient(url, key, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        });
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
         // Independent reads — run them together instead of one round-trip at a time.

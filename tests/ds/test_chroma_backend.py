@@ -28,7 +28,7 @@ def test_add_keeps_canonical_doc_id_over_spoofed_metadata() -> None:
             backend = ChromaBackend("test-index")
             backend.add([chunk])
 
-    assert collection.add.call_count == 1
-    metadatas = collection.add.call_args.kwargs["metadatas"]
+    assert collection.upsert.call_count == 1
+    metadatas = collection.upsert.call_args.kwargs["metadatas"]
     assert metadatas[0]["doc_id"] == "real-doc-id"
     assert metadatas[0]["title"] == "Example"

@@ -381,17 +381,10 @@ jobs:
         # uv run so the script's own `python3` calls resolve to the locked venv.
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
+      - name: Install ripgrep (pandas boundary gate)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
       - name: Pandas boundary (REM-132)
-        # Not wrapped in `uv run`: this script is pure bash + ripgrep and calls no
-        # Python, so the venv would buy nothing.
-        #
-        # NOTE (#1715): this gate is currently a no-op on runners without
-        # ripgrep. Its scan ends in `|| true`, so a missing `rg` yields an empty
-        # violation list and prints "pandas boundary OK". Run locally with rg
-        # present it FAILS on digiquant/scripts/fetch_real_ohlcv.py:17
-        # (`import pandas as pd`), which is outside the allowlist and contrary to
-        # the Polars-only rule. Left as-is here because fixing it is a digiquant
-        # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
 
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────

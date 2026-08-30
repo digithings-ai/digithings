@@ -443,8 +443,12 @@ def run(start: str, end: str, dry_run: bool) -> int:
                     "document_key": "digest",
                     "payload": norm,
                     "content": digest_md,
+                    # House stamp — 096 seed. UNIQUE is (workspace_id, date, document_key).
+                    "workspace_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319",
                 }
-                sb.table("documents").upsert(doc_row, on_conflict="date,document_key").execute()
+                sb.table("documents").upsert(
+                    doc_row, on_conflict="workspace_id,date,document_key"
+                ).execute()
 
             print(f"✅ {date_str}: schema normalized and re-published")
 

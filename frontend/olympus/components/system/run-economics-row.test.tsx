@@ -43,5 +43,34 @@ describe('run-economics formatting', () => {
     expect(html).toContain('grid-cols-2');
     expect(html).toContain('md:grid-cols-4');
     expect(html).toContain('p-4');
+    expect(html).toContain('data-testid="run-economics-row"');
+  });
+});
+
+describe('RunEconomicsRow entitlement wrap', () => {
+  it('locks behind glassbox_economics for Observer', async () => {
+    const { EntitledSurface } = await import('@/components/entitled-surface');
+    const html = renderToStaticMarkup(
+      createElement(
+        EntitledSurface,
+        { artifactClass: 'glassbox_economics', tier: 'free' },
+        createElement(RunEconomicsRow, { latest: diag({ duration_s: 10 }) }),
+      ),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('run-economics-row');
+  });
+
+  it('passthrough for Baseline', async () => {
+    const { EntitledSurface } = await import('@/components/entitled-surface');
+    const html = renderToStaticMarkup(
+      createElement(
+        EntitledSurface,
+        { artifactClass: 'glassbox_economics', tier: 'baseline' },
+        createElement(RunEconomicsRow, { latest: diag({ duration_s: 10 }) }),
+      ),
+    );
+    expect(html).toContain('run-economics-row');
+    expect(html).not.toContain('locked-surface');
   });
 });

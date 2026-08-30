@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -120,9 +121,15 @@ class _FakeQuery:
 
     def execute(self) -> Any:
         rows = list(self.rows)
+        house = str(house_workspace_id())
         for op, col, val in self._filters:
             if op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
+                rows = [
+                    r
+                    for r in rows
+                    if r.get(col) == val
+                    or (col == "workspace_id" and val == house and r.get(col) is None)
+                ]
             elif op == "neq":
                 rows = [r for r in rows if r.get(col) != val]
             elif op == "lt":
@@ -1097,7 +1104,10 @@ class TestMainPrefersTheLedger:
         recorded = {row["ticker"]: row for row in sb.upserts}
         assert recorded["FXI"]["event"] == "OPEN"
         assert recorded["DBO"]["event"] == "EXIT"
-        assert all(row["_on_conflict"] == "date,ticker" for row in sb.upserts)
+        # T0 (#5-T0): migration 097 widened UNIQUE to (workspace_id, date, ticker);
+        # the writer stamps house workspace_id and targets that composite key.
+        assert all(row["_on_conflict"] == "workspace_id,date,ticker" for row in sb.upserts)
+        assert all("workspace_id" in row for row in sb.upserts)
 
     def test_held_names_still_get_hold_continuity_rows(
         self, monkeypatch: pytest.MonkeyPatch

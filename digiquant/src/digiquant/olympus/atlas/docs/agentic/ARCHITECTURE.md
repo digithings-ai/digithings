@@ -687,7 +687,7 @@ bound spend.
 
 ### Fallback behaviour
 
-If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (the first retry adds OpenRouter provider-fallback routing); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
+If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (re-asking the same model; `OPENROUTER_FALLBACK_MODELS` covers provider errors on the primary request, not empty `200` bodies); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
 
 ### Overriding models (user configuration)
 

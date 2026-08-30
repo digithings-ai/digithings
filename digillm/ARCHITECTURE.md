@@ -192,9 +192,11 @@ chat_completion(
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
   retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
-  For an `openrouter/` model the first retry adds provider-fallback routing
-  (`extra_body.models` + `route=fallback`) from `OPENROUTER_FALLBACK_MODELS`; other
-  providers just re-ask. A persistent blank is returned unchanged (callers stay graceful).
+  For `openrouter/` models, `OPENROUTER_FALLBACK_MODELS` attaches provider-fallback
+  routing (`extra_body.models` + `route=fallback`) on the **primary** request via
+  `_with_openrouter_cost_controls`; it does **not** swap models on an empty `200`
+  (fallback routing fires on provider errors only). Empty retries re-ask the same
+  model. A persistent blank is returned unchanged (callers stay graceful).
 
 ### `chat_completion_with_tools`
 
