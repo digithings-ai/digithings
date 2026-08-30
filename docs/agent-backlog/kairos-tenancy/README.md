@@ -88,6 +88,9 @@ Operator runbook (merge state, migrations 096–105, Edge Functions, Olympus fla
 human prerequisites, cutover checklist, E2E skeleton, rollback):
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
+Credential / PAT / vendor secret naming (**digithings**, not “cursor cloud agent”):
+[`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
+
 Post-cutover RLS verification harness (vanilla Postgres or production clone):
 [`scripts/rls_proof/`](../../../scripts/rls_proof/) — run after §6 staged SQL is applied.
 

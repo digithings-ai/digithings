@@ -1,14 +1,17 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30 Auth Pages) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Staging E2E still needs Stripe/Mailgun/Google/Alpaca. Prod `/olympus/login` **404** until narrow Auth Pages PR merges to `main`.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-30) — NOT COMPLETE.** Identity: **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged). Captchas still block Stripe/Mailgun/Alpaca. No vendor EF secrets set. Staging E2E loud-fails named secrets. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
 
+**Secret files (when obtained):** `.local/secrets/digithings-stripe.env`, `digithings-mailgun.env`, `digithings-alpaca.env` — **not** `cursor-cloud-agent-*.env`.  
+**Canonical inbox:** `digithings@agentmail.to` (interim `cursor-cloud-agent6060@agentmail.to` = accidental only).  
+**Identity:** [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) · `/opt/cursor/artifacts/kairos-digithings-vendor-naming-ready.md`  
+**Human captcha ask:** `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
+**Vendor map:** [`VENDOR_MAP.md`](VENDOR_MAP.md) · `/opt/cursor/artifacts/kairos-VENDOR-MAP.md`  
+**Waiting:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`identity=digithings`)  
+**Vendor docs PR:** [#3233](https://github.com/digithings-ai/digithings/pull/3233) · branch `cursor/kairos-vendor-onboard-3d52`  
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`  
-Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-**Auth Pages (merge to `main`):** `cursor/olympus-auth-pages-e036` — https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036  
-**Docs/audit (`develop`):** `cursor/kairos-auth-pages-audit-e036`  
-**Do not merge** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) for the login 404. **Never apply cutover 900** with this Pages fix.
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 
 Loud-fail gates (after paste):
 ```bash
@@ -16,12 +19,9 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
 ```
 
-### 0a) Merge Auth Pages to `main` (agent-unblocked; human merge)
+### 0a) Auth Pages on `main` — DONE (#3231)
 
-1. Open/merge compare URL above (`cursor/olympus-auth-pages-e036` → `main`).
-2. Wait for Cloudflare Pages rebuild (`scripts/build-digiquant.sh`; AUTH defaults on under `CF_PAGES` when unset).
-3. Smoke: `https://digiquant.io/olympus/login` → **200** + Login UI (GitHub works; Google still Disabled on `core`).
-4. Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`.
+[#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI. Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183).
 
 ---
 
@@ -31,7 +31,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**) works; re-paste into Cursor env if process env drops it |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/digithings-supabase-pat` (label **digithings**) works; re-paste into Cursor env if process env drops it. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
@@ -69,55 +69,24 @@ supabase secrets set \
   MAILGUN_API_KEY=… \
   MAILGUN_DOMAIN=… \
   NOTIFY_FROM=… \
+  AUTH_GOOGLE_CLIENT_ID=… \
+  AUTH_GOOGLE_CLIENT_SECRET=… \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…
 ```
 
-Webhook URL: `https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webhook`
+Prefer writing values first to `.local/secrets/digithings-*.env` (gitignored), then `secrets set` from those files. Never commit values.
 
 ---
 
-## 2) Redeploy billing Edge Functions (after Stripe secrets)
+## 2) Human captcha (paused)
 
-Preferred order: `stripe-webhook` (no verify JWT) → `create-checkout-session` / `customer-portal`. Settings already **v22**.
-
-Smoke: unauth → gateway `401`; Stripe webhook without key must not stay `STRIPE_NOT_CONFIGURED` once secret is set; checkout must clear `PRICE_NOT_CONFIGURED`.
+Do **not** resume Stripe / Mailgun / Alpaca signup until human replies captcha done (or says continue). Screenshots and map: [`VENDOR_MAP.md`](VENDOR_MAP.md).
 
 ---
 
-## 3) Supabase Auth providers on `core`
+## 3) After secrets land
 
-- **GitHub:** Enabled.
-- **Email:** Enabled — Agentmail signup/confirm works.
-- **Google:** Still Disabled.
-
----
-
-## 4) Stripe webhook (test mode)
-
-1. Products/prices for Baseline + Custom (monthly required).
-2. Endpoint → `…/functions/v1/stripe-webhook`.
-3. Put `whsec_…` into EF secrets.
-4. One test Checkout → claim / `plan_tier` sync (replaces ops SQL elevation).
-
----
-
-## 5) Paper Alpaca connect
-
-1. Finish Alpaca OAuth app (paper); put client id/secret in EF secrets.
-2. Staging: sign in → Settings → Brokers → connect paper (OAuth — not fake api_key).
-3. Place paper order-intent → mirror fill path (no live trading).
-
----
-
-## 6) Flag cutover (human release gate — last)
-
-Only when staging E2E (signup → Stripe test → Alpaca paper → overlay → digest) is green:
-
-1. Keep Cloudflare Access on initially.
-2. Merge deliberate Pages promote when ready (**not** auto-merge #3183).
-3. Flip `NEXT_PUBLIC_OLYMPUS_AUTH` on Pages.
-4. Apply cutover SQL `migrations/cutover/900_…` only after Access + flag plan.
-5. RLS proof harness post-apply; then Access off.
-
-**Still out of epic:** IBKR vendor onboarding, live trading, legal adviser read.
+1. Redeploy settings + create-checkout-session + stripe-webhook EFs if needed.
+2. `python scripts/kairos_staging_e2e.py` — expect past named-secret loud-fail.
+3. Update [`WAITING-ON-SECRETS.json`](WAITING-ON-SECRETS.json) status.
