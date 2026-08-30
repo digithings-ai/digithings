@@ -34,6 +34,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 # INVITE_INVALID). Live v32 404s that route until --apply.
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_house_pipeline_proof.py
 # schedule success after #3334 only; never workflow_dispatch. Exit 3 until 12:00 UTC.
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_route_cron.py --check
+# --dry-run never submits. --all requires OLYMPUS_KAIROS_ROUTING=1 (default off → exit 3).
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
