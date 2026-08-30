@@ -60,6 +60,11 @@ deploy`, or the SQL editor.
 | `migrations/064_prices_live_lease.sql` | `public.prices_live_lease` + `claim_prices_live_refresh(integer)` — the single-row lease and the atomic claim that bound the Finnhub refresh **rate**; replaced the #1756 invocation secret |
 | `migrations/065_atlas_run_diagnostics_attempt.sql` | `atlas_run_diagnostics.attempt` + primary key `(run_id, attempt)`, and `attempt` appended to the `atlas_run_health` view — one row per outer-retry **attempt** so the last retry stops overwriting the expensive attempt's cost (#1762). Legacy rows carry the `0` sentinel, never `1` |
 | `functions/prices-live/` | Deno edge function: polls Finnhub, upserts one row per ticker into `public.prices_live` (#1461, #1807) |
+| `functions/stripe-webhook/` | Deno edge function: Stripe webhooks → `workspaces` billing + Auth `plan_tier` claim sync (T2). `verify_jwt=false`. |
+| `functions/create-checkout-session/` | Deno edge function: Stripe Checkout for logged-in workspace owners (T2). |
+| `functions/customer-portal/` | Deno edge function: Stripe Customer Portal session (T2). |
+| `functions/_shared/` | Shared Deno modules for billing (`stripe.ts`, `tiers.ts`, `supabase-admin.ts`, `webhook-handler.ts`). |
+| `functions/README.md` | Deploy + `supabase secrets set` + local `deno test` for billing functions. |
 
 The rest of this README is the operational guide for the **live price feed** (#1461).
 

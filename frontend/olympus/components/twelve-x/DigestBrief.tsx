@@ -12,14 +12,14 @@ export default function DigestBrief({
 }) {
   if (!digest) {
     return (
-      <section className="glass-card p-5">
+      <section className="oly-slab p-5">
         <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
         <p className="mt-2 text-sm text-ink-mute">No digest for today yet.</p>
       </section>
     );
   }
   return (
-    <section className="glass-card flex flex-col gap-2 p-5">
+    <section className="oly-slab flex flex-col gap-2 p-5">
       <header className="flex min-w-0 items-baseline gap-2">
         <FileText size={15} className="shrink-0 text-accent" aria-hidden />
         <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
@@ -37,7 +37,7 @@ export default function DigestBrief({
       {digest.key_themes.length > 0 ? (
         <div className="mt-1 flex flex-wrap gap-1.5">
           {digest.key_themes.map((t) => (
-            <span key={t} className="rounded-full border border-hair px-2.5 py-0.5 text-[11px] text-ink-soft">
+            <span key={t} className="rounded-none border border-hair px-2.5 py-0.5 text-[11px] text-ink-soft">
               {t}
             </span>
           ))}

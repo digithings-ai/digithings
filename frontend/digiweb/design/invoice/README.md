@@ -1,10 +1,10 @@
 # Invoice template
 
-A clean, print-ready invoice in an elegant **monochrome** (black & white) style —
-Geist / Geist Mono / Instrument Serif voices, hairline rules, generous
-whitespace, and tabular figures for money. No colour and no logo mark, so it
-reads as a plain professional document. Self-contained single `index.html` — no
-build step, no external assets beyond web fonts.
+A clean, print-ready invoice in a utilitarian **monochrome** (black & white)
+style — Geist Mono for claim, body, and chrome, hairline rules, zero radius, no
+glass, generous whitespace, and tabular figures for money. No colour and no logo
+mark. Self-contained single `index.html` — no build step, no external assets
+beyond the mono webfont.
 
 The invoice itself is always **one A4 page**. Line items read like an
 AI-services invoice: a deliverable name followed by a compact scope, one row

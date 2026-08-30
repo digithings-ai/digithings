@@ -87,7 +87,7 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
               return (
                 <span
                   key={seg}
-                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-ink/[0.04] px-1.5 py-0.5 text-xs text-ink-mute"
+                  className="inline-flex items-center gap-1 border border-hair bg-ink/[0.04] px-1.5 py-0.5 text-xs text-ink-mute"
                   title={chip.title}
                 >
                   <span className={`h-1 w-1 rounded-full ${chip.dot}`} aria-hidden />

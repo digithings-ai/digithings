@@ -30,6 +30,7 @@ export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Olympus", href: "/#olympus" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Changelog", href: "/changelog" },
   { label: "digithings.ai", href: "https://digithings.ai", external: true },
 ];
 
@@ -38,6 +39,7 @@ export const DQ_FOOTER: NavLink[] = [
   { label: "Olympus", href: "/#olympus" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
+  { label: "Changelog", href: "/changelog" },
   { label: "Built on digithings", href: "https://digithings.ai", external: true },
   { label: "GitHub", href: "https://github.com/digithings-ai", external: true },
 ];

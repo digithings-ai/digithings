@@ -13,9 +13,14 @@
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
 
-This file synthesizes three external north stars — [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md) — with our current
-implementation and sets **evolution paths** per surface. "Current implementation"
+This file synthesizes external north stars — [Graphite](references/graphite.com.md),
+[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
+utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
+[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+**evolution paths** per surface. Active blend lock + preference ledger:
+[`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
+
+"Current implementation"
 is two layers: `tokens.css` + `site/site.css` (shared CSS foundation — brand,
 buttons, terminal block, sections, and the CSS-only primitives built here in
 Phase B) consumed directly by the v7 landings (`frontend/digithings-web`,
@@ -46,20 +51,26 @@ we build next.
 
 ---
 
-## 1. The three references in one sentence each
+## 1. The references in one sentence each
 
 | Reference | Essence | Risk if copied literally |
 |-----------|---------|--------------------------|
 | **Graphite** | Motion-forward scroll storytelling with real product UI in dark frames | Page fatigue; orange/zinc is not our brand |
 | **Cursor** | Light, scannable bento layout; product screenshots; literal CTAs | Loses our terminal/quant identity; too generic SaaS |
 | **xAI** | Brutalist dark infrastructure; mono display; capability demos; no decoration | Too austere for digiquant storytelling; dark-only |
+| **Herdr** | Diegetic multi-pane terminal hero; ink/paper dual ground; sharp chrome | Zero-radius + lavender spot as a second brand |
+| **AgentMail** | Sparse dark API hero; white CTA; live code/inbox proof | Inter-as-display; announcement-bar chrome |
+| **Omarchy** | Mono-everything utilitarian; terminal colour punctuation; playful product shot | Synthwave / pixel decoration; multi-CTA icon grids |
 
-**Our blend:**
+**Our blend (2026-08, iterating):**
 
-> **Cursor’s page map and section discipline.**  
-> **Graphite’s one scroll story and motion craft.**  
-> **xAI’s mono infrastructure voice on dashboards and API surfaces.**  
-> **Our existing atmosphere** (mesh, grain, module accents, open-core honesty).
+> **Instrument Panel tokens and colour domains.**  
+> **Herdr’s diegetic terminal proof and sharp chrome option.**  
+> **AgentMail’s sparse split hero and white/ink loud CTA.**  
+> **Omarchy’s mono confidence (not its nostalgia).**  
+> **Cursor’s section discipline · xAI’s restraint · Graphite motion only when earned.**
+
+Pick concrete treatments on `/iterate` before locking into `DESIGN.md` / `tokens.css`.
 
 ---
 

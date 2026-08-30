@@ -124,7 +124,7 @@ export default function PipelineNodeDetail({
 
         {!documentKey && explanation && (
           <div className="space-y-5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-hair bg-surface text-accent">
+            <div className="flex h-9 w-9 items-center justify-center border border-hair bg-surface text-accent">
               <BookOpen size={17} aria-hidden />
             </div>
             <div>
@@ -133,7 +133,7 @@ export default function PipelineNodeDetail({
                 {explanation.description}
               </p>
             </div>
-            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hair bg-hair">
+            <dl className="grid grid-cols-2 gap-px overflow-hidden border border-hair bg-hair">
               <div className="bg-term-bg px-3 py-2.5">
                 <dt className="font-mono text-xs uppercase text-ink-mute">
                   Stage
@@ -233,7 +233,14 @@ async function fetchByDocumentKey(
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
 
-  const supabase = createClient(url, key);
+  // Secondary client — do not share GoTrue storage with the auth singleton.
+  const supabase = createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
   // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
   // row, which rendered as "No output found" — the same failure class as the
   // #1538 digest headline (a retried/backfilled publish can duplicate a

@@ -164,9 +164,9 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
         </span>
         <span
           title={event.event_kind.replace('_', ' ')}
-          className={`flex h-8 w-8 items-center justify-center rounded-md border ${
+          className={`flex h-8 w-8 items-center justify-center border ${
             event.status === 'error'
-              ? 'border-down/30 text-down'
+              ? 'border-danger/30 text-danger'
               : needsAttention
                 ? 'border-warn/30 text-warn'
                 : 'border-hair text-accent'
@@ -187,7 +187,7 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {event.status === 'error' ? (
-            <span className="font-mono text-[0.62rem] font-semibold uppercase text-down">Error</span>
+            <span className="font-mono text-[0.62rem] font-semibold uppercase text-danger">Error</span>
           ) : event.retry_count > 0 ? (
             <span className="font-mono text-[0.62rem] font-semibold uppercase text-warn">
               {event.retry_count} {event.retry_count === 1 ? 'retry' : 'retries'}
@@ -280,7 +280,7 @@ export function PipelineTraceView({
           type="button"
           aria-label="Close call trace"
           onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
         >
           <X size={18} aria-hidden />
         </button>
@@ -303,7 +303,7 @@ export function PipelineTraceView({
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search phases, operations, models, tools, or artifacts"
-                className="h-10 w-full rounded-lg border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
+                className="h-10 w-full border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
               />
             </label>
             <div
@@ -316,7 +316,7 @@ export function PipelineTraceView({
                   type="button"
                   aria-pressed={stage === value}
                   onClick={() => setStage(value)}
-                  className={`h-8 rounded-md border px-2.5 font-mono text-[0.62rem] transition-colors ${
+                  className={`h-8 border px-2.5 font-mono text-[0.62rem] transition-colors ${
                     stage === value
                       ? 'border-accent/40 bg-accent/10 text-accent'
                       : 'border-hair text-ink-mute hover:text-ink'
@@ -327,7 +327,7 @@ export function PipelineTraceView({
               ))}
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex rounded-lg border border-hair bg-surface p-0.5" aria-label="Call type filter">
+              <div className="inline-flex border border-hair bg-surface p-0.5" aria-label="Call type filter">
                 {([
                   ['all', 'All'],
                   ['model_call', 'Models'],
@@ -340,7 +340,7 @@ export function PipelineTraceView({
                     aria-pressed={kind === value}
                     onClick={() => setKind(value)}
                     className={`h-8 px-2.5 font-mono text-[0.65rem] transition-colors ${
-                      kind === value ? 'rounded-md bg-accent/10 text-accent' : 'text-ink-mute hover:text-ink'
+                      kind === value ? 'bg-accent/10 text-accent' : 'text-ink-mute hover:text-ink'
                     }`}
                   >
                     {label}
@@ -351,7 +351,7 @@ export function PipelineTraceView({
                 type="button"
                 aria-pressed={attention === 'issues'}
                 onClick={() => setAttention(attention === 'issues' ? 'all' : 'issues')}
-                className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[0.65rem] transition-colors ${
+                className={`inline-flex h-9 items-center gap-2 border px-3 font-mono text-[0.65rem] transition-colors ${
                   attention === 'issues'
                     ? 'border-warn/40 bg-warn/[0.08] text-warn'
                     : 'border-hair text-ink-mute hover:text-ink'
@@ -430,7 +430,7 @@ export function PipelineTraceView({
                       limit: nextTracePageLimit(visibleLimit, filtered.length),
                     })
                   }
-                  className="h-9 rounded-lg border border-hair px-4 font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent"
+                  className="h-9 border border-hair px-4 font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent"
                 >
                   Load {Math.min(TRACE_UI_PAGE_SIZE, remaining)} more · {remaining} remaining
                 </button>
@@ -479,7 +479,7 @@ export default function PipelineTraceLedger({
             type="button"
             aria-label="Close call trace"
             onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-hair text-ink-mute md:h-8 md:w-8"
+            className="flex h-11 w-11 items-center justify-center border border-hair text-ink-mute md:h-8 md:w-8"
           >
             <X size={18} aria-hidden />
           </button>

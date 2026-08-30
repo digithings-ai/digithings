@@ -26,6 +26,7 @@ import {
 } from "@/hooks/use-byok-key";
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
+  BYOK_MODEL_REMEDIABLE_CODES,
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
 } from "@/lib/embed-chat-error";
@@ -322,6 +323,8 @@ function EmbedChat({
   const [quotaPrompt, setQuotaPrompt] = useState(false);
   /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
   const pendingByokRetryRef = useRef(false);
+  /** Panel opened for a model-remediable refusal while a key is already bound — no retry until save. */
+  const pendingByokRemediateRef = useRef(false);
   /** Dedupes quota→BYOK open for the same AI SDK error instance/message. */
   const handledQuotaErrorRef = useRef<string | null>(null);
 
@@ -418,9 +421,9 @@ function EmbedChat({
     if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
   }, [chat.busy, chat.rawError, gate]);
 
-  // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
+  // Free-tier / rate-limit / model-remediable → stop turn + open in-chat BYOK.
   useEffect(() => {
-    if (!chat.rawError || byokIsSet) return;
+    if (!chat.rawError) return;
     const errKey = chat.rawError.message;
     if (handledQuotaErrorRef.current === errKey) return;
     const parsed = parseEmbedChatError(chat.rawError);
@@ -434,12 +437,21 @@ function EmbedChat({
     ) {
       return;
     }
+    const remediateWhileBound =
+      byokIsSet &&
+      !!parsed?.code &&
+      BYOK_MODEL_REMEDIABLE_CODES.has(parsed.code);
+    if (byokIsSet && !remediateWhileBound) return;
     handledQuotaErrorRef.current = errKey;
     void chat.stop?.();
-    pendingByokRetryRef.current = true;
+    if (remediateWhileBound) {
+      pendingByokRemediateRef.current = true;
+    } else {
+      pendingByokRetryRef.current = true;
+    }
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setQuotaPrompt(true);
+      setQuotaPrompt(!remediateWhileBound);
       setSettingsOpen(true);
     });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
@@ -448,6 +460,7 @@ function EmbedChat({
   // or release a question held at the gate / byok_only prompt.
   useEffect(() => {
     if (!byokIsSet || chat.busy) return;
+    if (pendingByokRemediateRef.current && !pendingByokRetryRef.current) return;
     const held = heldQuestionRef.current;
     if (pendingByokRetryRef.current) {
       pendingByokRetryRef.current = false;
@@ -476,10 +489,12 @@ function EmbedChat({
 
   const onByokSaved = useCallback(
     (key: string, provider: BYOKProvider, model: string) => {
+      pendingByokRemediateRef.current = false;
+      pendingByokRetryRef.current = true;
       setByokKey(key, provider, model);
       emit("embed_byok_saved", { provider });
       setSettingsOpen(false);
-      // Retry effect runs once byokIsSet flips (pendingByokRetryRef may already be set).
+      // Retry effect runs once byokIsSet flips (pendingByokRetryRef set above).
     },
     [setByokKey],
   );
@@ -910,7 +925,6 @@ function PaywallCard({
           type="button"
           size="sm"
           onClick={() => setShowBYOK(true)}
-          style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Key className="mr-1.5 size-3.5" />
           Bring your own key
@@ -920,7 +934,7 @@ function PaywallCard({
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}
-          className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          className="inline-flex items-center rounded-none border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
           Open digichat

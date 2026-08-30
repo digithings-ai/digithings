@@ -1,6 +1,7 @@
 'use client';
 
 import type { RebalanceAction } from '@/lib/types';
+import { activeRebalanceActions } from '@/components/today/brief-highlight';
 import { Badge } from '@/components/ui';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
@@ -8,7 +9,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 /**
  * The move-led hero — the single full-weight element of the Brief (landing) page.
  *
- * Quiet regime ribbon → "Brief" (display serif) + the move (reusing the tested
+ * Quiet regime ribbon → "Brief" (display face) + the move (reusing the tested
  * TodayActionsPanel, which already renders the empty and all-HOLD states) → a
  * one-line NAV status. The regime accent is localized here ONLY; the page no
  * longer washes regime colour across the whole viewport.
@@ -95,10 +96,7 @@ export function MoveHero({
   nav,
 }: MoveHeroProps) {
   const accent = REGIME_ACCENT[regimeLabel] ?? REGIME_ACCENT.neutral;
-  const changeCount = actions.filter((a) => {
-    const k = (a.action || '').trim().toUpperCase();
-    return k !== 'HOLD' && !(k === 'EXIT' && (a.current_pct ?? 0) === 0);
-  }).length;
+  const changeCount = activeRebalanceActions(actions).length;
   const moveStatus =
     changeCount === 0
       ? 'No rebalance today — holding the book'
@@ -142,7 +140,7 @@ export function MoveHero({
         </h1>
         {confidence != null ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
+            <span className="border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
               {confidence.toFixed(1)} confidence
             </span>
           </div>

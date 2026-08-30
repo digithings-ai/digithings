@@ -145,7 +145,8 @@ describe('AttributionTab — stat tile labels', () => {
   });
 
   it('uses flat sections when embedded without changing the default card presentation', () => {
-    expect(render(rows)).toContain('glass-card');
-    expect(render(rows, '2026-06-17', true)).not.toContain('glass-card');
+    expect(render(rows)).toContain('oly-slab');
+    expect(render(rows, '2026-06-17', true)).not.toContain('oly-slab');
+    expect(render(rows)).not.toContain('glass-card');
   });
 });

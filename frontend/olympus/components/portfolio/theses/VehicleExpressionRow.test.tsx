@@ -59,8 +59,8 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
       })
     );
 
-    // The vehicle row should render as a native <details> without nested glass-card styling
-    // The parent (ThesisStoryCard) wraps vehicles in a glass-card, but individual rows should not
+    // The vehicle row should render as a native <details> without nested card styling.
+    // Individual rows stay unframed; parent ThesisStoryCard is a disclosure spine.
     expect(html).toContain('<details');
     expect(html).not.toMatch(/<details[^>]*class="[^"]*glass-card/);
   });
@@ -83,5 +83,43 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     // The "Latest call" label should not use text-[10px]
     const latestCallSection = html.split('Latest call')[0] + 'Latest call' + html.split('Latest call')[1];
     expect(latestCallSection).not.toContain('text-[10px]');
+  });
+
+  it('Observer: locks weight panel; summary weight and P&L redacted', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: 'AAA',
+        rationale: 'Test rationale',
+        candidateRank: 1,
+        position: position(),
+        latestDecision: decision(),
+        dossierHref: '/portfolio/tickers?ticker=AAA',
+        deliberationHref: '/pipeline',
+        tier: 'free',
+      }),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('vehicle-weight-panel');
+    expect(html).not.toContain('20.0%');
+    expect(html).not.toContain('+5.5%');
+    expect(html).toContain('AAA');
+  });
+
+  it('Baseline: weight panel passthrough', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: 'AAA',
+        rationale: 'Test rationale',
+        candidateRank: 1,
+        position: position(),
+        latestDecision: decision(),
+        dossierHref: '/portfolio/tickers?ticker=AAA',
+        deliberationHref: '/pipeline',
+        tier: 'baseline',
+      }),
+    );
+    expect(html).toContain('vehicle-weight-panel');
+    expect(html).toContain('20.0%');
+    expect(html).not.toContain('locked-surface');
   });
 });

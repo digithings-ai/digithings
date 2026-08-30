@@ -105,7 +105,7 @@ export default function RebalanceDocumentView({
     return (
       <div className="space-y-6 text-sm">
         {liveSummary ? (
-          <div className="rounded-lg border border-accent/15 bg-accent/[0.04] p-4">
+          <div className="border border-accent/15 bg-accent/[0.04] p-4">
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">
               Post-risk-sizing book summary
             </h3>
@@ -206,7 +206,7 @@ export default function RebalanceDocumentView({
   return (
     <div className="space-y-6 text-sm">
       {ds && (
-        <div className="rounded-lg border border-hair bg-term-bg/50 p-4 space-y-1 text-ink-soft">
+        <div className="border border-hair bg-term-bg/50 p-4 space-y-1 text-ink-soft">
           <p className="text-xs font-semibold text-ink-mute uppercase tracking-wider">Delta summary</p>
           <p>
             Changes triggered: <span className="text-ink">{String(ds.changes_triggered ?? '—')}</span> · Held:{' '}

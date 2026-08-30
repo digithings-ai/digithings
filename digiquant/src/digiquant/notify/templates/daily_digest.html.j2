@@ -1,0 +1,12 @@
+{% extends "base.html.j2" %}
+{% block title %}Olympus daily digest — {{ run_date }}{% endblock %}
+{% block content %}
+<h1>Daily digest — {{ run_date }}</h1>
+<p>Workspace: {{ workspace_name }}</p>
+{% for section in sections %}
+<section>
+  <h2>{{ section.title }}</h2>
+  <div>{{ section.body }}</div>
+</section>
+{% endfor %}
+{% endblock %}

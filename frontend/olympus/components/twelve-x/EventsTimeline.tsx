@@ -264,7 +264,7 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
       {mode === 'multi' ? (
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="text-[11px] uppercase tracking-[0.08em] text-ink-mute">Scale</span>
-          <div className="inline-flex overflow-hidden rounded-md border border-hair text-[11px]">
+          <div className="inline-flex overflow-hidden rounded-none border border-hair text-[11px]">
             {(['day', 'hour'] as const).map((s) => (
               <button
                 key={s}
@@ -295,7 +295,7 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
 
       <div
         ref={scrollRef}
-        className={`tl-scroll max-w-full overflow-y-hidden rounded-[10px] border border-hair bg-surface ${
+        className={`tl-scroll max-w-full overflow-y-hidden rounded-none border border-hair bg-surface ${
           mode === 'single' ? 'overflow-x-hidden max-[760px]:overflow-x-auto' : 'overflow-x-auto'
         }`}
       >
@@ -360,7 +360,7 @@ export default function EventsTimeline({ events, mode, day, onSelect, selectable
                 const e = c.event;
                 const isSelectable = selectableIds ? selectableIds.has(e.id ?? '') : true;
                 const clickable = Boolean(onSelect && e.id != null && isSelectable);
-                const className = `tl-card absolute box-border overflow-hidden rounded-md border-l-[3px] px-[7px] py-[6px] text-left ${
+                const className = `tl-card absolute box-border overflow-hidden rounded-none border-l-[3px] px-[7px] py-[6px] text-left ${
                   clickable ? 'cursor-pointer transition-shadow hover:ring-1 hover:ring-inset hover:ring-ink/20' : ''
                 } ${impactClass(e.impact)} ${impactStyle(e.impact)}`;
                 const style = { left: dayLeft + c.x, top, width: c.width, height: TL_LANE_H };

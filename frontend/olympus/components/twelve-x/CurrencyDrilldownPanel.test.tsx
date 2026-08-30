@@ -186,7 +186,7 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('Strong fundamentals');
     expect(html).toContain('Technical breakout');
     expect(html).toContain('overflow-y-auto overscroll-contain pr-1 pb-1');
-    expect(html).toContain('rounded-lg border border-hair');
+    expect(html).toContain('rounded-none border border-hair');
     expect(html).toContain('border-accent/30 bg-accent/[0.05]');
     expect(html).toContain('capitalize text-accent');
     expect(html).toContain('border-warn/30 bg-warn/[0.05]');
@@ -215,7 +215,7 @@ describe('CurrencyDrilldownPanelBody', () => {
     expect(html).toContain('brief1.md');
     expect(html).toContain('brief2.md');
     expect(html).toContain('Broker A');
-    expect(html).toContain('w-full rounded-lg border border-hair');
+    expect(html).toContain('w-full rounded-none border border-hair');
   });
 
   it('shows em dash when no confluence data available', () => {

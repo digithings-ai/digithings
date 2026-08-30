@@ -32,7 +32,7 @@ export function ChatWidgetsReference() {
         through a human gate.
       </p>
 
-      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-none border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
         {/* Widget 1 — backtest result card */}
         <div className="flex gap-[0.55rem] items-baseline chat-turn--assistant">
           <span className="shrink-0 font-mono text-[0.86rem] leading-[1.5] text-accent" aria-hidden="true">
@@ -43,7 +43,7 @@ export function ChatWidgetsReference() {
               eyebrow="backtest complete"
               title="trend_xsec · ETH-USD · 8y"
               badge={
-                <span className="px-[0.55rem] py-[0.2rem] rounded-full font-mono text-[0.6rem] uppercase tracking-[0.06em] bg-up/15 text-up">
+                <span className="px-[0.55rem] py-[0.2rem] rounded-none font-mono text-[0.6rem] uppercase tracking-[0.06em] bg-up/15 text-up">
                   passed
                 </span>
               }

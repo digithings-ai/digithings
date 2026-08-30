@@ -28,6 +28,7 @@ from digiquant.olympus.accounting.models import (
     TickerPeriodResult,
 )
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +66,18 @@ def holding_row_id(period_id: UUID, symbol: str) -> UUID:
 
 
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
-    """Single INSERT gate — keeps ``upsert`` out of this module."""
+    """Single INSERT gate — keeps ``upsert`` out of this module.
+
+    T0 (#5-T0): ``workspace_id`` is NOT NULL as of migration 097 with no column
+    DEFAULT — this accounting pipeline is single-tenant today, so every row stamps
+    the house workspace explicitly here rather than relying on a fallback that does
+    not exist.
+    """
     if not rows:
         return
-    client.table(table).insert(rows).execute()
+    house_id = str(house_workspace_id())
+    stamped = [{"workspace_id": house_id, **row} for row in rows]
+    client.table(table).insert(stamped).execute()
 
 
 def _dec_str(value: Decimal | None) -> str | None:

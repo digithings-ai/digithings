@@ -451,7 +451,7 @@ export default function EventsTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
         {/* List | Timeline segmented control (demo's #evtSubnav). */}
         <div
-          className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"
+          className="ml-auto inline-flex overflow-hidden rounded-none border border-hair text-[11px]"
           role="group"
           aria-label="Events view"
         >
@@ -489,7 +489,7 @@ export default function EventsTab({
         grouped.length > 0 ? (
           <div className="space-y-4">
             {grouped.map(([dateStr, rows]) => (
-              <div key={dateStr} className="glass-card overflow-hidden p-0">
+              <div key={dateStr} className="oly-slab overflow-hidden p-0">
                 <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
                     {formatDateLabel(dateStr)}
@@ -511,12 +511,12 @@ export default function EventsTab({
             ))}
           </div>
         ) : (
-          <div className="glass-card p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
+          <div className="oly-slab p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
         )
       ) : null}
 
       {view === 'timeline' ? (
-        <div className="glass-card p-4">
+        <div className="oly-slab p-4">
           {timelineEvents.length > 0 ? (
             <EventsTimeline
               events={timelineEvents}

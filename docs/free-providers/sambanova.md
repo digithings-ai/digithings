@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://docs.sambanova.ai/sambanova-cloud/latest/get-started/rate-limits.html
   - https://docs.sambanova.ai
@@ -108,3 +108,4 @@ Paid tier available; pricing not publicly documented as of 2026-05-03. Contact s
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

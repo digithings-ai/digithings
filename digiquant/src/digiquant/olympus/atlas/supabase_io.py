@@ -12,7 +12,8 @@ Design:
 - Every write passes its payload through ``digibase.audit.redact_mapping``
   before the audit log line is emitted — non-negotiable per CLAUDE.md.
 - Idempotency: all writes are upserts on the schema-declared unique keys
-  (``(date, document_key)`` for ``documents``; ``date`` for ``daily_snapshots``).
+  (``(workspace_id, date, document_key)`` for ``documents``; ``date`` for
+  ``daily_snapshots``).
   Retries of the same node are safe.
 """
 
@@ -27,6 +28,8 @@ from typing import Any, Protocol, TypedDict  # score:allow untyped any — Proto
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
+from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +60,7 @@ class DocumentUpsertRow(TypedDict, total=False):
     document_key: str
     payload: DocumentRowPayload
     content: str | None
+    workspace_id: str
 
 
 class DailySnapshotUpsertRow(TypedDict, total=False):
@@ -227,8 +231,12 @@ def publish_document(
     segment: str | None = None,
     sector: str | None = None,
     content_markdown: str | None = None,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
-    """Upsert one row into ``documents`` on ``(date, document_key)``.
+    """Upsert one row into ``documents`` on ``(workspace_id, date, document_key)``.
+
+    Omitted ``workspace_id`` stamps the house workspace. Overlay private-phase
+    writes require ``OLYMPUS_OVERLAY_PERSIST=1``.
 
     ``doc_type=None`` is the canonical signal for per-segment Phase 1-5
     documents — the schema's ``chk_documents_doc_type`` constraint allows
@@ -238,9 +246,10 @@ def publish_document(
 
     Returns a :class:`PublishedArtifact` that callers append to
     ``AtlasResearchState.published``. Idempotent — replays with the same
-    (date, document_key) either update the row or no-op depending on whether
-    the payload changed.
+    (workspace_id, date, document_key) either update the row or no-op.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
+    require_overlay_persist(scoped)
     row: DocumentUpsertRow = {
         "date": date_str,
         "title": title,
@@ -253,9 +262,12 @@ def publish_document(
         "document_key": document_key,
         "payload": payload,
         "content": content_markdown,
+        "workspace_id": scoped,
     }
     resp = (
-        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+        client.table("documents")
+        .upsert(_json_safe(row), on_conflict="workspace_id,date,document_key")
+        .execute()
     )
     row_id = _extract_row_id(resp) or document_key
     _audit(
@@ -277,6 +289,7 @@ def publish_document_delta(
     target_document_key: str,
     patch: dict[str, Any],
     run_type: str,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
     """Publish a ``document_delta`` audit row under ``document-deltas/{target}`` (§5.4)."""
     delta_key = f"document-deltas/{target_document_key}"
@@ -293,6 +306,7 @@ def publish_document_delta(
         date_str=date_str,
         category="delta",
         segment="document_delta",
+        workspace_id=workspace_id,
     )
 
 
@@ -363,23 +377,30 @@ def load_prior_book(
     run_date: date,
     *,
     include_risk_fields: bool = False,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Positions rows for the most recent date strictly before ``run_date``.
 
     Returns the held book coming into ``run_date`` (newest prior date only),
     or ``[]`` on the first ever run.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so house rows cannot seed a
+    private book.
     """
     columns = "date, ticker, weight_pct, entry_date"
     if include_risk_fields:
         columns += ", entry_price"
-    resp = (
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
         client.table("positions")
         .select(columns)
         .lt("date", run_date.isoformat())
+        .eq("workspace_id", scoped)
         .order("date", desc=True)
         .limit(200)
-        .execute()
     )
+    resp = query.execute()
     rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return []
@@ -738,6 +759,15 @@ def query_price_technicals_freshness(
     return latest, len(tickers)
 
 
+_PRICE_DELTA_ROW_BUDGET = 900
+_DEFAULT_PRICE_LOOKBACK_DAYS = 14
+
+
+def _price_delta_ticker_batch(lookback_days: int) -> int:
+    """Tickers per ``price_history`` request so a full lookback window fits under the cap."""
+    return max(1, _PRICE_DELTA_ROW_BUDGET // (lookback_days + 1))
+
+
 def query_price_deltas(
     *,
     client: SupabaseClient,
@@ -764,8 +794,9 @@ def query_price_deltas(
     The query is bounded:
     - ``in_(tickers)`` filters server-side, so we never pull rows for
       tickers we don't track.
-    - ``lookback_days`` floors the date range to a small window so the
-      response stays tiny even with weeks of Atlas history.
+    - ``lookback_days`` floors the date range to a small window; requests are
+      batched by ticker so a full window for every ticker fits under PostgREST's
+      row cap.
     """
     from datetime import timedelta
 
@@ -773,15 +804,19 @@ def query_price_deltas(
         return {}
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, ticker, close")
-        .in_("ticker", list(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
-    rows: list[PriceHistoryRow] = list(getattr(resp, "data", None) or [])
+    ordered = sorted(tickers)
+    batch = _price_delta_ticker_batch(lookback_days)
+    rows: list[PriceHistoryRow] = []
+    for start in range(0, len(ordered), batch):
+        resp = (
+            client.table("price_history")
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + batch])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        rows.extend(list(getattr(resp, "data", None) or []))
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this

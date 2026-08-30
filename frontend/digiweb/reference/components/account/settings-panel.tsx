@@ -52,7 +52,7 @@ export function SettingsPanel() {
         hairline — red is reserved for it.
       </p>
 
-      <div className="mt-[1.2rem] rounded-[12px] border border-hair bg-surface">
+      <div className="mt-[1.2rem] rounded-none border border-hair bg-surface">
         <div className="acct-setting-row">
           <div>
             <p className="block text-[0.88rem] text-ink" id="setting-digests">
@@ -121,7 +121,7 @@ export function SettingsPanel() {
 
         <div className="acct-danger">
           <div>
-            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-down">danger zone</p>
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-danger">danger zone</p>
             <p className="acct-setting-desc">
               Deletes every strategy, backtest, and API key in this workspace. No undo.
             </p>

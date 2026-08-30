@@ -118,7 +118,7 @@ function SectionShell({ children }: { children: React.ReactNode }) {
 /** Muted single-card state (loading / empty / error / unconfigured). */
 function NoticeCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-[12px] border border-hair bg-surface px-[1.4rem] py-[1.6rem] text-center font-mono text-[0.82rem] text-ink-mute">
+    <div className="rounded-none border border-hair bg-surface px-[1.4rem] py-[1.6rem] text-center font-mono text-[0.82rem] text-ink-mute">
       {children}
     </div>
   );
@@ -128,7 +128,7 @@ function ContractBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="mb-[1.1rem] rounded-[12px] border border-warn/40 bg-warn/[0.08] px-[1.2rem] py-[0.9rem] text-left font-mono text-[0.72rem] text-ink"
+      className="mb-[1.1rem] rounded-none border border-warn/40 bg-warn/[0.08] px-[1.2rem] py-[0.9rem] text-left font-mono text-[0.72rem] text-ink"
     >
       <span className="font-semibold text-warn">Accounting NAV unavailable.</span> {message}
     </div>
@@ -138,7 +138,7 @@ function ContractBanner({ message }: { message: string }) {
 function PositionsTable({ positions }: { positions: LivePosition[] }) {
   const rows = [...positions].sort((a, b) => b.weightPct - a.weightPct);
   return (
-    <div className="mt-[1.1rem] overflow-x-auto rounded-[12px] border border-hair bg-surface">
+    <div className="mt-[1.1rem] overflow-x-auto rounded-none border border-hair bg-surface">
       <table className="w-full min-w-[560px] border-collapse font-mono text-[0.8rem] [font-variant-numeric:tabular-nums]">
         <thead>
           <tr className="border-b border-hair">
@@ -170,9 +170,9 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
               <td className="px-4 py-[0.6rem]">
                 <div className="flex items-center justify-end gap-2.5">
                   <span className="text-ink-soft">{fmtNum(p.weightPct, 1)}%</span>
-                  <span className="h-[6px] w-[56px] shrink-0 overflow-hidden rounded-full bg-ink/[0.08]">
+                  <span className="h-[6px] w-[56px] shrink-0 overflow-hidden rounded-none bg-ink/[0.08]">
                     <span
-                      className="block h-full rounded-full bg-accent"
+                      className="block h-full rounded-none bg-accent"
                       style={{ width: `${Math.min(100, Math.max(0, p.weightPct))}%` }}
                     />
                   </span>

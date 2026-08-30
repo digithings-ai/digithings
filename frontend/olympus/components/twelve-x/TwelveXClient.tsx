@@ -115,7 +115,7 @@ export function TwelveXUnavailable({ configured }: { configured: boolean }) {
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+              className="mt-5 inline-flex items-center rounded-none border border-hair bg-ink px-4 py-2 text-sm font-medium text-bg transition-colors hover:bg-ink/90"
             >
               Retry
             </button>

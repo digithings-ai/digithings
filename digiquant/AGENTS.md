@@ -53,7 +53,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
-| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` builds bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081) | None — documented boundary |
+| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
 
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
@@ -134,14 +134,44 @@ the full module map.
 - **`SdcaStrategy` is not in `strategies/registry.py`**, the same as
   `m2_liquidity`. Instantiate `SdcaStrategyConfig` directly — do not add a
   `register()` call for it. Its `risk_path` (a parquet of precomputed
-  `date`/`risk`, built by calling `compute_composite_risk()` +
-  `valuation_z_score()` upstream) has no sensible static default, so
-  `get_strategy()`'s param-merge model doesn't fit.
+  `date`/`risk`) has no sensible static default, so `get_strategy()`'s
+  param-merge model doesn't fit. Build that parquet with
+  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
+  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble it.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
   mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
+
+### RiskModel providers (#1082)
+
+`strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
+(`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
+
+- **Never treat `btc_power_law_coefficients.example.json` as a real fit.**
+  It is a synthetic placeholder (git-ignored `btc_power_law_coefficients.json`
+  doesn't exist yet in most checkouts/environments — no network access to
+  BTC price history or the reference artifact was available when this
+  provider was built). `load_coefficients()` logs a warning when it falls
+  back to the placeholder; don't silence or ignore that warning in code
+  reviewing this area — the fitted curve underneath a `SdcaStrategy` run may
+  not be real.
+- **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
+  (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
+  price history through `data/prices/history_cache.py` — the same cache
+  every other price consumer uses. Don't write a bespoke fetch path for this.
+  (`digiquant_fetch_coinbase_ohlcv`'s CCXT/Coinbase script pipeline writes to
+  the *same* `data/price-history/` directory and ticker naming, not a
+  separate cache — `history_cache.py` is still the right one to call from a
+  new tool because it's the actively-maintained, incrementally-updating
+  pipeline every other consumer builds on, not because the data differs.)
+- **`low_quantile`/`high_quantile` (default 10th/95th) are an unvalidated
+  judgment call**, not verified against the reference artifact's corridor —
+  revisit once that artifact is reachable, don't assume the default is
+  correct.
+- The other two #1082 providers (generic per-asset valuation-z, RS-driven
+  risk) are not implemented yet.
 
 ### Adding a preset
 

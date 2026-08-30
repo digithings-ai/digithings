@@ -32,14 +32,14 @@ export function MarketViewCard({
   return (
     <Link
       href={href}
-      className="group glass-card block p-5 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+      className="group oly-slab block p-5 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
     >
       <div className="flex items-start justify-between gap-4">
         <h3 className="font-display text-xl leading-snug text-ink">
           {thesis.name}
         </h3>
         {isNonActive(thesis.status) ? (
-          <span className="shrink-0 rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
+          <span className="shrink-0 border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
             {thesis.status}
           </span>
         ) : null}
@@ -51,7 +51,7 @@ export function MarketViewCard({
           <span className="text-xs text-ink-mute tabular-nums">{confidenceLabel}</span>
         </div>
         {thesis.horizon ? (
-          <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
+          <span className="border border-hair px-2 py-0.5 text-xs text-ink-soft">
             {thesis.horizon}
           </span>
         ) : null}

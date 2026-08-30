@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import { isMaterialRebalanceAction } from '@/lib/rebalance-actions';
 import type { RebalanceAction } from '@/lib/types';
 
 /**
@@ -70,7 +71,7 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
               color ? '' : 'bg-ink/[0.06] text-ink-mute border-hair'
             }`}
             style={
@@ -112,7 +113,7 @@ export function TodayActionsPanel({
   /** Per-ticker rationale from the PM rebalance memo (#704); the rationale line
    *  is omitted entirely for tickers with no memo entry. */
   rationaleByTicker?: Record<string, string>;
-  /** Hero/embedded mode: drop the panel's own glass-card frame and the
+  /** Hero/embedded mode: drop the panel's own slab frame and the
    *  "Today's actions" header (the host supplies the title and the frame). */
   bare?: boolean;
 }) {
@@ -124,7 +125,7 @@ export function TodayActionsPanel({
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
       // Meaningful book-building actions: new, add, trim, exit (where current_pct > 0).
-      changes: sorted.filter((a) => kindOf(a.action) !== 'HOLD' && !isSizerRemoved(a)),
+      changes: sorted.filter((a) => isMaterialRebalanceAction(a)),
       holds: sorted.filter((a) => kindOf(a.action) === 'HOLD'),
       // Sizer-rejected rows (target=0, never held) — shown collapsed so they don't crowd
       // the meaningful actions but are still accessible for inspection.
@@ -135,7 +136,7 @@ export function TodayActionsPanel({
   return (
     <div
       className={
-        bare ? 'rounded-lg border border-hair/70 overflow-hidden' : 'glass-card p-0 overflow-hidden'
+        bare ? 'border border-hair/70 overflow-hidden' : 'oly-slab p-0 overflow-hidden'
       }
     >
       {!bare && (
@@ -145,7 +146,7 @@ export function TodayActionsPanel({
             <ListChecks size={15} className="text-accent" />
             <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
             {changes.length > 0 && (
-              <span className="rounded-full bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
+              <span className="bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
                 {changes.length}
               </span>
             )}

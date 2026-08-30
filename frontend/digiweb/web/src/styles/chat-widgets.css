@@ -135,7 +135,7 @@
 }
 
 .cw-btn--primary {
-  color: var(--on-accent);
+  color: var(--bg);
 }
 
 .cw-btn--ghost:hover {

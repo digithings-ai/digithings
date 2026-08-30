@@ -1,35 +1,21 @@
 import './globals.css';
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
-import { DashboardProvider } from '@/lib/dashboard-context';
-import { AppShellProvider } from '@/components/app-shell-context';
+import { Geist_Mono } from 'next/font/google';
+import { AuthProvider } from '@/lib/auth-context';
+import { AuthGate } from '@/lib/auth-gate';
 import { ThemeProvider } from '@/components/theme-provider';
-import AppFrame from '@/components/app-frame';
 import MotionLayer from '@/components/motion-layer';
 
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme')||localStorage.getItem('dt-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}var m=dark?'dark':'light';d.classList.add(m);d.setAttribute('data-theme',m);}catch(e){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}})();`;
 
 // Self-hosted at build time by next/font (served from /olympus/_next/static/media),
-// so they satisfy the Olympus CSP (font-src 'self' data:) — no fonts.googleapis.com.
-const geistSans = Geist({
-  subsets: ['latin'],
-  variable: '--font-geist-sans',
-  display: 'swap',
-});
-
+// so it satisfies the Olympus CSP (font-src 'self' data:) — no fonts.googleapis.com.
+// BLEND v0.1: one mono voice for display, body, and chrome.
 const geistMono = Geist_Mono({
   subsets: ['latin'],
   variable: '--font-geist-mono',
-  display: 'swap',
-});
-
-// Editorial display serif — the digiquant.io house headline face (Fraunces).
-// Self-hosted by next/font so it satisfies the Olympus CSP (font-src 'self' data:).
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-fraunces',
   display: 'swap',
 });
 
@@ -62,10 +48,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"
-      // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono
-      // on :root via var(--font-geist-*), which resolves at the declaring element — variables
+      // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono/--font-display
+      // on :root via var(--font-geist-mono), which resolves at the declaring element — variables
       // scoped to <body> are invisible there and the tokens go invalid app-wide (#1538).
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}
+      className={geistMono.variable}
       suppressHydrationWarning
     >
       <head>
@@ -74,11 +60,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="qn-blueprint-bg min-h-screen bg-bg text-ink antialiased">
         <ThemeProvider>
           <MotionLayer />
-          <DashboardProvider>
-            <AppShellProvider>
-              <AppFrame>{children}</AppFrame>
-            </AppShellProvider>
-          </DashboardProvider>
+          <AuthProvider>
+            <AuthGate>{children}</AuthGate>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

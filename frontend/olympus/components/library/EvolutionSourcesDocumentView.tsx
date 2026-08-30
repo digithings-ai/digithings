@@ -14,7 +14,7 @@ export default function EvolutionSourcesDocumentView({
 }) {
   if (!payload || isEvolutionSourcesEmpty(payload)) {
     return (
-      <div className="rounded-lg border border-dashed border-hair bg-term-bg/30 p-6 text-center text-ink-mute text-sm">
+      <div className="border border-dashed border-hair bg-term-bg/30 p-6 text-center text-ink-mute text-sm">
         <p className="font-medium text-ink-soft mb-1">Draft — no source ratings yet</p>
         <p className="text-xs">
           This outline was published without scores. Open the Evolution tab when the scorecard is filled in, or view raw
@@ -51,7 +51,7 @@ export default function EvolutionSourcesDocumentView({
         <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Ratings</h3>
         <ul className="space-y-3">
           {ratings.map((r, i) => (
-            <li key={i} className="rounded-md border border-hair bg-term-bg/40 p-3">
+            <li key={i} className="border border-hair bg-term-bg/40 p-3">
               <p className="font-medium text-accent">
                 {r.name ?? '—'}{' '}
                 {r.reliability ? (

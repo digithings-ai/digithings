@@ -15,7 +15,7 @@ export default function Error({ error, reset }: ErrorProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg text-ink p-8">
       <div className="max-w-md text-center space-y-4">
-        <h2 className="text-2xl font-bold text-down">Something went wrong</h2>
+        <h2 className="text-2xl font-bold text-danger">Something went wrong</h2>
         <p className="text-ink-soft text-sm">
           {error?.message || 'An unexpected error occurred loading the dashboard.'}
         </p>
