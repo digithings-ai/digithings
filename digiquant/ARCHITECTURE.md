@@ -128,7 +128,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
 | `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
-| `cli.py` | `digiquant backtest | optimize | export` CLI |
+| `cli/` | `digiquant backtest | optimize | export | strategy | prices | policy-replay` CLI |
 
 ---
 
@@ -226,6 +226,20 @@ only the DigiAuth HTTP boundary may record decisions. There is no
 promote/activate/set-live/rollback-live tool on any surface.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
+
+### CLI (`python -m digiquant` / `digiquant`)
+
+Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or olympus for policy-replay). Pipeline commands call the same functions as HTTP/MCP via `service.py` where applicable.
+
+| Command | Implementation | Notes |
+|---|---|---|
+| `backtest` / `optimize` / `export` | `cli/__init__.py` | Direct `run_*` entrypoints (same as HTTP handlers) |
+| `strategy list` | `cli/strategy.py` → `service_list_strategies` | JSON; twin of MCP `digiquant_list_strategies` / `GET /strategies` (#160) |
+| `strategy search <query>` | `cli/strategy.py` | Case-insensitive filter on name, aliases, description |
+| `prices …` | `cli/prices.py` | OHLCV / technicals / macro cron surface |
+| `policy-replay …` | `olympus/replay/cli.py` | Read-only governance summaries |
+
+Still open from #160 AC: dedicated `indicator list` / `indicator compute` (closest today: `prices compute-technicals`; MCP indicator tools tracked in #152).
 
 #### Slapper tearsheet pipeline
 
