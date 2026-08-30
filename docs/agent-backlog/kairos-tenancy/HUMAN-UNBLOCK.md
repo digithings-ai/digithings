@@ -1,14 +1,13 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30 Auth Pages) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Staging E2E still needs Stripe/Mailgun/Google/Alpaca. Prod `/olympus/login` **404** until narrow Auth Pages PR merges to `main`.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-30 vendor onboard) — NOT COMPLETE.** Agent filled Stripe/Mailgun/Alpaca signup forms; each vendor blocked automation (hCaptcha / reCAPTCHA / Turnstile). No vendor EF secrets set yet. Staging E2E still loud-fails named secrets. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
 
+**Human captcha ask (one per vendor):** [`/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`](/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md)  
+**Vendor map:** [`VENDOR_MAP.md`](VENDOR_MAP.md) · artifact `/opt/cursor/artifacts/kairos-VENDOR-MAP.md`  
+**Waiting:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`WAITING_HUMAN_CAPTCHA`)  
+**Branch:** `cursor/kairos-vendor-onboard-3d52`  
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
-Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`  
-Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-**Auth Pages (merge to `main`):** `cursor/olympus-auth-pages-e036` — https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036  
-**Docs/audit (`develop`):** `cursor/kairos-auth-pages-audit-e036`  
-**Do not merge** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) for the login 404. **Never apply cutover 900** with this Pages fix.
+Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)
 
 Loud-fail gates (after paste):
 ```bash
