@@ -63,22 +63,27 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, secrets/deploy pass)
+## Agent delivery status (2026-08-30, post-#3161 + settings v9)
 
-**Code:** all 12 WPs merged to `develop` (promotion #3141). Notifications wire open as [#3161](https://github.com/digithings-ai/digithings/pull/3161) (CI green; human merge — agent `gh` read-only).
+**Code:** all 12 WPs on `develop` (promotion #3141). Notifications wire **merged** as [#3161](https://github.com/digithings-ai/digithings/pull/3161). Docs/schema align open as [#3177](https://github.com/digithings-ai/digithings/pull/3177) (ready; human merge — agent `gh` read-only).
 
-**Schema (`core`):** migrations 096–105 applied + stamped. **106** applied (align `notification_prefs` / `notification_log` to canonical 103 after IF NOT EXISTS drift). Cutover 900 **not** applied.
+**Schema (`core`):** migrations **096–106** applied + stamped on `olympus_schema_migrations` (106 = `notification_prefs` / `notification_log` canonical align). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v7** ACTIVE — thin GitHub-import of #3161 handlers; auth smoke `401` OK. Project EF secrets still unset (need `sbp_` PAT).
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v9** ACTIVE — thin SHA-pinned GitHub-raw import of #3161 tip (`41a57414…`) including `PATCH /notifications` → `notification_prefs`. Auth smoke: missing/invalid JWT → `401`. Full monorepo bundle preferred once `sbp_` PAT exists for CLI secrets + multi-file deploy hygiene. Project EF secrets still **unset** (Management API 403 without `sbp_`).
 
 **Secrets (names only):**
-- **SET in VM `.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (`http://127.0.0.1:3001`).
+- **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — cannot `supabase secrets set` / Management secrets API.
 - **Agent Mail:** `digithings@agentmail.to`.
-- **Still blocked:** Stripe test keys/prices/webhook, Mailgun, Auth providers (Google+GitHub), Alpaca OAuth, Supabase `sbp_` PAT, IBKR vendor, legal read.
+- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun MCP auth, Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
 
-**Acceptance evidence:**
-- House/notify/vault unit: notify 62 passed; vault+103 86 passed (`kairos-secrets-unit.log`).
-- SQL prefs upsert smoke on `core` succeeded post-106.
+**Acceptance evidence (re-run this turn, artifacts under `/opt/cursor/artifacts/`):**
+- House olympus unit: **420 passed** (`house-olympus-unit.log`).
+- Vault + notify unit: **138 passed** (`kairos-vault-notify-unit.log`).
+- Brokers + contracts: **208 passed**, 2 skipped (`kairos-brokers-contracts.log`).
+- Olympus kairos unit: **67 passed** (`olympus-kairos-unit.log`).
+- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v9-smoke.log`).
+- RLS proof: re-run in progress / prior 61/61 harness (`rls_isolation_proof.log`).
 - E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above.
 
 **Do not mark epic complete** until E2E + human/legal/IBKR gates clear.

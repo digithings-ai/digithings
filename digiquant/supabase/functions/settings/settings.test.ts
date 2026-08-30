@@ -44,6 +44,9 @@ interface Store {
   members: Array<{ workspace_id: string; user_id: string; role: string }>;
   profiles: Array<Record<string, unknown>>;
   brokers: Array<Record<string, unknown>>;
+  prefs: Array<Record<string, unknown>>;
+  /** When true, notification_prefs lookups fail as if the table is missing. */
+  prefsMissing?: boolean;
 }
 
 function wsRow(id: string, planTier = "custom"): WorkspaceRow {
@@ -70,6 +73,7 @@ function freshStore(): Store {
     ],
     profiles: [],
     brokers: [],
+    prefs: [],
   };
 }
 
@@ -80,6 +84,7 @@ function mockAdmin(store: Store): AdminClient {
     const filters: Filter[] = [];
     let pendingInsert: Record<string, unknown> | null = null;
     let pendingUpdate: Record<string, unknown> | null = null;
+    let pendingUpsert: Record<string, unknown> | null = null;
     let selectCols = "*";
     let limitN: number | null = null;
     let maybeSingle = false;
@@ -100,6 +105,10 @@ function mockAdmin(store: Store): AdminClient {
     };
     api.update = (vals: Record<string, unknown>) => {
       pendingUpdate = vals;
+      return chain();
+    };
+    api.upsert = (row: Record<string, unknown>, _opts?: unknown) => {
+      pendingUpsert = row;
       return chain();
     };
     api.eq = (col: string, val: unknown) => {
@@ -248,6 +257,45 @@ function mockAdmin(store: Store): AdminClient {
           return { data: projected[0] ?? null, error: null };
         }
         return { data: projected, error: null };
+      }
+
+      if (table === "notification_prefs") {
+        if (store.prefsMissing) {
+          return {
+            data: null,
+            error: { message: 'relation "notification_prefs" does not exist', code: "42P01" },
+          };
+        }
+        if (pendingUpsert) {
+          const email = String(pendingUpsert.email ?? "");
+          if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+            return {
+              data: null,
+              error: { message: "new row violates check constraint notification_prefs_email_check", code: "23514" },
+            };
+          }
+          const idx = store.prefs.findIndex(
+            (p) => p.workspace_id === pendingUpsert!.workspace_id,
+          );
+          const row = {
+            ...pendingUpsert,
+            updated_at: new Date().toISOString(),
+          };
+          if (idx >= 0) store.prefs[idx] = row;
+          else store.prefs.push(row);
+          return {
+            data: wantSingle || maybeSingle ? row : [row],
+            error: null,
+          };
+        }
+        let rows = [...store.prefs];
+        for (const f of filters) {
+          if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+        }
+        if (wantSingle || maybeSingle) {
+          return { data: rows[0] ?? null, error: null };
+        }
+        return { data: rows, error: null };
       }
 
       return { data: null, error: { message: `unknown table ${table}` } };
@@ -597,14 +645,85 @@ Deno.test("POST brokers/revoke: fails closed on unknown row", async () => {
   assertEquals(json.code, "CONNECTION_NOT_FOUND");
 });
 
-Deno.test("PATCH notifications: 503 NOT_READY until K5", async () => {
+Deno.test("PATCH notifications: upserts prefs for workspace member", async () => {
   const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "pm@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: true,
+    digest_hour_utc: 9,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "pm@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 9);
+  assertEquals(store.prefs.length, 1);
+});
+
+Deno.test("PATCH notifications: rejects invalid email", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "not-an-email",
+    daily_digest: true,
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "INVALID_EMAIL");
+});
+
+Deno.test("PATCH notifications: rejects digest_hour_utc out of range", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "pm@example.com",
+    digest_hour_utc: 24,
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "INVALID_DIGEST_HOUR");
+});
+
+Deno.test("PATCH notifications: 503 when notification_prefs missing", async () => {
+  const store = freshStore();
+  store.prefsMissing = true;
   const { status, json } = await call(store, "PATCH", "/notifications", {
     email: "pm@example.com",
     daily_digest: true,
   });
   assertEquals(status, 503);
   assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("PATCH notifications: partial update merges prior row", async () => {
+  const store = freshStore();
+  store.prefs.push({
+    workspace_id: WS_A,
+    email: "old@example.com",
+    daily_digest: true,
+    holding_change_alerts: true,
+    execution_alerts: false,
+    digest_hour_utc: 12,
+    updated_at: "2026-01-01T00:00:00Z",
+  });
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    execution_alerts: true,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.email, "old@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.holding_change_alerts, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 12);
+});
+
+Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    workspace_id: WS_B,
+    email: "pm@example.com",
+  });
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
 });
 
 // ---------------------------------------------------------------------------
