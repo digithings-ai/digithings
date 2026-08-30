@@ -1,5 +1,6 @@
 import "./account.css";
 
+import { AuthCardProposals } from "@/components/account/auth-card-proposals";
 import { LoginCard } from "@/components/account/login-card";
 import { PaymentBand } from "@/components/account/payment-band";
 import { ProfileCard } from "@/components/account/profile-card";
@@ -22,6 +23,7 @@ export default function AccountPage() {
         </p>
       </header>
 
+      <AuthCardProposals />
       <LoginCard />
       <SignupCard />
       <SessionCard />

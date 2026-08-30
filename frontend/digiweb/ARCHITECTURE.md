@@ -45,7 +45,17 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+`AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
+`./styles/account-auth.css`) is the promoted sign-in / create-account card.
+Layouts `compact` (A), `icons-first` (B), and `desk` (C) share one form: email +
+password, Google / GitHub / X (provider id `twitter`, UI copy X), primary submit
+Sign in / Sign up, footer Create an account / Sign in. No olympus branding; desk
+may keep a `digiquant` product kicker plus a sign-up strength meter and sign-in
+Forgot password. Specimens live on the reference account page
+(`AuthCardProposals`). Product dashboard import waits on an owner pick of A, B,
+or C.
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own
