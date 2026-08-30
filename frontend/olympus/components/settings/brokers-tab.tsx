@@ -285,8 +285,9 @@ export function BrokersTab({
           Paper fills
         </p>
         <p className="text-xs text-ink-mute">
-          Mirrored Alpaca paper executions for this workspace. The remaining hop requires a
-          fingerprint with a non-empty symbol — API-key paper rows do not prove OAuth.
+          Mirrored Alpaca paper executions for this workspace. The remaining hop
+          requires a fingerprint with a non-empty symbol **and** an Alpaca paper
+          OAuth connection — API-key paper rows do not prove it.
         </p>
         {fills.length === 0 ? (
           <p className="text-sm text-ink-mute">No paper fills mirrored yet.</p>

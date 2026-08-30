@@ -63,7 +63,15 @@ describe('RemainingHopStatus', () => {
           },
         ]),
         getJobsFn: vi.fn(async () => []),
-        getFillsFn: vi.fn(async () => []),
+        getFillsFn: vi.fn(async () => [
+          {
+            id: 'f1',
+            symbol: 'AAPL',
+            quantity: 1,
+            executed_at: null,
+            recorded_at: null,
+          },
+        ]),
         getLogFn: vi.fn(async () => [
           {
             event_key: 'digest:2026-08-31',
@@ -80,6 +88,9 @@ describe('RemainingHopStatus', () => {
       el.querySelector('[data-testid="remaining-hop-alpaca_paper_oauth_connect"]')?.getAttribute('data-proven'),
     ).toBe('false');
     expect(el.querySelector('[data-testid="remaining-hop-digest_email_received"]')?.getAttribute('data-proven')).toBe(
+      'false',
+    );
+    expect(el.querySelector('[data-testid="remaining-hop-paper_fill_mirrored"]')?.getAttribute('data-proven')).toBe(
       'false',
     );
   });

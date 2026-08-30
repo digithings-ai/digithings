@@ -108,7 +108,8 @@ export function RemainingHopStatus({
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
         a Stripe subscription boolean does not prove checkout. Digest log without inbox
-        confirmation does not prove received.
+        confirmation does not prove received. Alpaca <span className="font-mono">api_key</span>{' '}
+        paper fills do not prove the OAuth or fill hops.
       </p>
       {!api ? (
         <p className="text-sm text-ink-mute">Sign in to load remaining hops.</p>

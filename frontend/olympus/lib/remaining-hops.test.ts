@@ -59,6 +59,22 @@ describe('provenRemainingHops', () => {
     ).toBe(false);
   });
 
+  it('does not treat api_key fills as the paper fill hop', () => {
+    const apiKeyFill = provenRemainingHops({
+      connections: [['alpaca', 'paper', 'active', 'api_key']],
+      fill_count: 1,
+    });
+    expect(apiKeyFill.paper_fill_mirrored).toBe(false);
+    expect(apiKeyFill.alpaca_paper_oauth_connect).toBe(false);
+    expect(provenRemainingHops({ fill_count: 1 }).paper_fill_mirrored).toBe(false);
+    const oauthFill = provenRemainingHops({
+      connections: [['alpaca', 'paper', 'active', 'oauth']],
+      fill_count: 1,
+    });
+    expect(oauthFill.paper_fill_mirrored).toBe(true);
+    expect(oauthFill.alpaca_paper_oauth_connect).toBe(true);
+  });
+
   it('proves all five from product state including inbox flag', () => {
     const proven = provenRemainingHops({
       subscription_status: 'active',
