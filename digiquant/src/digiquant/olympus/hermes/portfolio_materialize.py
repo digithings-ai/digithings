@@ -19,12 +19,12 @@ intraday — before today's close lands in ``price_history`` — the index advan
 using the most recent *available* close pair, i.e. one trading-day phase lag.
 That is the standard, defensible behavior for an EOD-priced paper index.
 
-All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
-``nav_history`` / ``portfolio_metrics`` on ``date``). Payloads stamp the house
-``workspace_id`` (migration 097 NOT NULL) but **keep** the date-only conflict
-target — widening to ``(workspace_id, date)`` is staged cutover 113, which is
-not applied on the live book yet. A re-run of the same house date is a
-no-op-equivalent.
+All writes are idempotent upserts (``positions`` on
+``(workspace_id, date, ticker)``, ``nav_history`` / ``portfolio_metrics`` on
+``(workspace_id, date)``). This path stamps the house workspace. Overlay books
+stay refused (``legacy_book_unique``) until staged cutover 113 is applied
+(after these ``main`` house GHA writers are proven on a scheduled run). A
+re-run of the same house date is a no-op-equivalent.
 """
 
 from __future__ import annotations
@@ -377,7 +377,7 @@ def _upsert_portfolio_metrics(
         "relative_return_pct": performance_returns.relative_return_pct,
         "benchmark_ticker": performance_returns.benchmark_ticker,
     }
-    client.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
+    client.table("portfolio_metrics").upsert(row, on_conflict="workspace_id,date").execute()
     logger.debug(
         "phase9d: portfolio_metrics upserted for %s (sharpe=%s, vol=%s, dd=%s, alpha=%s)",
         date_str,
@@ -621,7 +621,7 @@ def build_materialize_node(deps: MaterializeDeps):
                 "cash_pct": cash_pct,
                 "invested_pct": round(invested, 4),
             },
-            on_conflict="date",
+            on_conflict="workspace_id,date",
         ).execute()
 
         # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
@@ -664,7 +664,7 @@ def build_materialize_node(deps: MaterializeDeps):
             )
         for row in pos_rows:
             row["workspace_id"] = HOUSE_WORKSPACE_ID
-            client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+            client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
         # Theses surface (#713): one thesis per held ticker, from the analyst
         # payloads + debate summaries already in state. Skips the CASH ledger row

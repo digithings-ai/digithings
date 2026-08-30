@@ -503,8 +503,10 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
-    # Stamp house workspace (097 NOT NULL) but keep on_conflict=date until 113
-    # widens the unique. Changing the conflict target here is the overlay cutover.
+    # Stamp house workspace (097 NOT NULL) and target the widened unique
+    # (workspace_id, date). Leftover UNIQUE(date) still blocks overlay until
+    # staged 113; house-only upserts use the 097 key. Do not apply 113 until
+    # these writers have been proven on a scheduled pipeline-olympus run.
     client.table("nav_history").upsert(
         {
             "workspace_id": HOUSE_WORKSPACE_ID,
@@ -513,7 +515,7 @@ def book_portfolio(
             "cash_pct": cash_pct,
             "invested_pct": round(invested, 4),
         },
-        on_conflict="date",
+        on_conflict="workspace_id,date",
     ).execute()
 
     if cash_pct > 0.01:
@@ -528,7 +530,7 @@ def book_portfolio(
 
     for row in pos_rows:
         row["workspace_id"] = HOUSE_WORKSPACE_ID
-        client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+        client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
     # Upsert first, then prune: the inverse order would leave a window in which the
     # date has no book at all.

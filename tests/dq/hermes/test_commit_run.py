@@ -120,11 +120,11 @@ class TestCommitRunBooking:
         positions = {r["ticker"]: r for r in client.store.get("positions", [])}
         assert positions["SPY"]["weight_pct"] == 100.0
         assert positions["SPY"]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-        assert positions["SPY"]["_on_conflict"] == "date,ticker"
+        assert positions["SPY"]["_on_conflict"] == "workspace_id,date,ticker"
         navs = client.store.get("nav_history", [])
         assert len(navs) == 1
         assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-        assert navs[0]["_on_conflict"] == "date"
+        assert navs[0]["_on_conflict"] == "workspace_id,date"
 
         docs = client.store.get("documents", [])
         brief = next(r for r in docs if r.get("document_key") == "pm-rebalance")
