@@ -318,6 +318,7 @@ def run_atlas_then_hermes(
     thread_base: str | None = None,
     hermes_watchlist: list[str] | None = None,
     hermes_held: Collection[str] = (),
+    manage_usage: bool = True,
 ) -> AtlasResearchState:
     """Compose Atlas → Hermes → publish, return the final state.
 
@@ -346,6 +347,10 @@ def run_atlas_then_hermes(
     (#2628 / WP4.1). Atlas preflight then pins one ``research_state_pin``
     (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
     it does not re-call ``now()`` or re-select state as ingestion continues.
+
+    ``manage_usage``: house cron owns WP1 capture (default True). Overlay cron
+    passes False so ``overlay_usage_scope`` is not wiped by a nested
+    ``usage.start`` / ``usage.reset``.
     """
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
@@ -356,7 +361,8 @@ def run_atlas_then_hermes(
     # reconcile the two against one value. With no diagnostics wiring there is no run to
     # attribute to: capture stays at today's no-identity behaviour rather than minting an
     # identifier that could silently join two unrelated in-process runs.
-    _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
+    if manage_usage:
+        _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
@@ -427,56 +433,58 @@ def run_atlas_then_hermes(
         _record_chain_error(state, "terminal", exc)
         raise
     finally:
-        if deps.diagnostics is not None:
-            finished_at = datetime.now(tz=timezone.utc)
-            # Detailed ledger (#1979) FIRST, and before `_usage.reset()` — which clears every
-            # buffer both writes read, so anything ordered after it writes nothing while
-            # reporting success.
-            #
-            # Ahead of `write_row` specifically so the two are independent in both directions
-            # without touching the aggregate path. A detailed-flush failure cannot lose the
-            # aggregate row because the `except` below contains it. An aggregate failure cannot
-            # lose the detailed flush because the flush has already happened — which matters
-            # because `write_row` is fail-soft for its *upsert* but calls `summarize_run`
-            # outside that `try`, so a malformed state can still raise straight out of it. That
-            # raise is pre-existing and left alone here; the ordering just stops it taking the
-            # detailed records with it.
-            try:
-                _provider_telemetry.flush_run_telemetry(
+        if manage_usage:
+            if deps.diagnostics is not None:
+                finished_at = datetime.now(tz=timezone.utc)
+                # Detailed ledger (#1979) FIRST, and before `_usage.reset()` — which clears every
+                # buffer both writes read, so anything ordered after it writes nothing while
+                # reporting success.
+                #
+                # Ahead of `write_row` specifically so the two are independent in both directions
+                # without touching the aggregate path. A detailed-flush failure cannot lose the
+                # aggregate row because the `except` below contains it. An aggregate failure cannot
+                # lose the detailed flush because the flush has already happened — which matters
+                # because `write_row` is fail-soft for its *upsert* but calls `summarize_run`
+                # outside that `try`, so a malformed state can still raise straight out of it. That
+                # raise is pre-existing and left alone here; the ordering just stops it taking the
+                # detailed records with it.
+                try:
+                    _provider_telemetry.flush_run_telemetry(
+                        deps.diagnostics.client,
+                        run_id=deps.diagnostics.run_id,
+                        attempt=deps.diagnostics.attempt,
+                        node_runs=_usage.node_runs_snapshot(),
+                        provider_calls=_usage.provider_calls_snapshot(),
+                        provider_attempts=_usage.provider_attempts_snapshot(),
+                        aggregate_snapshot=_usage.snapshot(),
+                        detailed_projection=_usage.detailed_usage_projection(),
+                    )
+                except Exception:  # a telemetry bug must not replace the run's real outcome
+                    _logger.exception("chain: detailed provider telemetry flush failed; continuing")
+                _diagnostics.write_row(
                     deps.diagnostics.client,
+                    state=state,
                     run_id=deps.diagnostics.run_id,
                     attempt=deps.diagnostics.attempt,
-                    node_runs=_usage.node_runs_snapshot(),
-                    provider_calls=_usage.provider_calls_snapshot(),
-                    provider_attempts=_usage.provider_attempts_snapshot(),
-                    aggregate_snapshot=_usage.snapshot(),
-                    detailed_projection=_usage.detailed_usage_projection(),
+                    run_type=_legacy_run_type(atlas_input.refresh_scope),
+                    run_date=atlas_input.run_date,
+                    model=deps.diagnostics.model,
+                    usage_snapshot=_usage.snapshot(),
+                    started_at=started_at,
+                    finished_at=finished_at,
                 )
-            except Exception:  # a telemetry bug must not replace the run's real outcome
-                _logger.exception("chain: detailed provider telemetry flush failed; continuing")
-            _diagnostics.write_row(
-                deps.diagnostics.client,
-                state=state,
-                run_id=deps.diagnostics.run_id,
-                attempt=deps.diagnostics.attempt,
-                run_type=_legacy_run_type(atlas_input.refresh_scope),
-                run_date=atlas_input.run_date,
-                model=deps.diagnostics.model,
-                usage_snapshot=_usage.snapshot(),
-                started_at=started_at,
-                finished_at=finished_at,
-            )
-        else:
-            # Not a silent no-op. Without diagnostics wiring there is no run identifier, so
-            # `node_run_scope` never opens and the run produces no node runs and no logical
-            # calls *at the source* — only orphaned physical attempts, which have no persistable
-            # parent. Nothing is lost by not flushing here, but the absence must be visible.
-            _logger.info(
-                "chain: no diagnostics wiring; %d physical attempt(s) captured in process were "
-                "not persisted and this run contributes no detailed telemetry",
-                len(_usage.provider_attempts_snapshot()),
-            )
-        _usage.reset()
+            else:
+                # Not a silent no-op. Without diagnostics wiring there is no run identifier, so
+                # `node_run_scope` never opens and the run produces no node runs and no logical
+                # calls *at the source* — only orphaned physical attempts, which have no
+                # persistable parent. Nothing is lost by not flushing here, but the absence
+                # must be visible.
+                _logger.info(
+                    "chain: no diagnostics wiring; %d physical attempt(s) captured in process "
+                    "were not persisted and this run contributes no detailed telemetry",
+                    len(_usage.provider_attempts_snapshot()),
+                )
+            _usage.reset()
 
 
 # ─── CLI entry point ────────────────────────────────────────────────────────

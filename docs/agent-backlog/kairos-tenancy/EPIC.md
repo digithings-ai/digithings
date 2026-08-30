@@ -82,7 +82,8 @@ does not prove the remaining hop). House is `enterprise`/`active` **without**
 Stripe ids — must not prove checkout.
 
 **Cron CLIs (do not run `--all` on Observer until Stripe + BYOK + Alpaca OAuth land):**
-- `python -m digiquant.olympus.overlay` — overlay_daily dispatch; hop proves on `succeeded` only
+- `python -m digiquant.olympus.overlay` — overlay_daily dispatch; `--execute` runs the graph
+  (hop proves on `succeeded` only; `chain=None` / persist-disabled / running do not)
 - `python -m digiquant.olympus.kairos.sync_cron` — Alpaca paper fill mirror
 - `python scripts/kairos_cron_check.py` — combined `--check` (overlay + sync + Mailgun)
 

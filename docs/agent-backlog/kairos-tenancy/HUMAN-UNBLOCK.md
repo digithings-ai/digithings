@@ -20,6 +20,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --check
+# After Stripe + BYOK only — never `--execute --all` on Observer:
+# PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --execute --workspace-id <uuid>
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 ```
 

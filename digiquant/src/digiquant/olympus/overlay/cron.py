@@ -3,6 +3,8 @@
 Production entry: ``python -m digiquant.olympus.overlay``. House and system
 workspaces are never overlay targets. This module does not import ``byok`` /
 digillm so the digiquant-only CI lane can unit-test candidate selection.
+``--execute`` runs claimed jobs through the one Olympus graph (lazy import);
+``chain=None`` is refused.
 """
 
 from __future__ import annotations
@@ -17,6 +19,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.olympus.overlay.cron_execute import (
+    OverlayChainFactory,
+    OverlayRunner,
+    execute_claimed_rows,
+    format_overlay_execute_not_configured,
+    missing_overlay_execute_env_names,
+)
 from digiquant.olympus.overlay.dispatch import (
     DispatchResult,
     JobRunStore,
@@ -198,6 +207,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Dispatch every non-house/system workspace (skipped rows for misses)",
     )
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Run claimed jobs through the one Olympus graph (refuses chain=None)",
+    )
     parser.add_argument("--workspace-id", default=None, help="Dispatch a single workspace id")
     parser.add_argument("--run-date", default=None, help="ISO date (default UTC today)")
     return parser.parse_args(argv)
@@ -277,6 +291,10 @@ def main(
     byok: OverlayByokProbe | None = None,
     load_workspaces: Callable[[], Sequence[WorkspaceEntitlement]] | None = None,
     build_store: Callable[[], JobRunStore] | None = None,
+    profile_pins: Mapping[UUID, UUID] | None = None,
+    load_profile_pin: Callable[[UUID], UUID | None] | None = None,
+    chain_factory: OverlayChainFactory | None = None,
+    overlay_runner: OverlayRunner | None = None,
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
@@ -318,6 +336,12 @@ def main(
         _log_dry_run(log, loaded=loaded, run_date=run_date)
         return 0
 
+    if args.execute and overlay_runner is None and store is None and build_store is None:
+        exec_missing = missing_overlay_execute_env_names(env, store_missing=missing)
+        if exec_missing:
+            err(format_overlay_execute_not_configured(exec_missing))
+            return 2
+
     resolved = _resolve_store(store=store, build_store=build_store, environ=env, missing=missing)
     if isinstance(resolved, str):
         err(resolved)
@@ -332,7 +356,23 @@ def main(
         f"overlay cron date={report.run_date.isoformat()} "
         f"dispatched={report.dispatched} claimed={report.claimed} skipped={report.skipped}"
     )
-    return 0
+    if not args.execute:
+        return 0
+    client = None
+    need_client = overlay_runner is None or (profile_pins is None and load_profile_pin is None)
+    if need_client and not missing:
+        client = _supabase_client_from_env(env)
+    return execute_claimed_rows(
+        claimed_workspace_ids=tuple(row.workspace_id for row in report.rows if row.claimed),
+        store=resolved,
+        run_date=run_date,
+        profile_pins=profile_pins,
+        load_profile_pin=load_profile_pin,
+        chain_factory=chain_factory,
+        overlay_runner=overlay_runner,
+        client=client,
+        log_err=err,
+    )
 
 
 __all__ = [

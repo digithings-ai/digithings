@@ -5,7 +5,8 @@ These tests must not import ``overlay.byok`` (digiquant-only CI omits digillm).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -20,8 +21,16 @@ from digiquant.olympus.overlay.cron import (
     reserved_overlay_workspace_ids,
     run_overlay_cron,
 )
+from digiquant.olympus.overlay.cron_execute import (
+    PROFILE_PIN_MISSING,
+    OverlayExecuteRequiresChain,
+    load_overlay_profile_version_id,
+    parse_overlay_profile_pin,
+    require_overlay_chain,
+)
 from digiquant.olympus.overlay.dispatch import (
     JOB_TYPE_OVERLAY_DAILY,
+    JobRun,
     JobStatus,
     MemoryJobRunStore,
     OverlaySkipReason,
@@ -285,3 +294,239 @@ def test_load_overlay_cron_workspaces_parses_valid_rows() -> None:
     assert len(loaded) == 1
     assert loaded[0].workspace_id == _USER
     assert loaded[0].subscription_status is SubscriptionStatus.NONE
+
+
+def _module_header(name: str) -> str:
+    path = Path(main.__code__.co_filename).with_name(name)
+    header: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("def ") or line.startswith("class "):
+            break
+        header.append(line)
+    return "\n".join(header)
+
+
+def test_cron_headers_do_not_import_byok_or_graph() -> None:
+    for name in ("cron.py", "cron_execute.py"):
+        imports = "\n".join(
+            line
+            for line in _module_header(name).splitlines()
+            if line.startswith(("import ", "from "))
+        )
+        assert "byok" not in imports
+        assert "digillm" not in imports
+        assert "overlay.runner" not in imports
+        assert "hermes.chain" not in imports
+
+
+def test_require_overlay_chain_refuses_none() -> None:
+    with pytest.raises(OverlayExecuteRequiresChain, match="chain=None"):
+        require_overlay_chain(None)
+
+
+def test_parse_overlay_profile_pin_skips_invalid() -> None:
+    assert parse_overlay_profile_pin({}) is None
+    assert parse_overlay_profile_pin({"id": "not-a-uuid"}) is None
+    assert parse_overlay_profile_pin({"id": str(_USER)}) == _USER
+
+
+class _ProfileQuery:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self._rows = rows
+
+    def select(self, *_args: object, **_kwargs: object) -> _ProfileQuery:
+        return self
+
+    def eq(self, *_args: object, **_kwargs: object) -> _ProfileQuery:
+        return self
+
+    def order(self, *_args: object, **_kwargs: object) -> _ProfileQuery:
+        return self
+
+    def limit(self, *_args: object, **_kwargs: object) -> _ProfileQuery:
+        return self
+
+    def execute(self) -> SimpleNamespace:
+        return SimpleNamespace(data=self._rows)
+
+
+class _ProfileClient:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self._rows = rows
+
+    def table(self, name: str) -> _ProfileQuery:
+        assert name == "olympus_profile_config"
+        return _ProfileQuery(self._rows)
+
+
+def test_load_overlay_profile_version_id_returns_tip() -> None:
+    pin = uuid4()
+    loaded = load_overlay_profile_version_id(_ProfileClient([{"id": str(pin)}]), _USER)
+    assert loaded == pin
+    assert load_overlay_profile_version_id(_ProfileClient([]), _USER) is None
+
+
+def _succeeding_runner(*, job: JobRun, store: MemoryJobRunStore, request, chain):
+    chain(
+        workspace_id=request.workspace_id,
+        run_date=request.run_date,
+        requested_version_id=request.profile_version_id,
+    )
+    return store.update(
+        job.model_copy(update={"status": JobStatus.SUCCEEDED, "finished_at": datetime.now(tz=UTC)})
+    )
+
+
+def test_execute_invokes_injected_chain_and_marks_succeeded() -> None:
+    store = MemoryJobRunStore()
+    seen: list[dict[str, object]] = []
+    pin = uuid4()
+
+    def chain(*, workspace_id, run_date, requested_version_id):
+        seen.append(
+            {
+                "workspace_id": workspace_id,
+                "run_date": run_date,
+                "requested_version_id": requested_version_id,
+            }
+        )
+
+    rc = main(
+        ["--execute", "--workspace-id", str(_USER), "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(_USER)],
+        store=store,
+        byok=_byok(ok=True),
+        profile_pins={_USER: pin},
+        chain_factory=lambda **_k: chain,
+        overlay_runner=_succeeding_runner,
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    row = store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN))
+    assert row is not None
+    assert row.status is JobStatus.SUCCEEDED
+    assert seen
+    assert seen[0]["workspace_id"] == _USER
+    assert seen[0]["requested_version_id"] == pin
+    assert seen[0]["workspace_id"] != house_workspace_id()
+
+
+def test_execute_missing_profile_pin_fails_closed_without_chain() -> None:
+    store = MemoryJobRunStore()
+    called = {"chain_factory": 0, "runner": 0}
+
+    def chain_factory(**_k):
+        called["chain_factory"] += 1
+        raise AssertionError("chain must not be built without a profile pin")
+
+    def runner(**_k):
+        called["runner"] += 1
+        raise AssertionError("runner must not run without a profile pin")
+
+    rc = main(
+        ["--execute", "--workspace-id", str(_USER), "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(_USER)],
+        store=store,
+        byok=_byok(ok=True),
+        profile_pins={},
+        chain_factory=chain_factory,
+        overlay_runner=runner,
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    row = store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN))
+    assert row is not None
+    assert row.status is JobStatus.FAILED
+    assert row.error == PROFILE_PIN_MISSING
+    assert called["chain_factory"] == 0
+    assert called["runner"] == 0
+
+
+def test_execute_chain_none_fails_closed_not_succeeded() -> None:
+    store = MemoryJobRunStore()
+    err: list[str] = []
+    pin = uuid4()
+    rc = main(
+        ["--execute", "--workspace-id", str(_USER), "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(_USER)],
+        store=store,
+        byok=_byok(ok=True),
+        profile_pins={_USER: pin},
+        chain_factory=lambda **_k: None,
+        overlay_runner=lambda **_k: (_ for _ in ()).throw(AssertionError("runner")),
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 3
+    assert err
+    assert "chain=None" in err[0]
+    row = store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN))
+    assert row is not None
+    assert row.status is JobStatus.FAILED
+    assert row.error == "chain_required"
+    assert row.status is not JobStatus.SUCCEEDED
+
+
+def test_execute_does_not_run_skipped_workspaces() -> None:
+    store = MemoryJobRunStore()
+    called = {"runner": 0}
+
+    def runner(**_k):
+        called["runner"] += 1
+        raise AssertionError("skipped jobs must not execute")
+
+    rc = main(
+        ["--execute", "--all", "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(_USER, tier=PlanTier.FREE)],
+        store=store,
+        byok=_byok(ok=True),
+        profile_pins={_USER: uuid4()},
+        chain_factory=lambda **_k: lambda **__: None,
+        overlay_runner=runner,
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    row = store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN))
+    assert row is not None
+    assert row.status is JobStatus.SKIPPED
+    assert called["runner"] == 0
+
+
+def test_dispatch_without_execute_stays_running() -> None:
+    store = MemoryJobRunStore()
+    rc = main(
+        ["--workspace-id", str(_USER), "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(_USER)],
+        store=store,
+        byok=_byok(ok=True),
+        overlay_runner=lambda **_k: (_ for _ in ()).throw(AssertionError("no execute")),
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    row = store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN))
+    assert row is not None
+    assert row.status is JobStatus.RUNNING
+
+
+def test_execute_production_missing_vault_exits_2_before_dispatch() -> None:
+    err: list[str] = []
+    rc = main(
+        ["--execute", "--all", "--run-date", _RUN.isoformat()],
+        environ={"SUPABASE_URL": "https://example.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        workspaces=[_ws(_USER)],
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 2
+    assert err
+    assert "OVERLAY_EXECUTE_NOT_CONFIGURED" in err[0]
+    assert "DIGIQUANT_VAULT_MASTER_KEY" in err[0]

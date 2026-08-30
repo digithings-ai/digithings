@@ -3139,9 +3139,18 @@ workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
 nothing. Apply requires `--workspace-id` or `--all` (refuses implicit writes).
 `--all` against a free workspace inserts a visible `skipped`/`not_entitled`
 row; it does not invoke the graph. Dispatch-only claims leave the row
-`running` — the staging harness proves overlay only on `succeeded` (after
-`run_overlay` + persist). Do not run `--all` against Observer until Stripe +
-BYOK land; skipped rows are not a remaining-hop proof. The cron module does
+`running`. `--execute` runs claimed jobs through the **one** Olympus graph
+(`overlay/graph_invoke.py` → `run_atlas_then_hermes(..., manage_usage=False)`
+so overlay's `overlay_usage_scope` owns WP1 capture). `chain=None` is
+refused (`OverlayExecuteRequiresChain` / `chain_required`) because
+`execute_overlay(chain=None)` would mark `succeeded` without a book. A
+missing overlay `olympus_profile_config` pin fails closed
+(`profile_pin_missing`) — the house default is never used. Persist-off
+finishes `persist_disabled`, which the staging harness does **not** treat
+as proven (hop requires `succeeded` only). `--execute` apply also requires
+`DIGIQUANT_VAULT_MASTER_KEY` (`OVERLAY_EXECUTE_NOT_CONFIGURED`). Do not run
+`--all` / `--execute --all` against Observer until Stripe + BYOK land;
+skipped rows are not a remaining-hop proof. The cron module does
 not import `byok`/`digillm` (digiquant-only CI). Production apply passes
 `byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
 
