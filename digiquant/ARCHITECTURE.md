@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-31
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -3319,7 +3319,12 @@ hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
 (house-only). Until 113 is applied, overlay persist-on cannot prove the
 remaining hop. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
-overwrite the house Brief). Cutover 900 is still required before dropping
+overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
+`analyst_coverage`, and `thesis_vehicles` for a private workspace
+(`skip_overlay_shared_register`): those tables have no `workspace_id` column
+and leftover `UNIQUE(date, …)` keys, so persist-on would last-writer-win the
+house corpus. Staged cutover 113 does not change that. Private overlay remains
+H7–H9 book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.

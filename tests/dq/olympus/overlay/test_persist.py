@@ -24,6 +24,7 @@ from digiquant.olympus.overlay.persist import (
     hermes_document_key,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
+    skip_overlay_shared_register,
 )
 from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
 from digiquant.olympus.research_corpus import ResearchCorpusStore
@@ -63,6 +64,19 @@ def test_require_overlay_legacy_book_safe_blocks_private_allows_house() -> None:
     assert exc.value.code == LEGACY_BOOK_UNIQUE_CODE
     require_overlay_legacy_book_safe(None)
     require_overlay_legacy_book_safe(house_workspace_id())
+
+
+def test_skip_overlay_shared_register_independent_of_persist_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist=1 still must not upsert house-owned theses / analyst / vehicles."""
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    assert skip_overlay_shared_register(overlay) is True
+    monkeypatch.delenv("OLYMPUS_OVERLAY_PERSIST", raising=False)
+    assert skip_overlay_shared_register(overlay) is True
+    assert skip_overlay_shared_register(None) is False
+    assert skip_overlay_shared_register(house_workspace_id()) is False
 
 
 def test_overlay_book_portfolio_refuses_private_workspace(

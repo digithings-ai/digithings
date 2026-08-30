@@ -25,6 +25,14 @@ overlay + house cannot both root a commit on the same date until then.
 
 ``daily_snapshots`` stays a house-only ``UNIQUE(date)`` table — overlay
 publish must skip it (see ``publish_phase``) even with persist on.
+
+``theses`` / ``analyst_coverage`` / ``thesis_vehicles`` are the same class of
+shared register: no ``workspace_id`` column, leftover ``UNIQUE(date, …)``.
+Overlay persist-on still compiles H1–H5 with the overlay client; a same-date
+upsert last-writer-wins the house corpus. ``skip_overlay_shared_register``
+no-ops those writes for a private workspace. Independent of persist-on and of
+staged cutover 113 (113 does not add theses tenancy). Private overlay is H7–H9
+book only (T4).
 """
 
 from __future__ import annotations
@@ -96,6 +104,20 @@ def require_overlay_legacy_book_safe(workspace_id: UUID | str | None) -> None:
         raise OverlayLegacyBookBlocked()
 
 
+def skip_overlay_shared_register(workspace_id: UUID | str | None) -> bool:
+    """True when overlay must not write house-owned shared registers.
+
+    ``theses``, ``analyst_coverage``, and ``thesis_vehicles`` have no
+    ``workspace_id`` column. Overlay persist-on is not a license to upsert
+    them: leftover ``UNIQUE(date, thesis_id)`` / ``UNIQUE(date, ticker)``
+    last-writer-wins the house row. Callers that omit *workspace_id* stay on
+    the house write path. Do not reuse :func:`require_overlay_legacy_book_safe`
+    here — that gate lifts after 113; these tables stay shared until a theses
+    tenancy migration exists.
+    """
+    return is_private_workspace(workspace_id)
+
+
 def hermes_document_key(base: str, workspace_id: UUID | str | None) -> str:
     """House keys stay unprefixed. Overlay H7/H8 keys are ``overlay/{ws}/{base}``."""
     if not is_private_workspace(workspace_id):
@@ -114,4 +136,5 @@ __all__ = [
     "overlay_persist_enabled",
     "require_overlay_legacy_book_safe",
     "require_overlay_persist",
+    "skip_overlay_shared_register",
 ]
