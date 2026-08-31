@@ -37,7 +37,7 @@ Pages opt in by setting `data-theme="light|dark"` on `<html>` **before paint**
 </head>
 ```
 
-`localStorage('dt-theme')` is the shared key — the Olympus dashboard mirrors it
+`localStorage('dt-theme')` is the shared key — the digiquant dashboard mirrors it
 on the same origin, so a chosen theme follows the user across surfaces. In the
 Next.js apps this is handled by `ThemeProvider.tsx`/`ThemeToggle` in
 `@digithings/web`, which reads/writes the same key.
@@ -376,7 +376,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 |------|---------|-------|
 | `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
 | `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
-| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open Olympus"). |
+| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open digiquant"). |
 | `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
 
 **Copy variants** (shown in `frontend/digiweb/design/smoke/index.html`):
@@ -384,7 +384,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | Surface | Title | Primary | Secondary |
 |---------|-------|---------|-----------|
 | digithings.ai | "Build your agent stack in the open." | Start building | Read the architecture → |
-| digiquant.io | "One graph, research to execution." | Open Olympus | Browse strategies → |
+| digiquant.io | "One graph, research to execution." | Open digiquant | Browse strategies → |
 
 | Class | Role |
 |-------|------|

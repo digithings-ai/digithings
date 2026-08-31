@@ -1,4 +1,4 @@
-# Olympus chart inventory & engine ruling (#1420, epic #1414)
+# Dashboard chart inventory & engine ruling (#1420, epic #1414)
 
 > **Ruling: lightweight-charts is the canon for time-series; recharts is
 > sanctioned for categorical/composition surfaces (lightweight-charts has no

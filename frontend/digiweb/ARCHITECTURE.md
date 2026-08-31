@@ -196,7 +196,7 @@ queries silently.
 
 Each product app also owns explicit 32px fallback, 180px Apple touch, and
 192/512px web-app PNGs plus a maskable 512px variant. digithings and digiquant
-use the compact terminal mark; Olympus uses the canonical four-stroke mark.
+use the compact terminal mark; the digiquant dashboard uses the canonical four-stroke mark.
 Tab and Apple metadata publish light/dark pairs with media queries. Web App
 Manifest icons use one contrast-safe default because installed icons are cached
 by the operating system and the manifest standard has no live colour-scheme

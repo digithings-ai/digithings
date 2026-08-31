@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * we run the page's data-load effect synchronously by stubbing React's `useEffect`
  * to invoke its callback immediately, and stub `useState` so the resolved tearsheet
  * is committed before render. We then render PerformancePage to a string and assert
- * the loaded OlympusTearsheetView (H1 "Olympus") appears — the loading→loaded
+ * the loaded OlympusTearsheetView (H1 "Performance") appears — the loading→loaded
  * transition, exercised the same way app/system/page.test.ts asserts its page chrome.
  */
 import { buildOlympusTearsheet } from '@/lib/observability-queries';

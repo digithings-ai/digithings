@@ -1,4 +1,4 @@
-# Olympus table inventory & SortableTable ruling (#1450 F4 batch D + F5 tables, epic #1414)
+# Dashboard table inventory & SortableTable ruling (#1450 F4 batch D + F5 tables, epic #1414)
 
 > **Ruling: the promoted `<SortableTable/>` leaderboard (`@digithings/web`
 > finance-composites) is NOT adopted for the olympus portfolio tables or the

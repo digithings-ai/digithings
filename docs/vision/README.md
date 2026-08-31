@@ -123,5 +123,5 @@ One document per module — positioning, current state, 12-month roadmap, and op
 
 - [[digigraph|digigraph]] · [[digiquant|digiquant]] · [[digisearch|digisearch]] · [[digichat|digichat]]
 - [[digikey|digikey]] · [[digismith|digismith]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
-- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[olympus|Olympus]]
+- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[olympus|digiquant dashboard]]
 - [[digilink|digilink]] · [[digistore|digistore]] *(designed, not yet shipped)*

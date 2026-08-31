@@ -1,9 +1,9 @@
 /**
- * The real Olympus brand mark, ported verbatim from the Olympus dashboard
- * (frontend/olympus/components/atlas-mark.tsx) so digiquant.io matches it.
- * Strokes carry `olympus-stroke-N` classes so the dashboard's loader animation
- * (stroke-draw + scale pulse) can be replayed on hover via CSS (see globals.css).
- * Uses currentColor, so it inherits the surrounding text/button colour.
+ * The digiquant dashboard mark, ported from frontend/olympus so digiquant.io
+ * matches the operator surface. Strokes carry `olympus-stroke-N` classes so the
+ * dashboard's loader animation (stroke-draw + scale pulse) can be replayed on
+ * hover via CSS (see globals.css). Uses currentColor, so it inherits the
+ * surrounding text/button colour. Identifier names stay until the path wave.
  */
 export function OlympusMark({ size = 22, className }: { size?: number; className?: string }) {
   return (

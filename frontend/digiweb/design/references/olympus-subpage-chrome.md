@@ -1,6 +1,6 @@
-# Olympus subpage chrome
+# digiquant dashboard subpage chrome
 
-Reference for the shared navigation + layout chrome on Olympus dashboard subpages
+Reference for the shared navigation + layout chrome on digiquant dashboard subpages
 (Portfolio, Research, Overview, twelve-x, …), so new subpages and twelve-x stay
 aligned with the Cursor "literal navigation" pattern. Source of truth:
 [`frontend/olympus/components/subpage-tab-bar.tsx`](../../olympus/components/subpage-tab-bar.tsx).

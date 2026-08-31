@@ -124,12 +124,12 @@ Typical homepage flow:
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
-| Hero contract: headline · sub · CTA · trust · product frame | `make stack-local`, `ask digichat`, `open olympus` | Generic “Scroll to explore” as only CTA |
+| Hero contract: headline · sub · CTA · trust · product frame | `make stack-local`, `ask digichat`, `open digiquant` | Generic “Scroll to explore” as only CTA |
 | Bento feature grid | Module grid on digithings; capabilities on digiquant | Multiple scrolly sections per page |
 | Literal CTAs + install commands | Docker compose / make targets in mono | Vague “Deploy a node” with no route |
 | Changelog / news band | GitHub releases, digigraph changelog | — |
 | Testimonial / quote strip | Builder quotes, OSS adopters | Fake metrics |
-| Product frame with border + shadow | Tearsheet, digichat, Olympus embed | — |
+| Product frame with border + shadow | Tearsheet, digichat, dashboard embed | — |
 | Two-column hero layout | Mesh **behind** frame, not over copy | Side-by-side “headline + random chart” cliché |
 
 ---

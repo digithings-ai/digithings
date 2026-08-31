@@ -1,7 +1,7 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Accepted — product name is **digiquant** (ADR-0026). Wave 1 (user-facing copy) ships with that ADR.
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). Wave 1 (user-facing copy + current docs + design specimens) ships with that ADR.
 > **Does not:** rewrite packages, `/olympus/` URLs, tables, workflows, or live-trading paths in wave 1
 > **Human gate:** yes — kairos **package** rename later touches execution; path/OAuth move is wave 2
 
