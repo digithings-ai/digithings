@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from pathlib import Path
 
 import polars as pl
 import pytest
+from digiquant.strategies.sdca import stage_0 as stage0_mod
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
@@ -21,6 +23,7 @@ from digiquant.strategies.sdca.stage_0 import (
     Stage0Cadence,
     persist_stage_0,
     run_stage_0,
+    should_persist_settings,
     solo_weights,
 )
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
@@ -332,8 +335,36 @@ class TestPersistStage0:
 
 
 def test_settings_persist_only_when_combined_oos_is_not_worse() -> None:
-    from digiquant.strategies.sdca.stage_0 import should_persist_settings
-
     assert should_persist_settings(-10.0, -7.8) is False
     assert should_persist_settings(-7.8, -7.8) is True
     assert should_persist_settings(-5.0, -7.8) is True
+
+
+def test_missing_settings_path_is_a_noop(tmp_path: Path) -> None:
+    missing = tmp_path / "absent" / "settings.json"
+    stage0_mod._write_settings_weights(SdcaCompositeWeights(), path=missing)
+    assert not missing.exists()
+    assert not missing.parent.exists()
+
+
+def test_checked_in_stage0_sidecar_pins_oos_survivors() -> None:
+    dest = Path(stage0_mod.__file__).resolve().parent
+    payload = json.loads((dest / "btc_stage0.json").read_text())
+    assert payload["evaluator"] == "curve_simulator"
+    assert payload["baseline_name"] == NAMED_BASELINE
+    assert payload["beats_flat_dca_oos"] is False
+    assert set(payload["survivors"]) == {"valuation", "m2", "dxy"}
+    by_id = {row["code_id"]: row for row in payload["solos"]}
+    assert by_id["valuation"]["display_name"] == "power law"
+    assert by_id["valuation"]["keep"] is True
+    assert by_id["m2"]["keep"] is True
+    assert by_id["dxy"]["keep"] is True
+    for dropped in ("rs_eth", "weekly_rsi", "weekly_macd", "sma_band"):
+        assert by_id[dropped]["keep"] is False
+        assert by_id[dropped]["evaluator"] == "curve_simulator"
+    combine = json.loads((dest / "btc_solo_then_combine_aggressive.json").read_text())
+    assert combine["evaluator"] == "curve_simulator"
+    assert combine["beats_flat_dca_oos"] is True
+    assert combine["stage_a_weights"]["m2"] == pytest.approx(0.5)
+    assert combine["stage_a_weights"]["dxy"] == pytest.approx(0.5)
+    assert combine["stage_a_weights"]["weekly_rsi"] == pytest.approx(0.0)

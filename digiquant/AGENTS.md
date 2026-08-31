@@ -165,11 +165,13 @@ the full module map.
 - **Published `btc_sdca` is valuation rails + a distribute curve.** Full extra
   catalog (`m2`, `rs_eth`, `dxy`, `weekly_rsi`, `weekly_macd`, `sma_band`) was
   searched as add-ons (IS vs-flat, none kept) and again as Stage 0 solos
-  (OOS vs `power_law_solo`). `indicator_weights` extras stay 0 until a
-  Stage 0 extra beats that OOS gate and combined OOS is not worse.
-  Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
-  OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
-  DCA; provenance stays honest.
+  (OOS vs `power_law_solo`). `indicator_weights` extras stay 0 until an
+  operator passes `--persist-settings` after a Stage 0 extra beats that
+  OOS gate and combined OOS is not worse. The Stage 0 CLI default is
+  sidecar-only; a 2-trial `curve_simulator` Stage B is not a published-weight
+  flip. Preset `btc_optimized` still sells (`long_only: false`). Published
+  walk-forward OOS `beats_flat_dca_oos` is still false — do not claim an
+  OOS win over flat DCA unless a new run actually prints true.
 
 ### RiskModel providers (#1082)
 

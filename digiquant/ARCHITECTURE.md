@@ -610,7 +610,7 @@ upstream for cached price history.
 | `sdca/stage_0.py` | Solo-indicator remaining-book books. Each catalog extra and power law (`valuation` code id; user-facing **power law**) gets a one-hot index (unused members omitted). Curve search via `run_stage_b_frozen` / `curve_simulator`. Keep extras that beat named baseline `power_law_solo` on the same walk-forward OOS folds; drop never-sell dumps. IS is diagnostic. `beats_flat_dca_oos` stays false on this sidecar. Operator: `python -m digiquant.strategies.sdca.stage_0` or `digiquant sdca-stage0`. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
-| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
+| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `{stem}_aggressive.json` + `{stem}_regularized.json` (default stem `btc_composite`). Stage 0 uses stem `btc_solo_then_combine` so the package dir is a safe `--out-dir`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (% of remaining cash on buys, % of remaining holdings on sells). `value_at_risk()` interpolates and clamps risk to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
 | `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. `size_trade()` is the remaining-book sizer (`buy_usd = cash * rate/100`, `sell_units = holdings * |rate|/100`). Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
@@ -668,9 +668,12 @@ beats OOS, power-law-only remains published — do not force extras back in.
 Stage 1 (`optimize_stage_1_survivor_weights`) then searches non-negative
 weights among survivors on a `(0, 1]` grid (no 0) and Stage B
 (`run_stage_b_frozen`) + `regularize` retunes the combined curve.
-`settings.json` is overwritten only when combined OOS is not worse than
-the published sidecar. `beats_flat_dca_oos` is true only when that
-combined run's mean OOS vs-flat is actually positive. Cycle-window
+Operator default writes sidecars only (`btc_stage0.json`,
+`btc_stage1_weights.json`, `btc_solo_then_combine_{aggressive,regularized}.json`).
+`settings.json` is overwritten only with `--persist-settings` **and**
+combined OOS not worse than the published sidecar — a 2-trial Stage B
+is not a published-weight flip. `beats_flat_dca_oos` is true only when
+that combined run's mean OOS vs-flat is actually positive. Cycle-window
 overlap (`stage_a.optimize_stage_a_weights`) remains a diagnostic.
 `stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays
 generic technicals only. Charts still plot weight-0 extras; user-facing

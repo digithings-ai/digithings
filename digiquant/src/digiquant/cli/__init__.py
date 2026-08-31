@@ -213,14 +213,29 @@ def optimize(
     is_flag=True,
     help="Skip Stage 1 / Stage B even if extras survive",
 )
-def sdca_stage0(data_path: Path | None, out_dir: Path, stage0_only: bool) -> None:
+@click.option(
+    "--persist-settings",
+    is_flag=True,
+    help=(
+        "Overwrite strategies/settings.json only when combined OOS is not worse. "
+        "Default writes sidecars only."
+    ),
+)
+def sdca_stage0(
+    data_path: Path | None, out_dir: Path, stage0_only: bool, persist_settings: bool
+) -> None:
     """Solo-indicator SDCA Stage 0 (curve_simulator). Gate extras on OOS vs power law."""
     from digiquant.strategies.sdca.stage_0 import operator_stage_0
 
     path = data_path or Path("data/price-history/BTC-USD.csv")
     if not path.exists():
         raise click.UsageError(f"OHLCV not found: {path}")
-    result = operator_stage_0(data_path=path, out_dir=out_dir, combine=not stage0_only)
+    result = operator_stage_0(
+        data_path=path,
+        out_dir=out_dir,
+        combine=not stage0_only,
+        persist_settings=persist_settings,
+    )
     click.echo(result.model_dump_json(indent=2))
 
 

@@ -395,6 +395,8 @@ def should_persist_settings(combined_oos: float, published_oos: float) -> bool:
 
 
 def _write_settings_weights(weights: SdcaCompositeWeights, *, path: Path) -> None:
+    if not path.exists():
+        return
     payload = json.loads(path.read_text())
     sdca = payload["strategies"]["btc_sdca"]["sdca"]
     sdca["indicator_weights"] = weights.model_dump()
@@ -414,6 +416,7 @@ def run_solo_then_combine(
     objective: SdcaOptimizeObjective | None = None,
     published_oos: float | None = None,
     persist_dir: Path | str | None = None,
+    persist_settings: bool = False,
     persist_settings_path: Path | str | None = None,
     cycle_windows: SdcaCycleWindows | None = None,
 ) -> SoloThenCombineResult:
@@ -481,13 +484,16 @@ def run_solo_then_combine(
         evaluator_label=evaluator_label,
         extra_z=extra_z,
     )
-    write_settings = should_persist_settings(stage_b.mean_oos_vs_flat_dca_pct, incumbent_oos)
+    eligible = should_persist_settings(stage_b.mean_oos_vs_flat_dca_pct, incumbent_oos)
+    want_write = persist_settings or persist_settings_path is not None
+    did_write = eligible and want_write
     beats = bool(stage_b.beats_flat_dca_oos and stage_b.mean_oos_vs_flat_dca_pct > 0.0)
     notes = (
         f"Stage 1 survivors={list(stage0.survivors)}; "
         f"combined OOS vs-flat={stage_b.mean_oos_vs_flat_dca_pct:.4f} "
-        f"(published {incumbent_oos:.4f}); persist_settings={write_settings}. "
-        f"beats_flat_dca_oos={beats}. Do not --push-supabase."
+        f"(published {incumbent_oos:.4f}); persist_settings_eligible={eligible}; "
+        f"wrote_settings={did_write}. beats_flat_dca_oos={beats}. "
+        "Do not --push-supabase. Default operator path writes sidecars only."
     )
     if dest is not None:
         persist_two_stage(
@@ -496,6 +502,7 @@ def run_solo_then_combine(
             windows=cycle_windows or SdcaCycleWindows.btc_v1(),
             dest_dir=dest,
             notes=notes,
+            stem="btc_solo_then_combine",
         )
         (dest / "btc_stage1_weights.json").write_text(
             json.dumps(
@@ -512,7 +519,7 @@ def run_solo_then_combine(
             )
             + "\n"
         )
-        if write_settings:
+        if did_write:
             _write_settings_weights(
                 stage1.weights,
                 path=Path(persist_settings_path) if persist_settings_path else _SETTINGS_PATH,
@@ -522,7 +529,7 @@ def run_solo_then_combine(
         stage1_weights=stage1.weights.model_dump(),
         stage_b_mean_oos_vs_flat_dca_pct=stage_b.mean_oos_vs_flat_dca_pct,
         beats_flat_dca_oos=beats,
-        persist_settings=write_settings,
+        persist_settings=did_write,
         notes=notes,
     )
 
@@ -533,6 +540,7 @@ def operator_stage_0(
     out_dir: Path | str,
     evaluator_label: str = DEFAULT_EVALUATOR_LABEL,
     combine: bool = True,
+    persist_settings: bool = False,
 ) -> SoloThenCombineResult | Stage0Report:
     """Load BTC cache + FRED/ETH siblings; run Stage 0 (and Stage 1 if survivors)."""
     if evaluator_label != DEFAULT_EVALUATOR_LABEL:
@@ -554,6 +562,7 @@ def operator_stage_0(
             evaluator=evaluate_sdca_trial_curve_sim,
             evaluator_label=DEFAULT_EVALUATOR_LABEL,
             persist_dir=dest,
+            persist_settings=persist_settings,
         )
     report = run_stage_0(
         dates,
@@ -591,11 +600,20 @@ def _cli(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Skip Stage 1 / Stage B even if extras survive",
     )
+    parser.add_argument(
+        "--persist-settings",
+        action="store_true",
+        help=(
+            "Overwrite strategies/settings.json only when combined OOS is not worse. "
+            "Default is sidecars only; a 2-trial Stage B is not a published-weight flip."
+        ),
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
     result = operator_stage_0(
         data_path=args.data_path,
         out_dir=args.out_dir,
         combine=not args.stage0_only,
+        persist_settings=args.persist_settings,
     )
     print(result.model_dump_json(indent=2))
     return 0
