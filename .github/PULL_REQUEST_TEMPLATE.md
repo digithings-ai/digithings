@@ -121,7 +121,7 @@ Agents: score honestly using `docs/scoring/`. Do not check a box unless you full
 
 - [ ] `{component}/ARCHITECTURE.md` updated (Module Map, Public API, or Configuration changed)
 - [ ] `{component}/AGENTS.md` updated (new patterns or anti-patterns discovered)
-- [ ] Root `AGENTS.md` or `CLAUDE.md` updated (if cross-cutting rule changed)
+- [ ] Root `AGENTS.md` updated (if a cross-cutting rule changed). Keep `CLAUDE.md` as a pointer at AGENTS.md.
 
 ---
 

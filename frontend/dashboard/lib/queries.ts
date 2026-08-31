@@ -9,6 +9,11 @@
  * the public house dashboard (migration 109 SELECT is house OR membership).
  */
 import { supabase, isSupabaseConfigured } from './supabase';
+import {
+  bookedCoversCommittedSnapshot,
+  committedBookDate,
+  previousBookDate,
+} from './dashboard-ssot';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TableRow } from './database.types';
 import type {
@@ -878,8 +883,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   >[] = docsRes.data ?? [];
 
   const posDates = [...new Set(allPositions.map((p) => p.date))];
-  const latestPosDate = posDates.length ? posDates[0] : null;
-  const prevPosDate = posDates.length > 1 ? posDates[1] : null;
+  const latestPosDate = committedBookDate(snapshot.date, posDates);
+  const prevPosDate = previousBookDate(latestPosDate, posDates);
   const currentPositions = latestPosDate ? allPositions.filter((p) => p.date === latestPosDate) : [];
   const prevPositions = prevPosDate ? allPositions.filter((p) => p.date === prevPosDate) : [];
   const prevWeightByTicker = new Map(prevPositions.map((p) => [p.ticker, Number(p.weight_pct ?? 0)]));
@@ -1044,8 +1049,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   // does, the positions table is the truth: it carries the POST-TURNOVER
   // booked weights (H8 sizing + no-trade band + carry), which legitimately
   // differ from the PM's proposal (e.g. a 20% target booked at 11.4%).
-  const bookedCoversSnapshot =
-    latestPosDate != null && snapshot.date != null && latestPosDate >= snapshot.date;
+  const bookedCoversSnapshot = bookedCoversCommittedSnapshot(snapshot.date, latestPosDate);
 
   // Treat proposed_positions as executed immediately ONLY while the booked
   // positions LAG the snapshot — the coping path for a frozen/failed commit
@@ -1060,7 +1064,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
           const base = currentPositions.find((cp) => cp.ticker === p.ticker);
           return {
             ...(base || ({
-              date: latestPosDate,
+              date: snapshot.date ?? latestPosDate,
               ticker: p.ticker,
               name: p.ticker,
               category: null,
@@ -1315,7 +1319,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     }
   }
 
-  const dashboardDate = snapshot.date ?? latestPosDate ?? null;
+  const dashboardDate = snapshot.date ?? null;
   let pipeline_observability: PipelineObservabilityBundle | null = null;
   if (dashboardDate) {
     pipeline_observability = await fetchPipelineObservabilityForDate(dashboardDate);
@@ -1326,7 +1330,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       meta: {
         name: 'Market Digest Dynamic Portfolio',
         base_currency: 'CAD',
-        last_updated: snapshot.date ?? latestPosDate,
+        last_updated: snapshot.date ?? null,
         last_run_at: lastRunAt(snapshot),
         benchmarks: Object.keys(benchmarks),
         latest_snapshot_run_type,
