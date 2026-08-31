@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date, timedelta
 from pathlib import Path
+from types import ModuleType
 
 import polars as pl
 import pytest
@@ -28,6 +30,11 @@ from digiquant.strategy_specs import (
     infer_param_grid,
     sample_random_params,
 )
+
+try:
+    import nautilus_trader as _nautilus_trader
+except ImportError:
+    _nautilus_trader = None
 
 pytestmark = pytest.mark.unit
 
@@ -211,6 +218,17 @@ class TestPersistAndDispatch:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         captured: dict[str, object] = {}
+
+        # CI digiquant-test does not install nautilus_trader (#42). Stub the
+        # evaluator module so dispatch is still asserted; walk_forward is patched.
+        if _nautilus_trader is None:
+            stub = ModuleType("digiquant.strategies.sdca.nautilus_evaluator")
+
+            def _unused_nautilus_eval(*_a: object, **_k: object) -> None:
+                raise AssertionError("walk_forward monkeypatch should intercept")
+
+            stub.evaluate_sdca_trial_nautilus = _unused_nautilus_eval  # type: ignore[attr-defined]
+            monkeypatch.setitem(sys.modules, "digiquant.strategies.sdca.nautilus_evaluator", stub)
 
         def fake_walk_forward(
             dates: list[date],
