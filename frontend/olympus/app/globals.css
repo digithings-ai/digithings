@@ -28,6 +28,7 @@
    Olympus's §13 dashboard variants + shell print rules live later in this
    file, so cascade ties resolve to the app. */
 @import "@digithings/web/styles/finance-tearsheet.css";
+@import "@digithings/web/styles/finance-tearsheet-overlay.css";
 /* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
    purpose (MIGRATION.md rule 2 exception): its element combinators are
    deliberately unlayered so they keep beating plain utilities. Olympus uses

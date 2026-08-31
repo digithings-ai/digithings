@@ -11,12 +11,12 @@ from types import ModuleType
 import polars as pl
 import pytest
 from digiquant.optimize import _sdca_trials, run_optimize
-from digiquant.strategies.sdca import optimize as sdca_opt
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.optimize import (
     SDCA_SHAPE_DEFAULTS,
     SdcaOptimizeProvenance,
     SdcaWalkForwardResult,
+    load_btc_optimized_provenance,
     persist_btc_optimized,
     run_sdca_walk_forward,
     walk_forward_to_optimize_result,
@@ -209,8 +209,7 @@ class TestPersistAndDispatch:
         preset = load_preset("btc_optimized")
         assert preset.shape is not None
         assert len(preset.curve_nodes) == 21
-        path = Path(sdca_opt.__file__).with_name("btc_optimized_provenance.json")
-        prov = SdcaOptimizeProvenance.model_validate_json(path.read_text())
+        prov = load_btc_optimized_provenance()
         assert prov.beats_flat_dca_oos is False
         assert "nautilus" in prov.notes.lower() or "SIGABRT" in prov.notes
 

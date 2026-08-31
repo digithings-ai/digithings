@@ -56,10 +56,40 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     settings = gts.load_settings()
     entry = settings["strategies"]["btc_sdca"]
     assert entry["symbol"] == "BTC-USD"
-    assert entry["label"] == "BTC Strategic DCA"
+    assert entry["label"] == "BTC-SDCA"
     assert entry["kind"] == "dca"
     assert gts.strategy_type_of(settings, "btc_sdca") == "sdca"
     assert gts.strategy_type_of(settings, "btc_slapper") == "slapper"
+    assert settings["strategies"]["btc_slapper"]["label"] == "BTC L/S"
+    assert settings["strategies"]["eth_slapper"]["label"] == "ETH L/S"
+    assert settings["strategies"]["sol_slapper"]["label"] == "SOL L/S"
+    sdca = entry["sdca"]
+    assert sdca["long_only"] is False
+    weights = sdca["indicator_weights"]
+    catalog = ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy")
+    assert set(catalog) <= set(weights)
+    assert weights["valuation"] == 1.0
+    assert weights["m2"] == 0.5
+    assert weights["dxy"] == 0.5
+    assert weights["rs_eth"] == 0.0
+    assert weights["weekly_rsi"] == 0.25
+    assert weights["weekly_macd"] == 0.5
+    assert weights["sma_band"] == 0.0
+    assert sdca["preset"] != "balanced"
+
+
+def test_richer_composite_sidecar_matches_settings() -> None:
+    sidecar = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "digiquant/src/digiquant/strategies/sdca/btc_richer_composite.json"
+        ).read_text()
+    )
+    settings = gts.load_settings()
+    published = settings["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
+    assert sidecar["beats_flat_dca_oos"] is False
+    assert sidecar["published_weights"] == published
+    assert sidecar["public_name"] == "BTC-SDCA"
 
 
 def test_sdca_risk_index_uses_signal_delayed_frame_only(tmp_path: Path) -> None:
@@ -82,7 +112,9 @@ def test_run_and_write_btc_sdca_skips_calibrations(
 ) -> None:
     cache = tmp_path / "cache"
     cache.mkdir()
-    _daily_ohlcv(date(2020, 1, 1), 40).write_csv(cache / "BTC-USD.csv")
+    # Oscillators need ~15 completed weeks before they vote; a 40-day frame
+    # would null the whole composite via the all-nulls rule.
+    _daily_ohlcv(date(2020, 1, 1), 300).write_csv(cache / "BTC-USD.csv")
     output = tmp_path / "out"
 
     def _boom(*_args: object, **_kwargs: object) -> dict:
@@ -111,6 +143,11 @@ def test_run_and_write_btc_sdca_skips_calibrations(
         return _EmptyPositions(), bars, ohlc, {}, None
 
     monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    def _boom_round_trips(*_args: object, **_kwargs: object) -> list:
+        raise AssertionError("sdca is not a round-trip book")
+
+    monkeypatch.setattr(gts, "trades_from_positions", _boom_round_trips)
     settings = gts.load_settings()
     with caplog.at_level(logging.WARNING):
         entry = gts.run_and_write(
@@ -134,10 +171,95 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert payload["profit_factor"] is None
     assert payload["long"] is None
     assert payload["short"] is None
+    assert payload["kind"] == "dca"
+    assert payload["current_signal"]["band"] in {
+        "Fire sale",
+        "Accumulate",
+        "Value",
+        "Above mid",
+        "Hot",
+        "Bubble",
+    }
+    assert "daily_rate_pct" in payload["current_signal"]
+    assert "risk" in payload["current_signal"]
+    assert payload["current_signal"]["entry_label"] != "MR Long"
+    assert payload["rails"]
+    assert payload["risk_curve"]
+    assert payload["lump_equity_curve"]
+    assert payload["flat_dca_equity_curve"]
+    assert payload["capital_deployed_curve"]
+    assert {"t", "low", "median", "high"} <= set(payload["rails"][0])
     assert "Coefficients" in " ".join(payload["notes"])
-    assert "Preset balanced" in " ".join(payload["notes"])
+    assert "Preset btc_optimized" in " ".join(payload["notes"])
+    assert "valuation:1.0" in " ".join(payload["notes"])
+    assert "composite valuation index" in " ".join(payload["notes"]).lower()
+    assert "weekly log-MACD" in " ".join(payload["notes"])
+    assert "weekly RSI" in " ".join(payload["notes"])
+    assert payload["beats_flat_dca_oos"] is False
+    assert "beats_flat_dca_oos=false" in " ".join(payload["notes"])
+    assert "not a live strategy" in " ".join(payload["notes"]).lower()
+    assert "Buy-and-hold" in " ".join(payload["notes"])
+    assert not any(
+        "curve_simulator" in n.lower() and "beats_flat_dca_oos=true" in n.lower()
+        for n in payload["notes"]
+    )
+    assert not any("stage 1" in n.lower() and "persist" in n.lower() for n in payload["notes"])
+    assert payload["dca"]["allocated_pct"] is not None
+    assert 0.0 <= payload["dca"]["allocated_pct"] <= 100.0
+    assert "power-law only" not in " ".join(payload["notes"]).lower()
+    assert "not a multi-indicator composite" not in " ".join(payload["notes"]).lower()
     assert not any("calibrations.example" in rec.message for rec in caplog.records)
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
+
+
+def test_window_ohlcv_to_trade_start_drops_warmup_bars() -> None:
+    raw = _daily_ohlcv(date(2017, 12, 1), 40)
+    windowed = gts.window_ohlcv_to_trade_start(raw, "2018-01-01")
+    assert windowed["timestamp"].min() >= date(2018, 1, 1)
+    assert windowed["timestamp"].max() == raw["timestamp"].max()
+    assert gts.window_ohlcv_to_trade_start(raw, "").height == raw.height
+
+
+def test_run_and_write_windows_engine_bars_to_trade_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    _daily_ohlcv(date(2017, 12, 1), 50).write_csv(cache / "BTC-USD.csv")
+    output = tmp_path / "out"
+    captured: dict[str, object] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured["min"] = ohlcv["timestamp"].min()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+    settings = gts.load_settings()
+    entry = gts.run_and_write(
+        "btc_sdca",
+        "BTC-USD",
+        settings,
+        cache,
+        output,
+        cal_source="file",
+        signal_delay_days=0,
+    )
+    assert entry is not None
+    assert captured["min"] is not None
+    assert str(captured["min"])[:10] >= "2018-01-01"
+    payload = json.loads((output / "btc_sdca.json").read_text())
+    assert payload["period_start"] >= "2018-01-01"
 
 
 @requires_nautilus
@@ -148,6 +270,9 @@ def test_trade_size_only_passed_when_config_declares_it() -> None:
 
     assert config_declares_field("btc_slapper", "trade_size") is True
     assert config_declares_field("btc_sdca", "trade_size") is False
+    assert config_declares_field("btc_sdca", "preset") is False
+    assert config_declares_field("btc_sdca", "indicator_weights") is False
+    assert config_declares_field("btc_sdca", "risk_path") is True
 
     inst = InstrumentId.from_str("BTC-USD.SIM")
     bar = BarType.from_str("BTC-USD.SIM-1-DAY-LAST-EXTERNAL")

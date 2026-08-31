@@ -8,17 +8,23 @@ the in-progress week's Friday/Sunday close.
 Sign convention matches ``valuation_z``: cheap / buy = +z, rich / sell = −z,
 clipped to ``[-3, 3]``.
 
-``weekly_macd`` is *not* a second equal vote with ``weekly_rsi`` (research
-*r* ≈ 0.65). Default its composite weight to 0; Stage A may turn it on.
-``sma_band`` is close vs a 90-day SMA in σ units (Bollinger-style), **not**
-raw realized vol (unsigned) and **not** Mayer / 200w SMA (*r* ≈ 0.84 vs
-power-law ``valuation_z``).
+``weekly_rsi`` is a **dead-zone** map (mid-cycle 30–80 → z≈0, RSI 85 is
+max-sell) blended with monthly RSI (``mtf_rsi_z``). Do not affine-map
+``(50−RSI)/50`` — that pegs a bull at the floor. ``weekly_macd`` is weekly
+**log-MACD** (``log10(EMA12)−log10(EMA26)``) with a sloped diminishing top
+cap, not 52-week histogram z (that renormalizes a persistent trend to
+neutral). ``SdcaCompositeWeights`` still defaults both to 0; published
+``btc_sdca`` turns them on in ``settings.json``.
 
-Alpha vs the power-law median is collinear with ``valuation_z`` and is
-omitted — see ARCHITECTURE.md.
+``sma_band`` stays a 90-day SMA z (Bollinger-style), **not** Mayer / 200w
+SMA (*r* ≈ 0.84 vs power-law ``valuation_z``). Alpha vs the power-law
+median is collinear with ``valuation_z`` and is omitted — see
+``btc_richer_composite.json``.
 """
 
 from __future__ import annotations
+
+from datetime import date
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -33,6 +39,18 @@ _SMA_BAND_WINDOW = 90
 _SMA_BAND_MIN_SAMPLES = 30
 _SIGMA_FLOOR = 1e-12
 _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
+_RSI_DEAD_LOW = 30.0
+_RSI_DEAD_HIGH = 80.0
+_RSI_EXTREME_LOW = 20.0
+_RSI_EXTREME_HIGH = 85.0
+_LMACD_BOTTOM_DEAD = -0.02
+_LMACD_BOTTOM_EXTREME = -0.10
+_LMACD_TOP_ANCHOR_YEAR = 2013
+_LMACD_TOP_ANCHOR = 0.15
+_LMACD_TOP_DECAY_PER_YEAR = 0.005
+_LMACD_TOP_FLOOR = 0.09
+_LMACD_TOP_CEILING = 0.16
+_LMACD_RICH_FRAC = 0.20
 
 
 class SdcaOscillatorSpec(BaseModel):
@@ -91,10 +109,25 @@ def completed_weekly_closes(dates: pl.Series, close: pl.Series) -> pl.DataFrame:
     return weekly.filter(pl.col("week_start") + pl.duration(days=_WEEK_DAYS) <= last_daily)
 
 
-def _asof_to_daily(dates: pl.Series, week_end: pl.Series, values: pl.Series) -> pl.Series:
+def completed_monthly_closes(dates: pl.Series, close: pl.Series) -> pl.DataFrame:
+    """Last daily close of each *completed* calendar month. Drops the in-progress month."""
+    if dates.len() != close.len():
+        raise ValueError("dates and close must be the same length")
+    df = pl.DataFrame({"date": dates, "close": close}).sort("date")
+    df = df.with_columns(pl.col("date").dt.truncate("1mo").alias("month_start"))
+    monthly = (
+        df.group_by("month_start")
+        .agg(pl.col("date").max().alias("month_end"), pl.col("close").last().alias("close"))
+        .sort("month_start")
+    )
+    last_daily = df["date"].max()
+    return monthly.filter(pl.col("month_start").dt.month_end() <= last_daily)
+
+
+def _asof_to_daily(dates: pl.Series, period_end: pl.Series, values: pl.Series) -> pl.Series:
     daily = pl.DataFrame({"date": dates}).sort("date")
-    weekly = pl.DataFrame({"week_end": week_end, "value": values}).sort("week_end")
-    joined = daily.join_asof(weekly, left_on="date", right_on="week_end", strategy="backward")
+    period = pl.DataFrame({"period_end": period_end, "value": values}).sort("period_end")
+    joined = daily.join_asof(period, left_on="date", right_on="period_end", strategy="backward")
     return joined["value"]
 
 
@@ -115,17 +148,140 @@ def _causal_z(values: pl.Series, *, window: int, min_samples: int) -> pl.Series:
     return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
 
+def rsi_deadzone_z(
+    rsi: pl.Series,
+    *,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Map RSI onto ``[-3, 3]`` with a mid-cycle dead zone and a capped blow-off."""
+    low_span = dead_low - extreme_low
+    high_span = extreme_high - dead_high
+    rsi_col = pl.col("rsi")
+    cheap = ((dead_low - rsi_col) / low_span * 3.0).clip(0.0, 3.0)
+    rich = ((dead_high - rsi_col) / high_span * 3.0).clip(-3.0, 0.0)
+    mapped = (
+        pl.when(rsi_col.is_null())
+        .then(None)
+        .when(rsi_col < dead_low)
+        .then(cheap)
+        .when(rsi_col > dead_high)
+        .then(rich)
+        .otherwise(0.0)
+        .alias("rsi_z")
+    )
+    return pl.DataFrame({"rsi": rsi}).select(mapped)["rsi_z"]
+
+
 def weekly_rsi_z(
     dates: pl.Series,
     close: pl.Series,
     *,
     length: int = _RSI_LENGTH,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
 ) -> pl.Series:
-    """Weekly Wilder RSI → ``(50 − RSI) / 50 × 3``, as-of onto daily dates."""
+    """Weekly Wilder RSI → dead-zone z, as-of onto daily dates."""
     weekly = completed_weekly_closes(dates, close)
     rsi = _wilder_rsi(weekly["close"], length=length)
-    z = ((50.0 - rsi) / 50.0 * 3.0).clip(-3.0, 3.0)
+    z = rsi_deadzone_z(
+        rsi,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
     return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_rsi")
+
+
+def monthly_rsi_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_LENGTH,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Monthly Wilder RSI (completed months) → same dead-zone z as weekly."""
+    monthly = completed_monthly_closes(dates, close)
+    rsi = _wilder_rsi(monthly["close"], length=length)
+    z = rsi_deadzone_z(
+        rsi,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_rsi")
+
+
+def mtf_rsi_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_LENGTH,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Equal blend of weekly + monthly dead-zone RSI. Weekly fills monthly warmup."""
+    weekly = weekly_rsi_z(
+        dates,
+        close,
+        length=length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    monthly = monthly_rsi_z(
+        dates,
+        close,
+        length=length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    blended: list[float | None] = []
+    for week_z, month_z in zip(weekly.to_list(), monthly.to_list(), strict=True):
+        if week_z is None and month_z is None:
+            blended.append(None)
+        elif month_z is None:
+            blended.append(week_z)
+        elif week_z is None:
+            blended.append(month_z)
+        else:
+            blended.append(0.5 * float(week_z) + 0.5 * float(month_z))
+    return pl.Series("weekly_rsi", blended, dtype=pl.Float64)
+
+
+def lmacd_top_cap(day: date) -> float:
+    years = day.year - _LMACD_TOP_ANCHOR_YEAR + (day.timetuple().tm_yday - 1) / 365.25
+    raw = _LMACD_TOP_ANCHOR - _LMACD_TOP_DECAY_PER_YEAR * max(years, 0.0)
+    return min(_LMACD_TOP_CEILING, max(_LMACD_TOP_FLOOR, raw))
+
+
+def _lmacd_to_z(lmacd: float | None, top_cap: float) -> float | None:
+    if lmacd is None:
+        return None
+    if lmacd <= _LMACD_BOTTOM_EXTREME:
+        return 3.0
+    if lmacd < _LMACD_BOTTOM_DEAD:
+        span = _LMACD_BOTTOM_DEAD - _LMACD_BOTTOM_EXTREME
+        return 3.0 * (_LMACD_BOTTOM_DEAD - lmacd) / span
+    rich_start = _LMACD_RICH_FRAC * top_cap
+    if lmacd <= rich_start:
+        return 0.0
+    span = max(top_cap - rich_start, 1e-9)
+    return max(-3.0, -3.0 * (lmacd - rich_start) / span)
 
 
 def weekly_macd_z(
@@ -138,18 +294,23 @@ def weekly_macd_z(
     z_window: int = _MACD_Z_WINDOW,
     min_samples: int = _MACD_Z_MIN_SAMPLES,
 ) -> pl.Series:
-    """Weekly MACD histogram rolling-z of ``−hist`` (bullish hist → rich → −z)."""
+    """Weekly log-MACD with a sloped top cap (not 52-week histogram z)."""
+    del signal, z_window, min_samples
     weekly = completed_weekly_closes(dates, close)
     frame = pl.DataFrame({"close": weekly["close"]})
-    ema_fast = pl.col("close").ewm_mean(span=fast, adjust=False, min_periods=fast)
-    ema_slow = pl.col("close").ewm_mean(span=slow, adjust=False, min_periods=slow)
-    macd = ema_fast - ema_slow
-    with_macd = frame.select(macd.alias("macd"))
-    signal_line = with_macd.select(
-        pl.col("macd").ewm_mean(span=signal, adjust=False, min_periods=signal)
-    )["macd"]
-    hist = with_macd["macd"] - signal_line
-    z = _causal_z(-hist, window=z_window, min_samples=min_samples)
+    ema_fast = pl.col("close").ewm_mean(span=fast, adjust=False, min_samples=fast)
+    ema_slow = pl.col("close").ewm_mean(span=slow, adjust=False, min_samples=slow)
+    with_ema = frame.select(
+        ema_fast.clip(lower_bound=_SIGMA_FLOOR).alias("ema_fast"),
+        ema_slow.clip(lower_bound=_SIGMA_FLOOR).alias("ema_slow"),
+    )
+    lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+    week_ends = weekly["week_end"].to_list()
+    z_vals = [
+        None if v is None else _lmacd_to_z(float(v), lmacd_top_cap(week_end))
+        for v, week_end in zip(lmacd.to_list(), week_ends, strict=True)
+    ]
+    z = pl.Series("weekly_macd", z_vals, dtype=pl.Float64)
     return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_macd")
 
 
@@ -181,7 +342,7 @@ def price_oscillator_z_vectors(
     """Causal extra-z for walk-forward slicing. Works on any asset's close."""
     spec = oscillators or SdcaOscillatorSpec()
     return {
-        "weekly_rsi": weekly_rsi_z(dates, close, length=spec.rsi_length).to_list(),
+        "weekly_rsi": mtf_rsi_z(dates, close, length=spec.rsi_length).to_list(),
         "weekly_macd": weekly_macd_z(
             dates,
             close,
@@ -201,9 +362,14 @@ def price_oscillator_z_vectors(
 
 __all__ = [
     "SdcaOscillatorSpec",
+    "completed_monthly_closes",
     "completed_weekly_closes",
     "documented_warmup_calendar_days",
+    "lmacd_top_cap",
+    "monthly_rsi_z",
+    "mtf_rsi_z",
     "price_oscillator_z_vectors",
+    "rsi_deadzone_z",
     "sma_band_z",
     "weekly_macd_z",
     "weekly_rsi_z",

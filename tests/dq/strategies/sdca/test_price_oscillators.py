@@ -16,7 +16,10 @@ from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
 )
 from digiquant.strategies.sdca.price_oscillators import (
+    completed_monthly_closes,
     completed_weekly_closes,
+    monthly_rsi_z,
+    rsi_deadzone_z,
     sma_band_z,
     weekly_macd_z,
     weekly_rsi_z,
@@ -49,6 +52,18 @@ class TestCompletedWeeklyCloses:
         first = weekly.filter(pl.col("week_end") == date(2020, 1, 12))
         assert first.height == 1
         assert first["close"][0] == pytest.approx(16.0)
+
+
+class TestRsiDeadzone:
+    def test_mid_cycle_maps_to_zero(self) -> None:
+        rsi = pl.Series([30.0, 50.0, 80.0, 20.0, 85.0, 100.0])
+        z = rsi_deadzone_z(rsi).to_list()
+        assert z[0] == pytest.approx(0.0)
+        assert z[1] == pytest.approx(0.0)
+        assert z[2] == pytest.approx(0.0)
+        assert z[3] == pytest.approx(3.0)
+        assert z[4] == pytest.approx(-3.0)
+        assert z[5] == pytest.approx(-3.0)
 
 
 class TestWeeklyRsiZ:
@@ -102,6 +117,28 @@ class TestWeeklyRsiZ:
         assert max(finite) <= 3.0 + 1e-9
         assert min(finite) >= -3.0 - 1e-9
 
+    def test_mid_bull_rsi_does_not_sit_at_floor_for_entire_bull(self) -> None:
+        n = 7 * 160
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [10_000.0 * (1.002**i) * (1.0 + 0.03 * ((i % 40) / 20.0 - 1.0)) for i in range(n)]
+        )
+        z = weekly_rsi_z(dates, close)
+        mid = [v for v in z.to_list()[400:1600] if v is not None]
+        assert len(mid) > 200
+        floor_days = sum(1 for v in mid if v <= -2.5)
+        assert floor_days / len(mid) < 0.25
+        assert abs(sum(mid) / len(mid)) < 1.25
+
+    def test_blowoff_rsi_still_votes_rich(self) -> None:
+        n = 280
+        dates = _dates(n)
+        close = pl.Series([100.0 + 8.0 * i for i in range(n)])
+        z = weekly_rsi_z(dates, close)
+        tail = [v for v in z.to_list()[-40:] if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < -1.5
+
 
 class TestWeeklyMacdZ:
     def test_default_macd_weight_is_zero(self) -> None:
@@ -127,6 +164,40 @@ class TestWeeklyMacdZ:
         m_idx = dates.to_list().index(next_monday)
         assert z1[m_idx] is not None
         assert z1[m_idx] != pytest.approx(z2[m_idx])
+
+    def test_persistent_log_macd_does_not_renormalize_to_neutral(self) -> None:
+        n = 7 * 200
+        dates = _dates(n, start=date(2016, 1, 4))
+        close = pl.Series([1_000.0 * (1.003**i) for i in range(n)])
+        z = weekly_macd_z(dates, close)
+        late = [v for v in z.to_list()[-400:] if v is not None]
+        assert len(late) > 100
+        assert sum(late) / len(late) < -0.5
+
+
+class TestMonthlyRsiZ:
+    def test_drops_in_progress_calendar_month(self) -> None:
+        dates = _dates(46, start=date(2020, 1, 1))
+        close = pl.Series([float(i + 1) for i in range(46)])
+        monthly = completed_monthly_closes(dates, close)
+        assert date(2020, 1, 31) in monthly["month_end"].to_list()
+        assert date(2020, 2, 15) not in monthly["month_end"].to_list()
+
+    def test_mid_month_does_not_see_same_month_close(self) -> None:
+        n = 1400
+        dates = _dates(n, start=date(2017, 1, 2))
+        base = [100.0 + 8.0 * ((i % 40) - 20) for i in range(n)]
+        z1 = monthly_rsi_z(dates, pl.Series(base))
+        spiked = base.copy()
+        idx = dates.to_list().index(date(2020, 1, 31))
+        spiked[idx] = 50_000.0
+        z2 = monthly_rsi_z(dates, pl.Series(spiked))
+        m_idx = dates.to_list().index(date(2020, 1, 15))
+        assert z1[m_idx] is not None
+        assert z1[m_idx] == pytest.approx(z2[m_idx])
+        f_idx = dates.to_list().index(date(2020, 2, 1))
+        assert z1[f_idx] is not None
+        assert z1[f_idx] != pytest.approx(z2[f_idx])
 
 
 class TestSmaBandZ:

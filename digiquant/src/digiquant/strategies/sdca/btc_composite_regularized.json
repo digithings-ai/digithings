@@ -11,10 +11,10 @@
     "sma_band": 0.0
   },
   "stage_b_params": {
-    "buy_max_rate": 4.2,
-    "buy_knee_risk": 35.0,
-    "sell_knee_risk": 80.0,
-    "sell_max_rate": 4.2,
+    "buy_max_rate": 2.1,
+    "buy_knee_risk": 25.0,
+    "sell_knee_risk": 70.0,
+    "sell_max_rate": 2.1,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
     "valuation_weight": 1.0,
@@ -57,10 +57,10 @@
       "end": "2025-03-06"
     }
   ],
-  "mean_is_vs_flat_dca_pct": 1157.11679252072,
-  "mean_oos_vs_flat_dca_pct": -14.127490293350762,
+  "mean_is_vs_flat_dca_pct": 915.4254476758982,
+  "mean_oos_vs_flat_dca_pct": -7.787838707761549,
   "beats_flat_dca_oos": false,
   "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
-  "notes": "Operator run on Coinbase BTC 2015-07-20→2026-08-29. Stage A used full-history real power-law rails (cycle targeting is in-sample). Unconstrained Stage A kept oscillators at 0 (valuation-only already overlaps troughs/peaks; forcing extras hurts peak_in_distribute). Stage B walk-forward refit rails per IS fold, scored with curve_simulator (Linux Nautilus SIGABRT #42). Two-stage fit will overfit: Stage A targets a handful of documented cycle windows and Stage B then tunes the curve on the same history. Keep the regularized variant (rounded weights, shrunk max rates) as the less aggressive copy. Not a published digiquant.io number. Do not --push-supabase. Regularized OOS vs-flat-DCA is copied from the aggressive run (rounded weights / shrunk rates were not re-scored).",
+  "notes": "All-catalog extra search (keep/drop grid 0/1). Stage A scored by IS vs_flat_dca with frozen btc_optimized curve; extras without data skipped. search_names=['weekly_rsi', 'weekly_macd', 'sma_band', 'm2', 'rs_eth', 'dxy']. kept={}. Curve_simulator Stage B. beats_flat_dca_oos not an OOS claim. Linux Nautilus BacktestEngine not used (#42). Two-stage fit will overfit: Stage A targets a handful of documented cycle windows and Stage B then tunes the curve on the same history. Keep the regularized variant (rounded weights, shrunk max rates) as the less aggressive copy. Not a published digiquant.io number. Do not --push-supabase. Regularized OOS vs-flat-DCA is copied from the aggressive run (rounded weights / shrunk rates were not re-scored).",
   "oos_from_aggressive": true
 }

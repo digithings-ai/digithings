@@ -145,20 +145,55 @@ the full module map.
   reimplement it.** This is what keeps the Nautilus-run result and the
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
+- **Sizing is remaining-book, not initial.** `size_trade(rate, cash, units)`
+  does `buy_usd = cash * rate / 100` and `sell_units = holdings * |rate| / 100`.
+  Both `run_backtest` and `on_bar` pass the running cash/holdings, never
+  `initial_cash`. A high daily buy rate (balanced `buy_max_rate=8`) compounds
+  remaining cash toward dust during a cheap window — that is intended
+  remaining-% math, not a percent-of-initial bug, and it is **not** a
+  long/short book. Pin: `tests/dq/strategies/sdca/test_remaining_pct.py`.
+- **Publish copies #3168 diagnostics** (`rails`, `risk_curve`,
+  `cost_basis_curve`, `capital_deployed_curve`, `lump_equity_curve`,
+  `flat_dca_equity_curve`) plus a DCA `current_signal` (today's risk, band,
+  daily remaining-book rate) onto the tearsheet JSON so the #3172 charts do
+  not degrade. Trade KPIs stay `null` for `kind=dca`.
+- **Library, not broker live.** `btc_sdca` ships into the public strategy
+  library (delayed signals, #1462). Do **not** enable Nautilus live-trading
+  or broker adapters for SDCA. Publish uses a spot CASH venue and leaves
+  the remaining book open at engine stop. `--push-supabase` is an operator
+  step after a real Nautilus generate; do not run it from an agent
+  environment.
+- **Published `btc_sdca` is a composite valuation index + remaining-book.**
+  Keepers **power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI**
+  (`valuation=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
+  are persisted in `settings.json`. SMA band and BTC/ETH RS stay at 0.
+  Oscillator z is cycle-scaled (RSI dead-zone + cap; log-MACD sloped top),
+  not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
+  with a concentrated remaining-book curve (high max daily % of remaining
+  cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
+  still false — in-sample richness, not a proven OOS beat. Allocation
+  charts draw MTM allocated % plus fill dots; do not draw a percent-cash
+  line (it is the inverse of allocated).
+- **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
+  “BTC SDCA Strat”). The other BTC book in the suite is **BTC L/S** — Slapper
+  is a true long/short (`enable_short`, net-short, BTC reversal flip), not
+  relative strength. Same pattern for **ETH L/S** and **SOL L/S**. The page
+  is a strategy (fills chart, latest remaining-book signal, MTM allocated, vs
+  buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
+  vs-flat DCA as a public KPI (`flat_dca_mark_to_market` is equal remaining-cash
+  spend each day, fully deploying by the last bar — not a public comparable).
+  Do not render `capital_deployed_pct` as "Deployed". `StrategyNotes` must
+  render for SDCA (not slapper-only).
 
 ### RiskModel providers (#1082)
 
 `strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
 (`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
 
-- **Never treat `btc_power_law_coefficients.example.json` as a real fit.**
-  It is a synthetic placeholder (git-ignored `btc_power_law_coefficients.json`
-  doesn't exist yet in most checkouts/environments — no network access to
-  BTC price history or the reference artifact was available when this
-  provider was built). `load_coefficients()` logs a warning when it falls
-  back to the placeholder; don't silence or ignore that warning in code
-  reviewing this area — the fitted curve underneath a `SdcaStrategy` run may
-  not be real.
+- **Never treat `btc_power_law_coefficients.example.json` as a real fit**
+  when the committed `btc_power_law_coefficients.json` is present (#3173).
+  `load_coefficients()` still falls back to the placeholder with a warning
+  if the real file is deleted. Don't silence that warning.
 - **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
   (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
   price history through `data/prices/history_cache.py` — the same cache
@@ -191,8 +226,9 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A (`profile.cycle_windows`) → Stage B → `regularize`. Do not
-   publish until the backtest looks comfortable.
+5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
+   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+   overlap is diagnostic. Do not publish until the backtest looks comfortable.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -250,14 +286,39 @@ at 0 (valuation-only, current BTC charts). Weekly RSI/MACD/SMA-band z are
 computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
 file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
 OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
-that need them. Two-stage fit: Stage A (`optimize_stage_a_weights`) aligns
-composite troughs/peaks with `SdcaAssetProfile.cycle_windows` (BTC:
-`SdcaCycleWindows.btc_v1()`); Stage B freezes those weights and runs this
+that need them. Two-stage fit: published BTC Stage A
+(`optimize_stage_a_by_backtest`) grids every extra with data and keeps
+weights by in-sample `vs_flat_dca_pct` (frozen curve; OOS reported, not
+used to pick). Cycle overlap (`optimize_stage_a_weights`) is diagnostic.
+Stage B freezes those weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
 from this WP.
+
+### Remaining-book curve search (frozen index)
+
+When fills look like a slow drip instead of clustering at bottoms/tops,
+search the **curve** on today's published composite — do **not** re-search
+indicator weights. The checked-in `btc_optimized` shape was fit on a
+3-member freeze and then applied to the richer published index.
+
+```bash
+# Linux-safe curve_simulator. Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --signal-delay-days 3 \
+  --n-random 400 --seed 42 --sidecar /tmp/sdca_curve_search.json
+# Optional: write btc_optimized only if return AND fill concentration both beat
+# the published 3% / 25 / 70 curve.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --persist-preset
+```
+
+Search space is `SdcaCurveShape` only (`buy_max_rate`/`sell_max_rate` up to
+40%/day, knees inside the published 25/70 dead zone, curvature up to 5).
+Objective is `total_return_pct`. vs-flat-DCA is logged, never
+`beats_flat_dca_oos`. Gates require 2025 sells and remaining-book identity.
 
 ### SDCA test commands
 
@@ -283,7 +344,9 @@ pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
 3. Skip `resolve_calibrations()` for non-Slapper families. Record provenance in
    tearsheet notes instead.
 4. Pass `trade_size` only when `config_declares_field(name, "trade_size")`.
-5. Do not `--push-supabase` a new family until its rails/calibrations are real.
+5. Do not `--push-supabase` a new family from an agent environment. After a
+   real Nautilus `generate_tearsheets.py --strategy btc_sdca` the operator
+   may push. Nightly pipeline is the intended live-library path.
 
 ---
 
