@@ -31,6 +31,7 @@ from digiquant.strategies.sdca.walk_forward import (
     WalkForwardFold,
     is_feasible,
     make_walk_forward_folds,
+    objective_score,
     window_slice,
 )
 
@@ -282,11 +283,10 @@ def optimize_stage_1_survivor_weights(
                 extra_z,
                 obj,
             )
-            if not all(is_feasible(s.out_of_sample, obj) for s in scores):
+            feasible = [s for s in scores if is_feasible(s.out_of_sample, obj)]
+            if not feasible:
                 continue
-            rank = _mean_oos(scores)
-            if rank == float("-inf"):
-                continue
+            rank = sum(objective_score(s.out_of_sample, obj) for s in feasible) / len(feasible)
             if _is_better(rank, weights, best_rank, best_weights):
                 best_weights = weights
                 best_rank = rank

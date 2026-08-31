@@ -448,16 +448,30 @@ def run_solo_then_combine(
             persist_settings=False,
             notes=notes,
         )
-    stage1 = optimize_stage_1_survivor_weights(
-        list(dates),
-        list(prices),
-        extra_z=extra_z,
-        rails_fitter=cached_rails_fitter(rails_fitter),
-        evaluator=evaluator,
-        shape=_STAGE1_FROZEN_SHAPE,
-        survivor_names=stage0.survivors,
-        objective=objective,
-    )
+    try:
+        stage1 = optimize_stage_1_survivor_weights(
+            list(dates),
+            list(prices),
+            extra_z=extra_z,
+            rails_fitter=cached_rails_fitter(rails_fitter),
+            evaluator=evaluator,
+            shape=_STAGE1_FROZEN_SHAPE,
+            survivor_names=stage0.survivors,
+            objective=objective,
+        )
+    except ValueError as exc:
+        notes = (
+            f"Stage 1 found no feasible survivor blend ({exc}). "
+            f"extras={extra_survivors}; published power-law-only weights unchanged. " + stage0.notes
+        )
+        return SoloThenCombineResult(
+            stage0=stage0,
+            stage1_weights=None,
+            stage_b_mean_oos_vs_flat_dca_pct=None,
+            beats_flat_dca_oos=False,
+            persist_settings=False,
+            notes=notes,
+        )
     stage_b = run_stage_b_frozen(
         list(dates),
         list(prices),
