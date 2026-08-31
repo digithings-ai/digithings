@@ -31,7 +31,7 @@ export const subsystems: Subsystem[] = [
     role: "Scheduled macro & market research",
     tagline: "Research, persisted — structured views, not prose.",
     summary: [
-      "Scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR) on two cadences: a weekday delta and a Sunday baseline.",
+      "Scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR) on one daily graph, with per-artifact skip, edit, or full refresh.",
       "Every cycle writes structured, versioned views to Supabase — re-used downstream, and fully auditable.",
     ],
     stack: [
@@ -72,11 +72,11 @@ export const subsystems: Subsystem[] = [
     tier: "execution",
     step: "03 · execution",
     emblem: "kairos",
-    role: "Backtest & optimize on NautilusTrader · no venue wired",
-    tagline: "Execution that stops at the audit log until you wire a venue.",
+    role: "Backtest, optimize, and paper-route — live venues refused",
+    tagline: "Paper adapters ship. Live tokens never leave the router.",
     summary: [
       "The execution stage runs the sized book through a real NautilusTrader engine — backtest and Optuna-driven optimization over your own OHLCV data, with a tearsheet and an append-only audit trail per run.",
-      "It reaches no live venue: the shipped IB, Alpaca, and QuantConnect adapters are declared stubs that raise NotImplementedError on connect and submit. Connecting a broker is your own deliberate integration, not a flag we flip.",
+      "Paper adapters for Alpaca and IBKR ship; routing stays off until you opt in. Live venue tokens are refused on the public path. Connecting a live venue is your own integration, not a flag we flip.",
     ],
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
@@ -84,7 +84,7 @@ export const subsystems: Subsystem[] = [
       { name: "Polars", icon: "polars" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # no broker adapter is wired" },
+    initSnippet: { lang: "python", code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # paper adapters exist; live tokens are refused" },
     related: ["hermes", "atlas"],
   },
 ];

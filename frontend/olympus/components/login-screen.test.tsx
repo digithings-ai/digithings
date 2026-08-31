@@ -68,6 +68,7 @@ describe('LoginScreen', () => {
       root.render(createElement(LoginScreen));
     });
     expect(container.textContent).toContain('Open the desk.');
+    expect(container.textContent).toContain('digiquant');
     expect(container.textContent).toContain('Continue with Google');
     expect(container.textContent).toContain('Continue with GitHub');
     expect(container.textContent).toContain('Sign in with email');

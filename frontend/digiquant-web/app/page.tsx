@@ -23,9 +23,8 @@ import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 // subsystem count from the shared subsystems registry (research · portfolio ·
 // execution), trade count summed live from the Supabase strategy index (inside
 // <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
-// (01 research → 07 export), and the zero is literal: there is no execution
-// path at all — every broker adapter under digiquant/src/digiquant/brokers/
-// raises NotImplementedError, so no order can be submitted, gated or not.
+// (01 research → 07 export), and the zero is literal: routing is off by
+// default, live venue tokens are refused, and nothing is sent to a venue yet.
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
 // (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →

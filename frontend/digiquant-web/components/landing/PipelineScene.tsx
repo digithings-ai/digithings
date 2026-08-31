@@ -73,7 +73,7 @@ const HEADS: [tag: string, h: string, p: string][] = [
   [
     "03 — Execution",
     "The stage after the book is committed.",
-    "Paper routing is ready. Live venues stay off until you turn them on.",
+    "Paper routing is ready. Connecting a live venue is your own integration, not a flag we flip.",
   ],
 ];
 
