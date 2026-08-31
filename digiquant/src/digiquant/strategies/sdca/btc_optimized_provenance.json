@@ -37,16 +37,16 @@
     "2026-08-29"
   ],
   "best_params": {
-    "buy_max_rate": 3.0,
-    "buy_knee_risk": 25.0,
-    "sell_knee_risk": 70.0,
-    "sell_max_rate": 3.0,
-    "buy_curvature": 1.0,
-    "sell_curvature": 2.0,
+    "buy_max_rate": 35.5,
+    "buy_knee_risk": 24.1,
+    "sell_knee_risk": 71.9,
+    "sell_max_rate": 21.0,
+    "buy_curvature": 1.3,
+    "sell_curvature": 4.0,
     "valuation_weight": 1.0,
-    "m2_weight": 0.0,
+    "m2_weight": 0.5,
     "rs_eth_weight": 0.0,
-    "dxy_weight": 0.0,
+    "dxy_weight": 0.5,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
     "sma_band_weight": 0.0
@@ -58,5 +58,5 @@
   "beats_flat_dca_oos": false,
   "sensitivity_stable": true,
   "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
-  "notes": "All-catalog extra search (grid 0/0.5/1, 1458 evals). Stage A scored by IS vs_flat_dca with a frozen distribute curve; extras without data skipped. search_names=['weekly_rsi', 'weekly_macd', 'sma_band', 'm2', 'rs_eth', 'dxy']. kept={}. Curve_simulator Stage B. beats_flat_dca_oos not an OOS claim. Linux Nautilus BacktestEngine not used (#42)."
+  "notes": "Curve retuned by digiquant sdca-optimize-curve on a frozen composite (power law 1.0 + M2 0.5 + DXY 0.5). In-sample total return with fill concentration gates. Fold vs-flat numbers in this file are the prior walk-forward and do not describe this curve. beats_flat_dca_oos is false. Linux Nautilus BacktestEngine may SIGABRT (#42). See btc_curve_optimize_provenance.json. Do not --push-supabase."
 }

@@ -188,6 +188,18 @@ def params_from_shape(shape: SdcaCurveShape) -> dict[str, float]:
     return {key: float(getattr(shape, key)) for key in _SHAPE_KEYS}
 
 
+def round_shape_for_preset(shape: SdcaCurveShape) -> SdcaCurveShape:
+    """One-decimal published curve; re-validates dead zone / signs."""
+    return SdcaCurveShape(
+        buy_max_rate=round(shape.buy_max_rate, 1),
+        buy_knee_risk=round(shape.buy_knee_risk, 1),
+        sell_knee_risk=round(shape.sell_knee_risk, 1),
+        sell_max_rate=round(shape.sell_max_rate, 1),
+        buy_curvature=round(shape.buy_curvature, 1),
+        sell_curvature=round(shape.sell_curvature, 1),
+    )
+
+
 def sample_curve_trials(
     *,
     n_random: int = 0,
@@ -440,13 +452,13 @@ def persist_curve_winner(
         return False
     dest = presets_path or _PRESETS_PATH
     raw = json.loads(dest.read_text())
-    shape = result.best.shape
+    shape = round_shape_for_preset(result.best.shape)
     raw["btc_optimized"] = {
         "description": (
             "Remaining-book curve search on the frozen published composite "
             "(power law 1.0 + M2 0.5 + DXY 0.5). Objective is total return with "
             "fill-concentration gates (cheap buys, rich sells, 2025 distribute). "
-            "beats_flat_dca_oos stays false — this search is in-sample on today's "
+            "beats_flat_dca_oos stays false -- this search is in-sample on today's "
             "index, not a walk-forward OOS claim. Re-run: digiquant sdca-optimize-curve. "
             "Do not --push-supabase from the agent environment."
         ),
@@ -454,6 +466,25 @@ def persist_curve_winner(
         "shape": params_from_shape(shape),
     }
     dest.write_text(json.dumps(raw, indent=2) + "\n")
+    provenance_path = Path(__file__).parent / "btc_optimized_provenance.json"
+    if provenance_path.exists():
+        prov = json.loads(provenance_path.read_text())
+        weight_params: dict[str, float] = {}
+        for name, val in result.frozen_weights.items():
+            key = "valuation_weight" if name == "valuation" else f"{name}_weight"
+            weight_params[key] = float(val)
+        prov["best_params"] = {**params_from_shape(shape), **weight_params}
+        prov["beats_flat_dca_oos"] = False
+        prov["evaluator"] = result.evaluator
+        prov["notes"] = (
+            "Curve retuned by digiquant sdca-optimize-curve on a frozen composite "
+            "(power law 1.0 + M2 0.5 + DXY 0.5). In-sample total return with fill "
+            "concentration gates. Fold vs-flat numbers in this file are the prior "
+            "walk-forward and do not describe this curve. beats_flat_dca_oos is false. "
+            "Linux Nautilus BacktestEngine may SIGABRT (#42). "
+            "See btc_curve_optimize_provenance.json. Do not --push-supabase."
+        )
+        provenance_path.write_text(json.dumps(prov, indent=2) + "\n")
     logger.info("persisted btc_optimized curve into %s", dest)
     return True
 
@@ -555,6 +586,7 @@ __all__ = [
     "persist_curve_winner",
     "published_curve_shape",
     "published_indicator_weights",
+    "round_shape_for_preset",
     "run_published_curve_search",
     "sample_curve_trials",
     "score_shape_on_index",

@@ -24,6 +24,7 @@ from digiquant.strategies.sdca.curve_optimize import (
     fill_concentration,
     persist_curve_winner,
     published_indicator_weights,
+    round_shape_for_preset,
     sample_curve_trials,
     score_shape_on_index,
     search_curve,
@@ -128,7 +129,7 @@ class TestFillConcentration:
 
     def test_curved_high_rate_clusters_buys_cheaper_than_linear_drip(self) -> None:
         dates, prices, risk = _v_cycle(n_cheap=60, n_mid=20, n_rich=40)
-        drip = score_shape_on_index(dates, prices, risk, _published_shape(), 1000.0)
+        drip = score_shape_on_index(dates, prices, risk, _shape(), 1000.0)
         clustered = score_shape_on_index(
             dates,
             prices,
@@ -434,3 +435,21 @@ class TestConcentrationHelper:
         assert gates.require_2025_sells is True
         assert gates.require_sells is True
         assert gates.min_sell_max_rate > 0.0
+
+    def test_round_shape_for_preset_is_one_decimal(self) -> None:
+        rounded = round_shape_for_preset(
+            _shape(
+                buy_max_rate=35.4864,
+                buy_knee_risk=24.0981,
+                sell_knee_risk=71.8844,
+                sell_max_rate=20.9816,
+                buy_curvature=1.2769,
+                sell_curvature=4.0424,
+            )
+        )
+        assert rounded.buy_max_rate == pytest.approx(35.5)
+        assert rounded.buy_knee_risk == pytest.approx(24.1)
+        assert rounded.sell_knee_risk == pytest.approx(71.9)
+        assert rounded.sell_max_rate == pytest.approx(21.0)
+        assert rounded.buy_curvature == pytest.approx(1.3)
+        assert rounded.sell_curvature == pytest.approx(4.0)
