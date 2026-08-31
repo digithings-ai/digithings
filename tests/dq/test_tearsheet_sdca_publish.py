@@ -56,7 +56,7 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     settings = gts.load_settings()
     entry = settings["strategies"]["btc_sdca"]
     assert entry["symbol"] == "BTC-USD"
-    assert entry["label"] == "BTC power-law remaining-book"
+    assert entry["label"] == "BTC SDCA Strat"
     assert entry["kind"] == "dca"
     assert gts.strategy_type_of(settings, "btc_sdca") == "sdca"
     assert gts.strategy_type_of(settings, "btc_slapper") == "slapper"
@@ -65,6 +65,13 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     weights = sdca["indicator_weights"]
     catalog = ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy")
     assert set(catalog) <= set(weights)
+    assert weights["valuation"] == 1.0
+    assert weights["m2"] == 0.5
+    assert weights["dxy"] == 0.5
+    assert weights["rs_eth"] == 0.0
+    assert weights["weekly_rsi"] == 0.0
+    assert weights["weekly_macd"] == 0.0
+    assert weights["sma_band"] == 0.0
     assert sdca["preset"] != "balanced"
 
 
@@ -122,6 +129,14 @@ def test_run_and_write_btc_sdca_skips_calibrations(
         raise AssertionError("sdca is not a round-trip book")
 
     monkeypatch.setattr(gts, "trades_from_positions", _boom_round_trips)
+
+    def _keep_weights(weights, _sources):
+        return weights
+
+    monkeypatch.setattr(
+        "digiquant.strategies.sdca.optimize.drop_extras_missing_sources",
+        _keep_weights,
+    )
     settings = gts.load_settings()
     with caplog.at_level(logging.WARNING):
         entry = gts.run_and_write(
@@ -166,15 +181,17 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert "Coefficients" in " ".join(payload["notes"])
     assert "Preset btc_optimized" in " ".join(payload["notes"])
     assert "valuation:1.0" in " ".join(payload["notes"])
-    assert "power-law remaining-book" in " ".join(payload["notes"]).lower()
+    assert "composite valuation index" in " ".join(payload["notes"]).lower()
     assert payload["beats_flat_dca_oos"] is False
     assert "beats_flat_dca_oos=false" in " ".join(payload["notes"])
     assert "not a live strategy" in " ".join(payload["notes"]).lower()
-    assert not any("curve_simulator" in n.lower() for n in payload["notes"])
-    assert not any("stage 1" in n.lower() for n in payload["notes"])
+    assert "Buy-and-hold" in " ".join(payload["notes"])
+    assert not any("curve_simulator" in n.lower() and "beats_flat_dca_oos=true" in n.lower() for n in payload["notes"])
+    assert not any("stage 1" in n.lower() and "persist" in n.lower() for n in payload["notes"])
     assert payload["dca"]["allocated_pct"] is not None
     assert 0.0 <= payload["dca"]["allocated_pct"] <= 100.0
-    assert "power-law only" in " ".join(payload["notes"]).lower()
+    assert "power-law only" not in " ".join(payload["notes"]).lower()
+    assert "not a multi-indicator composite" not in " ".join(payload["notes"]).lower()
     assert not any("calibrations.example" in rec.message for rec in caplog.records)
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
 

@@ -367,7 +367,7 @@ register(
         "curve_nodes": DEFAULT_BTC_NODES,
     },
     aliases=["sdca"],
-    description="BTC power-law remaining-book: valuation rails → accumulate/distribute curve",
+    description="BTC SDCA Strat: composite valuation index (power law + M2 + DXY) → remaining-book",
 )
 
 

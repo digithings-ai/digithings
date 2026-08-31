@@ -762,9 +762,12 @@ def run_and_write(
         sources = load_sdca_extra_sources(cache_dir)
         weights = drop_extras_missing_sources(weights, sources)
         try:
-            beats_flat_dca_oos = bool(load_btc_optimized_provenance().beats_flat_dca_oos)
+            load_btc_optimized_provenance()
         except Exception:
-            beats_flat_dca_oos = False
+            pass
+        # Public payload never claims an OOS beat (Stage 1 curve_simulator sidecar
+        # is not a Nautilus walk-forward result).
+        beats_flat_dca_oos = False
         extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
         index = materialize_sdca_risk_index(
             ohlcv,
@@ -805,6 +808,20 @@ def run_and_write(
                 "Published index is power-law only (valuation weight 1.0). Extra "
                 "indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH RS) are "
                 "unused (weight 0) — not a multi-indicator composite."
+            )
+        else:
+            keepers: list[str] = []
+            if weights.valuation:
+                keepers.append(f"power law {weights.valuation:g}")
+            if weights.m2:
+                keepers.append(f"M2 {weights.m2:g}")
+            if weights.dxy:
+                keepers.append(f"DXY {weights.dxy:g}")
+            provenance_notes.append(
+                "Published index is a composite valuation index ("
+                + " + ".join(keepers)
+                + "). Weekly RSI/MACD, SMA band, and BTC/ETH RS remain unused "
+                "(weight 0)."
             )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
@@ -927,13 +944,14 @@ def run_and_write(
     if family == "sdca":
         notes = [
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"power-law remaining-book (buy % of remaining cash / sell % of remaining "
-            f"holdings), marked to market (not 100% equity compounding), "
+            f"remaining-book SDCA from a composite valuation index "
+            f"(buy % of remaining cash / sell % of remaining holdings), "
+            f"marked to market (not 100% equity compounding), "
             f"trade window from {trade_start}. Backtest only — not a live strategy."
         ]
         notes.append(
-            "Full-sample Nautilus vs-flat / vs-lump is the backtest window, not "
-            "walk-forward out-of-sample. "
+            "Buy-and-hold (lump from trade_start) is the public benchmark. "
+            "Full-sample Nautilus vs-flat is not shown as a public comparable. "
             f"beats_flat_dca_oos={'true' if beats_flat_dca_oos else 'false'}."
         )
     else:

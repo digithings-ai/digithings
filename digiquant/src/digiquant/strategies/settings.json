@@ -34,7 +34,7 @@
     "btc_sdca": {
       "symbol": "BTC-USD",
       "ccxt_symbol": "BTC/USD",
-      "label": "BTC power-law remaining-book",
+      "label": "BTC SDCA Strat",
       "kind": "dca",
       "strategy_type": "sdca",
       "sdca": {
@@ -44,9 +44,9 @@
         "initial_cash": 1000.0,
         "indicator_weights": {
           "valuation": 1.0,
-          "m2": 0.0,
+          "m2": 0.5,
           "rs_eth": 0.0,
-          "dxy": 0.0,
+          "dxy": 0.5,
           "weekly_rsi": 0.0,
           "weekly_macd": 0.0,
           "sma_band": 0.0

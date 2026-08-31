@@ -45,7 +45,6 @@ Beyond root `AGENTS.md`:
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
-| `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/olympus/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
@@ -163,17 +162,19 @@ the full module map.
   the remaining book open at engine stop. `--push-supabase` is an operator
   step after a real Nautilus generate; do not run it from an agent
   environment.
-- **Published `btc_sdca` is valuation rails + a distribute curve.** Full extra
-  catalog (`m2`, `rs_eth`, `dxy`, `weekly_rsi`, `weekly_macd`, `sma_band`) was
-  searched; IS vs-flat-DCA kept none of them (`indicator_weights` extras 0).
-  Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
-  OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
-  DCA; provenance stays honest.
-- **Public copy.** User-facing name is **power-law remaining-book**. Do not
-  call the published book a multi-indicator composite while extras are 0.
-  Do not render `capital_deployed_pct` as "Deployed" (goes negative after
-  sells) — show MTM allocated %. `StrategyNotes` must render for SDCA
-  (not slapper-only). Full-sample Nautilus vs-flat is not OOS.
+- **Published `btc_sdca` is a composite valuation index + remaining-book.**
+  Stage 0 keepers **power law + M2 + DXY** (`valuation=1.0`, `m2=0.5`, `dxy=0.5`)
+  are persisted in `settings.json`. Weekly RSI/MACD, SMA band, and BTC/ETH RS
+  stay at 0. Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
+  OOS `beats_flat_dca_oos` is still false — do not claim an OOS win from the
+  Stage 1 `curve_simulator` sidecar.
+- **Public copy.** User-facing name is **BTC SDCA Strat**. The page is a
+  strategy (fills chart, latest remaining-book signal, MTM allocated, vs
+  buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
+  vs-flat DCA as a public KPI (`flat_dca_mark_to_market` is equal remaining-cash
+  spend each day, fully deploying by the last bar — not a public comparable).
+  Do not render `capital_deployed_pct` as "Deployed". `StrategyNotes` must
+  render for SDCA (not slapper-only).
 
 ### RiskModel providers (#1082)
 
