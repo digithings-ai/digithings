@@ -292,6 +292,10 @@ parse-error:
 hooks-install:
 	@scripts/install-hooks.sh
 
+.PHONY: kairos-cron-check
+kairos-cron-check:
+	python scripts/kairos_cron_check.py
+
 # Run gitleaks locally against the working tree. Mirrors the CI scan so
 # developers can reproduce findings before pushing.
 #   Install:  brew install gitleaks   OR   go install github.com/gitleaks/gitleaks/v8@latest

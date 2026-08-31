@@ -81,8 +81,8 @@ export function BillingTab({
       <div>
         <h2 className="font-display text-xl text-ink tracking-tight">Billing</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Upgrade for private books and broker overlays, or open the portal for invoices and
-          cancellations.
+          Baseline unlocks the house book. Custom adds private books, broker connect, and
+          overlays — broker connect and overlays need Custom, not Baseline.
         </p>
       </div>
 
@@ -90,20 +90,20 @@ export function BillingTab({
         <button
           type="button"
           disabled={busy}
-          onClick={() => void startCheckout('baseline')}
+          onClick={() => void startCheckout('custom')}
           className="border border-ink bg-ink px-3 py-1.5 text-sm font-medium text-bg disabled:opacity-50"
-          data-testid="billing-checkout-baseline"
+          data-testid="billing-checkout-custom"
         >
-          Upgrade to Baseline
+          Upgrade to Custom
         </button>
         <button
           type="button"
           disabled={busy}
-          onClick={() => void startCheckout('custom')}
+          onClick={() => void startCheckout('baseline')}
           className="border border-hair px-3 py-1.5 text-sm font-medium text-ink-soft hover:bg-ink/[0.04] disabled:opacity-50"
-          data-testid="billing-checkout-custom"
+          data-testid="billing-checkout-baseline"
         >
-          Upgrade to Custom
+          Upgrade to Baseline
         </button>
         <button
           type="button"

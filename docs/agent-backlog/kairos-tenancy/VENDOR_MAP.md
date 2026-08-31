@@ -87,21 +87,14 @@
 
 ```bash
 export SUPABASE_ACCESS_TOKEN="$(tr -d '\n' < .local/secrets/digithings-supabase-pat)"
-set -a
-source .local/secrets/digithings-stripe.env
-source .local/secrets/digithings-mailgun.env
-source .local/secrets/digithings-alpaca.env
-set +a
-npx supabase secrets set --project-ref rwagjbkvxkdwqmouagad \
-  STRIPE_SECRET_KEY=… STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… STRIPE_PRICE_CUSTOM_MONTHLY=… \
-  MAILGUN_API_KEY=… MAILGUN_DOMAIN=… NOTIFY_FROM=… \
-  ALPACA_OAUTH_CLIENT_ID=… ALPACA_OAUTH_CLIENT_SECRET=…
-npx supabase functions deploy stripe-webhook --project-ref rwagjbkvxkdwqmouagad --no-verify-jwt
-npx supabase functions deploy create-checkout-session --project-ref rwagjbkvxkdwqmouagad
-npx supabase functions deploy customer-portal --project-ref rwagjbkvxkdwqmouagad
-npx supabase functions deploy settings --project-ref rwagjbkvxkdwqmouagad
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+```
+
+Check-only (exit 2 until files + required key names exist; never prints values):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
 ```
 
 ## Browser tabs left open for human (paused)

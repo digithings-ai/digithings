@@ -738,9 +738,34 @@ cutover here), migration 109 adds:
 | `authenticated_read_house_teaser` | `daily_snapshots`, `theses`, `instruments` | `true` (shared teaser; no `workspace_id`) |
 | `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
 
-`anon_read` is untouched. Proof: `tests/dq/olympus/test_migration_109_house_teaser.py`.
-Numbering: **108** is creator/product grants (independent); **109** is this RLS
-hotfix. Both files are required.
+`anon_read` on those book tables was **USING (true)** until **110**. Proof:
+`tests/dq/olympus/test_migration_109_house_teaser.py`. Numbering: **108** is
+creator/product grants (independent); **109** is this RLS hotfix.
+
+### Anon house-only private books — migration 110
+
+Pre-cutover: 109 made authenticated SELECT house-OR-membership, but left
+`anon_read USING (true)` — anon was wider than a signed-in member. Overlay
+persist would have leaked private books. Migration **110** recreates
+`anon_read` (same policy name so cutover 900 still DROPs it):
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `anon_read` | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID only |
+| `anon_read` | `documents` | house **OR** system |
+
+Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
+`instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
+This is **not** cutover 900: anon can still read house weights/NAV. Proof:
+`tests/dq/olympus/test_migration_110_anon_house_only.py`.
+
+Staged cutover **900** section A2 restores 098 membership-only
+`authenticated_select_own_workspace` on the four book tables and drops
+`authenticated_read_house_teaser` on `daily_snapshots` (SELECT already REVOKEd
+in 900 §B). `theses` / `instruments` teasers stay (T5 research). 900 is not
+auto-applied; do not promote it to `core` until T1-train cutover. Proof:
+`tests/dq/olympus/test_cutover_900.py` plus `scripts/rls_proof/` (59/59 with
+900 applied on a throwaway DB).
 
 ### Broker credential vault — migration 099 (K3, Kairos tenancy)
 
@@ -870,7 +895,8 @@ in the same change.
   (`USING (true)`) on `daily_snapshots` / `theses` / `instruments`, and expands
   `authenticated_select_own_workspace` on `positions` / `position_events` /
   `nav_history` / `portfolio_metrics` with a house-workspace OR. **Anon policies
-  and cutover 900 are untouched.**
+  are untouched.** Staged cutover 900 §A2 reverts the book-table house UUID so
+  free JWTs cannot read house weights after `anon_read` is dropped.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the

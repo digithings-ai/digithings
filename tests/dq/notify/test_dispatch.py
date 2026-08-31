@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.notify.dispatch import dispatch_workspace, try_claim_send_slot
+from digiquant.notify.dispatch import (
+    dispatch_workspace,
+    format_digest_dry_run,
+    main,
+    plan_digest_dispatch,
+    try_claim_send_slot,
+)
 from digiquant.notify.mailgun import MailgunConfig
 
 from tests.dq.notify.conftest import FakeSupabase
@@ -135,3 +141,90 @@ def test_cron_hour_gate_blocks_wrong_hour() -> None:
     pref = sb.tables["notification_prefs"][0]
     dispatch_workspace(sb, client, cfg, pref, date(2026, 8, 30), hour_utc=12, force_digest=False)
     assert len(client.sent) == 1
+
+
+def test_plan_digest_dispatch_matches_workspace_gate() -> None:
+
+    plan = plan_digest_dispatch(
+        [
+            {
+                "workspace_id": "observer",
+                "email": "obs@example.com",
+                "daily_digest": True,
+            },
+            {
+                "workspace_id": "off",
+                "email": "off@example.com",
+                "daily_digest": False,
+            },
+            {"workspace_id": "blank", "email": "", "daily_digest": True},
+        ],
+        mailgun_configured=False,
+    )
+    assert plan.considered == 3
+    assert plan.digest_on == 1
+    assert plan.skipped_prefs_off == 1
+    assert plan.skipped_no_email == 1
+    assert plan.mailgun_configured is False
+    line = format_digest_dry_run(plan)
+    assert "digest_on=1" in line
+    assert "mailgun_configured=0" in line
+    assert "@" not in line
+
+    filtered = plan_digest_dispatch(
+        [
+            {
+                "workspace_id": "observer",
+                "email": "obs@example.com",
+                "daily_digest": True,
+            },
+            {
+                "workspace_id": "off",
+                "email": "off@example.com",
+                "daily_digest": False,
+            },
+        ],
+        mailgun_configured=False,
+        workspace_id="observer",
+    )
+    assert filtered.considered == 1
+    assert filtered.digest_on == 1
+
+    captured: list[str] = []
+    rc = main(
+        ["--dry-run", "--workspace-id", "observer"],
+        prefs=[
+            {
+                "workspace_id": "observer",
+                "email": "obs@example.com",
+                "daily_digest": True,
+            }
+        ],
+        mailgun_configured=False,
+        log=captured.append,
+    )
+    assert rc == 0
+    assert captured == [
+        "notify dry-run considered=1 digest_on=1 skipped_prefs_off=0 skipped_no_email=0 mailgun_configured=0"
+    ]
+
+
+def test_dry_run_never_dispatches_or_claims(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("dry-run must not dispatch or claim notification_log")
+
+    monkeypatch.setattr("digiquant.notify.dispatch._dispatch_with_client", boom)
+    monkeypatch.setattr("digiquant.notify.dispatch.try_claim_send_slot", boom)
+    rc = main(
+        ["--dry-run", "--workspace-id", "observer"],
+        prefs=[
+            {
+                "workspace_id": "observer",
+                "email": "obs@example.com",
+                "daily_digest": True,
+            }
+        ],
+        mailgun_configured=True,
+        log=lambda _line: None,
+    )
+    assert rc == 0

@@ -16,9 +16,39 @@ Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 
 Loud-fail gates (after paste):
 ```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
+# when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
+# when .local/secrets/digithings-byok.env exists (BYOK_PROVIDER + BYOK_API_KEY):
+# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py --apply --workspace-id <entitled-uuid>
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
+PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --check
+# After Stripe + BYOK only — never `--execute --all` on Observer:
+# PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --execute --workspace-id <uuid>
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 ```
+
+Overlay / sync `--check` need `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` in the
+process env (not in the Cloud Agent env today). This VM can load a gitignored
+PAT-fetched file under `.local/secrets/` for those two names only. Do **not**
+`--execute` overlay while BYOK is missing (`byok_present=0`). Sync cron **holds**
+Alpaca `auth_kind=api_key` (`ALPACA_API_KEY_SYNC_HELD` / `alpaca_api_key_held`);
+`--all` will not poll the ops-custom paper row. The oauth hop is still unproven.
+
+Scheduled probe (not installed from `cursor/*` — `.github/workflows/` is protected):
+copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` to
+`.github/workflows/kairos-cron-check.yml` on a `chore/` or `feat/` branch. Probe is
+`--check` / `--dry-run` only; house daily stays on `pipeline-olympus.yml`.
+
+House digest send (after Mailgun GitHub secrets exist): splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` into the
+"Run Olympus research pipeline" `env:` on the same `chore/`/`feat/` branch.
+Without those names, `hermes.chain` close-out logs `MAILGUN_NOT_CONFIGURED` and
+skips (fail-soft; the book still commits).
 
 ### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
 
@@ -49,7 +79,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client (still needed) |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
-**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
+**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL=https://digiquant.io`, `NEXT_PUBLIC_APP_URL=https://digiquant.io` (verified Observer `GET /settings/app-urls` 200, no loopback). Checkout returns to `/olympus/settings/?tab=billing`.
 **Done Auth:** GitHub provider **Enabled** on `core`. Google still Disabled. Email Enabled — Agentmail path works.  
 **Done product:** mig 107 bootstrap; settings GET/PATCH; vault seal; Settings/billing CORS preflight; free connect → `TIER_FORBIDDEN` (GitHub WS still `free`).
 

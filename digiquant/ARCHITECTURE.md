@@ -3007,6 +3007,24 @@ Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverge
 structured report on the snapshot row + log; **never** auto-submit corrective orders
 (`SyncResult.refused_corrective_orders` is always true).
 
+**Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
+Production entry that polls **Alpaca paper OAuth** connections only. House and
+system workspace ids are never sync targets; `env=live` is refused; inactive
+rows are dropped. IBKR paper is counted then held
+(`ibkr_requires_brokerage_session`) — cron does not open a brokerage session.
+Alpaca `auth_kind=api_key` is counted then held
+(`alpaca_api_key_does_not_prove_oauth_hop`) — `--all` must not poll that row,
+and `--connection-id` on it exits **3** with `ALPACA_API_KEY_SYNC_HELD`.
+`--check` exits **2** with `KAIROS_SYNC_NOT_CONFIGURED` listing missing store
+env *names*. `--dry-run` prints candidate counts (`ibkr_held`,
+`alpaca_api_key_held`) and does not unseal. Apply requires `--connection-id`
+or `--all` (refuses implicit broker polls). Apply without an injected callback
+also requires `DIGIQUANT_VAULT_MASTER_KEY` (names only on failure). Credentials
+are unsealed only inside `open_credential` for Alpaca OAuth adapter
+construction — `api_key` payloads are never polled. Do not run `--all` against
+Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
+requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
+
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
 invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
@@ -3031,18 +3049,62 @@ templates carry unsubscribe link, no broker ids/tokens/keys.
 
 **Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
 `--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
-when vendor keys are empty. Staging inventory also covers these names in
-`digiquant.olympus.kairos.staging_secrets`. Recipient for staging digests can be an
-Agentmail inbox once Mailgun is configured.
+when vendor keys are empty. `--dry-run` loads `notification_prefs` and prints
+candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
+`skipped_no_email`, `mailgun_configured`) without sending or claiming
+`notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
+skip of the count. `--workspace-id` filters the plan. Missing store env exits
+**2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
+`python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
+Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing which probes failed.
+Staging inventory also covers these names in
+`digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
+Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
+is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
+vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
+the five live hops are named even before secrets land). After Observer hops
+pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
+`/jobs`, `/fills`, and `/notifications/log`. A hop is proven only from that
+product state: `subscription_status=active` **and** `has_stripe_subscription`
+**and** `plan_tier` in `{custom, enterprise}` (boolean Stripe id only; house is
+seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
+Baseline Stripe also must not — broker connect and overlay stay
+`TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
+Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
+(not `running` / `skipped` / `persist_disabled` / `not_entitled`); a fill
+fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
+do not prove the hop); a `digest:`
+log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
+**and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
+off; Observer PATCH `/settings/notifications` is not Custom-gated).
+Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
+are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
+``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
+human-owned gate is named. Exit **0** only when all five remaining hops are
+proven. Exit **2** when hops are unproven **and** named vendor secrets are
+missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
+Phase C (and the Observer checkout hop) POST `tier=custom` — Baseline would
+leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
+Recipient for staging digests can be an Agentmail inbox once Mailgun is
+configured.
 
 **Entry points:**
 
 | Caller | Function | Digest hour gate |
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| House CLI `python -m digiquant.olympus.hermes.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
 | Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
+| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
+
+House GHA (`pipeline-olympus.yml`) does not yet pass `MAILGUN_API_KEY` /
+`MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` on a
+`chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
+close-out is fail-soft skip.
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 
@@ -3057,8 +3119,16 @@ spec D1) and denormalized `workspaces` billing columns for RLS.
 | Function | Auth | Role |
 |----------|------|------|
 | `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
-| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env |
-| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id` |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env; success/cancel → `{APP_URL}/olympus/settings/?tab=billing&checkout=…` (`_shared/app-url.ts`) |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id`; return `{APP_URL}/olympus/settings/?tab=billing` |
+
+`APP_URL` / `NEXT_PUBLIC_APP_URL` is the **site origin** (`https://digiquant.io`).
+Helpers strip a trailing `/olympus` so a mistaken path does not double the basePath.
+Loopback origins (`127.0.0.1`) break Alpaca `redirect_uri` and Stripe return URLs;
+`GET /settings/app-urls` is the Observer probe. It also returns the public
+Alpaca OAuth client id (never the secret) so Brokers connect can start as soon
+as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab from
+`?tab=billing` / `?checkout=success|cancel`.
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
 Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
@@ -3088,13 +3158,56 @@ T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
 Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
 `run_type` fork, no planner changes).
 
-**Dispatch (`dispatch.py`).** Entitlement is `plan_tier ∈ {custom, enterprise}` AND
-`subscription_status = active` AND BYOK present-and-unsealable. Misses write a
+**Dispatch (`dispatch.py`).** Entitlement is paid Custom/Enterprise
+(`plan_tier ∈ {custom, enterprise}` AND `subscription_status = active`) **or**
+D1 `entitlement_grants.plan_floor ∈ {custom, enterprise}` (creator/ops without
+Stripe), **and** BYOK present-and-unsealable. Misses write a
 `job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
 never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim
 is insert-first + skip-locked (first claimer wins). Production persistence is
 `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`);
 `MemoryJobRunStore` is the test seam. Overlay failures never write house job rows.
+
+**Cron CLI (`cron.py`, `python -m digiquant.olympus.overlay`).** Production
+entry that writes `job_runs` via `SupabaseJobRunStore`. House and system
+workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
+`--check` exits **2** with `OVERLAY_STORE_NOT_CONFIGURED` listing missing env
+*names* (`SUPABASE_URL` / `CORE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` /
+`CORE_SUPABASE_SERVICE_KEY`). `--dry-run` prints candidate counts
+(`considered`, `targets`, `billing_active`, `byok_present`) and writes nothing.
+`byok_present` counts active `workspace_provider_credentials` rows among
+billing-entitled targets (presence only; no unseal). Apply requires
+`--workspace-id` or `--all` (refuses implicit writes).
+`--all` against a free workspace inserts a visible `skipped`/`not_entitled`
+row; it does not invoke the graph. Dispatch-only claims leave the row
+`running`. `--execute` runs claimed jobs through the **one** Olympus graph
+(`overlay/graph_invoke.py` → `run_atlas_then_hermes(..., manage_usage=False)`
+so overlay's `overlay_usage_scope` owns WP1 capture). `chain=None` is
+refused (`OverlayExecuteRequiresChain` / `chain_required`) because
+`execute_overlay(chain=None)` would mark `succeeded` without a book. A
+missing overlay `olympus_profile_config` pin fails closed
+(`profile_pin_missing`) — the house default is never used. A graph or runner
+exception fails that claimed row (`job_runs.error` = structured code or
+exception type name, never the payload) and continues the batch. Persist-off
+finishes `persist_disabled`, which the staging harness does **not** treat
+as proven (hop requires `succeeded` only). `--execute` apply also requires
+`DIGIQUANT_VAULT_MASTER_KEY` and `OLYMPUS_OVERLAY_PERSIST=1` (safe after
+migration 110; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either is missing) so a
+production cron cannot finish `persist_disabled` and look like a hop. Do not run
+`--all` / `--execute --all` against Observer until Stripe + BYOK land;
+skipped rows are not a remaining-hop proof. The cron module does
+not import `byok`/`digillm` (digiquant-only CI). Production apply passes
+`byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
+
+**Scheduled probe (separate process).** Overlay must never share
+`pipeline-olympus.yml`'s Hermes chain job (`usage.start` is process-global).
+The fail-closed GHA spec is
+`docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
+(`15 12 * * *`, `make kairos-cron-check` / overlay `--dry-run` / sync
+`--dry-run`). `cursor/*` cannot write `.github/workflows/`; copy the spec
+to `kairos-cron-check.yml` on a `chore/` or `feat/` branch. Missing
+`CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
+must never pass `--execute`, `--all`, or invoke `hermes.chain`.
 
 **Omitted `workspace_id` means the house.** Readers and writers that leave the
 argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
@@ -3124,12 +3237,18 @@ keys after the documents unique is `(workspace_id, date, document_key)`.
 (backfilled house). The legacy `UNIQUE(date, document_key)` is **replaced** by
 `UNIQUE(workspace_id, date, document_key)` — keeping both would still collide
 overlay+house same-key rows. Authenticated own-workspace SELECT is added for
-non-house/non-system rows; **`anon_read` is not touched** (T1-train rule).
+non-house/non-system rows; **migration 110** narrows ``anon_read`` on
+workspace-scoped private books to house (documents: house+system) so overlay
+rows cannot leak to anon. Cutover 900 still DROPs those policies.
 
 **Persist flag.** Overlay private-phase writes (`documents` / `positions` /
 `nav_history` / ledger) require `OLYMPUS_OVERLAY_PERSIST=1` (default off).
-Production may enable that flag **only after** the T1-train anon-policy drop
-ships. With the flag off, research/corpus phases still run; private-phase
+Production may enable that flag **after migration 110** is applied on the
+target (anon house-only on private books). Overlay publish **skips**
+`daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
+overwrite the house Brief). Cutover 900 is still required before dropping
+the house teaser for anon / free JWTs; it is not the persist precondition.
+With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.
 
 **Budget (`budget.py`).** At overlay start the runner calls
@@ -3152,6 +3271,17 @@ with `credential is None` refuses (`no_credentials`) and never calls `chain()`.
 A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
+
+**BYOK seal CLI (`byok_seal.py`, `scripts/kairos_seal_byok.py`).** Resume path when
+a real user LLM key lands and Settings Keys is not yet on production Pages.
+Default `--check` requires gitignored `.local/secrets/digithings-byok.env`
+(`BYOK_PROVIDER` + `BYOK_API_KEY`, names only in logs). `--apply` seals with
+the K3 vault (AAD `workspace_id:provider:llm`), verifies unseal, and inserts
+one active `workspace_provider_credentials` row (unique-conflict = revoke then
+insert, same as the settings Edge Function). House/system and non-entitled
+workspaces (Observer free without `plan_floor`) are refused. Do not seal a
+placeholder or a house process-env key. Overlay `--execute` still requires
+`present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110.
 
 **Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
 for `None` / house / system UUIDs. Overlay tenant routing threads

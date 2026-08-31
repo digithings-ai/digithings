@@ -24,6 +24,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document_delta,
 )
 from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.olympus.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,40 @@ def _carry_incomplete_snapshot(
     return carried  # type: ignore[return-value]
 
 
+def _append_house_daily_snapshot(
+    artifacts: list[PublishedArtifact],
+    *,
+    deps: PublishDeps,
+    workspace_id: str | None,
+    date_str: str,
+    snapshot: Phase7DigestPayload | dict[str, Any],
+    run_type: str,
+    baseline_date: str | None,
+    digest_markdown: str,
+) -> bool:
+    """Write ``daily_snapshots`` for the house path only.
+
+    Overlay private books live in ``documents`` (workspace-scoped). This table
+    is unique on ``date`` with no ``workspace_id`` — an overlay upsert would
+    last-writer-wins over the house Brief.
+    """
+    if is_private_workspace(workspace_id):
+        logger.info("publish: overlay workspace skips daily_snapshots (house-only table)")
+        return False
+    artifacts.append(
+        publish_daily_snapshot(
+            client=deps.client,
+            date_str=date_str,
+            snapshot=snapshot,
+            run_type=run_type,
+            baseline_date=baseline_date,
+            digest_markdown=digest_markdown,
+            workspace_id=workspace_id,
+        )
+    )
+    return True
+
+
 def _maybe_publish_compiled_research_views(
     *,
     deps: PublishDeps,
@@ -410,17 +445,15 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                 )
             )
             if not state.custom_prompt:
-                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
-                digest_md = render_digest_markdown(state.phase7_digest)
-                artifacts.append(
-                    publish_daily_snapshot(
-                        client=deps.client,
-                        date_str=date_str,
-                        snapshot=dict(state.phase7_digest),
-                        run_type=run_type,
-                        baseline_date=baseline_iso,
-                        digest_markdown=digest_md,
-                    )
+                _append_house_daily_snapshot(
+                    artifacts,
+                    deps=deps,
+                    workspace_id=workspace_id,
+                    date_str=date_str,
+                    snapshot=dict(state.phase7_digest),
+                    run_type=run_type,
+                    baseline_date=state.baseline_date.isoformat() if state.baseline_date else None,
+                    digest_markdown=render_digest_markdown(state.phase7_digest),
                 )
         elif not state.custom_prompt:
             # Continuity (#952): no fresh digest (partial/failed run) — carry
@@ -428,23 +461,22 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             # always sees a row for the run date.
             carried = _carry_incomplete_snapshot(state)
             if carried is not None:
-                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
-                digest_md = render_digest_markdown(carried)
-                artifacts.append(
-                    publish_daily_snapshot(
-                        client=deps.client,
-                        date_str=date_str,
-                        snapshot=carried,
-                        run_type=run_type,
-                        baseline_date=baseline_iso,
-                        digest_markdown=digest_md,
+                wrote = _append_house_daily_snapshot(
+                    artifacts,
+                    deps=deps,
+                    workspace_id=workspace_id,
+                    date_str=date_str,
+                    snapshot=carried,
+                    run_type=run_type,
+                    baseline_date=state.baseline_date.isoformat() if state.baseline_date else None,
+                    digest_markdown=render_digest_markdown(carried),
+                )
+                if wrote:
+                    logger.warning(
+                        "publish: no fresh digest for %s; wrote carried-incomplete "
+                        "snapshot from prior context",
+                        date_str,
                     )
-                )
-                logger.warning(
-                    "publish: no fresh digest for %s; wrote carried-incomplete "
-                    "snapshot from prior context",
-                    date_str,
-                )
 
         # WP12.5: dual-write compiled views from exact pinned state (incumbent retained).
         artifacts.extend(

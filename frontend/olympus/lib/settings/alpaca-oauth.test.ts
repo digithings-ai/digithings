@@ -7,6 +7,7 @@ import {
   alpacaOAuthRedirectUri,
   buildAlpacaAuthorizeUrl,
   resolveAlpacaOAuthCallback,
+  resolveAlpacaOauthClientId,
 } from './alpaca-oauth';
 
 describe('alpaca-oauth paths (real olympusBasePath)', () => {
@@ -112,5 +113,19 @@ describe('resolveAlpacaOAuthCallback ordering', () => {
       origin: 'https://app.example',
     });
     expect(phase).toMatchObject({ kind: 'error', consumeNonce: false });
+  });
+});
+
+describe('resolveAlpacaOauthClientId', () => {
+  it('prefers Settings EF public client id over Pages build env', () => {
+    expect(resolveAlpacaOauthClientId(' cid-from-ef ', 'cid-from-pages')).toBe(
+      'cid-from-ef',
+    );
+  });
+
+  it('falls back to Pages env when Settings id is empty', () => {
+    expect(resolveAlpacaOauthClientId('', 'cid-from-pages')).toBe('cid-from-pages');
+    expect(resolveAlpacaOauthClientId(null, 'cid-from-pages')).toBe('cid-from-pages');
+    expect(resolveAlpacaOauthClientId('  ', '')).toBe('');
   });
 });

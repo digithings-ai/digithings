@@ -20,7 +20,9 @@
 --      private book (same stance as 098).
 --
 -- anon_read policies are untouched. Cutover 900 still owns dropping/narrowing
--- them later. Idempotent DROP POLICY IF EXISTS before CREATE.
+-- them later, **including reverting (2)** so free JWTs cannot read house
+-- weights/NAV/fills after anon_read is dropped. Idempotent DROP POLICY IF
+-- EXISTS before CREATE.
 
 -- House workspace id (seeded in 096; same literal as 105 documents policy).
 -- 6b753576-ced9-5319-9bfa-c5d0aacd9319

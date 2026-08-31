@@ -48,6 +48,7 @@ def test_require_overlay_persist_refuses_private_when_flag_off(
     with pytest.raises(OverlayPersistDisabled) as exc:
         require_overlay_persist(uuid4())
     assert exc.value.code == JobStatus.PERSIST_DISABLED.value
+    assert "migration 110" in exc.value.message
     require_overlay_persist(None)
     require_overlay_persist(house_workspace_id())
 

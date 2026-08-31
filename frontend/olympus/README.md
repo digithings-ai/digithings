@@ -220,22 +220,34 @@ Cloudflare dashboard.
 
 ## Settings workspace (T3)
 
-`/settings` is a tabbed workspace — **Profile | Brokers | Notifications | Billing | About**.
+`/settings` is a tabbed workspace — **Profile | Pipeline | Keys | Brokers | Notifications | Billing | About**.
 The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** by the
 Kairos tenancy program: authenticated users edit versioned investment overlays, connect
-paper brokers, and open Stripe checkout/portal.
+paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 
 - **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the
   reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
   Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
+- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs, plus a read of
+  `GET /settings/jobs` (skip reasons such as `no_credentials` are visible; remaining-hop
+  proof is `succeeded` only).
+- **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save).
 - **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
   IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /
-  `last_used_at` only. Gated as Custom-tier (`broker_status`).
-- **Notifications** — PATCH prefs; function returns `503 NOT_READY` until K5.
-- **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
-  "billing not configured" when Supabase/billing envs are absent.
-- **About** — prior ops/status/appearance card content.
+  `last_used_at` only, plus `GET /settings/fills` paper-fill fingerprints. Gated as
+  Custom-tier (`broker_status`).
+- **Notifications** — PATCH prefs; `GET /settings/notifications/log` delivery events
+  (digest remaining-hop needs a `digest:` log key **and** inbox confirmation **and**
+  `daily_digest` on).
+- **Billing** — links T2 `create-checkout-session` / `customer-portal`; Custom is
+  the primary checkout CTA (broker connect + overlay are Custom+; Baseline would
+  leave those remaining hops `TIER_FORBIDDEN`). Shows "billing not configured"
+  when Supabase/billing envs are absent.
+- **About** — remaining-hop product state (member-scoped Settings reads; Observer can
+  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes).
+  Unproven hops show a closed-vocabulary blocker (Custom checkout required, missing
+  Stripe ids, api_key not OAuth, persist disabled, inbox unconfirmed) — never Stripe ids.
 
 Edge Function: `digiquant/supabase/functions/settings` (`verify_jwt` true). **Deploy is
 blocked on K3** (vault + `broker_connections`) — see that function's README.
@@ -262,7 +274,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
 | `NEXT_PUBLIC_OLYMPUS_AUTH`        | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
-| `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Public Alpaca OAuth client id for Brokers connect (secret stays on the Edge Function).               |
+| `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Optional fallback public Alpaca OAuth client id. Brokers tab prefers `GET /settings/app-urls` (EF `ALPACA_OAUTH_CLIENT_ID`; never the secret). |
 | `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
 | `NEXT_PUBLIC_STRIPE_BILLING_ENABLED` | Set `0` to force Billing "not configured"; otherwise inferred from Supabase URL.                     |
 
