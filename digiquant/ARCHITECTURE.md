@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-31
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -2141,7 +2141,13 @@ failed append as a clean no-op and leave the lineage silently one commit short.
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
 `OrderIntent`: five batched `.insert()` calls in FK order. It never calls `.upsert()`.
 `service_role` holds `SELECT, INSERT` only, so an upsert whose conflict path fires is a `55000`
-from the append-only trigger, not an update.
+from the append-only trigger, not an update. `_insert` stamps house `workspace_id`
+(`HOUSE_WORKSPACE_ID`, same UUID as documents #3278) on every row: migration 097 made the
+column NOT NULL with no DEFAULT, and house GHA `ref: main` cannot import
+`digiquant.olympus.tenancy`. Ledger Pydantic models accept the same field (default house
+UUID) so `model_validate` read-back does not hit `extra="forbid"`. Companion H9 book
+upserts (`nav_history`, `positions`, `portfolio_metrics`) stamp the same UUID but
+**keep** `on_conflict="date"` / `"date,ticker"` until staged cutover 113.
 
 Conventions this writer fixes, each of which is easy to get backwards:
 

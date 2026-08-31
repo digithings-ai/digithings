@@ -20,7 +20,11 @@ using the most recent *available* close pair, i.e. one trading-day phase lag.
 That is the standard, defensible behavior for an EOD-priced paper index.
 
 All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
-``nav_history`` on ``date``), so a re-run of the same date is a no-op-equivalent.
+``nav_history`` / ``portfolio_metrics`` on ``date``). Payloads stamp the house
+``workspace_id`` (migration 097 NOT NULL) but **keep** the date-only conflict
+target — widening to ``(workspace_id, date)`` is staged cutover 113, which is
+not applied on the live book yet. A re-run of the same house date is a
+no-op-equivalent.
 """
 
 from __future__ import annotations
@@ -37,7 +41,12 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.olympus.atlas.supabase_io import (
+    HOUSE_WORKSPACE_ID,
+    SupabaseClient,
+    load_prior_book,
+    query_price_deltas,
+)
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
@@ -356,6 +365,7 @@ def _upsert_portfolio_metrics(
         alpha = performance_returns.relative_return_pct
 
     row: dict[str, Any] = {
+        "workspace_id": HOUSE_WORKSPACE_ID,
         "date": date_str,
         "pnl_pct": pnl_pct,
         "sharpe": sharpe,
@@ -605,6 +615,7 @@ def build_materialize_node(deps: MaterializeDeps):
 
         client.table("nav_history").upsert(
             {
+                "workspace_id": HOUSE_WORKSPACE_ID,
                 "date": date_str,
                 "nav": nav,
                 "cash_pct": cash_pct,
@@ -652,6 +663,7 @@ def build_materialize_node(deps: MaterializeDeps):
                 _non_cash_missing_thesis,
             )
         for row in pos_rows:
+            row["workspace_id"] = HOUSE_WORKSPACE_ID
             client.table("positions").upsert(row, on_conflict="date,ticker").execute()
 
         # Theses surface (#713): one thesis per held ticker, from the analyst

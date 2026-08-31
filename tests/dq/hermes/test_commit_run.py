@@ -119,7 +119,12 @@ class TestCommitRunBooking:
 
         positions = {r["ticker"]: r for r in client.store.get("positions", [])}
         assert positions["SPY"]["weight_pct"] == 100.0
-        assert len(client.store.get("nav_history", [])) == 1
+        assert positions["SPY"]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+        assert positions["SPY"]["_on_conflict"] == "date,ticker"
+        navs = client.store.get("nav_history", [])
+        assert len(navs) == 1
+        assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+        assert navs[0]["_on_conflict"] == "date"
 
         docs = client.store.get("documents", [])
         brief = next(r for r in docs if r.get("document_key") == "pm-rebalance")
@@ -1526,8 +1531,10 @@ class TestLedgerRowsSatisfyMigration069:
             rows = _rows(client, table)
             assert rows, f"{table} got no rows — the assertion below would be vacuous"
             for row in rows:
-                unknown = set(row) - columns
+                unknown = set(row) - columns - {"workspace_id"}
                 assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
+                assert row["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+                assert isinstance(row["workspace_id"], str)
 
     def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
         sql = _migration_sql()

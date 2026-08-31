@@ -21,6 +21,7 @@ from digiquant.olympus.atlas.pretrade_risk_registry import (
 )
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import (
+    HOUSE_WORKSPACE_ID,
     SupabaseClient,
     load_prior_book,
     publish_document,
@@ -502,8 +503,11 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
+    # Stamp house workspace (097 NOT NULL) but keep on_conflict=date until 113
+    # widens the unique. Changing the conflict target here is the overlay cutover.
     client.table("nav_history").upsert(
         {
+            "workspace_id": HOUSE_WORKSPACE_ID,
             "date": date_str,
             "nav": nav,
             "cash_pct": cash_pct,
@@ -523,6 +527,7 @@ def book_portfolio(
         )
 
     for row in pos_rows:
+        row["workspace_id"] = HOUSE_WORKSPACE_ID
         client.table("positions").upsert(row, on_conflict="date,ticker").execute()
 
     # Upsert first, then prune: the inverse order would leave a window in which the
