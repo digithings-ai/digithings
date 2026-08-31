@@ -85,9 +85,7 @@ def build_risk_index(
     # via ``0 × null`` if it stays in the blend (Stage 0 solo extras).
     indicators: list[IndicatorWeight] = []
     if valuation_weight != 0.0:
-        indicators.append(
-            IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight)
-        )
+        indicators.append(IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight))
     indicators.extend(extra_indicators or [])
     composite = compute_composite_risk(indicators)
     payload: dict[str, pl.Series] = {

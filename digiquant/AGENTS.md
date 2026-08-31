@@ -164,7 +164,9 @@ the full module map.
   environment.
 - **Published `btc_sdca` is valuation rails + a distribute curve.** Full extra
   catalog (`m2`, `rs_eth`, `dxy`, `weekly_rsi`, `weekly_macd`, `sma_band`) was
-  searched; IS vs-flat-DCA kept none of them (`indicator_weights` extras 0).
+  searched as add-ons (IS vs-flat, none kept) and again as Stage 0 solos
+  (OOS vs `power_law_solo`). `indicator_weights` extras stay 0 until a
+  Stage 0 extra beats that OOS gate and combined OOS is not worse.
   Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
   OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
   DCA; provenance stays honest.
@@ -210,9 +212,12 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
-   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
    overlap is diagnostic. Do not publish until the backtest looks comfortable.
+   Do not claim `beats_flat_dca_oos` unless a new run prints true.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.

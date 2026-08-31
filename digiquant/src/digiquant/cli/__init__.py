@@ -194,6 +194,36 @@ def optimize(
     click.echo(f"Best params: {json.dumps(opt.best_params)}")
 
 
+@main.command("sdca-stage0")
+@click.option(
+    "--data-path",
+    "-d",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="BTC OHLCV CSV; FRED/ETH siblings load from the same directory",
+)
+@click.option(
+    "--out-dir",
+    type=click.Path(path_type=Path),
+    default=Path("digiquant/src/digiquant/strategies/sdca"),
+    help="Provenance sidecar directory",
+)
+@click.option(
+    "--stage0-only",
+    is_flag=True,
+    help="Skip Stage 1 / Stage B even if extras survive",
+)
+def sdca_stage0(data_path: Path | None, out_dir: Path, stage0_only: bool) -> None:
+    """Solo-indicator SDCA Stage 0 (curve_simulator). Gate extras on OOS vs power law."""
+    from digiquant.strategies.sdca.stage_0 import operator_stage_0
+
+    path = data_path or Path("data/price-history/BTC-USD.csv")
+    if not path.exists():
+        raise click.UsageError(f"OHLCV not found: {path}")
+    result = operator_stage_0(data_path=path, out_dir=out_dir, combine=not stage0_only)
+    click.echo(result.model_dump_json(indent=2))
+
+
 @main.command()
 @click.option("--strategy", "-s", required=True, help="Strategy name")
 @click.option(
