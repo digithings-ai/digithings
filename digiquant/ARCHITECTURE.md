@@ -513,8 +513,10 @@ fill-complete/canceled/rejected/expired/denied), so two bars can never size
 off the same unreserved cash/asset_units. Fill-complete also fires when the
 leftover is below `size_increment` (quantization dust must not freeze the
 book). A pending flag whose bar date is in the past is canceled so a later
-distribute day can still sell — otherwise a 2023 leftover blocked the 2025
-top. Shadow `_cash`/`_asset_units` are
+distribute day can still sell. Buys size from quote-precision-floored cash so a
+sub-tick remainder cannot overdraft 2-decimal venue cash — Nautilus otherwise
+halts the whole backtest (`AccountBalanceNegative`); that is why the published
+book never reached 2025. Shadow `_cash`/`_asset_units` are
 updated from real `OrderFilled` events (`on_order_filled()`), not the
 pre-submission estimate, so they track Nautilus's actual quantity-quantized
 execution state rather than drifting from it; a fill's `commission` is also

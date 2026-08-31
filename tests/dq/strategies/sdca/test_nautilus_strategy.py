@@ -492,12 +492,7 @@ class TestSdcaStrategyOrderPendingGuard:
         bar_type: BarType,
         tmp_path: Path,
     ) -> None:
-        """Quantization leftover must not freeze on_bar() for years.
-
-        The 2023-09-15 last fill left pending_qty above 1e-9 but below the
-        instrument increment, so every later bar (including the 2025 top)
-        was skipped and the book never sold.
-        """
+        """Quantization leftover must not freeze on_bar() across later bars."""
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         increment = instrument.size_increment.as_double()
         strategy._order_pending = True
@@ -623,3 +618,97 @@ class TestSdcaStrategyOrderPendingGuard:
         strategy.on_order_filled(event)
 
         assert strategy._cash == pytest.approx(100_000.0 - 100.0)
+
+
+class TestSdcaStrategyQuoteCashFloor:
+    """A dust buy must not overdraft 2-decimal venue cash.
+
+    The published btc_sdca run halted on 2023-09-15 with
+    AccountBalanceNegative(-0.01 USD): float shadow cash was still a few
+    tenths of a cent, Nautilus USD is 2-decimal, and the next market buy
+    stopped the engine so 2025 distribute bars never ran.
+    """
+
+    def _strategy(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> SdcaStrategy:
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        path, _ = _write_risk_parquet(tmp_path, n=5)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=path,
+        )
+        strategy = SdcaStrategy(cfg)
+        strategy._instrument = instrument
+        strategy._risk_index = {date(2020, 1, 1): 0.0}
+        return strategy
+
+    def test_spendable_cash_floors_to_quote_precision(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._cash = 0.00743
+        strategy._quote_precision = lambda: 2  # type: ignore[method-assign]
+        assert strategy._spendable_cash() == pytest.approx(0.0)
+
+    def test_on_bar_skips_buy_when_cash_below_quote_tick(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._cash = 0.00743
+        strategy._quote_precision = lambda: 2  # type: ignore[method-assign]
+        strategy._submit_market = Mock()
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 1), 26_532.76)
+
+        strategy.on_bar(bar)
+
+        strategy._submit_market.assert_not_called()
+        assert strategy._order_pending is False
+
+    def test_on_bar_still_buys_when_spendable_cash_remains(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._cash = 1.00
+        strategy._quote_precision = lambda: 2  # type: ignore[method-assign]
+        strategy._submit_market = Mock()
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 1), 100.0)
+
+        strategy.on_bar(bar)
+
+        strategy._submit_market.assert_called_once()
+        assert strategy._submit_market.call_args.args[0] == OrderSide.BUY
+
+    def test_submit_buy_skips_when_notional_exceeds_spendable(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._cash = 0.00743
+        strategy._quote_precision = lambda: 2  # type: ignore[method-assign]
+        increment = instrument.size_increment.as_double()
+        # One increment at this price is already more than 0.00 spendable.
+        strategy._submit_market(OrderSide.BUY, increment, date(2020, 1, 1), price=26_532.76)
+        assert strategy._order_pending is False

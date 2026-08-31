@@ -16,7 +16,10 @@ still open (terminal-state guard, see ``_order_pending``), so two bars can
 never size off the same unreserved capacity. A leftover below the instrument
 ``size_increment`` still clears pending (quantization dust must not freeze
 the book), and a pending flag whose bar date is in the past is canceled so
-a later distribute day can still sell.
+a later distribute day can still sell. Buys size from quote-precision-floored
+cash so a sub-tick remainder cannot overdraft the venue: Nautilus otherwise
+halts the whole backtest with ``AccountBalanceNegative`` (published
+``btc_sdca`` stopped on 2023-09-15 at ``-0.01 USD``, so 2025 never ran).
 
 Usage:
     import polars as pl
@@ -35,6 +38,7 @@ Usage:
 
 from __future__ import annotations
 
+import math
 from datetime import date
 from decimal import Decimal
 
@@ -180,19 +184,36 @@ class SdcaStrategy(Strategy):
 
         close = bar.close.as_double()
         # Remaining cash / remaining holdings from the fill-synced shadow book.
-        buy_usd, sell_units = size_trade(rate, self._cash, self._asset_units)
+        # Floor cash to quote precision so a sub-tick remainder cannot size a
+        # buy that overdrafts the venue (AccountBalanceNegative halted the
+        # published run on 2023-09-15, so 2025 never ran).
+        buy_usd, sell_units = size_trade(rate, self._spendable_cash(), self._asset_units)
 
         if rate > 0:
             if buy_usd <= 0:
                 return
-            self._submit_market(OrderSide.BUY, buy_usd / close, bar_date)
+            self._submit_market(OrderSide.BUY, buy_usd / close, bar_date, price=close)
         elif rate < 0:
             if sell_units <= 0:
                 return
-            self._submit_market(OrderSide.SELL, sell_units, bar_date)
+            self._submit_market(OrderSide.SELL, sell_units, bar_date, price=close)
+
+    def _quote_precision(self) -> int:
+        if self._instrument is None:
+            return 2
+        return int(self._instrument.quote_currency.precision)
+
+    def _spendable_cash(self) -> float:
+        prec = max(0, self._quote_precision())
+        scale = 10**prec
+        return max(0.0, math.floor(self._cash * scale + 1e-12) / scale)
 
     def _submit_market(
-        self, side: OrderSide, quantity: float, bar_date: date | None = None
+        self,
+        side: OrderSide,
+        quantity: float,
+        bar_date: date | None = None,
+        price: float = 0.0,
     ) -> None:
         """Submit a market order sized from the sdca allocation loop.
 
@@ -209,6 +230,22 @@ class SdcaStrategy(Strategy):
         qty = self._instrument.make_qty(Decimal(str(quantity)))
         if qty.as_double() <= 0:
             return
+        if side == OrderSide.BUY and price > 0:
+            spendable = self._spendable_cash()
+            max_qty = spendable / price
+            if increment > 0 and max_qty < increment:
+                return
+            if qty.as_double() > max_qty:
+                qty = self._instrument.make_qty(Decimal(str(max_qty)))
+            if qty.as_double() <= 0:
+                return
+            if qty.as_double() * price > spendable + 1e-12:
+                nxt = qty.as_double() - increment
+                if increment <= 0 or nxt < increment:
+                    return
+                qty = self._instrument.make_qty(Decimal(str(nxt)))
+            if qty.as_double() <= 0 or qty.as_double() * price > spendable + 1e-12:
+                return
         order = self.order_factory.market(
             instrument_id=self.config.instrument_id,
             order_side=side,
