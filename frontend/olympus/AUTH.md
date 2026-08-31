@@ -40,7 +40,14 @@ persisted session so PKCE can finish; `SIGNED_IN` (or a successful
 that, the provider is disabled or the Google Cloud client redirect
 (`https://<ref>.supabase.co/auth/v1/callback`) is missing — dashboard work,
 not an app bug. Email/password sign-in replaces to `/` (AuthGate will not
-keep a signed-in user on `/login/` or `/signup/`).
+keep a signed-in user on `/login/` or `/signup/`). Email **sign-up** only
+replaces home when `signUp` returns a **session** (Confirm email off). When
+confirm-email is on, the card must not claim the confirmation message arrived —
+Auth SMTP (and Cloudflare Access PIN, if Access is still on the host) often
+never delivers until custom SMTP is wired. Prefer Google/GitHub; first-time
+OAuth **is** account creation. Google still has to be **Enabled** in the
+Supabase dashboard (Authentication → Providers) plus Redirect URLs; a disabled
+provider is not an app bug.
 
 ### Env / build
 
@@ -124,7 +131,10 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 
 - **Passphrase / client-side gate alone** — friction only. The anon key is in the
   bundle; a determined viewer replays it against Supabase. Not shipped as the
-  product login.
+  product login. FX Hub uses the same rule: **login remains required**; a hashed
+  invite only INSERTs `client_product_grants` for the signed-in email (settings
+  `POST /access/redeem-invite`). Do not put the plaintext invite in
+  `NEXT_PUBLIC_*`. Login-optional FX Hub is not a real gate on this architecture.
 - **Next.js route handlers / server components for OAuth** — forbidden under
   `output: 'export'` (D6). PKCE completes in the browser on static pages.
 - **digikey for end-user login** — digikey remains the machine/API plane (D4);
@@ -132,9 +142,35 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 
 ## Status
 
-- [x] T1 code path: flag-gated PKCE login, `/login` + `/auth/callback`, AuthGate.
-- [ ] **Owner:** enable Google/GitHub providers + redirect URLs in Supabase.
+- [x] T1 code path: flag-gated PKCE login, `/login` + `/signup` + `/auth/callback`, AuthGate.
+- [ ] **Owner:** enable **Google** (still often Disabled on `core`) and GitHub + Redirect URLs.
+- [ ] **Owner:** Auth SMTP (Mailgun) or turn Confirm email off until SMTP delivers.
+- [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the 12x invite) on the settings
+      Edge Function, apply migration **112**, share the plaintext only out of band.
 - [ ] **Owner:** staging Access overlay retained; production Access removed at
   cutover with `NEXT_PUBLIC_DASHBOARD_AUTH=1` + anon-policy drop.
 - [ ] **Do not share an ungated production URL** while anon `USING (true)` still
   applies and Access is not on that host.
+
+## FX Hub (12x) — invite after login
+
+Identity for FX Hub is the same Supabase Auth session as the rest of Olympus.
+The healthy medium is **short login (Google/GitHub)** plus a **rotatable hashed
+invite** that writes the caller's email into `client_product_grants`. That is
+preferable to the operator pasting every 12x address, and it is preferable to a
+login-optional shared secret (which cannot hide the anon key).
+
+Operator steps:
+
+1. Generate a high-entropy code (≥10 chars). Do not commit it.
+2. `python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" '<code>'`
+3. `supabase secrets set FX_HUB_INVITE_HASH=<hex>` and redeploy `settings`.
+   Optional: `INSERT INTO product_invite_codes (product_key, code_hash, label) VALUES ('fx_hub', '<hex>', '12x')`.
+4. Share the plaintext with the 12x team out of band. They sign in, open FX Hub,
+   paste the code. `product_invite_redemptions` is the admin ledger (who
+   registered). Mailgun digest is a separate secret; until it exists the
+   notification is the table row + `notification_log` event `fx_hub_invite_redeemed`.
+
+Cloudflare Access on **`/olympus/twelve-x*` only** remains a human Zero Trust
+option if the team should never see the rest of Olympus — it is not encoded here.
+

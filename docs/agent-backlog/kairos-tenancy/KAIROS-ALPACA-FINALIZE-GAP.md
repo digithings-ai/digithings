@@ -46,7 +46,7 @@ remain blocked.
 
 ## Human asks (blocking)
 
-1. **12x FX Hub email list** — insert into `client_product_grants (email, product_key='fx_hub')` once supplied.
+1. **12x FX Hub access** — creator email is already seeded. Remaining teammates either (a) get an ops INSERT into `client_product_grants` or (b) redeem the hashed invite (`FX_HUB_INVITE_HASH` + migration 112) after signing in. Do not ship a login-optional shared secret.
 2. **Vendor captchas** for digithings@ onboarding: Stripe hCaptcha, Mailgun reCAPTCHA, Alpaca Turnstile.
 3. After secrets: `supabase secrets set` + redeploy billing/settings EFs; re-run staging E2E.
 4. Confirm whether creator `plan_floor` should stay `custom` (ops / Kairos) or drop to `baseline` once Stripe works for self-serve.

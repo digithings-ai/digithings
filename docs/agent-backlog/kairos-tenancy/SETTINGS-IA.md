@@ -81,7 +81,7 @@ Stripe**; paying customers still go through Checkout.
 
 | Product key | Visibility |
 |-------------|------------|
-| `fx_hub` | Creator + rows in `client_product_grants` (12x email allowlist — human supplies list later; empty/configurable now) |
+| `fx_hub` | Creator + `client_product_grants` + hashed invite redeem (`POST /settings/access/redeem-invite`, migration 112). 12x teammates sign in, then paste the operator-shared code. Not login-optional. |
 | *(future)* | Same table + `ClientProductGate` / nav filter |
 
 Maintain grants in Supabase (`core`) near auth. Optional later: sync from the
@@ -101,7 +101,9 @@ Tier writes use **effective** plan (workspace + `entitlement_grants`).
 
 - Creator path: sign in as allowlisted email → effective custom → Settings writes 200.
 - Free path: non-allowlisted free workspace → `TIER_FORBIDDEN` on profile/keys/brokers.
-- Ops: insert into `entitlement_grants` / `client_product_grants` (service_role).
+- Ops: insert into `entitlement_grants` / `client_product_grants` (service_role),
+or share a hashed FX Hub invite (`FX_HUB_INVITE_HASH` / `product_invite_codes`)
+so teammates self-enrol after login.
 - No Stripe webhook required for Settings v0 or creator unlock.
 
 ## Non-goals

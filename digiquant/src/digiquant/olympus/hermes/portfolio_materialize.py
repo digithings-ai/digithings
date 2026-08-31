@@ -226,10 +226,15 @@ def _upsert_theses(
 
 
 def _prior_nav(client: SupabaseClient, run_date: date) -> float:
-    """Latest ``nav_history.nav`` strictly before ``run_date`` (seed if none)."""
+    """Latest house ``nav_history.nav`` strictly before ``run_date`` (seed if none).
+
+    This path is house-only. Overlay NAV on a later calendar date must not
+    compound the house index.
+    """
     resp = (
         client.table("nav_history")
         .select("date, nav")
+        .eq("workspace_id", str(house_workspace_id()))
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)

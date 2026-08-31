@@ -652,9 +652,12 @@ Product gating without widening free Observer:
 | Object | Purpose |
 |--------|---------|
 | `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`baseline`,`custom`,`enterprise`). Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `custom` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
-| `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom Olympus products reuse the same table. 12x client emails inserted by ops (list TBD). Seed: creator → `fx_hub`. |
+| `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom Olympus products reuse the same table. 12x client emails via ops insert **or** hashed invite redeem (migration 112). Seed: creator → `fx_hub`. |
 | `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. |
 | `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math. |
+| `product_invite_codes` | SHA-256 hex of invite codes (`product_key`, `code_hash`). service_role only. |
+| `product_invite_redemptions` | Who redeemed (user_id, email, source `env`\|`table`). Admin ledger. |
+| `product_invite_attempts` | Rate-limit ledger for redeem. |
 
 Olympus UI + settings EF resolve **effective** tier (never JWT claim alone) so creator
 baseline/Kairos works while Stripe captchas block Checkout. Free remains teaser-only

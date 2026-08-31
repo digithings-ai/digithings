@@ -9,6 +9,7 @@ import {
   getNotifications,
   getProfile,
   isBillingConfigured,
+  redeemInvite,
   saveProfile,
   SettingsHttpError,
 } from './settings-api';
@@ -287,5 +288,29 @@ describe('settings-api', () => {
     });
     expect(urls.alpaca_oauth_client_id).toBe('cid-public');
     expect(JSON.stringify(urls)).not.toMatch(/secret/i);
+  });
+
+  it('redeemInvite posts the code to /settings/access/redeem-invite', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/access/redeem-invite');
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        code: '12x-desk-invite-alpha',
+        product_key: 'fx_hub',
+      });
+      return new Response(
+        JSON.stringify({ ok: true, already_granted: false, product_key: 'fx_hub' }),
+        { status: 200 },
+      );
+    });
+    const result = await redeemInvite(
+      {
+        accessToken: 'tok',
+        functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+      { code: '12x-desk-invite-alpha', product_key: 'fx_hub' },
+    );
+    expect(result).toEqual({ ok: true, already_granted: false, product_key: 'fx_hub' });
   });
 });

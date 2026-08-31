@@ -51,9 +51,16 @@ export function useCanAccessProduct(productKey: ClientProductKey | string): bool
   return canAccessProduct(access.products, productKey);
 }
 
+const accessRefreshListeners = new Set<() => void>();
+
+/** Re-run `my_access` in every mounted entitlement hook (after invite redeem). */
+export function requestAccessRefresh(): void {
+  for (const listener of [...accessRefreshListeners]) listener();
+}
+
 /**
  * Load `my_access` RPC when authenticated; fall back to env creator allowlist.
- * Re-resolves when the session user id changes.
+ * Re-resolves when the session user id changes or `requestAccessRefresh` fires.
  */
 export function useAccessSnapshot(): AccessSnapshot {
   const ctx = useContext(AuthContext);
@@ -61,9 +68,18 @@ export function useAccessSnapshot(): AccessSnapshot {
   const [rpc, setRpc] = useState<Parameters<typeof resolveClientAccess>[0]['rpc']>(
     null,
   );
+  const [epoch, setEpoch] = useState(0);
 
   const userId = ctx?.session?.user?.id ?? null;
   const session = ctx?.session ?? null;
+
+  useEffect(() => {
+    const bump = () => setEpoch((n) => n + 1);
+    accessRefreshListeners.add(bump);
+    return () => {
+      accessRefreshListeners.delete(bump);
+    };
+  }, []);
 
   useEffect(() => {
     if (!authOn || !userId) {
@@ -91,7 +107,7 @@ export function useAccessSnapshot(): AccessSnapshot {
     return () => {
       cancelled = true;
     };
-  }, [authOn, userId]);
+  }, [authOn, userId, epoch]);
 
   if (!authOn) {
     return {

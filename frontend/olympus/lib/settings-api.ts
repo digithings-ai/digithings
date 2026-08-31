@@ -374,3 +374,16 @@ export async function createCustomerPortal(
 ): Promise<{ url: string }> {
   return request(opts, 'POST', '/customer-portal', payload);
 }
+
+export type RedeemInviteResult = {
+  ok: true;
+  already_granted: boolean;
+  product_key: string;
+};
+
+export async function redeemInvite(
+  opts: SettingsApiOptions,
+  payload: { code: string; product_key?: string; workspace_id?: string },
+): Promise<RedeemInviteResult> {
+  return request<RedeemInviteResult>(opts, 'POST', '/settings/access/redeem-invite', payload);
+}

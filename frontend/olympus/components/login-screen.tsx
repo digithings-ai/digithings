@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardMark } from '@/components/atlas-mark';
 import { useAuth, type OAuthProvider } from '@/lib/auth-context';
+import { formatAuthError, SIGNUP_SESSION_MISSING_COPY } from '@/lib/auth-errors';
 
 const STRENGTH_WORDS = ['', 'weak', 'fair', 'good', 'strong'] as const;
 /** Ink/accent/danger — not P&L `--up`/`--down`. */
@@ -45,7 +46,7 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
     try {
       await signInWithOAuth(provider);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed');
+      setError(formatAuthError(err, 'oauth'));
       setPending(null);
     }
   }
@@ -62,14 +63,18 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
     setPending('email');
     try {
       if (signUp) {
-        await signUpWithPassword(trimmedEmail, password);
-        setInfo('Check your email to confirm the account, then sign in.');
+        const { session } = await signUpWithPassword(trimmedEmail, password);
+        if (session) {
+          router.replace('/');
+        } else {
+          setInfo(SIGNUP_SESSION_MISSING_COPY);
+        }
       } else {
         await signInWithPassword(trimmedEmail, password);
         router.replace('/');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : signUp ? 'Sign-up failed' : 'Sign-in failed');
+      setError(formatAuthError(err, signUp ? 'signup' : 'signin'));
     } finally {
       setPending(null);
     }
@@ -90,7 +95,7 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
         </h1>
         <p className="mt-2 text-[0.88rem] leading-[1.45] text-ink-soft">
           {signUp
-            ? 'Google or GitHub to start. Email if you would rather keep a password.'
+            ? 'Google or GitHub to start — first-time OAuth creates the account. Email if you would rather keep a password (confirmation mail may not arrive until Auth SMTP is wired).'
             : 'Google or GitHub. Email if you already have a workspace password.'}
         </p>
 

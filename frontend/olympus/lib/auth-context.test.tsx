@@ -234,13 +234,15 @@ describe('AuthProvider', () => {
       email: 'a@b.c',
       password: 'secret12',
     });
+    let signupResult: { session: unknown } | undefined;
     await act(async () => {
-      await latest!.signUpWithPassword('a@b.c', 'secret12');
+      signupResult = await latest!.signUpWithPassword('a@b.c', 'secret12');
     });
     expect(supabaseMock.auth.signUp).toHaveBeenCalledWith({
       email: 'a@b.c',
       password: 'secret12',
       options: { emailRedirectTo: 'http://localhost:3000/dashboard/auth/callback/' },
     });
+    expect(signupResult).toEqual({ session: null });
   });
 });
