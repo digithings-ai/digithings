@@ -35,11 +35,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import re
 import subprocess
 import sys
-from datetime import date as dt_date, datetime, timedelta, timezone
+from datetime import date as dt_date
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -128,9 +128,9 @@ def _clip_rationale(text: str, max_len: int = 2000) -> str:
 
 
 def _document_payload(sb, date_iso: str, document_key: str) -> Optional[Dict[str, Any]]:
+    """House payload for ``document_key``. Overlay same-key rows must not win limit(1)."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", date_iso)
         .eq("document_key", document_key)
         .limit(1)
