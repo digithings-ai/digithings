@@ -232,7 +232,9 @@ def _data_layer_snapshot(
         market_context["onchain_positioning"] = onchain.compact_summary()
         try:
             upsert_onchain_cohort_positioning(
-                client=deps.client, rows=onchain.to_rows(run_date.isoformat())
+                client=deps.client,
+                rows=onchain.to_rows(run_date.isoformat()),
+                workspace_id=config.workspace_id,
             )
         except Exception as exc:  # persistence is best-effort; a missing table
             # (pre-migration window) or any postgrest/network error must never block the run.

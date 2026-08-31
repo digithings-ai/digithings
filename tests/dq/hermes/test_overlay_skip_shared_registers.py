@@ -1,4 +1,4 @@
-"""Overlay must not last-writer-win house theses / analyst / vehicle / decision_log.
+"""Overlay must not last-writer-win house theses / analyst / vehicle / decision_log / onchain.
 
 Those tables have no ``workspace_id`` column. Overlay persist-on is not a
 license to upsert them.
@@ -16,10 +16,13 @@ from digiquant.olympus.atlas.decision_log import (
     resolve_pending,
 )
 from digiquant.olympus.atlas.phases.preflight import (
+    PreflightDeps,
     PreflightReflectDeps,
+    build_preflight_node,
     build_preflight_reflect_node,
 )
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.olympus.atlas.supabase_io import upsert_onchain_cohort_positioning
 from digiquant.olympus.hermes.models.thesis import (
     ThesisReviewOutput,
     ThesisStatusUpdate,
@@ -356,3 +359,90 @@ def test_overlay_preflight_reflect_skips_decision_log(
     )
     assert node(house_state) == {}
     assert calls == ["decision_log"]
+
+
+def test_overlay_persist_on_does_not_write_onchain_cohort_positioning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    row = {"date": "2026-08-30", "market": "ETH", "divergence": -0.8}
+    overlay_client = FakeSupabaseClient()
+    overlay_written = upsert_onchain_cohort_positioning(
+        client=overlay_client,
+        rows=[row],
+        workspace_id=overlay,
+    )
+    assert overlay_written == 0
+    assert overlay_client.store.get("onchain_cohort_positioning", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_written = upsert_onchain_cohort_positioning(
+        client=house_client,
+        rows=[row],
+        workspace_id=house_workspace_id(),
+    )
+    omitted = FakeSupabaseClient()
+    omitted_written = upsert_onchain_cohort_positioning(client=omitted, rows=[row])
+    assert house_written == 1
+    assert omitted_written == 1
+    assert [r["market"] for r in house_client.store["onchain_cohort_positioning"]] == ["ETH"]
+    assert [r["market"] for r in omitted.store["onchain_cohort_positioning"]] == ["ETH"]
+
+
+def test_overlay_preflight_injects_onchain_without_persisting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from digiquant.data.onchain.hyperdash import cohort_summary_to_positioning
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    summary = {
+        "timestamp": "2026-08-30T00:00:00Z",
+        "totalTraders": 999,
+        "pnlCohorts": [
+            {
+                "id": "extremely_profitable",
+                "longNotional": 1_000_000,
+                "shortNotional": 4_000_000,
+                "topMarkets": [
+                    {"ticker": "ETH", "longNotional": 100_000, "shortNotional": 900_000}
+                ],
+            },
+            {
+                "id": "rekt",
+                "longNotional": 5_000_000,
+                "shortNotional": 1_000_000,
+                "topMarkets": [
+                    {"ticker": "ETH", "longNotional": 900_000, "shortNotional": 100_000}
+                ],
+            },
+        ],
+    }
+    overlay_client = FakeSupabaseClient(
+        canned_reads={
+            "daily_snapshots": [],
+            "documents": [],
+            "price_technicals": [{"date": "2026-08-30", "ticker": "SPY"}],
+            "macro_series_observations": [],
+        }
+    )
+    deps = PreflightDeps(
+        client=overlay_client,
+        config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+    )
+    node = build_preflight_node(deps)
+    overlay_state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=str(overlay)),
+    )
+    with patch(
+        "digiquant.olympus.atlas.phases.preflight.get_onchain_cohort_positioning",
+        lambda: cohort_summary_to_positioning(summary),
+    ):
+        out = node(overlay_state)
+    assert "onchain_positioning" in out["data_layer"].market_context
+    assert overlay_client.store.get("onchain_cohort_positioning", []) == []

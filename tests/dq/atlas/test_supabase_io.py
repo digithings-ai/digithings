@@ -244,6 +244,34 @@ class TestUpsertOnchainCohortPositioning:
         json.dumps(row)  # must not raise
         assert row["date"] == "2026-06-22"
 
+    def test_overlay_workspace_skips_shared_register(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        overlay = uuid4()
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay_client = FakeSupabaseClient()
+        overlay_written = upsert_onchain_cohort_positioning(
+            client=overlay_client,
+            rows=[{"date": date(2026, 6, 22), "market": "BTC", "net_taker": 0.3}],
+            workspace_id=overlay,
+        )
+        assert overlay_written == 0
+        assert overlay_client.store.get("onchain_cohort_positioning", []) == []
+
+        house_client = FakeSupabaseClient()
+        house_written = upsert_onchain_cohort_positioning(
+            client=house_client,
+            rows=[{"date": date(2026, 6, 22), "market": "BTC", "net_taker": 0.3}],
+            workspace_id=str(house_workspace_id()),
+        )
+        omitted = FakeSupabaseClient()
+        omitted_written = upsert_onchain_cohort_positioning(
+            client=omitted,
+            rows=[{"date": date(2026, 6, 22), "market": "BTC", "net_taker": 0.3}],
+        )
+        assert house_written == 1
+        assert omitted_written == 1
+        assert house_client.store["onchain_cohort_positioning"][0]["market"] == "BTC"
+        assert omitted.store["onchain_cohort_positioning"][0]["market"] == "BTC"
+
 
 @pytest.mark.unit
 class TestLoadPriorContext:

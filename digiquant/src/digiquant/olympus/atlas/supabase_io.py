@@ -24,11 +24,16 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
+from uuid import UUID
 
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
-from digiquant.olympus.overlay.persist import is_private_workspace, require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    is_private_workspace,
+    require_overlay_persist,
+    skip_overlay_shared_register,
+)
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -361,6 +366,7 @@ def upsert_onchain_cohort_positioning(
     *,
     client: SupabaseClient,
     rows: list[dict[str, Any]],
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Idempotently upsert per-(date,market) on-chain cohort positioning rows (#801).
 
@@ -368,7 +374,18 @@ def upsert_onchain_cohort_positioning(
     preflight caller can skip cleanly on a Hyperdash outage without a special case. Upserts one
     row at a time on ``(date, market)`` — the per-run market set is small (a handful) and this
     matches the single-dict upsert convention used by every other writer here.
+
+    This table has no ``workspace_id`` column (leftover ``UNIQUE(date, market)``). Overlay
+    persist-on is not a license to last-writer-win the house research row. Private workspaces
+    skip the upsert and return 0; callers that omit *workspace_id* stay on the house write
+    path. Independent of ``OLYMPUS_OVERLAY_PERSIST`` and of staged cutover 113.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register onchain_cohort_positioning "
+            "(house-only UNIQUE(date, market))"
+        )
+        return 0
     if not rows:
         return 0
     for row in rows:
