@@ -109,7 +109,9 @@ def test_run_and_write_btc_sdca_skips_calibrations(
 ) -> None:
     cache = tmp_path / "cache"
     cache.mkdir()
-    _daily_ohlcv(date(2020, 1, 1), 40).write_csv(cache / "BTC-USD.csv")
+    # Oscillators need ~15 completed weeks before they vote; a 40-day frame
+    # would null the whole composite via the all-nulls rule.
+    _daily_ohlcv(date(2020, 1, 1), 300).write_csv(cache / "BTC-USD.csv")
     output = tmp_path / "out"
 
     def _boom(*_args: object, **_kwargs: object) -> dict:
@@ -188,6 +190,8 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert "Preset btc_optimized" in " ".join(payload["notes"])
     assert "valuation:1.0" in " ".join(payload["notes"])
     assert "composite valuation index" in " ".join(payload["notes"]).lower()
+    assert "weekly log-MACD" in " ".join(payload["notes"])
+    assert "weekly RSI" in " ".join(payload["notes"])
     assert payload["beats_flat_dca_oos"] is False
     assert "beats_flat_dca_oos=false" in " ".join(payload["notes"])
     assert "not a live strategy" in " ".join(payload["notes"]).lower()

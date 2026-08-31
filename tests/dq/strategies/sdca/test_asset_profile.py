@@ -173,7 +173,11 @@ class TestGenericTechnicalsFromAnyOhlcv:
     def test_calibrated_rsi_length_changes_z(self) -> None:
         n = 400
         dates = _dates(n)
-        close = pl.Series([1_000.0 - 2.5 * i for i in range(n)])
+        # Chop, then a blow-off: RSI(14) crosses the rich cap before RSI(28).
+        close = pl.Series(
+            [100.0 + 4.0 * ((i % 20) - 10) for i in range(200)]
+            + [100.0 + 5.0 * i for i in range(200)]
+        )
         default = weekly_rsi_z(dates, close)
         slower = weekly_rsi_z(dates, close, length=28)
         finite = [
