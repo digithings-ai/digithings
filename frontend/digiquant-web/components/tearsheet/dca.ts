@@ -64,10 +64,6 @@ export function allocatedPctCurve(data: TearsheetData): TearsheetSeriesPoint[] {
   });
 }
 
-export function cashPctFromAllocated(allocated: TearsheetSeriesPoint[]): TearsheetSeriesPoint[] {
-  return allocated.map((p) => ({ t: p.t, v: 100 - p.v }));
-}
-
 export function fillMarkersForChart(data: TearsheetData): TearsheetFillMarker[] {
   if (data.fill_markers && data.fill_markers.length > 0) return data.fill_markers;
   const eq = data.equity_curve ?? [];

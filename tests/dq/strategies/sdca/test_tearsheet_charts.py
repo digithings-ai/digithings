@@ -111,10 +111,11 @@ def test_catalog_keeps_zero_weight_extras_out_of_index() -> None:
     assert by_name["m2"].points == []
 
 
-def test_btc_optimized_knees_are_25_and_70() -> None:
+def test_btc_optimized_knees_leave_a_dead_zone() -> None:
     knees = knees_from_preset("btc_optimized")
-    assert knees.buy_knee_risk == pytest.approx(25.0)
-    assert knees.sell_knee_risk == pytest.approx(70.0)
+    assert 0.0 < knees.buy_knee_risk <= 25.0
+    assert 70.0 <= knees.sell_knee_risk < 100.0
+    assert knees.buy_knee_risk < knees.sell_knee_risk
 
 
 def test_tearsheet_overlays_emit_allocated_and_fill_markers() -> None:
@@ -141,7 +142,9 @@ def test_tearsheet_overlays_emit_allocated_and_fill_markers() -> None:
     assert markers[1]["side"] == "sell"
     power = next(c for c in overlays["indicator_curves"] if c["name"] == "valuation")
     assert power["display_name"] == "power law"
-    assert overlays["curve_knees"]["buy_knee_risk"] == pytest.approx(25.0)
+    knees = knees_from_preset("btc_optimized")
+    assert overlays["curve_knees"]["buy_knee_risk"] == pytest.approx(knees.buy_knee_risk)
+    assert overlays["curve_knees"]["sell_knee_risk"] == pytest.approx(knees.sell_knee_risk)
 
 
 def test_reconstruct_allocated_from_negative_capital_deployed() -> None:
@@ -220,8 +223,10 @@ def test_chart_inputs_from_2025_style_payload_reconstructs_sells() -> None:
         ],
     }
     bundle = chart_inputs_from_payload(payload)
-    assert bundle["knees"].buy_knee_risk == pytest.approx(25.0)
-    assert bundle["knees"].sell_knee_risk == pytest.approx(70.0)
+    assert "cash_pct" not in bundle
+    knees = knees_from_preset("btc_optimized")
+    assert bundle["knees"].buy_knee_risk == pytest.approx(knees.buy_knee_risk)
+    assert bundle["knees"].sell_knee_risk == pytest.approx(knees.sell_knee_risk)
     power = next(c for c in bundle["indicators"] if c.name == "valuation")
     assert power.display_name == "power law"
     assert power.in_index is True

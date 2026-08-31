@@ -49,7 +49,6 @@ _SELL = "#c0392b"
 _SDCA = "#0b5fff"
 _HOLD = "#6b7280"
 _INDEX = "#111827"
-_CASH = "#9ca3af"
 _BTC_FAINT = "#9ca3af"
 
 
@@ -213,18 +212,19 @@ def plot_indicator_multiples(inputs: Mapping[str, object], path: Path) -> Path:
 
 
 def plot_allocation(inputs: Mapping[str, object], path: Path) -> Path:
-    """Step % allocated / % cash, log BTC overlay, sized green/red fill dots."""
+    """Step % allocated (MTM), log BTC overlay, sized green/red fill dots.
+
+    Cash is the inverse of allocated and is not drawn.
+    """
     plt = _require_mpl()
     dates = _dates(inputs["dates"])  # type: ignore[arg-type]
     allocated: list[float] = list(inputs["allocated_pct"])  # type: ignore[arg-type]
-    cash_pct: list[float] = list(inputs["cash_pct"])  # type: ignore[arg-type]
     markers: list[SdcaFillMarker] = list(inputs["fill_markers"])  # type: ignore[arg-type]
 
     fig, ax = plt.subplots(figsize=(12.5, 6.4), dpi=160)
     ax.set_ylim(0, 100)
     ax.step(dates, allocated, where="post", color=_SDCA, lw=1.6, label="% allocated")
     ax.fill_between(dates, allocated, step="post", color=_SDCA, alpha=0.12)
-    ax.step(dates, cash_pct, where="post", color=_CASH, lw=1.2, label="% cash")
 
     date_ix = {d.date(): (d, a) for d, a in zip(dates, allocated, strict=True)}
     buy_x, buy_y, buy_s, sell_x, sell_y, sell_s = [], [], [], [], [], []
@@ -290,7 +290,7 @@ def plot_allocation(inputs: Mapping[str, object], path: Path) -> Path:
 
     ax.set_ylabel("Percent of book")
     ax.set_title(
-        "Allocation — % in BTC vs % cash (step). "
+        "Allocation — % in BTC (MTM, step). "
         "Dots are actual fills, sized by |trade_usd| / portfolio that day."
     )
     fig.tight_layout()
@@ -322,7 +322,6 @@ def _window_chart_inputs(
     windowed["equity"] = list(inputs["equity"])[lo:hi]  # type: ignore[index]
     windowed["prices"] = list(inputs["prices"])[lo:hi]  # type: ignore[index]
     windowed["allocated_pct"] = list(inputs["allocated_pct"])[lo:hi]  # type: ignore[index]
-    windowed["cash_pct"] = list(inputs["cash_pct"])[lo:hi]  # type: ignore[index]
     start_d, end_d = dates[lo], dates[hi - 1]
     windowed["period_start"] = start_d
     windowed["period_end"] = end_d

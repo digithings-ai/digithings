@@ -167,9 +167,12 @@ the full module map.
   (`valuation=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
   are persisted in `settings.json`. SMA band and BTC/ETH RS stay at 0.
   Oscillator z is cycle-scaled (RSI dead-zone + cap; log-MACD sloped top),
-  not 90-day rolling z. Preset `btc_optimized` still sells (`long_only: false`).
-  Walk-forward OOS `beats_flat_dca_oos` is still false — in-sample richness,
-  not a proven OOS beat. Curve knees/rates are a sibling PR.
+  not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
+  with a concentrated remaining-book curve (high max daily % of remaining
+  cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
+  still false — in-sample richness, not a proven OOS beat. Allocation
+  charts draw MTM allocated % plus fill dots; do not draw a percent-cash
+  line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC SDCA Strat**. The page is a
   strategy (fills chart, latest remaining-book signal, MTM allocated, vs
   buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
@@ -289,6 +292,29 @@ Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
 from this WP.
+
+### Remaining-book curve search (frozen index)
+
+When fills look like a slow drip instead of clustering at bottoms/tops,
+search the **curve** on today's published composite — do **not** re-search
+indicator weights. The checked-in `btc_optimized` shape was fit on a
+3-member freeze and then applied to the richer published index.
+
+```bash
+# Linux-safe curve_simulator. Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --signal-delay-days 3 \
+  --n-random 400 --seed 42 --sidecar /tmp/sdca_curve_search.json
+# Optional: write btc_optimized only if return AND fill concentration both beat
+# the published 3% / 25 / 70 curve.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --persist-preset
+```
+
+Search space is `SdcaCurveShape` only (`buy_max_rate`/`sell_max_rate` up to
+40%/day, knees inside the published 25/70 dead zone, curvature up to 5).
+Objective is `total_return_pct`. vs-flat-DCA is logged, never
+`beats_flat_dca_oos`. Gates require 2025 sells and remaining-book identity.
 
 ### SDCA test commands
 
