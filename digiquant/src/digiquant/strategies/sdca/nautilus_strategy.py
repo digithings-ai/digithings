@@ -170,7 +170,6 @@ class SdcaStrategy(Strategy):
             rate = max(rate, 0.0)
 
         close = bar.close.as_double()
-        # Remaining cash / remaining holdings from the fill-synced shadow book.
         buy_usd, sell_units = size_trade(rate, self._cash, self._asset_units)
 
         if rate > 0:
@@ -183,18 +182,8 @@ class SdcaStrategy(Strategy):
             self._submit_market(OrderSide.SELL, sell_units)
 
     def _submit_market(self, side: OrderSide, quantity: float) -> None:
-        """Submit a market order sized from the sdca allocation loop.
-
-        Remaining-book compounding can size below the instrument increment
-        (balanced ``buy_max_rate`` drains cash toward dust). ``make_qty``
-        raises if the value rounds to zero — skip those bars instead.
-        """
+        """Submit a market order sized from the sdca allocation loop."""
         assert self._instrument is not None
-        if quantity <= 0:
-            return
-        increment = self._instrument.size_increment.as_double()
-        if increment > 0 and quantity < increment:
-            return
         qty = self._instrument.make_qty(Decimal(str(quantity)))
         if qty.as_double() <= 0:
             return
@@ -264,10 +253,8 @@ class SdcaStrategy(Strategy):
         self._pending_qty = 0.0
 
     def on_stop(self) -> None:
-        # Leave remaining cash / remaining holdings open. Flattening at engine
-        # stop would invent a round-trip that is not the DCA product. This
-        # wrapper is backtest-only — do not wire it to broker live-trading.
         self.cancel_all_orders(self.config.instrument_id)
+        self.close_all_positions(self.config.instrument_id)
 
     def on_reset(self) -> None:
         self._cash = self.config.initial_cash
@@ -287,7 +274,7 @@ register(
     SdcaStrategyConfig,
     {
         "initial_cash": 1000.0,
-        "long_only": False,
+        "long_only": True,
         "curve_nodes": DEFAULT_BTC_NODES,
     },
     aliases=["sdca"],

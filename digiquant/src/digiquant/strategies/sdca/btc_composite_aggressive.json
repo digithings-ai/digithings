@@ -8,13 +8,13 @@
     "dxy": 0.0,
     "weekly_rsi": 0.0,
     "weekly_macd": 0.0,
-    "sma_band": 0.5
+    "sma_band": 0.0
   },
   "stage_b_params": {
-    "buy_max_rate": 4.0,
-    "buy_knee_risk": 30.0,
-    "sell_knee_risk": 70.0,
-    "sell_max_rate": 5.0,
+    "buy_max_rate": 6.0,
+    "buy_knee_risk": 35.0,
+    "sell_knee_risk": 80.0,
+    "sell_max_rate": 6.0,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
     "valuation_weight": 1.0,
@@ -23,7 +23,7 @@
     "dxy_weight": 0.0,
     "weekly_rsi_weight": 0.0,
     "weekly_macd_weight": 0.0,
-    "sma_band_weight": 0.5
+    "sma_band_weight": 0.0
   },
   "windows": [
     {
@@ -57,10 +57,10 @@
       "end": "2025-03-06"
     }
   ],
-  "mean_is_vs_flat_dca_pct": 531.1075062096951,
-  "mean_oos_vs_flat_dca_pct": -8.211388735988557,
+  "mean_is_vs_flat_dca_pct": 1157.11679252072,
+  "mean_oos_vs_flat_dca_pct": -14.127490293350762,
   "beats_flat_dca_oos": false,
   "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
-  "notes": "require_extras composite; IS-only rails per fold. Two-stage fit will overfit: Stage A targets a handful of documented cycle windows and Stage B then tunes the curve on the same history. Keep the regularized variant (rounded weights, shrunk max rates) as the less aggressive copy. Not a published digiquant.io number. Do not --push-supabase.",
+  "notes": "Operator run on Coinbase BTC 2015-07-20→2026-08-29. Stage A used full-history real power-law rails (cycle targeting is in-sample). Unconstrained Stage A kept oscillators at 0 (valuation-only already overlaps troughs/peaks; forcing extras hurts peak_in_distribute). Stage B walk-forward refit rails per IS fold, scored with curve_simulator (Linux Nautilus SIGABRT #42). Two-stage fit will overfit: Stage A targets a handful of documented cycle windows and Stage B then tunes the curve on the same history. Keep the regularized variant (rounded weights, shrunk max rates) as the less aggressive copy. Not a published digiquant.io number. Do not --push-supabase.",
   "oos_from_aggressive": false
 }

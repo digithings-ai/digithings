@@ -18,10 +18,7 @@ export function clipOhlc(bars: TearsheetOhlcBar[], periodStart: string): Tearshe
   return bars.filter((b) => onOrAfterDate(b.t, periodStart));
 }
 
-/** Close series from OHLC bars (rails overlay uses spot vs low/median/high). */
-export function closesFromOhlc(bars: TearsheetOhlcBar[]): TearsheetSeriesPoint[] {
-  return bars.map((b) => ({ t: b.t, v: b.c }));
-}
+/** Shared x-span for linked charts: backtest start → last equity point. */
 export function chartFullSpan(
   periodStart: string,
   equity: TearsheetSeriesPoint[],

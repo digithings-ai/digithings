@@ -1,9 +1,8 @@
 """Accumulation/distribution curve — piecewise-linear risk-to-rate map for SDCA.
 
 Mirrors the artifact's ``curveValueAtRisk``: 21 nodes at risk = 0, 5, ..., 100,
-each holding a daily rate (%). ``value > 0`` buys that % of *currently
-available cash* today; ``value < 0`` sells that % of the *current open
-position* today. See
+each holding a daily rate (%). ``value > 0`` buys that % of cash today;
+``value < 0`` sells that % of holdings today. See
 ``digiquant/ARCHITECTURE.md`` (SDCA engine) for the full spec.
 """
 
@@ -44,9 +43,8 @@ class AccumDistCurve:
     """21-node piecewise-linear accumulation/distribution curve.
 
     ``value_at_risk(risk)`` returns the daily trade rate (%) for a composite
-    risk score: positive buys that % of currently available cash, negative
-    sells that % of the current open position. Risk is clamped to [0, 100]
-    before lookup.
+    risk score: positive buys that % of cash, negative sells that % of
+    holdings. Risk is clamped to [0, 100] before lookup.
     """
 
     def __init__(self, nodes: tuple[float, ...] | list[float] = DEFAULT_BTC_NODES) -> None:

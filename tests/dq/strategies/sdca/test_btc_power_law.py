@@ -244,29 +244,6 @@ class TestPersistence:
             "placeholder" in rec.message.lower() for rec in caplog.records
         )
 
-    def test_load_default_uses_committed_real_fit_without_placeholder_warning(self, caplog) -> None:
-        """#3173: normal path is the committed Coinbase fit, not the synthetic example.
-
-        Does not assert coefficient values — those are the fitted artifact, not a
-        unit fixture. Pins provenance so a silent revert to the placeholder fails.
-        """
-        from datetime import date
-
-        from digiquant.strategies.sdca.btc_power_law import (
-            _COEFFICIENTS_PATH,
-            load_coefficients,
-        )
-
-        if not _COEFFICIENTS_PATH.exists():
-            pytest.skip("real coefficients file not present")
-        with caplog.at_level("WARNING"):
-            coefficients = load_coefficients()
-        assert coefficients.fit_start == date(2015, 7, 20)
-        assert coefficients.fit_rows >= 4000
-        assert coefficients.notes.startswith("Real Coinbase")
-        assert not any("placeholder" in rec.message.lower() for rec in caplog.records)
-        assert not any("synthetic" in rec.message.lower() for rec in caplog.records)
-
 
 class TestBtcPowerLawRiskModel:
     def test_satisfies_risk_model_protocol(self) -> None:

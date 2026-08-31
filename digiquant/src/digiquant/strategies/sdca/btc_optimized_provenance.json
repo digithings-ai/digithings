@@ -1,62 +1,36 @@
 {
   "preset": "btc_optimized",
-  "evaluator": "curve_simulator",
+  "evaluator": "synthetic_fixture_ci",
   "objective": {
     "capital_deployed_floor_pct": 10.0,
     "max_drawdown_cap_pct": 50.0
   },
-  "fit_window": [
-    "2015-07-20",
-    "2024-06-09"
-  ],
+  "fit_window": ["2020-01-01", "2020-03-20"],
   "folds": [
     {
       "fold": 0,
-      "is_start": "2015-07-20",
-      "is_end": "2017-10-08",
-      "oos_start": "2017-10-09",
-      "oos_end": "2019-12-29"
-    },
-    {
-      "fold": 1,
-      "is_start": "2015-07-20",
-      "is_end": "2019-12-29",
-      "oos_start": "2019-12-30",
-      "oos_end": "2022-03-20"
-    },
-    {
-      "fold": 2,
-      "is_start": "2015-07-20",
-      "is_end": "2022-03-20",
-      "oos_start": "2022-03-21",
-      "oos_end": "2024-06-09"
+      "is_start": "2020-01-01",
+      "is_end": "2020-01-12",
+      "oos_start": "2020-01-13",
+      "oos_end": "2020-01-24"
     }
   ],
-  "holdout": [
-    "2024-06-10",
-    "2026-08-29"
-  ],
+  "holdout": ["2020-03-21", "2020-04-09"],
   "best_params": {
-    "buy_max_rate": 4.0,
-    "buy_knee_risk": 30.0,
-    "sell_knee_risk": 70.0,
-    "sell_max_rate": 5.0,
+    "buy_max_rate": 10.0,
+    "buy_knee_risk": 35.0,
+    "sell_knee_risk": 80.0,
+    "sell_max_rate": 10.0,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
-    "valuation_weight": 1.0,
-    "m2_weight": 0.0,
-    "rs_eth_weight": 0.0,
-    "dxy_weight": 0.0,
-    "weekly_rsi_weight": 0.0,
-    "weekly_macd_weight": 0.0,
-    "sma_band_weight": 0.5
+    "valuation_weight": 1.0
   },
-  "mean_is_vs_flat_dca_pct": 531.1075062096951,
-  "mean_oos_vs_flat_dca_pct": -8.211388735988557,
-  "is_oos_gap_pct": 539.3188949456836,
-  "holdout_vs_flat_dca_pct": 3.5228013923788604,
+  "mean_is_vs_flat_dca_pct": 0.0,
+  "mean_oos_vs_flat_dca_pct": 0.0,
+  "is_oos_gap_pct": 0.0,
+  "holdout_vs_flat_dca_pct": 0.0,
   "beats_flat_dca_oos": false,
   "sensitivity_stable": true,
   "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
-  "notes": "Composite valuation (require_extras Stage A: valuation 1.0 + sma_band 0.5; weekly_rsi weight 0). Curve_simulator Stage B with sells enabled (sell_max_rate=5). beats_flat_dca_oos remains false — not an OOS claim. Linux Nautilus BacktestEngine not used for the walk-forward (#42)."
+  "notes": "CI / this pack did not run a real-BTC Nautilus walk-forward (Linux BacktestEngine SIGABRT, #42). Shape currently matches accumulate_and_distribute. beats_flat_dca_oos is false until an operator re-runs run_sdca_walk_forward with evaluate_sdca_trial_nautilus on real history and persist_btc_optimized. Do not publish to digiquant.io or --push-supabase from this file."
 }

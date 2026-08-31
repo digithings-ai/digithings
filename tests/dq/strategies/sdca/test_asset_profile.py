@@ -34,7 +34,7 @@ from digiquant.strategies.sdca.price_oscillators import (
 )
 from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
 from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.stage_a import CycleOverlapScore, cycle_overlap_score
+from digiquant.strategies.sdca.stage_a import cycle_overlap_score
 
 pytestmark = pytest.mark.unit
 
@@ -71,9 +71,8 @@ def _ohlcv_frame(
     ).select(list(OHLCV_COLUMNS))
 
 
-def _synthetic_second_asset(n: int = 2500) -> tuple[pl.Series, pl.Series]:
-    # Long enough for 90d SMA warmup plus ETH research pins (2018–2022).
-    dates = _dates(n, start=date(2016, 1, 1))
+def _synthetic_second_asset(n: int = 800) -> tuple[pl.Series, pl.Series]:
+    dates = _dates(n, start=date(2018, 1, 1))
     close = pl.Series("close", [80.0 + 0.05 * i + (8.0 if i % 40 == 0 else 0.0) for i in range(n)])
     return dates, close
 
@@ -210,57 +209,41 @@ class TestSecondAssetSmoke:
                 used_cache = False
         if not used_cache:
             dates, close = _synthetic_second_asset()
-
-        def _risk_and_overlap(
-            series_dates: pl.Series, series_close: pl.Series
-        ) -> tuple[pl.DataFrame, CycleOverlapScore]:
-            model = resolve_sdca_risk_model(
-                profile.risk_model,
-                dates=series_dates,
-                price=series_close,
-            )
-            extras = build_extra_indicators(
-                series_dates,
-                series_close,
-                SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.3, sma_band=0.2),
-                ExtraIndicatorSources(),
-                oscillators=profile.oscillators,
-                allowlist=profile.extra_indicators,
-            )
-            built = build_risk_index(
-                series_dates,
-                series_close,
-                model,
-                extra_indicators=extras,
-                valuation_weight=1.0,
-            )
-            overlap = cycle_overlap_score(
-                series_dates.to_list(),
-                built["risk"].to_list(),
-                profile.cycle_windows,
-            )
-            return built, overlap
-
-        try:
-            frame, score = _risk_and_overlap(dates, close)
-        except ValueError:
-            # CI cache can exist and still miss ETH research pins (prefix / warmup).
-            if not used_cache:
-                raise
-            used_cache = False
-            dates, close = _synthetic_second_asset()
-            frame, score = _risk_and_overlap(dates, close)
-
         if used_cache:
             # Full Coinbase cache, not a 900-day prefix (BTC died Jan 2018).
             assert dates.len() > 900
             assert dates[-1].year >= 2025
+        model = resolve_sdca_risk_model(
+            profile.risk_model,
+            dates=dates,
+            price=close,
+        )
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.3, sma_band=0.2),
+            ExtraIndicatorSources(),
+            oscillators=profile.oscillators,
+            allowlist=profile.extra_indicators,
+        )
+        frame = build_risk_index(
+            dates,
+            close,
+            model,
+            extra_indicators=extras,
+            valuation_weight=1.0,
+        )
         assert frame.height == dates.len()
         assert frame["risk"].null_count() < frame.height
         complete = frame.filter(pl.col("risk").is_not_null())
         assert complete.height > 0
         assert complete["risk"].is_finite().all()
         # Cycle windows are per-asset; overlap scoring must accept ETH pins.
+        score = cycle_overlap_score(
+            dates.to_list(),
+            frame["risk"].to_list(),
+            profile.cycle_windows,
+        )
         assert score.trough_days > 0
         assert score.peak_days > 0
         assert not used_cache or profile.symbol == "ETH-USD"

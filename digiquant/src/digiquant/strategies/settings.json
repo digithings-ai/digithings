@@ -13,24 +13,9 @@
     "strategy_type": "slapper"
   },
   "strategies": {
-    "btc_slapper": {
-      "symbol": "BTC-USD",
-      "ccxt_symbol": "BTC/USD",
-      "label": "BTC Slapper",
-      "kind": "long_short"
-    },
-    "eth_slapper": {
-      "symbol": "ETH-USD",
-      "ccxt_symbol": "ETH/USD",
-      "label": "ETH Slapper",
-      "kind": "long_short"
-    },
-    "sol_slapper": {
-      "symbol": "SOL-USD",
-      "ccxt_symbol": "SOL/USD",
-      "label": "SOL Slapper",
-      "kind": "long_short"
-    },
+    "btc_slapper": {"symbol": "BTC-USD", "ccxt_symbol": "BTC/USD", "label": "BTC Slapper", "kind": "long_short"},
+    "eth_slapper": {"symbol": "ETH-USD", "ccxt_symbol": "ETH/USD", "label": "ETH Slapper", "kind": "long_short"},
+    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper", "kind": "long_short"},
     "btc_sdca": {
       "symbol": "BTC-USD",
       "ccxt_symbol": "BTC/USD",
@@ -38,9 +23,9 @@
       "kind": "dca",
       "strategy_type": "sdca",
       "sdca": {
-        "preset": "btc_optimized",
+        "preset": "balanced",
         "risk_model": "btc_power_law",
-        "long_only": false,
+        "long_only": true,
         "initial_cash": 1000.0,
         "indicator_weights": {
           "valuation": 1.0,
@@ -49,7 +34,7 @@
           "dxy": 0.0,
           "weekly_rsi": 0.0,
           "weekly_macd": 0.0,
-          "sma_band": 0.5
+          "sma_band": 0.0
         }
       }
     }

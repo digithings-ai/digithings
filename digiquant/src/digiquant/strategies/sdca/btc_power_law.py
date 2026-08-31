@@ -214,12 +214,11 @@ def load_coefficients(path: Path | None = None) -> BtcPowerLawCoefficients:
     """Load fitted BTC power-law coefficients.
 
     Without an explicit ``path``, prefers the real fit
-    (``btc_power_law_coefficients.json``, committed as of #3173) and falls
-    back to the checked-in placeholder (``btc_power_law_coefficients.example.json``
-    — synthetic, NOT fit to real BTC history) when the real file is absent
-    (fresh tree, or a checkout that deleted it). The fallback still logs a
-    warning. Re-fit via ``digiquant_fit_btc_power_law`` (or ``fit_btc_power_law``
-    + ``save_coefficients``) when new history should move the window.
+    (``btc_power_law_coefficients.json``) and falls back to the checked-in
+    placeholder (``btc_power_law_coefficients.example.json`` — synthetic, NOT
+    fit to real BTC history) when the real file hasn't been produced yet. Run
+    the ``digiquant_fit_btc_power_law`` MCP tool (or ``fit_btc_power_law`` +
+    ``save_coefficients`` directly) to produce the real one — see #1082.
     """
     p = path or (_COEFFICIENTS_PATH if _COEFFICIENTS_PATH.exists() else _COEFFICIENTS_EXAMPLE_PATH)
     if not p.exists():
@@ -283,12 +282,9 @@ class BtcPowerLawRiskModel:
     quantile rails (#1082's "optional full 7-quantile set") for callers that
     want the wider corridor. ``low_quantile``/``high_quantile`` pick which of
     the 7 fitted rails map to "low"/"high" — median is always ``q50``. The
-    default (10th/95th) is kept after #3173: in-sample coverage of Coinbase
-    daily closes vs the rearranged rails matches those quantiles within 0.1pp
-    (q10 ≈ 10.05% of days below the low rail, q95 ≈ 94.95% below the high
-    rail). The asymmetry (10% cheap clip vs 5% rich clip) matches a book that
-    should hit max-buy more often than max-sell. Truncated-history refits are
-    *not* stable — see ARCHITECTURE.md — but that does not change this default.
+    default (10th/95th) is a documented judgment call, not validated against
+    the reference artifact (network access to it is blocked in the environment
+    this was built in — see #1082); revisit once the artifact is reachable.
     """
 
     def __init__(

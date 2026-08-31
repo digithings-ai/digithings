@@ -24,30 +24,6 @@ export interface TearsheetBreakdown {
   losses: number;
 }
 
-/** Schema 1.3 DCA block. Every `*_pct` field is a ×100 true percent (#2552). */
-export interface TearsheetDcaBreakdown {
-  vs_lump_pct: number;
-  vs_flat_dca_pct: number;
-  avg_cost_basis: number | null;
-  final_cost_basis_vs_price: number | null;
-  capital_deployed_pct: number;
-  capital_deployed_peak_pct: number;
-  units_accumulated: number;
-  buy_days: number;
-  sell_days: number;
-  no_trade_days: number;
-  avg_risk: number | null;
-  avg_rate: number | null;
-}
-
-/** Valuation rails overlay (low / median / high) from the #3168 diagnostics. */
-export interface TearsheetRailPoint {
-  t: string;
-  low: number;
-  median: number;
-  high: number;
-}
-
 export interface TearsheetData {
   schema_version: string;
   strategy: string;
@@ -68,14 +44,13 @@ export interface TearsheetData {
   sharpe_ratio: number | null;
   sortino_ratio: number | null;
   calmar_ratio: number | null;
-  /** Null (not 0) on DCA books — trade-based KPIs do not apply (#3171). */
-  profit_factor: number | null;
-  win_rate_pct: number | null;
+  profit_factor: number;
+  win_rate_pct: number;
   total_trades: number;
   avg_trade: number;
   overall: TearsheetBreakdown;
-  long: TearsheetBreakdown | null;
-  short: TearsheetBreakdown | null;
+  long: TearsheetBreakdown;
+  short: TearsheetBreakdown;
   equity_curve: TearsheetSeriesPoint[];
   drawdown_curve: TearsheetSeriesPoint[];
   /** Full-history OHLC (may span before ``trade_start``); absent on schema 1.0. */
@@ -87,31 +62,16 @@ export interface TearsheetData {
    *  derived current signal. Absent on legacy static-JSON payloads. */
   label?: string;
   kind?: string;
-  avg_trade_pct?: number | null;
+  avg_trade_pct?: number;
   current_signal?: CurrentSignal;
-  /** Schema 1.3 — absent on every Slapper payload. */
-  dca?: TearsheetDcaBreakdown | null;
-  /** Optional diagnostic series; degrade when absent (publish may lag). */
-  rails?: TearsheetRailPoint[];
-  risk_curve?: TearsheetSeriesPoint[];
-  cost_basis_curve?: TearsheetSeriesPoint[];
-  capital_deployed_curve?: TearsheetSeriesPoint[];
-  lump_equity_curve?: TearsheetSeriesPoint[];
-  flat_dca_equity_curve?: TearsheetSeriesPoint[];
 }
 
 export interface CurrentSignal {
-  /** "long" | "short" | "flat" on slappers; DCA books may still send long/flat. */
+  /** "long" | "short" | "flat" — the leg open at period end. */
   position: string;
   entry_label: string;
   last_signal_date: string;
   last_price: number | null;
-  /** Composite risk 0–100 (DCA). */
-  risk?: number | null;
-  /** Band label; renderer derives from `risk` when omitted. */
-  band?: string | null;
-  /** Today's rate as a ×100 percent (cash for buys, units for sells). */
-  daily_rate_pct?: number | null;
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */
@@ -129,13 +89,10 @@ export interface StrategyIndexEntry {
   signal_delay_days?: number;
   net_profit_pct: number;
   max_drawdown_pct: number;
-  profit_factor: number | null;
-  win_rate_pct: number | null;
-  avg_trade_pct: number | null;
+  profit_factor: number;
+  win_rate_pct: number;
+  avg_trade_pct: number;
   total_trades: number;
   generated_at: string;
   href: string;
-  vs_lump_pct?: number | null;
-  vs_flat_dca_pct?: number | null;
-  capital_deployed_pct?: number | null;
 }

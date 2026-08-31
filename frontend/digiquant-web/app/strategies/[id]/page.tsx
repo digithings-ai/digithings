@@ -8,13 +8,12 @@ import { strategyDisplayName } from "@/components/tearsheet/strategy-names";
 
 // Static export needs the route list (and per-route metadata) at build time,
 // while the tearsheet DATA is read live from Supabase inside <TearsheetView/>.
-// The published set is the three Slappers plus btc_sdca (DCA). Keep the
-// slug→label/symbol map here so the build never depends on the live store (#1069).
+// The published set is the three Slappers; keep the slug→label/symbol map here
+// so the build never depends on the live store (#1069).
 const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_slapper: { label: "BTC Slapper", symbol: "BTC-USD" },
   eth_slapper: { label: "ETH Slapper", symbol: "ETH-USD" },
   sol_slapper: { label: "SOL Slapper", symbol: "SOL-USD" },
-  btc_sdca: { label: "BTC Strategic DCA", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;

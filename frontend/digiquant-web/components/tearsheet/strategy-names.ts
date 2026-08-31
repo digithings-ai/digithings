@@ -4,7 +4,6 @@ const DISPLAY_NAMES: Record<string, string> = {
   btc_slapper: "BTC long/short",
   eth_slapper: "ETH long/short",
   sol_slapper: "SOL long/short",
-  btc_sdca: "BTC Strategic DCA",
 };
 
 /** Resolve a human label; prefers index.json `label`, then the canonical map. */

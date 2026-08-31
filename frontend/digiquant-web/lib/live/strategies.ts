@@ -32,13 +32,10 @@ function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
     max_drawdown_pct: m.max_drawdown_pct,
     profit_factor: m.profit_factor,
     win_rate_pct: m.win_rate_pct,
-    avg_trade_pct: m.avg_trade_pct ?? null,
+    avg_trade_pct: m.avg_trade_pct ?? 0,
     total_trades: m.total_trades,
     generated_at: m.generated_at,
     href: `/strategies/${m.strategy}`,
-    vs_lump_pct: m.dca?.vs_lump_pct ?? null,
-    vs_flat_dca_pct: m.dca?.vs_flat_dca_pct ?? null,
-    capital_deployed_pct: m.dca?.capital_deployed_pct ?? null,
   };
 }
 
