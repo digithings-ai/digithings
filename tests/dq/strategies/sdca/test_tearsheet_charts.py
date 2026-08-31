@@ -37,6 +37,8 @@ pytestmark = pytest.mark.unit
 def test_indicator_display_name_renames_valuation_to_power_law() -> None:
     assert indicator_display_name("valuation") == "power law"
     assert indicator_display_name("m2") == "M2 liquidity"
+    assert indicator_display_name("weekly_macd") == "weekly log-MACD"
+    assert indicator_display_name("weekly_rsi") == "weekly RSI"
 
 
 def test_allocated_pct_is_mark_to_market_not_capital_deployed() -> None:

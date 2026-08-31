@@ -73,7 +73,7 @@ Latest signal for a DCA book is **buy / sell / hold** plus the remaining-book
 rate (percent of remaining cash or remaining BTC), as of `period_end` (3-day
 delay). Allocated is MTM, never a negative "Deployed". The primary chart is
 **Fills** (`AllocationStepChart` with sized buy/sell markers). The risk tab is
-the **composite valuation index** (power law + M2 + DXY).
+the **composite valuation index** (power law + M2 + DXY + weekly log-MACD + RSI).
 
 Public title is **BTC SDCA Strat**. Honesty (`beats_flat_dca_oos` false,
 backtest only) lives in notes, not title chips.

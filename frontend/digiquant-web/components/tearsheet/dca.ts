@@ -18,7 +18,7 @@ const UNUSED_EXTRAS: { name: string; display_name: string }[] = [
   { name: "rs_eth", display_name: "BTC/ETH relative strength" },
   { name: "dxy", display_name: "DXY" },
   { name: "weekly_rsi", display_name: "weekly RSI" },
-  { name: "weekly_macd", display_name: "weekly MACD" },
+  { name: "weekly_macd", display_name: "weekly log-MACD" },
   { name: "sma_band", display_name: "SMA band" },
 ];
 

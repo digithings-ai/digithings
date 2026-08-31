@@ -128,7 +128,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
         lw=1.2,
         label=f"distribute starts (overbought, risk {sell_k:.0f})",
     )
-    ax.set_ylabel("Power-law risk (0 cheap → 100 rich)")
+    ax.set_ylabel("Composite valuation index (0 cheap → 100 rich)")
 
     prices = inputs["prices"]
     dates = _dates(inputs["dates"])  # type: ignore[arg-type]
@@ -157,7 +157,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
     else:
         ax.legend(frameon=False, loc="upper left", fontsize=9)
 
-    ax.set_title("Power-law risk — accumulate / distribute knees")
+    ax.set_title("Composite valuation index — accumulate / distribute knees")
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
@@ -204,7 +204,7 @@ def plot_indicator_multiples(inputs: Mapping[str, object], path: Path) -> Path:
                 fontsize=9,
             )
         ax.set_ylabel("0–100")
-    fig.suptitle("Underlying indicators (power law in index; extras unused at weight 0)", y=1.01)
+    fig.suptitle("Underlying indicators (included members in the composite; weight 0 unused)", y=1.01)
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")

@@ -109,7 +109,8 @@ def materialize_sdca_risk_index(
 
     Callers must pass the already-``apply_signal_delay()``-truncated frame so
     the index cannot leak bars beyond the published window. Default
-    ``valuation_weight=1`` and no extras matches the published BTC chart.
+    ``valuation_weight=1`` and no extras matches the catalog model default.
+    Published ``btc_sdca`` extras come from ``settings.json``.
     """
     import polars as pl
 
@@ -736,6 +737,7 @@ def run_and_write(
         from digiquant.strategies.sdca.indicator_catalog import (
             SdcaCompositeWeights,
             build_extra_indicators,
+            indicator_display_name,
         )
         from digiquant.strategies.sdca.presets import load_preset
 
@@ -819,19 +821,20 @@ def run_and_write(
                 "unused (weight 0) — not a multi-indicator composite."
             )
         else:
-            keepers: list[str] = []
-            if published_weights.valuation:
-                keepers.append(f"power law {published_weights.valuation:g}")
-            if published_weights.m2:
-                keepers.append(f"M2 {published_weights.m2:g}")
-            if published_weights.dxy:
-                keepers.append(f"DXY {published_weights.dxy:g}")
-            provenance_notes.append(
-                "Published index is a composite valuation index ("
-                + " + ".join(keepers)
-                + "). Weekly RSI/MACD, SMA band, and BTC/ETH RS remain unused "
-                "(weight 0)."
-            )
+            keepers = [
+                f"{indicator_display_name(name)} {weight:g}"
+                for name, weight in published_weights.model_dump().items()
+                if weight > 0.0
+            ]
+            unused = [
+                indicator_display_name(name)
+                for name, weight in published_weights.model_dump().items()
+                if name != "valuation" and weight == 0.0
+            ]
+            note = "Published index is a composite valuation index (" + " + ".join(keepers) + ")."
+            if unused:
+                note += " Unused (weight 0): " + ", ".join(unused) + "."
+            provenance_notes.append(note)
         if dropped_this_run:
             provenance_notes.append(
                 "This run omitted "

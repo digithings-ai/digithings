@@ -389,7 +389,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <span className="ts-panel-hint">
             {isValuationOnlyIndex(data?.indicator_weights)
               ? "Power-law only. Extra indicators are unused (weight 0)."
-              : "Composite valuation index (power law + M2 + DXY). Zero-weight extras are unused."}
+              : "Composite valuation index (power law + M2 + DXY + weekly log-MACD + RSI). Zero-weight extras are unused."}
           </span>
         );
       case "accumulation":

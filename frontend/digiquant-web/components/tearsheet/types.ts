@@ -141,7 +141,7 @@ export interface CurrentSignal {
   entry_label: string;
   last_signal_date: string;
   last_price: number | null;
-  /** Composite risk 0–100 (DCA remaining-book; power law + M2 + DXY when published). */
+  /** Composite risk 0–100 (DCA remaining-book; power law + M2 + DXY + oscillators when published). */
   risk?: number | null;
   /** Band label; renderer derives from `risk` when omitted. */
   band?: string | null;

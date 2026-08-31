@@ -69,10 +69,24 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     assert weights["m2"] == 0.5
     assert weights["dxy"] == 0.5
     assert weights["rs_eth"] == 0.0
-    assert weights["weekly_rsi"] == 0.0
-    assert weights["weekly_macd"] == 0.0
+    assert weights["weekly_rsi"] == 0.25
+    assert weights["weekly_macd"] == 0.5
     assert weights["sma_band"] == 0.0
     assert sdca["preset"] != "balanced"
+
+
+def test_richer_composite_sidecar_matches_settings() -> None:
+    sidecar = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "digiquant/src/digiquant/strategies/sdca/btc_richer_composite.json"
+        ).read_text()
+    )
+    settings = gts.load_settings()
+    published = settings["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
+    assert sidecar["beats_flat_dca_oos"] is False
+    assert sidecar["published_weights"] == published
+    assert sidecar["public_name"] == "BTC SDCA Strat"
 
 
 def test_sdca_risk_index_uses_signal_delayed_frame_only(tmp_path: Path) -> None:
@@ -178,7 +192,10 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert "beats_flat_dca_oos=false" in " ".join(payload["notes"])
     assert "not a live strategy" in " ".join(payload["notes"]).lower()
     assert "Buy-and-hold" in " ".join(payload["notes"])
-    assert not any("curve_simulator" in n.lower() and "beats_flat_dca_oos=true" in n.lower() for n in payload["notes"])
+    assert not any(
+        "curve_simulator" in n.lower() and "beats_flat_dca_oos=true" in n.lower()
+        for n in payload["notes"]
+    )
     assert not any("stage 1" in n.lower() and "persist" in n.lower() for n in payload["notes"])
     assert payload["dca"]["allocated_pct"] is not None
     assert 0.0 <= payload["dca"]["allocated_pct"] <= 100.0

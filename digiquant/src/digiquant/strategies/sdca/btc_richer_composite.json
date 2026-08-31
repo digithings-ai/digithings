@@ -1,0 +1,55 @@
+{
+  "asset": "BTC-USD",
+  "strategy_id": "btc_sdca",
+  "public_name": "BTC SDCA Strat",
+  "kind": "dca",
+  "composite_valuation_index": true,
+  "beats_flat_dca_oos": false,
+  "curve_params_owned_by": "sibling PR (knees / buy_max_rate / remaining-book ramp); this sidecar does not retune them",
+  "notes": [
+    "In-sample richness, not a proven OOS beat. Frozen btc_optimized curve used for diagnostics.",
+    "Do not dump 90-day rolling-z extras: they smear risk toward 50 and made weekly RSI sit rich all bull (Stage 0: 0 buy / 155 sell days).",
+    "weekly_rsi extra is an MTF blend of weekly + monthly RSI with a 30-80 dead zone and BTI-style cap at 85 (not affine 50-RSI).",
+    "weekly_macd extra is weekly log-MACD (log10 EMA12-EMA26) with a sloped diminishing top cap (Da_Prof-style), not 52w histogram z.",
+    "Daily RSI is not a composite vote (must not flip a distribute day to a buy).",
+    "Alpha residual |r|≈0.92 vs valuation_z on Coinbase 2015-07-20→2026-08-29 — skipped as collinear.",
+    "Equal-weighting dead-zone RSI (z=0 most of the time) still sits in the denominator and dilutes the spine; RSI weight is 0.25 not 0.5."
+  ],
+  "correlations_vs_valuation_z": {
+    "sample": "Coinbase BTC-USD.csv 2015-07-20 to 2026-08-29 (in-sample)",
+    "alpha_residual": -0.92,
+    "m2": 0.146,
+    "dxy": 0.038,
+    "rs_eth": -0.078,
+    "weekly_rsi_deadzone": 0.18,
+    "weekly_log_macd": 0.583,
+    "sma_band_90d": 0.162,
+    "monthly_rsi_deadzone": 0.341
+  },
+  "published_weights": {
+    "valuation": 1.0,
+    "m2": 0.5,
+    "dxy": 0.5,
+    "weekly_macd": 0.5,
+    "weekly_rsi": 0.25,
+    "sma_band": 0.0,
+    "rs_eth": 0.0
+  },
+  "included": [
+    {"name": "valuation", "weight": 1.0, "why": "power-law spine (user-facing name: power law)"},
+    {"name": "m2", "weight": 0.5, "why": "Stage 0 keeper; independent of valuation (r=0.15)"},
+    {"name": "dxy", "weight": 0.5, "why": "Stage 0 keeper; independent of valuation (r=0.04)"},
+    {"name": "weekly_macd", "weight": 0.5, "why": "re-spec'd weekly log-MACD; r=0.58 vs valuation; 2025 solo sells 39 days"},
+    {"name": "weekly_rsi", "weight": 0.25, "why": "MTF weekly+monthly dead-zone RSI; sparse exhaustion vote, lighter weight so z=0 does not dilute the spine"}
+  ],
+  "skipped": [
+    {"name": "alpha / Mayer / 200w SMA", "why": "collinear with valuation_z (|r|≈0.92 for log-price minus power-law median)"},
+    {"name": "rs_eth", "why": "Stage 0 clearly harmful; transform not re-spec'd"},
+    {"name": "sma_band", "why": "90-day rolling z smears 2025 risk toward 50"},
+    {"name": "pi_cycle", "why": "111d/350d SMA cross is wrong-signed in 2025 (would buy the ATH)"},
+    {"name": "MVRV / SOPR / NUPL", "why": "no in-repo history (#1086); do not scrape"},
+    {"name": "CSI / HSI", "why": "calendar clocks, not valuation"},
+    {"name": "daily RSI", "why": "must not flip a distribute day to a buy; ST oscillators stay out of compute_composite_risk"},
+    {"name": "meme-heat / DOGE", "why": "optional overlay later, not in this PR"}
+  ]
+}

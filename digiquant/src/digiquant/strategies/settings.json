@@ -47,8 +47,8 @@
           "m2": 0.5,
           "rs_eth": 0.0,
           "dxy": 0.5,
-          "weekly_rsi": 0.0,
-          "weekly_macd": 0.0,
+          "weekly_rsi": 0.25,
+          "weekly_macd": 0.5,
           "sma_band": 0.0
         }
       }

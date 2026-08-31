@@ -163,11 +163,13 @@ the full module map.
   step after a real Nautilus generate; do not run it from an agent
   environment.
 - **Published `btc_sdca` is a composite valuation index + remaining-book.**
-  Stage 0 keepers **power law + M2 + DXY** (`valuation=1.0`, `m2=0.5`, `dxy=0.5`)
-  are persisted in `settings.json`. Weekly RSI/MACD, SMA band, and BTC/ETH RS
-  stay at 0. Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
-  OOS `beats_flat_dca_oos` is still false — do not claim an OOS win from the
-  Stage 1 `curve_simulator` sidecar.
+  Keepers **power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI**
+  (`valuation=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
+  are persisted in `settings.json`. SMA band and BTC/ETH RS stay at 0.
+  Oscillator z is cycle-scaled (RSI dead-zone + cap; log-MACD sloped top),
+  not 90-day rolling z. Preset `btc_optimized` still sells (`long_only: false`).
+  Walk-forward OOS `beats_flat_dca_oos` is still false — in-sample richness,
+  not a proven OOS beat. Curve knees/rates are a sibling PR.
 - **Public copy.** User-facing name is **BTC SDCA Strat**. The page is a
   strategy (fills chart, latest remaining-book signal, MTM allocated, vs
   buy-and-hold). Honesty lives in notes, not a chip wall. Do not render

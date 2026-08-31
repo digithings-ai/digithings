@@ -3,14 +3,15 @@
 The engine already blends ``Σ(zᵢ·wᵢ)/Σ(wᵢ)`` then
 ``risk = 50 − z×50/3`` (``composite_risk.py``). Extras are either **macro**
 (independent of BTC close: M2, BTC/ETH, DXY) or **price oscillators**
-(weekly RSI / weekly MACD / 90d SMA-band z). Oscillators are user-requested
+(weekly RSI / weekly log-MACD / 90d SMA-band z). Oscillators are
 long-horizon votes; they are **not** Mayer / 200w SMA (near-duplicate of
-power-law ``valuation_z``). Weekly MACD defaults to weight 0 because it
-correlates ~0.65 with weekly RSI — do not equal-weight the pair.
+power-law ``valuation_z``).
 
-Default weights keep published BTC charts unchanged: ``valuation=1``, extras
-``0`` (disabled, excluded from the blend, so a missing macro row cannot null
-the day). Positive weights are searched by Stage A / walk-forward.
+``SdcaCompositeWeights`` defaults ``valuation=1``, extras ``0`` (disabled,
+excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
+on M2, DXY, weekly log-MACD, and MTF weekly/monthly RSI — see
+``btc_richer_composite.json``. Model defaults stay extras-off so a missing
+macro row cannot null an unpublished path.
 
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``valuation_z`` (research PR #3232)
@@ -33,10 +34,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
+    mtf_rsi_z,
     price_oscillator_z_vectors,
     sma_band_z,
     weekly_macd_z,
-    weekly_rsi_z,
 )
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
@@ -64,7 +65,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
     "weekly_rsi": "weekly RSI",
-    "weekly_macd": "weekly MACD",
+    "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
 }
 
@@ -312,7 +313,7 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="weekly_rsi",
-                z=weekly_rsi_z(dates, btc_price, length=spec.rsi_length),
+                z=mtf_rsi_z(dates, btc_price, length=spec.rsi_length),
                 weight=enabled["weekly_rsi"],
             )
         )
