@@ -57,6 +57,22 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "sma_band": "sma_band_weight",
 }
 
+# User-facing labels. Code ids stay ``valuation``; charts must say "power law".
+INDICATOR_DISPLAY_NAMES: dict[str, str] = {
+    "valuation": "power law",
+    "m2": "M2 liquidity",
+    "rs_eth": "BTC/ETH relative strength",
+    "dxy": "DXY",
+    "weekly_rsi": "weekly RSI",
+    "weekly_macd": "weekly MACD",
+    "sma_band": "SMA band",
+}
+
+
+def indicator_display_name(name: str) -> str:
+    """Chart/UI label for an indicator code id (``valuation`` → ``power law``)."""
+    return INDICATOR_DISPLAY_NAMES.get(name, name.replace("_", " "))
+
 
 class SdcaCompositeWeights(BaseModel):
     """Non-negative weights. Zero means disabled (not in the blend)."""
@@ -471,6 +487,7 @@ __all__ = [
     "MACRO_INDICATOR_NAMES",
     "PRICE_OSCILLATOR_NAMES",
     "WEIGHT_PARAM_BY_NAME",
+    "INDICATOR_DISPLAY_NAMES",
     "ExtraIndicatorSources",
     "SdcaCompositeWeights",
     "align_to_dates",
@@ -480,6 +497,7 @@ __all__ = [
     "dxy_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
+    "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",
     "missing_extra_names",

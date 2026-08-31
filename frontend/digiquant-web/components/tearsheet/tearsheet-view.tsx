@@ -24,6 +24,7 @@ import {
   RISK_BANDS,
   ReturnsMatrix,
   RiskBandStrip,
+  AllocationStepChart,
   SegToggle,
   TerminalMark,
   TimeSeries,
@@ -70,7 +71,7 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { hasTradeKpis, isDcaTearsheet } from "./dca";
+import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees } from "./dca";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -117,7 +118,7 @@ function TradeLog({
 }
 
 type TearsheetMode = "charts" | "tables";
-type ChartTab = "price" | "rails" | "risk" | "accumulation" | "equity" | "drawdown" | "pnl" | "matrix";
+type ChartTab = "price" | "rails" | "risk" | "indicators" | "accumulation" | "equity" | "drawdown" | "pnl" | "matrix";
 type TableTab = "stats" | "trades";
 
 const CHART_H = 440;
@@ -184,10 +185,6 @@ export function TearsheetView({ slug }: { slug: string }) {
     () => (data?.cost_basis_curve ? clipPoints(data.cost_basis_curve, data.period_start) : []),
     [data],
   );
-  const chartDeployed = useMemo(
-    () => (data?.capital_deployed_curve ? clipPoints(data.capital_deployed_curve, data.period_start) : []),
-    [data],
-  );
   const chartLump = useMemo(
     () => (data?.lump_equity_curve ? clipPoints(data.lump_equity_curve, data.period_start) : []),
     [data],
@@ -196,6 +193,11 @@ export function TearsheetView({ slug }: { slug: string }) {
     () => (data?.flat_dca_equity_curve ? clipPoints(data.flat_dca_equity_curve, data.period_start) : []),
     [data],
   );
+  const chartAllocated = useMemo(() => (data ? clipPoints(allocatedPctCurve(data), data.period_start) : []), [data]);
+  const chartCash = useMemo(() => cashPctFromAllocated(chartAllocated), [chartAllocated]);
+  const chartFills = useMemo(() => (data ? fillMarkersForChart(data) : []), [data]);
+  const chartIndicators = useMemo(() => (data ? indicatorPanels(data) : []), [data]);
+  const chartKnees = useMemo(() => (data ? curveKnees(data) : { buy_knee_risk: 25, sell_knee_risk: 70 }), [data]);
 
   const pnlBars = useMemo(() => (data ? tradesForPnlChart(data) : []), [data]);
 
@@ -242,13 +244,18 @@ export function TearsheetView({ slug }: { slug: string }) {
   const hasPrice = chartOhlc.length > 0;
   const hasRails = chartRails.length > 0 && chartSpot.length > 0;
   const hasRisk = chartRisk.length > 0;
-  const hasAccum = chartCost.length > 0 || chartDeployed.length > 0;
+  const hasIndicators = chartIndicators.length > 0;
+  const hasAccum = chartCost.length > 0 || chartAllocated.length > 0;
   const hasThreeWay = chartLump.length > 0 && chartFlat.length > 0;
   const showTradeKpis = data ? hasTradeKpis(data.win_rate_pct, data.profit_factor) : true;
   const dcaBook = data ? isDcaTearsheet(data) : false;
   const chartTab =
     chartTabPick ??
     (hasRails ? "rails" : hasPrice ? "price" : "equity");
+
+  useEffect(() => {
+    if (dcaBook) setScale("log");
+  }, [dcaBook]);
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, data?.label);
@@ -282,13 +289,14 @@ export function TearsheetView({ slug }: { slug: string }) {
     const opts: { value: ChartTab; label: string }[] = [];
     if (hasPrice) opts.push({ value: "price", label: "Price" });
     if (hasRails) opts.push({ value: "rails", label: "Rails" });
-    if (hasRisk) opts.push({ value: "risk", label: "Risk" });
-    if (hasAccum) opts.push({ value: "accumulation", label: "Accumulation" });
+    if (hasRisk) opts.push({ value: "risk", label: "Index" });
+    if (hasIndicators) opts.push({ value: "indicators", label: "Indicators" });
+    if (hasAccum) opts.push({ value: "accumulation", label: "Allocation" });
     opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
     if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
     opts.push({ value: "matrix", label: "Matrix" });
     return opts;
-  }, [hasAccum, hasPrice, hasRails, hasRisk, showTradeKpis]);
+  }, [hasAccum, hasIndicators, hasPrice, hasRails, hasRisk, showTradeKpis]);
 
   const railsOverlay: OverlaySeries[] = useMemo(() => {
     if (!hasRails) return [];
@@ -333,7 +341,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <ChartLegend
             items={[
               { kind: "line", label: "Spot" },
-              { kind: "line-dashed", label: "Low / high" },
+              { kind: "line-dashed", label: "Low / high (power law)" },
               { kind: "line-mute", label: "Median" },
             ]}
           />
@@ -341,16 +349,24 @@ export function TearsheetView({ slug }: { slug: string }) {
       case "risk":
         return (
           <span className="ts-panel-hint">
+            {`accumulate starts at ${chartKnees.buy_knee_risk} · distribute starts at ${chartKnees.sell_knee_risk} · `}
             {RISK_BANDS.map((b) => `${b.lo}–${b.hi} ${b.label}`).join(" · ")}
+          </span>
+        );
+      case "indicators":
+        return (
+          <span className="ts-panel-hint">
+            Included members of the composite (power law). Zero-weight extras are unused.
           </span>
         );
       case "accumulation":
         return (
           <ChartLegend
             items={[
-              { kind: "line", label: "Spot" },
-              { kind: "line-up", label: "Cost basis" },
-              { kind: "line-mute", label: "Capital deployed %" },
+              { kind: "line", label: "% allocated" },
+              { kind: "line-dashed", label: "% cash" },
+              { kind: "marker-buy", label: "buy fill" },
+              { kind: "marker-sell", label: "sell fill" },
             ]}
           />
         );
@@ -384,7 +400,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         return _exhaustive;
       }
     }
-  }, [chartTab, hasThreeWay, scale]);
+  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, hasThreeWay, scale]);
 
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
@@ -558,7 +574,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           ) : null}
           {hasRails ? (
             <div className="ts-tab-pane" hidden={chartTab !== "rails"}>
-              <PrintHeading>Valuation rails</PrintHeading>
+              <PrintHeading>Power-law rails</PrintHeading>
               <div className="ts-chart">
                 <MultiTimeSeries
                   series={railsOverlay}
@@ -569,14 +585,14 @@ export function TearsheetView({ slug }: { slug: string }) {
                   onView={setViewFromChart}
                   fullSpan={fullSpan}
                   resetView={presetView}
-                  ariaLabel={`${data.symbol} log price with valuation rails`}
+                  ariaLabel={`${data.symbol} log price with power-law rails`}
                 />
               </div>
             </div>
           ) : null}
           {hasRisk ? (
             <div className="ts-tab-pane" hidden={chartTab !== "risk"}>
-              <PrintHeading>Risk band</PrintHeading>
+              <PrintHeading>Composite index</PrintHeading>
               <div className="ts-chart">
                 <RiskBandStrip
                   points={chartRisk}
@@ -585,47 +601,91 @@ export function TearsheetView({ slug }: { slug: string }) {
                   onView={setViewFromChart}
                   fullSpan={fullSpan}
                   resetView={presetView}
-                  ariaLabel="Composite risk 0 to 100 with labelled bands"
+                  thresholds={[
+                    {
+                      id: "buy",
+                      value: chartKnees.buy_knee_risk,
+                      label: `accumulate (oversold) ${chartKnees.buy_knee_risk}`,
+                    },
+                    {
+                      id: "sell",
+                      value: chartKnees.sell_knee_risk,
+                      label: `distribute (overbought) ${chartKnees.sell_knee_risk}`,
+                    },
+                  ]}
+                  priceOverlay={chartSpot}
+                  ariaLabel="Composite index 0 to 100 with power-law member, buy and sell knees, and log BTC overlay"
                 />
+              </div>
+            </div>
+          ) : null}
+          {hasIndicators ? (
+            <div className="ts-tab-pane" hidden={chartTab !== "indicators"}>
+              <PrintHeading>Underlying indicators</PrintHeading>
+              <div className="ts-indicator-grid">
+                {chartIndicators.map((ind) => (
+                  <div key={ind.name} className={ind.in_index ? undefined : "ts-indicator-unused"}>
+                    <p className="ts-indicator-caption">
+                      {ind.display_name}
+                      {ind.in_index ? ` · in index, weight ${ind.weight}` : " · not in index, weight 0"}
+                    </p>
+                    {ind.points.length > 0 ? (
+                      <TimeSeries
+                        points={clipPoints(ind.points, data.period_start)}
+                        height={200}
+                        scale="linear"
+                        tone="accent"
+                        fmt={(v) => fmtCompact(v)}
+                        view={chartView}
+                        onView={setViewFromChart}
+                        fullSpan={fullSpan}
+                        resetView={presetView}
+                        ariaLabel={`${ind.display_name} on the 0 to 100 risk scale`}
+                      />
+                    ) : (
+                      <p className="ts-panel-hint">no series (dropped from the composite)</p>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           ) : null}
           {hasAccum ? (
             <div className="ts-tab-pane" hidden={chartTab !== "accumulation"}>
-              <PrintHeading>Accumulation</PrintHeading>
-              <div className="ts-chart">
-                <MultiTimeSeries
-                  series={[
-                    ...(chartSpot.length
-                      ? [{ id: "spot", label: "Spot", points: chartSpot, tone: "accent" as const, fill: true }]
-                      : []),
-                    ...(chartCost.length
-                      ? [{ id: "cost", label: "Cost basis", points: chartCost, tone: "up" as const }]
-                      : []),
-                  ]}
-                  height={CHART_H}
-                  scale="linear"
-                  fmt={fmtCompact}
-                  view={chartView}
-                  onView={setViewFromChart}
-                  fullSpan={fullSpan}
-                  resetView={presetView}
-                  ariaLabel="Cost basis versus spot price"
-                />
-              </div>
-              {chartDeployed.length > 0 ? (
+              <PrintHeading>Allocation</PrintHeading>
+              {chartAllocated.length > 0 ? (
                 <div className="ts-chart">
-                  <TimeSeries
-                    points={chartDeployed}
-                    height={Math.round(CHART_H * 0.55)}
-                    scale="linear"
-                    tone="accent"
-                    fmt={(v) => fmtCompact(v) + "%"}
+                  <AllocationStepChart
+                    allocated={chartAllocated}
+                    cash={chartCash}
+                    markers={chartFills}
+                    priceOverlay={chartSpot}
+                    height={CHART_H}
                     view={chartView}
                     onView={setViewFromChart}
                     fullSpan={fullSpan}
                     resetView={presetView}
-                    ariaLabel="Capital deployed, percent of initial cash"
+                    ariaLabel="Percent allocated versus percent cash, step chart, with fill dots sized by fraction of book moved"
+                  />
+                </div>
+              ) : null}
+              {chartCost.length > 0 ? (
+                <div className="ts-chart">
+                  <MultiTimeSeries
+                    series={[
+                      ...(chartSpot.length
+                        ? [{ id: "spot", label: "Spot", points: chartSpot, tone: "accent" as const, fill: true }]
+                        : []),
+                      { id: "cost", label: "Cost basis", points: chartCost, tone: "up" as const },
+                    ]}
+                    height={Math.round(CHART_H * 0.55)}
+                    scale={chartScale === "log" ? "log" : "linear"}
+                    fmt={fmtCompact}
+                    view={chartView}
+                    onView={setViewFromChart}
+                    fullSpan={fullSpan}
+                    resetView={presetView}
+                    ariaLabel="Cost basis versus spot price"
                   />
                 </div>
               ) : null}

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { hasTradeKpis, isDcaIndexEntry, isDcaTearsheet } from "./dca";
+import {
+  allocatedPctCurve,
+  fillMarkersForChart,
+  hasTradeKpis,
+  indicatorPanels,
+  isDcaIndexEntry,
+  isDcaTearsheet,
+} from "./dca";
 import { inferKind } from "./strategy-kinds";
 
 describe("inferKind", () => {
@@ -36,5 +43,51 @@ describe("isDcaTearsheet", () => {
       }),
     ).toBe(true);
     expect(isDcaTearsheet({ strategy: "btc_slapper" })).toBe(false);
+  });
+});
+
+describe("allocatedPctCurve", () => {
+  it("does not use negative capital_deployed as allocation", () => {
+    const allocated = allocatedPctCurve({
+      allocated_pct_curve: undefined,
+      equity_curve: [{ t: "2025-01-20", v: 84232 }],
+      capital_deployed_curve: [{ t: "2025-01-20", v: -504.63549 }],
+      initial_capital: 1000,
+    } as never);
+    expect(allocated[0].v).toBeGreaterThan(0);
+    expect(allocated[0].v).toBeLessThan(100);
+    expect(allocated[0].v).not.toBeCloseTo(-504.63549);
+  });
+});
+
+describe("fillMarkersForChart", () => {
+  it("marks a reconstructed unit drop as a sell", () => {
+    const markers = fillMarkersForChart({
+      initial_capital: 1000,
+      equity_curve: [
+        { t: "2025-01-19", v: 1100 },
+        { t: "2025-01-20", v: 1050 },
+      ],
+      capital_deployed_curve: [
+        { t: "2025-01-19", v: 90 },
+        { t: "2025-01-20", v: -50 },
+      ],
+      ohlc_bars: [
+        { t: "2025-01-19", o: 100, h: 100, l: 100, c: 100 },
+        { t: "2025-01-20", o: 110, h: 110, l: 110, c: 110 },
+      ],
+    } as never);
+    expect(markers.some((m) => m.side === "sell" && m.t.startsWith("2025-01-20"))).toBe(true);
+  });
+});
+
+describe("indicatorPanels", () => {
+  it("labels valuation as power law when reconstructing from the index", () => {
+    const panels = indicatorPanels({
+      risk_curve: [{ t: "2025-01-01", v: 40 }],
+    } as never);
+    expect(panels[0].display_name).toBe("power law");
+    expect(panels[0].in_index).toBe(true);
+    expect(panels.some((p) => p.name === "m2" && !p.in_index)).toBe(true);
   });
 });

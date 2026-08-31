@@ -576,6 +576,7 @@ def _sdca_tearsheet_from_nautilus(
     """
     import polars as pl
 
+    from digiquant.strategies.sdca.chart_series import z_from_risk_index
     from digiquant.strategies.sdca.curve import AccumDistCurve
     from digiquant.strategies.sdca.dca_metrics import (
         breakdown_from_daily,
@@ -604,6 +605,7 @@ def _sdca_tearsheet_from_nautilus(
             risk_df = pl.read_parquet(risk_path)
 
     nodes = (calibration or {}).get("curve_nodes")
+    indicator_z: dict = {}
     if risk_df is not None and nodes is not None:
         by_date: dict[str, tuple[float | None, float | None, float | None, float | None]] = {}
         dates = [str(d)[:10] for d in risk_df["date"].to_list()]
@@ -619,6 +621,11 @@ def _sdca_tearsheet_from_nautilus(
                 None if med is None else float(med),
                 None if hi is None else float(hi),
             )
+        z_cols = z_from_risk_index(risk_df)
+        z_by_date: dict[str, dict[str, float | None]] = {d: {} for d in dates}
+        for name, values in z_cols.items():
+            for day, z in zip(dates, values, strict=True):
+                z_by_date[day][name] = z
         curve = AccumDistCurve(tuple(float(n) for n in nodes))
         for i, (day, _close) in enumerate(windowed):
             packed = by_date.get(day)
@@ -628,6 +635,9 @@ def _sdca_tearsheet_from_nautilus(
             risk_vals[i] = r
             rail_vals[i] = (lo, med, hi)
             rate_vals[i] = None if r is None else curve.value_at_risk(r)
+        window_dates = [d for d, _c in windowed]
+        for name in z_cols:
+            indicator_z[name] = [z_by_date.get(d, {}).get(name) for d in window_dates]
 
     dca = breakdown_from_daily(
         prices=state["prices"],
@@ -648,6 +658,10 @@ def _sdca_tearsheet_from_nautilus(
         initial_cash=initial_capital,
         rails=rail_vals,
         risk=risk_vals,
+        asset_units=state["asset_units"],
+        indicator_z=indicator_z or None,
+        weights=(calibration or {}).get("indicator_weights"),
+        preset_name=(calibration or {}).get("preset"),
     )
     last_date = windowed[-1][0] if windowed else ""
     last_price = windowed[-1][1] if windowed else None
@@ -759,6 +773,8 @@ def run_and_write(
             "curve_nodes": preset.curve_nodes,
             "long_only": bool(sdca_cfg.get("long_only", preset.long_only)),
             "initial_cash": float(sdca_cfg.get("initial_cash", initial_capital)),
+            "preset": preset_name,
+            "indicator_weights": weights.model_dump(),
         }
         provenance_notes.append(
             "SDCA risk index built from the signal-delayed OHLCV frame "
@@ -914,6 +930,11 @@ def run_and_write(
             "capital_deployed_curve": sdca_overlays.get("capital_deployed_curve"),
             "lump_equity_curve": sdca_overlays.get("lump_equity_curve"),
             "flat_dca_equity_curve": sdca_overlays.get("flat_dca_equity_curve"),
+            "allocated_pct_curve": sdca_overlays.get("allocated_pct_curve"),
+            "fill_markers": sdca_overlays.get("fill_markers"),
+            "indicator_curves": sdca_overlays.get("indicator_curves"),
+            "indicator_weights": sdca_overlays.get("indicator_weights"),
+            "curve_knees": sdca_overlays.get("curve_knees"),
             "label": entry.get("label"),
             "kind": entry.get("kind"),
         }

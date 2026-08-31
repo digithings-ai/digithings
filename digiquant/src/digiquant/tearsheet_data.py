@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +42,11 @@ _OPTIONAL_PUBLISH_KEYS = (
     "capital_deployed_curve",
     "lump_equity_curve",
     "flat_dca_equity_curve",
+    "allocated_pct_curve",
+    "fill_markers",
+    "indicator_curves",
+    "indicator_weights",
+    "curve_knees",
     "label",
     "kind",
     "avg_trade_pct",
@@ -75,6 +81,42 @@ class TearsheetRailPoint(BaseModel):
     low: float
     median: float
     high: float
+
+
+class TearsheetFillMarker(BaseModel):
+    """One day's aggregated buy or sell from actual Nautilus fills.
+
+    ``book_frac`` is ``|trade_usd| / portfolio`` that day — the fraction of
+    the book moved — not the curve remaining-book rate.
+    """
+
+    t: str
+    side: Literal["buy", "sell"]
+    book_frac: float = Field(..., ge=0.0)
+    price: float
+    trade_usd: float
+
+
+class TearsheetIndicatorCurve(BaseModel):
+    """One composite-member series on the 0–100 risk scale.
+
+    ``display_name`` is the user-facing label (``valuation`` → ``power law``).
+    ``in_index`` is true iff ``weight > 0``.
+    """
+
+    name: str
+    display_name: str
+    weight: float = Field(..., ge=0.0)
+    in_index: bool
+    points: list[SeriesPoint] = Field(default_factory=list)
+
+
+class TearsheetCurveKnees(BaseModel):
+    """Buy-start / sell-start risk thresholds from the published curve shape."""
+
+    buy_knee_risk: float
+    sell_knee_risk: float
+    preset: str = ""
 
 
 class CurrentSignal(BaseModel):
@@ -234,6 +276,11 @@ class TearsheetData(BaseModel):
     capital_deployed_curve: list[SeriesPoint] | None = None
     lump_equity_curve: list[SeriesPoint] | None = None
     flat_dca_equity_curve: list[SeriesPoint] | None = None
+    allocated_pct_curve: list[SeriesPoint] | None = None
+    fill_markers: list[TearsheetFillMarker] | None = None
+    indicator_curves: list[TearsheetIndicatorCurve] | None = None
+    indicator_weights: dict[str, float] | None = None
+    curve_knees: TearsheetCurveKnees | None = None
     label: str | None = None
     kind: str | None = None
     avg_trade_pct: float | None = None
@@ -325,6 +372,37 @@ def _rails(
     return out
 
 
+def _fill_markers(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None,
+) -> list[TearsheetFillMarker]:
+    if not series:
+        return []
+    out: list[TearsheetFillMarker] = []
+    for item in series:
+        if isinstance(item, TearsheetFillMarker):
+            out.append(item)
+        else:
+            out.append(TearsheetFillMarker.model_validate(item))
+    return out
+
+
+def _indicator_curves(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetIndicatorCurve] | None,
+) -> list[TearsheetIndicatorCurve]:
+    if not series:
+        return []
+    out: list[TearsheetIndicatorCurve] = []
+    for item in series:
+        if isinstance(item, TearsheetIndicatorCurve):
+            out.append(item)
+        else:
+            raw = dict(item)
+            pts = raw.get("points") or []
+            raw["points"] = _points(pts)  # type: ignore[arg-type]
+            out.append(TearsheetIndicatorCurve.model_validate(raw))
+    return out
+
+
 def _build_tearsheet(
     summary: Mapping[str, object],
     trades: Sequence[Mapping[str, object]],
@@ -348,6 +426,13 @@ def _build_tearsheet(
     flat_dca_equity_curve: Sequence[tuple[str, float]]
     | Sequence[Mapping[str, object]]
     | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
     label: str | None = None,
     kind: str | None = None,
     avg_trade_pct: float | None = None,
@@ -415,6 +500,20 @@ def _build_tearsheet(
         extras["lump_equity_curve"] = _points(lump_equity_curve)
     if flat_dca_equity_curve is not None:
         extras["flat_dca_equity_curve"] = _points(flat_dca_equity_curve)
+    if allocated_pct_curve is not None:
+        extras["allocated_pct_curve"] = _points(allocated_pct_curve)
+    if fill_markers is not None:
+        extras["fill_markers"] = _fill_markers(fill_markers)
+    if indicator_curves is not None:
+        extras["indicator_curves"] = _indicator_curves(indicator_curves)
+    if indicator_weights is not None:
+        extras["indicator_weights"] = {str(k): float(v) for k, v in indicator_weights.items()}
+    if curve_knees is not None:
+        extras["curve_knees"] = (
+            curve_knees
+            if isinstance(curve_knees, TearsheetCurveKnees)
+            else TearsheetCurveKnees.model_validate(curve_knees)
+        )
     if label is not None:
         extras["label"] = label
     if kind is not None:
@@ -505,6 +604,13 @@ def from_nautilus_run(
     flat_dca_equity_curve: Sequence[tuple[str, float]]
     | Sequence[Mapping[str, object]]
     | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
     label: str | None = None,
     kind: str | None = None,
     avg_trade_pct: float | None = None,
@@ -536,6 +642,11 @@ def from_nautilus_run(
         capital_deployed_curve=capital_deployed_curve,
         lump_equity_curve=lump_equity_curve,
         flat_dca_equity_curve=flat_dca_equity_curve,
+        allocated_pct_curve=allocated_pct_curve,
+        fill_markers=fill_markers,
+        indicator_curves=indicator_curves,
+        indicator_weights=indicator_weights,
+        curve_knees=curve_knees,
         label=label,
         kind=kind,
         avg_trade_pct=avg_trade_pct,
@@ -619,6 +730,9 @@ __all__ = [
     "TearsheetDcaBreakdown",
     "TearsheetData",
     "TearsheetRailPoint",
+    "TearsheetFillMarker",
+    "TearsheetIndicatorCurve",
+    "TearsheetCurveKnees",
     "CurrentSignal",
     "TradeRecord",
     "from_nautilus",

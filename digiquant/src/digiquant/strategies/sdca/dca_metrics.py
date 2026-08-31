@@ -25,6 +25,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.strategies.sdca.chart_series import (
+    allocated_pct_series,
+    cash_from_net_deployed,
+    catalog_indicator_curves,
+    fill_markers_from_daily,
+    knees_from_preset,
+)
+from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.tearsheet_data import TearsheetDcaBreakdown
 
 
@@ -289,13 +297,22 @@ def tearsheet_overlays(
     initial_cash: float,
     rails: Sequence[tuple[float | None, float | None, float | None]],
     risk: Sequence[float | None],
-) -> dict[str, list[dict[str, float | str]]]:
+    asset_units: Sequence[float] | None = None,
+    indicator_z: Mapping[str, Sequence[float | None]] | None = None,
+    weights: object | None = None,
+    preset_name: str | None = None,
+) -> dict[str, object]:
     """Diagnostic series for schema 1.3 charts (#3168 columns → #3172 overlays).
 
     Keys match the optional ``TearsheetData`` fields the renderer already reads:
     ``rails``, ``risk_curve``, ``cost_basis_curve``, ``capital_deployed_curve``,
-    ``lump_equity_curve``, ``flat_dca_equity_curve``. Null rail/risk/cost days
-    are omitted so the SVG path does not have to encode gaps.
+    ``lump_equity_curve``, ``flat_dca_equity_curve``. Additional chart fields
+    (``allocated_pct_curve``, ``fill_markers``, ``indicator_curves``,
+    ``curve_knees``) are included when the book / index inputs are passed.
+
+    ``capital_deployed_curve`` is ``(initial_cash - cash) / initial_cash × 100``
+    and **goes negative after sells** — do not plot it as allocation.
+    ``allocated_pct_curve`` is ``100 * units * price / (cash + units * price)``.
     """
     n = len(dates)
     if not (
@@ -303,7 +320,7 @@ def tearsheet_overlays(
     ):
         raise ValueError("tearsheet_overlays requires equal-length daily series")
     if n == 0:
-        return {
+        empty: dict[str, object] = {
             "rails": [],
             "risk_curve": [],
             "cost_basis_curve": [],
@@ -311,6 +328,7 @@ def tearsheet_overlays(
             "lump_equity_curve": [],
             "flat_dca_equity_curve": [],
         }
+        return empty
 
     lump = lump_mark_to_market(prices, initial_cash)
     flat = flat_dca_mark_to_market(prices, initial_cash)
@@ -337,7 +355,7 @@ def tearsheet_overlays(
         lump_out.append({"t": day, "v": float(lump[i])})
         flat_out.append({"t": day, "v": float(flat[i])})
 
-    return {
+    out: dict[str, object] = {
         "rails": rails_out,
         "risk_curve": risk_out,
         "cost_basis_curve": cost_out,
@@ -345,6 +363,42 @@ def tearsheet_overlays(
         "lump_equity_curve": lump_out,
         "flat_dca_equity_curve": flat_out,
     }
+
+    if asset_units is not None:
+        if len(asset_units) != n:
+            raise ValueError("tearsheet_overlays asset_units must match dates")
+        cash = cash_from_net_deployed(net_deployed, initial_cash)
+        allocated = allocated_pct_series(cash=cash, units=asset_units, prices=prices)
+        portfolio = [c + u * p for c, u, p in zip(cash, asset_units, prices, strict=True)]
+        out["allocated_pct_curve"] = [
+            {"t": day, "v": pct} for day, pct in zip(dates, allocated, strict=True)
+        ]
+        out["fill_markers"] = [
+            m.model_dump(mode="json")
+            for m in fill_markers_from_daily(
+                dates=dates,
+                daily_trade_usd=daily_trade_usd,
+                portfolio_values=portfolio,
+                prices=prices,
+            )
+        ]
+
+    if weights is not None:
+        w = (
+            weights
+            if isinstance(weights, SdcaCompositeWeights)
+            else SdcaCompositeWeights.model_validate(weights)
+        )
+        out["indicator_weights"] = w.model_dump()
+        out["indicator_curves"] = [
+            c.model_dump(mode="json")
+            for c in catalog_indicator_curves(dates=dates, z_by_name=indicator_z or {}, weights=w)
+        ]
+
+    if preset_name:
+        out["curve_knees"] = knees_from_preset(preset_name).model_dump(mode="json")
+
+    return out
 
 
 def dca_current_signal(

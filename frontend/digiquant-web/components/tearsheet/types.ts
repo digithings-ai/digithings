@@ -48,6 +48,22 @@ export interface TearsheetRailPoint {
   high: number;
 }
 
+export interface TearsheetFillMarker {
+  t: string;
+  side: "buy" | "sell";
+  book_frac: number;
+  price: number;
+  trade_usd: number;
+}
+
+export interface TearsheetIndicatorCurve {
+  name: string;
+  display_name: string;
+  weight: number;
+  in_index: boolean;
+  points: TearsheetSeriesPoint[];
+}
+
 export interface TearsheetData {
   schema_version: string;
   strategy: string;
@@ -98,6 +114,12 @@ export interface TearsheetData {
   capital_deployed_curve?: TearsheetSeriesPoint[];
   lump_equity_curve?: TearsheetSeriesPoint[];
   flat_dca_equity_curve?: TearsheetSeriesPoint[];
+  /** Mark-to-market % of book in the asset. Not capital_deployed (goes negative after sells). */
+  allocated_pct_curve?: TearsheetSeriesPoint[];
+  fill_markers?: TearsheetFillMarker[];
+  indicator_curves?: TearsheetIndicatorCurve[];
+  indicator_weights?: Record<string, number>;
+  curve_knees?: { buy_knee_risk: number; sell_knee_risk: number; preset: string };
 }
 
 export interface CurrentSignal {

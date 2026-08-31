@@ -21,6 +21,29 @@
 .ts-risk-band-hot { fill: color-mix(in srgb, var(--down) 12%, transparent); }
 .ts-risk-band-bubble { fill: color-mix(in srgb, var(--down) 22%, transparent); }
 
+.ts-risk-threshold { stroke-width: 1.2; stroke-dasharray: 5 4; }
+.ts-risk-threshold-buy { stroke: var(--up); }
+.ts-risk-threshold-sell { stroke: var(--down); }
+.ts-risk-threshold-label {
+  font-size: 10px;
+  fill: var(--ink-soft);
+}
+.ts-price-faint { stroke: var(--ink-soft); stroke-width: 1; opacity: 0.35; }
+.ts-axis-mute { fill: var(--ink-soft); }
+.ts-fill-dot-buy { fill: var(--up); opacity: 0.7; }
+.ts-fill-dot-sell { fill: var(--down); opacity: 0.7; }
+.ts-indicator-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.ts-indicator-unused { opacity: 0.55; }
+.ts-indicator-caption {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin: 0 0 4px;
+}
+
 .ts-position-dca-band {
   font-family: var(--font-display, var(--font-sans));
   font-size: 1.05rem;

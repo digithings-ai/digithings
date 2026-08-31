@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MultiTimeSeries, RiskBandStrip } from "./charts";
+import { MultiTimeSeries, RiskBandStrip, AllocationStepChart } from "./charts";
 import { dcaRateCopy, riskBandLabel } from "./risk-bands";
 
 const DATES = ["2024-01-01", "2024-01-02", "2024-01-03"];
@@ -101,5 +101,62 @@ describe("RiskBandStrip", () => {
     expect(html).toContain('data-band="hot"');
     expect(html).toContain('data-band="bubble"');
     expect(html.match(/<svg/g)).toHaveLength(1);
+  });
+
+  it("draws accumulate/distribute knees and a faint price overlay", () => {
+    const html = renderToStaticMarkup(
+      createElement(RiskBandStrip, {
+        points: [
+          { t: "2024-01-01", v: 20 },
+          { t: "2024-01-02", v: 70 },
+        ],
+        thresholds: [
+          { id: "buy", value: 25, label: "accumulate (oversold) 25" },
+          { id: "sell", value: 70, label: "distribute (overbought) 70" },
+        ],
+        priceOverlay: [
+          { t: "2024-01-01", v: 40000 },
+          { t: "2024-01-02", v: 42000 },
+        ],
+        ariaLabel: "Index with knees",
+      }),
+    );
+    expect(html).toContain('data-chart-layer="risk-threshold"');
+    expect(html).toContain('data-threshold="buy"');
+    expect(html).toContain('data-threshold="sell"');
+    expect(html).toContain("accumulate (oversold) 25");
+    expect(html).toContain('data-chart-layer="price-overlay"');
+  });
+});
+
+describe("AllocationStepChart", () => {
+  it("renders step paths and sized buy/sell fill dots", () => {
+    const html = renderToStaticMarkup(
+      createElement(AllocationStepChart, {
+        allocated: [
+          { t: "2025-01-19", v: 90 },
+          { t: "2025-01-20", v: 70 },
+        ],
+        cash: [
+          { t: "2025-01-19", v: 10 },
+          { t: "2025-01-20", v: 30 },
+        ],
+        markers: [
+          { t: "2025-01-19", side: "buy", book_frac: 0.05 },
+          { t: "2025-01-20", side: "sell", book_frac: 0.12 },
+        ],
+        priceOverlay: [
+          { t: "2025-01-19", v: 90000 },
+          { t: "2025-01-20", v: 102000 },
+        ],
+        ariaLabel: "Allocation step chart",
+      }),
+    );
+    expect(html).toContain('data-chart-layer="alloc-step"');
+    expect(html).toContain('data-chart-layer="cash-step"');
+    expect(html).toContain('data-chart-layer="fill-markers"');
+    expect(html).toContain('data-side="buy"');
+    expect(html).toContain('data-side="sell"');
+    expect(html).toContain('data-chart-layer="price-overlay"');
   });
 });
