@@ -15,7 +15,7 @@ try:
     from nautilus_trader.core.datetime import dt_to_unix_nanos
     from nautilus_trader.model.currencies import BTC, USDT
     from nautilus_trader.model.data import Bar, BarSpecification, BarType
-    from nautilus_trader.model.enums import BarAggregation, PriceType
+    from nautilus_trader.model.enums import BarAggregation, OrderSide, PriceType
     from nautilus_trader.model.identifiers import InstrumentId
     from nautilus_trader.model.instruments import Instrument
     from nautilus_trader.model.objects import Money
@@ -397,6 +397,36 @@ class TestSdcaStrategyOrderPendingGuard:
 
         assert strategy._cash == pytest.approx(100_000.0)
         assert strategy._asset_units == pytest.approx(0.0)
+
+    def test_submit_market_skips_dust_below_size_increment(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Remaining-book dust must not raise inside make_qty (publish path)."""
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        increment = instrument.size_increment.as_double()
+        assert increment > 0
+        strategy._submit_market(OrderSide.BUY, increment / 2.0)
+        assert strategy._order_pending is False
+        assert strategy._cash == pytest.approx(100_000.0)
+
+    def test_on_stop_leaves_dca_book_open(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Engine stop must not flatten remaining holdings into a fake round-trip."""
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy.cancel_all_orders = Mock()
+        strategy.close_all_positions = Mock()
+        strategy.on_stop()
+        strategy.cancel_all_orders.assert_called_once_with(instrument_id)
+        strategy.close_all_positions.assert_not_called()
 
     def test_order_filled_clears_pending_after_full_qty(
         self,

@@ -1,0 +1,16 @@
+{
+  "source": "stage_a",
+  "require_extras": true,
+  "evaluator": "curve_simulator",
+  "objective_approx": 105.48,
+  "weights": {
+    "valuation": 1.0,
+    "m2": 0.0,
+    "rs_eth": 0.0,
+    "dxy": 0.0,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.5
+  },
+  "notes": "Stage A require_extras winner for published btc_sdca. Extra that survived is sma_band (weekly_rsi weight 0). Objective ~105.48 is worse cycle overlap than valuation-only (~126) by design — valuation-only + balanced long_only dumps cash and never sells. Paired with presets.json btc_optimized (sell_max_rate=5). Not an OOS claim; beats_flat_dca_oos is false."
+}

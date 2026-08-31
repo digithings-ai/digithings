@@ -10,6 +10,7 @@ import {
   toneClass,
 } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
+import { isDcaIndexEntry } from "./dca";
 import { LiveMetricsBadge } from "./live-metrics";
 import { SignalDelayChip } from "./signal-delay";
 import { symbolBase } from "./strategy-names";
@@ -20,6 +21,7 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
   const asset = symbolBase(e.symbol);
   const cagr = cagrPctFromGrowth(e.net_profit_pct, e.period_start, e.period_end);
   const avgTrade = e.avg_trade_pct ?? 0;
+  const dca = isDcaIndexEntry(e);
 
   return (
     <TearsheetCard href={`/strategies/${e.strategy}`}>
@@ -41,10 +43,26 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
       <TearsheetCardKpis>
         <TearsheetCardKpi label="CAGR" value={<span className={toneClass(cagr)}>{fmtPct(cagr)}</span>} />
         <TearsheetCardKpi label="Max DD" value={<span className="is-neg">{fmtPct(e.max_drawdown_pct)}</span>} />
-        <TearsheetCardKpi label="Profit factor" value={fmtNum(e.profit_factor, 2)} />
-        <TearsheetCardKpi label="Win rate" value={fmtPct(e.win_rate_pct)} />
-        <TearsheetCardKpi label="Avg trade" value={<span className={toneClass(avgTrade)}>{fmtPct(avgTrade)}</span>} />
-        <TearsheetCardKpi label="Trades" value={fmtNum(e.total_trades)} />
+        {dca ? (
+          <>
+            <TearsheetCardKpi
+              label="Vs lump"
+              value={<span className={toneClass(e.vs_lump_pct)}>{fmtPct(e.vs_lump_pct)}</span>}
+            />
+            <TearsheetCardKpi
+              label="Vs flat DCA"
+              value={<span className={toneClass(e.vs_flat_dca_pct)}>{fmtPct(e.vs_flat_dca_pct)}</span>}
+            />
+            <TearsheetCardKpi label="Capital deployed" value={fmtPct(e.capital_deployed_pct)} />
+          </>
+        ) : (
+          <>
+            <TearsheetCardKpi label="Profit factor" value={fmtNum(e.profit_factor, 2)} />
+            <TearsheetCardKpi label="Win rate" value={fmtPct(e.win_rate_pct)} />
+            <TearsheetCardKpi label="Avg trade" value={<span className={toneClass(avgTrade)}>{fmtPct(avgTrade)}</span>} />
+            <TearsheetCardKpi label="Trades" value={fmtNum(e.total_trades)} />
+          </>
+        )}
       </TearsheetCardKpis>
     </TearsheetCard>
   );
