@@ -81,10 +81,14 @@ def build_risk_index(
         )
 
     valuation_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
-    indicators = [
-        IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight),
-        *(extra_indicators or []),
-    ]
+    # Omit unused members. A weight-0 power-law column still nulls the day
+    # via ``0 × null`` if it stays in the blend (Stage 0 solo extras).
+    indicators: list[IndicatorWeight] = []
+    if valuation_weight != 0.0:
+        indicators.append(
+            IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight)
+        )
+    indicators.extend(extra_indicators or [])
     composite = compute_composite_risk(indicators)
     payload: dict[str, pl.Series] = {
         "date": dates,

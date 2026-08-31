@@ -112,6 +112,62 @@ class TestNamedExtras:
         assert tail, "expected some non-null m2 z after warmup"
         assert sum(tail) / len(tail) > 0
 
+    def test_m2_z_is_valid_on_early_coinbase_dates_when_fred_has_history(self) -> None:
+        """YoY + rolling-z must run on full FRED, not after joining onto BTC days.
+
+        ``aligned.shift(365)`` on Coinbase dates amputates the first year even
+        though M2SL exists back to 1959. Fold-0 IS then starts ~2016-08-19.
+        """
+        btc_start = date(2015, 8, 1)
+        btc_dates = pl.Series(
+            "date",
+            [btc_start + _dt.timedelta(days=i) for i in range(90)],
+            dtype=pl.Date,
+        )
+        fred_start = date(2010, 1, 1)
+        fred_dates = pl.Series(
+            "date",
+            [date(fred_start.year + y, m, 1) for y in range(6) for m in range(1, 13)],
+            dtype=pl.Date,
+        )
+        # Smooth monthly growth so YoY is defined well before Coinbase.
+        fred_values = pl.Series([10_000.0 * (1.004 ** i) for i in range(fred_dates.len())])
+        z = m2_liquidity_z(
+            btc_dates,
+            fred_dates,
+            fred_values,
+            roc_days=365,
+            window=90,
+            min_samples=20,
+        )
+        early = z.to_list()[0]
+        assert early is not None, (
+            "M2 z must be non-null on 2015-08-01 when FRED history starts in 2010; "
+            "got a leading null from shift-after-join onto BTC dates"
+        )
+        first_valid = next(d for d, v in zip(btc_dates.to_list(), z.to_list()) if v is not None)
+        assert first_valid <= date(2015, 8, 15)
+
+    def test_dxy_z_is_valid_on_first_coinbase_date_when_dxy_has_history(self) -> None:
+        """Rolling-z warmup belongs on the full DXY series, then align to BTC."""
+        btc_start = date(2015, 8, 1)
+        btc_dates = pl.Series(
+            "date",
+            [btc_start + _dt.timedelta(days=i) for i in range(40)],
+            dtype=pl.Date,
+        )
+        dxy_start = date(2014, 1, 1)
+        dxy_dates = pl.Series(
+            "date",
+            [dxy_start + _dt.timedelta(days=i) for i in range(700)],
+            dtype=pl.Date,
+        )
+        dxy_values = pl.Series([90.0 + 0.01 * i for i in range(dxy_dates.len())])
+        z = dxy_z(btc_dates, dxy_dates, dxy_values, window=90, min_samples=20)
+        assert z[0] is not None, (
+            "DXY z must be non-null on 2015-08-01 when DTWEXBGS has 2014 history"
+        )
+
     def test_dxy_strength_is_negative_z(self) -> None:
         n = 50
         dates = _dates(n)

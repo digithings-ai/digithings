@@ -112,6 +112,22 @@ class TestBuildRiskIndex:
         # valuation z=0 (price at median) + macro z=3, equal weights → composite 1.5
         assert frame["composite_z"][0] == pytest.approx(1.5)
 
+    def test_solo_extra_risk_is_not_nulled_by_unused_valuation(self) -> None:
+        """Stage 0 extras must omit power law. Weight-0 valuation still nulls if kept."""
+        dates, price = _dates_and_price(n=3, price=100.0)
+        extra = [IndicatorWeight(name="m2", z=pl.Series([3.0, 2.0, 1.0]), weight=1.0)]
+        frame = build_risk_index(
+            dates,
+            price,
+            StaticRiskModel(null_row=0),
+            extra_indicators=extra,
+            valuation_weight=0.0,
+        )
+        assert frame["risk"].null_count() == 0
+        assert frame["risk"][0] == pytest.approx(0.0)
+        assert frame["valuation_z"][0] is None
+        assert "m2_z" in frame.columns
+
     def test_rejects_length_mismatch(self) -> None:
         dates, price = _dates_and_price(n=3)
         with pytest.raises(ValueError, match="same length"):

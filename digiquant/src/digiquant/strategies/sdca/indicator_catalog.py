@@ -192,6 +192,40 @@ def align_to_dates(
     return joined["value"]
 
 
+def _full_calendar_values(
+    src_dates: pl.Series,
+    src_values: pl.Series,
+    *,
+    until: date,
+) -> tuple[pl.Series, pl.Series]:
+    """Dense daily calendar from the first source obs through ``until``.
+
+    Macro YoY / rolling-z warmup belongs on this calendar, not on the BTC
+    window after an inner join (that amputates leading Coinbase years).
+    """
+    native = (
+        pl.DataFrame({"date": src_dates, "value": src_values})
+        .drop_nulls()
+        .unique(subset=["date"], keep="last")
+        .sort("date")
+    )
+    if native.is_empty():
+        return (
+            pl.Series("date", [], dtype=pl.Date),
+            pl.Series("value", [], dtype=pl.Float64),
+        )
+    start = native["date"][0]
+    last_src = native["date"][-1]
+    end = until if until >= last_src else last_src
+    if end < start:
+        end = start
+    calendar = pl.select(pl.date_range(start, end, interval="1d", eager=True).alias("date"))
+    dense = calendar.join(native, on="date", how="left").with_columns(
+        pl.col("value").forward_fill()
+    )
+    return dense["date"], dense["value"]
+
+
 def m2_liquidity_z(
     dates: pl.Series,
     m2_dates: pl.Series,
@@ -201,10 +235,22 @@ def m2_liquidity_z(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """YoY (or ``roc_days``) M2 growth, rolling-z. Expanding liquidity → +z (buy)."""
-    aligned = align_to_dates(dates, m2_dates, m2_values, forward_fill=True)
-    roc = aligned / aligned.shift(roc_days) - 1.0
-    return causal_rolling_z(roc, window=window, min_samples=min_samples)
+    """YoY (or ``roc_days``) M2 growth, rolling-z. Expanding liquidity → +z (buy).
+
+    YoY and rolling-z run on the **full** FRED series (dense daily from the
+    first observation), then the z is aligned onto ``dates``. Shifting after
+    joining onto Coinbase BTC days would null the first year even when M2SL
+    exists back to 1959.
+    """
+    if dates.dtype != pl.Date:
+        raise ValueError(f"dates must be pl.Date, got {dates.dtype}")
+    until = dates.max()
+    cal_dates, cal_values = _full_calendar_values(m2_dates, m2_values, until=until)
+    if cal_dates.len() == 0:
+        return pl.Series([None] * dates.len(), dtype=pl.Float64)
+    roc = cal_values / cal_values.shift(roc_days) - 1.0
+    z_full = causal_rolling_z(roc, window=window, min_samples=min_samples)
+    return align_to_dates(dates, cal_dates, z_full, forward_fill=True)
 
 
 def rs_eth_z(
@@ -230,9 +276,20 @@ def dxy_z(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """Dollar index rolling-z, sign-flipped: strong dollar → −z (headwind)."""
-    aligned = align_to_dates(dates, dxy_dates, dxy_values, forward_fill=True)
-    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("dxy")
+    """Dollar index rolling-z, sign-flipped: strong dollar → −z (headwind).
+
+    Rolling-z runs on the full DXY calendar, then aligns onto ``dates``, so
+    Coinbase-era BTC days are not charged the 90-day warmup a second time.
+    """
+    if dates.dtype != pl.Date:
+        raise ValueError(f"dates must be pl.Date, got {dates.dtype}")
+    until = dates.max()
+    cal_dates, cal_values = _full_calendar_values(dxy_dates, dxy_values, until=until)
+    if cal_dates.len() == 0:
+        return pl.Series([None] * dates.len(), dtype=pl.Float64).alias("dxy")
+    z_full = causal_rolling_z(cal_values, window=window, min_samples=min_samples)
+    aligned = align_to_dates(dates, cal_dates, z_full, forward_fill=True)
+    return (-aligned).alias("dxy")
 
 
 def build_extra_indicators(
