@@ -7,8 +7,10 @@ from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
-from digiquant.olympus.hermes.writers.ledger_io import _last_closes
+from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+from digiquant.olympus.hermes.writers import ledger_io
 from digiquant.olympus.postgrest_timeout import (
     CONNECT_TIMEOUT_SECONDS,
     EXECUTE_DEADLINE_SECONDS,
@@ -38,7 +40,7 @@ def test_run_with_deadline_raises_without_waiting_unbounded() -> None:
         time.sleep(30)
 
     t0 = time.monotonic()
-    with pytest.raises(PostgrestTimeoutError, match="70s|0.05"):
+    with pytest.raises(PostgrestTimeoutError, match="0.05"):
         run_with_deadline(hang, seconds=0.05)
     elapsed = time.monotonic() - t0
     assert elapsed < 2.0, f"deadline wrapper waited {elapsed:.1f}s; must not hang"
@@ -70,20 +72,16 @@ class _HungClient:
 def test_last_closes_does_not_wait_unbounded_on_hung_price_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import digiquant.olympus.hermes.writers.ledger_io as ledger_io
-
     monkeypatch.setattr(ledger_io, "EXECUTE_DEADLINE_SECONDS", 0.05)
     t0 = time.monotonic()
     with pytest.raises(PostgrestTimeoutError):
-        _last_closes(client=_HungClient(), tickers={"SPY"}, run_date=RUN_DATE)
+        ledger_io._last_closes(client=_HungClient(), tickers={"SPY"}, run_date=RUN_DATE)
     elapsed = time.monotonic() - t0
     assert elapsed < 2.0, f"_last_closes hung for {elapsed:.1f}s on a timed-out client"
 
 
 def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("supabase")
-    pytest.importorskip("httpx")
-    import httpx
     import supabase
 
     captured: dict[str, Any] = {}
@@ -95,8 +93,6 @@ def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> N
         return {"client": "fake"}
 
     monkeypatch.setattr(supabase, "create_client", fake_create)
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
-
     out = build_client(SupabaseConfig(url="https://example.supabase.co", service_key="sk"))
     assert out == {"client": "fake"}
     options = captured["options"]

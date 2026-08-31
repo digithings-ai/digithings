@@ -117,12 +117,7 @@ class LedgerAppend:
 
 
 def _execute(query: Any) -> Any:
-    """Run a PostgREST ``execute()`` under the Olympus deadline (#3319).
-
-    Reads ``EXECUTE_DEADLINE_SECONDS`` at call time so tests can shorten it.
-    A timeout raises :class:`PostgrestTimeoutError` (a ``TimeoutError``) and is
-    not swallowed — H9 must fail so the outer pipeline retry can fire.
-    """
+    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
     return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
 
 

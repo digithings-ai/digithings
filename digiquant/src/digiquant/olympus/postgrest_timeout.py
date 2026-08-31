@@ -1,16 +1,8 @@
 """Bounded PostgREST/httpx timeouts for Olympus I/O (#3319).
 
-Monday run 33395925331 booked positions then stalled inside
-``append_commit_chain``'s ``price_history`` read until GitHub cancelled the
-job at 240 minutes. This module:
-
-- documents the per-request bound (60s read / 10s connect — stricter than
-  supabase-py's 120s library default);
-- wraps ``execute()`` with a hard thread deadline so H9 fails in minutes
-  even if the injected client has no httpx timeout;
-- raises (never swallows) so the outer pipeline retry can fire.
-
-Independent of ``transient.py`` disconnect retries (#3299).
+httpx timeouts on ``build_client`` plus a thread deadline around H9
+``execute()`` so a hung call raises instead of sitting until the 240-minute
+job cancel. Independent of ``transient.py`` retries (#3299).
 """
 
 from __future__ import annotations
