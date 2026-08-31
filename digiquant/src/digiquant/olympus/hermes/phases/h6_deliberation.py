@@ -43,8 +43,10 @@ from digiquant.olympus.hermes.models.forecast import (
     ForecastAmendment,
     ForecastAssessment,
     ForecastTerms,
+    fill_forecast_tenor_from_base,
     materialize_forecast_amendment,
     resolve_effective_forecast,
+    unwrap_forecast_terms_payload,
 )
 from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
 from digiquant.olympus.hermes.roster_cap import capped_tickers
@@ -300,7 +302,10 @@ def _resolve_from_debate(
             None,
         )
     try:
-        terms = ForecastTerms.model_validate(amendment_terms_raw)
+        payload = unwrap_forecast_terms_payload(amendment_terms_raw)
+        if not isinstance(payload, dict):
+            raise TypeError("amendment terms must be an object")
+        terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
         amendment = materialize_forecast_amendment(
             base=base,
             terms=terms,
