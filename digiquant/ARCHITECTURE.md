@@ -2170,6 +2170,13 @@ next attempt reads to decide "already committed", so a partial chain must leave 
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
 failed append as a clean no-op and leave the lineage silently one commit short.
 
+When `book_portfolio` already wrote `positions` / `nav_history` but the chain insert
+died (cron on `main` omitting `workspace_id` → `23502`, #3330), recover without an LLM
+rerun: `python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD`
+(dry-run) then `--apply`. That path reads the booked weights and calls
+`append_commit_chain` + a `commit-run/{run_id}` manifest tagged
+`recovery=append_from_existing_book`. It does not call H8 or rewrite positions.
+
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
 `OrderIntent`: five batched `.insert()` calls in FK order. It never calls `.upsert()`.

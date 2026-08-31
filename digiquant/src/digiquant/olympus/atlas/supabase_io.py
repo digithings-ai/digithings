@@ -220,21 +220,24 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _json_safe(value: Any) -> Any:
-    """Recursively coerce ``date``/``datetime`` to ISO strings.
+    """Recursively coerce ``date``/``datetime``/``UUID`` to JSON-safe scalars.
 
     The Supabase client serializes upsert bodies with the stdlib ``json``
-    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
-    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
-    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
-    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
-    in ``payload["date"]``. Coercing here, at the single write boundary,
-    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
-    once instead of relying on each one to pre-serialize its dates.
+    encoder (via httpx), which cannot encode ``date``/``datetime`` or ``UUID``.
+    Atlas/Hermes payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo``
+    rehydrated from a LangGraph checkpoint as a plain dict — rather than the
+    Pydantic model whose ``model_dump(mode="json")`` would coerce it — carries a
+    raw ``date`` in ``payload["date"]``. Commit-run manifests may carry a raw
+    ``UUID`` (``ledger_commit_id``, ``source_run_id``). Coercing here, at the
+    single write boundary, protects every caller at once instead of relying on
+    each one to pre-serialize its dates and ids.
     """
     if isinstance(value, dict):
         return {key: _json_safe(val) for key, val in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(item) for item in value]
+    if isinstance(value, UUID):
+        return str(value)
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return value

@@ -88,6 +88,20 @@ class TestJsonSafe:
         }
         json.dumps(out)  # the whole structure must be JSON-encodable
 
+    def test_coerces_uuid_recursively(self) -> None:
+        """Commit-run payloads may carry a raw UUID (ledger_commit_id)."""
+        from uuid import UUID
+
+        from digiquant.olympus.atlas.supabase_io import _json_safe
+
+        commit_id = UUID("6b951f22-7680-4458-99e1-f169acc3a38c")
+        out = _json_safe({"ledger_commit_id": commit_id, "nested": [{"id": commit_id}]})
+        assert out == {
+            "ledger_commit_id": "6b951f22-7680-4458-99e1-f169acc3a38c",
+            "nested": [{"id": "6b951f22-7680-4458-99e1-f169acc3a38c"}],
+        }
+        json.dumps(out)
+
 
 @pytest.mark.unit
 class TestPublishDocument:
