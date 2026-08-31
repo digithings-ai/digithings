@@ -36,9 +36,11 @@ function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
     total_trades: m.total_trades,
     generated_at: m.generated_at,
     href: `/strategies/${m.strategy}`,
-    vs_lump_pct: m.dca?.vs_lump_pct ?? null,
-    vs_flat_dca_pct: m.dca?.vs_flat_dca_pct ?? null,
-    capital_deployed_pct: m.dca?.capital_deployed_pct ?? null,
+    vs_lump_pct: m.dca?.vs_lump_pct ?? m.vs_lump_pct ?? null,
+    vs_flat_dca_pct: m.dca?.vs_flat_dca_pct ?? m.vs_flat_dca_pct ?? null,
+    capital_deployed_pct: m.dca?.capital_deployed_pct ?? m.capital_deployed_pct ?? null,
+    allocated_pct: m.dca?.allocated_pct ?? m.allocated_pct ?? null,
+    beats_flat_dca_oos: m.beats_flat_dca_oos ?? false,
   };
 }
 

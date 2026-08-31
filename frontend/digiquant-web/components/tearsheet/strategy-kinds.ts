@@ -20,7 +20,7 @@ export const KIND_LABELS: Record<StrategyKind, string> = {
   short_only: SHORT_ONLY_KIND,
   relative_strength: "Relative strength",
   rotation: "Rotation",
-  dca: "DCA",
+  dca: "Remaining-book DCA",
 };
 
 export function kindLabel(kind: string | undefined): string {

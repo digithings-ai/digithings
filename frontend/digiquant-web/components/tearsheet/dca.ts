@@ -128,3 +128,55 @@ export function indicatorPanels(data: TearsheetData): TearsheetIndicatorCurve[] 
 export function curveKnees(data: TearsheetData): { buy_knee_risk: number; sell_knee_risk: number } {
   return data.curve_knees ?? DEFAULT_SDCA_KNEES;
 }
+
+export const ALLOCATED_KPI_LABEL = "MTM allocated";
+export const VS_FLAT_KPI_LABEL = "Vs flat DCA (full sample)";
+export const VS_LUMP_KPI_LABEL = "Vs lump (full sample)";
+
+/** Final MTM allocated %. Never capital_deployed (goes negative after sells). */
+export function lastAllocatedPct(
+  data: Pick<TearsheetData, "dca" | "allocated_pct_curve" | "equity_curve" | "capital_deployed_curve" | "initial_capital">,
+): number | null {
+  if (data.dca?.allocated_pct != null && Number.isFinite(data.dca.allocated_pct)) {
+    return Math.max(0, data.dca.allocated_pct);
+  }
+  const curve = allocatedPctCurve(data as TearsheetData);
+  if (curve.length === 0) return null;
+  return Math.max(0, curve[curve.length - 1].v);
+}
+
+export function lastAllocatedPctFromIndex(
+  e: Pick<StrategyIndexEntry, "allocated_pct" | "capital_deployed_pct">,
+): number | null {
+  if (e.allocated_pct != null && Number.isFinite(e.allocated_pct)) {
+    return Math.max(0, e.allocated_pct);
+  }
+  return null;
+}
+
+/** Absent / false = do not claim an OOS win over flat DCA. */
+export function beatsFlatDcaOos(
+  value: boolean | null | undefined,
+): boolean {
+  return value === true;
+}
+
+export function isValuationOnlyIndex(weights?: Record<string, number> | null): boolean {
+  if (!weights) return true;
+  const extras = Object.entries(weights).filter(([name]) => name !== "valuation");
+  const extrasOff = extras.length === 0 || extras.every(([, w]) => w === 0);
+  return extrasOff && (weights.valuation ?? 1) > 0;
+}
+
+/** Fill-day counts from actual fills — never curve-sign buy_days / sell_days. */
+export function fillDayCounts(data: TearsheetData): { buys: number; sells: number } | null {
+  if (data.dca?.fill_buy_days != null && data.dca.fill_sell_days != null) {
+    return { buys: data.dca.fill_buy_days, sells: data.dca.fill_sell_days };
+  }
+  const markers = fillMarkersForChart(data);
+  if (markers.length === 0) return null;
+  return {
+    buys: markers.filter((m) => m.side === "buy").length,
+    sells: markers.filter((m) => m.side === "sell").length,
+  };
+}

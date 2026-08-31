@@ -14,7 +14,7 @@ const PUBLISHED: Record<string, { label: string; symbol: string }> = {
   btc_slapper: { label: "BTC Slapper", symbol: "BTC-USD" },
   eth_slapper: { label: "ETH Slapper", symbol: "ETH-USD" },
   sol_slapper: { label: "SOL Slapper", symbol: "SOL-USD" },
-  btc_sdca: { label: "BTC Strategic DCA", symbol: "BTC-USD" },
+  btc_sdca: { label: "BTC power-law remaining-book", symbol: "BTC-USD" },
 };
 
 export const dynamicParams = false;
@@ -25,9 +25,14 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const s = PUBLISHED[id];
   const name = s ? strategyDisplayName(id, s.label) : id;
-  return s
-    ? { title: `${name} · ${s.symbol} — digiquant tearsheet`, description: `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.` }
-    : { title: "Strategy Tearsheet — digiquant" };
+  if (!s) return { title: "Strategy Tearsheet — digiquant" };
+  const dca = id.includes("sdca");
+  return {
+    title: `${name} · ${s.symbol} — digiquant tearsheet`,
+    description: dca
+      ? `Backtest tearsheet for ${name} (${s.symbol}) — power-law remaining-book, equity, and allocation. Illustrative Nautilus backtest; not a live strategy.`
+      : `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.`,
+  };
 }
 
 export default async function TearsheetPage({ params }: { params: Promise<{ id: string }> }) {

@@ -71,7 +71,8 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees } from "./dca";
+import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_FLAT_KPI_LABEL, VS_LUMP_KPI_LABEL, isValuationOnlyIndex } from "./dca";
+import { BacktestOnlyChip, OosHonestyChip } from "./honesty";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -356,7 +357,9 @@ export function TearsheetView({ slug }: { slug: string }) {
       case "indicators":
         return (
           <span className="ts-panel-hint">
-            Included members of the composite (power law). Zero-weight extras are unused.
+            {isValuationOnlyIndex(data?.indicator_weights)
+              ? "Power-law only. Extra indicators are unused (weight 0)."
+              : "Index members. Zero-weight extras are unused."}
           </span>
         );
       case "accumulation":
@@ -400,7 +403,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         return _exhaustive;
       }
     }
-  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, hasThreeWay, scale]);
+  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasThreeWay, scale]);
 
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
@@ -486,6 +489,8 @@ export function TearsheetView({ slug }: { slug: string }) {
             <LiveMetricsBadge generatedAt={data.generated_at} />
             <span className="ts-chip">{data.symbol}</span>
             <SignalDelayChip days={data.signal_delay_days} detail="full" />
+            {dcaBook ? <BacktestOnlyChip /> : null}
+            {dcaBook ? <OosHonestyChip beatsFlatDcaOos={data.beats_flat_dca_oos} /> : null}
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>
@@ -511,9 +516,9 @@ export function TearsheetView({ slug }: { slug: string }) {
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} />
         {dcaBook && data.dca ? (
           <>
-            <Kpi label="Vs lump" value={<Toned v={data.dca.vs_lump_pct}>{fmtPct(data.dca.vs_lump_pct)}</Toned>} />
-            <Kpi label="Vs flat DCA" value={<Toned v={data.dca.vs_flat_dca_pct}>{fmtPct(data.dca.vs_flat_dca_pct)}</Toned>} />
-            <Kpi label="Capital deployed" value={fmtPct(data.dca.capital_deployed_pct)} />
+            <Kpi label={VS_LUMP_KPI_LABEL} value={<Toned v={data.dca.vs_lump_pct}>{fmtPct(data.dca.vs_lump_pct)}</Toned>} />
+            <Kpi label={VS_FLAT_KPI_LABEL} value={<Toned v={data.dca.vs_flat_dca_pct}>{fmtPct(data.dca.vs_flat_dca_pct)}</Toned>} />
+            <Kpi label={ALLOCATED_KPI_LABEL} value={fmtPct(lastAllocatedPct(data))} />
             <Kpi label="Units" value={fmtNum(data.dca.units_accumulated, 2)} />
           </>
         ) : showTradeKpis ? (
@@ -592,7 +597,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           ) : null}
           {hasRisk ? (
             <div className="ts-tab-pane" hidden={chartTab !== "risk"}>
-              <PrintHeading>Composite index</PrintHeading>
+              <PrintHeading>Power-law risk</PrintHeading>
               <div className="ts-chart">
                 <RiskBandStrip
                   points={chartRisk}
@@ -614,7 +619,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                     },
                   ]}
                   priceOverlay={chartSpot}
-                  ariaLabel="Composite index 0 to 100 with power-law member, buy and sell knees, and log BTC overlay"
+                  ariaLabel="Power-law risk 0 to 100 with accumulate and distribute knees and log BTC overlay"
                 />
               </div>
             </div>
@@ -627,7 +632,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                   <div key={ind.name} className={ind.in_index ? undefined : "ts-indicator-unused"}>
                     <p className="ts-indicator-caption">
                       {ind.display_name}
-                      {ind.in_index ? ` · in index, weight ${ind.weight}` : " · not in index, weight 0"}
+                      {ind.in_index ? ` · in index, weight ${ind.weight}` : " · unused extra, weight 0"}
                     </p>
                     {ind.points.length > 0 ? (
                       <TimeSeries
@@ -643,7 +648,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                         ariaLabel={`${ind.display_name} on the 0 to 100 risk scale`}
                       />
                     ) : (
-                      <p className="ts-panel-hint">no series (dropped from the composite)</p>
+                      <p className="ts-panel-hint">no series (unused extra, weight 0)</p>
                     )}
                   </div>
                 ))}

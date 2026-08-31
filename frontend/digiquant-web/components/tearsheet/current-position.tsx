@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { DirectionPill, dcaRateCopy, fmtNum, fmtPct, riskBandLabel, toneClass } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
-import { isDcaTearsheet } from "./dca";
+import { isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL } from "./dca";
 import {
   isOpenTrade,
   markPriceForTrade,
@@ -95,7 +95,7 @@ function DcaCurrentSignal({ data, asset }: { data: TearsheetData; asset: string 
       ? `${band} — ${rateCopy}`
       : band
     : "DCA book";
-  const deployed = data.dca?.capital_deployed_pct;
+  const allocated = lastAllocatedPct(data);
   const units = data.dca?.units_accumulated;
   const lastPrice = sig?.last_price ?? null;
 
@@ -128,8 +128,8 @@ function DcaCurrentSignal({ data, asset }: { data: TearsheetData; asset: string 
             <dd>{band ?? "—"}</dd>
           </div>
           <div>
-            <dt>Deployed</dt>
-            <dd>{fmtPct(deployed)}</dd>
+            <dt>{ALLOCATED_KPI_LABEL}</dt>
+            <dd>{fmtPct(allocated)}</dd>
           </div>
           <div>
             <dt>Units</dt>

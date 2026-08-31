@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   allocatedPctCurve,
+  beatsFlatDcaOos,
+  fillDayCounts,
   fillMarkersForChart,
   hasTradeKpis,
   indicatorPanels,
   isDcaIndexEntry,
   isDcaTearsheet,
+  isValuationOnlyIndex,
+  lastAllocatedPct,
+  lastAllocatedPctFromIndex,
 } from "./dca";
 import { inferKind } from "./strategy-kinds";
 
@@ -89,5 +94,46 @@ describe("indicatorPanels", () => {
     expect(panels[0].display_name).toBe("power law");
     expect(panels[0].in_index).toBe(true);
     expect(panels.some((p) => p.name === "m2" && !p.in_index)).toBe(true);
+  });
+});
+
+describe("lastAllocatedPct", () => {
+  it("prefers dca.allocated_pct and never prints negative deployed", () => {
+    expect(
+      lastAllocatedPct({
+        dca: { allocated_pct: 12.5, capital_deployed_pct: -505 } as never,
+        allocated_pct_curve: [{ t: "2025-01-20", v: 12.5 }],
+      } as never),
+    ).toBe(12.5);
+    expect(
+      lastAllocatedPctFromIndex({ allocated_pct: 40, capital_deployed_pct: -10 }),
+    ).toBe(40);
+    expect(lastAllocatedPctFromIndex({ capital_deployed_pct: -505 })).toBeNull();
+  });
+});
+
+describe("beatsFlatDcaOos", () => {
+  it("treats absent and false as no OOS win", () => {
+    expect(beatsFlatDcaOos(undefined)).toBe(false);
+    expect(beatsFlatDcaOos(false)).toBe(false);
+    expect(beatsFlatDcaOos(true)).toBe(true);
+  });
+});
+
+describe("isValuationOnlyIndex", () => {
+  it("is true when extras are zero or omitted", () => {
+    expect(isValuationOnlyIndex(undefined)).toBe(true);
+    expect(isValuationOnlyIndex({ valuation: 1, m2: 0, dxy: 0 })).toBe(true);
+    expect(isValuationOnlyIndex({ valuation: 1, m2: 0.5 })).toBe(false);
+  });
+});
+
+describe("fillDayCounts", () => {
+  it("uses fill_* fields, not curve-sign buy_days", () => {
+    expect(
+      fillDayCounts({
+        dca: { buy_days: 400, sell_days: 20, fill_buy_days: 3, fill_sell_days: 1 },
+      } as never),
+    ).toEqual({ buys: 3, sells: 1 });
   });
 });

@@ -10,10 +10,11 @@ import {
   toneClass,
 } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
-import { isDcaIndexEntry } from "./dca";
+import { isDcaIndexEntry, lastAllocatedPctFromIndex, ALLOCATED_KPI_LABEL, VS_FLAT_KPI_LABEL, VS_LUMP_KPI_LABEL } from "./dca";
+import { OosHonestyChip } from "./honesty";
 import { LiveMetricsBadge } from "./live-metrics";
 import { SignalDelayChip } from "./signal-delay";
-import { symbolBase } from "./strategy-names";
+import { strategyDisplayName, symbolBase } from "./strategy-names";
 import { cagrPctFromGrowth } from "./stats";
 import { type StrategyIndexEntry } from "./types";
 
@@ -29,11 +30,16 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
         <div className="ts-card-title">
           <AssetLogoFor strategy={e.strategy} symbol={e.symbol} size={32} className="ts-card-logo" />
           <div className="ts-card-title-text">
-            <span className="ts-card-name">{asset}</span>
+            <span className="ts-card-name">{strategyDisplayName(e.strategy, e.label) || asset}</span>
             <span className="ts-card-period">{e.period_start} → {e.period_end}</span>
             {e.signal_delay_days ? (
               <div className="mt-1.5">
                 <SignalDelayChip days={e.signal_delay_days} />
+              </div>
+            ) : null}
+            {dca ? (
+              <div className="mt-1.5">
+                <OosHonestyChip beatsFlatDcaOos={e.beats_flat_dca_oos} />
               </div>
             ) : null}
           </div>
@@ -46,14 +52,14 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
         {dca ? (
           <>
             <TearsheetCardKpi
-              label="Vs lump"
+              label={VS_LUMP_KPI_LABEL}
               value={<span className={toneClass(e.vs_lump_pct)}>{fmtPct(e.vs_lump_pct)}</span>}
             />
             <TearsheetCardKpi
-              label="Vs flat DCA"
+              label={VS_FLAT_KPI_LABEL}
               value={<span className={toneClass(e.vs_flat_dca_pct)}>{fmtPct(e.vs_flat_dca_pct)}</span>}
             />
-            <TearsheetCardKpi label="Capital deployed" value={fmtPct(e.capital_deployed_pct)} />
+            <TearsheetCardKpi label={ALLOCATED_KPI_LABEL} value={fmtPct(lastAllocatedPctFromIndex(e))} />
           </>
         ) : (
           <>

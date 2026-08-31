@@ -38,6 +38,12 @@ export interface TearsheetDcaBreakdown {
   no_trade_days: number;
   avg_risk: number | null;
   avg_rate: number | null;
+  /** Final MTM allocated %; never capital_deployed (goes negative after sells). */
+  allocated_pct?: number | null;
+  /** Days with a non-zero buy fill — not curve-sign `buy_days`. */
+  fill_buy_days?: number | null;
+  /** Days with a non-zero sell fill — not curve-sign `sell_days`. */
+  fill_sell_days?: number | null;
 }
 
 /** Valuation rails overlay (low / median / high) from the #3168 diagnostics. */
@@ -120,6 +126,13 @@ export interface TearsheetData {
   indicator_curves?: TearsheetIndicatorCurve[];
   indicator_weights?: Record<string, number>;
   curve_knees?: { buy_knee_risk: number; sell_knee_risk: number; preset: string };
+  /** Walk-forward OOS vs flat DCA. False / omitted = do not claim an OOS win. */
+  beats_flat_dca_oos?: boolean | null;
+  /** Index extras duplicated onto the Supabase metrics row (#1069). */
+  vs_lump_pct?: number | null;
+  vs_flat_dca_pct?: number | null;
+  capital_deployed_pct?: number | null;
+  allocated_pct?: number | null;
 }
 
 export interface CurrentSignal {
@@ -160,4 +173,6 @@ export interface StrategyIndexEntry {
   vs_lump_pct?: number | null;
   vs_flat_dca_pct?: number | null;
   capital_deployed_pct?: number | null;
+  allocated_pct?: number | null;
+  beats_flat_dca_oos?: boolean | null;
 }

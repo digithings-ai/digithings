@@ -19,6 +19,14 @@ export function strategyLibraryDescription(): string[] {
 }
 
 export function theoryCopy(asset: string, strategy: string): string[] {
+  if (strategy.includes("sdca")) {
+    return [
+      `${asset} power-law remaining-book: each day buys a percent of remaining cash or sells a percent of remaining holdings from a power-law valuation index. Extra indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH relative strength) are unused — their weights are 0. This is not a multi-indicator composite.`,
+      "Nautilus vs-flat and vs-lump are the full backtest window, not walk-forward out-of-sample. Published walk-forward does not beat flat DCA.",
+      "Signals are delayed 3 days. This page is a backtest — not a live trading strategy.",
+    ];
+  }
+  if (!isSlapperStrategy(strategy)) return [];
   const lines = [
     `Mean-reversion signals tuned for high-probability local tops and bottoms work alongside a medium-horizon trend layer, calibrated for long and short participation on ${asset}. Entries can fire from either layer or both; exits follow the same logic — staying with meaningful trends while navigating volatile extremes.`,
   ];
@@ -56,8 +64,6 @@ export function StrategyNotes({
   asset: string;
   printing?: boolean;
 }) {
-  if (!isSlapperStrategy(data.strategy)) return null;
-
   const theory = theoryCopy(asset, data.strategy);
   const meta = metaLines(data);
   if (theory.length === 0 && meta.length === 0) return null;

@@ -65,11 +65,14 @@ the publish path copies #3168 diagnostic columns so these charts do not
 degrade on a shipped `btc_sdca` payload.
 
 Library cards for `kind === "dca"` (or when `vs_lump_pct` is present)
-headline **vs-lump**, **vs-flat-DCA**, and **capital deployed** instead of
-win rate / trade count.
+headline **vs-lump (full sample)**, **vs-flat-DCA (full sample)**, and
+**MTM allocated %** instead of win rate / trade count / capital deployed.
+`beats_flat_dca_oos` is surfaced as a "Not OOS vs flat DCA" chip when false.
+Do not present curve-sign `buy_days`/`sell_days` as fill counts.
 
-Current signal for a DCA book is **risk, band, daily rate**
-("Accumulate — buying 4.0% of remaining cash today"), not long/short/flat.
+Current signal for a DCA book is **risk, band, daily rate**, plus MTM allocated
+(never a negative "Deployed"). The risk tab is **power-law risk**, not a
+multi-indicator composite, while extras sit at weight 0.
 
 Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
 All `dca.*_pct` fields are ×100 percents.
