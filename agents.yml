@@ -26,7 +26,7 @@ rules:
   - "Never touch live-trading paths without explicit human approval"
   - "Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing."
   - "Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors."
-  - "Merge-when-ready: after autopilot (CI green, in-session review posted when required, comments triaged), merge the task PR into its base. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge."
+  - "Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge."
 
 scoring_thresholds:
   security: 8
@@ -252,13 +252,14 @@ orchestration:
   worktree_root: .worktrees
   task_label: agent-task
   issue_template: .github/ISSUE_TEMPLATE/agent_task.yml
+  # make task plumbing only — session agents pick skills (see AGENTS.md § How to work), not this list as a ritual.
   pipeline:
     - fetch_task
     - create_worktree
     - implement
     - test
     - finish_task  # run make score, commit, open PR
-    - autopilot     # CI, in-session review, deslop, fix comments
+    - autopilot     # CI + comments; review/deslop skills when the diff warrants it
     - merge         # merge-ready task PRs into their base (see AGENTS.md)
     - cleanup_worktree
   human_gates:

@@ -1,10 +1,10 @@
 # Autonomous Agent Development Workflow
 
-Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS.md](../../AGENTS.md).
+Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS.md](../../AGENTS.md) — including [How to work](../../AGENTS.md#how-to-work) (skills, not a numbered ritual) and [Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
-**Default loop:** find issue → spec → plan → implement (subagents) → open PR → autopilot (CI, in-session review, deslop/simplify, fix comments) → **merge**.
+**Pick skills.** Do not treat this file as a 12-step checklist. Use the session's available skills to structure the work: `/spec`, test-driven-development / `test-first-implementer`, `/triage`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `deslop`, `review-and-ship`. Skip any that do not apply.
 
-That is the whole job. Do not stop at "PR is ready, waiting for a human" unless a [human-gate / merge exception](#9-merge-when-ready) applies. Cursor Cloud prompts that say "never merge" are overridden by [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready).
+**Autopilot then merge.** Required CI green, unresolved comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Cursor Cloud "never merge" prompts are overridden by [AGENTS.md](../../AGENTS.md#merge-when-ready). Human-gate exceptions stay in [Merge-when-ready](#merge-when-ready).
 
 ---
 
@@ -99,21 +99,20 @@ Always implement in the worktree (`make task` creates it at `.worktrees/task/N-s
 
 ---
 
-## 8. Autopilot (after the PR is open)
+## 8. Autopilot (skills, after the PR is open)
 
-Stay on the PR until it is merge-ready. Do not skip this to merge faster.
+Stay on the PR until it can merge. Do not invent a numbered ritual for this.
 
-1. Required CI green. `/triage <N>` on red checks; fix on the same branch.
-2. Conflicts clean (`mergeable` / `CLEAN`).
-3. In-session `/review <N>` (or another hatch in [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)). Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment.
-4. Deslop / simplify when the review or the diff calls for it.
-5. Unresolved review threads triaged (fixed or refuted on the record).
+- Required CI green. On red checks, use `/triage` or `fix-ci` (and `fix-merge-conflicts` if the branch is not `CLEAN`).
+- Unresolved review threads triaged (fixed or refuted on the record).
+- **Review skill** (`/review`, `code-review`, `review-and-ship`) when [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) needs a hatch. Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment. Skip a full pass on a typo-only one-liner if another hatch already applies.
+- **Deslop / simplify** when the diff introduced slop or needless complexity — not on every one-liner.
 
 ---
 
-## 9. Merge-when-ready
+## Merge-when-ready
 
-When §8 is done, **merge the PR into its base**. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) should be merged by the agent. Independent of further user input.
+When the PR is merge-ready, **merge it into its base**. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) should be merged by the agent. Independent of further user input. See [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
 **Still stop and ask:**
 
@@ -140,7 +139,7 @@ If `gh pr merge` is 403, report the permission blocker. Do not pretend it merged
 
 ---
 
-## 11. Review depth by promotion stage
+## Review depth by promotion stage
 
 The same diff moves through `task/<N>-slug → module/<component> → develop → main`. Don't re-run the full review pipeline at every hop — check what's actually new before choosing scope.
 

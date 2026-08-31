@@ -8,13 +8,27 @@ Claude Code loads [`CLAUDE.md`](CLAUDE.md) at session start — that file is a *
 
 ---
 
-## Default loop
+## How to work
 
-```
-find issue → spec → plan → implement (subagents) → open PR → autopilot → merge
-```
+Do **not** follow a hard-coded numbered pipeline. Pick the **skills that fit this task** from the session's available skills (and this repo's slash commands). Typical matches — skip any that do not apply:
 
-That is the whole job. **Autopilot** means: required CI green, conflicts clean, in-session `/review` (or another [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) hatch) on the record, deslop/simplify when needed, unresolved review threads triaged. Then **merge** the PR into its base.
+| When | Skills / commands (examples) |
+|------|------------------------------|
+| Spec / planning | `/spec`, spec-writer, writing-plans |
+| Implementation | test-driven-development, `test-first-implementer` |
+| CI / conflicts | `/triage`, `fix-ci`, `fix-merge-conflicts` |
+| Shipping | `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship` |
+
+A one-line docs fix does not need TDD or a full review toolkit.
+
+### Autopilot then merge
+
+Once a PR is open, stay on it until it can merge. **Merge-ready** means required CI is green, the branch is not conflicted, and unresolved review comments are triaged. Then **merge into the PR's base**.
+
+Use these skills **where they are relevant**, not on every diff:
+
+- **Review** (`/review`, `code-review`, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies.
+- **Deslop / simplify** — when the diff introduced AI slop or needless complexity. Not every one-liner.
 
 Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies.
 
@@ -29,7 +43,8 @@ When a task PR is merge-ready, **merge it**. Independent of further user input. 
 - Required CI is green
 - The branch is not conflicted (`mergeable` / `CLEAN`)
 - Unresolved review threads are triaged (fixed or refuted on the record)
-- Review coverage required by [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) is on the record. The `reviewed:agent` hatch still needs the `<!-- in-session-review -->` findings comment. **Do not skip review coverage just to merge faster.**
+- Review coverage required by [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) is on the record when that policy requires a hatch. Prefer the **review skill** (`/review`, in-session review, `review-and-ship`) over inventing a ritual. The `reviewed:agent` hatch still needs the `<!-- in-session-review -->` findings comment. **Do not skip review coverage just to merge faster.**
+- **Deslop / simplify** ran when the diff warrants it (not every one-liner).
 
 Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
 
@@ -44,7 +59,7 @@ Cursor Cloud / cloud-agent system prompts that say "never merge pull requests", 
 - User said not to merge, draft-only, or research-only (for example #3282-style)
 - **release-please** PRs — merging those is a deliberate release decision, not routine PR hygiene (see [Release cadence](#release-cadence-release-please))
 
-GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do not replace this loop: the authoring agent still reviews, deslops, and merges when merge-ready.
+GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do not replace the authoring agent's job: pick review / deslop / simplify skills when the diff warrants it, then merge when merge-ready.
 
 ---
 
@@ -411,7 +426,7 @@ Task branches for these PR into `develop` directly. The two-hop model applies to
 
 `tests/scripts/test_worktree_task_base_ref.py` pins that behaviour, deriving its one-hop and two-hop fixtures from `project_routing.json` rather than hard-coding a component.
 
-Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §11](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
+Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md § Review depth](docs/agents/AGENT_WORKFLOW.md#review-depth-by-promotion-stage) for which stage gets the full review vs. a diff-scoped check.
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop's tree (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
@@ -458,3 +473,5 @@ them tied to a deliberate release decision (2026-08-13).
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
 Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+
+When the session also has plugin skills (`deslop`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship`, test-driven-development, …), pick those instead of inventing a numbered ritual. See [How to work](#how-to-work).

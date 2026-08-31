@@ -22,6 +22,7 @@
 #
 # Backlog: docs/agent-backlog/INDEX.md + GitHub Issues labeled agent-task
 # Scoring: docs/scoring/  |  Workflow: docs/agents/AGENT_WORKFLOW.md
-# Loop: find issue → spec → plan → implement → open PR → autopilot → merge
+# Skills, not a ritual: pick spec / TDD / triage / fix-ci / deslop / review-and-ship as they fit.
+# Autopilot: CI green, comments triaged, review+deslop skills when the diff warrants it, then merge.
 # Merge-when-ready (AGENTS.md): merge task PRs into their base when CI+review are done.
 # Still stop: digikey/, live-trading, PRs into main, user said not to merge.
