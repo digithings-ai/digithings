@@ -68,8 +68,11 @@ Wave E
       house book was recovered operator-side without LLM rerun: ledger
       `8ab9840f-0946-4026-860b-cce20f75eb93`, document
       `commit-run/52066e03-6c50-44bb-af18-e263664eacd4` (house workspace, recorded
-      2026-08-31T20:01:20Z). Conflicting [#3332](https://github.com/digithings-ai/digithings/pull/3332)
-      is the original recovery CLI (atlas-graph red: `test_h9_is_the_only_ledger_writer`).
+      2026-08-31T20:01:20Z). Recovery CLI landed as
+      [#3337](https://github.com/digithings-ai/digithings/pull/3337) on `develop`
+      (`eb791dd99`). Do **not** merge conflicting
+      [#3332](https://github.com/digithings-ai/digithings/pull/3332) (atlas-graph
+      red: `test_h9_is_the_only_ledger_writer`; overlaps #3335 `_json_safe`).
       Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
       *pipeline* book-commit proof. Do **not** `workflow_dispatch`; do **not**
       apply staged 113 while main writers still upsert date-only. Unit green is
@@ -249,6 +252,10 @@ on `main` (`2df473110`). Ledger stamp hotfix
 (`2026-08-31T20:13:43Z`) — Cloudflare rebuilt after #3331, but that tree still
 serves `/olympus/` (Python-only). `/olympus/build-info.json` is 404 HTML.
 Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
+
+**Landed 2026-08-31T21:24Z — [#3337](https://github.com/digithings-ai/digithings/pull/3337) on `develop` (`eb791dd99`):** H9 recovery CLI. Do not merge [#3332](https://github.com/digithings-ai/digithings/pull/3332).
+
+**Landed 2026-08-31T21:43Z — [#3338](https://github.com/digithings-ai/digithings/pull/3338) on `develop` (`db3745b7e`):** `114_economic_calendar_authenticated_select.sql`. Do not merge [#3321](https://github.com/digithings-ai/digithings/pull/3321). Live Pages site `/build-info.json` is `3601f72df` (`2026-08-31T20:42:57Z`, after #3334); still `/olympus` 200 / `/dashboard` 404.
 
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
