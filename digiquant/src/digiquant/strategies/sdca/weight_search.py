@@ -89,15 +89,14 @@ def _mean_oos(scores: Sequence[FoldScore]) -> float:
 
 
 def _is_rank_score(scores: Sequence[FoldScore], objective: SdcaOptimizeObjective) -> float:
-    """Mean IS vs-flat-DCA. Capital floor still applies; drawdown cap does not.
+    """Mean IS vs-flat-DCA across folds. OOS is not used.
 
-    BTC remaining-% books routinely print >50% IS drawdown. Using the Stage B
-    cap here dropped every extra combo. Keep/drop is "did this extra help
-    vs flat DCA while deploying capital", not the curve's DD rail.
+    Stage B's drawdown cap and an all-folds capital floor are not applied
+    here. Early expanding IS windows can sit in the sell zone with an
+    all-cash book even when later folds trade; requiring every fold to
+    clear 10% deployed dropped the whole extra grid.
     """
     if not scores:
-        return float("-inf")
-    if any(s.in_sample.capital_deployed_pct < objective.capital_deployed_floor_pct for s in scores):
         return float("-inf")
     return sum(s.in_sample.vs_flat_dca_pct for s in scores) / len(scores)
 
