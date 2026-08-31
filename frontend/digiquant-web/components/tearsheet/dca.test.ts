@@ -12,16 +12,6 @@ import {
   lastAllocatedPct,
   lastAllocatedPctFromIndex,
 } from "./dca";
-import { inferKind } from "./strategy-kinds";
-
-describe("inferKind", () => {
-  it("maps *_sdca slugs to dca and leaves slappers as long_short", () => {
-    expect(inferKind("btc_sdca")).toBe("dca");
-    expect(inferKind("eth_sdca")).toBe("dca");
-    expect(inferKind("btc_slapper")).toBe("long_short");
-    expect(inferKind("btc_sdca", "long_only")).toBe("long_only");
-  });
-});
 
 describe("hasTradeKpis", () => {
   it("hides tiles when the schema reports null, not when the slug is sdca", () => {

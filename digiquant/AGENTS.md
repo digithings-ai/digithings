@@ -174,8 +174,11 @@ the full module map.
   still false — in-sample richness, not a proven OOS beat. Allocation
   charts draw MTM allocated % plus fill dots; do not draw a percent-cash
   line (it is the inverse of allocated).
-- **Public copy.** User-facing name is **BTC SDCA Strat**. The page is a
-  strategy (fills chart, latest remaining-book signal, MTM allocated, vs
+- **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
+  “BTC SDCA Strat”). The other BTC book in the suite is **BTC L/S** — Slapper
+  is a true long/short (`enable_short`, net-short, BTC reversal flip), not
+  relative strength. Same pattern for **ETH L/S** and **SOL L/S**. The page
+  is a strategy (fills chart, latest remaining-book signal, MTM allocated, vs
   buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
   vs-flat DCA as a public KPI (`flat_dca_mark_to_market` is equal remaining-cash
   spend each day, fully deploying by the last bar — not a public comparable).

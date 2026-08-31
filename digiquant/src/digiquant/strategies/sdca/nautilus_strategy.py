@@ -367,7 +367,7 @@ register(
         "curve_nodes": DEFAULT_BTC_NODES,
     },
     aliases=["sdca"],
-    description="BTC SDCA Strat: composite valuation index (power law + M2 + DXY + weekly log-MACD + RSI) → remaining-book",
+    description="BTC-SDCA: composite valuation index (power law + M2 + DXY + weekly log-MACD + RSI) → remaining-book",
 )
 
 

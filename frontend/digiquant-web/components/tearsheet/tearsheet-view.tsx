@@ -55,6 +55,7 @@ import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
 import { RemainingBookNotes, StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
+import { StrategyTypeChip } from "./strategy-type-chip";
 import { chartFullSpan, clipOhlc, clipPoints, closesFromOhlc } from "./series";
 import {
   avgTradePct,
@@ -140,6 +141,7 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
           {dca ? (
             <div className="ts-meta">
               <span className="ts-chip">{symbol}</span>
+              <StrategyTypeChip strategy={slug} />
               <SignalDelayChip days={3} detail="full" />
               <BacktestOnlyChip />
             </div>
@@ -512,6 +514,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data.generated_at} />
             <span className="ts-chip">{data.symbol}</span>
+            <StrategyTypeChip strategy={slug} kind={data.kind} />
             <SignalDelayChip days={data.signal_delay_days} detail="full" />
             {dcaBook ? <BacktestOnlyChip /> : null}
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>

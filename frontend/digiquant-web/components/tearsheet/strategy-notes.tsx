@@ -21,7 +21,7 @@ export function strategyLibraryDescription(): string[] {
 export function theoryCopy(asset: string, strategy: string): string[] {
   if (strategy.includes("sdca")) {
     return [
-      `${asset} SDCA Strat sizes each day as a percent of remaining cash (buy) or remaining ${asset} (sell) from a composite valuation index (power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI).`,
+      `${asset}-SDCA sizes each day as a percent of remaining cash (buy) or remaining ${asset} (sell) from a composite valuation index (power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI).`,
       "Illustrative Nautilus backtest with a 3-day signal delay — not a live strategy. Buy-and-hold is the public benchmark. Walk-forward vs flat DCA is not a published beat.",
     ];
   }
@@ -42,7 +42,7 @@ function metaLines(data: TearsheetData): string[] {
     .map((n) =>
       n
         .replace(/NautilusTrader\s+backtest,?\s*/gi, "")
-        .replace(/\s*Slapper/gi, " long/short")
+        .replace(/\s*Slapper/gi, " L/S")
         .trim(),
     )
     .filter(Boolean);

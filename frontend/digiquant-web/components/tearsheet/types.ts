@@ -152,7 +152,7 @@ export interface CurrentSignal {
 /** Compact card summary in `strategies/index.json` (the library manifest). */
 export interface StrategyIndexEntry {
   strategy: string;
-  /** Human label, e.g. "BTC long/short" (present in index.json). */
+  /** Human label, e.g. "BTC L/S" (present in index.json). */
   label?: string;
   /** Taxonomy slug for library filters — `long_short`, `long_only`, etc. */
   kind?: string;

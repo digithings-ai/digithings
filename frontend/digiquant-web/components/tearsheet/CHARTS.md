@@ -75,8 +75,10 @@ delay). Allocated is MTM, never a negative "Deployed". The primary chart is
 **Fills** (`AllocationStepChart` with sized buy/sell markers). The risk tab is
 the **composite valuation index** (power law + M2 + DXY + weekly log-MACD + RSI).
 
-Public title is **BTC SDCA Strat**. Honesty (`beats_flat_dca_oos` false,
-backtest only) lives in notes, not title chips.
+Public title is **BTC-SDCA**. Honesty (`beats_flat_dca_oos` false,
+backtest only) lives in notes, not title chips. Slapper books are
+**BTC L/S** / **ETH L/S** / **SOL L/S** (true long/short). The library
+filters by public type All / SDCA / L/S (RS reserved on the enum).
 
 Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
 All `dca.*_pct` fields are ×100 percents.

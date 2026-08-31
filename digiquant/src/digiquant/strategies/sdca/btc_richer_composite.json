@@ -1,7 +1,7 @@
 {
   "asset": "BTC-USD",
   "strategy_id": "btc_sdca",
-  "public_name": "BTC SDCA Strat",
+  "public_name": "BTC-SDCA",
   "kind": "dca",
   "composite_valuation_index": true,
   "beats_flat_dca_oos": false,
