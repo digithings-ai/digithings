@@ -1,85 +1,85 @@
 {
-  "generatedAt": "2026-08-24T07:15:49Z",
+  "generatedAt": "2026-08-31T13:34:50Z",
   "windowDays": 30,
-  "commits": 940,
+  "commits": 1420,
   "features": [
     {
       "scope": "olympus",
-      "summary": "trade idea continuity, levels ladder, formatting",
-      "pr": 2574,
-      "date": "2026-08-21T17:35:10Z"
+      "summary": "remaining hops on Pages Settings About",
+      "pr": 3273,
+      "date": "2026-08-31T10:01:54Z"
     },
     {
-      "scope": "digiquant",
-      "summary": "wrap SDCA engine as NautilusTrader strategy",
-      "pr": 1081,
-      "date": "2026-08-20T22:32:46Z"
+      "scope": "olympus",
+      "summary": "promote account login/signup UI to Pages",
+      "pr": 3266,
+      "date": "2026-08-31T00:35:12Z"
     },
     {
-      "scope": "digiquant",
-      "summary": "add SDCA core engine (composite-risk + accum/dist curve + backtest)",
-      "pr": 2519,
-      "date": "2026-08-20T13:47:08Z"
+      "scope": "olympus",
+      "summary": "Settings Pipeline/Keys UI on Pages (no cutover 900)",
+      "pr": 3251,
+      "date": "2026-08-30T22:36:28Z"
     },
     {
-      "scope": "digiquant",
-      "summary": "book paper fills from the order ledger at the open",
-      "pr": 2489,
-      "date": "2026-08-19T22:29:27Z"
+      "scope": "olympus",
+      "summary": "Auth login/callback on Pages (no cutover 900)",
+      "pr": 3231,
+      "date": "2026-08-30T20:54:56Z"
     },
     {
-      "scope": "digiquant",
-      "summary": "make H9 append the authoritative commit chain",
-      "pr": 2482,
-      "date": "2026-08-19T16:06:51Z"
+      "scope": "digikey",
+      "summary": "add profile_id and profile_version JWT claims",
+      "pr": 3039,
+      "date": "2026-08-29T00:18:44Z"
     },
     {
-      "scope": "digiquant",
-      "summary": "add append-only portfolio lineage ledger schema",
-      "pr": 2432,
-      "date": "2026-08-17T19:24:40Z"
+      "scope": "digivault",
+      "summary": "canonical tool_dispatch for vault MCP routing",
+      "pr": 3041,
+      "date": "2026-08-29T00:11:59Z"
     }
   ],
-  "pullsMerged": 546,
-  "issuesClosed": 605,
-  "issuesOpen": 6,
+  "pullsMerged": 1044,
+  "issuesClosed": 1110,
+  "issuesOpen": 38,
   "branch": "main",
   "latestRelease": {
-    "tag": "digichat-v1.3.1",
-    "name": "digichat: v1.3.1",
-    "publishedAt": "2026-08-21T00:49:33Z",
-    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.1"
+    "tag": "digichat-v1.3.2",
+    "name": "digichat: v1.3.2",
+    "publishedAt": "2026-08-25T23:08:33Z",
+    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.2"
   },
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-08-21T13:00:39Z",
-      "files": 137,
-      "lines": 18563
+      "lastCommit": "2026-08-28T23:52:06Z",
+      "files": 138,
+      "lines": 19270
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-08-21T13:07:14Z",
-      "files": 506,
-      "lines": 84598
+      "lastCommit": "2026-08-31T11:24:23Z",
+      "files": 712,
+      "lines": 151356
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-08-13T02:57:00Z",
-      "files": 89,
-      "lines": 8722
+      "lastCommit": "2026-08-29T07:42:53Z",
+      "files": 97,
+      "lines": 9175
     },
     "digichat": {
       "path": "frontend/digichat",
-      "lastCommit": "2026-08-21T13:00:39Z",
-      "files": 217,
-      "lines": 27149
+      "lastCommit": "2026-08-28T23:12:35Z",
+      "files": 222,
+      "lines": 28230
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-08-19T07:45:48Z",
-      "files": 24,
-      "lines": 2392
+      "lastCommit": "2026-08-29T00:18:44Z",
+      "files": 25,
+      "lines": 2636
     },
     "digismith": {
       "path": "digismith",
@@ -89,21 +89,21 @@
     },
     "digiclaw": {
       "path": "digiclaw",
-      "lastCommit": "2026-08-11T02:03:02Z",
-      "files": 12,
-      "lines": 946
+      "lastCommit": "2026-08-28T23:06:21Z",
+      "files": 18,
+      "lines": 1885
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-08-11T01:31:27Z",
+      "lastCommit": "2026-08-28T22:50:19Z",
       "files": 16,
-      "lines": 1851
+      "lines": 2056
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-08-15T17:11:14Z",
-      "files": 20,
-      "lines": 3811
+      "lastCommit": "2026-08-29T11:39:58Z",
+      "files": 21,
+      "lines": 4286
     }
   }
 }
