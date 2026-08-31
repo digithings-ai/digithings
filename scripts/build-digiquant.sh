@@ -6,7 +6,8 @@
 #   2. frontend/olympus/out/       — the dashboard (basePath /dashboard)
 #      → dist/dashboard/
 # The digiquant-web export ships public/_headers (root /* security headers +
-# /dashboard* CSP, plus /olympus* while 308s still land there).
+# /dashboard* CSP, plus /olympus* so a 308 landing still has a CSP if the
+# redirect is not followed).
 set -euo pipefail
 
 # Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
@@ -84,12 +85,6 @@ echo "NEXT_PUBLIC_DASHBOARD_AUTH=${NEXT_PUBLIC_DASHBOARD_AUTH:-<unset>}"
 npm --workspace frontend/olympus run build
 mkdir -p dist/dashboard
 cp -r frontend/olympus/out/. dist/dashboard/
-# One-release twin: .github/workflows/deploy-digiquant-cloudflare.yml still
-# asserts `test -d dist/olympus` and cannot be edited on cursor/* branches.
-# HTML asset URLs are /dashboard/_next/… so the twin is a fallback if a
-# 308 from /olympus/* is not applied; drop it when the workflow path updates.
-mkdir -p dist/olympus
-cp -r frontend/olympus/out/. dist/olympus/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
@@ -105,7 +100,6 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 [ -f dist/subsystems/research/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard did not export" >&2; exit 1; }
-[ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — legacy-path twin not exported" >&2; exit 1; }
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }

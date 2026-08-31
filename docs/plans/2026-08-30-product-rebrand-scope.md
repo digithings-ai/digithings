@@ -1,8 +1,8 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). Wave 2 public path is `/dashboard/` with 308s from `/olympus/`. Folder / npm / CI workflow rename needs a `feat/` or `task/<N>-slug` branch.
-> **Does not:** rewrite Python packages, SQL tables, workflows, or live-trading paths in this wave
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`**. Wave 1 copy and wave 3 identifiers shipped (#3261). Wave 2 public path is `/dashboard/` (308s from `/olympus/`; no `dist/olympus` twin). Folder / npm rename of `frontend/olympus` is a later hop.
+> **Does not:** rewrite Python packages, SQL tables, or live-trading paths
 > **Human gate:** yes — kairos **package** rename later touches execution; vendor consoles (Supabase / Alpaca / Access) must add `/dashboard/` callbacks **before** dropping `/olympus/`
 
 Two decisions, in order:
