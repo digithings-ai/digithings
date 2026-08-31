@@ -3228,7 +3228,12 @@ argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
 `_pending_order_heads`, `refresh_attribution.py` positions, and
 `finalize_period_accounting.py` Group A nav/positions) filter **and** stamp
 `house_workspace_id()`. They never
-mean "every row". The olympus dashboard Group A readers
+mean "every row". House atlas ops readers (`repair_supabase_portfolio_data`,
+`seed_ledger_opening_snapshot`, `backfill_position_events`,
+`ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
+`validate_db_first` Group A checks, `backfill_export_state` positions export,
+`backfill_pm_rebalance_and_activity` thesis map) pin via `eq_house_workspace()`
+(omitted id = house). The olympus dashboard Group A readers
 (`frontend/dashboard/lib/queries.ts`, `observability-queries.ts`) go through
 `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom member's overlay
 rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses

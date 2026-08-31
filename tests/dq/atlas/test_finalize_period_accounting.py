@@ -455,10 +455,10 @@ def test_legacy_nav_day_return_ignores_overlay_nav() -> None:
     client = FakeSupabaseClient(
         canned_reads={
             "nav_history": [
-                {"date": "2026-08-24", "nav": 100.0, "workspace_id": house},
-                {"date": "2026-08-25", "nav": 101.0, "workspace_id": house},
-                {"date": "2026-08-24", "nav": 1.0, "workspace_id": overlay},
                 {"date": "2026-08-25", "nav": 999.0, "workspace_id": overlay},
+                {"date": "2026-08-24", "nav": 1.0, "workspace_id": overlay},
+                {"date": "2026-08-25", "nav": 101.0, "workspace_id": house},
+                {"date": "2026-08-24", "nav": 100.0, "workspace_id": house},
             ]
         }
     )
@@ -477,28 +477,28 @@ def test_opening_cash_ignores_overlay_nav_and_cash_weight() -> None:
             "nav_history": [
                 {
                     "date": "2026-08-24",
-                    "nav": 100.0,
-                    "workspace_id": house,
-                },
-                {
-                    "date": "2026-08-24",
                     "nav": 999.0,
                     "cash_pct": 99.0,
                     "workspace_id": overlay,
+                },
+                {
+                    "date": "2026-08-24",
+                    "nav": 100.0,
+                    "workspace_id": house,
                 },
             ],
             "positions": [
                 {
                     "date": "2026-08-24",
                     "ticker": "CASH",
-                    "weight_pct": 20.0,
-                    "workspace_id": house,
+                    "weight_pct": 99.0,
+                    "workspace_id": overlay,
                 },
                 {
                     "date": "2026-08-24",
                     "ticker": "CASH",
-                    "weight_pct": 99.0,
-                    "workspace_id": overlay,
+                    "weight_pct": 20.0,
+                    "workspace_id": house,
                 },
             ],
         }

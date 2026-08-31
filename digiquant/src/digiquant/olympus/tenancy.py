@@ -111,6 +111,15 @@ def resolved_workspace_id(raw: UUID | str | None) -> UUID:
     return UUID(text)
 
 
+def eq_house_workspace(query: Any, workspace_id: UUID | str | None = None) -> Any:
+    """Pin a PostgREST query to one workspace. Omitted id means the house book.
+
+    Overlay same-date Group A rows must not leak into house ops readers. Duck-typed
+    for supabase-py and ``FakeSupabaseClient`` (both expose ``.eq``).
+    """
+    return query.eq("workspace_id", str(resolved_workspace_id(workspace_id)))
+
+
 class Workspace(BaseModel):
     """One row of ``public.workspaces`` (roadmap P2a; billing columns per spec D1/D8).
 
@@ -193,6 +202,7 @@ __all__ = [
     "WorkspaceMember",
     "WorkspaceMemberRole",
     "WorkspaceType",
+    "eq_house_workspace",
     "house_workspace_id",
     "house_workspace_row",
     "resolved_workspace_id",
