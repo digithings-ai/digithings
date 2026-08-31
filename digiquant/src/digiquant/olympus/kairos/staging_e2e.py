@@ -55,7 +55,12 @@ STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "custom", "interval": "month
 
 
 def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
-    """Pinned core APP_URL must be the public origin, not loopback."""
+    """Pinned core APP_URL must be the public origin + ``/dashboard`` path.
+
+    Loopback and the retired ``/olympus`` prefix both fail. Do not weaken this
+    to accept live Pages while they still serve ``/olympus`` — that is a
+    deploy/path contract, not a remaining hop.
+    """
     if http != 200:
         return False
     alpaca = str(body.get("alpaca_redirect_uri") or "")

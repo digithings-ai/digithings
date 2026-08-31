@@ -173,6 +173,16 @@ def test_public_app_urls_ok_requires_digiquant_origin() -> None:
         "alpaca_oauth_client_id": "cid-public",
     }
     assert public_app_urls_ok(200, extra_public_client) is True
+    retired_olympus = {
+        "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, retired_olympus) is False
+    mixed_olympus_billing = {
+        **good,
+        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, mixed_olympus_billing) is False
 
 
 class _FakeHttp:
