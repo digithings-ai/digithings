@@ -130,7 +130,7 @@ function PrintHeading({ children }: { children: string }) {
 export function TearsheetView({ slug }: { slug: string }) {
   const [data, setData] = useState<TearsheetData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [scale, setScale] = useState<ChartScale>("linear");
+  const [userScale, setUserScale] = useState<{ slug: string; scale: ChartScale } | null>(null);
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
   const [viewOverride, setViewOverride] = useState<ViewWindow | null>(null);
@@ -249,13 +249,11 @@ export function TearsheetView({ slug }: { slug: string }) {
   const hasThreeWay = chartLump.length > 0 && chartFlat.length > 0;
   const showTradeKpis = data ? hasTradeKpis(data.win_rate_pct, data.profit_factor) : true;
   const dcaBook = data ? isDcaTearsheet(data) : false;
+  const scale: ChartScale =
+    userScale && userScale.slug === slug ? userScale.scale : dcaBook ? "log" : "linear";
   const chartTab =
     chartTabPick ??
     (hasRails ? "rails" : hasPrice ? "price" : "equity");
-
-  useEffect(() => {
-    if (dcaBook) setScale("log");
-  }, [dcaBook]);
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, data?.label);
@@ -455,7 +453,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         <SegToggle
           label="Chart Y-axis scale"
           value={scale}
-          onChange={setScale}
+          onChange={(next) => setUserScale({ slug, scale: next })}
           options={[
             { value: "linear", label: "Linear" },
             { value: "log", label: "Log" },
