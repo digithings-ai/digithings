@@ -26,6 +26,7 @@ from datetime import date, datetime
 from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
 from uuid import UUID
 
+import httpx
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
@@ -33,6 +34,12 @@ from digiquant.olympus.overlay.persist import (
     is_private_workspace,
     require_overlay_persist,
     skip_overlay_shared_register,
+)
+from digiquant.olympus.postgrest_timeout import (
+    CONNECT_TIMEOUT_SECONDS,
+    POOL_TIMEOUT_SECONDS,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
 )
 from digiquant.olympus.tenancy import resolved_workspace_id
 
@@ -178,11 +185,21 @@ def build_client(cfg: SupabaseConfig) -> SupabaseClient:
     The ``supabase`` package is an optional extra; this helper defers the
     import so unit tests (which use :class:`FakeSupabaseClient`) never need
     it installed. Production entry points (commit 9's graph compiler) call
-    this once at startup.
+    this once at startup. PostgREST uses an explicit httpx timeout (#3319).
     """
+    from supabase.lib.client_options import SyncClientOptions
+
     from supabase import create_client  # deferred — supabase is an optional dep
 
-    return create_client(cfg.url, cfg.service_key)  # type: ignore[return-value]
+    options = SyncClientOptions(
+        postgrest_client_timeout=httpx.Timeout(
+            connect=CONNECT_TIMEOUT_SECONDS,
+            read=READ_TIMEOUT_SECONDS,
+            write=WRITE_TIMEOUT_SECONDS,
+            pool=POOL_TIMEOUT_SECONDS,
+        )
+    )
+    return create_client(cfg.url, cfg.service_key, options)  # type: ignore[return-value]
 
 
 def _audit(event_type: str, payload: dict[str, Any]) -> None:
