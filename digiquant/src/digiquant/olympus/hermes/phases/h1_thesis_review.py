@@ -21,6 +21,7 @@ from digiquant.olympus.hermes.writers.thesis_io import (
     merge_review_with_invalidation_hits,
     persist_thesis_review,
 )
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +85,13 @@ def _h1_node_factory(client: SupabaseClient | None):
             run_date=state.run_date,
             body=review.model_dump(mode="json"),
         )
-        if client is not None:
+        if client is not None and not skip_overlay_shared_register(state.config.workspace_id):
             persist_thesis_review(
                 client,
                 run_date=state.run_date,
                 review=review,
                 active_theses=state.prior_context.active_theses,
+                workspace_id=state.config.workspace_id,
             )
         return {
             "phase_hermes": state.phase_hermes.model_copy(update={"thesis_review": document}),

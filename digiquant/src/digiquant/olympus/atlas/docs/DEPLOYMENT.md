@@ -14,6 +14,7 @@ executes the unified Atlas+Hermes pipeline via
 | --- | --- | --- | --- |
 | `pipeline-olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
 | `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
+| Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
 | `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff | 15 min |
 | `ci.yml` → `actionlint` job | `push` / `pull_request` touching `.github/workflows/**` | `actionlint` over **every** workflow | 5 min |
 

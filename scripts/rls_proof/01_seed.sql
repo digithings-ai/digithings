@@ -1,8 +1,9 @@
 -- ============================================================================
 -- Seed: two tenants + free observer + representative private rows
 -- ============================================================================
--- Runs as table owner / superuser (bypasses RLS) AFTER migrations + cutover.
--- Deterministic UUIDs for proof assertions.
+-- Runs as table owner / superuser (bypasses RLS) AFTER migrations 001–110 and
+-- BEFORE cutover 900 (pre-cutover 110 proof) as well as remaining in place for
+-- the post-cutover 02_proof.sql matrix. Deterministic UUIDs for proof assertions.
 -- ============================================================================
 
 \echo '=== SEED: begin ==='

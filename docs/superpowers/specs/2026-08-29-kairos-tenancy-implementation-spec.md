@@ -12,7 +12,7 @@
 
 This spec is written so a smaller model can pick up any single work package (WP) cold. Per WP it gives: goal, exact files, interfaces, behavior rules, edge cases, tests, acceptance, and gates. Global rules that apply to **every** WP:
 
-1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/olympus/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
+1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/dashboard/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
 2. **Branching:** K-track WPs are `component:digiquant` → branch from `module/digiquant` via `make task ISSUE=N` (two-hop). Olympus UI WPs and root docs are one-hop to `develop`. Never branch from a stale base — `make task` enforces `origin/<base>`.
 3. **Migration numbers are allocated at execution time** — the next free `digiquant/supabase/migrations/NNN_*.sql` when your PR lands (096+ as of this writing; check, don't assume). Update `digiquant/supabase/SCHEMA.md` in the same PR.
 4. **Human gates (hard):**
@@ -29,7 +29,7 @@ This spec is written so a smaller model can pick up any single work package (WP)
 
 | # | Decision | Ruling | Rationale |
 |---|----------|--------|-----------|
-| **D1** | Tier content split | **Observer** (free, authenticated): Atlas research + Hermes narrative **without** weights/NAV/fills. **Baseline** (tier 1): full house glass-box + house paper book, read-only. **Custom** (tier 2): overlay profiles, private book, broker connect, BYOK. **Enterprise**: contract (multi-seat, SLA) | Free taste without giving away the PM product; matches the user-stated "tier 1 = baseline in full" |
+| **D1** | Tier content split | **Observer** (free, authenticated): teaser only — Atlas research + Hermes narrative / **digest summary conclusions** + light **portfolio glimpse** (names, not weights/NAV/fills). **No** automations, **no** broker/portfolio connections. **Baseline** (tier 1, paid): full house glass-box + house paper book, read-only. **Custom** (tier 2, paid): overlay profiles, private book, broker connect, BYOK. **Enterprise**: contract (multi-seat, SLA). **Creator/ops exception:** emails in `entitlement_grants` get a `plan_floor` (seeded creator → `custom`) so baseline/Kairos works without Stripe for the operator; everyone else still needs a subscription for full product. **Client products** (FX Hub / future): `client_product_grants` email allowlist, not plan_tier | Free taste without reverse-engineering the PM product; creator unblocked while Stripe/Alpaca captchas block vendor onboarding |
 | **D2** | Broker order | **Alpaca paper first**, IBKR second (read-first) | Alpaca: single REST plane, OAuth for third-party apps, paper keys trivial. IBKR: session/gateway model is heavier (§7) |
 | **D3** | Live trading in scope? | **No.** Milestone 1+2 ship paper connect + read + paper orders only. Live cutover is a separate, human-gated epic | Repo invariant; also defers the investment-adviser compliance question (§8) |
 | **D4** | End-user identity plane | **Supabase Auth** (Google + GitHub OAuth) for Olympus users; **digikey** remains the machine/API plane. Entitlements ride Supabase JWT `app_metadata.plan_tier`, enforced by RLS | Wave 3 D3; one login for dashboard + data plane; digikey untouched (no auth-plane change = no digikey human gate in this program) |

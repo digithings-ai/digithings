@@ -6,6 +6,11 @@
 #
 # Do not extend this file. New digest-materialization logic lives in
 # the sub-graph. See ADR-0009.
+# Exception (P6 tenancy): stamp house ``workspace_id`` on Group A book
+# upserts so dropping 097's legacy ``UNIQUE(date, ticker)`` does not 42P10
+# this recovery path. House-scope leftover ``documents`` reads on
+# ``sync_digest_markdown_from_documents`` so overlay digest content cannot
+# overwrite ``daily_snapshots.digest_markdown``. No new features.
 # ────────────────────────────────────────────────────────────────────────────
 """
 materialize_snapshot.py
@@ -30,6 +35,8 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from digiquant.olympus.tenancy import eq_house_workspace, house_workspace_id
 
 try:
     from supabase import create_client  # type: ignore
@@ -372,6 +379,7 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
             continue
         pos_rows.append(
             {
+                "workspace_id": str(house_workspace_id()),
                 "date": snapshot["date"],
                 "ticker": t,
                 "name": p.get("name"),
@@ -386,16 +394,26 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
         )
     if pos_rows:
         for r in pos_rows:
-            _safe_upsert("positions", r, on_conflict="date,ticker")
+            _safe_upsert("positions", r, on_conflict="workspace_id,date,ticker")
         # Remove stale tickers for this date (carry-forward refresh can leave exited names).
         keep_tickers = {r["ticker"] for r in pos_rows if r.get("ticker")}
         d = snapshot["date"]
+        house = str(house_workspace_id())
         sb = _sb()
-        existing = sb.table("positions").select("ticker").eq("date", d).execute()
+        existing = (
+            sb.table("positions").select("ticker").eq("workspace_id", house).eq("date", d).execute()
+        )
         for row in getattr(existing, "data", None) or []:
             tk = row.get("ticker")
             if tk and tk not in keep_tickers:
-                sb.table("positions").delete().eq("date", d).eq("ticker", tk).execute()
+                (
+                    sb.table("positions")
+                    .delete()
+                    .eq("workspace_id", house)
+                    .eq("date", d)
+                    .eq("ticker", tk)
+                    .execute()
+                )
 
     # Theses table
     thesis_rows = []
@@ -435,14 +453,21 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
         _safe_upsert("documents", doc_row, on_conflict="workspace_id,date,document_key")
 
 
-def sync_digest_markdown_from_documents(dates: List[str]) -> None:
-    """Copy documents.content (DIGEST.md) into daily_snapshots.digest_markdown when missing."""
-    sb = _sb()
-    q = sb.table("documents").select("date,content").eq("document_key", "digest")
+def house_digest_documents(sb: Any, dates: List[str]) -> List[Dict[str, Any]]:
+    """House ``digest`` documents. Overlay same-key rows must not overwrite the Brief."""
+    q = eq_house_workspace(sb.table("documents").select("date,content")).eq(
+        "document_key", "digest"
+    )
     if dates:
         q = q.in_("date", dates)
     res = q.execute()
-    docs = getattr(res, "data", None) or []
+    return list(getattr(res, "data", None) or [])
+
+
+def sync_digest_markdown_from_documents(dates: List[str]) -> None:
+    """Copy documents.content (DIGEST.md) into daily_snapshots.digest_markdown when missing."""
+    sb = _sb()
+    docs = house_digest_documents(sb, dates)
     for doc in docs:
         date_str = doc.get("date")
         content = doc.get("content")

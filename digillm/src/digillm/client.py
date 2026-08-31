@@ -1457,8 +1457,13 @@ def openrouter_web_search(
     """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
 
     ``:online`` models and native-search providers (``perplexity/*``) use built-in web
-    search via a plain completion. Other models fall back to the server-side
-    ``openrouter:web_search`` tool (Exa by default).
+    search via a plain completion — this is the **Olympus grounding** path
+    (:func:`digigraph.model_config.get_grounding_model`).
+
+    Other models fall back to the server-side ``openrouter:web_search`` tool
+    (Exa by default). That branch is a **digillm toolkit** capability for
+    non-native-search models (diagnostics / opt-in callers); Olympus must not
+    assemble ``engine`` / ``max_results`` for production grounding (#2567).
 
     Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
     unset, or the call fails (fail-soft).

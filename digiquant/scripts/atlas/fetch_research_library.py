@@ -43,6 +43,18 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
 
 def _sb():
     if not _HAS_SB:
@@ -56,8 +68,7 @@ def _sb():
 
 def _query(sb, args: argparse.Namespace, select: str = "date,document_key,title,doc_type,segment,payload"):
     q = (
-        sb.table("documents")
-        .select(select)
+        eq_house_workspace(sb.table("documents").select(select))
         .like("document_key", "research/%")
         .order("date", desc=True)
     )
@@ -96,8 +107,7 @@ def cmd_index(args: argparse.Namespace) -> int:
 def cmd_fetch_one(args: argparse.Namespace) -> int:
     sb = _sb()
     res = (
-        sb.table("documents")
-        .select("date,document_key,title,content")
+        eq_house_workspace(sb.table("documents").select("date,document_key,title,content"))
         .eq("document_key", args.key)
         .limit(1)
         .execute()

@@ -11,7 +11,7 @@ web
 digiweb is the shared design suite behind two customer-facing domains, both co-primary:
 
 - **digithings.ai visitors** — evaluating the open-core agentic stack (quant finance, RAG, chat) as a platform hub.
-- **digiquant.io visitors** — evaluating the quant product family (Atlas, Hermes, Kairos) as an investment-research/profiling demo.
+- **digiquant.io visitors** — evaluating the quant product (research, portfolio, execution) as an investment-research/profiling demo.
 
 Both audiences are in a persuade/explore posture — deciding whether to try or adopt, not operating an already-installed tool.
 
@@ -29,7 +29,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 - The reference app (`reference/`) is the live, browsable canon at `http://127.0.0.1:4013` — the first place to check before building any new pattern.
 - `MANIFEST.json` is a machine-readable index of every reusable component (name, path, family, purpose) that agents are expected to consult before adding new UI.
 - **Consuming surfaces with their own PRODUCT.md-eligible context** (recorded here as durable facts only; visual specifics stay out of PRODUCT.md per init's own rule):
-  - **olympus** (`frontend/olympus/`) — the Atlas + Hermes dashboard, an Operate-mode surface (task completion, not persuasion): research pipeline runs, portfolio/tearsheet views, performance monitoring for the digiquant sub-graphs. Its patterns live in the reference under `/finance` (dashboard workspace, tearsheet, performance metrics, order book) and `/layout-patterns` (the olympus app's phone mockup frame) and `/effects` (the olympus-ported pipeline workflow viz).
+  - **dashboard** (`frontend/dashboard/`) — the digiquant operator surface (task completion, not persuasion): research pipeline runs, portfolio/tearsheet views, performance monitoring. Its patterns live in the reference under `/finance` (dashboard workspace, tearsheet, performance metrics, order book) and `/layout-patterns` (the dashboard app's phone mockup frame) and `/effects` (the pipeline workflow viz).
   - **digichat** (`frontend/digichat/`, `frontend/digichat-ui/`) — the chat UI, presented as a terminal-style CLI chatbot: monospace scrollback, `>` prompt, thinking chain, collapsible tool-call chain, inline charts/route graphs, custom action widgets embedded in the terminal. Its pattern lives in the reference under `/chatbot` (and shares grammar with the diegetic `/terminal` family). Persuade-adjacent on marketing surfaces, Operate-mode once a user is actually chatting.
 
 ## Capabilities and Constraints
@@ -45,7 +45,7 @@ digithings' core, truthful differentiator: an **open-core, self-hostable stack**
 ## Brand Commitments
 
 - No Digi module name is ever rendered in CamelCase or with internal spacing in prose/UI copy (DigiChat, Digi Things, etc. are all wrong) — see `CLAUDE.md`'s naming table for the canonical list.
-- No naming-philosophy commitments beyond the "digi + lowercase rest" rule are binding at the digiweb-suite level; product-specific names (Atlas, Kairos) are decided per product, not per surface.
+- No naming-philosophy commitments beyond the "digi + lowercase rest" rule are binding at the digiweb-suite level; job words (research, portfolio, execution) are decided per product, not per surface.
 
 ## Evidence on Hand
 

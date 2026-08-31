@@ -6,9 +6,10 @@
 #   1) 00_supabase_shim.sql
 #   2) digiquant/supabase/migrations/*.sql (lexicographic sort, top-level)
 #   (099/102–105 now live in digiquant/supabase/migrations/ — applied by the main glob)
-#   4) cutover/900_drop_anon_read_cutover.sql  (post-cutover state)
-#   5) 01_seed.sql
-#   6) 02_proof.sql
+#   4) seed (01_seed.sql) — once, before both proofs
+#   5) 02_pre_cutover_110.sql  (anon house-only; BEFORE 900)
+#   6) cutover/900_drop_anon_read_cutover.sql  (post-cutover state)
+#   7) 02_proof.sql
 #
 # Usage:
 #   ./scripts/rls_proof/run.sh
@@ -108,8 +109,9 @@ for f in "${DEVELOP_MIGS[@]}"; do
   run_sql_file "develop/${base}" "$f"
 done
 
-run_sql_file "cutover/900_drop_anon_read_cutover.sql (STAGED)" "$CUTOVER"
 run_sql_file "seed" "$PROOF_DIR/01_seed.sql"
+run_sql_file "pre-cutover 110 proof (BEFORE 900)" "$PROOF_DIR/02_pre_cutover_110.sql"
+run_sql_file "cutover/900_drop_anon_read_cutover.sql (STAGED)" "$CUTOVER"
 
 log ""
 log "=== PROOF MATRIX EXECUTION ==="

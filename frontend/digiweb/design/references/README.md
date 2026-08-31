@@ -65,8 +65,8 @@ Last full pass: **2026-06-29** (deep layer in [`scans/`](scans/INDEX.md)).
 | digithings.ai | `frontend/digithings-web/` | Marketing + architecture story |
 | digiquant.io | `frontend/digiquant-web/` | Marketing + quant product proof |
 | digichat | `frontend/digichat/` | Product-as-landing (terminal chat) |
-| Olympus | `frontend/olympus/` | Professional dashboard |
-| twelve-x | `frontend/olympus/components/twelve-x/` | Data-dense research utility |
+| Olympus | `frontend/dashboard/` | Professional dashboard |
+| twelve-x | `frontend/dashboard/components/twelve-x/` | Data-dense research utility |
 | Shared system | `frontend/digiweb/design/`, `frontend/digiweb/web/` | Tokens, primitives, motion |
 
 Legacy static sites (`frontend/digithings/`, `frontend/digiquant/`) are not

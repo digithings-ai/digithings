@@ -57,7 +57,11 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.turnover import no_trade_band_pp
-from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.olympus.postgrest_timeout import EXECUTE_DEADLINE_SECONDS, run_with_deadline
 from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -112,6 +116,11 @@ class LedgerAppend:
     unpriced_symbols: list[str]
 
 
+def _execute(query: Any) -> Any:
+    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
+    return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
+
+
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
     """The single INSERT gate for every ledger table.
 
@@ -131,7 +140,7 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
         return
     house_id = str(house_workspace_id())
     stamped = [{"workspace_id": house_id, **row} for row in rows]
-    client.table(table).insert(stamped).execute()
+    _execute(client.table(table).insert(stamped))
 
 
 def _is_cash(ticker: Any) -> bool:
@@ -157,7 +166,7 @@ def _rows_for_date(
         .eq("run_date", run_date.isoformat())
         .eq("workspace_id", scoped)
     )
-    resp = query.execute()
+    resp = _execute(query)
     return list(resp.data or [])
 
 
@@ -198,13 +207,12 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
     ordered = sorted(tickers)
     latest: dict[str, tuple[str, float]] = {}
     for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
-        resp = (
+        resp = _execute(
             client.table(_PRICE_HISTORY)
             .select("date, ticker, close")
             .in_("ticker", ordered[start : start + _CLOSE_TICKER_BATCH])
             .gte("date", floor)
             .lt("date", run_date.isoformat())
-            .execute()
         )
         for row in resp.data or []:
             ticker = _symbol(row.get("ticker"))
@@ -247,11 +255,8 @@ def _frozen_symbols(*, client: SupabaseClient, order_rows: list[dict[str, Any]])
         return frozen
     # ``paper_executions`` carries no ``run_date`` column — it is reachable only
     # through the order intents it references, so filter on those ids alone.
-    resp = (
-        client.table(PAPER_EXECUTIONS)
-        .select("order_intent_id")
-        .in_("order_intent_id", order_ids)
-        .execute()
+    resp = _execute(
+        client.table(PAPER_EXECUTIONS).select("order_intent_id").in_("order_intent_id", order_ids)
     )
     filled = {str(r.get("order_intent_id")) for r in resp.data or []}
     frozen.update(
@@ -426,6 +431,9 @@ def append_commit_chain(
 
     overlay_ws = getattr(state.config, "workspace_id", None)
     require_overlay_persist(overlay_ws)
+    # Ledger one-root-per-run_date is still global (migration 069); overlay + house
+    # cannot both root a commit on the same date until that index is widened.
+    require_overlay_legacy_book_safe(overlay_ws)
     prior_commits = _rows_for_date(
         client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
     )

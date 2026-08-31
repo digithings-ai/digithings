@@ -27,6 +27,7 @@ from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.analyst_io import upsert_analyst_coverage
 from digiquant.olympus.hermes.writers.thesis_io import upsert_vehicle_thesis_from_analyst
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ def _h5_node_factory(
         if errors:
             logger.warning("H5 %s completed with %d recoverable errors", ticker, len(errors))
         doc_key = artifact_document_key(analyst_artifact_key(ticker))
-        if client is not None:
+        if client is not None and not skip_overlay_shared_register(state.config.workspace_id):
             upsert_analyst_coverage(
                 client,
                 run_date=state.run_date,
@@ -103,6 +104,7 @@ def _h5_node_factory(
                 thesis_ids=[entry["linked_market_thesis_id"]]
                 if entry.get("linked_market_thesis_id")
                 else None,
+                workspace_id=state.config.workspace_id,
             )
             if _should_backfill_vehicle_thesis(entry):
                 upsert_vehicle_thesis_from_analyst(
@@ -110,6 +112,7 @@ def _h5_node_factory(
                     run_date=state.run_date,
                     ticker=ticker,
                     analyst_payload=payload.model_dump(mode="json"),
+                    workspace_id=state.config.workspace_id,
                 )
         analysts = {ticker: payload.model_dump(mode="json")}
         return {

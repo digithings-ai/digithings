@@ -2,36 +2,37 @@ import type { ReactNode } from "react";
 
 /**
  * Brand marks — promoted from the design reference (symbols/marks) as pure,
- * props-driven components. The four-stroke olympus signature was previously
- * copied verbatim in four places (olympus atlas-mark.tsx + AtlasLoader.tsx,
- * digiquant-web's OlympusMark, the reference specimen) — this file is the
+ * props-driven components. The four-stroke digiquant signature was previously
+ * copied verbatim in four places (dashboard atlas-mark.tsx + AtlasLoader.tsx,
+ * digiquant-web's DigiquantMark, the reference specimen) — this file is the
  * canonical copy. Everything draws in currentColor so a mark inherits the
  * ink/accent of its livery scope. No CSS ships with this family: the marks
  * are pure SVG/text; stroke-draw loader animations stay in the consuming
- * app's CSS, targeted through `strokeClassPrefix`.
+ * app's CSS, targeted through `strokeClassPrefix`. Default hooks are
+ * `dq-mark` / `dq-stroke`.
  */
 
-export type OlympusMarkProps = {
+export type DigiquantMarkProps = {
   size?: number;
   className?: string;
   /** Accessible name (renders a <title> + role="img"); omitted → decorative. */
   title?: string;
   /**
    * Per-path class hook for stroke-draw animations: each stroke gets
-   * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The olympus
-   * dashboard's loader keys its draw keyframes off "atlas-loader-stroke";
-   * the reference / digiquant hover replay uses the default
-   * "olympus-stroke".
+   * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The dashboard
+   * loader keys its draw keyframes off "atlas-loader-stroke";
+   * the reference / landing hover replay uses the default
+   * "dq-stroke".
    */
   strokeClassPrefix?: string;
 };
 
-export function OlympusMark({
+export function DigiquantMark({
   size = 22,
   className,
   title,
-  strokeClassPrefix = "olympus-stroke",
-}: OlympusMarkProps) {
+  strokeClassPrefix = "dq-stroke",
+}: DigiquantMarkProps) {
   const strokeClass = (n: number) => `${strokeClassPrefix} ${strokeClassPrefix}-${n}`;
   return (
     <svg
@@ -42,7 +43,7 @@ export function OlympusMark({
       role={title ? "img" : undefined}
       aria-hidden={title ? undefined : "true"}
       focusable="false"
-      className={["olympus-mark", className].filter(Boolean).join(" ")}
+      className={["dq-mark", className].filter(Boolean).join(" ")}
     >
       {title ? <title>{title}</title> : null}
       <path

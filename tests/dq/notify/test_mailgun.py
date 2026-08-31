@@ -39,10 +39,10 @@ def test_unsubscribe_url_placeholder() -> None:
         api_key="k",
         domain="mg.example.com",
         from_address="n@example.com",
-        unsubscribe_base="https://digiquant.io/olympus/settings/notifications",
+        unsubscribe_base="https://digiquant.io/dashboard/settings/notifications",
     )
     url = unsubscribe_url("abc-workspace", cfg)
-    assert url == "https://digiquant.io/olympus/settings/notifications?workspace=abc-workspace"
+    assert url == "https://digiquant.io/dashboard/settings/notifications?workspace=abc-workspace"
 
 
 def test_dispatch_fail_soft_on_transport(monkeypatch: pytest.MonkeyPatch) -> None:

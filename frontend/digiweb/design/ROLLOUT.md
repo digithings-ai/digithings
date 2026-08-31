@@ -15,7 +15,7 @@ Canon: [`BLEND.md`](BLEND.md) · [`DESIGN.md`](../DESIGN.md) · reference `/iter
 | digithings.ai | `frontend/digithings-web/` | **Phase 2 — this branch** |
 | digiquant.io | `frontend/digiquant-web/` | **Phase 2 — this branch** |
 | digichat | `frontend/digichat/` | Phase 3 |
-| olympus + FX Hub (twelve-x) | `frontend/olympus/` | Phase 3 |
+| olympus + FX Hub (twelve-x) | `frontend/dashboard/` | Phase 3 |
 
 Same atoms everywhere: **radius 0 · mono voice · white/ink loud CTA · tonal slabs · `//` kickers · sparse marketing / instrument dashboards**.
 

@@ -34,8 +34,11 @@
 --     `sync_positions_from_rebalance.py`, `update_tearsheet.py`, …) still upsert with
 --     `on_conflict="date"` / `"date,ticker"`; dropping those arbiters would raise
 --     Postgres 42P10 on the next metrics job. `UNIQUE(date)` / `UNIQUE(date, ticker)`
---     stays correct while only the house workspace writes. Roadmap P6 drops the
---     legacy keys after every writer is patched to the widened arbiter.
+--     stays correct while only the house workspace writes. Roadmap P6 stages the
+--     drop in migrations/cutover/113_drop_legacy_book_uniques.sql (not
+--     auto-applied). Copy to top-level only after main house GHA writers use
+--     the widened arbiter — applying while origin/main still upserts
+--     on_conflict=date raises 42P10.
 --     Every constraint this migration ADDS (enumerate for reviewers / T0 acceptance):
 --       KEEP positions_date_ticker_key
 --         + ADD uq_positions_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
