@@ -59,6 +59,17 @@ except ImportError:
     _HAS_JSONSCHEMA = False
 
 ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _load_execute_at_open():
@@ -292,7 +303,9 @@ def _snapshot_portfolio_cash(sb, d: str) -> Optional[float]:
 
 
 def _thesis_map_for_date(sb, d: str) -> Dict[str, Optional[str]]:
-    res = sb.table("positions").select("ticker,thesis_id").eq("date", d).execute()
+    res = (
+        eq_house_workspace(sb.table("positions").select("ticker,thesis_id")).eq("date", d).execute()
+    )
     out: Dict[str, Optional[str]] = {}
     for row in getattr(res, "data", None) or []:
         if not isinstance(row, dict):
