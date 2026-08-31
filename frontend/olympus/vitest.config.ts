@@ -20,6 +20,7 @@ export default defineConfig({
       'components/**/*.test.ts',
       'components/**/*.test.tsx',
       'app/**/*.test.ts',
+      'app/**/*.test.tsx',
     ],
     // OXC transformer config — mirrors Vitest's default but pins JSX runtime.
     // See https://vitest.dev/config/#oxc

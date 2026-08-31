@@ -40,7 +40,9 @@ export function buildSupabaseClient(
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Callback page owns `exchangeCodeForSession`. Auto-detect would
+        // race the one-shot PKCE code (see PipelineClient).
+        detectSessionInUrl: false,
       },
     });
   }
@@ -63,8 +65,61 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
 
 export const isSupabaseConfigured = (): boolean => Boolean(supabase);
 
+export type OAuthProvider = 'google' | 'github';
+
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {
   if (typeof window === 'undefined') return '';
   return `${window.location.origin}${olympusBasePath()}/auth/callback/`;
+}
+
+/**
+ * Options for supabase-js `signInWithOAuth`.
+ *
+ * `skipBrowserRedirect` is required: Google (unlike GitHub) often returns a URL
+ * that the default supabase-js location swap drops on static `/olympus/`
+ * basePath. The caller assigns `data.url` itself after a missing-URL check.
+ */
+export function oauthSignInOptions(provider: OAuthProvider): {
+  redirectTo: string;
+  skipBrowserRedirect: true;
+  queryParams?: Record<string, string>;
+} {
+  const options: {
+    redirectTo: string;
+    skipBrowserRedirect: true;
+    queryParams?: Record<string, string>;
+  } = {
+    redirectTo: oauthRedirectTo(),
+    skipBrowserRedirect: true,
+  };
+  if (provider === 'google') {
+    options.queryParams = {
+      access_type: 'offline',
+      prompt: 'select_account',
+    };
+  }
+  return options;
+}
+
+/** Parse `error` / `error_description` from the PKCE callback search or hash. */
+export function oauthCallbackErrorFromLocation(search: string, hash: string): string | null {
+  const query = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const code = query.get('error') || hashParams.get('error');
+  if (!code) return null;
+  const desc = query.get('error_description') || hashParams.get('error_description');
+  if (!desc) return code;
+  try {
+    return `${code}: ${decodeURIComponent(desc.replace(/\+/g, ' '))}`;
+  } catch {
+    return `${code}: ${desc}`;
+  }
+}
+
+/** PKCE `code` query param on `/auth/callback/` (Google/GitHub both use this). */
+export function oauthPkceCodeFromLocation(search: string): string | null {
+  const query = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const code = query.get('code');
+  return code && code.length > 0 ? code : null;
 }

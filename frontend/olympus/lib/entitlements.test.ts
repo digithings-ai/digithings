@@ -4,8 +4,13 @@ import {
   ALL_PLAN_TIERS,
   ARTIFACT_CLASSES,
   can,
+  defaultSettingsTab,
   effectivePlanTier,
   requiredTierFor,
+  settingsTabFromLocationHash,
+  settingsTabFromSearch,
+  settingsTabsVisible,
+  resolveSettingsTab,
   tierFromSession,
   type ArtifactClass,
   type PlanTier,
@@ -165,6 +170,70 @@ describe('tierFromSession', () => {
     expect(tier(null)).toBe('free');
     expect(tier(sessionWithTier(undefined))).toBe('free');
     expect(tier(sessionWithTier('gold'))).toBe('free');
+  });
+});
+
+describe('settingsTabsVisible', () => {
+  it('omits Custom+ tabs for Observer and Baseline; shows them for Custom+', () => {
+    expect(settingsTabsVisible('free').map((t) => t.id)).toEqual([
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('baseline').map((t) => t.id)).toEqual([
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('custom').map((t) => t.id)).toEqual([
+      'profile',
+      'pipeline',
+      'keys',
+      'brokers',
+      'notifications',
+      'billing',
+      'about',
+    ]);
+    expect(settingsTabsVisible('enterprise').map((t) => t.id)).toEqual(
+      settingsTabsVisible('custom').map((t) => t.id),
+    );
+  });
+
+  it('defaults Observer to Notifications, Custom to Profile', () => {
+    expect(defaultSettingsTab('free')).toBe('notifications');
+    expect(defaultSettingsTab('custom')).toBe('profile');
+  });
+
+  it('settingsTabFromLocationHash selects a visible tab and ignores gated ones', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    const custom = settingsTabsVisible('custom').map((t) => t.id);
+    expect(settingsTabFromLocationHash('#billing', free)).toBe('billing');
+    expect(settingsTabFromLocationHash('billing', free)).toBe('billing');
+    expect(settingsTabFromLocationHash('#profile', free)).toBeNull();
+    expect(settingsTabFromLocationHash('#profile', custom)).toBe('profile');
+    expect(settingsTabFromLocationHash('#nope', free)).toBeNull();
+    expect(settingsTabFromLocationHash('', free)).toBeNull();
+  });
+
+  it('settingsTabFromSearch honors Stripe ?tab=billing and ?checkout=', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    const custom = settingsTabsVisible('custom').map((t) => t.id);
+    expect(settingsTabFromSearch('?tab=billing', free)).toBe('billing');
+    expect(settingsTabFromSearch('tab=billing&checkout=success', free)).toBe('billing');
+    expect(settingsTabFromSearch('?checkout=success', free)).toBe('billing');
+    expect(settingsTabFromSearch('?checkout=cancel', free)).toBe('billing');
+    expect(settingsTabFromSearch('?tab=profile', free)).toBeNull();
+    expect(settingsTabFromSearch('?tab=profile', custom)).toBe('profile');
+    expect(settingsTabFromSearch('', free)).toBeNull();
+  });
+
+  it('resolveSettingsTab prefers query over hash', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    expect(resolveSettingsTab('?tab=billing', '#about', free, 'notifications')).toBe(
+      'billing',
+    );
+    expect(resolveSettingsTab('', '#about', free, 'notifications')).toBe('about');
+    expect(resolveSettingsTab('', '', free, 'notifications')).toBe('notifications');
   });
 });
 
