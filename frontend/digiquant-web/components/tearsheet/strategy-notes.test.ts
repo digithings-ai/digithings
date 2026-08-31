@@ -26,5 +26,7 @@ describe("strategy notes", () => {
     expect(lines.join(" ")).toMatch(/does not beat flat DCA/i);
     expect(lines.join(" ")).toMatch(/not a live trading strategy/i);
     expect(lines.join(" ")).not.toMatch(/beat the market/i);
+    expect(lines.join(" ")).not.toMatch(/curve_simulator/i);
+    expect(lines.join(" ")).not.toMatch(/btc_stage1/i);
   });
 });

@@ -55,6 +55,33 @@ function metaLines(data: TearsheetData): string[] {
   ];
 }
 
+/** Theory-only notes (used when the live store has not published a payload yet). */
+export function RemainingBookNotes({
+  strategy,
+  asset,
+  printing = false,
+}: {
+  strategy: string;
+  asset: string;
+  printing?: boolean;
+}) {
+  const theory = theoryCopy(asset, strategy);
+  if (theory.length === 0) return null;
+  return (
+    <details className="ts-strategy-notes" open={printing || undefined}>
+      <summary className="ts-strategy-notes-summary">
+        <span className="ts-strategy-notes-label">Notes</span>
+        <span className="ts-strategy-notes-chevron" aria-hidden="true" />
+      </summary>
+      <div className="ts-strategy-notes-body">
+        {theory.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export function StrategyNotes({
   data,
   asset,

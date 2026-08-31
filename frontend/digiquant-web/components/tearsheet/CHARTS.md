@@ -55,7 +55,7 @@ omit it and render unchanged. Drive off **null KPIs** (`win_rate_pct` /
 |---|---|---|
 | Valuation rails (log spot + low/median/high) | `MultiTimeSeries` | family (#3172) |
 | Risk-band strip (0–100, labelled bands) | `RiskBandStrip` | family (#3172) |
-| Accumulation (cost basis vs spot; capital deployed %) | `MultiTimeSeries` + `TimeSeries` | family |
+| Allocation (MTM allocated % vs cash; fill markers) | `AllocationStepChart` + cost-basis overlay | family |
 | Three-way equity (SDCA / lump / flat DCA) | `MultiTimeSeries` on the Equity tab | family |
 
 Rails / risk / cost-basis / lump / flat series are optional diagnostic
@@ -73,6 +73,11 @@ Do not present curve-sign `buy_days`/`sell_days` as fill counts.
 Current signal for a DCA book is **risk, band, daily rate**, plus MTM allocated
 (never a negative "Deployed"). The risk tab is **power-law risk**, not a
 multi-indicator composite, while extras sit at weight 0.
+
+When the live store has no payload yet, `/strategies/btc_sdca/` still renders
+the canonical title, delay chip, backtest-only + OOS-honesty chips, and
+remaining-book notes. Charts and KPI numbers wait on the operator
+`--push-supabase` from the halt-fixed tree.
 
 Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
 All `dca.*_pct` fields are ×100 percents.

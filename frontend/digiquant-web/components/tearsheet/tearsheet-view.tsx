@@ -53,7 +53,7 @@ import { LiveMetricsBadge } from "./live-metrics";
 import { PivotStatsPivotToggle, PivotStatsTable } from "./pivot-stats-table";
 import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
-import { StrategyNotes } from "./strategy-notes";
+import { RemainingBookNotes, StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
 import { chartFullSpan, clipOhlc, clipPoints, closesFromOhlc } from "./series";
 import {
@@ -121,6 +121,40 @@ function TradeLog({
 type TearsheetMode = "charts" | "tables";
 type ChartTab = "price" | "rails" | "risk" | "indicators" | "accumulation" | "equity" | "drawdown" | "pnl" | "matrix";
 type TableTab = "stats" | "trades";
+
+/** Honest chrome when Cloudflare Pages has the route but the live store has no payload yet. */
+function TearsheetUnavailable({ slug, message }: { slug: string; message: string }) {
+  const dca = slug.includes("sdca");
+  const title = strategyDisplayName(slug);
+  const asset = symbolBase(slug.split("_")[0]?.toUpperCase() || slug);
+  const symbol = `${asset}-USD`;
+  return (
+    <div className="ts-print-root">
+      <header className="ts-header">
+        <div className="ts-header-main">
+          <Link href="/strategies" className="ts-back">← Strategies</Link>
+          <h1 className="ts-h1 ts-h1-with-logo">
+            <AssetLogoFor strategy={slug} symbol={symbol} size={36} className="ts-header-logo" />
+            <span>{title}</span>
+          </h1>
+          {dca ? (
+            <div className="ts-meta">
+              <span className="ts-chip">{symbol}</span>
+              <SignalDelayChip days={3} detail="full" />
+              <BacktestOnlyChip />
+              <OosHonestyChip beatsFlatDcaOos={false} />
+            </div>
+          ) : null}
+        </div>
+      </header>
+      <p className="ts-status ts-status-error" role="status">
+        {message} Charts and KPIs appear after the operator publishes this backtest
+        to the live store — they are not omitted to hide a result.
+      </p>
+      {dca ? <RemainingBookNotes strategy={slug} asset={asset} /> : null}
+    </div>
+  );
+}
 
 const CHART_H = 440;
 
@@ -290,14 +324,14 @@ export function TearsheetView({ slug }: { slug: string }) {
     const opts: { value: ChartTab; label: string }[] = [];
     if (hasPrice) opts.push({ value: "price", label: "Price" });
     if (hasRails) opts.push({ value: "rails", label: "Rails" });
-    if (hasRisk) opts.push({ value: "risk", label: "Index" });
+    if (hasRisk) opts.push({ value: "risk", label: dcaBook ? "Risk" : "Index" });
     if (hasIndicators) opts.push({ value: "indicators", label: "Indicators" });
     if (hasAccum) opts.push({ value: "accumulation", label: "Allocation" });
     opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
     if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
     opts.push({ value: "matrix", label: "Matrix" });
     return opts;
-  }, [hasAccum, hasIndicators, hasPrice, hasRails, hasRisk, showTradeKpis]);
+  }, [dcaBook, hasAccum, hasIndicators, hasPrice, hasRails, hasRisk, showTradeKpis]);
 
   const railsOverlay: OverlaySeries[] = useMemo(() => {
     if (!hasRails) return [];
@@ -405,7 +439,7 @@ export function TearsheetView({ slug }: { slug: string }) {
     }
   }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasThreeWay, scale]);
 
-  if (err) return <p className="ts-status ts-status-error">{err}</p>;
+  if (err) return <TearsheetUnavailable slug={slug} message={err} />;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
 
   const title = strategyDisplayName(slug, data?.label);

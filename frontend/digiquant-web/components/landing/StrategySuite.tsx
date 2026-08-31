@@ -185,7 +185,7 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
  */
 function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
   const dca = strategyId.includes("sdca");
-  const label = dca ? "BTC SDCA" : strategyId.split("_")[0]?.toUpperCase() || strategyId;
+  const label = strategyDisplayName(strategyId);
   return (
     <>
       <header className="ts-header">
@@ -202,7 +202,15 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
             <span>{label}</span>
           </h3>
           <div className="ts-meta">
-            <span className="dqss-meta-skeleton" aria-hidden="true" />
+            {dca ? (
+              <>
+                <BacktestOnlyChip />
+                <OosHonestyChip beatsFlatDcaOos={false} />
+                <SignalDelayChip days={3} />
+              </>
+            ) : (
+              <span className="dqss-meta-skeleton" aria-hidden="true" />
+            )}
           </div>
         </div>
       </header>
