@@ -883,8 +883,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   >[] = docsRes.data ?? [];
 
   const posDates = [...new Set(allPositions.map((p) => p.date))];
-  // SSOT (#3319): holdings follow the committed snapshot date, never a newer
-  // uncommitted book (H9 can write positions before append_commit_chain).
   const latestPosDate = committedBookDate(snapshot.date, posDates);
   const prevPosDate = previousBookDate(latestPosDate, posDates);
   const currentPositions = latestPosDate ? allPositions.filter((p) => p.date === latestPosDate) : [];
@@ -1051,7 +1049,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   // does, the positions table is the truth: it carries the POST-TURNOVER
   // booked weights (H8 sizing + no-trade band + carry), which legitimately
   // differ from the PM's proposal (e.g. a 20% target booked at 11.4%).
-  // Exact date match only — a newer uncommitted book must not cover an older snapshot.
   const bookedCoversSnapshot = bookedCoversCommittedSnapshot(snapshot.date, latestPosDate);
 
   // Treat proposed_positions as executed immediately ONLY while the booked

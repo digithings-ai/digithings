@@ -7,7 +7,7 @@ import {
 } from './dashboard-ssot';
 
 describe('committedBookDate', () => {
-  it('ignores positions newer than the committed snapshot (uncommitted Monday book)', () => {
+  it('ignores positions newer than the committed snapshot', () => {
     expect(committedBookDate('2026-08-28', ['2026-08-31', '2026-08-28', '2026-08-27'])).toBe(
       '2026-08-28'
     );
@@ -17,18 +17,18 @@ describe('committedBookDate', () => {
     expect(committedBookDate('2026-08-28', ['2026-08-31'])).toBeNull();
   });
 
-  it('returns null when there is no snapshot — never fall back to raw latest positions', () => {
+  it('returns null without a snapshot instead of falling back to latest positions', () => {
     expect(committedBookDate(null, ['2026-08-31', '2026-08-28'])).toBeNull();
     expect(committedBookDate(undefined, ['2026-08-31'])).toBeNull();
   });
 
-  it('uses the latest positions date on or before the snapshot when the snapshot date has no book', () => {
+  it('uses the latest on-or-before date when the snapshot date has no book', () => {
     expect(committedBookDate('2026-08-28', ['2026-08-27', '2026-08-26'])).toBe('2026-08-27');
   });
 });
 
 describe('previousBookDate', () => {
-  it('picks the prior date strictly before the committed book, ignoring newer uncommitted rows', () => {
+  it('picks the prior date strictly before the committed book', () => {
     expect(previousBookDate('2026-08-28', ['2026-08-31', '2026-08-28', '2026-08-27'])).toBe(
       '2026-08-27'
     );
@@ -36,7 +36,7 @@ describe('previousBookDate', () => {
 });
 
 describe('bookedCoversCommittedSnapshot', () => {
-  it('is false when latest positions are newer than the snapshot (the >= trap)', () => {
+  it('is false when the book date is newer than the snapshot', () => {
     expect(bookedCoversCommittedSnapshot('2026-08-28', '2026-08-31')).toBe(false);
   });
 
@@ -48,9 +48,9 @@ describe('bookedCoversCommittedSnapshot', () => {
 });
 
 describe('unpublishedBookNote', () => {
-  it('explains a cancelled/uncommitted later run instead of looking like last week with no reason', () => {
+  it('notes when the committed snapshot is older than today', () => {
     expect(unpublishedBookNote('2026-08-28', '2026-08-31')).toBe(
-      'Last committed snapshot is 2026-08-28. Newer positions are hidden until a ledger commit lands.'
+      'Last committed snapshot is 2026-08-28. Newer positions are hidden until a snapshot exists for that date.'
     );
   });
 

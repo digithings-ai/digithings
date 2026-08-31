@@ -278,10 +278,7 @@ export function BriefPipelineHealth({
 
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
-  const todayYmd = formatYmd(
-    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  );
-  const commitNote = unpublishedBookNote(runHealth?.runDate ?? null, todayYmd);
+  const commitNote = unpublishedBookNote(runHealth?.runDate ?? null, formatYmd(now));
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">
