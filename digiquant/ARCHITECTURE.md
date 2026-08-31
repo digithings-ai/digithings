@@ -3250,6 +3250,9 @@ docs (overlay reviews must not file GitHub issues),
 not be rewritten by id), `normalize_supabase_documents.fetch_all_documents`
 (overlay rows must not be rewritten by id), `fetch_research_library` house
 research notes, `verify_supabase_canonical` house leftover ``outputs/`` keys,
+`publish_research.house_research_library_rows` (overlay notes must not dump as
+the house library), `backfill_research_state` house inventory pages (overlay
+rows must not seed the in-memory research-state store),
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
