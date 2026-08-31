@@ -10,12 +10,12 @@ anon / free JWTs; it is not the persist precondition.
 ``positions`` / ``nav_history`` / ``portfolio_metrics`` / ``position_events``
 still carry migration 097's legacy single-tenant arbiters
 (``PRIMARY KEY (date)`` / ``UNIQUE(date, ticker)`` / ``UNIQUE(date)``) beside
-the widened ``(workspace_id, …)`` keys. House ops scripts still upsert with
-``on_conflict="date"`` / ``"date,ticker"``. An overlay row for the same calendar
-date therefore either fails the legacy arbiter or, if it wins the race, is
-rewritten by the next house ``on_conflict=date`` upsert — corrupting both
-books. ``require_overlay_legacy_book_safe`` refuses those writes until P6 drops
-the legacy keys and every house writer uses the widened arbiter.
+the widened ``(workspace_id, …)`` keys. House ops writers on ``develop`` now
+target those widened keys, but the legacy arbiters still reject a second
+workspace's same-date row (and ``main`` house GHA must be on the widened
+conflict before P6 can drop them). An overlay row for the same calendar
+date therefore still fails the leftover unique. ``require_overlay_legacy_book_safe``
+refuses those writes until P6 drops the legacy keys.
 
 Ledger ``uq_portfolio_ledger_commits_one_root`` is likewise ``(run_date)`` only
 (migration 069) — overlay + house cannot both root a commit on the same date.
