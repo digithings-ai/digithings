@@ -5,7 +5,7 @@ import { AtlasMark } from '@/components/atlas-mark';
 import { useAuth, type OAuthProvider } from '@/lib/auth-context';
 
 /**
- * Full-page login for Olympus (static-export PKCE). Google + GitHub only (D4).
+ * Full-page login for the digiquant dashboard (static-export PKCE). Google + GitHub only (D4).
  * Rendered by AuthGate when signed out, and by `/login`.
  */
 export function LoginScreen() {
@@ -29,7 +29,7 @@ export function LoginScreen() {
       <div className="w-full max-w-sm">
         <div className="mb-10 flex flex-col items-center gap-3 text-center">
           <AtlasMark className="shrink-0" />
-          <h1 className="font-display text-2xl tracking-tight text-ink">Olympus</h1>
+          <h1 className="font-display text-2xl tracking-tight text-ink">digiquant</h1>
           <p className="text-sm text-ink-soft">
             Sign in to view your workspace. Sessions use Supabase Auth (Google or GitHub).
           </p>

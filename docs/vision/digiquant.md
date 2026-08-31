@@ -13,6 +13,8 @@ relevance:
 # digiquant
 > The quantitative finance platform — from macro research to deployed trading strategies, powered by AI agents.
 
+**Names (ADR-0026):** the product is digiquant. The three jobs are research, portfolio, and execution. "Atlas / Hermes / Kairos / olympus" in older sections of this page are historical names for those jobs and the dashboard.
+
 ## What it is
 
 digiquant is the quantitative finance vertical within digithings. It is not a trading platform in the traditional sense — it is an AI-powered toolkit for the complete investment workflow: researching markets, constructing theses, building and testing strategies, and deploying them.
@@ -78,9 +80,9 @@ Data and state flow across the broader stack:
 
 - **digistore** holds the research library, strategy definitions, backtest results, and portfolio state.
 - **digisearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
-- **digiclaw** runs Atlas and Hermes on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
-- **digichat** is the user-facing interface for Kairos product mode and for querying Atlas research interactively.
-- **Olympus** (`frontend/olympus`) is the dedicated dashboard for the trio — Atlas's "Morning Read", Hermes's deliberations and risk debate, and portfolio/NAV tracking — and the surface where the human approval gate will be exercised once Hermes ships (see Current state below). See [[olympus|olympus.md]]. Atlas, Hermes, and Kairos run inside digiquant as `digiquant.olympus` (ADR-0014, ADR-0015).
+- **digiclaw** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
+- **digichat** is the user-facing chat interface for querying research interactively.
+- **Dashboard** (`frontend/olympus`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate is exercised. See [[olympus|olympus.md]]. Sub-graphs live in `digiquant.olympus` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
 
 ## Data philosophy
 

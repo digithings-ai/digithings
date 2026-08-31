@@ -106,7 +106,7 @@ async function queryMainSupabase<T>(
 ): Promise<T> {
   if (!isSupabaseConfigured() || !supabase) {
     throw new Error(
-      'Olympus Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.'
+      'digiquant Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.'
     );
   }
   let lastError: unknown;

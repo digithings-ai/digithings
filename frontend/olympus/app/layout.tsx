@@ -21,13 +21,13 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://digiquant.io'),
-  applicationName: 'Olympus',
-  title: 'Olympus — digiquant',
-  description: 'digiquant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
+  applicationName: 'digiquant',
+  title: 'digiquant',
+  description: 'digiquant — AI-orchestrated investment intelligence (research + portfolio)',
   manifest: '/olympus/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    title: 'Olympus',
+    title: 'digiquant',
     statusBarStyle: 'black-translucent',
   },
   icons: {

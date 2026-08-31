@@ -207,7 +207,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
             aria-label="Download performance tear sheet as PDF"
             title="Download PDF"
             onClick={() =>
-              runTearsheetPrint({ documentTitle: 'Olympus performance', setPrinting })
+              runTearsheetPrint({ documentTitle: 'digiquant performance', setPrinting })
             }
           >
             <Download size={17} aria-hidden />

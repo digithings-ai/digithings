@@ -73,7 +73,7 @@ Extracted from live site copy on Graphite, Cursor, and x.ai — 2026-06-29.
 |---------------|-----------------|
 | Download for macOS | `git clone` / docker compose |
 | Get API Key | `make stack-local` / issue-key |
-| Get started | `ask digichat` / `open olympus` |
+| Get started | `ask digichat` / `open digiquant` |
 | Start free trial | `run a backtest` (digiquant) |
 | Explore → | `read docs` / module pages |
 | Contact sales | `contact@digithings.ai` |
@@ -189,7 +189,7 @@ Examples:
 
 - **Technical, precise, ownership-oriented** — closer to x.ai infrastructure than Cursor consumer warmth
 - Lowercase product names: digithings, digiquant, digichat
-- Proper nouns: Olympus, Atlas, Hermes, NautilusTrader
+- Proper nouns: NautilusTrader
 
 ### Page-level IA template (marketing)
 
@@ -209,4 +209,4 @@ Examples:
 | digithings.ai | Cursor IA + x.ai API band |
 | digiquant.io | Graphite outcomes + Cursor bento |
 | digichat | Cursor product-as-hero |
-| Olympus / twelve-x | x.ai mono labels, no marketing fluff |
+| dashboard / twelve-x | x.ai mono labels, no marketing fluff |

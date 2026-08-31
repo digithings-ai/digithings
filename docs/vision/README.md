@@ -45,7 +45,7 @@ Shipped and in active use:
 LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing (LiteLLM today, migrating to the shared digillm library), digismith tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
 
 ### digiquant — quantitative finance platform
-NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Atlas (research), Hermes (portfolio), and Kairos (strategy execution) are in active development as sub-graph modules.
+NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Research, portfolio, and execution sub-graphs are in active development.
 
 ### digisearch — RAG and retrieval pipeline
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
@@ -74,16 +74,16 @@ Shared headless-fetch engine: browser session lifecycle, composable retry/backof
 ### digidev — agentic-coding workflow kit
 Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
 
-### Olympus — finance dashboard
-Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio — Atlas research, Hermes deliberation, Kairos strategy work — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Rebrand under discussion: [product-rebrand-scope](../plans/2026-08-30-product-rebrand-scope.md).
+### digiquant dashboard
+Human-facing operator surface (`frontend/olympus`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Path remains `/olympus/` until ADR-0026 wave 2. See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
 
 **Note — not yet shipped:** digistore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and digilink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, digillm and digifetch *have* shipped as standalone libraries.)
 
 ## Capabilities — 12-month roadmap
 
-- **Atlas** running daily research cycles autonomously — parallel, batched, prompt-cached, fully integrated as a digigraph sub-graph
-- **Hermes** maintaining live portfolio allocations with deliberation sub-graph and human approval gate before any execution
-- **Kairos** enabling chat-based strategy development through digichat — a quant researcher's interactive strategy workbench
+- **Research** running daily cycles autonomously — parallel, batched, prompt-cached, fully integrated as a digigraph sub-graph
+- **Portfolio** maintaining live allocations with a deliberation sub-graph and human approval gate before any execution
+- **Execution** enabling strategy work and (later) venue routing — live cutover stays human-gated
 - **Client pilot** fully deployed with Microsoft SSO, proper domain RAG, and a client-facing chat interface
 - **digilink** formalised as a module — MCP adapter generation from OpenAPI specs, CLI wrapper auto-generation, desktop AI app connector library (Claude Desktop, Cursor, Windsurf)
 - **digistore** shipping as a unified storage abstraction with Supabase, SQLite, and S3/MinIO backends behind a single interface
@@ -107,8 +107,8 @@ Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio —
 - digistore storage abstraction (when shipped)
 
 **Proprietary (commercial):**
-- Domain-specific sub-graph implementations: Atlas research cycles, Hermes portfolio deliberation, Kairos strategy execution
-- Olympus dashboard as the product surface for those sub-graphs
+- Domain-specific sub-graph implementations: research cycles, portfolio deliberation, execution routing
+- digiquant dashboard as the product surface for those sub-graphs
 - Strategy library and backtest configuration templates
 - Investor document builder and scholarly synthesis sub-graphs
 - Premium digidev agents and skills

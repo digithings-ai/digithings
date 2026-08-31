@@ -1,6 +1,6 @@
 # digithings copy & information architecture guide
 
-**Status:** Living document · **Last updated:** 2026-06-30
+**Status:** Living document · **Last updated:** 2026-08-30
 
 Authoritative voice, CTA, and section-map reference for all public surfaces. Implements Layer D of the [design evolution spec](../../docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md) and extends [`references/scans/copy-patterns.md`](references/scans/copy-patterns.md).
 
@@ -14,7 +14,7 @@ Authoritative voice, CTA, and section-map reference for all public surfaces. Imp
 |-----------|------|
 | Tone | Technical, precise, ownership-oriented — closer to x.ai infrastructure than Cursor consumer warmth |
 | Product names | lowercase: digithings, digiquant, digichat |
-| Proper nouns | Olympus, Atlas, Hermes, NautilusTrader, LangGraph, LiteLLM, Polars |
+| Proper nouns | NautilusTrader, LangGraph, LiteLLM, Polars |
 | CTAs | **Literal destinations** — never naked "Get started" |
 | Proof | Real data only — GitHub stars, backtest counts, release dates |
 | Serif | Marketing hero display only; dashboards use sans + mono |
@@ -28,7 +28,7 @@ Authoritative voice, CTA, and section-map reference for all public surfaces. Imp
 | digithings | [ownership outcome] | "Build agents on infrastructure you own." |
 | digiquant | [category] + [twist] | "A quant hedge fund. *In a box you own.*" |
 | digichat | (product speaks) | — no marketing h1 above terminal |
-| Olympus / twelve-x | [page function] | "Atlas pipeline" / "Today's snapshot" |
+| digiquant dashboard / twelve-x | [page function] | "Pipeline" / "Today's snapshot" |
 
 Reference patterns (Graphite, Cursor, x.ai): see [`copy-patterns.md` §1–2](references/scans/copy-patterns.md).
 
@@ -81,9 +81,9 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 
 ### Per-surface matrix
 
-| Pattern | digithings.ai | digiquant.io | digichat | Olympus |
+| Pattern | digithings.ai | digiquant.io | digichat | dashboard |
 |---------|---------------|--------------|----------|---------|
-| Primary | `ask digichat` | `open olympus` | `sign in` / `new chat` | context action |
+| Primary | `ask digichat` | `open digiquant` | `sign in` / `new chat` | context action |
 | Secondary | `read docs` → | `browse strategies` → | `view on github` → | `export` / `run` |
 | Developer | `make stack-local` | `git clone …` | `copy api command` | — |
 | Explore | `explore digigraph` → | `view tearsheets` → | — | tab label |
@@ -95,7 +95,7 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 |---------------|-----------------|
 | Download for macOS | `git clone` / `docker compose` |
 | Get API Key | `make stack-local` / issue-key |
-| Get started | `ask digichat` / `open olympus` |
+| Get started | `ask digichat` / `open digiquant` |
 | Start free trial | `run a backtest` (digiquant) |
 | Explore → | `read docs` / module pages |
 | Contact sales | `contact@digithings.ai` |
@@ -124,9 +124,9 @@ Four columns: **Architecture · Docs · Contact · Connect**
 
 Include cross-links: digiquant.io · GitHub · digichat where relevant.
 
-### Dashboard (Olympus / twelve-x)
+### Dashboard (digiquant / twelve-x)
 
-Minimal — no marketing columns. Literal nav labels only; document in Olympus subpage chrome (#1220).
+Minimal — no marketing columns. Literal nav labels only; document in dashboard subpage chrome (#1220).
 
 ---
 
@@ -143,7 +143,7 @@ Minimal — no marketing columns. Literal nav labels only; document in Olympus s
 7. Closing CTA — `ClosingCtaBand`
 8. Footer
 
-### Dashboard template (Olympus, twelve-x)
+### Dashboard template (digiquant, twelve-x)
 
 1. Sticky tab bar — literal labels
 2. Page title — Instrument Serif display, one line
@@ -183,25 +183,25 @@ Minimal — no marketing columns. Literal nav labels only; document in Olympus s
 ### digiquant.io (Graphite outcomes + Cursor bento)
 
 1. Hero — mono h1 + modality sub + CTAs + stats — #1213
-2. Optional hero picker — Olympus / strategies / pipeline — Phase E
-3. **Olympus scrolly** (only pin) + progress rail — #1215
+2. Optional hero picker — dashboard / strategies / pipeline — Phase E
+3. **Pipeline scrolly** (only pin) + progress rail — #1215
 4. Bento — Pipeline · Strategies · Pricing — #1214
 5. Strategy suite — existing scroll stack (second story, not second pin)
 6. Pricing — `PricingMatrix` + `FaqAccordion` — Phase E
-7. Closing CTA — `open olympus`
+7. Closing CTA — `open digiquant`
 8. Footer
 
 **Draft hero copy:**
 
 - **h1:** "A quant hedge fund. *In a box you own.*"
 - **sub:** "Backtest · optimize · paper · live — NautilusTrader under the hood."
-- **primary:** `open olympus` · **secondary:** `browse strategies` →
+- **primary:** `open digiquant` · **secondary:** `browse strategies` →
 
 ### digichat (#1218)
 
 See §9 product-as-hero template. Marketing route = full chat chrome; embed route stays minimal (no marketing chrome in iframe).
 
-### Olympus / twelve-x (#1216, #1217, #1220)
+### digiquant dashboard / twelve-x (#1216, #1217, #1220)
 
 See §9 dashboard template. **Explicit reject list:** mesh, Fraunces/serif, scroll pinning, hero sections, announcement bar.
 

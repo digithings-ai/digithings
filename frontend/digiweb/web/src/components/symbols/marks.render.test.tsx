@@ -28,8 +28,8 @@ describe("OlympusMark", () => {
   });
 
   it("exposes a titled mark as an image", () => {
-    const html = renderToStaticMarkup(<OlympusMark title="Olympus" />);
-    expect(html).toContain("<title>Olympus</title>");
+    const html = renderToStaticMarkup(<OlympusMark title="digiquant" />);
+    expect(html).toContain("<title>digiquant</title>");
     expect(html).toContain('role="img"');
     expect(html).not.toContain("aria-hidden");
   });

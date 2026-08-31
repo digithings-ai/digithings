@@ -56,7 +56,7 @@ const FLOW: { n: string; title: string; body: string; tool: string }[] = [
     body:
       "Export the strategy to TradingView as Pine v5. Live execution is not built: there is no " +
       "paper or live path, and every broker adapter is a stub.",
-    tool: "Kairos · planned",
+    tool: "execution · planned",
   },
 ];
 

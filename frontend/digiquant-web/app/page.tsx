@@ -20,8 +20,8 @@ import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 
 // Real figures only — each one is mined from shipped data, never invented:
-// subsystem count from the shared subsystems registry (Atlas · Hermes ·
-// Kairos), trade count summed live from the Supabase strategy index (inside
+// subsystem count from the shared subsystems registry (research · portfolio ·
+// execution), trade count summed live from the Supabase strategy index (inside
 // <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
 // (01 research → 07 export), and the zero is literal: there is no execution
 // path at all — every broker adapter under digiquant/src/digiquant/brokers/
@@ -52,8 +52,8 @@ export default function Home() {
             </span>
           </h1>
           <p className="dqhero-lede">
-            The research stack an institutional desk would build — <b>Atlas</b> researches and{" "}
-            <b>Hermes</b> sizes the risk, through backtest to a tearsheet. Open-source and
+            The research stack an institutional desk would build — research runs daily and{" "}
+            portfolio sizes the risk, through backtest to a tearsheet. Open-source and
             self-hosted, so work that once needed a team runs for one.
           </p>
           <div className="dqhero-cta dqhero-scrollcue">
@@ -64,7 +64,7 @@ export default function Home() {
               git clone https://github.com/digithings-ai/digithings.git
             </p>
             <a className="btn btn-primary" href="/olympus/">
-              Open olympus
+              Open digiquant
             </a>
             <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
@@ -101,8 +101,8 @@ export default function Home() {
 
         <OlympusScene />
 
-        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
-            maintain, marked live off the same feed. Client island; SSR-safe
+        {/* The payoff of the research book: positions the pipeline
+            maintains, marked live off the same feed. Client island; SSR-safe
             (renders a plain "connects on deploy" card without env vars). */}
         <OlympusPortfolioPanel />
 
@@ -128,7 +128,7 @@ export default function Home() {
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   digiquant is open core, and it is built on the same digithings modules you can
                   deploy yourself. Self-host the whole stack at no cost, join the waitlist for
-                  managed Olympus, or talk to us about enterprise — the same engine either way.
+                  managed hosting, or talk to us about enterprise — the same engine either way.
                 </p>
               </div>
             </Reveal>

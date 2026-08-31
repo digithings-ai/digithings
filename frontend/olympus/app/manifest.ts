@@ -4,9 +4,9 @@ export const dynamic = 'force-static';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Olympus — DigiQuant',
-    short_name: 'Olympus',
-    description: 'AI-orchestrated investment intelligence from DigiQuant.',
+    name: 'digiquant',
+    short_name: 'digiquant',
+    description: 'AI-orchestrated investment intelligence from digiquant.',
     start_url: '/olympus/',
     scope: '/olympus/',
     display: 'standalone',

@@ -100,10 +100,10 @@ function SectionShell({ children }: { children: React.ReactNode }) {
       <div className="wrap">
         <Reveal>
           <div style={{ textAlign: "center" }}>
-            <span className="kicker">{"// olympus · live book"}</span>
+            <span className="kicker">{"// live book"}</span>
             <h2 className="dq-title">The research book, valued live.</h2>
             <p className="dq-sub" style={{ marginInline: "auto" }}>
-              The paper portfolio Atlas and Hermes maintain, marked against the same price
+              The paper portfolio the daily pipeline maintains, marked against the same price
               feed. Positions and weights are the published book; prices tick live during
               market hours, and P&amp;L is stated as of the last price date.
             </p>

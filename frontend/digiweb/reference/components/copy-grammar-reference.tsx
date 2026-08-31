@@ -14,7 +14,7 @@ const HEADLINES: Formula[] = [
 const CTAS: { theirs: string; ours: string }[] = [
   { theirs: "Download for macOS", ours: "git clone · docker compose" },
   { theirs: "Get API key", ours: "make stack-local · issue a key" },
-  { theirs: "Get started", ours: "ask digichat · open olympus" },
+  { theirs: "Get started", ours: "ask digichat · open digiquant" },
   { theirs: "Start free trial", ours: "run a backtest" },
   { theirs: "Explore / Contact sales", ours: "read docs · contact@digithings.ai" },
 ];

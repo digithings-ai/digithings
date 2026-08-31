@@ -22,7 +22,7 @@ const GROUPS: CommandPaletteGroup[] = [
   },
   {
     label: "Navigate",
-    items: [{ id: "olympus", label: "Open olympus", description: "atlas + hermes" }],
+    items: [{ id: "desk", label: "Open digiquant", description: "research + portfolio" }],
   },
 ];
 
@@ -56,7 +56,7 @@ describe("CommandPalette", () => {
     expect(html).toContain("cp-dot");
     expect(html).toContain("cp-row-key");
     expect(html).toContain("cp-desc");
-    expect(html).toContain("atlas + hermes");
+    expect(html).toContain("research + portfolio");
     expect(html).toContain("cp-foot"); // footer legend
     expect(html).toContain("navigate");
   });

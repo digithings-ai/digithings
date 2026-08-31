@@ -11,7 +11,7 @@ Update this file when themes start/complete. Link **GitHub Issues** (not bare TO
 | digiskills — agent-skill compiler | in_progress | [#1453](https://github.com/digithings-ai/digithings/issues/1453) epic, #1454 P0 (ADR, done), #1458 P1 (compiler core, done), [#1472](https://github.com/digithings-ai/digithings/issues/1472) P2 (dogfood) | [ADR-0023](../adr/0023-digiskills-agent-skill-compiler.md) |
 | Self-host GHCR + OpenAPI | in_progress | [#2016](https://github.com/digithings-ai/digithings/issues/2016) epic, #2017–#2021 | GHCR publish, pull compose, committed OpenAPI |
 | Olympus Kairos + tenancy | todo | _(issue pack ready: [kairos-tenancy/](kairos-tenancy/README.md))_ | [Implementation spec](../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md) (decisions locked) · epic + 12 executor briefings · [DEPLOYMENT.md](kairos-tenancy/DEPLOYMENT.md) runbook + staged anon-drop under `digiquant/supabase/migrations/cutover/` · module branches synced #3083–#3090; live broker cutover human-gated |
-| Product rebrand (retire olympus / atlas / hermes / kairos) | todo | _(not filed — pick the name first)_ | [Scope + name brief](../plans/2026-08-30-product-rebrand-scope.md) — recommendation only; no rename until the product name is locked (digiquant vs alphabox) |
+| Product rebrand (retire olympus / atlas / hermes / kairos) | in_progress | [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) | [Scope](../plans/2026-08-30-product-rebrand-scope.md) — product is digiquant; wave 1 is user-facing copy. `/olympus/` path, Python packages, and tables stay until later waves. |
 | _(example) digigraph hub mode_ | todo |  | |
 
 ## Quick links

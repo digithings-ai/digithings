@@ -1,9 +1,9 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Recommendation only — no rename is authorized by this document
-> **Does not:** rewrite packages, URLs, tables, workflows, or live-trading paths
-> **Human gate:** yes — novel product-architecture decision; Kairos rename later touches execution
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). Wave 1 (user-facing copy) ships with that ADR.
+> **Does not:** rewrite packages, `/olympus/` URLs, tables, workflows, or live-trading paths in wave 1
+> **Human gate:** yes — kairos **package** rename later touches execution; path/OAuth move is wave 2
 
 Two decisions, in order:
 
@@ -242,11 +242,10 @@ Draft issue title for wave 1:
 
 ## 7. Recommendation
 
-**Lock this, then implement:**
+**Locked 2026-08-30:**
 
-1. **Subsystem brands: strip.** User-facing words are research, portfolio, execution. Keep A0–A4 / H1–H9 as internal phase IDs. Do not brand the three engines.
-2. **Product name: prefer collapsing into digiquant.** The dashboard is the digiquant product. The letter-A mark does not need to be an acronym.
-3. **If a distinct dashboard name is required, use alphabox** — not autobox, not ai box. Host it on digiquant.io. Do not buy a colliding alphabox.* domain and expect to rank against 熵简.
-4. **Do not grep-rename the repo.** Copy first (wave 1), URL second (wave 2), packages last (wave 4). Leave SQL and ADRs alone.
+1. **Subsystem brands: strip.** User-facing words are research, portfolio, execution. Keep A0–A4 / H1–H9 as internal phase IDs.
+2. **Product name: digiquant.** No second consumer brand (alphabox / autobox / aibox rejected).
+3. **Do not grep-rename the repo.** Copy first (wave 1), URL second (wave 2), packages last (wave 4). Leave SQL and historical ADR bodies alone.
 
-Decision needed before any code PR: **digiquant** or **alphabox**.
+See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
