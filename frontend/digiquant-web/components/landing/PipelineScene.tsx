@@ -13,7 +13,7 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
-import { OlympusMark } from "./OlympusMark";
+import { DigiquantMark } from "./OlympusMark";
 
 type Phase = [id: string, name: string, detail: string];
 
@@ -79,7 +79,7 @@ const HEADS: [tag: string, h: string, p: string][] = [
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export function OlympusScene() {
+export function PipelineScene() {
   const scrollyRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const railFillRef = useRef<HTMLDivElement>(null);
@@ -236,12 +236,12 @@ export function OlympusScene() {
       <div className="dqp-scrolly" ref={scrollyRef}>
         <div className="dqp-pin">
           <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
-            <OlympusMark size={560} />
+            <DigiquantMark size={560} />
           </div>
           <div className="wrap">
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
-              <OlympusMark size={22} />
+              <DigiquantMark size={22} />
               <span>digiquant · research → portfolio</span>
             </div>
             <div className="dqp-scene-title">The research desk in a box.</div>
@@ -325,3 +325,6 @@ export function OlympusScene() {
     </section>
   );
 }
+
+/** @deprecated Use PipelineScene. One-release alias (ADR-0026 wave 3). */
+export const OlympusScene = PipelineScene;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import { useAuth, type OAuthProvider } from '@/lib/auth-context';
 
 /**
@@ -28,7 +28,7 @@ export function LoginScreen() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-bg px-6 text-ink qn-blueprint-bg">
       <div className="w-full max-w-sm">
         <div className="mb-10 flex flex-col items-center gap-3 text-center">
-          <AtlasMark className="shrink-0" />
+          <DashboardMark className="shrink-0" />
           <h1 className="font-display text-2xl tracking-tight text-ink">digiquant</h1>
           <p className="text-sm text-ink-soft">
             Sign in to view your workspace. Sessions use Supabase Auth (Google or GitHub).

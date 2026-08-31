@@ -5,12 +5,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * we run the page's data-load effect synchronously by stubbing React's `useEffect`
  * to invoke its callback immediately, and stub `useState` so the resolved tearsheet
  * is committed before render. We then render PerformancePage to a string and assert
- * the loaded OlympusTearsheetView (H1 "Performance") appears — the loading→loaded
+ * the loaded PerformanceTearsheetView (H1 "Performance") appears — the loading→loaded
  * transition, exercised the same way app/system/page.test.ts asserts its page chrome.
  */
-import { buildOlympusTearsheet } from '@/lib/observability-queries';
+import { buildPerformanceTearsheet } from '@/lib/observability-queries';
 
-const sample = buildOlympusTearsheet({
+const sample = buildPerformanceTearsheet({
   nav: [{ date: '2026-06-23', nav: 99.32, cash_pct: 25, invested_pct: 75 }],
   positions: [],
   metrics: null,
@@ -22,7 +22,11 @@ vi.mock('@/lib/observability-queries', async () => {
     await vi.importActual<typeof import('@/lib/observability-queries')>(
       '@/lib/observability-queries'
     );
-  return { ...actual, fetchOlympusTearsheet: vi.fn(() => Promise.resolve(sample)) };
+  return {
+    ...actual,
+    fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
+    fetchOlympusTearsheet: vi.fn(() => Promise.resolve(sample)),
+  };
 });
 
 vi.mock('@/components/observability/AttributionTab', () => ({ default: () => null }));

@@ -17,7 +17,7 @@
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
-import { OlympusMark } from "./OlympusMark";
+import { DigiquantMark } from "./OlympusMark";
 
 export function SiteNav() {
   return (
@@ -55,14 +55,14 @@ export function SiteNav() {
             href="/olympus/"
             aria-label="Open the digiquant dashboard"
           >
-            <OlympusMark size={16} />
+            <DigiquantMark size={16} />
             <span>digiquant</span>
           </a>
         </>
       }
       cta={
         <a className="btn btn-primary olympus-cta" href="/olympus/" aria-label="Open the digiquant dashboard">
-          <OlympusMark size={18} />
+          <DigiquantMark size={18} />
           <span>digiquant</span>
         </a>
       }

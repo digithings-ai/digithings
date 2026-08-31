@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
@@ -151,7 +151,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
           >
             <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
-              <AtlasMark className="shrink-0" />
+              <DashboardMark className="shrink-0" />
             </div>
             <button
               type="button"
@@ -165,7 +165,7 @@ export default function Sidebar() {
           <div
             className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
           >
-            <AtlasMark className="shrink-0" />
+            <DashboardMark className="shrink-0" />
             <button
               type="button"
               onClick={toggleSidebar}

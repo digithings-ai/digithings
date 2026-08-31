@@ -1,6 +1,6 @@
-import AtlasLoader from '@/components/AtlasLoader';
+import DigiquantLoader from '@/components/AtlasLoader';
 
 export default function Loading() {
-  return <AtlasLoader />;
+  return <DigiquantLoader />;
 }
 

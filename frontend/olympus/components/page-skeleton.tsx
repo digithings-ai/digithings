@@ -7,7 +7,7 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  * promoted @digithings/web Skeleton primitives: a kicker + title bar, a pair
  * of card blocks, and a body block.
  *
- * Ruling (#1548 LOADING adoption): the AtlasLoader brand moment appears ONLY
+ * Ruling (#1548 LOADING adoption): the DigiquantLoader brand moment appears ONLY
  * at the app-boot/root level — app/loading.tsx and the legacy-SPA redirect
  * shim. Every page-level data fallback renders this skeleton instead, so
  * in-app navigation reads as

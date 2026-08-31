@@ -1,6 +1,6 @@
 "use client";
 /**
- * OlympusPortfolioPanel (#1461/#1462) — the payoff under the Olympus pipeline
+ * LivePortfolioPanel (#1461/#1462) — the payoff under the desk pipeline
  * scrolly: the research book, valued live off the same feed. A client island
  * on useLivePortfolio.
  *
@@ -199,7 +199,7 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
   );
 }
 
-export function OlympusPortfolioPanel() {
+export function LivePortfolioPanel() {
   const book = useLivePortfolio();
   const {
     configured,
@@ -367,3 +367,6 @@ export function OlympusPortfolioPanel() {
     </SectionShell>
   );
 }
+
+/** @deprecated Use LivePortfolioPanel. One-release alias (ADR-0026 wave 3). */
+export const OlympusPortfolioPanel = LivePortfolioPanel;

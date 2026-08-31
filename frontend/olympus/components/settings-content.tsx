@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Database, Search } from 'lucide-react';
-import { useAtlasTheme } from '@/components/theme-provider';
+import { useDashboardTheme } from '@/components/theme-provider';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { normalizePathname } from '@/lib/pathname';
 import {
@@ -52,7 +52,7 @@ export function SettingsContent({
   tier,
 }: SettingsContentProps) {
   const pathname = usePathname();
-  const { theme, setTheme } = useAtlasTheme();
+  const { theme, setTheme } = useDashboardTheme();
   const pipe = pipelineActive(pathname);
   const settings = settingsActive(pathname);
 

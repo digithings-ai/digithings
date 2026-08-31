@@ -12,9 +12,9 @@ import { ContactMailto } from "@/components/ContactMailto";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
-import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
+import { LivePortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
-import { OlympusScene } from "@/components/landing/OlympusScene";
+import { PipelineScene } from "@/components/landing/PipelineScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
@@ -29,7 +29,7 @@ import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
 // (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
-// linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
+// linear pipeline → desk scrolly → strategy suite → the one WordReveal
 // claim → pricing. Client islands; page stays a server component. Every
 // motion moment honors prefers-reduced-motion and reads with no JS.
 export default function Home() {
@@ -99,12 +99,12 @@ export default function Home() {
 
         <ResearchPipeline />
 
-        <OlympusScene />
+        <PipelineScene />
 
         {/* The payoff of the research book: positions the pipeline
             maintains, marked live off the same feed. Client island; SSR-safe
             (renders a plain "connects on deploy" card without env vars). */}
-        <OlympusPortfolioPanel />
+        <LivePortfolioPanel />
 
         <StrategySuite />
 

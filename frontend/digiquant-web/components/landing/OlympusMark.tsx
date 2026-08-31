@@ -3,9 +3,11 @@
  * matches the operator surface. Strokes carry `olympus-stroke-N` classes so the
  * dashboard's loader animation (stroke-draw + scale pulse) can be replayed on
  * hover via CSS (see globals.css). Uses currentColor, so it inherits the
- * surrounding text/button colour. Identifier names stay until the path wave.
+ * surrounding text/button colour. CSS class names stay until the path wave.
+ *
+ * `OlympusMark` is a one-release alias of `DigiquantMark` (ADR-0026 wave 3).
  */
-export function OlympusMark({ size = 22, className }: { size?: number; className?: string }) {
+export function DigiquantMark({ size = 22, className }: { size?: number; className?: string }) {
   return (
     <svg
       width={size}
@@ -51,3 +53,6 @@ export function OlympusMark({ size = 22, className }: { size?: number; className
     </svg>
   );
 }
+
+/** @deprecated Use DigiquantMark. One-release alias (ADR-0026 wave 3). */
+export const OlympusMark = DigiquantMark;

@@ -1,8 +1,8 @@
-import { OlympusMark } from "@/components/symbols/marks";
+import { DigiquantMark } from "@/components/symbols/marks";
 
 /**
- * Phone mockup showcasing the olympus app — a device frame (matte bezel,
- * dynamic-island, side buttons) wrapping a mock olympus mobile dashboard.
+ * Phone mockup showcasing the digiquant app — a device frame (matte bezel,
+ * dynamic-island, side buttons) wrapping a mock digiquant mobile dashboard.
  * Product-surface grammar like MockTearsheet: an inline SVG sparkline, no
  * charting engine. Money colors (--up/--down) stay on P&L reads; the accent
  * dresses chrome and re-themes with the livery; sub-graph names are lowercase.
@@ -32,7 +32,7 @@ export function PhoneOlympus() {
 
         <header className="oly-head">
           <span className="oly-brand">
-            <OlympusMark size={18} />
+            <DigiquantMark size={18} />
             digiquant
           </span>
           <span className="oly-live">

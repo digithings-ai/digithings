@@ -22,7 +22,7 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 
 **Positive:** One product name on digiquant.io; landing and dashboard say the same thing; agent docs stop teaching four Greek names as the architecture.
 
-**Negative / tradeoffs:** `/olympus/` remains in the address bar and in OAuth redirect URLs until wave 2. Code identifiers (`OlympusMark`, `digiquant.olympus.atlas`, `.oly-*`) remain until later waves. Historical issues and ADRs still say the old names.
+**Negative / tradeoffs:** `/olympus/` remains in the address bar and in OAuth redirect URLs until wave 2. Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`, `.olympus-mark`) and the `frontend/olympus` folder stay until a `feat/` or `task/<N>-slug` branch can edit `.github/workflows`. TypeScript identifiers (`DigiquantMark`, `PerformanceTearsheetView`, `DashboardMark`) move in wave 3 with one-release aliases. Historical issues and ADRs still say the old names.
 
 ## Links
 
