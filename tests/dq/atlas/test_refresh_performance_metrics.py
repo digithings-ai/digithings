@@ -19,6 +19,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from digiquant.olympus.tenancy import house_workspace_id
@@ -58,6 +59,7 @@ _nav_history_count = _mod._nav_history_count
 _risk_metrics_from_nav_history = _mod._risk_metrics_from_nav_history
 upsert_portfolio_metrics_daily = _mod.upsert_portfolio_metrics_daily
 refresh_positions_metrics = _mod.refresh_positions_metrics
+refresh_event_cumulative = _mod.refresh_event_cumulative
 _MIN_HISTORY_ROWS = _mod._MIN_HISTORY_ROWS
 
 
@@ -638,6 +640,44 @@ class TestCarriedPriceProvenance:
         sb = self._sb(cash, [])
         refresh_positions_metrics(sb, "2026-06-13")
         assert sb.store["positions"][0]["metrics_as_of"] is None
+
+
+class TestRefreshEventCumulativeHouseScope:
+    """House cron must not patch overlay (or leaked) ``position_events`` by bare ``id``."""
+
+    def test_skips_overlay_workspace_events(self) -> None:
+        house = str(house_workspace_id())
+        overlay = str(uuid4())
+        house_ev = {
+            "id": "house-1",
+            "date": "2026-06-01",
+            "ticker": "SPY",
+            "workspace_id": house,
+            "cumulative_return_since_event_pct": None,
+        }
+        overlay_ev = {
+            "id": "overlay-1",
+            "date": "2026-06-01",
+            "ticker": "SPY",
+            "workspace_id": overlay,
+            "cumulative_return_since_event_pct": None,
+        }
+        prices = [
+            {"ticker": "SPY", "date": "2026-06-01", "close": 500.0},
+            {"ticker": "SPY", "date": "2026-06-12", "close": 550.0},
+        ]
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "position_events": [house_ev, overlay_ev],
+                "price_history": prices,
+            }
+        )
+        sb.store["position_events"] = [dict(house_ev), dict(overlay_ev)]
+        n = refresh_event_cumulative(sb, "2026-06-12")
+        assert n == 1
+        by_id = {r["id"]: r for r in sb.store["position_events"]}
+        assert by_id["house-1"]["cumulative_return_since_event_pct"] == pytest.approx(10.0)
+        assert by_id["overlay-1"]["cumulative_return_since_event_pct"] is None
 
 
 class TestMetricsCronRunsEveryDay:

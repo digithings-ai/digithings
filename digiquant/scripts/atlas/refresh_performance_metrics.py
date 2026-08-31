@@ -600,7 +600,12 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
 def refresh_event_cumulative(sb, as_of: str) -> int:
     """Fill cumulative_return_since_event_pct for recent events with prices."""
     cut = (date.fromisoformat(as_of) - timedelta(days=120)).isoformat()
-    res = sb.table("position_events").select("*").gte("date", cut).lte("date", as_of).execute()
+    res = (
+        _eq_house(sb.table("position_events").select("*"))
+        .gte("date", cut)
+        .lte("date", as_of)
+        .execute()
+    )
     events = getattr(res, "data", None) or []
     n = 0
     for ev in events:
@@ -613,9 +618,13 @@ def refresh_event_cumulative(sb, as_of: str) -> int:
         c1 = cmap.get(as_of)
         if c0 and c1 and c0 > 0:
             pct = (c1 - c0) / c0 * 100.0
-            sb.table("position_events").update({"cumulative_return_since_event_pct": pct}).eq(
-                "id", ev["id"]
-            ).execute()
+            (
+                _eq_house(
+                    sb.table("position_events").update({"cumulative_return_since_event_pct": pct})
+                )
+                .eq("id", ev["id"])
+                .execute()
+            )
             n += 1
     return n
 
