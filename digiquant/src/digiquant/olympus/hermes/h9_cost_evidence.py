@@ -43,6 +43,7 @@ REQUESTED_TARGETS = "portfolio_ledger_requested_targets"
 APPROVED_TARGETS = "portfolio_ledger_approved_targets"
 ORDER_INTENTS = "portfolio_ledger_order_intents"
 _PRICE_HISTORY = "price_history"
+_PRICE_TECHNICALS = "price_technicals"
 
 
 def investor_currency_from_state(state: AtlasResearchState) -> str | None:
@@ -55,6 +56,57 @@ def investor_currency_from_state(state: AtlasResearchState) -> str | None:
     return code if len(code) >= 3 else None
 
 
+def _fetch_technicals_row(
+    *,
+    client: SupabaseClient,
+    symbol: str,
+    session_date: str,
+) -> dict[str, Any] | None:
+    resp = (
+        client.table(_PRICE_TECHNICALS)
+        .select("date, hist_vol_21, atr_pct")
+        .eq("ticker", symbol.strip().upper())
+        .eq("date", session_date)
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return rows[0] if rows else None
+
+
+def _merge_price_and_technicals(
+    price_row: dict[str, Any] | None,
+    tech_row: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if price_row is None and tech_row is None:
+        return None
+    merged: dict[str, Any] = dict(price_row or {})
+    if tech_row:
+        for key in ("hist_vol_21", "atr_pct"):
+            if merged.get(key) is None and tech_row.get(key) is not None:
+                merged[key] = tech_row[key]
+    return merged
+
+
+def _load_technicals_history(
+    *,
+    client: SupabaseClient,
+    symbol: str,
+    as_of_session: str,
+) -> pl.DataFrame:
+    resp = (
+        client.table(_PRICE_TECHNICALS)
+        .select("date, hist_vol_21, atr_pct")
+        .eq("ticker", symbol.strip().upper())
+        .lte("date", as_of_session)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return pl.DataFrame()
+    return pl.DataFrame(rows)
+
+
 def _load_symbol_history(
     *,
     client: SupabaseClient,
@@ -64,7 +116,7 @@ def _load_symbol_history(
 ) -> pl.DataFrame:
     resp = (
         client.table(_PRICE_HISTORY)
-        .select("date, ticker, close, high, low, volume, hist_vol_21, atr_pct")
+        .select("date, ticker, close, high, low, volume")
         .eq("ticker", symbol.strip().upper())
         .lte("date", as_of_session)
         .execute()
@@ -73,6 +125,20 @@ def _load_symbol_history(
     if not rows:
         return pl.DataFrame()
     frame = pl.DataFrame(rows)
+    techs = _load_technicals_history(
+        client=client,
+        symbol=symbol,
+        as_of_session=as_of_session,
+    )
+    if not techs.is_empty() and "date" in techs.columns and "date" in frame.columns:
+        left = frame.with_columns(pl.col("date").cast(pl.Utf8).alias("_join_date"))
+        right = techs.with_columns(pl.col("date").cast(pl.Utf8).alias("_join_date"))
+        tech_cols = ["_join_date"] + [c for c in ("hist_vol_21", "atr_pct") if c in right.columns]
+        frame = left.join(right.select(tech_cols), on="_join_date", how="left").drop("_join_date")
+    else:
+        for col in ("hist_vol_21", "atr_pct"):
+            if col not in frame.columns:
+                frame = frame.with_columns(pl.lit(None).alias(col))
     if "date" in frame.columns:
         frame = frame.sort("date", descending=True).head(lookback_days + 5)
     return frame
@@ -86,14 +152,18 @@ def _fetch_price_row(
 ) -> dict[str, Any] | None:
     resp = (
         client.table(_PRICE_HISTORY)
-        .select("date, close, high, low, volume, hist_vol_21, atr_pct")
+        .select("date, close, high, low, volume")
         .eq("ticker", symbol.strip().upper())
         .eq("date", session_date)
         .limit(1)
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    return rows[0] if rows else None
+    price_row = rows[0] if rows else None
+    return _merge_price_and_technicals(
+        price_row,
+        _fetch_technicals_row(client=client, symbol=symbol, session_date=session_date),
+    )
 
 
 def _load_commit_orders(

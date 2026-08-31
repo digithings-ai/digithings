@@ -23,6 +23,7 @@ from digiquant.olympus.atlas.data.queries import (
     get_vix_term_structure,
     query_data,
 )
+from digiquant.olympus.transient import call_with_disconnect_retry
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +187,7 @@ def build_data_tool_dispatcher(
     as_of = run_date or datetime.now(UTC).date()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
-        try:
+        def _dispatch() -> str:
             if name == "query_data":
                 table = args.get("table")
                 if not table:
@@ -199,26 +200,27 @@ def build_data_tool_dispatcher(
                 # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
                 # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
                 # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
+                rewritten = args
                 if table == "macro_series_observations":
                     for filter_arg in ("eq", "gte", "lte"):
-                        filt = args.get(filter_arg)
+                        filt = rewritten.get(filter_arg)
                         if isinstance(filt, dict) and "date" in filt:
                             filt = dict(filt)
                             filt["obs_date"] = filt.pop("date")
-                            args = {**args, filter_arg: filt}
-                    if args.get("order") == "date":
-                        args = {**args, "order": "obs_date"}
+                            rewritten = {**rewritten, filter_arg: filt}
+                    if rewritten.get("order") == "date":
+                        rewritten = {**rewritten, "order": "obs_date"}
                 result = query_data(
                     client=client,
                     table=table,
-                    columns=str(args.get("columns", "*")),
-                    eq=args.get("eq"),
-                    gte=args.get("gte"),
-                    lte=args.get("lte"),
-                    in_=args.get("in_"),
-                    order=args.get("order"),
-                    desc=_coerce_bool(args.get("desc", True)),
-                    limit=int(args.get("limit", 50)),
+                    columns=str(rewritten.get("columns", "*")),
+                    eq=rewritten.get("eq"),
+                    gte=rewritten.get("gte"),
+                    lte=rewritten.get("lte"),
+                    in_=rewritten.get("in_"),
+                    order=rewritten.get("order"),
+                    desc=_coerce_bool(rewritten.get("desc", True)),
+                    limit=int(rewritten.get("limit", 50)),
                     allowed_tables=allowed_tables,
                 )
             elif name == "get_macro_series":
@@ -241,6 +243,9 @@ def build_data_tool_dispatcher(
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
+
+        try:
+            return call_with_disconnect_retry(_dispatch)
         except Exception as exc:  # tool errors are returned to the model, not raised
             logger.warning("data tool %s failed: %s", name, exc)
             return f"Error: {name} failed: {exc}"

@@ -20,3 +20,8 @@ env:
 
   DIGI_CHECKPOINTER: postgres          # Resume on retry (#665); degrades if URI absent
   LANGSMITH_TRACING: "true"            # Required for traces; key alone is insufficient (#687)
+
+  # Hard cap on Atlas/Hermes tool-calling rounds per LLM turn (#3299).
+  # Default 24 in code; set here so CI/daily runs are explicit. Do not remove —
+  # unbounded tool loops are an LLM-spend bomb on a 30-analyst roster.
+  OLYMPUS_MAX_TOOL_ROUNDS: "24"

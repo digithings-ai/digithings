@@ -201,6 +201,7 @@ def run_research_agent(
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
     search_parameters: dict[str, Any] | None = None,
+    max_tool_rounds: int | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -239,6 +240,9 @@ def run_research_agent(
         search_parameters: Optional xAI Live Search descriptor, forwarded via
             ``extra_body`` for xAI models (no-op otherwise). Applies on both the
             tool and the structured-output paths.
+        max_tool_rounds: Tool-calling round budget forwarded to ``run_tools``.
+            ``None`` (default) keeps digillm's default of 5 so digigraph chat is
+            unchanged. Olympus passes a higher cap via its wrapper.
 
     Tool-path retry (#1739):
         A tool-grounded turn gets **no** provider-side schema enforcement, so a
@@ -366,14 +370,15 @@ def run_research_agent(
                         follow_up_no_artifact_reason=NoArtifactReason.CONSUMED_INLINE,
                         defer_finalization=True,
                     ) as call:
-                        raw = run_tools(
-                            effective_model,
-                            messages,
-                            tools=tools,
-                            execute_tool=execute_for_llm,
-                            temperature=temperature,
-                            search_parameters=search_parameters,
-                        )
+                        tool_kwargs: dict[str, Any] = {
+                            "tools": tools,
+                            "execute_tool": execute_for_llm,
+                            "temperature": temperature,
+                            "search_parameters": search_parameters,
+                        }
+                        if max_tool_rounds is not None:
+                            tool_kwargs["max_tool_rounds"] = max_tool_rounds
+                        raw = run_tools(effective_model, messages, **tool_kwargs)
                         parent_call_id = call.last_call_id
                 else:
                     purpose = (

@@ -562,6 +562,28 @@ class TestRunResearchAgent:
                     max_retries=0,
                 )
 
+    def test_forwards_max_tool_rounds_to_run_tools(self) -> None:
+        payload = json.dumps({"regime": "growth", "confidence": 0.5, "notes": []})
+        captured: dict[str, object] = {}
+
+        def fake_run_tools(*_args: object, **kwargs: object) -> str:
+            captured["max_tool_rounds"] = kwargs.get("max_tool_rounds")
+            return payload
+
+        with patch("digigraph.graph.research_agent.run_tools", side_effect=fake_run_tools):
+            out = run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                tools=[{"type": "function", "function": {"name": "probe"}}],
+                execute_tool=lambda _n, _a: "{}",
+                max_tool_rounds=24,
+            )
+        assert out.regime == "growth"
+        assert captured["max_tool_rounds"] == 24
+
     def test_whitespace_only_response_raises_value_error(self) -> None:
         """Whitespace-only responses (after fence-strip) must also raise ValueError, not
         JSONDecodeError with a generic 'Expecting value' message (#814)."""

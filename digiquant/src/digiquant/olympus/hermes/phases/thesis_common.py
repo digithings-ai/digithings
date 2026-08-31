@@ -9,7 +9,6 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     TypeVar,
 )
 
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel, ValidationError
 
@@ -30,6 +29,7 @@ from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch,
 from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.thesis_grounding import build_thesis_grounding
+from digiquant.olympus.research_agent import run_research_agent
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
 
 logger = logging.getLogger(__name__)

@@ -31,6 +31,7 @@ from digiquant.olympus.research_retrieval.cache import ResearchCache, _parse_row
 from digiquant.olympus.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.olympus.research_retrieval.store import LoadedResearchState
 from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.olympus.transient import call_with_disconnect_retry
 
 logger = logging.getLogger(__name__)
 
@@ -397,18 +398,27 @@ def query_research(
                 )
 
     try:
-        if key == DIGEST_DOCUMENT_KEY:
-            row, resolved_date = _query_digest_row(client, as_of_date=effective_as_of)
-            source = "daily_snapshots"
-            payload = row.get("snapshot") if isinstance(row, dict) else None
-        else:
-            row, resolved_date = _query_documents_row(
-                client,
-                document_key=key,
-                as_of_date=effective_as_of,
-            )
-            source = "documents"
-            payload = row.get("payload") if isinstance(row, dict) else None
+
+        def _fetch() -> tuple[dict[str, Any] | None, date | None, str, dict[str, Any] | None]:
+            if key == DIGEST_DOCUMENT_KEY:
+                fetched_row, fetched_date = _query_digest_row(client, as_of_date=effective_as_of)
+                fetched_source = "daily_snapshots"
+                fetched_payload = (
+                    fetched_row.get("snapshot") if isinstance(fetched_row, dict) else None
+                )
+            else:
+                fetched_row, fetched_date = _query_documents_row(
+                    client,
+                    document_key=key,
+                    as_of_date=effective_as_of,
+                )
+                fetched_source = "documents"
+                fetched_payload = (
+                    fetched_row.get("payload") if isinstance(fetched_row, dict) else None
+                )
+            return fetched_row, fetched_date, fetched_source, fetched_payload
+
+        row, resolved_date, source, payload = call_with_disconnect_retry(_fetch)
     except Exception as exc:  # return structured error to tool caller
         logger.warning("query_research failed for %s: %s", key, exc)
         return {"error": f"query_research failed: {exc}"}
@@ -451,18 +461,26 @@ def query_portfolio(
 
     effective_as_of = as_of_date or run_date
     try:
-        positions, resolved_date = _positions_for_as_of(
-            client,
-            as_of_date=effective_as_of,
-            ticker=ticker,
-        )
-        nav = _nav_for_as_of(client, as_of_date=effective_as_of)
-        theses = _theses_for_as_of(client, as_of_date=effective_as_of)
-        lessons = fetch_recent_lessons(
-            client=client,
-            run_date=effective_as_of,
-            watchlist=watchlist,
-        )
+
+        def _fetch() -> tuple[list[dict[str, Any]], date | None, Any, Any, Any]:
+            fetched_positions, fetched_date = _positions_for_as_of(
+                client,
+                as_of_date=effective_as_of,
+                ticker=ticker,
+            )
+            return (
+                fetched_positions,
+                fetched_date,
+                _nav_for_as_of(client, as_of_date=effective_as_of),
+                _theses_for_as_of(client, as_of_date=effective_as_of),
+                fetch_recent_lessons(
+                    client=client,
+                    run_date=effective_as_of,
+                    watchlist=watchlist,
+                ),
+            )
+
+        positions, resolved_date, nav, theses, lessons = call_with_disconnect_retry(_fetch)
     except Exception as exc:  # return structured error to tool caller
         logger.warning("query_portfolio failed: %s", exc)
         return {"error": f"query_portfolio failed: {exc}"}

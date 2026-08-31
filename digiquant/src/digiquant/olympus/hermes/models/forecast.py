@@ -17,7 +17,11 @@ import json
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, TypeAlias
+from typing import (  # score:allow untyped any — nested LLM wrapper payloads
+    Annotated,
+    Any,
+    TypeAlias,
+)
 from uuid import UUID, uuid5
 
 from pydantic import (
@@ -133,6 +137,55 @@ class ForecastTerms(ForecastModel):
             + self.base_probability * self.base_return
             + self.bull_probability * self.bull_return
         )
+
+
+_FORECAST_WRAPPER_KEYS = frozenset({"terms", "amendment", "forecast_amendment"})
+_ECONOMICS_KEYS = frozenset(
+    {
+        "bear_return",
+        "base_return",
+        "bull_return",
+        "bear_probability",
+        "base_probability",
+        "bull_probability",
+    }
+)
+
+
+def unwrap_nested_forecast_terms(
+    raw: dict[str, Any],
+    *,
+    base: ForecastTerms | None = None,
+) -> dict[str, Any]:
+    """Unwrap one ``{terms|amendment|forecast_amendment: {...}}`` wrapper (#3299).
+
+    Cheap models often emit a nested object instead of a flat ``ForecastTerms``.
+    When the *only* keys are those wrappers, peel one level. If scenario
+    economics are present but ``horizon_sessions`` / ``half_life_sessions`` are
+    missing, copy those two fields from the H5 base (complete replacement of
+    the rest). Objects with no scenario returns are left as-is so validation
+    still rejects them (e.g. a ``catalyst_within_horizon`` blob).
+    """
+    data: dict[str, Any] = dict(raw)
+    if data and set(data) <= _FORECAST_WRAPPER_KEYS:
+        nested_key = next(
+            (
+                key
+                for key in ("terms", "amendment", "forecast_amendment")
+                if isinstance(data.get(key), dict)
+            ),
+            None,
+        )
+        if nested_key is not None:
+            data = dict(data[nested_key])
+
+    has_economics = bool(_ECONOMICS_KEYS & set(data))
+    if has_economics and base is not None:
+        if data.get("horizon_sessions") in (None, ""):
+            data["horizon_sessions"] = base.horizon_sessions
+        if data.get("half_life_sessions") in (None, ""):
+            data["half_life_sessions"] = base.half_life_sessions
+    return data
 
 
 class PriceAnchor(ForecastModel):
@@ -468,4 +521,5 @@ __all__ = [
     "forecast_terms_content_hash",
     "materialize_forecast_amendment",
     "resolve_effective_forecast",
+    "unwrap_nested_forecast_terms",
 ]

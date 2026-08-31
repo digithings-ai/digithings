@@ -837,6 +837,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
+| `OLYMPUS_MAX_TOOL_ROUNDS` | `"24"` | Hard cap on Atlas/Hermes `run_research_agent` tool-calling rounds per LLM turn (#3299). High enough that segments finish `get_macro_series` / `get_etf_flows_proxy`; still finite. Do not remove. Wired via `digiquant.olympus.research_agent.olympus_max_tool_rounds()`; digigraph chat stays at `max_tool_rounds=4`. |
 
 ### MCP Server Startup
 
@@ -965,6 +966,12 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 digiquant ships two sibling sub-graphs that compose end-to-end on **one daily topology**
 ([#930](https://github.com/digithings-ai/digithings/issues/930), spec
 [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)):
+
+Every Olympus LLM turn goes through `digiquant.olympus.research_agent.run_research_agent`,
+which forwards `max_tool_rounds` from `OLYMPUS_MAX_TOOL_ROUNDS` (default **24**) into
+digigraph's research agent. Digigraph chat is unchanged (`max_tool_rounds=4` in
+`digigraph.graph.research`). The cap is a malfunction brake, not a quality target —
+do not remove it.
 
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.

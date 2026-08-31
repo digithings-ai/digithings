@@ -16,7 +16,6 @@ from typing import (
 )
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from digigraph.graph.research_agent import run_research_agent
 from pydantic import ValidationError
 
 from digiquant.olympus.atlas.forecast_outcomes import list_resolved_outcomes_as_of
@@ -40,6 +39,7 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.research_agent import run_research_agent
 from digiquant.olympus.research_retrieval.context_wiring import wire_h7_phase_inputs
 from digiquant.olympus.research_retrieval.store import ResearchStateStore
 

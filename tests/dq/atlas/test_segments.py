@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.olympus.atlas.phases.phase1_altdata import PoliticianSignalsReport
 from digiquant.olympus.atlas.segments import SegmentReport
 
 pytestmark = pytest.mark.unit
@@ -64,6 +65,18 @@ def test_data_quality_unrecognized_degrades_to_none() -> None:
 def test_bias_synonym_still_normalizes() -> None:
     # The new fields don't disturb the existing bias-synonym normalization.
     assert _report(bias="positive").bias == "bullish"
+
+
+def test_hawkish_bias_on_politician_signals() -> None:
+    report = PoliticianSignalsReport.model_validate(
+        {
+            "segment": "alt-politician-signals",
+            "date": date(2026, 8, 29),
+            "bias": "hawkish",
+            "headline": "Fed chair hawkish",
+        }
+    )
+    assert report.bias == "bearish"
 
 
 class TestFlowDirectionSynonyms:

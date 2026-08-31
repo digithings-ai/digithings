@@ -125,7 +125,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     One LLM call. The output is a ``RiskCase`` whose text seeds the
     aggressive arm of the debate summary.
     """
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
 
     from digiquant.olympus.hermes.skills import load_skill
 
@@ -189,7 +189,7 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     aggressive node and emits the conservative case plus a one-line
     ``key_tension`` synthesis.
     """
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
 
     from digiquant.olympus.hermes.skills import load_skill
 
@@ -270,7 +270,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
     separate ``phase_inputs.current_weights`` field is explicit enough
     to preserve the blinded-analysis semantics at the prompt level.
     """
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
 
     from digiquant.olympus.hermes.skills import load_skill
 

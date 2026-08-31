@@ -246,6 +246,22 @@ class TestDedicatedValidatorsKeepOwnership:
         body = {**_minimal_body(SectorReport), "bias": "very_positive"}
         assert SectorReport.model_validate(body).bias == "strong_bullish"
 
+    def test_hawkish_bias_maps_to_bearish(self) -> None:
+        body = {**_minimal_body(SectorReport), "bias": "hawkish"}
+        assert SectorReport.model_validate(body).bias == "bearish"
+
+    def test_dovish_bias_maps_to_bullish(self) -> None:
+        body = {**_minimal_body(SectorReport), "bias": "dovish"}
+        assert SectorReport.model_validate(body).bias == "bullish"
+
+    def test_tightening_bias_maps_to_bearish(self) -> None:
+        body = {**_minimal_body(SectorReport), "bias": "tightening"}
+        assert SectorReport.model_validate(body).bias == "bearish"
+
+    def test_hawkish_policy_still_maps_to_tightening(self) -> None:
+        body = {**_minimal_body(MacroRegimeReport), "policy": "hawkish"}
+        assert MacroRegimeReport.model_validate(body).policy == "tightening"
+
     def test_unknown_bias_is_still_rejected(self) -> None:
         body = {**_minimal_body(SectorReport), "bias": _NOT_A_MEMBER}
         with pytest.raises(ValidationError, match="bias"):

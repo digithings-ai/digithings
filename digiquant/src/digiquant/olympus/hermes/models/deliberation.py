@@ -8,7 +8,7 @@ from typing import (
     Literal,
 )
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 MissingFactSourceKind = Literal[
     "analyst",
@@ -78,6 +78,11 @@ class DeliberationPmTurn(BaseModel):
         ),
     )
 
+    @field_validator("conviction_delta", mode="before")
+    @classmethod
+    def _coerce_conviction_delta(cls, value: object) -> object:
+        return _clamp_conviction_delta(value)
+
 
 class DeliberationAnalystTurn(BaseModel):
     """Analyst response turn or terminal summary."""
@@ -92,12 +97,24 @@ class DeliberationAnalystTurn(BaseModel):
     # Partial nested patches are rejected by materialize/resolve — omit when unchanged.
     forecast_amendment: dict[str, Any] | None = None
 
+    @field_validator("conviction_delta", mode="before")
+    @classmethod
+    def _coerce_conviction_delta(cls, value: object) -> object:
+        return _clamp_conviction_delta(value)
+
 
 CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
 CARRY_LLM_FAILURE = "llm_failure"
 CARRY_LOW_VALUE = "low_value_carry"
 CARRY_ATTENTION = "attention_carry"
 CarryReason = Literal["fingerprint_skip", "llm_failure", "low_value_carry"]
+
+
+def _clamp_conviction_delta(value: object) -> object:
+    """Clamp LLM ``conviction_delta`` to [-2, 2] before ge/le validation (#3299)."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return value
+    return max(-2, min(2, int(value)))
 
 
 class DeliberationSummary(BaseModel):
@@ -126,6 +143,12 @@ class DeliberationSummary(BaseModel):
         default=None,
         description="Primary H6SelectionReason code for this run/carry (#2902).",
     )
+
+    @field_validator("conviction_delta", mode="before")
+    @classmethod
+    def _coerce_conviction_delta(cls, value: object) -> object:
+        return _clamp_conviction_delta(value)
+
     h6_selection: dict[str, Any] | None = Field(
         default=None,
         description="Optional H6Selection dump (shadow/enforce audit; never prompt input).",

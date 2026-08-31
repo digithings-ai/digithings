@@ -25,7 +25,7 @@ class MonthlyDigest(DigestSnapshot):
 
 
 def _monthly_node(state: AtlasResearchState) -> dict[str, Any]:
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
 
     from digiquant.olympus.atlas.skills import SkillNotFoundError, load_skill
 

@@ -61,6 +61,9 @@ _BIAS_SYNONYMS: dict[str, str] = {
     "very_negative": "strong_bearish",
     "strongly_bearish": "strong_bearish",
     "strongly_negative": "strong_bearish",
+    "hawkish": "bearish",
+    "dovish": "bullish",
+    "tightening": "bearish",
 }
 
 
@@ -125,8 +128,8 @@ _LITERAL_SYNONYMS: dict[str, tuple[str, ...]] = {
     "strong": ("high",),
     "weak": ("low",),
     # Macro-factor vocabulary (the four required Phase 3 axes).
-    "hawkish": ("tightening",),
-    "dovish": ("easing",),
+    "hawkish": ("tightening", "bearish"),
+    "dovish": ("easing", "bullish"),
     "sticky": ("hot",),
     "elevated": ("hot",),
     "disinflation": ("cooling",),

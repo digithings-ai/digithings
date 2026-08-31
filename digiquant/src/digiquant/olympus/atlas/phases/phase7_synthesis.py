@@ -13,7 +13,6 @@ from datetime import date
 from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from digigraph.graph.research_agent import run_research_agent
 from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
@@ -42,6 +41,7 @@ from digiquant.olympus.edit_mode.content_identity import (
 from digiquant.olympus.edit_mode.models import TriageSignal
 from digiquant.olympus.edit_mode.prior import PriorPublished
 from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
+from digiquant.olympus.research_agent import run_research_agent
 from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)

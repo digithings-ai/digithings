@@ -8,7 +8,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Literal,
 )
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 PatchOpType = Literal["set", "append", "remove"]
 EditMode = Literal["full", "edit", "skip"]
@@ -45,6 +45,26 @@ class DocumentPatch(BaseModel):
     ops: list[PatchOp] = Field(default_factory=list)
     one_line_summary: str | None = None
     signals_checked: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_non_patch_ops(cls, data: object) -> object:
+        """Drop ops that lack ``op``+``path`` (decision-log rows) before PatchOp validate."""
+        if not isinstance(data, dict):
+            return data
+        ops = data.get("ops")
+        if not isinstance(ops, list):
+            return data
+        kept: list[object] = []
+        for item in ops:
+            if isinstance(item, PatchOp):
+                kept.append(item)
+                continue
+            if isinstance(item, dict) and "op" in item and "path" in item:
+                kept.append(item)
+        if len(kept) == len(ops):
+            return data
+        return {**data, "ops": kept}
 
 
 class MergeStats(BaseModel):

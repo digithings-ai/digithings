@@ -98,7 +98,7 @@ def _run_beliefs_llm(
     lessons: list[dict[str, Any]],
     active_theses: list[dict[str, Any]],
 ) -> BeliefsBlob:
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
     from digigraph.model_config import get_grounding_model
 
     from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding

@@ -330,7 +330,7 @@ def _default_reflector(prompt_inputs: dict[str, Any]) -> ReflectorOutput:
     Imports are lazy so unit tests that pass a stub ``reflector`` don't need
     ``digigraph`` / ``litellm`` installed.
     """
-    from digigraph.graph.research_agent import run_research_agent
+    from digiquant.olympus.research_agent import run_research_agent
 
     from digiquant.olympus.atlas.skills import load_skill
 

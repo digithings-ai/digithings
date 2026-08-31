@@ -167,7 +167,7 @@ def _phase9_node_factory(
                 )
 
         # ── Phase 9A/B/C: LLM evolution artifacts ─────────────────────
-        from digigraph.graph.research_agent import run_research_agent
+        from digiquant.olympus.research_agent import run_research_agent
 
         from digiquant.olympus.hermes.skills import load_skill
 

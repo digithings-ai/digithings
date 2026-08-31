@@ -18,7 +18,6 @@ from typing import (  # score:allow untyped any — heterogeneous node-update di
     NamedTuple,
 )
 
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
@@ -62,6 +61,7 @@ from digiquant.olympus.edit_mode.content_identity import (
     prior_content_date,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
+from digiquant.olympus.research_agent import run_research_agent
 from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)

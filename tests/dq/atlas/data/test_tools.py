@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 import pytest
 from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
@@ -131,3 +132,73 @@ def test_query_data_description_warns_no_close_in_price_technicals():
     assert "close" in description
     # Must guide the model to use price_history for OHLCV.
     assert "OHLCV" in description or "price_history" in description
+
+
+class _FlakyTable:
+    def __init__(self, rows: list[dict[str, object]], *, fails: int, err: Exception) -> None:
+        self._rows = rows
+        self._fails = fails
+        self._err = err
+        self.calls = 0
+        self._f: dict[str, object] = {}
+
+    def select(self, *a: object, **k: object) -> _FlakyTable:
+        return self
+
+    def eq(self, col: str, val: object) -> _FlakyTable:
+        self._f[col] = val
+        return self
+
+    def in_(self, col: str, vals: object) -> _FlakyTable:
+        self._f[col] = vals
+        return self
+
+    def order(self, *a: object, **k: object) -> _FlakyTable:
+        return self
+
+    def limit(self, n: int) -> _FlakyTable:
+        return self
+
+    def execute(self) -> object:
+        self.calls += 1
+        if self.calls <= self._fails:
+            raise self._err
+        return type("R", (), {"data": self._rows})
+
+
+class _FlakyClient:
+    def __init__(self, table: _FlakyTable) -> None:
+        self._table = table
+
+    def table(self, name: str) -> _FlakyTable:
+        del name
+        return self._table
+
+
+@pytest.mark.unit
+def test_dispatcher_retries_server_disconnect_then_succeeds() -> None:
+    table = _FlakyTable(
+        [{"series_id": "DFF", "obs_date": "2026-08-29", "value": 4.5}],
+        fails=2,
+        err=RuntimeError("Server disconnected without sending a response."),
+    )
+    dispatch = build_data_tool_dispatcher(_FlakyClient(table))
+    with patch("digiquant.olympus.transient.time.sleep"):
+        result = json.loads(dispatch("get_macro_series", {"series_ids": ["DFF"], "lookback": 3}))
+    assert result["DFF"]["latest"]["value"] == 4.5
+    assert table.calls == 3
+
+
+@pytest.mark.unit
+def test_dispatcher_returns_error_after_retries_exhausted() -> None:
+    table = _FlakyTable(
+        [],
+        fails=5,
+        err=RuntimeError("PGRST002: Could not query the database for the schema cache."),
+    )
+    dispatch = build_data_tool_dispatcher(_FlakyClient(table))
+    with patch("digiquant.olympus.transient.time.sleep"):
+        err = dispatch("get_macro_series", {"series_ids": ["DFF"]})
+    assert err.startswith("Error:")
+    assert "PGRST002" in err
+    assert table.calls == 3

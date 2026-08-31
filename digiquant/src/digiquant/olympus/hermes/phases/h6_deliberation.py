@@ -10,7 +10,6 @@ from typing import (
 )
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.phases._node_factory import (
@@ -45,12 +44,14 @@ from digiquant.olympus.hermes.models.forecast import (
     ForecastTerms,
     materialize_forecast_amendment,
     resolve_effective_forecast,
+    unwrap_nested_forecast_terms,
 )
 from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
+from digiquant.olympus.research_agent import run_research_agent
 from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
 from digiquant.olympus.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
 from digiquant.olympus.research_retrieval.h6_amendment import (
@@ -300,7 +301,9 @@ def _resolve_from_debate(
             None,
         )
     try:
-        terms = ForecastTerms.model_validate(amendment_terms_raw)
+        terms = ForecastTerms.model_validate(
+            unwrap_nested_forecast_terms(amendment_terms_raw, base=base.terms)
+        )
         amendment = materialize_forecast_amendment(
             base=base,
             terms=terms,
@@ -926,7 +929,7 @@ def _h6_node_factory(
             ticker=ticker,
             analyst=analyst,
             amendment_terms_raw=amendment_terms,
-            amendment_reason=summary.conclusion or "h6_challenge_revision",
+            amendment_reason="h6_challenge_revision",
         )
         summary = _attach_evidence_amendment(
             summary,
