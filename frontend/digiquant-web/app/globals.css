@@ -124,7 +124,7 @@ html {
   scroll-padding-top: var(--dq-nav-h);
 }
 #pipeline,
-#olympus,
+#desk,
 #strategies,
 #pricing {
   scroll-margin-top: var(--dq-nav-h);
@@ -151,10 +151,10 @@ html {
 }
 
 /* Dashboard mark CTA (NavShell sheet slot + desktop tail). */
-.olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
+.dq-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
 /* Desktop tail — teal mark only. No label: the wordmark is already
    digiquant, and the accessible name is on the <a>. */
-.dq-nav-olympus-cta {
+.dq-nav-mark-cta {
   color: var(--accent);
   width: 2.35rem;
   height: 2.35rem;
@@ -167,25 +167,25 @@ html {
   opacity: 0.96;
   transition: opacity 0.18s var(--ease), background 0.18s var(--ease);
 }
-.dq-nav-olympus-cta:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.olympus-mark { transform-origin: 50% 50%; }
+.dq-nav-mark-cta:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dq-mark { transform-origin: 50% 50%; }
 /* Strokes are fully drawn at rest. Idle: replay the dashboard loader once
    every 10s (1.55s of motion, then hold). Hover: the same 1.55s loop. */
-.olympus-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
-.olympus-stroke-1 { --ol-len: 120; }
-.olympus-stroke-2 { --ol-len: 190; }
-.olympus-stroke-3 { --ol-len: 45; }
-.olympus-stroke-4 { --ol-len: 165; }
-.dq-nav-olympus-cta .olympus-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.dq-nav-olympus-cta .olympus-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
-.olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
-.olympus-cta .olympus-stroke-2,
-.olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
-.olympus-cta .olympus-stroke-3,
-.olympus-cta:hover .olympus-stroke-3 { animation-delay: 0.06s; }
-.olympus-cta .olympus-stroke-4,
-.olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+.dq-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
+.dq-stroke-1 { --ol-len: 120; }
+.dq-stroke-2 { --ol-len: 190; }
+.dq-stroke-3 { --ol-len: 45; }
+.dq-stroke-4 { --ol-len: 165; }
+.dq-nav-mark-cta .dq-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dq-nav-mark-cta .dq-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
+.dq-cta:hover .dq-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dq-cta:hover .dq-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.dq-cta .dq-stroke-2,
+.dq-cta:hover .dq-stroke-2 { animation-delay: 0.03s; }
+.dq-cta .dq-stroke-3,
+.dq-cta:hover .dq-stroke-3 { animation-delay: 0.06s; }
+.dq-cta .dq-stroke-4,
+.dq-cta:hover .dq-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
 /* 1.55s of ol-pulse / ol-draw packed into the first 15.5% of a 10s cycle. */
@@ -202,10 +202,10 @@ html {
   6.2%, 100% { stroke-dashoffset: 0; opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dq-nav-olympus-cta .olympus-mark,
-  .dq-nav-olympus-cta .olympus-stroke,
-  .olympus-cta:hover .olympus-mark,
-  .olympus-cta:hover .olympus-stroke { animation: none; }
+  .dq-nav-mark-cta .dq-mark,
+  .dq-nav-mark-cta .dq-stroke,
+  .dq-cta:hover .dq-mark,
+  .dq-cta:hover .dq-stroke { animation: none; }
 }
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
@@ -331,7 +331,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 }
 
 /* ---- OLYMPUS: scroll-pinned hedge-fund-in-a-box track ---- */
-.dq-olympus { background: var(--bg); }
+.dq-desk { background: var(--bg); }
 
 /* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
    for a beat so a live change is perceptible, not silent. Money colours only
@@ -356,10 +356,10 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 /* kinetic 3D Olympus mark behind the scene — opacity + scale driven by scroll
    progress in PipelineScene (rotateX gives the laid-back 3D read). */
 .dqp-logo-bg { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; pointer-events: none; color: var(--accent); opacity: 0; transform: perspective(900px) rotateX(20deg) scale(0.82); transform-origin: 50% 55%; }
-.dqp-logo-bg .olympus-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
+.dqp-logo-bg .dq-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .dqp-scene-head { text-align: center; margin-bottom: clamp(1.4rem, 4vw, 2.6rem); }
-.dqp-olympus { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
-.dqp-olympus svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
+.dqp-desk { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.dqp-desk svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
 .dqp-scene-title { font-family: var(--font-display); font-size: clamp(1.5rem, 3.2vw, 2.3rem); font-weight: 400; letter-spacing: -0.015em; margin-top: 0.5rem; color: var(--ink); }
 .dqp-rail { position: relative; display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 2rem; padding: 0 8px; }
 .dqp-rail::before { content: ""; position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--hair); }

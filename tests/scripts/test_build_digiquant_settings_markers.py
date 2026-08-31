@@ -1,7 +1,7 @@
 """Pin Cloudflare Pages Settings export greps to the Observer IA.
 
 Cloudflare git-integration sets ``CF_PAGES=1``. ``scripts/build-digiquant.sh``
-then defaults ``NEXT_PUBLIC_OLYMPUS_AUTH=1``, so ``tierFromSession(null)`` is
+then defaults ``NEXT_PUBLIC_DASHBOARD_AUTH=1``, so ``tierFromSession(null)`` is
 ``free`` and the static Settings shell is Notifications | Billing | About.
 GitHub's deploy build check omits ``CF_PAGES``, auth stays off, and the same
 page prerenders as enterprise (all Custom+ tabs). Requiring
@@ -41,7 +41,7 @@ def test_observer_ia_markers_are_required_on_every_pages_build() -> None:
 
 def test_custom_tab_markers_are_gated_to_auth_off_ssg() -> None:
     block = _settings_block()
-    gate = 'NEXT_PUBLIC_OLYMPUS_AUTH:-}" != "1"'
+    gate = 'NEXT_PUBLIC_DASHBOARD_AUTH:-}" != "1"'
     assert gate in block, "Pipeline/Keys greps must be skipped when auth is on (CF Pages)"
     before, after = block.split(gate, 1)
     assert "settings-tab-pipeline" not in before

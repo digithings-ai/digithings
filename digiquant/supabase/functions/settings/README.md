@@ -1,6 +1,6 @@
 # settings Edge Function (T3)
 
-Authenticated Settings backend for Olympus: investment profile overlays, broker
+Authenticated Settings backend for the digiquant dashboard: investment profile overlays, broker
 connect/revoke, and notification prefs.
 
 | Setting | Value |

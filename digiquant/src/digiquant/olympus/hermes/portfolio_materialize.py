@@ -45,6 +45,7 @@ from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book,
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 from digiquant.olympus.performance_returns import calculate_performance_returns
 from digiquant.olympus.tenancy import house_workspace_id
 
@@ -158,6 +159,7 @@ def _upsert_theses(
     weights: dict[str, float],
     analysts: dict[str, Any],
     debates: dict[str, Any],
+    workspace_id: str | None = None,
 ) -> int:
     """Materialize one thesis row (+ vehicle) per booked holding (#713).
 
@@ -172,10 +174,16 @@ def _upsert_theses(
     parent rows are written first; vehicle writes are best-effort enrichment and
     never block the book.
 
+    Overlay workspaces skip this write: ``theses`` / ``thesis_vehicles`` are
+    house-owned shared registers (no ``workspace_id`` column).
+
     Invariants enforced on write (#814):
     - Every ACTIVE thesis has a non-empty invalidation string.
     - A rule-based default is generated when the analyst/debate left it blank.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return 0
     if not weights:
         return 0
     thesis_rows: list[dict[str, Any]] = []
@@ -687,6 +695,7 @@ def build_materialize_node(deps: MaterializeDeps):
             weights=weights,
             analysts=analyst_payloads(state),
             debates=deliberation_summaries(state),
+            workspace_id=state.config.workspace_id,
         )
 
         logger.info(

@@ -5,7 +5,7 @@ Free-teaser addendum (2026-08-30): Observer also gets ``digest_summary`` +
 ``portfolio_teaser`` (no weights/NAV, no brokers/automations).
 
 TypeScript mirror (T5 UI gate) MUST stay in sync:
-  frontend/olympus/lib/entitlements.ts
+  frontend/dashboard/lib/entitlements.ts
 When either file changes the matrix, update the other in the same PR.
 """
 

@@ -12,7 +12,7 @@
 
 This spec is written so a smaller model can pick up any single work package (WP) cold. Per WP it gives: goal, exact files, interfaces, behavior rules, edge cases, tests, acceptance, and gates. Global rules that apply to **every** WP:
 
-1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/olympus/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
+1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/dashboard/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
 2. **Branching:** K-track WPs are `component:digiquant` → branch from `module/digiquant` via `make task ISSUE=N` (two-hop). Olympus UI WPs and root docs are one-hop to `develop`. Never branch from a stale base — `make task` enforces `origin/<base>`.
 3. **Migration numbers are allocated at execution time** — the next free `digiquant/supabase/migrations/NNN_*.sql` when your PR lands (096+ as of this writing; check, don't assume). Update `digiquant/supabase/SCHEMA.md` in the same PR.
 4. **Human gates (hard):**

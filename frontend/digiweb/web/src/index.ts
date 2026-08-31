@@ -364,10 +364,8 @@ export {
 } from "./components/command-palette";
 export {
   DigiquantMark,
-  OlympusMark,
   Wordmark,
   type DigiquantMarkProps,
-  type OlympusMarkProps,
   type WordmarkProps,
 } from "./components/symbols/marks";
 // Terminal identity — the `digi` + block-cursor lockup and the hairline display

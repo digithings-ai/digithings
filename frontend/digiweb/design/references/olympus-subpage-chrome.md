@@ -3,7 +3,7 @@
 Reference for the shared navigation + layout chrome on digiquant dashboard subpages
 (Portfolio, Research, Overview, twelve-x, …), so new subpages and twelve-x stay
 aligned with the Cursor "literal navigation" pattern. Source of truth:
-[`frontend/olympus/components/subpage-tab-bar.tsx`](../../olympus/components/subpage-tab-bar.tsx).
+[`frontend/dashboard/components/subpage-tab-bar.tsx`](../../dashboard/components/subpage-tab-bar.tsx).
 
 ## Tab bar anatomy — `SubpageStickyTabBar`
 
@@ -48,7 +48,7 @@ region) — never a second nested blur layer (that produces a double-blur artifa
 - Flat `--surface` panels (`.glass-card` is a flat panel, *not* glass), 1px `--hair`
   (`--color-border-subtle`) borders, hover to `--hair-2`. No glass morphism on
   content (anti-pattern #8). See the surface-system note in
-  `frontend/olympus/app/globals.css`.
+  `frontend/dashboard/app/globals.css`.
 - `backdrop-blur` is confined to sticky/overlay chrome (this tab bar, the app top
   bar, command palette, sidebar) — never content cards.
 - Accent = Olympus cyan (`fin-blue` / `--accent`), used for the active tab + focus ring.
@@ -74,5 +74,5 @@ region) — never a second nested blur layer (that produces a double-blur artifa
 ---
 
 See also: [`../EVOLUTION.md`](../EVOLUTION.md) §3 (Olympus) and the surface-system
-note in `frontend/olympus/app/globals.css` (#1216). Olympus has no `ARCHITECTURE.md`,
+note in `frontend/dashboard/app/globals.css` (#1216). Olympus has no `ARCHITECTURE.md`,
 so this reference is the design home for subpage chrome.

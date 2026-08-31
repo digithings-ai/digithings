@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-27
+**Last updated:** 2026-08-31
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -1728,7 +1728,7 @@ the two percent writers could not satisfy: both are gated on `nav_history` reach
 `_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
 PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
 non-increasing. New writers of these columns must emit percent; readers may take the stored
-value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+value directly (`frontend/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
 `annVolPct` / `maxDrawdownPct` unchanged).
 
 Known wart, deliberately not changed here: `computed_from` carries
@@ -2458,7 +2458,7 @@ cross-project price copy is therefore **superseded**. `#1066` adds a shared
 incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
 ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
 twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
-`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+`frontend/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
@@ -2683,7 +2683,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -2716,7 +2716,7 @@ detectable and is the only way a future collision would be visible.
   `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
-- `frontend/olympus/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+- `frontend/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
   `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
   `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
@@ -3040,7 +3040,7 @@ invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 
 K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
 Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
-`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+`frontend/dashboard/lib/entitlements.ts` artifact-class matrix).
 
 **Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
 `NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
@@ -3248,7 +3248,12 @@ publish into the house book), `validate_pipeline_step.fetch_document_rows`,
 `pipeline_review_to_github` / `pipeline_meta_review` house pipeline-review
 docs (overlay reviews must not file GitHub issues),
 `format_deliberation_transcripts_chat` house transcripts (overlay rows must
-not be rewritten by id),
+not be rewritten by id), `normalize_supabase_documents.fetch_all_documents`
+(overlay rows must not be rewritten by id), `fetch_research_library` house
+research notes, `verify_supabase_canonical` house leftover ``outputs/`` keys,
+`publish_research.house_research_library_rows` (overlay notes must not dump as
+the house library), `backfill_research_state` house inventory pages (overlay
+rows must not seed the in-memory research-state store),
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
@@ -3256,7 +3261,7 @@ stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). House preflight
 `load_prior_context` / analyst and deliberation continuity / beliefs /
 institutional-absence documents also pin house so overlay private docs cannot
-seed the house graph. The dashboard Group A readers (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`)
+seed the house graph. The dashboard Group A readers (`frontend/dashboard/lib/queries.ts`, `observability-queries.ts`)
 go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
 member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later
@@ -3276,8 +3281,13 @@ at the preflight seam — the pin loader is unchanged) → publish-if-missing in
 shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
 A write-time assertion rejects any corpus key containing the workspace or user id.
 House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
-Overlay commit manifests use `overlay-commit/{workspace_id}/…`; H7/H8 document
-keys use `overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
+Overlay commit manifests use `overlay-commit/{workspace_id}/…` **only** when
+`is_private_workspace(workspace_id)` is true. House UUID and omitted
+`workspace_id` keep `commit-run/{run_id}` — a truthy house id must not flip the
+prefix (same rule as `hermes_document_key`). `load_commit_manifests` pins
+`documents.workspace_id` on the PostgREST path so an overlay same-date row
+cannot satisfy a house `commit-run/%` like. H7/H8 document keys use
+`overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
 `pm-rebalance`, `analyst/…`, `deliberation/…`) so they cannot collide with house
 keys after the documents unique is `(workspace_id, date, document_key)`.
 
@@ -3299,7 +3309,8 @@ books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 `uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
 keys — H9 `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
 now upsert the widened `(workspace_id, …)` targets, as do the remaining house
-ops scripts (`update_tearsheet`, `sync_positions_from_rebalance`,
+ops scripts (`update_tearsheet` Group A plus documents
+`on_conflict=workspace_id,date,document_key`, `sync_positions_from_rebalance`,
 `materialize_snapshot` positions, `backfill_execution_prices`,
 `reconcile_position_events_from_positions`). Overlay private books still refuse
 (`legacy_book_unique`) until staged cutover **113**
@@ -3314,7 +3325,24 @@ hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
 (house-only). Until 113 is applied, overlay persist-on cannot prove the
 remaining hop. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
-overwrite the house Brief). Cutover 900 is still required before dropping
+overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
+`analyst_coverage`, and `thesis_vehicles` for a private workspace
+(`skip_overlay_shared_register`): those tables have no `workspace_id` column
+and leftover `UNIQUE(date, …)` keys, so persist-on would last-writer-win the
+house corpus. Overlay `preflight_reflect` / `persist_pending` likewise **skip**
+`decision_log` (`UNIQUE(run_date, ticker)` — resolving would stamp house
+reflections by id). Overlay Atlas preflight **skips** the
+`onchain_cohort_positioning` upsert (`UNIQUE(date, market)`) the same way; the
+compact summary still lands in in-memory `market_context` for that overlay run.
+Overlay `run_atlas_then_hermes` **skips** `_run_beliefs_fold` for a private
+workspace — distillation reads every unfolded house `decision_log` row and
+stamps `beliefs_folded_at` by id, and the chain still reaches that fold after
+a fail-soft H9 `legacy_book_unique`. Overlay identity is seeded onto
+`initial_state` from the preflight `config_loader` before graph invoke, so an
+Atlas crash that returns last-good state cannot fold as house
+(`workspace_id=None`). Staged cutover 113 does not change that.
+Private overlay remains
+H7–H9 book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.

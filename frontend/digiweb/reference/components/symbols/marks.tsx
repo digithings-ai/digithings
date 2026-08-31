@@ -6,10 +6,9 @@
  * shared primitives for the symbols page and the phone demo.
  *
  * - DigiquantMark: four strokes in currentColor; strokes keep their
- *   `olympus-stroke-N` classes by default so the dashboard's stroke-draw
+ *   `dq-stroke-N` classes by default so the dashboard's stroke-draw
  *   loader animation could be replayed via CSS if ever wanted here
  *   (`strokeClassPrefix` retargets them, e.g. to `atlas-loader-stroke-N`).
- *   `OlympusMark` is a one-release alias.
  * - Wordmark: the text lockup grammar shared with the footer colophon —
  *   `digi` in ink, the suffix wearing var(--accent) so a livery scope
  *   (e.g. `.accent-digiquant`) dresses it automatically. Mono, weight 500.
@@ -22,5 +21,4 @@ import { DigiquantMark as SharedDigiquantMark, Wordmark as SharedWordmark } from
 // Const aliases (not a bare `export … from`) so build-manifest.mjs's
 // export-name scan keeps indexing this specimen on the symbols page.
 export const DigiquantMark = SharedDigiquantMark;
-export const OlympusMark = SharedDigiquantMark;
 export const Wordmark = SharedWordmark;

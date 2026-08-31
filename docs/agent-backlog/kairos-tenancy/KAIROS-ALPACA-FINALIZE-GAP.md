@@ -55,7 +55,7 @@ remain blocked.
 
 - `digiquant/supabase/migrations/108_entitlement_grants_and_products.sql`
 - EF `_shared/access.ts` + settings effective-tier gate + Deno tests
-- Olympus entitlements free-teaser + `access.ts` / hooks + FX Hub UI gate
+- Dashboard entitlements free-teaser + `access.ts` / hooks + FX Hub UI gate
 - SETTINGS-IA + D1 amend + SCHEMA.md
 - Gap artifact: `/opt/cursor/artifacts/kairos-alpaca-finalize-gap.md`
 

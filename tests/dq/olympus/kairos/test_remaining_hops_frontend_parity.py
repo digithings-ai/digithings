@@ -19,7 +19,7 @@ from digiquant.olympus.kairos.remaining_hops import (
 
 pytestmark = pytest.mark.unit
 
-_TS = Path("frontend/olympus/lib/remaining-hops.ts")
+_TS = Path("frontend/dashboard/lib/remaining-hops.ts")
 
 
 def _ts_source() -> str:
