@@ -1,7 +1,7 @@
 'use client';
 
-import { useSyncExternalStore, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
 import AppFrame from '@/components/app-frame';
@@ -9,10 +9,14 @@ import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
 
 /** Exact auth routes (Next usePathname strips basePath). */
-const AUTH_PATHS = new Set(['/login', '/auth/callback']);
+const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
 
 /** Prefixed forms if a caller ever passes a full path including basePath. */
-const AUTH_PATHS_WITH_BASE = new Set(['/olympus/login', '/olympus/auth/callback']);
+const AUTH_PATHS_WITH_BASE = new Set([
+  '/olympus/login',
+  '/olympus/signup',
+  '/olympus/auth/callback',
+]);
 
 /**
  * Paths that complete or start OAuth without a session (no dashboard chrome).
@@ -21,6 +25,20 @@ const AUTH_PATHS_WITH_BASE = new Set(['/olympus/login', '/olympus/auth/callback'
 export function isOlympusAuthPath(pathname: string | null): boolean {
   const norm = (pathname ?? '').replace(/\/+$/, '') || '/';
   return AUTH_PATHS.has(norm) || AUTH_PATHS_WITH_BASE.has(norm);
+}
+
+/** PKCE callback only — must run even when a session already exists. */
+export function isOlympusAuthCallbackPath(pathname: string | null): boolean {
+  const norm = (pathname ?? '').replace(/\/+$/, '') || '/';
+  return norm === '/auth/callback' || norm === '/olympus/auth/callback';
+}
+
+function SignedInAuthPathRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/');
+  }, [router]);
+  return <AuthLoadingScreen />;
 }
 
 /** false during SSR/prerender; true after client hydrate. */
@@ -53,7 +71,9 @@ function AuthLoadingScreen() {
 /**
  * Flag-aware auth guard (T1).
  * - Flag off → AppProviders + children (today's shell).
- * - Flag on + auth route → children only (login / PKCE callback, no chrome).
+ * - Flag on + `/login` or `/signup` with a session → replace home (email
+ *   sign-in would otherwise sit on the card; callback is excluded so PKCE
+ *   can finish).
  * - Flag on + not yet mounted → full shell (prerender-safe; static export keeps <h1>).
  * - Flag on + mounted + loading → session check *inside* AppProviders so
  *   DashboardProvider is not unmounted (a remount aborted house fetches and
@@ -70,7 +90,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <AppProviders>{children}</AppProviders>;
   }
 
+  if (isOlympusAuthCallbackPath(pathname)) {
+    return <>{children}</>;
+  }
+
   if (isOlympusAuthPath(pathname)) {
+    if (mounted && !loading && session) {
+      return <SignedInAuthPathRedirect />;
+    }
     return <>{children}</>;
   }
 

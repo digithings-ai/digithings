@@ -74,12 +74,12 @@ describe('SettingsContent', () => {
     expect(render()).not.toContain('fin-blue');
   });
 
-  it('page variant shows Custom-tier workspace gates and Billing anchor', () => {
-    const locked = render({ variant: 'page', tier: 'free' });
-    expect(locked).toContain('settings-workspace-gates');
-    expect(locked).toContain('locked-surface');
-    expect(locked).toContain('settings-billing-anchor');
-    expect(locked).toContain('id="billing"');
+  it('page variant omits Custom+ workspace gates for Observer; shows them for Custom', () => {
+    const observer = render({ variant: 'page', tier: 'free' });
+    expect(observer).toContain('settings-billing-anchor');
+    expect(observer).toContain('id="billing"');
+    expect(observer).not.toContain('locked-surface');
+    expect(observer).not.toContain('tier-unlocked-note');
 
     const unlocked = render({ variant: 'page', tier: 'custom' });
     expect(unlocked).toContain('tier-unlocked-note');

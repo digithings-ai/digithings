@@ -198,19 +198,20 @@ export default function Sidebar() {
         >
           {authEnabled && user ? (
             <div
-              className={`mb-3 flex flex-col gap-2 ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              className={`acct-session-rail ${sidebarCollapsed ? 'md:items-center' : ''}`}
               data-testid="sidebar-auth-identity"
             >
               <p
-                className={`truncate text-xs text-ink-mute ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                className={`acct-session-email ${sidebarCollapsed ? 'md:sr-only' : ''}`}
                 title={identityLabel}
               >
                 {identityLabel}
               </p>
+              <p className={`acct-session-meta ${sidebarCollapsed ? 'md:sr-only' : ''}`}>signed in</p>
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className={`inline-flex items-center gap-2 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
+                className={`btn-ghost inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs ${
                   sidebarCollapsed ? 'md:justify-center md:px-2' : ''
                 }`}
                 aria-label="Sign out"
@@ -219,7 +220,7 @@ export default function Sidebar() {
                 <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
               </button>
               {signOutError ? (
-                <p className="text-xs text-down" role="alert">
+                <p className="acct-error" role="alert">
                   {signOutError}
                 </p>
               ) : null}

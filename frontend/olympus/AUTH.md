@@ -8,13 +8,14 @@ key cannot be hidden in a static bundle.
 
 ## App auth (T1)
 
-Product login is **Supabase Auth** with **Google + GitHub OAuth** over the
+Product login is **Supabase Auth** with **Google + GitHub OAuth** (and email/password) over the
 browser PKCE flow (`@supabase/supabase-js` only — no custom cookies or token
 storage). Routes:
 
 | Path | Role |
 |------|------|
-| `/olympus/login/` | Start OAuth (`signInWithOAuth`) |
+| `/olympus/login/` | Start OAuth / email sign-in (`signInWithOAuth`, `signInWithPassword`) |
+| `/olympus/signup/` | Same card, create-account mode (`signUpWithPassword`) |
 | `/olympus/auth/callback/` | Client-side PKCE completion (static page — no route handlers) |
 
 Everything is behind `NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time). Flag **off**
@@ -31,6 +32,21 @@ attaches the user JWT. `anon_read` policies are `TO anon` only — sending the
 JWT (`role=authenticated`) hides house rows and 406s `daily_snapshots.single()`.
 Do not point `lib/queries.ts` at the PKCE singleton until cutover 900 replaces
 anon_read with authenticated house/teaser policies.
+
+OAuth starts with `skipBrowserRedirect: true` so the app assigns `data.url`
+itself (Google otherwise drops the redirect on the static `/olympus/` basePath).
+Google also sends `queryParams.access_type=offline` and `prompt=select_account`.
+The PKCE client sets `detectSessionInUrl: false` so only the callback page
+exchanges `?code=` (`exchangeCodeForSession`). Auto-detect would race the
+one-shot code. The callback reads `error` / `error_description`, and fails
+closed if neither a code nor a session appears. While `?code=` is present,
+`onAuthStateChange` ignores `INITIAL_SESSION` / `TOKEN_REFRESHED` from a
+persisted session so PKCE can finish; `SIGNED_IN` (or a successful
+`exchangeCodeForSession`) is what navigates home. If Google still fails after
+that, the provider is disabled or the Google Cloud client redirect
+(`https://<ref>.supabase.co/auth/v1/callback`) is missing — dashboard work,
+not an app bug. Email/password sign-in replaces to `/` (AuthGate will not
+keep a signed-in user on `/login/` or `/signup/`).
 
 ### Env / build
 

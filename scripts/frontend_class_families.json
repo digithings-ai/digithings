@@ -1,6 +1,7 @@
 {
   "_note": "Baseline of app-local CSS component-class families (first hyphen segment of classes DEFINED in each app's own css). The frontend canon guard (#1421) fails when an app grows a NEW family: new UI belongs in the reference + @digithings/web first (frontend/digiweb/MIGRATION.md). To extend deliberately, add the prefix here in the same PR with a justifying comment in that PR's body.",
   "_frozen": "2026-07-08 \u2014 post component-consolidation epic (#1414)",
+  "_acct": "olympus .acct-* is the digiweb account family (login, signup, session, settings) born in frontend/digiweb/reference/app/account/account.css. Olympus consumes the same prefix rather than forking a local one (PR #3264).",
   "digithings-web": [
     "brand",
     "dc",
@@ -24,6 +25,7 @@
     "ts"
   ],
   "olympus": [
+    "acct",
     "atlas",
     "dbar",
     "glass",
