@@ -21,6 +21,7 @@ from digiquant.olympus.overlay.dispatch import (
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
+from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE, OverlayLegacyBookBlocked
 from digiquant.olympus.overlay.runner import (
     OverlayError,
     OverlayRunRequest,
@@ -234,9 +235,10 @@ def _book_state(*, workspace_id: str | None = None) -> AtlasResearchState:
     return state
 
 
-def test_overlay_book_stamps_overlay_workspace_house_untouched(
+def test_overlay_book_refuses_while_legacy_unique_remains(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Persist=1 must not stamp overlay positions/NAV onto UNIQUE(date) tables."""
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay_id = uuid4()
     client = FakeSupabaseClient(
@@ -247,23 +249,19 @@ def test_overlay_book_stamps_overlay_workspace_house_untouched(
             "positions": [],
         }
     )
-    booked = book_portfolio(
-        client=client,
-        state=_book_state(workspace_id=str(overlay_id)),
-        book={
-            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
-            "actions": [],
-            "notes": "overlay",
-        },
-    )
-    assert booked.weights["SPY"] == 100.0
-    positions = client.store.get("positions", [])
-    nav = client.store.get("nav_history", [])
-    assert positions
-    assert all(row["workspace_id"] == str(overlay_id) for row in positions)
-    assert all(row["workspace_id"] != str(house_workspace_id()) for row in positions)
-    assert nav
-    assert all(row["workspace_id"] == str(overlay_id) for row in nav)
+    with pytest.raises(OverlayLegacyBookBlocked) as exc:
+        book_portfolio(
+            client=client,
+            state=_book_state(workspace_id=str(overlay_id)),
+            book={
+                "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
+                "actions": [],
+                "notes": "overlay",
+            },
+        )
+    assert exc.value.code == LEGACY_BOOK_UNIQUE_CODE
+    assert client.store.get("positions", []) == []
+    assert client.store.get("nav_history", []) == []
 
 
 def test_house_book_stamp_remains_house_workspace() -> None:
