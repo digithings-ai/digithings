@@ -60,7 +60,11 @@ Wave E
       [#3331](https://github.com/digithings-ai/digithings/pull/3331) squash-merged
       to `main` as `9f898ec1d` (2026-08-31T20:10Z): stamps house UUID
       `6b753576-ced9-5319-9bfa-c5d0aacd9319` in `_insert` / nav / positions /
-      metrics; **keeps** `on_conflict=date` / `date,ticker`. Next scheduled GHA
+      metrics; **keeps** `on_conflict=date` / `date,ticker`. UUID payload
+      stringify hotfix [#3334](https://github.com/digithings-ai/digithings/pull/3334)
+      squash-merged to `main` as `3601f72df` (2026-08-31T20:39Z): `_json_safe`
+      coerces `UUID` the same way it already coerced `date`/`datetime` (GHA
+      retries died in `publish_document` after the `23502`). Next scheduled GHA
       (`cron: "0 12 * * *"`, ~12:00 UTC) is the live book-commit proof. Do
       **not** `workflow_dispatch`; do **not** apply staged 113 while main writers
       still upsert date-only. Unit green is not a substitute for a green house
