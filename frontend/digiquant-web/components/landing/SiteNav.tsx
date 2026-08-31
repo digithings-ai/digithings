@@ -9,12 +9,8 @@
  * dismissal, and body-scroll lock all live in the primitive; only the dress
  * arrives from here.
  *
- * The dashboard CTA opens the app at `/olympus/` (a full cross-app
- * navigation — the dashboard is a separate export assembled into `dist/olympus/`, so
- * it's a plain <a>, not a Next <Link>, and matches the subsystems page).
- * Desktop chrome is the teal dashboard mark only (aria-label names the
- * destination). The sheet CTA still says Open dashboard. "Desk" in the text
- * links scrolls to `/#desk`. Path `/olympus/` stays until ADR-0026 wave 2.
+ * Dashboard CTA is a plain <a href="/olympus/"> (separate export; path stays
+ * until ADR-0026 wave 2). Desktop: teal mark only. Sheet: Open dashboard.
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
@@ -37,15 +33,7 @@ export function SiteNav() {
           >
             <GitHubGlyph />
           </a>
-          {/* Desktop twin of the sheet CTA — icon-only teal mark. The wordmark
-              is already digiquant; a "dashboard" label next to the mark was a
-              second name in the chrome. `.dq-nav-olympus-cta` (globals.css)
-              sizes the hit target; `.olympus-cta` owns the stroke-draw idle
-              (every 10s) and the hover replay. Hides at the same 880px
-              breakpoint where the inline links yield to the hamburger.
-              hidden! (important): `.olympus-cta`'s `display: inline-flex` is
-              unlayered on purpose in globals.css (sheet-slot rule) and
-              outranks the layered utility. */}
+          {/* Icon-only desktop twin. hidden! beats unlayered .olympus-cta display. */}
           <a
             className="dq-nav-olympus-cta olympus-cta max-[880px]:hidden!"
             href="/olympus/"

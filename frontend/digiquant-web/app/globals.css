@@ -176,15 +176,15 @@ html {
 .olympus-stroke-2 { --ol-len: 190; }
 .olympus-stroke-3 { --ol-len: 45; }
 .olympus-stroke-4 { --ol-len: 165; }
-.olympus-cta .olympus-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.olympus-cta .olympus-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
-.olympus-cta .olympus-stroke-2 { animation-delay: 0.03s; }
-.olympus-cta .olympus-stroke-3 { animation-delay: 0.06s; }
-.olympus-cta .olympus-stroke-4 { animation-delay: 0.09s; }
+.dq-nav-olympus-cta .olympus-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dq-nav-olympus-cta .olympus-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
 .olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 .olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.olympus-cta .olympus-stroke-2,
 .olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
+.olympus-cta .olympus-stroke-3,
 .olympus-cta:hover .olympus-stroke-3 { animation-delay: 0.06s; }
+.olympus-cta .olympus-stroke-4,
 .olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
@@ -202,8 +202,8 @@ html {
   6.2%, 100% { stroke-dashoffset: 0; opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .olympus-cta .olympus-mark,
-  .olympus-cta .olympus-stroke,
+  .dq-nav-olympus-cta .olympus-mark,
+  .dq-nav-olympus-cta .olympus-stroke,
   .olympus-cta:hover .olympus-mark,
   .olympus-cta:hover .olympus-stroke { animation: none; }
 }
