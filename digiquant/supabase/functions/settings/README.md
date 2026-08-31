@@ -88,13 +88,18 @@ See `docs/agent-backlog/kairos-tenancy/SETTINGS-IA.md`.
 ```bash
 supabase secrets set \
   DIGIQUANT_VAULT_MASTER_KEY="$(openssl rand -base64 32)" \
-  APP_URL=https://app.example \
+  APP_URL=https://digiquant.io \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…   # never NEXT_PUBLIC_
   FX_HUB_INVITE_HASH=…           # sha256 hex of the 12x invite; never NEXT_PUBLIC_
 ```
 
-Pinned OAuth callback: `{APP_URL}/dashboard/settings/brokers/callback/`.
+`APP_URL` must be the **site origin** (`https://digiquant.io`) — never
+`http://127.0.0.1` and never a path that already includes `/dashboard`
+(helpers in `_shared/app-url.ts` strip a trailing `/dashboard`, and a leftover
+`/olympus` suffix, to avoid doubling `basePath`). Pinned OAuth callback:
+`{origin}/dashboard/settings/brokers/callback/`. Billing return:
+`{origin}/dashboard/settings/?tab=billing`.
 
 ## Tests
 

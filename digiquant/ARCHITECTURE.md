@@ -3232,14 +3232,15 @@ to `kairos-cron-check.yml` on a `chore/` or `feat/` branch. Missing
 `CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
 must never pass `--execute`, `--all`, or invoke `hermes.chain`.
 
-**Omitted `workspace_id` means the house.** Readers and writers that leave the
-argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
-`_prior_nav`, `_recent_navs` / `breaker_scale_from_nav_history`,
-`opening_snapshot` Group A reads, `_prune_orphan_positions`, `_rows_for_date`,
-`_pending_order_heads`, `refresh_attribution.py` positions, and
-`finalize_period_accounting.py` Group A nav/positions) filter **and** stamp
-`house_workspace_id()`. They never
-mean "every row". House atlas ops readers (`repair_supabase_portfolio_data`,
+**Omitted `workspace_id` means the house.** Scannable developer guide:
+[`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md). Readers and
+writers that leave the argument off (`load_prior_book`,
+`load_portfolio_performance_snapshot`, `_prior_nav`, `_recent_navs` /
+`breaker_scale_from_nav_history`, `opening_snapshot` Group A reads,
+`_prune_orphan_positions`, `_rows_for_date`, `_pending_order_heads`,
+`refresh_attribution.py` positions, and `finalize_period_accounting.py` Group A
+nav/positions) filter **and** stamp `house_workspace_id()`. They never mean
+"every row". House atlas ops readers (`repair_supabase_portfolio_data`,
 `seed_ledger_opening_snapshot`, `backfill_position_events`,
 `ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
 `validate_db_first` Group A checks and house ``documents`` presence
