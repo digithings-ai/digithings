@@ -97,7 +97,7 @@ Claude Code operating on this repo (local or cloud) **must follow this sequence*
 ### 2a. Pre-flight (before writing any code)
 
 ```
-1. Read CLAUDE.md                         ← repo rules + workflows
+1. Read AGENTS.md                         ← repo rules + workflows (CLAUDE.md points here)
 2. Read {component}/AGENTS.md             ← per-module pre-flight checklist
 3. Read {component}/ARCHITECTURE.md       ← module map, extension points
 4. Read docs/agents/EXECUTION_TIERS.md    ← confirm this task actually needs Tier 3
@@ -118,7 +118,7 @@ ISSUE=N` handles it.
 
 ### 2c. Implementation rules
 
-Canonical rules in `CLAUDE.md` + `agents.yml`. Key constraints:
+Canonical rules in `AGENTS.md` + `agents.yml`. Key constraints:
 
 - **Polars only** — never import pandas
 - **Pydantic v2** — model_validator, field_validator; no v1 syntax
@@ -207,7 +207,7 @@ follow-up `exec:claude` issue with the error logs.
 | Cursor tier onboarding | `docs/agents/CURSOR_AGENT_ONBOARDING.md` |
 | Component routing | `docs/agents/COMPONENT_ROUTING.md` |
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
-| Claude rules | `CLAUDE.md` + `.claude/agents/` + `.claude/skills/` |
+| Claude rules | `AGENTS.md` (canonical) + `CLAUDE.md` (pointer) + `.claude/agents/` + `.claude/skills/` |
 | Scoring rubrics | `docs/scoring/` |
 | Cloud dispatch | `.github/workflows/agent-claude-dispatch.yml` |
 | Project-status automation | `.github/workflows/project-status.yml` |

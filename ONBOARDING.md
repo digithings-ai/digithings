@@ -1,6 +1,6 @@
 # Onboarding — Developing on digithings
 
-Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [CLAUDE.md](CLAUDE.md) (repo-wide agent rules) and [AGENTS.md](AGENTS.md) (stack-wide non-negotiables) — read both once, then come back here to see how the pieces connect day-to-day.
+Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
 
 If you're a new human contributor, skim this front-to-back and run the one-time setup.
 If you're a Claude Code session picking this up fresh, the later sections are the playbook.
@@ -156,7 +156,7 @@ Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` sk
 
 1. **Pre-push**: local `pre-push` hook blocks pushes to non-origin remotes, pushes to `main` without `ALLOW_MAIN_PUSH=1`, and live-trading-path pushes without a `Human-Approved-By:` trailer.
 2. **CI on open**: lint, unit tests, scoring gate, doc-link check, agents-init drift check.
-3. **Review**: invoke `/review` on your own PR before asking a human — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see CLAUDE.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available.
+3. **Review**: invoke `/review` on your own PR — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see AGENTS.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available. Then merge when merge-ready ([AGENTS.md § Merge-when-ready](AGENTS.md#merge-when-ready)).
 4. **CI red?** `/triage <N>` buckets failures by type and proposes minimal fix commands.
 5. **Security-sensitive changes**: run `/security-review` on the branch before requesting review.
 
@@ -198,7 +198,7 @@ make up-digichat / make down-digichat
 make test                           # unit + e2e (needs stack up)
 make test-unit                      # pytest -m unit (no stack)
 make test-e2e                       # pytest -m e2e
-make test-cov                       # coverage (needs `pip install -e` for each service — see CLAUDE.md)
+make test-cov                       # coverage (needs `pip install -e` for each service — see AGENTS.md)
 
 # Agent dev kit
 make status [COMPONENT=x]           # open agent-task issues
@@ -233,8 +233,8 @@ make find-stale                     # find stale branches / artifacts
 
 ## 9. Where to find more
 
-- [CLAUDE.md](CLAUDE.md) — repo-wide instructions for Claude Code sessions.
-- [AGENTS.md](AGENTS.md) — stack-wide non-negotiable rules (applies to every IDE / agent).
+- [AGENTS.md](AGENTS.md) — canonical repo-wide agent rules (every IDE / agent).
+- [CLAUDE.md](CLAUDE.md) — Claude Code loader stub; points at AGENTS.md.
 - [docs/VISION.md](docs/VISION.md) — product strategy and roadmap.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram.
 - [docs/adr/](docs/adr/) — architecture decision records. 0002 (two-domain plan), 0006 (public dogfood projects), 0009 (frontend umbrella) are the most referenced.

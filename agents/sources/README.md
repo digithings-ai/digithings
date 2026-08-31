@@ -43,7 +43,7 @@ CI catches drift via `scripts/agents_init.py --check` — a PR whose generated f
 There is deliberately no `pr-reviewer`/`security-reviewer` subagent here — that job
 already has three owners (Cursor Bugbot, the `/review` command's fresh-context
 lens fan-out in `agents/sources/commands/review.md`, and the `pr-review-toolkit` +
-`superpowers:requesting-code-review` plugin skills). See CLAUDE.md § Model &
+`superpowers:requesting-code-review` plugin skills). See AGENTS.md § Model &
 subagent policy for the full reasoning.
 
 ### Skills (`agents/sources/skills/`)

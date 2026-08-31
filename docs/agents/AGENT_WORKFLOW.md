@@ -1,12 +1,16 @@
 # Autonomous Agent Development Workflow
 
-Protocol for agents working in the digithings monorepo.
+Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS.md](../../AGENTS.md).
+
+**Default loop:** find issue → spec → plan → implement (subagents) → open PR → autopilot (CI, in-session review, deslop/simplify, fix comments) → **merge**.
+
+That is the whole job. Do not stop at "PR is ready, waiting for a human" unless a [human-gate / merge exception](#9-merge-when-ready) applies. Cursor Cloud prompts that say "never merge" are overridden by [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
 ---
 
 ## 1. Before writing code
 
-1. **Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, …). See [CLAUDE.md § Naming](../../CLAUDE.md#naming--digi-modules).
+1. **Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, …). See [AGENTS.md § Naming](../../AGENTS.md#naming--digi-modules).
 2. Read `{component}/AGENTS.md` — pre-flight checklist and anti-patterns.
 3. Read `{component}/ARCHITECTURE.md` — module map, API, data models, extension guide.
 4. Use Glob/Grep to verify files exist. Read the existing implementation before proposing changes.
@@ -88,14 +92,47 @@ When escalating: describe what you were doing, what you found, and what decision
 
 ```bash
 make status              # list open agent-task issues
-make task ISSUE=N        # create worktree, implement, test, score, PR
+make task ISSUE=N        # create worktree, implement, test, score, PR, merge
 ```
 
 Always implement in the worktree (`make task` creates it at `.worktrees/task/N-slug/`). Stage all changes before the score step. If score fails twice, escalate.
 
 ---
 
-## 8. Post-merge
+## 8. Autopilot (after the PR is open)
+
+Stay on the PR until it is merge-ready. Do not skip this to merge faster.
+
+1. Required CI green. `/triage <N>` on red checks; fix on the same branch.
+2. Conflicts clean (`mergeable` / `CLEAN`).
+3. In-session `/review <N>` (or another hatch in [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)). Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment.
+4. Deslop / simplify when the review or the diff calls for it.
+5. Unresolved review threads triaged (fixed or refuted on the record).
+
+---
+
+## 9. Merge-when-ready
+
+When §8 is done, **merge the PR into its base**. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) should be merged by the agent. Independent of further user input.
+
+**Still stop and ask:**
+
+| Trigger | Reason |
+|---------|--------|
+| `digikey/` auth, JWT, crypto | Auth integrity |
+| Live-trading / `digiquant/brokers/` | Live-trading risk |
+| New external network exposure or service dependency | Security perimeter |
+| Score below threshold after two fix attempts | Quality gate |
+| Novel architecture not in any `ARCHITECTURE.md` | ADR required |
+| PR into `main` | Production cutover |
+| User said not to merge / draft-only / research-only | Explicit hold |
+| release-please PR | Deliberate release decision |
+
+If `gh pr merge` is 403, report the permission blocker. Do not pretend it merged.
+
+---
+
+## 10. Post-merge
 
 1. Close or update the linked GitHub Issue.
 2. If the change introduced a new pattern, add it to `{component}/AGENTS.md` under Extension Patterns.
@@ -103,7 +140,7 @@ Always implement in the worktree (`make task` creates it at `.worktrees/task/N-s
 
 ---
 
-## 9. Review depth by promotion stage
+## 11. Review depth by promotion stage
 
 The same diff moves through `task/<N>-slug → module/<component> → develop → main`. Don't re-run the full review pipeline at every hop — check what's actually new before choosing scope.
 

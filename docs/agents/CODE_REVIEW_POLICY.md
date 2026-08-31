@@ -42,3 +42,8 @@ Do not run every lens at opus on a tiny diff. Do not leave review `model` unset 
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
+- Do not skip review coverage just to merge faster. After the hatches above are satisfied and CI is green, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
+
+## After review: merge
+
+Review is a step in the loop, not a hand-off that leaves the PR open. When required CI is green, threads are triaged, and a coverage hatch is on the record, the authoring agent merges into the PR's base unless a human-gate exception in AGENTS.md applies (including PRs into `main`).

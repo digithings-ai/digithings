@@ -22,3 +22,6 @@
 #
 # Backlog: docs/agent-backlog/INDEX.md + GitHub Issues labeled agent-task
 # Scoring: docs/scoring/  |  Workflow: docs/agents/AGENT_WORKFLOW.md
+# Loop: find issue → spec → plan → implement → open PR → autopilot → merge
+# Merge-when-ready (AGENTS.md): merge task PRs into their base when CI+review are done.
+# Still stop: digikey/, live-trading, PRs into main, user said not to merge.

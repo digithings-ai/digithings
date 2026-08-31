@@ -194,8 +194,9 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 ## Auto-Merge Eligibility
 
-Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes.
-Code PRs require all score thresholds met + CI green + no human gate triggered.
+After autopilot (required CI green, in-session review posted when required by [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md), comments triaged), **merge the task PR into its base**. Do not stop at "report ready, wait". Cursor Cloud "never merge" prompts are overridden by [`AGENTS.md`](AGENTS.md). Exceptions: human-gate paths, PRs into `main`, user said not to merge.
+
+Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes as a backstop. GitHub Actions `automerge-agent` is also a backstop — it does not replace the authoring agent's merge step.
 """
 
 

@@ -30,7 +30,7 @@ For each acceptance criterion, one at a time:
 - **One criterion, one commit.** Each commit should have a one-line message matching `feat(component): <criterion summary>`.
 - **Red-green-refactor in that order.** Never write implementation before a failing test is visible.
 - **If a criterion can't be tested** (e.g., "UX should feel snappy"), stop and ask the user to make it testable — or mark it explicitly as "manual verification only" and note that in the PR body.
-- **Respect the non-negotiables** in `CLAUDE.md`: Polars only, Pydantic v2, LangGraph for orchestration, LiteLLM for LLM routing, NautilusTrader for backtest.
+- **Respect the non-negotiables** in `AGENTS.md`: Polars only, Pydantic v2, LangGraph for orchestration, LiteLLM for LLM routing, NautilusTrader for backtest.
 - **Structured errors, not silent failures.** Any `except` that isn't re-raising must log with context.
 
 ## When tests already exist for the behavior
