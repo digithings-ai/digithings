@@ -346,7 +346,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    Padding on the track is load-bearing: `.dqp-step.cur` lifts the active card
    (`translateY(-5px)`), and without this inset the In-development card (and
    every other phase card on the slide) collides with the engine copy above. */
-.dqp-track { margin-top: 1.75rem; overflow: hidden; padding: 1.25rem 2px 0.85rem; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
+.dqp-track { margin-top: 2.4rem; overflow: hidden; padding: 1.75rem 2px 1rem; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 0; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
 .dqp-step.lit { opacity: 1; border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
