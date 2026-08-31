@@ -128,6 +128,9 @@ P6 ops-book PR). House GHA chain Group A **reads** (`commit_io._prior_nav`,
 house `workspace_id` so overlay NAV/positions cannot compound the house index.
 House research/MCP `query_data` likewise defaults Group A tables to house
 when `eq` omits `workspace_id` (overlay same-date rows cannot seed agents).
+House ops `backfill_position_event_reasons` pages house `position_events`
+only (overlay rows are not rewritten by id). `audit_activity_coverage_api`
+max-dates ignore later overlay Group A rows.
 Overlay same-day books still collide until those 097 keys are
 **dropped** on `core` (after `main` house GHA writers are also widened). Staged
 cutover **113** (`migrations/cutover/113_drop_legacy_book_uniques.sql`) holds

@@ -187,3 +187,57 @@ class TestBackfillPmThesisMapIsHouseScoped:
         text = (_SCRIPTS / "backfill_pm_rebalance_and_activity.py").read_text(encoding="utf-8")
         assert 'eq_house_workspace(sb.table("positions").select("ticker,thesis_id"))' in text
         assert 'sb.table("positions").select("ticker,thesis_id").eq("date", d)' not in text
+
+
+class TestBackfillEventReasonsIgnoresOverlay:
+    def test_house_event_page_drops_overlay_listed_first(self) -> None:
+        mod = _load("backfill_position_event_reasons")
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "position_events": [
+                    {
+                        "id": "ov",
+                        "date": "2026-08-31",
+                        "ticker": "EVIL",
+                        "event": "HOLD",
+                        "reason": "HOLD",
+                        "workspace_id": _OVERLAY,
+                    },
+                    {
+                        "id": "hs",
+                        "date": "2026-08-31",
+                        "ticker": "IAU",
+                        "event": "HOLD",
+                        "reason": "HOLD",
+                        "workspace_id": _HOUSE,
+                    },
+                ]
+            }
+        )
+        rows = mod._house_event_page(sb, 0, 800)
+        assert [r["ticker"] for r in rows] == ["IAU"]
+        assert [r["id"] for r in rows] == ["hs"]
+
+
+class TestAuditCoverageIgnoresOverlay:
+    def test_group_a_max_date_ignores_later_overlay_row(self) -> None:
+        mod = _load("audit_activity_coverage_api")
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "position_events": [
+                    {"date": "2026-08-01", "ticker": "IAU", "workspace_id": _HOUSE},
+                    {"date": "2026-08-31", "ticker": "EVIL", "workspace_id": _OVERLAY},
+                ],
+                "positions": [
+                    _pos("2026-08-01", "IAU", workspace_id=_HOUSE),
+                    _pos("2026-08-31", "EVIL", workspace_id=_OVERLAY),
+                ],
+                "nav_history": [
+                    {"date": "2026-08-01", "nav": 100.0, "workspace_id": _HOUSE},
+                    {"date": "2026-08-31", "nav": 999.0, "workspace_id": _OVERLAY},
+                ],
+            }
+        )
+        assert mod._max_date(sb, "position_events") == "2026-08-01"
+        assert mod._max_date(sb, "positions") == "2026-08-01"
+        assert mod._max_date(sb, "nav_history") == "2026-08-01"
