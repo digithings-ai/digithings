@@ -1,8 +1,4 @@
 {
-  "source": "stage_a",
-  "require_extras": true,
-  "evaluator": "curve_simulator",
-  "objective_approx": 105.48,
   "weights": {
     "valuation": 1.0,
     "m2": 0.0,
@@ -10,7 +6,26 @@
     "dxy": 0.0,
     "weekly_rsi": 0.0,
     "weekly_macd": 0.0,
-    "sma_band": 0.5
+    "sma_band": 0.0
   },
-  "notes": "Stage A require_extras winner for published btc_sdca. Extra that survived is sma_band (weekly_rsi weight 0). Objective ~105.48 is worse cycle overlap than valuation-only (~126) by design — valuation-only + balanced long_only dumps cash and never sells. Paired with presets.json btc_optimized (sell_max_rate=5). Not an OOS claim; beats_flat_dca_oos is false."
+  "search_names": [
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band",
+    "m2",
+    "rs_eth",
+    "dxy"
+  ],
+  "catalog": [
+    "m2",
+    "rs_eth",
+    "dxy",
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band"
+  ],
+  "mean_is_vs_flat_dca_pct": 915.4254476758982,
+  "mean_oos_vs_flat_dca_pct": -7.787838707761549,
+  "num_evaluations": 1458,
+    "notes": "All-catalog extra search (grid 0/0.5/1, 1458 evals). Stage A scored by IS vs_flat_dca with a frozen distribute curve; extras without data skipped. search_names=['weekly_rsi', 'weekly_macd', 'sma_band', 'm2', 'rs_eth', 'dxy']. kept={}. Curve_simulator Stage B. beats_flat_dca_oos not an OOS claim. Linux Nautilus BacktestEngine not used (#42)."
 }

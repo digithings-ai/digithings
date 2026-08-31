@@ -63,10 +63,8 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     sdca = entry["sdca"]
     assert sdca["long_only"] is False
     weights = sdca["indicator_weights"]
-    extras = sum(
-        float(weights[k]) for k in ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy")
-    )
-    assert extras > 0.0
+    catalog = ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy")
+    assert set(catalog) <= set(weights)
     assert sdca["preset"] != "balanced"
 
 
@@ -167,7 +165,7 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert {"t", "low", "median", "high"} <= set(payload["rails"][0])
     assert "Coefficients" in " ".join(payload["notes"])
     assert "Preset btc_optimized" in " ".join(payload["notes"])
-    assert "sma_band:0.5" in " ".join(payload["notes"])
+    assert "valuation:1.0" in " ".join(payload["notes"])
     assert not any("calibrations.example" in rec.message for rec in caplog.records)
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
 

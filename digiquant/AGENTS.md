@@ -162,9 +162,10 @@ the full module map.
   the remaining book open at engine stop. `--push-supabase` is an operator
   step after a real Nautilus generate; do not run it from an agent
   environment.
-- **Published `btc_sdca` is composite + distribute.** Settings use
-  `indicator_weights` `{valuation: 1.0, sma_band: 0.5}` (require_extras Stage A)
-  and preset `btc_optimized` (sells enabled, `long_only: false`). Walk-forward
+- **Published `btc_sdca` is valuation rails + a distribute curve.** Full extra
+  catalog (`m2`, `rs_eth`, `dxy`, `weekly_rsi`, `weekly_macd`, `sma_band`) was
+  searched; IS vs-flat-DCA kept none of them (`indicator_weights` extras 0).
+  Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
   OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
   DCA; provenance stays honest.
 

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -188,3 +190,16 @@ def test_drop_extras_missing_sources_zeros_plugins_only() -> None:
     assert dropped.m2 == pytest.approx(0.0)
     assert dropped.weekly_rsi == pytest.approx(0.5)
     assert dropped.valuation == pytest.approx(1.0)
+
+
+def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
+    payload = json.loads(
+        (
+            Path(__file__).resolve().parents[4]
+            / "digiquant/src/digiquant/strategies/sdca/btc_composite_weights.json"
+        ).read_text()
+    )
+    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES)
+    assert payload["num_evaluations"] >= 128
+    kept = {k: v for k, v in payload["weights"].items() if k != "valuation" and v > 0}
+    assert kept == {}

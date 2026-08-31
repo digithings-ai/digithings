@@ -49,7 +49,7 @@
           "dxy": 0.0,
           "weekly_rsi": 0.0,
           "weekly_macd": 0.0,
-          "sma_band": 0.5
+          "sma_band": 0.0
         }
       }
     }

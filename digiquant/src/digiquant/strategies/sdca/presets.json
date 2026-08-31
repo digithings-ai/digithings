@@ -48,13 +48,13 @@
     }
   },
   "btc_optimized": {
-    "description": "Walk-forward winner (#3174). Not a published digiquant.io number. Composite valuation (require_extras Stage A: valuation + sma_band). Curve_simulator Stage B with sells enabled. beats_flat_dca_oos is false. Re-run with the Nautilus evaluator on real BTC when new history lands.",
+    "description": "Walk-forward winner (#3174). Not a published digiquant.io number. Re-run with the Nautilus evaluator on real BTC when new history lands. All-catalog extra search (grid 0/0.5/1, 1458 evals) kept no extras. Curve_simulator Stage B with sells enabled. beats_flat_dca_oos is false.",
     "long_only": false,
     "shape": {
-      "buy_max_rate": 4.0,
-      "buy_knee_risk": 30.0,
+      "buy_max_rate": 3.0,
+      "buy_knee_risk": 25.0,
       "sell_knee_risk": 70.0,
-      "sell_max_rate": 5.0,
+      "sell_max_rate": 3.0,
       "buy_curvature": 1.0,
       "sell_curvature": 2.0
     }
