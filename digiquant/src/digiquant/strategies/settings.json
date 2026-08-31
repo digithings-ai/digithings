@@ -16,25 +16,25 @@
     "btc_slapper": {
       "symbol": "BTC-USD",
       "ccxt_symbol": "BTC/USD",
-      "label": "BTC Slapper",
+      "label": "BTC L/S",
       "kind": "long_short"
     },
     "eth_slapper": {
       "symbol": "ETH-USD",
       "ccxt_symbol": "ETH/USD",
-      "label": "ETH Slapper",
+      "label": "ETH L/S",
       "kind": "long_short"
     },
     "sol_slapper": {
       "symbol": "SOL-USD",
       "ccxt_symbol": "SOL/USD",
-      "label": "SOL Slapper",
+      "label": "SOL L/S",
       "kind": "long_short"
     },
     "btc_sdca": {
       "symbol": "BTC-USD",
       "ccxt_symbol": "BTC/USD",
-      "label": "BTC SDCA Strat",
+      "label": "BTC-SDCA",
       "kind": "dca",
       "strategy_type": "sdca",
       "sdca": {

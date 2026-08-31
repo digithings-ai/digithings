@@ -56,10 +56,13 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     settings = gts.load_settings()
     entry = settings["strategies"]["btc_sdca"]
     assert entry["symbol"] == "BTC-USD"
-    assert entry["label"] == "BTC SDCA Strat"
+    assert entry["label"] == "BTC-SDCA"
     assert entry["kind"] == "dca"
     assert gts.strategy_type_of(settings, "btc_sdca") == "sdca"
     assert gts.strategy_type_of(settings, "btc_slapper") == "slapper"
+    assert settings["strategies"]["btc_slapper"]["label"] == "BTC L/S"
+    assert settings["strategies"]["eth_slapper"]["label"] == "ETH L/S"
+    assert settings["strategies"]["sol_slapper"]["label"] == "SOL L/S"
     sdca = entry["sdca"]
     assert sdca["long_only"] is False
     weights = sdca["indicator_weights"]
@@ -86,7 +89,7 @@ def test_richer_composite_sidecar_matches_settings() -> None:
     published = settings["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
     assert sidecar["beats_flat_dca_oos"] is False
     assert sidecar["published_weights"] == published
-    assert sidecar["public_name"] == "BTC SDCA Strat"
+    assert sidecar["public_name"] == "BTC-SDCA"
 
 
 def test_sdca_risk_index_uses_signal_delayed_frame_only(tmp_path: Path) -> None:
