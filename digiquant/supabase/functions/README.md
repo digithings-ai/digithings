@@ -102,6 +102,8 @@ deno test --allow-env --allow-read \
   _shared/app-url.test.ts \
   _shared/access.test.ts \
   _shared/cors.test.ts \
+  _shared/profile-schemas.test.ts \
+  _shared/billing-auth.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
   stripe-webhook/stripe-webhook.test.ts \
