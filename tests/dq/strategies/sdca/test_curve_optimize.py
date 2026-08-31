@@ -373,9 +373,10 @@ class TestSearchAndPersist:
         assert weights.m2 == pytest.approx(0.5)
         assert weights.dxy == pytest.approx(0.5)
         assert weights.rs_eth == pytest.approx(0.0)
-        assert weights.weekly_rsi == pytest.approx(0.0)
-        assert weights.weekly_macd == pytest.approx(0.0)
         assert weights.sma_band == pytest.approx(0.0)
+        # Richer published composite (#3304): cycle-scaled oscillators, not 90-day z.
+        assert weights.weekly_rsi == pytest.approx(0.25)
+        assert weights.weekly_macd == pytest.approx(0.5)
 
     def test_cli_help_lists_command(self) -> None:
         result = CliRunner().invoke(digiquant_main, ["sdca-optimize-curve", "--help"])
