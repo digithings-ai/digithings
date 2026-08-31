@@ -19,8 +19,11 @@ intraday — before today's close lands in ``price_history`` — the index advan
 using the most recent *available* close pair, i.e. one trading-day phase lag.
 That is the standard, defensible behavior for an EOD-priced paper index.
 
-All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
-``nav_history`` on ``date``), so a re-run of the same date is a no-op-equivalent.
+All writes are idempotent upserts (``positions`` on
+``(workspace_id, date, ticker)``, ``nav_history`` / ``portfolio_metrics`` on
+``(workspace_id, date)``). This path stamps the house workspace. Overlay books
+stay refused (``legacy_book_unique``) until P6 drops 097's legacy ``UNIQUE(date)``
+arbiters. A re-run of the same house date is a no-op-equivalent.
 """
 
 from __future__ import annotations
@@ -42,6 +45,7 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
 from digiquant.olympus.performance_returns import calculate_performance_returns
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -276,13 +280,19 @@ def _upsert_portfolio_metrics(
 
     ``pnl_pct`` is the day-over-day NAV return (latest NAV pair).
 
-    Idempotent: upserts on ``date``.
+    Idempotent: upserts on ``(workspace_id, date)``.
     """
     date_str = run_date.isoformat()
+    workspace_id = str(house_workspace_id())
 
-    # Fetch all nav_history up to run_date for risk metrics.
+    # Fetch house nav_history up to run_date for risk metrics.
     resp = (
-        client.table("nav_history").select("date,nav").lte("date", date_str).order("date").execute()
+        client.table("nav_history")
+        .select("date,nav")
+        .eq("workspace_id", workspace_id)
+        .lte("date", date_str)
+        .order("date")
+        .execute()
     )
     nav_rows = list(getattr(resp, "data", None) or [])
     nav_observations = [row for row in nav_rows if row.get("date") and row.get("nav") is not None]
@@ -356,6 +366,7 @@ def _upsert_portfolio_metrics(
         alpha = performance_returns.relative_return_pct
 
     row: dict[str, Any] = {
+        "workspace_id": workspace_id,
         "date": date_str,
         "pnl_pct": pnl_pct,
         "sharpe": sharpe,
@@ -367,7 +378,7 @@ def _upsert_portfolio_metrics(
         "relative_return_pct": performance_returns.relative_return_pct,
         "benchmark_ticker": performance_returns.benchmark_ticker,
     }
-    client.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
+    client.table("portfolio_metrics").upsert(row, on_conflict="workspace_id,date").execute()
     logger.debug(
         "phase9d: portfolio_metrics upserted for %s (sharpe=%s, vol=%s, dd=%s, alpha=%s)",
         date_str,
@@ -606,12 +617,13 @@ def build_materialize_node(deps: MaterializeDeps):
 
         client.table("nav_history").upsert(
             {
+                "workspace_id": str(house_workspace_id()),
                 "date": date_str,
                 "nav": nav,
                 "cash_pct": cash_pct,
                 "invested_pct": round(invested, 4),
             },
-            on_conflict="date",
+            on_conflict="workspace_id,date",
         ).execute()
 
         # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
@@ -652,8 +664,10 @@ def build_materialize_node(deps: MaterializeDeps):
                 "phase9d: non-CASH positions missing thesis_id (will write NULL): %s",
                 _non_cash_missing_thesis,
             )
+        house_id = str(house_workspace_id())
         for row in pos_rows:
-            client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+            row["workspace_id"] = house_id
+            client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
         # Theses surface (#713): one thesis per held ticker, from the analyst
         # payloads + debate summaries already in state. Skips the CASH ledger row

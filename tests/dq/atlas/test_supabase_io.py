@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from digiquant.olympus.atlas.supabase_io import (
@@ -203,6 +204,29 @@ class TestPublishDailySnapshot:
         row = client.store["daily_snapshots"][0]
         json.dumps(row)  # must not raise
         assert row["snapshot"]["as_of"] == "2026-06-22"
+
+    def test_refuses_overlay_workspace(self) -> None:
+        client = FakeSupabaseClient()
+        with pytest.raises(ValueError, match="house digest table"):
+            publish_daily_snapshot(
+                client=client,
+                date_str="2026-08-31",
+                snapshot={"regime": "overlay"},
+                run_type="baseline",
+                workspace_id=str(uuid4()),
+            )
+        assert client.store.get("daily_snapshots", []) == []
+
+    def test_house_workspace_id_still_upserts(self) -> None:
+        client = FakeSupabaseClient()
+        publish_daily_snapshot(
+            client=client,
+            date_str="2026-08-31",
+            snapshot={"regime": "house"},
+            run_type="baseline",
+            workspace_id=str(house_workspace_id()),
+        )
+        assert len(client.store["daily_snapshots"]) == 1
 
 
 @pytest.mark.unit

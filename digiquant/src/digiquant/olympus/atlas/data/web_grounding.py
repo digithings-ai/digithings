@@ -1,11 +1,16 @@
-"""Web-grounding pre-pass for research phases (#650).
+"""Web-grounding pre-pass for research phases (#650 / #2567).
 
-For ``live_search`` segments, runs a read-only search pass scoped to the curated
-domain allowlist in ``config/search_domains.yaml``, returning a cited summary
-injected into ``phase_inputs`` before the normal structured-output research call.
+For ``live_search`` segments, runs a read-only search pass and returns a cited
+summary injected into ``phase_inputs`` before the normal structured-output
+research call.
 
-Uses OpenRouter's ``openrouter:web_search`` server tool (Exa engine) — requires
-``OPENROUTER_API_KEY`` only. Fails soft on error or missing key unless
+Olympus grounding uses **web-search-capable models only** (Perplexity /
+``:online``) via :func:`digigraph.model_config.get_grounding_model` — provider
+built-in search through :func:`digillm.openrouter_web_search`'s native branch.
+The Exa ``openrouter:web_search`` server-tool path stays available as a digillm
+toolkit fallback for non-native models; Olympus does not assemble Exa params.
+
+Requires ``OPENROUTER_API_KEY``. Fails soft on error or missing key unless
 ``OLYMPUS_WEB_SEARCH=required``.
 """
 
@@ -23,7 +28,7 @@ import yaml
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
-# Domain allowlist cap (Exa / OpenRouter web_search).
+# Soft focus hint for the grounding query (native search ignores Exa allowlists).
 _MAX_ALLOWED_DOMAINS = 5
 
 
@@ -67,25 +72,15 @@ def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
     return list(domains)[:_MAX_ALLOWED_DOMAINS] or None
 
 
-def _openrouter_web_search(
-    model: str,
-    query: str,
-    *,
-    allowed_domains: list[str] | None,
-    max_results: int,
-) -> tuple[str, list[str]] | None:
-    """OpenRouter-only web search dispatch."""
+def _openrouter_web_search(model: str, query: str) -> tuple[str, list[str]] | None:
+    """Olympus grounding dispatch — native search models only (no Exa params)."""
     if not model.startswith("openrouter/"):
         return None
     from digigraph.llm_client import openrouter_web_search
 
-    return openrouter_web_search(
-        model,
-        query,
-        allowed_domains=allowed_domains,
-        max_results=max_results,
-        engine="exa",
-    )
+    # Do not pass engine=/max_results=/allowed_domains= — those only apply to the
+    # digillm Exa toolkit branch, which Olympus must not use (#2567).
+    return openrouter_web_search(model, query)
 
 
 def fetch_web_grounding(
@@ -97,14 +92,13 @@ def fetch_web_grounding(
 ) -> dict[str, Any] | None:
     """Return ``{"summary", "sources", "as_of"}`` web grounding for a segment, or None."""
     cfg = _config()
+    # Domain list is folded into the natural-language query focus only; native
+    # provider search does not accept Exa allowlist tool params.
     allowed = _domains_for(segment, cfg)
-    max_results = int(cfg.get("max_search_results", 8))
-    result = _openrouter_web_search(
-        model,
-        _build_query(segment, run_date, scope),
-        allowed_domains=allowed,
-        max_results=max_results,
-    )
+    focus = scope
+    if allowed:
+        focus = (f"{scope} Prefer sources among: {', '.join(allowed)}.").strip()
+    result = _openrouter_web_search(model, _build_query(segment, run_date, focus))
     if result is None:
         if olympus_web_search_required():
             raise OlympusWebSearchError(

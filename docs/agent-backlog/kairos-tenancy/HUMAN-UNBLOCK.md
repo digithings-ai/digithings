@@ -1,6 +1,6 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: WAITING_HUMAN_CAPTCHA (2026-08-30T21:40Z) — NOT COMPLETE.** Identity: **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged). Forms still filled as `digithings@agentmail.to`; captchas still block Stripe (hCaptcha), Mailgun (reCAPTCHA), Alpaca (Turnstile). No vendor EF secrets set. Staging E2E exit **2** (9 named secrets). Olympus Auth Pages live (#3231) — **GitHub login proven on prod** (`auth.users` github + mig 107 Personal `plan_tier=free`). Live Settings EF proven from digiquant.io after CORS deploy (`cursor/settings-ef-cors-053b`): profile/notifications/brokers GET **200**; free connect → **`TIER_FORBIDDEN`**. Prod Settings **UI tabs** still need draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) promote (`main` is pre-T3 shell). Do not merge #3183 yet; never apply cutover 900.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-31T11:42Z) — NOT COMPLETE.** Identity: **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged). Forms still filled as `digithings@agentmail.to`; captchas still block Stripe (hCaptcha), Mailgun (reCAPTCHA), Alpaca (Turnstile). No vendor EF secrets set (`digithings-{stripe,mailgun,alpaca}.env` still absent). Staging E2E exit **2** (9 named secrets). Olympus Auth Pages live (#3231) — **GitHub login proven on prod**. Account Settings IA is on `develop` ([#3264](https://github.com/digithings-ai/digithings/pull/3264)) and remaining hops on Settings About ([#3269](https://github.com/digithings-ai/digithings/pull/3269)). Cloudflare Pages was stuck on `f1a196e5` after #3266 failed (Observer SSG lacks Pipeline/Keys testids the build script grepped). [#3275](https://github.com/digithings-ai/digithings/pull/3275) gated those greps and rebuilt `digiquant-io`: live `build-info.json` is `119b7838` / `2026-08-31T10:45:27Z`. Settings export now has “The desk, not the product.” and Notifications | Billing | About; Pipeline/Keys/Profile/Brokers testids are absent. Auth still wraps Settings. Remaining-hops UI is in the live JS chunk (About, after sign-in). House daily was red on `42P10` after core 105; [#3278](https://github.com/digithings-ai/digithings/pull/3278) squash-merged to `main` (`2df473110`, 2026-08-31T11:24Z; hotfix CI 36/36 green). Overlay private books are fail-closed on `develop` ([#3277](https://github.com/digithings-ai/digithings/pull/3277), `legacy_book_unique`) until P6. Next 12:00 UTC `pipeline-olympus` is the live house publish proof. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) / [#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply cutover 900.
 
 **Secret files (when obtained):** `.local/secrets/digithings-stripe.env`, `digithings-mailgun.env`, `digithings-alpaca.env` — **not** `cursor-cloud-agent-*.env`.  
 **Canonical inbox:** `digithings@agentmail.to` (interim `cursor-cloud-agent6060@agentmail.to` = accidental only).  
@@ -16,13 +16,43 @@ Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 
 Loud-fail gates (after paste):
 ```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
+# when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
+# when .local/secrets/digithings-byok.env exists (BYOK_PROVIDER + BYOK_API_KEY):
+# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py --apply --workspace-id <entitled-uuid>
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
+PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --check
+# After Stripe + BYOK only — never `--execute --all` on Observer:
+# PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --execute --workspace-id <uuid>
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 ```
+
+Overlay / sync `--check` need `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` in the
+process env (not in the Cloud Agent env today). This VM can load a gitignored
+PAT-fetched file under `.local/secrets/` for those two names only. Do **not**
+`--execute` overlay while BYOK is missing (`byok_present=0`). Sync cron **holds**
+Alpaca `auth_kind=api_key` (`ALPACA_API_KEY_SYNC_HELD` / `alpaca_api_key_held`);
+`--all` will not poll the ops-custom paper row. The oauth hop is still unproven.
+
+Scheduled probe (not installed from `cursor/*` — `.github/workflows/` is protected):
+copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` to
+`.github/workflows/kairos-cron-check.yml` on a `chore/` or `feat/` branch. Probe is
+`--check` / `--dry-run` only; house daily stays on `pipeline-olympus.yml`.
+
+House digest send (after Mailgun GitHub secrets exist): splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` into the
+"Run Olympus research pipeline" `env:` on the same `chore/`/`feat/` branch.
+Without those names, `hermes.chain` close-out logs `MAILGUN_NOT_CONFIGURED` and
+skips (fail-soft; the book still commits).
 
 ### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
 
-[#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI (Google + GitHub). Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183).
+[#3231](https://github.com/digithings-ai/digithings/pull/3231) squash-merged to `main`. Smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** + Login UI (Google + GitHub). Account Settings IA + `?tab=billing` / radius 0: [#3266](https://github.com/digithings-ai/digithings/pull/3266) merge-committed to `main` 2026-08-31T09:48Z (Cloudflare Pages rebuild may lag). Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`. Do **not** merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) / [#3256](https://github.com/digithings-ai/digithings/pull/3256) — those are full `develop`→`main` promotes, not the account UI path.
 
 **GitHub Auth (2026-08-30T21:15Z):** human signed in on prod. `core` DB: `auth.users` = 2 (1 github / 1 email); GitHub user → Personal workspace owner `plan_tier=free` via mig 107 trigger. No bootstrap fix needed. Evidence: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`.
 
@@ -49,7 +79,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client (still needed) |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
-**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
+**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL=https://digiquant.io`, `NEXT_PUBLIC_APP_URL=https://digiquant.io` (verified Observer `GET /settings/app-urls` 200, no loopback). Checkout returns to `/olympus/settings/?tab=billing`.
 **Done Auth:** GitHub provider **Enabled** on `core`. Google still Disabled. Email Enabled — Agentmail path works.  
 **Done product:** mig 107 bootstrap; settings GET/PATCH; vault seal; Settings/billing CORS preflight; free connect → `TIER_FORBIDDEN` (GitHub WS still `free`).
 

@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  getJobs,
   getProfile,
   saveProfile,
   SettingsHttpError,
+  type JobRunView,
   type ProfileTip,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
@@ -15,6 +17,7 @@ export type PipelineTabProps = {
   onVersionSaved?: (versionId: string) => void;
   saveFn?: typeof saveProfile;
   getFn?: typeof getProfile;
+  jobsFn?: typeof getJobs;
 };
 
 function listFromTip(values: string[] | undefined): string {
@@ -34,6 +37,7 @@ export function PipelineTab({
   onVersionSaved,
   saveFn = saveProfile,
   getFn = getProfile,
+  jobsFn = getJobs,
 }: PipelineTabProps) {
   const [tip, setTip] = useState<ProfileTip | null>(null);
   const [watchlist, setWatchlist] = useState('');
@@ -44,6 +48,7 @@ export function PipelineTab({
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [savedVersion, setSavedVersion] = useState<string | null>(null);
+  const [jobs, setJobs] = useState<JobRunView[]>([]);
 
   const applyTip = useCallback(
     (next: ProfileTip) => {
@@ -68,12 +73,17 @@ export function PipelineTab({
     setError(null);
     try {
       applyTip(await getFn(api));
+      try {
+        setJobs(await jobsFn(api));
+      } catch {
+        setJobs([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load pipeline knobs.');
     } finally {
       setLoading(false);
     }
-  }, [api, getFn, applyTip]);
+  }, [api, getFn, jobsFn, applyTip]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate tip after mount */
@@ -217,6 +227,40 @@ export function PipelineTab({
           Saved overlay version {savedVersion}
         </p>
       ) : null}
+
+      <div className="space-y-2" data-testid="pipeline-runs">
+        <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+          Overlay runs
+        </p>
+        <p className="text-xs text-ink-mute">
+          Scheduled overlay jobs for this workspace. Skip reasons such as
+          <span className="font-mono"> no_credentials</span> mean the Keys tab still needs a
+          sealed BYOK row. <span className="font-mono">succeeded</span> is the remaining-hop
+          proof; persist-off finishes <span className="font-mono">persist_disabled</span>.
+        </p>
+        {jobs.length === 0 ? (
+          <p className="text-sm text-ink-mute">No overlay runs yet.</p>
+        ) : (
+          <ul className="divide-y divide-hair border border-hair">
+            {jobs.map((job) => (
+              <li
+                key={job.id}
+                className="px-3 py-2 text-sm"
+                data-testid="pipeline-run-row"
+              >
+                <p className="font-mono text-ink">
+                  {job.status}
+                  {job.error ? ` · ${job.error}` : ''}
+                </p>
+                <p className="text-xs text-ink-mute">
+                  {job.job_type}
+                  {job.finished_at ? ` · ${job.finished_at}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

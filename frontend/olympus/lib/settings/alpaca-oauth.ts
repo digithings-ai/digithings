@@ -43,6 +43,16 @@ export function publicAlpacaClientId(): string {
   return process.env.NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID ?? '';
 }
 
+/** Prefer the Settings EF public client id (runtime secret) over the Pages build env. */
+export function resolveAlpacaOauthClientId(
+  fromSettings: string | null | undefined,
+  fromBuildEnv: string = publicAlpacaClientId(),
+): string {
+  const api = (fromSettings ?? '').trim();
+  if (api.length > 0) return api;
+  return fromBuildEnv.trim();
+}
+
 export type OAuthCallbackPhase =
   | { kind: 'wait_auth' }
   | { kind: 'error'; message: string; consumeNonce: false }

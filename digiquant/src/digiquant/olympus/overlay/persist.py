@@ -1,8 +1,27 @@
-"""Overlay private-phase persistence gate (T4 / T1-train precondition).
+"""Overlay private-phase persistence gate (T4).
 
-``documents`` / ``positions`` / ``nav_history`` still carry ``anon_read USING (true)``
-until the T1-train anon-policy drop. Overlay must not write private rows onto that
-surface unless an operator has explicitly enabled persistence after that drop.
+Migration 110 narrows ``anon_read`` on workspace-scoped private books
+(``documents`` / ``positions`` / ``nav_history`` / ``portfolio_metrics``) to the
+house (and house+system for documents). Overlay may persist **documents** once
+an operator sets ``OLYMPUS_OVERLAY_PERSIST=1`` on a target that has 110
+applied. Cutover 900 is still required before dropping the house teaser for
+anon / free JWTs; it is not the persist precondition.
+
+``positions`` / ``nav_history`` / ``portfolio_metrics`` / ``position_events``
+still carry migration 097's legacy single-tenant arbiters
+(``PRIMARY KEY (date)`` / ``UNIQUE(date, ticker)`` / ``UNIQUE(date)``) beside
+the widened ``(workspace_id, …)`` keys. House ops scripts still upsert with
+``on_conflict="date"`` / ``"date,ticker"``. An overlay row for the same calendar
+date therefore either fails the legacy arbiter or, if it wins the race, is
+rewritten by the next house ``on_conflict=date`` upsert — corrupting both
+books. ``require_overlay_legacy_book_safe`` refuses those writes until P6 drops
+the legacy keys and every house writer uses the widened arbiter.
+
+Ledger ``uq_portfolio_ledger_commits_one_root`` is likewise ``(run_date)`` only
+(migration 069) — overlay + house cannot both root a commit on the same date.
+
+``daily_snapshots`` stays a house-only ``UNIQUE(date)`` table — overlay
+publish must skip it (see ``publish_phase``) even with persist on.
 """
 
 from __future__ import annotations
@@ -15,6 +34,7 @@ from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id,
 
 OVERLAY_PERSIST_ENV = "OLYMPUS_OVERLAY_PERSIST"
 OVERLAY_DOC_PREFIX = "overlay/"
+LEGACY_BOOK_UNIQUE_CODE = "legacy_book_unique"
 
 
 class OverlayPersistDisabled(Exception):
@@ -24,7 +44,23 @@ class OverlayPersistDisabled(Exception):
         self.code = JobStatus.PERSIST_DISABLED.value
         self.message = (
             "overlay private-phase persistence is disabled; set "
-            f"{OVERLAY_PERSIST_ENV}=1 only after the T1-train anon-policy drop"
+            f"{OVERLAY_PERSIST_ENV}=1 only after migration 110 "
+            "(anon house-only on private books) is applied on the target"
+        )
+        super().__init__(self.message)
+
+
+class OverlayLegacyBookBlocked(Exception):
+    """Overlay positions/NAV/ledger write refused while legacy UNIQUEs remain."""
+
+    def __init__(self) -> None:
+        self.code = LEGACY_BOOK_UNIQUE_CODE
+        self.message = (
+            "overlay positions/nav_history/ledger writes are blocked while "
+            "legacy UNIQUE(date) / UNIQUE(date,ticker) and ledger "
+            "one-root-per-run_date still apply; "
+            f"{OVERLAY_PERSIST_ENV}=1 after migration 110 only covers documents. "
+            "Roadmap P6 must drop those arbiters and patch house writers first"
         )
         super().__init__(self.message)
 
@@ -46,6 +82,15 @@ def require_overlay_persist(workspace_id: UUID | str | None) -> None:
         raise OverlayPersistDisabled()
 
 
+def require_overlay_legacy_book_safe(workspace_id: UUID | str | None) -> None:
+    """Refuse overlay book/ledger writes until legacy single-tenant UNIQUEs are gone.
+
+    Documents remain gated only by :func:`require_overlay_persist`.
+    """
+    if is_private_workspace(workspace_id):
+        raise OverlayLegacyBookBlocked()
+
+
 def hermes_document_key(base: str, workspace_id: UUID | str | None) -> str:
     """House keys stay unprefixed. Overlay H7/H8 keys are ``overlay/{ws}/{base}``."""
     if not is_private_workspace(workspace_id):
@@ -54,11 +99,14 @@ def hermes_document_key(base: str, workspace_id: UUID | str | None) -> str:
 
 
 __all__ = [
+    "LEGACY_BOOK_UNIQUE_CODE",
     "OVERLAY_DOC_PREFIX",
     "OVERLAY_PERSIST_ENV",
+    "OverlayLegacyBookBlocked",
     "OverlayPersistDisabled",
     "hermes_document_key",
     "is_private_workspace",
     "overlay_persist_enabled",
+    "require_overlay_legacy_book_safe",
     "require_overlay_persist",
 ]

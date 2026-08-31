@@ -908,6 +908,7 @@ BEGIN
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
 -- user_a_custom / positions / house
+-- Post-cutover (900 A2): 109 house-teaser UUID is gone; non-members see 0.
 TRUNCATE _probe;
 DO $$
 DECLARE

@@ -30,7 +30,11 @@ from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.overlay.persist import hermes_document_key, require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    hermes_document_key,
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -536,6 +540,10 @@ def book_portfolio(
     overlay_ws = getattr(state.config, "workspace_id", None)
     workspace_id = str(resolved_workspace_id(overlay_ws))
     require_overlay_persist(workspace_id)
+    # Legacy UNIQUE(date) / UNIQUE(date,ticker) still sit beside the widened
+    # (workspace_id, …) keys (migration 097). Overlay rows for the same calendar
+    # date collide with house or get rewritten by house on_conflict=date upserts.
+    require_overlay_legacy_book_safe(workspace_id)
 
     client.table("nav_history").upsert(
         {

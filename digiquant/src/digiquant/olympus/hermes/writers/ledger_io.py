@@ -57,7 +57,10 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.turnover import no_trade_band_pp
-from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
 from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -426,6 +429,9 @@ def append_commit_chain(
 
     overlay_ws = getattr(state.config, "workspace_id", None)
     require_overlay_persist(overlay_ws)
+    # Ledger one-root-per-run_date is still global (migration 069); overlay + house
+    # cannot both root a commit on the same date until that index is widened.
+    require_overlay_legacy_book_safe(overlay_ws)
     prior_commits = _rows_for_date(
         client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
     )

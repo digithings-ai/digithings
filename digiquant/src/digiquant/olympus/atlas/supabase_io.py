@@ -28,7 +28,7 @@ from typing import Any, Protocol, TypedDict  # score:allow untyped any — Proto
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
-from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.overlay.persist import is_private_workspace, require_overlay_persist
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -318,6 +318,7 @@ def publish_daily_snapshot(
     run_type: str,
     baseline_date: str | None = None,
     digest_markdown: str | None = None,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
     """Upsert one row into ``daily_snapshots`` on ``date``.
 
@@ -325,7 +326,16 @@ def publish_daily_snapshot(
     ``templates/digest-snapshot-schema.json``). Stored in the ``snapshot``
     JSONB column; the legacy column set (``bias`` fields, etc.) is populated
     by downstream readers or a follow-up schema migration — not this adapter.
+
+    This table has no ``workspace_id`` (unique on ``date``). Overlay workspaces
+    must not upsert it — that would last-writer-wins over the house Brief.
+    Omitted ``workspace_id`` is the house path.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
+    if is_private_workspace(scoped):
+        raise ValueError(
+            "daily_snapshots is the house digest table; overlay workspaces must not upsert it"
+        )
     row: DailySnapshotUpsertRow = {
         "date": date_str,
         "run_type": run_type,

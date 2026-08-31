@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.writers.commit_io import publish_hermes_documents
+from digiquant.olympus.hermes.writers.commit_io import book_portfolio, publish_hermes_documents
 from digiquant.olympus.overlay.byok import ByokProbe
 from digiquant.olympus.overlay.dispatch import (
     JobStatus,
@@ -18,8 +18,11 @@ from digiquant.olympus.overlay.dispatch import (
     dispatch_overlay_daily,
 )
 from digiquant.olympus.overlay.persist import (
+    LEGACY_BOOK_UNIQUE_CODE,
+    OverlayLegacyBookBlocked,
     OverlayPersistDisabled,
     hermes_document_key,
+    require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
 from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
@@ -48,8 +51,52 @@ def test_require_overlay_persist_refuses_private_when_flag_off(
     with pytest.raises(OverlayPersistDisabled) as exc:
         require_overlay_persist(uuid4())
     assert exc.value.code == JobStatus.PERSIST_DISABLED.value
+    assert "migration 110" in exc.value.message
     require_overlay_persist(None)
     require_overlay_persist(house_workspace_id())
+
+
+def test_require_overlay_legacy_book_safe_blocks_private_allows_house() -> None:
+    """positions/NAV/ledger stay single-tenant until P6 drops legacy UNIQUEs."""
+    with pytest.raises(OverlayLegacyBookBlocked) as exc:
+        require_overlay_legacy_book_safe(uuid4())
+    assert exc.value.code == LEGACY_BOOK_UNIQUE_CODE
+    require_overlay_legacy_book_safe(None)
+    require_overlay_legacy_book_safe(house_workspace_id())
+
+
+def test_overlay_book_portfolio_refuses_private_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist=1 must not write overlay positions/NAV while UNIQUE(date) remains."""
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay = uuid4()
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=date(2026, 8, 30),
+        config=AtlasConfigBundle(workspace_id=str(overlay)),
+    )
+    client = FakeSupabaseClient(
+        canned_reads={
+            "thesis_vehicles": [],
+            "nav_history": [],
+            "price_history": [],
+            "positions": [],
+        }
+    )
+    with pytest.raises(OverlayLegacyBookBlocked) as exc:
+        book_portfolio(
+            client=client,
+            state=state,
+            book={
+                "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
+                "actions": [],
+                "notes": "overlay",
+            },
+        )
+    assert exc.value.code == LEGACY_BOOK_UNIQUE_CODE
+    assert client.store.get("positions", []) == []
+    assert client.store.get("nav_history", []) == []
 
 
 def test_publish_hermes_documents_namespaces_overlay_keys(
