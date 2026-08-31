@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  *
  * AuthProvider needs a real client effect cycle (getSession / onAuthStateChange /
- * setState). Other Olympus suites stay on node + renderToStaticMarkup; this file
+ * setState). Other dashboard suites stay on node + renderToStaticMarkup; this file
  * opts into happy-dom only for the session lifecycle contract.
  */
 import { createElement, act } from 'react';
@@ -70,7 +70,7 @@ vi.mock('./supabase', async () => {
   const actual = await vi.importActual<typeof import('./supabase')>('./supabase');
   return {
     ...actual,
-    isOlympusAuthEnabled: () => true,
+    isDashboardAuthEnabled: () => true,
     getSupabaseClient: () => supabaseMock.client,
     // Keep real oauthRedirectTo / dashboardBasePath — do not stub the redirect URL.
   };

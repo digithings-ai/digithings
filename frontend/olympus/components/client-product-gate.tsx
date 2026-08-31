@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { AuthContext } from '@/lib/auth-context';
 import { useCanAccessProduct, requestAccessRefresh } from '@/lib/use-entitlement';
-import { isOlympusAuthEnabled } from '@/lib/supabase';
+import { isDashboardAuthEnabled } from '@/lib/supabase';
 import { redeemInvite, SettingsHttpError } from '@/lib/settings-api';
 
 /**
- * Gate a custom Olympus client product (FX Hub now; future products reuse this).
+ * Gate a custom dashboard client product (FX Hub now; future products reuse this).
  * Presentation only — data plane must still deny via RLS / dedicated project keys.
  *
  * After login, a hashed invite (settings EF) can INSERT `client_product_grants`
@@ -33,7 +33,7 @@ export function ClientProductGate({
   const [error, setError] = useState<string | null>(null);
   const [unlocked, setUnlocked] = useState(false);
 
-  if (!isOlympusAuthEnabled() || allowed || unlocked) {
+  if (!isDashboardAuthEnabled() || allowed || unlocked) {
     return <>{children}</>;
   }
 

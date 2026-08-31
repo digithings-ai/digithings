@@ -18,8 +18,8 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
 
   it('flag off: createClient is called with url+key only (anon client)', async () => {
     vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '');
-    const { buildSupabaseClient, isOlympusAuthEnabled } = await import('./supabase');
-    expect(isOlympusAuthEnabled()).toBe(false);
+    const { buildSupabaseClient, isDashboardAuthEnabled } = await import('./supabase');
+    expect(isDashboardAuthEnabled()).toBe(false);
     createClient.mockClear();
     buildSupabaseClient('https://example.supabase.co', 'anon-key', false);
     expect(createClient).toHaveBeenCalledTimes(1);
@@ -28,8 +28,8 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
 
   it('flag on: createClient uses PKCE auth options', async () => {
     vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
-    const { buildSupabaseClient, isOlympusAuthEnabled } = await import('./supabase');
-    expect(isOlympusAuthEnabled()).toBe(true);
+    const { buildSupabaseClient, isDashboardAuthEnabled } = await import('./supabase');
+    expect(isDashboardAuthEnabled()).toBe(true);
     createClient.mockClear();
     buildSupabaseClient('https://example.supabase.co', 'anon-key', true);
     expect(createClient).toHaveBeenCalledTimes(1);

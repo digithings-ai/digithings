@@ -9,7 +9,7 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
  * behavior (Cloudflare Access remains the edge gate until cutover).
  * Inlined at build time — static export has no runtime env.
  */
-export function isOlympusAuthEnabled(): boolean {
+export function isDashboardAuthEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DASHBOARD_AUTH === '1';
 }
 
@@ -34,7 +34,7 @@ export function dashboardBasePath(): string {
 export function buildSupabaseClient(
   url: string,
   key: string,
-  authEnabled: boolean = isOlympusAuthEnabled(),
+  authEnabled: boolean = isDashboardAuthEnabled(),
 ): SupabaseClient<Database> {
   if (authEnabled) {
     return createClient<Database>(url, key, {
@@ -53,7 +53,7 @@ export function buildSupabaseClient(
 
 export const supabase: SupabaseClient<Database> | null =
   supabaseUrl && supabaseAnonKey
-    ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isOlympusAuthEnabled())
+    ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isDashboardAuthEnabled())
     : null;
 
 /**

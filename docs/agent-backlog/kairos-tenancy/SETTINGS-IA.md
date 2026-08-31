@@ -1,7 +1,7 @@
 # Settings IA + tier matrix (addendum)
 
 > **Date:** 2026-08-30  
-> **Status:** Product addendum for Olympus Settings — fills silence in the Kairos
+> **Status:** Product addendum for dashboard Settings — fills silence in the Kairos
 > tenancy spec on pipeline knobs, models, and BYOK entry. **Amended same day** for
 > free-teaser + creator/ops + FX Hub product gates (supersedes the earlier
 > “baseline may connect broker” tension).  

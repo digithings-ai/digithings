@@ -5,7 +5,7 @@ import TwelveXClient from '@/components/twelve-x/TwelveXClient';
 import TwelveXHeading from '@/components/twelve-x/TwelveXHeading';
 
 /**
- * OLYMPUS FX Hub suite (twelve-x). Thin server wrapper → Suspense →
+ * FX Hub suite (twelve-x). Thin server wrapper → Suspense →
  * client. Renders inside the standard AppFrame shell (#1664 retired the
  * standalone chrome); the client gates itself on its own research feed
  * (see `isTwelveXConfigured`), which is why the route is DB-exempt. The page

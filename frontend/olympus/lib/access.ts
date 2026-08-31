@@ -1,16 +1,16 @@
 /**
  * Client product + creator/ops access (migration 108).
  *
- * `fx_hub` and future custom Olympus products are moderated via
+ * `fx_hub` and future custom dashboard products are moderated via
  * `client_product_grants`. Creator emails get a `plan_floor` in
- * `entitlement_grants` so baseline/Kairos works without Stripe.
+ * `entitlement_grants` so baseline/execution works without Stripe.
  */
 
 import type { PlanTier } from './entitlements';
 import { effectivePlanTier, isPlanTier, tierFromSession } from './entitlements';
 import type { Session } from '@supabase/supabase-js';
 
-/** Known client product keys — extend as new custom Olympus products ship. */
+/** Known client product keys — extend as new custom dashboard products ship. */
 export type ClientProductKey = 'fx_hub';
 
 export type AccessSnapshot = {

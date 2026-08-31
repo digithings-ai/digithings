@@ -51,7 +51,7 @@ describe('house workspace identity', () => {
   });
 });
 
-describe('olympus Group A readers stay house-scoped', () => {
+describe('dashboard Group A readers stay house-scoped', () => {
   const files = ['queries.ts', 'observability-queries.ts'] as const;
 
   it.each(files)('%s has no date-only Group A .from() and uses houseBook()', (file) => {

@@ -183,7 +183,7 @@ The dashboard reads portfolio and research data from the shared research Supabas
 row-level security. Anon `anon_read` on Group A book tables (`positions`,
 `position_events`, `nav_history`, `portfolio_metrics`) is house-UUID only
 (migration 110). Authenticated members can also SELECT their own overlay book
-(migration 109), so olympus Group A readers always go through `houseBook()` in
+(migration 109), so dashboard Group A readers always go through `houseBook()` in
 `lib/house-workspace.ts` — date-only filters would mix overlay weights into the
 public house Brief / Holdings / Performance surfaces. Shared teasers without
 `workspace_id` (`daily_snapshots`, `theses`, `instruments`) stay date-only.
