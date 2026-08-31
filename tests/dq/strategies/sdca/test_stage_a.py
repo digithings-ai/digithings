@@ -238,6 +238,39 @@ class TestStageAWeightSearch:
         assert result.weights.valuation == pytest.approx(1.0)
         assert sum(result.weights.enabled_extras().values()) > 0.0
 
+    def test_all_null_extra_combos_are_skipped_not_aborted(self) -> None:
+        """Warmup-null extras must not abort the grid; valuation-only still wins."""
+        start = date(2020, 1, 1)
+        dates = _dates(60, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t",
+                    kind=CycleKind.TROUGH,
+                    start=start,
+                    end=date(2020, 1, 20),
+                ),
+                CycleWindow(
+                    name="p",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 2, 10),
+                    end=date(2020, 2, 25),
+                ),
+            )
+        )
+        valuation = [3.0 if d <= date(2020, 1, 20) else -3.0 for d in dates]
+        result = optimize_stage_a_weights(
+            dates,
+            valuation_z=valuation,
+            extra_z={"weekly_rsi": [None] * len(dates)},
+            windows=windows,
+            search_names=("weekly_rsi",),
+            grid=(0.0, 1.0),
+            valuation_grid=(1.0,),
+        )
+        assert result.weights.weekly_rsi == pytest.approx(0.0)
+        assert result.weights.valuation == pytest.approx(1.0)
+
     def test_risk_from_weighted_z_matches_composite_formula(self) -> None:
         dates = [date(2020, 1, 1), date(2020, 1, 2)]
         risk = risk_from_weighted_z(

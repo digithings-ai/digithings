@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+
 from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
@@ -52,6 +53,19 @@ _HIDDEN = {
 
 def _dates(n: int = 60) -> list[date]:
     return [date(2020, 1, 1) + timedelta(days=i) for i in range(n)]
+
+
+def _stub_nautilus_evaluator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI digiquant lane has no nautilus_trader; ``_run_sdca_optimize`` imports
+    ``nautilus_evaluator`` before the walk-forward monkeypatch runs.
+    """
+    stub = types.ModuleType("digiquant.strategies.sdca.nautilus_evaluator")
+
+    def _unused(*_a: object, **_k: object) -> SdcaTrialMetrics:
+        raise AssertionError("walk-forward should be monkeypatched before evaluator use")
+
+    stub.evaluate_sdca_trial_nautilus = _unused  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digiquant.strategies.sdca.nautilus_evaluator", stub)
 
 
 class _ConstRails:
@@ -248,9 +262,8 @@ class TestPersistAndDispatch:
                 evaluator_label="injected",
             )
 
-        monkeypatch.setattr(
-            "digiquant.strategies.sdca.optimize.run_sdca_walk_forward", fake_walk_forward
-        )
+        _stub_nautilus_evaluator(monkeypatch)
+        monkeypatch.setattr("digiquant.optimize.run_sdca_walk_forward", fake_walk_forward)
         csv = tmp_path / "BTC-USD.csv"
         n = 60
         rows = ["timestamp,open,high,low,close,volume,symbol"]
@@ -268,6 +281,49 @@ class TestPersistAndDispatch:
         assert captured["n_trials"] == 2
         assert opt.strategy_name == "btc_sdca"
         assert "mean_oos_vs_flat_dca_pct" in opt.message
+
+    def test_run_optimize_freezes_stage_a_weight_params(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_walk_forward(
+            dates: list[date],
+            prices: list[float],
+            trials: list[dict[str, float | int | str]],
+            **kwargs: object,
+        ) -> SdcaWalkForwardResult:
+            captured["trials"] = trials
+            dates_l = list(dates)
+            prices_l = list(prices)
+            return run_sdca_walk_forward(
+                dates_l,
+                prices_l,
+                [dict(_HIDDEN)],
+                rails_fitter=_fitter,
+                evaluator=_evaluator,
+                evaluator_label="injected",
+            )
+
+        _stub_nautilus_evaluator(monkeypatch)
+        monkeypatch.setattr("digiquant.optimize.run_sdca_walk_forward", fake_walk_forward)
+        csv = tmp_path / "BTC-USD.csv"
+        rows = ["timestamp,open,high,low,close,volume,symbol"]
+        for i in range(60):
+            d = date(2020, 1, 1) + timedelta(days=i)
+            rows.append(f"{d},100,101,99,100,1,BTC-USD")
+        csv.write_text("\n".join(rows) + "\n")
+        run_optimize(
+            strategy_name="sdca",
+            symbols=["BTC-USD"],
+            data_path=csv,
+            param_grid=[dict(SDCA_SHAPE_DEFAULTS), dict(_HIDDEN)],
+            base_params={"weekly_rsi_weight": 0.4, "valuation_weight": 0.6},
+        )
+        trials = captured["trials"]
+        assert isinstance(trials, list)
+        assert all(t.get("weekly_rsi_weight") == 0.4 for t in trials)
+        assert all(t.get("valuation_weight") == 0.6 for t in trials)
 
     def test_sdca_auto_grid_excludes_curvatures(self) -> None:
         trials = _sdca_trials(None, "grid", 10, None)

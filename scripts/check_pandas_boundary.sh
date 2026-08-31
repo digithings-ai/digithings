@@ -19,7 +19,7 @@ ALLOWLIST=(
   "digiquant/scripts/atlas/preload-history.py"
   "digiquant/src/digiquant/strategies/bollinger_mr.py"
   "digiquant/src/digiquant/strategies/macd_trend.py"
-  # SDCA walk-forward evaluator: BarDataWrangler boundary, same as nautilus_runner (#3174).
+  # SDCA walk-forward evaluator: BarDataWrangler boundary, same as nautilus_runner (#3174 / #3253).
   "digiquant/src/digiquant/strategies/sdca/nautilus_evaluator.py"
   # Operator ad-hoc Yahoo fetch; yfinance returns pandas DataFrames (#1719).
   "digiquant/scripts/fetch_real_ohlcv.py"

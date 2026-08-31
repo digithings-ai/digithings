@@ -55,6 +55,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/scripts/atlas/preload-history.py` | Same atlas ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
+| `digiquant/strategies/sdca/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
 | `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
 
@@ -238,10 +239,17 @@ on the extra-indicator allowlist.
    in this WP.
 5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
    `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
-   overlap is diagnostic. Do not publish until the backtest looks comfortable.
+   overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
+   `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
+   Do not publish until the backtest looks comfortable.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
+
+On-chain extras (#1086): `digiquant_fetch_bitview_series` is the ingest tool
+(Bitview/BRK `mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL;
+no HTML scrape; fail-soft). They are not composite votes yet. Coin Metrics
+community CC BY-NC stays research-only.
 
 `pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
 multi-asset smoke (full ETH Coinbase cache if present, else a synthetic
@@ -287,25 +295,29 @@ from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_w
 ```
 
 `run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
-(`digiquant_run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
+(`digiquant_run_optimize`) — Stage B. Stage A is
+`digiquant_fit_sdca_weights` (cycle-window overlap; cannot honestly live
+inside `run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
 a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
 Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
 `weekly_rsi_weight`, `weekly_macd_weight`, `sma_band_weight`) are searched by
 `method=random`/`bayesian` or an explicit `param_grid`; auto-grid holds them
-at 0 (valuation-only, current BTC charts). Weekly RSI/MACD/SMA-band z are
+at 0 (valuation-only, current BTC charts) unless Stage A weights are passed
+as `strategy_params` (frozen onto every trial). Weekly RSI/MACD/SMA-band z are
 computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
 file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
 OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
 that need them. Two-stage fit: published BTC Stage A
 (`optimize_stage_a_by_backtest`) grids every extra with data and keeps
 weights by in-sample `vs_flat_dca_pct` (frozen curve; OOS reported, not
-used to pick). Cycle overlap (`optimize_stage_a_weights`) is diagnostic.
-Stage B freezes those weights and runs this
+used to pick). Cycle overlap (`optimize_stage_a_weights` via
+`digiquant_fit_sdca_weights`) is diagnostic. Stage B freezes those
+weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
-from this WP.
+from this WP. No live-trading.
 
 ### Remaining-book curve search (frozen index)
 
