@@ -3247,7 +3247,9 @@ publish into the house book), `validate_pipeline_step.fetch_document_rows`,
 `pipeline_review_to_github` / `pipeline_meta_review` house pipeline-review
 docs (overlay reviews must not file GitHub issues),
 `format_deliberation_transcripts_chat` house transcripts (overlay rows must
-not be rewritten by id),
+not be rewritten by id), `normalize_supabase_documents.fetch_all_documents`
+(overlay rows must not be rewritten by id), `fetch_research_library` house
+research notes, `verify_supabase_canonical` house leftover ``outputs/`` keys,
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
