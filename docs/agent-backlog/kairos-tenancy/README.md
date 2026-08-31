@@ -5,6 +5,11 @@ Ready-to-file GitHub issue bodies for the program specced in
 Each WP file is a **self-contained executor briefing**: a cost-effective model should be able to
 implement it from the issue body alone, without re-deriving anything from the spec.
 
+**House vs overlay book isolation (Group A):** see the scannable ops guide
+[`docs/ops/HOUSE_BOOK_SCOPE.md`](../../ops/HOUSE_BOOK_SCOPE.md) before changing
+`positions` / `nav_history` / `position_events` / `portfolio_metrics` readers or
+writers. Epic status and cutover 113 notes stay in [`EPIC.md`](EPIC.md).
+
 ## Filing (human or authorized session)
 
 ```bash

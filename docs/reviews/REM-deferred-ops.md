@@ -101,7 +101,9 @@ gh run list -w agent-quota-reset.yml -L 3
 - [ ] Set `NEXT_PUBLIC_SUPABASE_URL`, `OLYMPUS_SUPABASE_SERVICE_ROLE_KEY` (server-only).
 - [ ] Set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1`.
 - [ ] Run `npm --workspace frontend/olympus run dev` (not static export).
-- [ ] `curl -s http://localhost:3000/olympus/api/snapshots | jq .snapshot.date`
+- [ ] `curl -s http://localhost:3001/dashboard/api/snapshots | jq .snapshot.date`
+  (dev default port 3001 + `basePath` `/dashboard/`; BFF only when
+  `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` — static export has no `/api` otherwise)
 
 ### Static export (digiquant.io)
 
