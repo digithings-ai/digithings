@@ -2341,11 +2341,26 @@ not a row the approval chains through.
 #### H9 appends the commit chain (#2418)
 
 `digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py` is the only writer into these
-tables, called from exactly one place: `phases/h9_commit_run.py`, after `persist_decision_log`
+tables. The pipeline caller is `phases/h9_commit_run.py`, after `persist_decision_log`
 and **before `save_commit_manifest`**. That ordering is load-bearing — the manifest is what the
 next attempt reads to decide "already committed", so a partial chain must leave no manifest
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
 failed append as a clean no-op and leave the lineage silently one commit short.
+
+When `book_portfolio` already wrote `positions` / `nav_history` but the chain insert
+died (cron on `main` omitting `workspace_id` → `23502`, #3330), recover without an LLM
+rerun: `python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD`
+(dry-run) then `--apply`. That path (`hermes/writers/recover_ledger.py`) reads the booked
+weights and calls `append_commit_chain` + a `commit-run/{run_id}` manifest tagged
+`recovery=append_from_existing_book`. It does not call H8 or rewrite positions. It is an
+operator recovery *caller* of the same writer, not a second implementation.
+`test_h9_is_the_only_ledger_writer` allowlists that file explicitly. Idempotent only when
+a committed manifest fingerprint matches the booked weights **and** approved-target rows
+cover that book; a fingerprint mismatch is `conflict` (nonzero exit); a commit row without
+children falls through to `append_commit_chain` (supersede), never a false-finalized
+manifest. The matching commit must also be the current ledger `_heads()` tip;
+`resolve_prior_commit` orders manifests by `commit_seq` (ambiguous seq → `conflict`).
+Recovery manifests carry the next `commit_seq` and `supersedes` fingerprints.
 
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
@@ -2399,7 +2414,8 @@ untouched. The polarity is deliberately the inverse of `OLYMPUS_POSITION_RISK_FI
 a dark schema needs opting into, a live writer needs an escape hatch.
 
 - **Tests**: `tests/dq/hermes/test_commit_run.py::TestCommitChainLedger` — every final ticker
-  plus cash appears; inserts are never upserts; H9 is the only ledger writer; an identical
+  plus cash appears; inserts are never upserts; `ledger_io` is the only ledger writer
+  (pipeline caller H9, operator recovery caller `recover_ledger`); an identical
   same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
   existing fill freezes the symbol; orphan pruning still converges with the ledger on; a partial
   failure does not masquerade as committed; and the kill switch writes no rows.
