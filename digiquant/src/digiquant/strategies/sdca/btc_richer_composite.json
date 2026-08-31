@@ -13,7 +13,8 @@
     "weekly_macd extra is weekly log-MACD (log10 EMA12-EMA26) with a sloped diminishing top cap (Da_Prof-style), not 52w histogram z.",
     "Daily RSI is not a composite vote (must not flip a distribute day to a buy).",
     "Alpha residual |r|≈0.92 vs valuation_z on Coinbase 2015-07-20→2026-08-29 — skipped as collinear.",
-    "Equal-weighting dead-zone RSI (z=0 most of the time) still sits in the denominator and dilutes the spine; RSI weight is 0.25 not 0.5."
+    "Equal-weighting dead-zone RSI (z=0 most of the time) still sits in the denominator and dilutes the spine; RSI weight is 0.25 not 0.5.",
+    "curve_simulator on frozen btc_optimized: published book still sells in 2025 (70 sell days, 0 buy days, mean risk 61.5). In-sample vs_flat_dca_pct is positive but lower than the 3-member book because z=0 extras still sit in the blend denominator. Not an OOS claim."
   ],
   "correlations_vs_valuation_z": {
     "sample": "Coinbase BTC-USD.csv 2015-07-20 to 2026-08-29 (in-sample)",
@@ -21,7 +22,7 @@
     "m2": 0.146,
     "dxy": 0.038,
     "rs_eth": -0.078,
-    "weekly_rsi_deadzone": 0.18,
+    "weekly_rsi_mtf": 0.345,
     "weekly_log_macd": 0.583,
     "sma_band_90d": 0.162,
     "monthly_rsi_deadzone": 0.341
@@ -29,11 +30,20 @@
   "published_weights": {
     "valuation": 1.0,
     "m2": 0.5,
+    "rs_eth": 0.0,
     "dxy": 0.5,
-    "weekly_macd": 0.5,
     "weekly_rsi": 0.25,
-    "sma_band": 0.0,
-    "rs_eth": 0.0
+    "weekly_macd": 0.5,
+    "sma_band": 0.0
+  },
+  "curve_simulator_in_sample": {
+    "trade_start": "2018-01-01",
+    "end": "2026-08-29",
+    "preset": "btc_optimized",
+    "published_2025": {"buy_days": 0, "sell_days": 70, "mean_risk": 61.5},
+    "published_full": {"buy_days": 78, "sell_days": 336, "vs_flat_dca_pct": 75.6},
+    "val_m2_dxy_2025": {"buy_days": 0, "sell_days": 156, "mean_risk": 64.3},
+    "valuation_only_2025": {"buy_days": 0, "sell_days": 281, "mean_risk": 85.3}
   },
   "included": [
     {"name": "valuation", "weight": 1.0, "why": "power-law spine (user-facing name: power law)"},
