@@ -911,7 +911,10 @@ in the same change.
   (`USING (true)`) on `daily_snapshots` / `theses` / `instruments`, and expands
   `authenticated_select_own_workspace` on `positions` / `position_events` /
   `nav_history` / `portfolio_metrics` with a house-workspace OR. **Anon policies
-  are untouched.** Staged cutover 900 §A2 reverts the book-table house UUID so
+  are untouched.** The olympus dashboard still filters those Group A tables to
+  the house UUID via `houseBook()` so overlay rows a Custom JWT can SELECT
+  never mix into Brief / Holdings / Performance. Staged cutover 900 §A2 reverts
+  the book-table house UUID so
   free JWTs cannot read house weights after `anon_read` is dropped.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
