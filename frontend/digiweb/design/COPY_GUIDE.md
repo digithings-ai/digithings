@@ -100,7 +100,7 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 | Explore → | `read docs` / module pages |
 | Contact sales | `contact@digithings.ai` |
 
-**Avoid:** "Get started" without naming the destination. On digiquant.io, do not use the site name as the dashboard CTA (`open digiquant`) — the wordmark already says digiquant; the destination is the **dashboard**. Compact nav: mark + `dashboard`. Off-site (digithings.ai) may still name the product.
+**Avoid:** "Get started" without naming the destination. On digiquant.io, do not use the site name as the dashboard CTA (`open digiquant`) — the wordmark already says digiquant. Compact nav: teal dashboard mark (icon-only; `aria-label` "Open the dashboard"). Hero / sheet: `open dashboard`. Off-site (digithings.ai) may still name the product.
 
 ---
 

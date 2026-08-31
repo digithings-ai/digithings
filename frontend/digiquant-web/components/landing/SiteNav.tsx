@@ -12,10 +12,9 @@
  * The dashboard CTA opens the app at `/olympus/` (a full cross-app
  * navigation — the dashboard is a separate export assembled into `dist/olympus/`, so
  * it's a plain <a>, not a Next <Link>, and matches the subsystems page).
- * Visible label is **dashboard** (mark + word) — the site wordmark is already
- * digiquant; repeating it here names the destination as the site. "Desk" in
- * the text links still scrolls to `/#desk`. Path `/olympus/` stays until
- * ADR-0026 wave 2.
+ * Desktop chrome is the teal dashboard mark only (aria-label names the
+ * destination). The sheet CTA still says Open dashboard. "Desk" in the text
+ * links scrolls to `/#desk`. Path `/olympus/` stays until ADR-0026 wave 2.
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
@@ -38,34 +37,28 @@ export function SiteNav() {
           >
             <GitHubGlyph />
           </a>
-          {/* Desktop twin of the sheet CTA below — same destination + label,
-              plain wordmark-style link rather than a solid `.btn-primary`
-              pill (same call as digithings.ai's DtNav "ask digichat", #1450
-              round 3+): a filled button read as a bright, standoffish box
-              next to the quiet GitHub glyph and the plain inline links either
-              side of it. `.dq-nav-olympus-cta` (globals.css) is just icon +
-              label in the theme's own ink tone, no button chrome — kept
-              apart from `.olympus-cta`, which stays for the hover-animation
-              hooks on the mark's strokes, not the button dress. Hides at the
-              same 880px breakpoint where the inline links yield to the
-              hamburger, so narrow viewports keep the sheet button as the
-              only dashboard entry. hidden! (important): `.olympus-cta`'s
-              `display: inline-flex` is unlayered on purpose in globals.css
-              (sheet-slot rule) and outranks the layered utility. */}
+          {/* Desktop twin of the sheet CTA — icon-only teal mark. The wordmark
+              is already digiquant; a "dashboard" label next to the mark was a
+              second name in the chrome. `.dq-nav-olympus-cta` (globals.css)
+              sizes the hit target; `.olympus-cta` owns the stroke-draw idle
+              (every 10s) and the hover replay. Hides at the same 880px
+              breakpoint where the inline links yield to the hamburger.
+              hidden! (important): `.olympus-cta`'s `display: inline-flex` is
+              unlayered on purpose in globals.css (sheet-slot rule) and
+              outranks the layered utility. */}
           <a
             className="dq-nav-olympus-cta olympus-cta max-[880px]:hidden!"
             href="/olympus/"
             aria-label="Open the dashboard"
           >
-            <DigiquantMark size={16} />
-            <span>dashboard</span>
+            <DigiquantMark size={20} />
           </a>
         </>
       }
       cta={
         <a className="btn btn-primary olympus-cta" href="/olympus/" aria-label="Open the dashboard">
           <DigiquantMark size={18} />
-          <span>dashboard</span>
+          <span>Open dashboard</span>
         </a>
       }
     />

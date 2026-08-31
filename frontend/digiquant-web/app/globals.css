@@ -150,21 +150,37 @@ html {
   .btn-icon svg { display: block; }
 }
 
-/* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
+/* Dashboard mark CTA (NavShell sheet slot + desktop tail). */
 .olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
-/* Desktop tail twin (SiteNav.tsx) — plain icon + label in the theme's own ink
-   tone, no `.btn-primary` fill. Same treatment as digithings.ai's
-   `.dt-nav-chat-cta`. */
-.dq-nav-olympus-cta { color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 0; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
-.dq-nav-olympus-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+/* Desktop tail — teal mark only. No label: the wordmark is already
+   digiquant, and the accessible name is on the <a>. */
+.dq-nav-olympus-cta {
+  color: var(--accent);
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  justify-content: center;
+  text-decoration: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  opacity: 0.96;
+  transition: opacity 0.18s var(--ease), background 0.18s var(--ease);
+}
+.dq-nav-olympus-cta:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .olympus-mark { transform-origin: 50% 50%; }
-/* mark strokes are fully drawn at rest; the Open-Olympus button replays the
-   dashboard's loader (stroke-draw + scale pulse) on hover. */
+/* Strokes are fully drawn at rest. Idle: replay the dashboard loader once
+   every 10s (1.55s of motion, then hold). Hover: the same 1.55s loop. */
 .olympus-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
 .olympus-stroke-1 { --ol-len: 120; }
 .olympus-stroke-2 { --ol-len: 190; }
 .olympus-stroke-3 { --ol-len: 45; }
 .olympus-stroke-4 { --ol-len: 165; }
+.olympus-cta .olympus-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.olympus-cta .olympus-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
+.olympus-cta .olympus-stroke-2 { animation-delay: 0.03s; }
+.olympus-cta .olympus-stroke-3 { animation-delay: 0.06s; }
+.olympus-cta .olympus-stroke-4 { animation-delay: 0.09s; }
 .olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 .olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
 .olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
@@ -172,7 +188,25 @@ html {
 .olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .olympus-cta:hover .olympus-mark, .olympus-cta:hover .olympus-stroke { animation: none; } }
+/* 1.55s of ol-pulse / ol-draw packed into the first 15.5% of a 10s cycle. */
+@keyframes ol-pulse-idle {
+  0% { transform: scale(0.82); }
+  5.4% { transform: scale(1); }
+  8.5% { transform: scale(0.72); }
+  11.2% { transform: scale(1.03); }
+  15.5%, 100% { transform: scale(1); }
+}
+@keyframes ol-draw-idle {
+  0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; }
+  1.6% { opacity: 1; }
+  6.2%, 100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .olympus-cta .olympus-mark,
+  .olympus-cta .olympus-stroke,
+  .olympus-cta:hover .olympus-mark,
+  .olympus-cta:hover .olympus-stroke { animation: none; }
+}
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
    the ambient mesh can anchor to the top band without covering the footer */
