@@ -61,7 +61,7 @@ Initial commits may use 1×1 placeholders. Operators replace them with real
 captures without changing the manifest path contract.
 
 ```bash
-# From frontend/olympus — fails if any required path is missing
+# From frontend/dashboard — fails if any required path is missing
 npm run test -- lib/screenshot-manifest.test.ts
 ```
 

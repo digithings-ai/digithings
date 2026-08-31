@@ -70,7 +70,13 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
    - `http://localhost:3001/dashboard/auth/callback/` (dev)
 3. Alpaca OAuth app → Redirect URI:
    - `https://digiquant.io/dashboard/settings/brokers/callback/`
-4. Cloudflare Access, if used: `https://digiquant.io/dashboard*` only.
+4. Cloudflare Access (Zero Trust → Access → Applications) — **owner console**, no
+   API token in this environment. Point the self-hosted application (same Allow
+   email policy) at **`digiquant.io/dashboard*`**:
+   - Destination: `https://digiquant.io/dashboard*`
+   - If a separate app exists for FX Hub: `https://digiquant.io/dashboard/twelve-x*`
+   Alpaca / Supabase callback URLs are exact-match and are listed in steps 2–3;
+   Access is the path gate in front of those URLs.
 5. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 

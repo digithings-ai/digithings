@@ -8,13 +8,14 @@ on:
     paths:
       - "frontend/digiquant-web/**"
       - "frontend/digiweb/web/**"
-      - "frontend/olympus/**"
+      - "frontend/dashboard/**"
       - "frontend/digiweb/design/**"
       - "scripts/build-digiquant.sh"
       # The build script's callees. Watching the caller alone leaves the gap this
       # check exists to close, and the two files below fail in different places.
       # `write-build-info.sh` runs inside the real Cloudflare build under
-      # `set -euo pipefail` (scripts/build-digiquant.sh:88) and the build hard-fails
+      # `set -euo pipefail` (scripts/build-digiquant.sh, "writing dist/build-info.json")
+      # and the build hard-fails
       # when the stamp it writes is absent — a bug there breaks the production deploy.
       # `check_deploy_freshness.py` is never reached by the real deploy (Cloudflare's
       # build command is `bash scripts/build-digiquant.sh`, which does not call it);

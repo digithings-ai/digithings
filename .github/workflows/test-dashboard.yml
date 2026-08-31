@@ -1,4 +1,4 @@
-name: "Test: olympus"
+name: "Test: dashboard"
 
 on:
   workflow_call:
@@ -26,10 +26,10 @@ jobs:
         run: npm install --no-audit --no-fund --include=optional
 
       - name: Lint
-        run: npm run lint --workspace olympus
+        run: npm run lint --workspace dashboard
 
       - name: Build
-        run: npm run build --workspace olympus
+        run: npm run build --workspace dashboard
 
       - name: Test
-        run: npm run test --workspace olympus
+        run: npm run test --workspace dashboard

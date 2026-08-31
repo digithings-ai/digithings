@@ -1,6 +1,6 @@
 # digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). Public path is `/dashboard/` (`basePath`); `frontend/olympus` remains the workspace folder until a `feat/` / `task/` branch can rename CI workflow paths. Joins the root npm workspace and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). Public path is `/dashboard/` (`basePath`); workspace folder is `frontend/dashboard` (npm package `dashboard`). Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
@@ -262,11 +262,11 @@ blocked on K3** (vault + `broker_connections`) — see that function's README.
 ```bash
 # From repo root
 npm install                                # links workspace packages
-npm --workspace frontend/olympus run dev     # http://127.0.0.1:3001/dashboard/
-npm --workspace frontend/olympus run build   # static export (output: 'export')
-npm --workspace frontend/olympus run check:static-export # verify server/client class boundaries
-npm --workspace frontend/olympus run lint
-npm --workspace frontend/olympus run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
+npm --workspace frontend/dashboard run dev     # http://127.0.0.1:3001/dashboard/
+npm --workspace frontend/dashboard run build   # static export (output: 'export')
+npm --workspace frontend/dashboard run check:static-export # verify server/client class boundaries
+npm --workspace frontend/dashboard run lint
+npm --workspace frontend/dashboard run test    # Vitest (lib/**/*.test.ts + components/**/*.test.tsx)
 ```
 
 ## Environment variables

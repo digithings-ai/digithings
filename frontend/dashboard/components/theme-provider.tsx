@@ -16,7 +16,9 @@ export type DashboardTheme = 'light' | 'dark' | 'auto';
 /** @deprecated Use DashboardTheme. */
 export type AtlasTheme = DashboardTheme;
 
-const STORAGE_KEY = 'olympus-theme';
+const STORAGE_KEY = 'dashboard-theme';
+/** Pre-rebrand key. Read so a chosen theme survives the rename; never write. */
+const LEGACY_STORAGE_KEY = 'olympus-theme';
 /** Shared with the marketing sites (digiquant.io / digithings.ai) so the
  *  chosen theme follows the user across the same origin. Stores only 'light'|'dark'. */
 const MIRROR_KEY = 'dt-theme';
@@ -45,6 +47,8 @@ function readStoredTheme(): DashboardTheme {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw === 'light' || raw === 'dark' || raw === 'auto') return raw;
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy === 'light' || legacy === 'dark' || legacy === 'auto') return legacy;
     // fall back to the marketing-site preference if set on this origin
     const mirror = localStorage.getItem(MIRROR_KEY);
     return mirror === 'light' || mirror === 'dark' ? mirror : 'auto';
@@ -59,7 +63,7 @@ const themeListeners = new Set<() => void>();
 function subscribeTheme(onStoreChange: () => void) {
   themeListeners.add(onStoreChange);
   const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY || e.key === MIRROR_KEY) onStoreChange();
+    if (e.key === STORAGE_KEY || e.key === LEGACY_STORAGE_KEY || e.key === MIRROR_KEY) onStoreChange();
   };
   window.addEventListener('storage', onStorage);
   return () => {
@@ -113,6 +117,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = useCallback((t: DashboardTheme) => {
     try {
       localStorage.setItem(STORAGE_KEY, t);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
       // mirror the resolved light/dark so the marketing sites stay in sync
       localStorage.setItem(MIRROR_KEY, resolveEffectiveTheme(t));
     } catch {

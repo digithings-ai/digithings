@@ -12,7 +12,7 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `digikey/` | [digikey/AGENTS.md](../../digikey/AGENTS.md) | [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) | 8005 | unit tests under `tests/` for auth contracts |
 | `digibase/` | [digibase/AGENTS.md](../../digibase/AGENTS.md) | [digibase/ARCHITECTURE.md](../../digibase/ARCHITECTURE.md) | TBD (library today) | `pytest -m unit` |
 | `digichat/` | [frontend/digichat/AGENTS.md](../../frontend/digichat/AGENTS.md) | [frontend/digichat/ARCHITECTURE.md](../../frontend/digichat/ARCHITECTURE.md) | 3005 (profile) | `make test-unit` (Vitest) or `cd frontend/digichat && npm run test` |
-| `frontend/olympus/` | — | [frontend/olympus/README.md](../../frontend/olympus/README.md) | static export | `cd frontend/olympus && npm run lint && npm run test && npm run build` (not in `make test-unit`; see `olympus-test.yml`) |
+| `frontend/dashboard/` | — | [frontend/dashboard/README.md](../../frontend/dashboard/README.md) | static export | `cd frontend/dashboard && npm run lint && npm run test && npm run build` (not in `make test-unit`; see `test-dashboard.yml`) |
 | `website/` | [AGENTS.md](../../AGENTS.md) (starfield note) | — | static | manual / visual |
 | `config/` | — | [config/MODELS.md](../../config/MODELS.md) | LiteLLM 4000 | stack integration |
 | `tests/fixtures/` | — | — | — | Shared doubles (e.g. `FakeSupabaseClient` in `fake_supabase.py`) |

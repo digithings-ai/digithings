@@ -25,7 +25,7 @@ for the layout rationale.
 - `frontend/digithings-web/` — digithings.ai (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `frontend/digiquant-web/` — digiquant.io (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `frontend/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
-- `frontend/olympus/` — workspace dep only; token adoption deferred
+- `frontend/dashboard/` — workspace dep only; token adoption deferred
 
 ---
 
