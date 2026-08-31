@@ -209,8 +209,9 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A (`profile.cycle_windows`) → Stage B → `regularize`. Do not
-   publish until the backtest looks comfortable.
+5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
+   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+   overlap is diagnostic. Do not publish until the backtest looks comfortable.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -268,9 +269,11 @@ at 0 (valuation-only, current BTC charts). Weekly RSI/MACD/SMA-band z are
 computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
 file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
 OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
-that need them. Two-stage fit: Stage A (`optimize_stage_a_weights`) aligns
-composite troughs/peaks with `SdcaAssetProfile.cycle_windows` (BTC:
-`SdcaCycleWindows.btc_v1()`); Stage B freezes those weights and runs this
+that need them. Two-stage fit: published BTC Stage A
+(`optimize_stage_a_by_backtest`) grids every extra with data and keeps
+weights by in-sample `vs_flat_dca_pct` (frozen curve; OOS reported, not
+used to pick). Cycle overlap (`optimize_stage_a_weights`) is diagnostic.
+Stage B freezes those weights and runs this
 walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
 Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is

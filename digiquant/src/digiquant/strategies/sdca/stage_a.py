@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.cycle_windows import CycleKind, SdcaCycleWindows
-from digiquant.strategies.sdca.indicator_catalog import PRICE_OSCILLATOR_NAMES, SdcaCompositeWeights
+from digiquant.strategies.sdca.indicator_catalog import EXTRA_INDICATOR_NAMES, SdcaCompositeWeights
 
 ACCUMULATE_RISK_MAX = 35.0
 DISTRIBUTE_RISK_MIN = 80.0
@@ -138,7 +138,7 @@ def optimize_stage_a_weights(
     valuation_z: Sequence[float | None],
     extra_z: Mapping[str, Sequence[float | None]],
     windows: SdcaCycleWindows,
-    search_names: Sequence[str] = PRICE_OSCILLATOR_NAMES,
+    search_names: Sequence[str] = EXTRA_INDICATOR_NAMES,
     grid: Sequence[float] = (0.0, 0.5, 1.0),
     valuation_grid: Sequence[float] = (0.0, 0.5, 1.0),
     require_extras: bool = False,

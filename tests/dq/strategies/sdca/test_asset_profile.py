@@ -104,6 +104,7 @@ class TestSdcaAssetProfileBtcV1:
         assert set(BTC_PLUGIN_INDICATOR_NAMES).issubset(set(profile.extra_indicators))
         assert profile.plugin_extras() == BTC_PLUGIN_INDICATOR_NAMES
         assert profile.generic_technicals() == GENERIC_TECHNICAL_NAMES
+        assert stage_a_search_names(profile) == GENERIC_TECHNICAL_NAMES + BTC_PLUGIN_INDICATOR_NAMES
 
     def test_signal_delay_default_does_not_publish_eth(self) -> None:
         payload = json.loads(_SETTINGS.read_text())

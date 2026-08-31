@@ -715,7 +715,6 @@ def run_and_write(
 
         from digiquant.strategies.sdca.btc_power_law import load_coefficients
         from digiquant.strategies.sdca.indicator_catalog import (
-            ExtraIndicatorSources,
             SdcaCompositeWeights,
             build_extra_indicators,
         )
@@ -739,17 +738,14 @@ def run_and_write(
         idx_dates = ohlcv[ts_col]
         if idx_dates.dtype != pl.Date:
             idx_dates = idx_dates.cast(pl.Date)
-        # Price oscillators need only this OHLCV frame. Macro extras stay off
-        # on the publish path unless a later change supplies FRED/ETH files.
-        osc_only = SdcaCompositeWeights(
-            valuation=weights.valuation,
-            weekly_rsi=weights.weekly_rsi,
-            weekly_macd=weights.weekly_macd,
-            sma_band=weights.sma_band,
+        from digiquant.strategies.sdca.optimize import (
+            drop_extras_missing_sources,
+            load_sdca_extra_sources,
         )
-        extras = build_extra_indicators(
-            idx_dates, ohlcv["close"], osc_only, ExtraIndicatorSources()
-        )
+
+        sources = load_sdca_extra_sources(cache_dir)
+        weights = drop_extras_missing_sources(weights, sources)
+        extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
         index = materialize_sdca_risk_index(
             ohlcv,
             tmp_risk,

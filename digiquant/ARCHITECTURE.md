@@ -588,7 +588,8 @@ upstream for cached price history.
 | `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` / `weekly_macd` / `sma_band` (any asset's close; windows from `SdcaOscillatorSpec`) plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084). |
 | `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly resample + SMA-band z. Completed ISO weeks only; `join_asof(..., strategy="backward")`. Defaults are BTC v1 (RSI 14 / MACD 12-26-9 / 90d SMA); pass a spec to calibrate to another asset's cycle. `documented_warmup_calendar_days()` is `(rsi_length + 1) * 7` (105 days at RSI 14) — a short leading null gap, not a 2018 cliff. |
 | `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
-| `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). |
+| `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
+| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
 | `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
@@ -634,10 +635,7 @@ that default unless callers pass extras. Walk-forward (`method=random` /
 explicit `param_grid`) searches the extra weights; auto-grid does not, so a
 default optimize run still matches the power-law-only chart.
 
-**Two-stage fit.** Stage A (`stage_a.py`) searches indicator weights so
-composite risk troughs overlap that **asset's** cycle lows and peaks overlap
-cycle highs (`SdcaAssetProfile.cycle_windows` — BTC uses
-`SdcaCycleWindows.btc_v1()`, ETH research uses `eth_research_v1()`). Stage B
+**Two-stage fit.** Stage A for published BTC (`weight_search.optimize_stage_a_by_backtest`) grids every extra that has a z-series (`m2` / `rs_eth` / `dxy` / `weekly_rsi` / `weekly_macd` / `sma_band`) and keeps weights that raise in-sample `vs_flat_dca_pct` on a frozen distribute curve. Cycle-window overlap (`stage_a.optimize_stage_a_weights`) remains a diagnostic, not the keep/drop rule. `stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays generic technicals only. Stage B
 freezes those weights and runs the existing walk-forward curve optimize
 (`vs_flat_dca_pct`, floors/caps, IS-only rails). After the aggressive fit,
 `regularize.py` rounds weights to tenths and shrinks max rates (rounded to
@@ -662,7 +660,7 @@ research; do not scrape put/call or paid on-chain here.
    `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; later
    on-chain SOPR/MVRV as #1086, equity put/call). Do not enable BTC plugins
    on a second asset.
-5. Run Stage A (cycle overlap) → Stage B (walk-forward curve) → regularize.
+5. Run Stage A (backtest keep/drop of extras, cycle overlap as diagnostic) → Stage B (walk-forward curve) → regularize.
    Trust the composite as a top/bottom indicator only when that historical
    backtest looks comfortable.
 6. Only then consider a `settings.json` entry. `eth_research_v1()` is
