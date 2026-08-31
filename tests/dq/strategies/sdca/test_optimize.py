@@ -59,7 +59,7 @@ def _stub_nautilus_evaluator(monkeypatch: pytest.MonkeyPatch) -> None:
     """CI digiquant lane has no nautilus_trader; ``_run_sdca_optimize`` imports
     ``nautilus_evaluator`` before the walk-forward monkeypatch runs.
     """
-    stub = types.ModuleType("digiquant.strategies.sdca.nautilus_evaluator")
+    stub = ModuleType("digiquant.strategies.sdca.nautilus_evaluator")
 
     def _unused(*_a: object, **_k: object) -> SdcaTrialMetrics:
         raise AssertionError("walk-forward should be monkeypatched before evaluator use")
