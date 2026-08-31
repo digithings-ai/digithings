@@ -109,5 +109,5 @@ class TestNautilusOnBarUsesRemainingBook:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy
 
         src = inspect.getsource(SdcaStrategy.on_bar)
-        assert "size_trade(rate, self._cash, self._asset_units)" in src
+        assert "size_trade(rate, self._spendable_cash(), self._asset_units)" in src
         assert "self.config.initial_cash" not in src

@@ -167,7 +167,8 @@ the full module map.
   are persisted in `settings.json`. Weekly RSI/MACD, SMA band, and BTC/ETH RS
   stay at 0. Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
   OOS `beats_flat_dca_oos` is still false — do not claim an OOS win from the
-  Stage 1 `curve_simulator` sidecar.
+  Stage 1 `curve_simulator` sidecar. Allocation charts draw MTM allocated %
+  plus fill dots; do not draw a percent-cash line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC SDCA Strat**. The page is a
   strategy (fills chart, latest remaining-book signal, MTM allocated, vs
   buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
@@ -287,6 +288,28 @@ Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
 and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
 from this WP.
+
+### Remaining-book curve search (frozen index)
+
+When fills look like a slow drip instead of clustering at bottoms/tops,
+search the **curve** on today's published composite — do **not** re-search
+M2/DXY/power-law weights.
+
+```bash
+# Linux-safe curve_simulator. Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --signal-delay-days 3 \
+  --n-random 400 --seed 42 --sidecar /tmp/sdca_curve_search.json
+# Optional: write btc_optimized only if return AND fill concentration both beat
+# the published 3% / 25 / 70 curve.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --persist-preset
+```
+
+Search space is `SdcaCurveShape` only (`buy_max_rate`/`sell_max_rate` up to
+40%/day, knees inside the published 25/70 dead zone, curvature up to 5).
+Objective is `total_return_pct`. vs-flat-DCA is logged, never
+`beats_flat_dca_oos`. Gates require 2025 sells and remaining-book identity.
 
 ### SDCA test commands
 
