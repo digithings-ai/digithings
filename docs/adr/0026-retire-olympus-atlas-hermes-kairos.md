@@ -22,7 +22,7 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 
 **Positive:** One product name on digiquant.io; landing and dashboard say the same thing; agent docs stop teaching four Greek names as the architecture.
 
-**Negative / tradeoffs:** `/olympus/` 308s onto `/dashboard/` until vendor consoles drop the old callback URLs. Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`, `.olympus-mark`) and the `frontend/olympus` folder stay until a dedicated folder rename. Historical issues and ADRs still say the old names.
+**Negative / tradeoffs:** `/olympus/` 308s onto `/dashboard/` until vendor consoles drop the old callback URLs. Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`, `.olympus-mark`) stays. The workspace folder is `frontend/dashboard` (npm package `dashboard`). Historical issues and ADRs still say the old names.
 
 ## Links
 

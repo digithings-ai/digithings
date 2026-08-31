@@ -8,7 +8,7 @@ on:
     paths:
       - "frontend/digiquant-web/**"
       - "frontend/digiweb/web/**"
-      - "frontend/olympus/**"
+      - "frontend/dashboard/**"
       - "frontend/digiweb/design/**"
       - "scripts/build-digiquant.sh"
       # The build script's callees. Watching the caller alone leaves the gap this

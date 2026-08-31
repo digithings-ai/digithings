@@ -95,7 +95,7 @@ cutover (§6).
 Use only when the workflow cannot run (emergency) or for a staging clone.
 
 ```bash
-# Link CLI to core (project ref from frontend/olympus/lib/database.types.ts)
+# Link CLI to core (project ref from frontend/dashboard/lib/database.types.ts)
 supabase link --project-ref rwagjbkvxkdwqmouagad
 
 # Option A — Supabase CLI (applies pending files the CLI tracks; still prefer
@@ -210,7 +210,7 @@ Cloudflare Pages env for the digiquant.io project:
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (anon publishable key) |
 | `NEXT_PUBLIC_OLYMPUS_AUTH` | unset / empty |
 
-Behavior: classic anon client; Cloudflare Access may still gate `/olympus/*`.
+Behavior: classic anon client; Cloudflare Access may still gate `/dashboard/*` (and `/olympus/*` 308s).
 
 ### Flag on (cutover)
 
@@ -220,12 +220,12 @@ Behavior: classic anon client; Cloudflare Access may still gate `/olympus/*`.
 | (same URL + anon key) | |
 
 Then **Retry deployment** / push to `main` so `scripts/build-digiquant.sh`
-rebuilds `frontend/olympus` with the flag inlined (static export).
+rebuilds `frontend/dashboard` with the flag inlined (static export).
 
 Local verify:
 
 ```bash
-cd frontend/olympus
+cd frontend/dashboard
 NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 # out/ must still be static-export clean
 ```
@@ -273,7 +273,7 @@ ledger, §3 functions are live, and §5 rows needed for launch are green.
 apply staged SQL → verification (anon + free JWT) → frontend research-view
 cutover PR merged/deployed → **then** remove Access.
 
-- [ ] **Keep Cloudflare Access ON** for production `/olympus/*` (staging overlay
+- [ ] **Keep Cloudflare Access ON** for production `/dashboard/*` and `/olympus/*` (staging overlay
       retained throughout).
 - [ ] **Flag flip:** set `NEXT_PUBLIC_OLYMPUS_AUTH=1` on Cloudflare Pages; rebuild
       digiquant.io (`scripts/build-digiquant.sh`).
@@ -300,14 +300,14 @@ cutover PR merged/deployed → **then** remove Access.
 - [ ] **Frontend research-view cutover** (named task below) merged and Pages
       redeployed — Observer/anon paths no longer `.from('daily_snapshots')` for
       payload.
-- [ ] **Cloudflare Access removal (LAST):** remove production `/olympus/*`
+- [ ] **Cloudflare Access removal (LAST):** remove production `/dashboard/*` and `/olympus/*`
       application; keep staging overlay (D7).
 
 ### Named follow-up — frontend (T1-train; do **not** land on this branch)
 
 Cutover SQL revokes base `daily_snapshots` SELECT from anon/authenticated and
 exposes research via `public_daily_research`. Inventory of reads that break
-until the dashboard switches (file: `frontend/olympus/lib/`):
+until the dashboard switches (file: `frontend/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
@@ -397,7 +397,7 @@ PATH="$PWD/.venv/bin:$PATH" pytest -m unit tests/dq/olympus/ -q
 | Edge Functions | Bad deploy / secret miss | `supabase functions deploy <name>` prior known-good SHA; unset bad secrets carefully. Stripe webhook: disable endpoint in Dashboard if signatures fail. |
 | Olympus flag on | Login broken / empty chrome | Set `NEXT_PUBLIC_OLYMPUS_AUTH=` empty; rebuild Pages → anon path restored **only if** anon policies still exist. |
 | Anon-drop applied | Dashboard blank for Observer / research broken | Keep Access on; roll forward with `public_daily_research` frontend switch. Do not rewrite history. Emergency: forward migration re-creating old anon policies only while Access still gates the URL. |
-| Cloudflare Access removed too early | Public URL + anon/free JWT still reads weights/NAV | Re-enable Access on `/olympus/*` immediately; finish verification before removing again. |
+| Cloudflare Access removed too early | Public URL + anon/free JWT still reads weights/NAV | Re-enable Access on `/dashboard/*` and `/olympus/*` immediately; finish verification before removing again. |
 | Stripe / vault | Wrong keys | Rotate Stripe webhook secret; generate new vault key only with a re-seal plan (K3 rotation out of scope — avoid rotating after seal without a job). |
 
 **Ordering tip:** Access on → flag flip → login smoke → apply cutover SQL →
@@ -410,5 +410,5 @@ verify anon **and** free JWT see zero weights/NAV → ship frontend
 
 - Staged SQL:
   [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
-- T1 cutover notes: [`frontend/olympus/AUTH.md`](../../../frontend/olympus/AUTH.md)
+- T1 cutover notes: [`frontend/dashboard/AUTH.md`](../../../frontend/dashboard/AUTH.md)
 - db-migrate mechanics: [`digiquant/supabase/README.md`](../../../digiquant/supabase/README.md)

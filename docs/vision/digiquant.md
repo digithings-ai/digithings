@@ -84,7 +84,7 @@ Data and state flow across the broader stack:
 - **digisearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
 - **digiclaw** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
 - **digichat** is the user-facing chat interface for querying research interactively.
-- **Dashboard** (`frontend/olympus`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[olympus|olympus.md]]. Sub-graphs live in `digiquant.olympus` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
+- **Dashboard** (`frontend/dashboard`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[olympus|olympus.md]]. Sub-graphs live in `digiquant.olympus` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
 
 ## Data philosophy
 

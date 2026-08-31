@@ -1,5 +1,5 @@
 # Cloudflare Pages headers for digiquant.io (landing + /dashboard).
-# Canonical CSP values mirror frontend/olympus/lib/security-headers.mjs.
+# Canonical CSP values mirror frontend/dashboard/lib/security-headers.mjs.
 # CSP is scoped to /dashboard* (and /olympus* while 308s still land there) —
 # the landing self-hosts fonts (next/font) and needs no external origins;
 # the dashboard reads Supabase (connect-src).

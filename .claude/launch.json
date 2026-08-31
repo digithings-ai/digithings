@@ -111,11 +111,11 @@
       "port": 4030
     },
     {
-      "name": "olympus",
+      "name": "dashboard",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "frontend/olympus",
+        "frontend/dashboard",
         "run",
         "dev",
         "--",

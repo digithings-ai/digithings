@@ -424,7 +424,7 @@
 /* ── conviction vocabulary ───────────────────────────────────────────────────────── */
 /* RECORDED-FROM-OLYMPUS, pending a promotion ruling (#1577) — no
    @digithings/web export exists yet, so conviction-reference.tsx owns static
-   markup class-for-class from frontend/olympus/components/shared/
+   markup class-for-class from frontend/dashboard/components/shared/
    conviction-meter.tsx + signed-conviction-badge.tsx. The pip/badge dress
    itself stays inline utilities (bg-accent / bg-hair / text-up / text-down)
    to mirror the olympus source exactly; the cvx-* classes below are

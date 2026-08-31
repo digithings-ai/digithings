@@ -36,7 +36,7 @@ After filing, edit each issue to add `Parent: #E` (or use the epic checklist to 
 | T4 | Overlay pipeline runs | `component:digiquant` | `module/digiquant` | high | claude | sonnet | no (budget-guarded) |
 | T5 | Tier-gated UI | (olympus UI) | `develop` | med | cursor | sonnet | no |
 
-Olympus UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `frontend/olympus` routes
+Olympus UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `frontend/dashboard` routes
 per `docs/agents/COMPONENT_ROUTING.md`); use a `cursor/<slug>` or `task/<N>-<slug>` branch off
 `origin/develop`. digiquant WPs use `make task ISSUE=N` (module branches were synced 2026-08-29,
 PRs #3083–#3090).

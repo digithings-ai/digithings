@@ -3,7 +3,7 @@
  * conviction primitives, RECORDED-FROM-OLYMPUS pending a promotion ruling: no
  * @digithings/web export exists yet, so this specimen reproduces the dress as
  * static markup sourced class-for-class from
- * `frontend/olympus/components/shared/conviction-meter.tsx` and
+ * `frontend/dashboard/components/shared/conviction-meter.tsx` and
  * `signed-conviction-badge.tsx`, rather than consuming a shared primitive.
  *
  * THREE encodings, never conflated (the olympus F6 ruling) — same cyan

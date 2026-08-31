@@ -1,5 +1,5 @@
 /**
- * The digiquant dashboard mark, ported from frontend/olympus so digiquant.io
+ * The digiquant dashboard mark, ported from frontend/dashboard so digiquant.io
  * matches the operator surface. Strokes carry `olympus-stroke-N` classes so the
  * dashboard's loader animation (stroke-draw + scale pulse) can be replayed on
  * hover via CSS (see globals.css). Uses currentColor, so it inherits the

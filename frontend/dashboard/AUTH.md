@@ -73,7 +73,16 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 3. Alpaca OAuth app → Redirect URI, **add before dropping the old one**:
    - `https://digiquant.io/dashboard/settings/brokers/callback/`
    - keep `https://digiquant.io/olympus/settings/brokers/callback/` until traffic drains
-4. Cloudflare Access: add `/dashboard/*` (and keep `/olympus/*` until 308s drop).
+4. Cloudflare Access (Zero Trust → Access → Applications) — **owner console**, no
+   API token in this environment. Clone the existing `digiquant.io/olympus*`
+   self-hosted application (same Allow email policy) onto **`digiquant.io/dashboard*`**
+   before dropping the old destination:
+   - Destination 1 (keep until 308s drain): `https://digiquant.io/olympus*`
+   - Destination 2 (add now): `https://digiquant.io/dashboard*`
+   - If a separate app exists for FX Hub: add `https://digiquant.io/dashboard/twelve-x*`
+     and keep `https://digiquant.io/olympus/twelve-x*` until 308s drop.
+   Alpaca / Supabase callback URLs are exact-match and are listed in steps 2–3;
+   Access is the path gate in front of those URLs.
 5. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 
@@ -122,7 +131,8 @@ owned); do not encode it in this repo.
 ### Historical production Access (pre-cutover)
 
 Before T1 cutover, production `/dashboard/*` (and the `/olympus/*` 308) may still
-use Access as the only gate. Until Access is live on that path, treat the URL as public. Migration
+use Access as the only gate. Access must list **both** destinations; until it
+does, treat `/dashboard/` as public. Migration
 [`033_revoke_anon_run_diagnostics.sql`](../../digiquant/supabase/migrations/033_revoke_anon_run_diagnostics.sql)
 already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 `positions.pm_notes` stays readable (PM commentary the dashboard renders).
@@ -171,6 +181,7 @@ Operator steps:
    registered). Mailgun digest is a separate secret; until it exists the
    notification is the table row + `notification_log` event `fx_hub_invite_redeemed`.
 
-Cloudflare Access on **`/olympus/twelve-x*` only** remains a human Zero Trust
-option if the team should never see the rest of Olympus — it is not encoded here.
+Cloudflare Access on **`/dashboard/twelve-x*`** (keep **`/olympus/twelve-x*`** until
+308s drop) remains a human Zero Trust option if the team should never see the
+rest of the dashboard — it is not encoded here.
 
