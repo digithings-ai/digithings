@@ -5,7 +5,10 @@ import { strategyDisplayName } from "./strategy-names";
 describe("strategyDisplayName", () => {
   it("uses the canonical remaining-book name even if the store still says Strategic DCA", () => {
     expect(strategyDisplayName("btc_sdca", "BTC Strategic DCA")).toBe(
-      "BTC power-law remaining-book",
+      "BTC SDCA Strat",
+    );
+    expect(strategyDisplayName("btc_sdca", "BTC power-law remaining-book")).toBe(
+      "BTC SDCA Strat",
     );
     expect(strategyDisplayName("btc_slapper", "BTC Slapper")).toBe("BTC long/short");
   });
@@ -21,11 +24,15 @@ describe("strategy notes", () => {
   it("renders remaining-book notes instead of dropping SDCA", () => {
     const lines = theoryCopy("BTC", "btc_sdca");
     expect(lines.length).toBeGreaterThan(0);
-    expect(lines.join(" ")).toMatch(/power-law remaining-book/i);
-    expect(lines.join(" ")).toMatch(/not a multi-indicator composite/i);
-    expect(lines.join(" ")).toMatch(/does not beat flat DCA/i);
+    expect(lines.join(" ")).toMatch(/SDCA Strat/i);
+    expect(lines.join(" ")).toMatch(/composite valuation index/i);
+    expect(lines.join(" ")).toMatch(/power law \+ M2 \+ DXY/i);
+    expect(lines.join(" ")).toMatch(/remaining cash/i);
     expect(lines.join(" ")).toMatch(/not a live trading strategy/i);
+    expect(lines.join(" ")).toMatch(/Buy-and-hold is the public benchmark/i);
     expect(lines.join(" ")).not.toMatch(/beat the market/i);
+    expect(lines.join(" ")).not.toMatch(/power-law remaining-book/i);
+    expect(lines.join(" ")).not.toMatch(/not a multi-indicator composite/i);
     expect(lines.join(" ")).not.toMatch(/curve_simulator/i);
     expect(lines.join(" ")).not.toMatch(/btc_stage1/i);
   });

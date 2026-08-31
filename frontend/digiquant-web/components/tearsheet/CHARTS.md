@@ -65,19 +65,18 @@ the publish path copies #3168 diagnostic columns so these charts do not
 degrade on a shipped `btc_sdca` payload.
 
 Library cards for `kind === "dca"` (or when `vs_lump_pct` is present)
-headline **vs-lump (full sample)**, **vs-flat-DCA (full sample)**, and
-**MTM allocated %** instead of win rate / trade count / capital deployed.
-`beats_flat_dca_oos` is surfaced as a "Not OOS vs flat DCA" chip when false.
+headline **vs buy & hold**, **total return**, **max drawdown**, and
+**allocated %**. vs-flat DCA is not a public comparable.
 Do not present curve-sign `buy_days`/`sell_days` as fill counts.
 
-Current signal for a DCA book is **risk, band, daily rate**, plus MTM allocated
-(never a negative "Deployed"). The risk tab is **power-law risk**, not a
-multi-indicator composite, while extras sit at weight 0.
+Latest signal for a DCA book is **buy / sell / hold** plus the remaining-book
+rate (percent of remaining cash or remaining BTC), as of `period_end` (3-day
+delay). Allocated is MTM, never a negative "Deployed". The primary chart is
+**Fills** (`AllocationStepChart` with sized buy/sell markers). The risk tab is
+the **composite valuation index** (power law + M2 + DXY).
 
-When the live store has no payload yet, `/strategies/btc_sdca/` still renders
-the canonical title, delay chip, backtest-only + OOS-honesty chips, and
-remaining-book notes. Charts and KPI numbers wait on the operator
-`--push-supabase` from the halt-fixed tree.
+Public title is **BTC SDCA Strat**. Honesty (`beats_flat_dca_oos` false,
+backtest only) lives in notes, not title chips.
 
 Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
 All `dca.*_pct` fields are ×100 percents.

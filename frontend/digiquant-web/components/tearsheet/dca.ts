@@ -129,9 +129,10 @@ export function curveKnees(data: TearsheetData): { buy_knee_risk: number; sell_k
   return data.curve_knees ?? DEFAULT_SDCA_KNEES;
 }
 
-export const ALLOCATED_KPI_LABEL = "MTM allocated";
+export const ALLOCATED_KPI_LABEL = "Allocated";
 export const VS_FLAT_KPI_LABEL = "Vs flat DCA (full sample)";
-export const VS_LUMP_KPI_LABEL = "Vs lump (full sample)";
+export const VS_LUMP_KPI_LABEL = "Vs buy & hold";
+export const TOTAL_RETURN_KPI_LABEL = "Total return";
 
 /** Final MTM allocated %. Never capital_deployed (goes negative after sells). */
 export function lastAllocatedPct(

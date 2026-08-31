@@ -4,7 +4,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   btc_slapper: "BTC long/short",
   eth_slapper: "ETH long/short",
   sol_slapper: "SOL long/short",
-  btc_sdca: "BTC power-law remaining-book",
+  btc_sdca: "BTC SDCA Strat",
 };
 
 /** Resolve a human label; canonical map wins so a stale store label cannot lie. */

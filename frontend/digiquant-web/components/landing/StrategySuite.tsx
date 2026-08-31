@@ -1,7 +1,7 @@
 "use client";
 /**
  * Homepage strategy spotlight — the BTC / ETH / SOL slapper plus BTC
- * power-law remaining-book (btc_sdca) tearsheet previews on the
+ * BTC SDCA Strat (btc_sdca) tearsheet previews on the
  * canonical <DeckStack/> sticky cascade (@digithings/web, promoted from the
  * design reference's card deck, #1450).
  *
@@ -47,8 +47,8 @@ import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stat
 import { symbolBase, strategyDisplayName } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
-import { isDcaIndexEntry, isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_FLAT_KPI_LABEL, VS_LUMP_KPI_LABEL } from "@/components/tearsheet/dca";
-import { BacktestOnlyChip, OosHonestyChip } from "@/components/tearsheet/honesty";
+import { isDcaIndexEntry, isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "@/components/tearsheet/dca";
+import { BacktestOnlyChip } from "@/components/tearsheet/honesty";
 
 const SUITE_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper", "btc_sdca"] as const;
 
@@ -205,7 +205,6 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
             {dca ? (
               <>
                 <BacktestOnlyChip />
-                <OosHonestyChip beatsFlatDcaOos={false} />
                 <SignalDelayChip days={3} />
               </>
             ) : (
@@ -220,7 +219,7 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
       </div>
 
       <KpiStrip primary ariaLabel="Headline performance">
-        <Kpi label="CAGR" value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
+        <Kpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
         <Kpi
           label="Max drawdown"
           value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
@@ -233,18 +232,8 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
               value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
             />
             <Kpi
-              className="dqss-kpi-medium"
-              label={VS_FLAT_KPI_LABEL}
-              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-            />
-            <Kpi
               className="dqss-kpi-optional"
               label={ALLOCATED_KPI_LABEL}
-              value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
-            />
-            <Kpi
-              className="dqss-kpi-optional"
-              label="Units"
               value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
             />
           </>
@@ -340,7 +329,6 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
     periodEnd,
   );
   const vsLump = data?.dca?.vs_lump_pct ?? entry.vs_lump_pct;
-  const vsFlat = data?.dca?.vs_flat_dca_pct ?? entry.vs_flat_dca_pct;
   const allocated = data ? lastAllocatedPct(data) : entry.allocated_pct ?? null;
 
   const chartReady = chartOhlc.length > 0;
@@ -371,9 +359,6 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
             <span className="ts-chip">{symbol}</span>
             <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             {dca ? <BacktestOnlyChip /> : null}
-            {dca ? (
-              <OosHonestyChip beatsFlatDcaOos={data?.beats_flat_dca_oos ?? entry.beats_flat_dca_oos} />
-            ) : null}
             <span className="ts-meta-text">
               {periodStart} → {periodEnd}
               {bars != null ? ` · ${fmtNum(bars)} bars` : ""}
@@ -391,7 +376,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
       </div>
 
       <KpiStrip primary ariaLabel="Headline performance">
-        <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
+        <Kpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<Toned v={dca ? (data?.net_profit_pct ?? entry.net_profit_pct) : cagr}>{fmtPct(dca ? (data?.net_profit_pct ?? entry.net_profit_pct) : cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(maxDd)}</span>} />
         {dca ? (
           <>
@@ -401,19 +386,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
               value={<Toned v={vsLump}>{fmtPct(vsLump)}</Toned>}
             />
             <Kpi
-              className="dqss-kpi-medium"
-              label={VS_FLAT_KPI_LABEL}
-              value={<Toned v={vsFlat}>{fmtPct(vsFlat)}</Toned>}
-            />
-            <Kpi
               className="dqss-kpi-optional"
               label={ALLOCATED_KPI_LABEL}
               value={fmtPct(allocated)}
-            />
-            <Kpi
-              className="dqss-kpi-optional"
-              label="Units"
-              value={fmtNum(data?.dca?.units_accumulated, 2)}
             />
           </>
         ) : (

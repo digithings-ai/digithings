@@ -21,9 +21,8 @@ export function strategyLibraryDescription(): string[] {
 export function theoryCopy(asset: string, strategy: string): string[] {
   if (strategy.includes("sdca")) {
     return [
-      `${asset} power-law remaining-book: each day buys a percent of remaining cash or sells a percent of remaining holdings from a power-law valuation index. Extra indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH relative strength) are unused — their weights are 0. This is not a multi-indicator composite.`,
-      "Nautilus vs-flat and vs-lump are the full backtest window, not walk-forward out-of-sample. Published walk-forward does not beat flat DCA.",
-      "Signals are delayed 3 days. This page is a backtest — not a live trading strategy.",
+      `${asset} SDCA Strat sizes each day as a percent of remaining cash (buy) or remaining ${asset} (sell) from a composite valuation index (power law + M2 + DXY).`,
+      "Illustrative Nautilus backtest with a 3-day signal delay — not a live strategy. Buy-and-hold is the public benchmark. Walk-forward vs flat DCA is not a published beat.",
     ];
   }
   if (!isSlapperStrategy(strategy)) return [];

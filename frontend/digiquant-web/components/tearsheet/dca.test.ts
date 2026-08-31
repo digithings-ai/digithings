@@ -125,6 +125,17 @@ describe("isValuationOnlyIndex", () => {
     expect(isValuationOnlyIndex(undefined)).toBe(true);
     expect(isValuationOnlyIndex({ valuation: 1, m2: 0, dxy: 0 })).toBe(true);
     expect(isValuationOnlyIndex({ valuation: 1, m2: 0.5 })).toBe(false);
+    expect(
+      isValuationOnlyIndex({
+        valuation: 1,
+        m2: 0.5,
+        dxy: 0.5,
+        rs_eth: 0,
+        weekly_rsi: 0,
+        weekly_macd: 0,
+        sma_band: 0,
+      }),
+    ).toBe(false);
   });
 });
 

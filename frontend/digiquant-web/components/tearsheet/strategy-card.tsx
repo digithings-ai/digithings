@@ -10,8 +10,7 @@ import {
   toneClass,
 } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
-import { isDcaIndexEntry, lastAllocatedPctFromIndex, ALLOCATED_KPI_LABEL, VS_FLAT_KPI_LABEL, VS_LUMP_KPI_LABEL } from "./dca";
-import { OosHonestyChip } from "./honesty";
+import { isDcaIndexEntry, lastAllocatedPctFromIndex, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "./dca";
 import { LiveMetricsBadge } from "./live-metrics";
 import { SignalDelayChip } from "./signal-delay";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
@@ -37,27 +36,18 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
                 <SignalDelayChip days={e.signal_delay_days} />
               </div>
             ) : null}
-            {dca ? (
-              <div className="mt-1.5">
-                <OosHonestyChip beatsFlatDcaOos={e.beats_flat_dca_oos} />
-              </div>
-            ) : null}
           </div>
         </div>
         <LiveMetricsBadge generatedAt={e.generated_at} className="ts-card-live" />
       </div>
       <TearsheetCardKpis>
-        <TearsheetCardKpi label="CAGR" value={<span className={toneClass(cagr)}>{fmtPct(cagr)}</span>} />
+        <TearsheetCardKpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<span className={toneClass(dca ? e.net_profit_pct : cagr)}>{fmtPct(dca ? e.net_profit_pct : cagr)}</span>} />
         <TearsheetCardKpi label="Max DD" value={<span className="is-neg">{fmtPct(e.max_drawdown_pct)}</span>} />
         {dca ? (
           <>
             <TearsheetCardKpi
               label={VS_LUMP_KPI_LABEL}
               value={<span className={toneClass(e.vs_lump_pct)}>{fmtPct(e.vs_lump_pct)}</span>}
-            />
-            <TearsheetCardKpi
-              label={VS_FLAT_KPI_LABEL}
-              value={<span className={toneClass(e.vs_flat_dca_pct)}>{fmtPct(e.vs_flat_dca_pct)}</span>}
             />
             <TearsheetCardKpi label={ALLOCATED_KPI_LABEL} value={fmtPct(lastAllocatedPctFromIndex(e))} />
           </>

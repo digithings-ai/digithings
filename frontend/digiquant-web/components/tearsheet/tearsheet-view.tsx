@@ -71,8 +71,8 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_FLAT_KPI_LABEL, VS_LUMP_KPI_LABEL, isValuationOnlyIndex } from "./dca";
-import { BacktestOnlyChip, OosHonestyChip } from "./honesty";
+import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
+import { BacktestOnlyChip } from "./honesty";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -142,7 +142,6 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
               <span className="ts-chip">{symbol}</span>
               <SignalDelayChip days={3} detail="full" />
               <BacktestOnlyChip />
-              <OosHonestyChip beatsFlatDcaOos={false} />
             </div>
           ) : null}
         </div>
@@ -169,7 +168,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
   const [viewOverride, setViewOverride] = useState<ViewWindow | null>(null);
-  const [lookback, setLookback] = useState<LookbackPreset>("1y");
+  const [lookback, setLookback] = useState<LookbackPreset>(slug.includes("sdca") ? "all" : "1y");
   const [mode, setMode] = useState<TearsheetMode>("charts");
   const [chartTabPick, setChartTab] = useState<ChartTab | null>(null);
   const [tableTab, setTableTab] = useState<TableTab>("stats");
@@ -222,10 +221,6 @@ export function TearsheetView({ slug }: { slug: string }) {
   );
   const chartLump = useMemo(
     () => (data?.lump_equity_curve ? clipPoints(data.lump_equity_curve, data.period_start) : []),
-    [data],
-  );
-  const chartFlat = useMemo(
-    () => (data?.flat_dca_equity_curve ? clipPoints(data.flat_dca_equity_curve, data.period_start) : []),
     [data],
   );
   const chartAllocated = useMemo(() => (data ? clipPoints(allocatedPctCurve(data), data.period_start) : []), [data]);
@@ -281,12 +276,12 @@ export function TearsheetView({ slug }: { slug: string }) {
   const hasRisk = chartRisk.length > 0;
   const hasIndicators = chartIndicators.length > 0;
   const hasAccum = chartCost.length > 0 || chartAllocated.length > 0;
-  const hasThreeWay = chartLump.length > 0 && chartFlat.length > 0;
+  const hasLump = chartLump.length > 0;
   const showTradeKpis = data ? hasTradeKpis(data.win_rate_pct, data.profit_factor) : true;
   const dcaBook = data ? isDcaTearsheet(data) : false;
   const chartTab =
     chartTabPick ??
-    (hasRails ? "rails" : hasPrice ? "price" : "equity");
+    (dcaBook && hasAccum ? "accumulation" : hasRails ? "rails" : hasPrice ? "price" : "equity");
 
   useEffect(() => {
     if (dcaBook) setScale("log");
@@ -322,11 +317,12 @@ export function TearsheetView({ slug }: { slug: string }) {
 
   const chartTabOptions = useMemo(() => {
     const opts: { value: ChartTab; label: string }[] = [];
+    if (dcaBook && hasAccum) opts.push({ value: "accumulation", label: "Fills" });
     if (hasPrice) opts.push({ value: "price", label: "Price" });
     if (hasRails) opts.push({ value: "rails", label: "Rails" });
     if (hasRisk) opts.push({ value: "risk", label: dcaBook ? "Risk" : "Index" });
     if (hasIndicators) opts.push({ value: "indicators", label: "Indicators" });
-    if (hasAccum) opts.push({ value: "accumulation", label: "Allocation" });
+    if (hasAccum && !dcaBook) opts.push({ value: "accumulation", label: "Allocation" });
     opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
     if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
     opts.push({ value: "matrix", label: "Matrix" });
@@ -393,7 +389,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           <span className="ts-panel-hint">
             {isValuationOnlyIndex(data?.indicator_weights)
               ? "Power-law only. Extra indicators are unused (weight 0)."
-              : "Index members. Zero-weight extras are unused."}
+              : "Composite valuation index (power law + M2 + DXY). Zero-weight extras are unused."}
           </span>
         );
       case "accumulation":
@@ -408,12 +404,11 @@ export function TearsheetView({ slug }: { slug: string }) {
           />
         );
       case "equity":
-        return hasThreeWay ? (
+        return hasLump ? (
           <ChartLegend
             items={[
               { kind: "line", label: scale === "log" ? "SDCA ($)" : "SDCA %" },
-              { kind: "line-dashed", label: "Lump" },
-              { kind: "line-mute", label: "Flat DCA" },
+              { kind: "line-dashed", label: "Buy & hold" },
             ]}
           />
         ) : (
@@ -437,7 +432,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         return _exhaustive;
       }
     }
-  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasThreeWay, scale]);
+  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasLump, scale]);
 
   if (err) return <TearsheetUnavailable slug={slug} message={err} />;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
@@ -524,7 +519,6 @@ export function TearsheetView({ slug }: { slug: string }) {
             <span className="ts-chip">{data.symbol}</span>
             <SignalDelayChip days={data.signal_delay_days} detail="full" />
             {dcaBook ? <BacktestOnlyChip /> : null}
-            {dcaBook ? <OosHonestyChip beatsFlatDcaOos={data.beats_flat_dca_oos} /> : null}
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>
@@ -546,14 +540,12 @@ export function TearsheetView({ slug }: { slug: string }) {
       <CurrentPosition data={data} asset={asset} />
 
       <KpiStrip primary ariaLabel="Headline performance">
-        <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
+        <Kpi label={dcaBook ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<Toned v={dcaBook ? data.net_profit_pct : cagr}>{fmtPct(dcaBook ? data.net_profit_pct : cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} />
         {dcaBook && data.dca ? (
           <>
             <Kpi label={VS_LUMP_KPI_LABEL} value={<Toned v={data.dca.vs_lump_pct}>{fmtPct(data.dca.vs_lump_pct)}</Toned>} />
-            <Kpi label={VS_FLAT_KPI_LABEL} value={<Toned v={data.dca.vs_flat_dca_pct}>{fmtPct(data.dca.vs_flat_dca_pct)}</Toned>} />
             <Kpi label={ALLOCATED_KPI_LABEL} value={fmtPct(lastAllocatedPct(data))} />
-            <Kpi label="Units" value={fmtNum(data.dca.units_accumulated, 2)} />
           </>
         ) : showTradeKpis ? (
           <>
@@ -613,7 +605,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           ) : null}
           {hasRails ? (
             <div className="ts-tab-pane" hidden={chartTab !== "rails"}>
-              <PrintHeading>Power-law rails</PrintHeading>
+              <PrintHeading>Valuation rails</PrintHeading>
               <div className="ts-chart">
                 <MultiTimeSeries
                   series={railsOverlay}
@@ -624,14 +616,14 @@ export function TearsheetView({ slug }: { slug: string }) {
                   onView={setViewFromChart}
                   fullSpan={fullSpan}
                   resetView={presetView}
-                  ariaLabel={`${data.symbol} log price with power-law rails`}
+                  ariaLabel={`${data.symbol} log price with valuation rails`}
                 />
               </div>
             </div>
           ) : null}
           {hasRisk ? (
             <div className="ts-tab-pane" hidden={chartTab !== "risk"}>
-              <PrintHeading>Power-law risk</PrintHeading>
+              <PrintHeading>Composite risk</PrintHeading>
               <div className="ts-chart">
                 <RiskBandStrip
                   points={chartRisk}
@@ -653,7 +645,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                     },
                   ]}
                   priceOverlay={chartSpot}
-                  ariaLabel="Power-law risk 0 to 100 with accumulate and distribute knees and log BTC overlay"
+                  ariaLabel="Composite risk 0 to 100 with accumulate and distribute knees and log BTC overlay"
                 />
               </div>
             </div>
@@ -691,7 +683,7 @@ export function TearsheetView({ slug }: { slug: string }) {
           ) : null}
           {hasAccum ? (
             <div className="ts-tab-pane" hidden={chartTab !== "accumulation"}>
-              <PrintHeading>Allocation</PrintHeading>
+              <PrintHeading>Fills</PrintHeading>
               {chartAllocated.length > 0 ? (
                 <div className="ts-chart">
                   <AllocationStepChart
@@ -733,29 +725,22 @@ export function TearsheetView({ slug }: { slug: string }) {
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <PrintHeading>Equity</PrintHeading>
             <div className="ts-chart">
-              {hasThreeWay ? (
+              {hasLump ? (
                 <MultiTimeSeries
                   series={
                     chartScale === "log"
                       ? [
                           { id: "sdca", label: "SDCA", points: chartEquity, tone: "accent", fill: true },
-                          { id: "lump", label: "Lump", points: chartLump, tone: "mute", dashed: true },
-                          { id: "flat", label: "Flat DCA", points: chartFlat, tone: "mute" },
+                          { id: "lump", label: "Buy & hold", points: chartLump, tone: "mute", dashed: true },
                         ]
                       : [
                           { id: "sdca", label: "SDCA", points: equityPct, tone: "accent", fill: true },
                           {
                             id: "lump",
-                            label: "Lump",
+                            label: "Buy & hold",
                             points: toReturnPct(chartLump, data.initial_capital),
                             tone: "mute",
                             dashed: true,
-                          },
-                          {
-                            id: "flat",
-                            label: "Flat DCA",
-                            points: toReturnPct(chartFlat, data.initial_capital),
-                            tone: "mute",
                           },
                         ]
                   }

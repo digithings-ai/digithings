@@ -89,43 +89,40 @@ function DcaCurrentSignal({ data, asset }: { data: TearsheetData; asset: string 
   const sig = data.current_signal;
   const risk = sig?.risk ?? data.dca?.avg_risk ?? null;
   const band = sig?.band ?? riskBandLabel(risk);
-  const rateCopy = dcaRateCopy(sig?.daily_rate_pct);
-  const headline = band
-    ? rateCopy
-      ? `${band} — ${rateCopy}`
-      : band
-    : "DCA book";
+  const rate = sig?.daily_rate_pct;
+  const rateCopy = dcaRateCopy(rate);
+  const side =
+    rate == null || Number.isNaN(rate) || rate === 0 ? "hold" : rate > 0 ? "buy" : "sell";
+  const sideLabel = side === "buy" ? "Buy" : side === "sell" ? "Sell" : "Hold";
   const allocated = lastAllocatedPct(data);
   const units = data.dca?.units_accumulated;
   const lastPrice = sig?.last_price ?? null;
 
   return (
-    <section className="ts-position ts-position-live" aria-label="Current signal">
+    <section className="ts-position ts-position-live" aria-label="Latest signal">
       <div className="ts-position-head">
-        <span className="ts-panel-label">Current signal</span>
+        <span className="ts-panel-label">Latest signal</span>
         <span className="ts-position-asof">as of {asOf}</span>
       </div>
       <div className="ts-position-body">
         <div className="ts-position-main">
-          <span className="ts-position-dca-band">{headline}</span>
-          {rateCopy ? null : (
-            <span className="ts-position-entry">
-              Accumulation book on{" "}
-              <span className="ts-position-asset">
-                <AssetLogoFor strategy={data.strategy} symbol={data.symbol} size={20} className="ts-position-logo" />
-                {asset}
-              </span>
+          <span className="ts-position-dca-band">
+            {sideLabel}
+            {rateCopy ? ` — ${rateCopy}` : ""}
+          </span>
+          <span className="ts-position-entry">
+            Remaining-book rate on{" "}
+            <span className="ts-position-asset">
+              <AssetLogoFor strategy={data.strategy} symbol={data.symbol} size={20} className="ts-position-logo" />
+              {asset}
             </span>
-          )}
+            {band ? ` · ${band}` : ""}
+          </span>
         </div>
         <dl className="ts-position-stats">
           <div>
             <dt>Risk</dt>
             <dd>{risk == null ? "—" : risk.toFixed(1)}</dd>
-          </div>
-          <div>
-            <dt>Band</dt>
-            <dd>{band ?? "—"}</dd>
           </div>
           <div>
             <dt>{ALLOCATED_KPI_LABEL}</dt>
