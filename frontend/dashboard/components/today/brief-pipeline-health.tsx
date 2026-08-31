@@ -6,11 +6,13 @@ import { ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
 import type { AtlasRunDiagnostics } from '@/lib/types';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
+import { unpublishedBookNote } from '@/lib/dashboard-ssot';
 import {
   buildWeekDaySlots,
   canGoToNextWeek,
   clampWeekStart,
   formatWeekRangeLabel,
+  formatYmd,
   mondayOfWeek,
   shiftWeekStart,
 } from '@/lib/run-health-week';
@@ -276,6 +278,10 @@ export function BriefPipelineHealth({
 
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
+  const todayYmd = formatYmd(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  );
+  const commitNote = unpublishedBookNote(runHealth?.runDate ?? null, todayYmd);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">
@@ -299,6 +305,11 @@ export function BriefPipelineHealth({
 
       <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>{pipeline.label}</p>
       <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">{pipeline.detail}</p>
+      {commitNote ? (
+        <p data-testid="unpublished-book-note" className="mt-1 text-[11px] leading-snug text-ink-mute">
+          {commitNote}
+        </p>
+      ) : null}
 
       {cards ? (
         <div

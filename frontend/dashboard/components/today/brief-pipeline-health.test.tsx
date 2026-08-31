@@ -114,6 +114,20 @@ describe('BriefPipelineHealth', () => {
     expect(html).not.toContain('brief-run-health-timeline');
   });
 
+  it('explains a last-week committed snapshot when today has no commit', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth,
+        diagnostics: [diag()],
+        now: new Date('2026-08-31T17:00:00Z'),
+        initialWeekStart: '2026-08-31',
+      })
+    );
+    expect(html).toContain('data-testid="unpublished-book-note"');
+    expect(html).toContain('Last committed snapshot is 2026-08-27');
+    expect(html).toContain('Newer positions are hidden until a ledger commit lands');
+  });
+
   it('defaults the week window to the current week of `now`', () => {
     const html = renderToStaticMarkup(
       createElement(BriefPipelineHealth, {
