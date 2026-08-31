@@ -308,11 +308,11 @@ export function PipelineScene() {
                 <p>Research and portfolio run today. Live execution is next.</p>
               </div>
               {/* Final beat of the horizontal track: after the pipeline pans by,
-                  a quiet text+arrow that launches the dashboard. `/olympus/` is the
-                  separate dashboard export (dist/olympus/), so a plain <a> (full
+                  a quiet text+arrow that launches the dashboard. `/dashboard/` is the
+                  separate dashboard export (dist/dashboard/), so a plain <a> (full
                   cross-app navigation), not a Next <Link>. data-eng="2" ties it to
                   the execution leg so the pan centres it last (Kend). */}
-              <a className="dqp-step dqp-golink" data-eng="2" href="/olympus/">
+              <a className="dqp-step dqp-golink" data-eng="2" href="/dashboard/">
                 <span className="dqp-golink-label">Open dashboard</span>
                 <span className="dqp-golink-arrow" aria-hidden="true">→</span>
               </a>

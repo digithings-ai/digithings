@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/olympus/twelve-x',
+  usePathname: () => '/twelve-x',
 }));
 
 import {

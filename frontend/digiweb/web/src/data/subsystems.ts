@@ -1,8 +1,9 @@
 /** digiquant subsystems — research → portfolio → execution.
  *  Same shape conventions as modules; drives the pipeline graph + detail pages.
  *
- *  Display names are job words (ADR-0026). URL ids (`atlas` / `hermes` / `kairos`)
- *  and Python import snippets still match package paths until the path/package waves.
+ *  Display names and URL ids are job words (ADR-0026). Emblem keys stay on the
+ *  existing mark set (research/portfolio/execution alias the same SVGs).
+ *  Init snippets do not print retired package paths.
  */
 import { type StackItem } from "./modules";
 
@@ -23,11 +24,11 @@ export interface Subsystem {
 
 export const subsystems: Subsystem[] = [
   {
-    id: "atlas",
+    id: "research",
     name: "Research",
     tier: "research",
     step: "01 · research",
-    emblem: "atlas",
+    emblem: "research",
     role: "Scheduled macro & market research",
     tagline: "Research, persisted — structured views, not prose.",
     summary: [
@@ -42,15 +43,18 @@ export const subsystems: Subsystem[] = [
       { name: "CoinGecko", icon: null, mono: "CG" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.olympus.atlas.graph import build_atlas_graph\natlas = build_atlas_graph()" },
-    related: ["hermes", "kairos"],
+    initSnippet: {
+      lang: "python",
+      code: "# daily research cycle — structured views, not prose\n# universe + open data → versioned artifacts (A0–A4)",
+    },
+    related: ["portfolio", "execution"],
   },
   {
-    id: "hermes",
+    id: "portfolio",
     name: "Portfolio",
     tier: "signals",
     step: "02 · signals",
-    emblem: "hermes",
+    emblem: "portfolio",
     role: "Deliberation & signal delivery",
     tagline: "Delivery, not deliberation theatre.",
     summary: [
@@ -63,15 +67,18 @@ export const subsystems: Subsystem[] = [
       { name: "Supabase", icon: "supabase" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.olympus.hermes.graph import build_hermes_graph\nhermes = build_hermes_graph()" },
-    related: ["atlas", "kairos"],
+    initSnippet: {
+      lang: "python",
+      code: "# deliberation → a sized book (H1–H9)\n# every signal timestamped to the views that produced it",
+    },
+    related: ["research", "execution"],
   },
   {
-    id: "kairos",
+    id: "execution",
     name: "Execution",
     tier: "execution",
     step: "03 · execution",
-    emblem: "kairos",
+    emblem: "execution",
     role: "Backtest, optimize, and paper-route — live venues refused",
     tagline: "Paper adapters ship. Live tokens never leave the router.",
     summary: [
@@ -84,8 +91,11 @@ export const subsystems: Subsystem[] = [
       { name: "Polars", icon: "polars" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # paper adapters exist; live tokens are refused" },
-    related: ["hermes", "atlas"],
+    initSnippet: {
+      lang: "python",
+      code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # paper adapters exist; live tokens are refused",
+    },
+    related: ["portfolio", "research"],
   },
 ];
 

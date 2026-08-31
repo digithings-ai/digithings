@@ -149,25 +149,25 @@ def test_staging_checkout_is_custom_not_baseline() -> None:
 @pytest.mark.unit
 def test_public_app_urls_ok_requires_digiquant_origin() -> None:
     good = {
-        "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
-        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+        "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
     }
     assert public_app_urls_ok(200, good) is True
     loopback = {
         **good,
-        "alpaca_redirect_uri": "http://127.0.0.1:3001/olympus/settings/brokers/callback/",
+        "alpaca_redirect_uri": "http://127.0.0.1:3001/dashboard/settings/brokers/callback/",
     }
     assert public_app_urls_ok(200, loopback) is False
     named_loopback = {
         **good,
-        "billing_return_url": "http://localhost:3001/olympus/settings/?tab=billing",
+        "billing_return_url": "http://localhost:3001/dashboard/settings/?tab=billing",
     }
     assert public_app_urls_ok(200, named_loopback) is False
-    missing_olympus = {
+    missing_dashboard = {
         **good,
         "billing_return_url": "https://digiquant.io/settings/billing",
     }
-    assert public_app_urls_ok(200, missing_olympus) is False
+    assert public_app_urls_ok(200, missing_dashboard) is False
     extra_public_client = {
         **good,
         "alpaca_oauth_client_id": "cid-public",
@@ -217,8 +217,8 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
         ("GET", "/settings/app-urls"): (
             200,
             {
-                "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
-                "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+                "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+                "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
             },
         ),
         ("GET", "/settings/jobs"): (200, {"jobs": []}),

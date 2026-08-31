@@ -1,6 +1,6 @@
 # digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The folder and public path remain `frontend/olympus` / `/olympus/` until the path wave. Joins the root npm workspace and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). Public path is `/dashboard/` (`basePath`); `frontend/olympus` remains the workspace folder until a `feat/` / `task/` branch can rename CI workflow paths. Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
@@ -200,9 +200,10 @@ comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
 
 **CSP (REM-077):** security headers ship from `frontend/digiquant-web/public/_headers`,
 which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pages
-ignores `_headers` files below the output root, so a copy under `dist/olympus/`
+ignores `_headers` files below the output root, so a copy under `dist/dashboard/`
 would never apply in production (#674).
-The dashboard CSP is scoped to `/olympus*`; landing pages keep Google Fonts working.
+The dashboard CSP is scoped to `/dashboard*` (and `/olympus*` while 308s still
+land there); landing pages keep Google Fonts working.
 Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
 secure WebSockets (`wss://*.supabase.co`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
@@ -257,7 +258,7 @@ blocked on K3** (vault + `broker_connections`) — see that function's README.
 ```bash
 # From repo root
 npm install                                # links workspace packages
-npm --workspace frontend/olympus run dev     # http://localhost:3000/olympus/
+npm --workspace frontend/olympus run dev     # http://127.0.0.1:3001/dashboard/
 npm --workspace frontend/olympus run build   # static export (output: 'export')
 npm --workspace frontend/olympus run check:static-export # verify server/client class boundaries
 npm --workspace frontend/olympus run lint
@@ -272,7 +273,7 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
-| `NEXT_PUBLIC_OLYMPUS_AUTH`        | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
+| `NEXT_PUBLIC_DASHBOARD_AUTH`      | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. `NEXT_PUBLIC_OLYMPUS_AUTH` is a one-release alias. |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 | `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Optional fallback public Alpaca OAuth client id. Brokers tab prefers `GET /settings/app-urls` (EF `ALPACA_OAUTH_CLIENT_ID`; never the secret). |
 | `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
@@ -381,7 +382,7 @@ values.
 
 > **Sharing / auth:** The dashboard is a static export (`output: 'export'`). Product
 > login is **Supabase Auth** (Google + GitHub PKCE) behind
-> `NEXT_PUBLIC_OLYMPUS_AUTH=1` — see [`AUTH.md`](AUTH.md) § App auth (T1). Flag
+> `NEXT_PUBLIC_DASHBOARD_AUTH=1` — see [`AUTH.md`](AUTH.md) § App auth (T1). Flag
 > off (default) keeps today's anon client. Until cutover, anon RLS
 > `USING (true)` still applies; gate shared hosts with **Cloudflare Access**
 > (staging overlay after T1; production Access comes off at cutover — D7).

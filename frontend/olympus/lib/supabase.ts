@@ -10,18 +10,29 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
  * Inlined at build time — static export has no runtime env.
  */
 export function isOlympusAuthEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1';
+  return (
+    process.env.NEXT_PUBLIC_DASHBOARD_AUTH === '1' ||
+    process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1'
+  );
 }
+
+const FALLBACK_DASHBOARD_BASE_PATH = '/dashboard';
 
 /**
  * App basePath for client URLs. Sourced from next.config.mjs `env` (same value
- * as `basePath: '/olympus'`). Hard fallback keeps OAuth correct if env is missing.
+ * as `basePath: '/dashboard'`). Hard fallback keeps OAuth correct if env is missing.
  */
-export function olympusBasePath(): string {
-  const raw = process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ?? '/olympus';
+export function dashboardBasePath(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH ||
+    process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ||
+    FALLBACK_DASHBOARD_BASE_PATH;
   const trimmed = raw.replace(/\/+$/, '');
-  return trimmed || '/olympus';
+  return trimmed || FALLBACK_DASHBOARD_BASE_PATH;
 }
+
+/** @deprecated Use dashboardBasePath. */
+export const olympusBasePath = dashboardBasePath;
 
 /**
  * Build the browser Supabase client.
@@ -70,14 +81,14 @@ export type OAuthProvider = 'google' | 'github';
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}${olympusBasePath()}/auth/callback/`;
+  return `${window.location.origin}${dashboardBasePath()}/auth/callback/`;
 }
 
 /**
  * Options for supabase-js `signInWithOAuth`.
  *
  * `skipBrowserRedirect` is required: Google (unlike GitHub) often returns a URL
- * that the default supabase-js location swap drops on static `/olympus/`
+ * that the default supabase-js location swap drops on static `/dashboard/`
  * basePath. The caller assigns `data.url` itself after a missing-URL check.
  */
 export function oauthSignInOptions(provider: OAuthProvider): {

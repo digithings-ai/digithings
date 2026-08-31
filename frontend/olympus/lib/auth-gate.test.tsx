@@ -85,12 +85,16 @@ describe('isOlympusAuthPath', () => {
   it('identifies only the PKCE callback as the exchange route', () => {
     expect(isOlympusAuthCallbackPath('/auth/callback')).toBe(true);
     expect(isOlympusAuthCallbackPath('/auth/callback/')).toBe(true);
+    expect(isOlympusAuthCallbackPath('/dashboard/auth/callback')).toBe(true);
     expect(isOlympusAuthCallbackPath('/olympus/auth/callback')).toBe(true);
     expect(isOlympusAuthCallbackPath('/login')).toBe(false);
     expect(isOlympusAuthCallbackPath('/signup')).toBe(false);
   });
 
   it('allows basePath-prefixed exact forms', () => {
+    expect(isOlympusAuthPath('/dashboard/login')).toBe(true);
+    expect(isOlympusAuthPath('/dashboard/signup')).toBe(true);
+    expect(isOlympusAuthPath('/dashboard/auth/callback/')).toBe(true);
     expect(isOlympusAuthPath('/olympus/login')).toBe(true);
     expect(isOlympusAuthPath('/olympus/signup')).toBe(true);
     expect(isOlympusAuthPath('/olympus/auth/callback/')).toBe(true);

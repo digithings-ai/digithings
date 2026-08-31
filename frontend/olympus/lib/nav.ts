@@ -35,7 +35,7 @@ export const NAV: NavItem[] = [
  *     '/pipeline' (run health panel) and '/settings';
  *   - static legacy redirect routes that never touch Supabase, so gating them
  *     would only swallow a redirect.
- * Pathnames are app-relative (basePath '/olympus' is stripped by usePathname).
+ * Pathnames are app-relative (basePath '/dashboard' is stripped by usePathname).
  */
 export const DB_EXEMPT_PREFIXES = [
   '/system', // legacy redirect → /pipeline

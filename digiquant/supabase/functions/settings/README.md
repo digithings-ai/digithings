@@ -94,7 +94,7 @@ supabase secrets set \
   FX_HUB_INVITE_HASH=…           # sha256 hex of the 12x invite; never NEXT_PUBLIC_
 ```
 
-Pinned OAuth callback: `{APP_URL}/olympus/settings/brokers/callback/`.
+Pinned OAuth callback: `{APP_URL}/dashboard/settings/brokers/callback/`.
 
 ## Tests
 

@@ -1,10 +1,11 @@
 # digiquant dashboard access gating
 
-The digiquant dashboard at `digiquant.io/olympus/` is a **static export** (D6) that
+The digiquant dashboard at `digiquant.io/dashboard/` is a **static export** (D6) that
 reads Supabase with the **publishable anon key baked into the JS bundle**. Until
 app auth cutover, every relevant table still has an `anon` RLS policy of
 `USING (true)`, so **anyone with the URL can read all published data**. The anon
-key cannot be hidden in a static bundle.
+key cannot be hidden in a static bundle. Bookmarks to `/olympus/` 308 onto
+`/dashboard/`.
 
 ## App auth (T1)
 
@@ -14,11 +15,11 @@ storage). Routes:
 
 | Path | Role |
 |------|------|
-| `/olympus/login/` | Start OAuth / email sign-in (`signInWithOAuth`, `signInWithPassword`) |
-| `/olympus/signup/` | Same card, create-account mode (`signUpWithPassword`) |
-| `/olympus/auth/callback/` | Client-side PKCE completion (static page — no route handlers) |
+| `/dashboard/login/` | Start OAuth / email sign-in (`signInWithOAuth`, `signInWithPassword`) |
+| `/dashboard/signup/` | Same card, create-account mode (`signUpWithPassword`) |
+| `/dashboard/auth/callback/` | Client-side PKCE completion (static page — no route handlers) |
 
-Everything is behind `NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time). Flag **off**
+Everything is behind `NEXT_PUBLIC_DASHBOARD_AUTH=1` (build-time; `NEXT_PUBLIC_OLYMPUS_AUTH=1` remains a one-release alias). Flag **off**
 (default) ⇒ no behavior change; prerendered DOM verified identical to today's
 shell: `AuthGate` passes children through and queries use the classic anon client.
 
@@ -27,7 +28,7 @@ dashboard shell; the same PKCE client attaches the user JWT so RLS can scope
 rows after the coordinated anon-policy drop.
 
 OAuth starts with `skipBrowserRedirect: true` so the app assigns `data.url`
-itself (Google otherwise drops the redirect on the static `/olympus/` basePath).
+itself (Google otherwise drops the redirect on the static `/dashboard/` basePath).
 Google also sends `queryParams.access_type=offline` and `prompt=select_account`.
 The PKCE client sets `detectSessionInUrl: false` so only the callback page
 exchanges `?code=` (`exchangeCodeForSession`). Auto-detect would race the
@@ -54,7 +55,9 @@ provider is not an app bug.
 # .env.local (local) or Cloudflare Pages build env (prod)
 NEXT_PUBLIC_SUPABASE_URL=…
 NEXT_PUBLIC_SUPABASE_ANON_KEY=…
-NEXT_PUBLIC_OLYMPUS_AUTH=1
+NEXT_PUBLIC_DASHBOARD_AUTH=1
+# One-release alias still honoured:
+# NEXT_PUBLIC_OLYMPUS_AUTH=1
 ```
 
 Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server env.
@@ -62,29 +65,37 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 ### Supabase dashboard (human performs)
 
 1. Authentication → Providers → enable **Google** and **GitHub** (D4).
-2. Authentication → URL configuration → Redirect URLs, allow:
-   - `https://digiquant.io/olympus/auth/callback/`
-   - `http://localhost:3000/olympus/auth/callback/` (dev)
-3. Do **not** add custom cookie/session wiring in the app — session storage stays
+2. Authentication → URL configuration → Redirect URLs, allow **both** until
+   vendor consoles are cut over (Alpaca `redirect_uri` is exact-match):
+   - `https://digiquant.io/dashboard/auth/callback/`
+   - `https://digiquant.io/olympus/auth/callback/` (308s onto dashboard; keep listed)
+   - `http://127.0.0.1:3001/dashboard/auth/callback/` (dev; dashboard historically on 3001)
+3. Alpaca OAuth app → Redirect URI, **add before dropping the old one**:
+   - `https://digiquant.io/dashboard/settings/brokers/callback/`
+   - keep `https://digiquant.io/olympus/settings/brokers/callback/` until traffic drains
+4. Cloudflare Access: add `/dashboard/*` (and keep `/olympus/*` until 308s + twin copy go).
+5. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 
 ### Pages Auth UI (without anon-drop cutover 900)
 
-`/olympus/login` and `/olympus/auth/callback` are static routes. They must exist
+`/dashboard/login` and `/dashboard/auth/callback` are static routes. They must exist
 on `main` for Cloudflare Pages to stop 404ing those paths. Enabling
-`NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time; `scripts/build-digiquant.sh` defaults
-it on when `CF_PAGES=1` and the var is unset) shows the LoginScreen / AuthGate
+`NEXT_PUBLIC_DASHBOARD_AUTH=1` (build-time; `scripts/build-digiquant.sh` defaults
+`NEXT_PUBLIC_OLYMPUS_AUTH=1` and mirrors it onto `NEXT_PUBLIC_DASHBOARD_AUTH`
+when `CF_PAGES=1` and the vars are unset) shows the LoginScreen / AuthGate
 **without** applying `migrations/cutover/900_*`. Anon RLS stays until the
 coordinated cutover below — do **not** treat Auth-UI-on as full tenancy cutover.
 
 ### Cutover checklist (coordinated release — human)
 
 1. Merge T0 workspaces/RLS (incl. drafted anon-policy drop) when ready.
-2. Confirm `NEXT_PUBLIC_OLYMPUS_AUTH=1` on the digiquant.io Cloudflare Pages build
-   (or leave unset so `build-digiquant.sh` defaults it on under `CF_PAGES=1`).
+2. Confirm `NEXT_PUBLIC_DASHBOARD_AUTH=1` (or the `NEXT_PUBLIC_OLYMPUS_AUTH=1`
+   alias) on the digiquant.io Cloudflare Pages build (or leave unset so
+   `build-digiquant.sh` defaults them on under `CF_PAGES=1`).
 3. Redeploy the static dashboard bundle.
 4. Apply cutover SQL `900_*` only after Access + Auth UI plan (never auto).
-5. Owner removes Cloudflare Access from production `/olympus/*` (D7).
+5. Owner removes Cloudflare Access from production `/dashboard/*` and `/olympus/*` (D7).
 6. Keep Access on **staging** only (below).
 
 **HUMAN GATE:** auth flow review before merge; production cutover is owner-led.
@@ -110,8 +121,8 @@ owned); do not encode it in this repo.
 
 ### Historical production Access (pre-cutover)
 
-Before T1 cutover, production `/olympus/*` may still use Access as the only
-gate. Until Access is live on that path, treat the URL as public. Migration
+Before T1 cutover, production `/dashboard/*` (and the `/olympus/*` 308) may still
+use Access as the only gate. Until Access is live on that path, treat the URL as public. Migration
 [`033_revoke_anon_run_diagnostics.sql`](../../digiquant/supabase/migrations/033_revoke_anon_run_diagnostics.sql)
 already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 `positions.pm_notes` stays readable (PM commentary the dashboard renders).
@@ -137,7 +148,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 - [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the 12x invite) on the settings
       Edge Function, apply migration **112**, share the plaintext only out of band.
 - [ ] **Owner:** staging Access overlay retained; production Access removed at
-  cutover with `NEXT_PUBLIC_OLYMPUS_AUTH=1` + anon-policy drop.
+  cutover with `NEXT_PUBLIC_DASHBOARD_AUTH=1` + anon-policy drop.
 - [ ] **Do not share an ungated production URL** while anon `USING (true)` still
   applies and Access is not on that host.
 

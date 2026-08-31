@@ -10,7 +10,7 @@ import MotionLayer from '@/components/motion-layer';
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme')||localStorage.getItem('dt-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}var m=dark?'dark':'light';d.classList.add(m);d.setAttribute('data-theme',m);}catch(e){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}})();`;
 
-// Self-hosted at build time by next/font (served from /olympus/_next/static/media),
+// Self-hosted at build time by next/font (served from /dashboard/_next/static/media),
 // so it satisfies the dashboard CSP (font-src 'self' data:) — no fonts.googleapis.com.
 // BLEND v0.1: one mono voice for display, body, and chrome.
 const geistMono = Geist_Mono({
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   applicationName: 'digiquant',
   title: 'digiquant',
   description: 'digiquant — AI-orchestrated investment intelligence (research + portfolio)',
-  manifest: '/olympus/manifest.webmanifest',
+  manifest: '/dashboard/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     title: 'digiquant',
@@ -32,14 +32,14 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/olympus/icons/olympus-app-dark.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
-      { url: '/olympus/icons/olympus-app-light.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
-      { url: '/olympus/icons/olympus-app-32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/dashboard/icons/olympus-app-dark.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
+      { url: '/dashboard/icons/olympus-app-light.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
+      { url: '/dashboard/icons/olympus-app-32.png', type: 'image/png', sizes: '32x32' },
     ],
-    shortcut: '/olympus/icons/olympus-app-32.png',
+    shortcut: '/dashboard/icons/olympus-app-32.png',
     apple: [
-      { url: '/olympus/icons/olympus-app-touch-dark.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: dark)' },
-      { url: '/olympus/icons/olympus-app-touch-light.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: light)' },
+      { url: '/dashboard/icons/olympus-app-touch-dark.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: dark)' },
+      { url: '/dashboard/icons/olympus-app-touch-light.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: light)' },
     ],
   },
 };

@@ -140,8 +140,8 @@ describe('BrokersTab', () => {
           revokeFn: vi.fn(),
           fillsFn,
           appUrlsFn: vi.fn(async () => ({
-            alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
-            billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+            alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+            billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
             alpaca_oauth_client_id: '',
           })),
         }),
@@ -165,8 +165,8 @@ describe('BrokersTab', () => {
     const root = createRoot(host);
     const navigated: string[] = [];
     const appUrlsFn = vi.fn(async () => ({
-      alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
-      billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+      alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+      billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
       alpaca_oauth_client_id: 'cid-from-ef',
     }));
     await act(async () => {

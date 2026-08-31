@@ -1,15 +1,15 @@
 /**
- * Alpaca OAuth path helpers (T3) — must use olympusBasePath(), never an unset
- * NEXT_PUBLIC_BASE_PATH (that dropped /olympus — T1's exact bug).
+ * Alpaca OAuth path helpers (T3) — must use dashboardBasePath(), never an unset
+ * NEXT_PUBLIC_BASE_PATH (that dropped the dashboard prefix — T1's exact bug).
  */
 
-import { olympusBasePath } from '@/lib/supabase';
+import { dashboardBasePath } from '@/lib/supabase';
 
-export const ALPACA_OAUTH_STATE_KEY = 'olympus_alpaca_oauth_state';
+export const ALPACA_OAUTH_STATE_KEY = 'dashboard_alpaca_oauth_state';
 
-/** Fixed callback path under the Olympus basePath (trailing slash). */
+/** Fixed callback path under the dashboard basePath (trailing slash). */
 export function alpacaOAuthCallbackPath(): string {
-  return `${olympusBasePath()}/settings/brokers/callback/`;
+  return `${dashboardBasePath()}/settings/brokers/callback/`;
 }
 
 /** Absolute redirect_uri for authorize + token exchange. */
@@ -19,7 +19,7 @@ export function alpacaOAuthRedirectUri(origin: string = window.location.origin):
 
 /** Settings home after a successful connect. */
 export function settingsHomeHref(): string {
-  return `${olympusBasePath()}/settings/`;
+  return `${dashboardBasePath()}/settings/`;
 }
 
 /** Alpaca OAuth authorize URL (paper). Client id is public; secret stays server-side. */

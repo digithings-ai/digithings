@@ -68,7 +68,7 @@ describe('AuthCallbackPage', () => {
   beforeEach(() => {
     supabaseMock.reset();
     replace.mockClear();
-    window.history.replaceState({}, '', '/olympus/auth/callback/');
+    window.history.replaceState({}, '', '/dashboard/auth/callback/');
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -97,7 +97,7 @@ describe('AuthCallbackPage', () => {
     window.history.replaceState(
       {},
       '',
-      '/olympus/auth/callback/?error=access_denied&error_description=Provider+not+enabled',
+      '/dashboard/auth/callback/?error=access_denied&error_description=Provider+not+enabled',
     );
     await mount();
     expect(container.textContent).toContain('access_denied: Provider not enabled');
@@ -106,7 +106,7 @@ describe('AuthCallbackPage', () => {
   });
 
   it('exchanges ?code= and replaces home', async () => {
-    window.history.replaceState({}, '', '/olympus/auth/callback/?code=pkce-abc');
+    window.history.replaceState({}, '', '/dashboard/auth/callback/?code=pkce-abc');
     await mount();
     expect(supabaseMock.auth.exchangeCodeForSession).toHaveBeenCalledWith('pkce-abc');
     expect(replace).toHaveBeenCalledWith('/');
@@ -121,7 +121,7 @@ describe('AuthCallbackPage', () => {
           finishExchange = resolve;
         }),
     );
-    window.history.replaceState({}, '', '/olympus/auth/callback/?code=pkce-pending');
+    window.history.replaceState({}, '', '/dashboard/auth/callback/?code=pkce-pending');
     await mount();
     expect(supabaseMock.auth.exchangeCodeForSession).toHaveBeenCalledWith('pkce-pending');
     await act(async () => {

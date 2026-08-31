@@ -13,7 +13,7 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
   beforeEach(() => {
     createClient.mockClear();
     vi.unstubAllEnvs();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
   });
 
   it('flag off: createClient is called with url+key only (anon client)', async () => {
@@ -40,18 +40,18 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     expect(opts?.auth?.detectSessionInUrl).toBe(false);
   });
 
-  it('oauthRedirectTo includes /olympus basePath (real implementation)', async () => {
-    const { oauthRedirectTo, olympusBasePath } = await import('./supabase');
-    expect(olympusBasePath()).toBe('/olympus');
+  it('oauthRedirectTo includes /dashboard basePath (real implementation)', async () => {
+    const { oauthRedirectTo, dashboardBasePath } = await import('./supabase');
+    expect(dashboardBasePath()).toBe('/dashboard');
     // happy-dom default origin
-    expect(oauthRedirectTo()).toBe(`${window.location.origin}/olympus/auth/callback/`);
+    expect(oauthRedirectTo()).toBe(`${window.location.origin}/dashboard/auth/callback/`);
   });
 
   it('oauthSignInOptions always skipBrowserRedirect and add Google query params', async () => {
     const { oauthSignInOptions } = await import('./supabase');
     const github = oauthSignInOptions('github');
     expect(github.skipBrowserRedirect).toBe(true);
-    expect(github.redirectTo).toMatch(/\/olympus\/auth\/callback\/$/);
+    expect(github.redirectTo).toMatch(/\/dashboard\/auth\/callback\/$/);
     expect(github.queryParams).toBeUndefined();
     const google = oauthSignInOptions('google');
     expect(google.queryParams).toEqual({
@@ -77,14 +77,15 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     expect(oauthPkceCodeFromLocation('')).toBeNull();
   });
 
-  it('olympusBasePath falls back to /olympus when env unset', async () => {
+  it('dashboardBasePath falls back to /dashboard when env unset', async () => {
     vi.unstubAllEnvs();
     // Re-import would be cached; exercise the fallback via direct logic:
-    // when NEXT_PUBLIC_OLYMPUS_BASE_PATH is empty string, still normalize.
+    // when NEXT_PUBLIC_DASHBOARD_BASE_PATH is empty string, still normalize.
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '');
     vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '');
     // Module already loaded — call through with empty env by re-reading:
-    const raw = process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ?? '/olympus';
+    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH || '/dashboard';
     const trimmed = raw.replace(/\/+$/, '');
-    expect(trimmed || '/olympus').toBe('/olympus');
+    expect(trimmed || '/dashboard').toBe('/dashboard');
   });
 });

@@ -170,7 +170,9 @@ export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digigraph: DigiGraph, digiquant: DigiQuant, digisearch: DigiSearch, digichat: DigiChat,
   digikey: DigiKey, digismith: DigiSmith, digiclaw: DigiClaw, digibase: DigiBase,
   digivault: DigiVault,
-  digistore: DigiStore, digilink: DigiLink, atlas: Atlas, hermes: Hermes, kairos: Kairos,
+  digistore: DigiStore, digilink: DigiLink,
+  atlas: Atlas, hermes: Hermes, kairos: Kairos,
+  research: Atlas, portfolio: Hermes, execution: Kairos,
 };
 
 export function Emblem({ id, size = 32, className }: { id: string; size?: number; className?: string }) {

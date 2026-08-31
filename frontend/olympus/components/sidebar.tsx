@@ -10,7 +10,7 @@ import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
-import { olympusBasePath } from '@/lib/supabase';
+import { dashboardBasePath } from '@/lib/supabase';
 import { useCanAccessProduct } from '@/lib/use-entitlement';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
@@ -53,7 +53,7 @@ function routeActive(pathname: string, base: string, href: string): boolean {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const base = olympusBasePath();
+  const base = dashboardBasePath();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();

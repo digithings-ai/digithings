@@ -22,7 +22,7 @@ import { formatAuthError, isDuplicateSignupUser } from './auth-errors';
 export type { OAuthProvider };
 
 export interface AuthContextValue {
-  /** True when NEXT_PUBLIC_OLYMPUS_AUTH=1 (build-time). */
+  /** True when NEXT_PUBLIC_DASHBOARD_AUTH=1 (or OLYMPUS_AUTH alias) at build time. */
   authEnabled: boolean;
   session: Session | null;
   user: User | null;

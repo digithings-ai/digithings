@@ -98,7 +98,7 @@ export function can(tier: PlanTier, artifactClass: ArtifactClass): boolean {
 /**
  * Resolve plan tier from a Supabase session.
  *
- * Flag coupling (pre-cutover): when `NEXT_PUBLIC_OLYMPUS_AUTH` is off, return
+ * Flag coupling (pre-cutover): when `isOlympusAuthEnabled()` is off, return
  * `enterprise` so today's operator UI stays fully visible and T5 can merge
  * before the auth cutover.
  *

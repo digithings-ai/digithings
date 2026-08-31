@@ -13,6 +13,9 @@ const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
 
 /** Prefixed forms if a caller ever passes a full path including basePath. */
 const AUTH_PATHS_WITH_BASE = new Set([
+  '/dashboard/login',
+  '/dashboard/signup',
+  '/dashboard/auth/callback',
   '/olympus/login',
   '/olympus/signup',
   '/olympus/auth/callback',
@@ -30,7 +33,11 @@ export function isOlympusAuthPath(pathname: string | null): boolean {
 /** PKCE callback only — must run even when a session already exists. */
 export function isOlympusAuthCallbackPath(pathname: string | null): boolean {
   const norm = (pathname ?? '').replace(/\/+$/, '') || '/';
-  return norm === '/auth/callback' || norm === '/olympus/auth/callback';
+  return (
+    norm === '/auth/callback' ||
+    norm === '/dashboard/auth/callback' ||
+    norm === '/olympus/auth/callback'
+  );
 }
 
 function SignedInAuthPathRedirect() {

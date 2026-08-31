@@ -11,7 +11,7 @@ tags:
 # digiquant dashboard
 > The human-facing operator surface for digiquant — research, portfolio deliberation, and execution in one place.
 
-This page used to be titled olympus. Product names are now digiquant plus job words (research / portfolio / execution). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) and [the rebrand scope](../plans/2026-08-30-product-rebrand-scope.md). The dashboard still lives at `frontend/olympus` and `digiquant.io/olympus/` until the path wave.
+This page used to be titled olympus. Product names are now digiquant plus job words (research / portfolio / execution). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) and [the rebrand scope](../plans/2026-08-30-product-rebrand-scope.md). The dashboard lives at `digiquant.io/dashboard/` (`frontend/olympus` remains the workspace folder).
 
 ## What it is
 

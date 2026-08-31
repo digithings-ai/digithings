@@ -274,8 +274,8 @@ describe('settings-api', () => {
       expect(String(url)).toContain('/settings/app-urls');
       return new Response(
         JSON.stringify({
-          alpaca_redirect_uri: 'https://digiquant.io/olympus/settings/brokers/callback/',
-          billing_return_url: 'https://digiquant.io/olympus/settings/?tab=billing',
+          alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+          billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
           alpaca_oauth_client_id: 'cid-public',
         }),
         { status: 200 },

@@ -101,7 +101,7 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
 
         {!authEnabled ? (
           <p className="mt-4 border border-hair bg-bg px-4 py-3 font-mono text-[0.68rem] text-ink-mute">
-            App auth is off. Set <code>NEXT_PUBLIC_OLYMPUS_AUTH=1</code> at build time to enable
+            App auth is off. Set <code>NEXT_PUBLIC_DASHBOARD_AUTH=1</code> at build time to enable
             login.
           </p>
         ) : (
