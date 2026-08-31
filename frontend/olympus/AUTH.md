@@ -73,7 +73,7 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 3. Alpaca OAuth app → Redirect URI, **add before dropping the old one**:
    - `https://digiquant.io/dashboard/settings/brokers/callback/`
    - keep `https://digiquant.io/olympus/settings/brokers/callback/` until traffic drains
-4. Cloudflare Access: add `/dashboard/*` (and keep `/olympus/*` until 308s + twin copy go).
+4. Cloudflare Access: add `/dashboard/*` (and keep `/olympus/*` until 308s drop).
 5. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 
