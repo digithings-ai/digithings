@@ -218,6 +218,7 @@ def test_chart_inputs_from_2025_style_payload_reconstructs_sells() -> None:
         ],
     }
     bundle = chart_inputs_from_payload(payload)
+    assert "cash_pct" not in bundle
     assert bundle["knees"].buy_knee_risk == pytest.approx(25.0)
     assert bundle["knees"].sell_knee_risk == pytest.approx(70.0)
     power = next(c for c in bundle["indicators"] if c.name == "valuation")

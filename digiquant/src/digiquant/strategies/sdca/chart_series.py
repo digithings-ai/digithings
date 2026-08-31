@@ -363,7 +363,6 @@ def chart_inputs_from_payload(payload: Mapping[str, object]) -> dict[str, object
         "equity": equity,
         "prices": prices,
         "allocated_pct": allocated,
-        "cash_pct": [100.0 - a for a in allocated],
         "fill_markers": markers,
         "risk": risk_pts,
         "lump": lump_pts,

@@ -130,16 +130,12 @@ describe("RiskBandStrip", () => {
 });
 
 describe("AllocationStepChart", () => {
-  it("renders step paths and sized buy/sell fill dots", () => {
+  it("renders allocated step and sized buy/sell fill dots, without a cash line", () => {
     const html = renderToStaticMarkup(
       createElement(AllocationStepChart, {
         allocated: [
           { t: "2025-01-19", v: 90 },
           { t: "2025-01-20", v: 70 },
-        ],
-        cash: [
-          { t: "2025-01-19", v: 10 },
-          { t: "2025-01-20", v: 30 },
         ],
         markers: [
           { t: "2025-01-19", side: "buy", book_frac: 0.05 },
@@ -153,7 +149,7 @@ describe("AllocationStepChart", () => {
       }),
     );
     expect(html).toContain('data-chart-layer="alloc-step"');
-    expect(html).toContain('data-chart-layer="cash-step"');
+    expect(html).not.toContain('data-chart-layer="cash-step"');
     expect(html).toContain('data-chart-layer="fill-markers"');
     expect(html).toContain('data-side="buy"');
     expect(html).toContain('data-side="sell"');

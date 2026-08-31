@@ -2241,7 +2241,6 @@ export interface AllocationFillMarker {
 
 export interface AllocationStepChartProps {
   allocated: TearsheetSeriesPoint[];
-  cash: TearsheetSeriesPoint[];
   markers: AllocationFillMarker[];
   priceOverlay?: TearsheetSeriesPoint[];
   height?: number;
@@ -2266,7 +2265,7 @@ function stepPath(
   return d;
 }
 
-/** Step % allocated / % cash with sized buy/sell fill dots and faint log price. */
+/** Step % allocated (MTM) with sized buy/sell fill dots and faint log price. Cash is the inverse of allocated and is not drawn. */
 export function AllocationStepChart(props: AllocationStepChartProps) {
   const { allocated, height = 320 } = props;
   if (!allocated || allocated.length === 0) return <Empty height={height} msg="no data" />;
@@ -2275,7 +2274,6 @@ export function AllocationStepChart(props: AllocationStepChartProps) {
 
 function AllocationStepChartBody({
   allocated: allAllocated,
-  cash: allCash,
   markers,
   priceOverlay = [],
   height,
@@ -2292,7 +2290,6 @@ function AllocationStepChartBody({
   const pad = { ...layoutPad, right: Math.max(layoutPad.right, 64) };
   const clipId = `ts-alloc-clip-${useId().replace(/:/g, "")}`;
   const allocated = sliceByView(allAllocated, view, fullSpan);
-  const cash = sliceByView(allCash, view, fullSpan);
   const pricePts = sliceByView(priceOverlay, view, fullSpan);
   const control = viewHandlers(view, onView, pad, vbW, resetView);
   const plotW = vbW - pad.left - pad.right;
@@ -2303,7 +2300,6 @@ function AllocationStepChartBody({
   const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = (val: number) => pad.top + plotH - (val / 100) * plotH;
   const allocPath = stepPath(allocated, xAt, yAt);
-  const cashPath = stepPath(cash, xAt, yAt);
   const dateIx = new Map(allocated.map((p, i) => [p.t.slice(0, 10), i]));
 
   const priceMap = new Map(pricePts.map((p) => [p.t, p.v]));
@@ -2389,7 +2385,6 @@ function AllocationStepChartBody({
         ) : null}
         <g clipPath={`url(#${clipId})`}>
           <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
-          <path d={cashPath} fill="none" className="ts-line ts-tone-mute ts-line-dashed" data-chart-layer="cash-step" />
         </g>
         <g clipPath={`url(#${clipId})`} data-chart-layer="fill-markers">
           {markers.map((m, i) => {

@@ -71,7 +71,7 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, cashPctFromAllocated, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
+import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
 import { BacktestOnlyChip } from "./honesty";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
@@ -224,7 +224,6 @@ export function TearsheetView({ slug }: { slug: string }) {
     [data],
   );
   const chartAllocated = useMemo(() => (data ? clipPoints(allocatedPctCurve(data), data.period_start) : []), [data]);
-  const chartCash = useMemo(() => cashPctFromAllocated(chartAllocated), [chartAllocated]);
   const chartFills = useMemo(() => (data ? fillMarkersForChart(data) : []), [data]);
   const chartIndicators = useMemo(() => (data ? indicatorPanels(data) : []), [data]);
   const chartKnees = useMemo(() => (data ? curveKnees(data) : { buy_knee_risk: 25, sell_knee_risk: 70 }), [data]);
@@ -397,7 +396,6 @@ export function TearsheetView({ slug }: { slug: string }) {
           <ChartLegend
             items={[
               { kind: "line", label: "% allocated" },
-              { kind: "line-dashed", label: "% cash" },
               { kind: "marker-buy", label: "buy fill" },
               { kind: "marker-sell", label: "sell fill" },
             ]}
@@ -688,7 +686,6 @@ export function TearsheetView({ slug }: { slug: string }) {
                 <div className="ts-chart">
                   <AllocationStepChart
                     allocated={chartAllocated}
-                    cash={chartCash}
                     markers={chartFills}
                     priceOverlay={chartSpot}
                     height={CHART_H}
@@ -696,7 +693,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                     onView={setViewFromChart}
                     fullSpan={fullSpan}
                     resetView={presetView}
-                    ariaLabel="Percent allocated versus percent cash, step chart, with fill dots sized by fraction of book moved"
+                    ariaLabel="Percent allocated (mark-to-market), step chart, with fill dots sized by fraction of book moved"
                   />
                 </div>
               ) : null}
