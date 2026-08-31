@@ -706,7 +706,7 @@ NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
 
 | Table | Backfill target | Column DEFAULT | Constraints changed |
 |-------|-----------------|----------------|---------------------|
-| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 drops legacy) |
+| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 stages the drop in `cutover/113`, not auto-applied) |
 | `position_events` | house | house id | **keep** `position_events_date_ticker_key`; **add** `uq_position_events_workspace_date_ticker` |
 | `nav_history` | house | house id | **keep** PK `(date)`; **add** `uq_nav_history_workspace_date (workspace_id, date)` |
 | `portfolio_metrics` | house | house id | **keep** `portfolio_metrics_date_key`; **add** `uq_portfolio_metrics_workspace_date` |
@@ -720,9 +720,13 @@ House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_sna
 Ops / recovery scripts (`sync_positions_from_rebalance.py`, `update_tearsheet.py`,
 `materialize_snapshot.py` positions, `backfill_execution_prices.py`,
 `reconcile_position_events_from_positions.py`) now stamp the same house id and
-target the widened UNIQUEs. P6 still must **drop** the 097 legacy date-only
-arbiters on `core` before overlay private books can persist; do not drop them
-until `main` house GHA writers are on the widened conflict.
+target the widened UNIQUEs. P6 stages the 097 legacy date-only drop in
+`migrations/cutover/113_drop_legacy_book_uniques.sql` (not auto-applied;
+`db-migrate.yml` is `-maxdepth 1`). Do **not** copy 113 to top-level or apply
+it on `core` until `main` house GHA writers are on the widened conflict
+(`origin/main` `commit_io` / `portfolio_materialize` still `on_conflict=date`).
+`require_overlay_legacy_book_safe` stays until 113 is actually applied.
+Proof: `tests/dq/olympus/test_cutover_113.py`.
 
 ### Authenticated RLS (098) — anon untouched until T1
 
@@ -769,11 +773,16 @@ Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
 097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
 069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
 `develop` already upsert the widened `(workspace_id, …)` targets; the leftover
-097 keys still reject a second workspace's same-date row. Do not drop those
-keys on `core` until `main` house GHA writers are also widened. This is **not**
-cutover 900: anon can still read house weights/NAV.
-Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py` and
-`tests/dq/olympus/overlay/test_persist.py`.
+097 keys still reject a second workspace's same-date row. Staged cutover **113**
+(`migrations/cutover/113_drop_legacy_book_uniques.sql`) DROPs those 097 keys and
+widens the 069 one-root indexes to `(workspace_id, run_date[, symbol])`. It is
+**not** auto-applied. Do not copy it to top-level or apply on `core` until
+`main` house GHA writers are also widened. Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. This is **not** cutover 900: anon can still
+read house weights/NAV. `daily_snapshots` `UNIQUE(date)` is kept (house-only).
+Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py`,
+`tests/dq/olympus/overlay/test_persist.py`, and
+`tests/dq/olympus/test_cutover_113.py`.
 
 Staged cutover **900** section A2 restores 098 membership-only
 `authenticated_select_own_workspace` on the four book tables and drops

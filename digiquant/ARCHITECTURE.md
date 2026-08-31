@@ -3280,12 +3280,17 @@ now upsert the widened `(workspace_id, …)` targets, as do the remaining house
 ops scripts (`update_tearsheet`, `sync_positions_from_rebalance`,
 `materialize_snapshot` positions, `backfill_execution_prices`,
 `reconcile_position_events_from_positions`). Overlay private books still refuse
-(`legacy_book_unique`) until P6 **drops** 097's legacy `UNIQUE(date)` /
-`UNIQUE(date, ticker)` / `PRIMARY KEY (date)` on `core` — do not apply that
-drop until `main`'s house GHA writers are on the widened conflict (documents
-hotfix #3278; nav/positions still on `main` H9 until a follow-up hotfix after
-the 12:00 UTC house cron). `daily_snapshots` stays `UNIQUE(date)` (house-only).
-Until the unique-drop, overlay persist-on cannot prove the remaining hop. Overlay publish
+(`legacy_book_unique`) until staged cutover **113**
+(`digiquant/supabase/migrations/cutover/113_drop_legacy_book_uniques.sql`) is
+**applied** on `core`. That file DROPs the 097 leftover keys and widens 069
+one-root indexes to `(workspace_id, run_date[, symbol])`. It is **not**
+auto-applied (`db-migrate.yml` `-maxdepth 1`). Do not copy it to top-level
+until `main`'s house GHA writers are on the widened conflict (documents
+hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
+`on_conflict=date` / `date,ticker`). Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. `daily_snapshots` stays `UNIQUE(date)`
+(house-only). Until 113 is applied, overlay persist-on cannot prove the
+remaining hop. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
@@ -3323,7 +3328,8 @@ insert, same as the settings Edge Function). House/system and non-entitled
 workspaces (Observer free without `plan_floor`) are refused. Do not seal a
 placeholder or a house process-env key. Overlay `--execute` still requires
 `present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110
-(documents only; book/ledger stay `legacy_book_unique` until P6).
+(documents only; book/ledger stay `legacy_book_unique` until staged cutover 113
+is applied on the target).
 
 **Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
 for `None` / house / system UUIDs. Overlay tenant routing threads

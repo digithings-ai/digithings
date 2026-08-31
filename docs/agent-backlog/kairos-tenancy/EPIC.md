@@ -90,7 +90,13 @@ secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL`
 Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
-under `/olympus`, no loopback). Checkout return URLs are
+under **`/olympus`**, no loopback). Live Pages still serve `/olympus/*`
+(`build-info.json` commit `2df473110` / `2026-08-31T11:27:05Z`); `/dashboard/*`
+is **404**. Develop `app-url.ts` and the staging harness pin `/dashboard/...`.
+**Do not redeploy** settings EF with `/dashboard` URLs while live Pages 404
+that path — Alpaca/billing returns would miss. Do **not** weaken
+`public_app_urls_ok` to accept `/olympus`; that is a deploy/path contract, not
+a remaining hop. Checkout return URLs on the live EF are
 `/olympus/settings/?tab=billing`. Brokers tab reads the **public** Alpaca OAuth
 client id from `GET /app-urls` (empty until EF secrets land; never the secret)
 so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
@@ -121,9 +127,14 @@ P6 ops-book PR). House GHA chain Group A **reads** (`commit_io._prior_nav`,
 `breaker_scale_from_nav_history`, `opening_snapshot` positions/NAV) now filter
 house `workspace_id` so overlay NAV/positions cannot compound the house index.
 Overlay same-day books still collide until those 097 keys are
-**dropped** on `core` (after `main` house GHA writers are also widened). Do not set
+**dropped** on `core` (after `main` house GHA writers are also widened). Staged
+cutover **113** (`migrations/cutover/113_drop_legacy_book_uniques.sql`) holds
+that DDL; it is **not** auto-applied and must **not** be copied to top-level
+or applied on `core` while `origin/main` `commit_io` / `portfolio_materialize`
+still upsert `on_conflict=date`. Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. Do not set
 `OLYMPUS_OVERLAY_PERSIST=1` expecting a private book — persist-on still cannot
-prove the overlay remaining hop until P6 drops those arbiters. BYOK rows on
+prove the overlay remaining hop until 113 is applied on the target. BYOK rows on
 that workspace are still **0**, so `--execute` would skip `no_credentials` even
 with persist on. Settings Pipeline / Brokers / Notifications tabs now read
 `GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining
@@ -153,8 +164,13 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
 **Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP
 still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
 
-**Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
-Observer checkout hop and Phase C both POST `tier=custom` (Baseline would leave
+**Harness:** `python scripts/kairos_staging_e2e.py` → exit **3** (Observer
+`GET /settings/app-urls` fails `public_app_urls_ok`: live EF still returns
+`/olympus/settings/...` while develop pins `/dashboard/settings/...`). Live
+Pages `/olympus/settings/` **200**, `/dashboard/settings/` **404**. After the
+Pages+EF path cutover lands together, the next expected miss is exit **2**
+(9 named vendor secrets). Observer checkout hop and Phase C both POST
+`tier=custom` (Baseline would leave
 broker/overlay/fill `TIER_FORBIDDEN`). Settings Billing makes Custom the primary
 checkout CTA for the same reason. Remaining-hop `browser_stripe_checkout`
 requires Custom/enterprise **and** Stripe ids — Baseline Stripe does not prove
@@ -166,13 +182,22 @@ prints digest candidate counts without sending.
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
 gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
 pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
-**2** until `digithings-byok.env` exists. Observer Settings hops all ok including
-`GET /settings/app-urls`. A fifth
+**2** until `digithings-byok.env` exists. Other Observer Settings hops (profile /
+notifications / brokers / keys reads, PATCH digest on, TIER_FORBIDDEN on Custom
+writes, checkout `PRICE_NOT_CONFIGURED`, wrong-path 404) still match. A fifth
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
-**Landed 2026-08-31T11:42Z (not epic-complete):** overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277) on `develop` (`11d45bfb0`) — persist-on private `positions`/`nav`/`ledger` writes raise `legacy_book_unique`. House documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278) on `main` (`2df473110`, CI 36/36 green). Core 105 unique is `(workspace_id, date, document_key)`; next 12:00 UTC `pipeline-olympus` is the live book-commit proof. Pages still `119b7838` / `2026-08-31T10:45:27Z`. Staging E2E still blocked on vendor secrets.
+**Landed 2026-08-31T14:30Z (not epic-complete):** staged unique-drop **113**
+under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
+`core`). Overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277)
+on `develop` (`11d45bfb0`) still raises `legacy_book_unique` until 113 is
+applied. House documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278)
+on `main` (`2df473110`). Live Pages `build-info.json` is `2df473110` /
+`2026-08-31T11:27:05Z` (`/olympus` 200, `/dashboard` 404). Staging E2E exit
+**3** (app-urls path contract). Vendor secrets still missing.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
 [#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply cutover 900.
+Never apply staged 113 on `core` while `main` house writers are date-only.
