@@ -3229,7 +3229,7 @@ argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
 `finalize_period_accounting.py` Group A nav/positions) filter **and** stamp
 `house_workspace_id()`. They never
 mean "every row". The olympus dashboard Group A readers
-(`frontend/olympus/lib/queries.ts`, `observability-queries.ts`) go through
+(`frontend/dashboard/lib/queries.ts`, `observability-queries.ts`) go through
 `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom member's overlay
 rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later
