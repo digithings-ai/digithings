@@ -1734,9 +1734,11 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
   `None` on an Optional axis and is still rejected on a required one (`growth` /
   `inflation` have no non-directional member, so coercing them would invent a macro
-  call that Phases 4–7 consume as fact). A field that declares its own
+  call that Phases 4–7 consume as fact).   A field that declares its own
   `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
-  ownership of its vocabulary and is skipped by the generic pass.
+  ownership of its vocabulary and is skipped by the generic pass. `bias` still
+  consults `_LITERAL_SYNONYMS` after `_BIAS_SYNONYMS` (house GHA 33426508863
+  `cautious` → `neutral`); unknown values stay rejected.
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →

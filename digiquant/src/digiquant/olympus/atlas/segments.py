@@ -51,7 +51,9 @@ DataQuality = Literal["high", "medium", "low", "absent"]
 
 # LLM synonym → canonical Bias value. Applied before Pydantic validates the
 # Literal so models never hard-fail on reasonable paraphrases (e.g. Gemini
-# Flash returning "positive" instead of "bullish").
+# Flash returning "positive" instead of "bullish"). Degree forms
+# (``very_positive``) live only here; hedges like ``cautious`` also live on
+# ``_LITERAL_SYNONYMS`` and the dedicated validator consults both.
 _BIAS_SYNONYMS: dict[str, str] = {
     "positive": "bullish",
     "negative": "bearish",
@@ -61,7 +63,10 @@ _BIAS_SYNONYMS: dict[str, str] = {
     "very_negative": "strong_bearish",
     "strongly_bearish": "strong_bearish",
     "strongly_negative": "strong_bearish",
+    "cautious": "neutral",
 }
+
+_BIAS_MEMBERS: frozenset[str] = frozenset(get_args(Bias))
 
 
 # ─── Generic Literal-axis normalization (#1741) ──────────────────────────────
@@ -411,9 +416,25 @@ class SegmentReport(BaseModel):
     @field_validator("bias", mode="before")
     @classmethod
     def _normalize_bias(cls, v: object) -> object:
-        if isinstance(v, str):
-            return _BIAS_SYNONYMS.get(v.lower(), v)
-        return v
+        """Map LLM hedges onto Bias without a full-mode regeneration.
+
+        Ownership stays on this validator (the generic pass skips ``bias``), but
+        the lookup is the same two-table walk as every other Literal axis:
+        identity after ``_literal_token``, then ``_BIAS_SYNONYMS``, then
+        ``_LITERAL_SYNONYMS``. House GHA 33426508863 emitted ``cautious`` on
+        ``SentimentNewsReport.bias``; ``.lower()``-only lookup missed it even
+        though the generic table already mapped ``cautious → (neutral, mixed)``.
+        """
+        if not isinstance(v, str):
+            return v
+        token = _literal_token(v)
+        if token in _BIAS_MEMBERS:
+            return token
+        mapped = _BIAS_SYNONYMS.get(token)
+        if mapped in _BIAS_MEMBERS:
+            return mapped
+        canonical = canonical_literal(v, _BIAS_MEMBERS)
+        return canonical if canonical is not None else v
 
     @field_validator("data_quality", mode="before")
     @classmethod
