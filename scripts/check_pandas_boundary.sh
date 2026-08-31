@@ -19,6 +19,8 @@ ALLOWLIST=(
   "digiquant/scripts/atlas/preload-history.py"
   "digiquant/src/digiquant/strategies/bollinger_mr.py"
   "digiquant/src/digiquant/strategies/macd_trend.py"
+  # SDCA walk-forward evaluator: BarDataWrangler boundary (#3174 / #3253).
+  "digiquant/src/digiquant/strategies/sdca/nautilus_evaluator.py"
   # Operator ad-hoc Yahoo fetch; yfinance returns pandas DataFrames (#1719).
   "digiquant/scripts/fetch_real_ohlcv.py"
   # Sandbox shim: re-exports pandas_ta_classic for agent image acceptance (#396).

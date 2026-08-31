@@ -66,8 +66,10 @@ def _ohlcv_frame(
     ).select(list(OHLCV_COLUMNS))
 
 
-def _synthetic_second_asset(n: int = 800) -> tuple[pl.Series, pl.Series]:
-    dates = _dates(n, start=date(2018, 1, 1))
+def _synthetic_second_asset(n: int = 2200) -> tuple[pl.Series, pl.Series]:
+    # Start early enough that risk warmup clears before the 2018 ETH peak
+    # window, and span through the 2022 trough pin (±45d).
+    dates = _dates(n, start=date(2017, 1, 1))
     close = pl.Series("close", [80.0 + 0.05 * i + (8.0 if i % 40 == 0 else 0.0) for i in range(n)])
     return dates, close
 

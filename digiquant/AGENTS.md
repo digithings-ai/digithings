@@ -52,6 +52,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/scripts/atlas/preload-history.py` | Same atlas ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
+| `digiquant/strategies/sdca/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
 | `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -45,6 +47,19 @@ _HIDDEN = {
 
 def _dates(n: int = 60) -> list[date]:
     return [date(2020, 1, 1) + timedelta(days=i) for i in range(n)]
+
+
+def _stub_nautilus_evaluator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CI digiquant lane has no nautilus_trader; ``_run_sdca_optimize`` imports
+    ``nautilus_evaluator`` before the walk-forward monkeypatch runs.
+    """
+    stub = types.ModuleType("digiquant.strategies.sdca.nautilus_evaluator")
+
+    def _unused(*_a: object, **_k: object) -> SdcaTrialMetrics:
+        raise AssertionError("walk-forward should be monkeypatched before evaluator use")
+
+    stub.evaluate_sdca_trial_nautilus = _unused  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "digiquant.strategies.sdca.nautilus_evaluator", stub)
 
 
 class _ConstRails:
@@ -231,6 +246,7 @@ class TestPersistAndDispatch:
                 evaluator_label="injected",
             )
 
+        _stub_nautilus_evaluator(monkeypatch)
         monkeypatch.setattr("digiquant.optimize.run_sdca_walk_forward", fake_walk_forward)
         csv = tmp_path / "BTC-USD.csv"
         n = 60
@@ -273,6 +289,7 @@ class TestPersistAndDispatch:
                 evaluator_label="injected",
             )
 
+        _stub_nautilus_evaluator(monkeypatch)
         monkeypatch.setattr("digiquant.optimize.run_sdca_walk_forward", fake_walk_forward)
         csv = tmp_path / "BTC-USD.csv"
         rows = ["timestamp,open,high,low,close,volume,symbol"]
