@@ -26,7 +26,11 @@ from digiquant.olympus.overlay.dispatch import (
     OverlaySkipReason,
 )
 from digiquant.olympus.overlay.models import OverlayRunRequest, OverlayRunResult
-from digiquant.olympus.overlay.persist import OverlayPersistDisabled, require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    OverlayLegacyBookBlocked,
+    OverlayPersistDisabled,
+    require_overlay_persist,
+)
 from digiquant.olympus.research_corpus import (
     CorpusKey,
     ResearchCorpusKeyError,
@@ -158,6 +162,10 @@ def _map_execute_error(
             carried=carried,
             error=exc.code,
         )
+    if isinstance(exc, OverlayLegacyBookBlocked):
+        # Stable error code (not the exception type name) so staging hops and
+        # operators can tell P6 is still required — not a transient graph failure.
+        return _failed_result(store, job, request, budget, published, carried, exc.code)
     if isinstance(exc, ByokError):
         if exc.code == OverlaySkipReason.NO_CREDENTIALS.value:
             return skipped_no_credentials(store, job, request.workspace_id)

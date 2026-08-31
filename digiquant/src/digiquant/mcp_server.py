@@ -199,6 +199,9 @@ def create_mcp_server() -> Any:
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
         ``macro_series_observations``, ``trading_calendar``. Operator-internal
         telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        Group A books (``positions``, ``nav_history``, ``position_events``,
+        ``portfolio_metrics``) default to the house ``workspace_id`` when
+        ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
         ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
         """
         from digiquant.olympus.atlas.data.queries import query_data
@@ -363,6 +366,92 @@ def create_mcp_server() -> Any:
             },
             indent=2,
         )
+
+    @mcp.tool()
+    def digiquant_build_sdca_risk_index(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        risk_model: str = "btc_power_law",
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+    ) -> str:
+        """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) — never a bespoke fetch.
+        ``refresh=True`` (default) incrementally updates the cache first;
+        ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
+        string selector so later providers (#3175) can be added without changing
+        this signature; currently only ``"btc_power_law"`` is implemented.
+        Writes the two-column parquet ``SdcaStrategy`` loads via ``risk_path``.
+        Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
+        or ``{"error": ...}`` (never raises — missing cache / coefficients /
+        unknown selector surface as error JSON).
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                BtcPowerLawRiskModel,
+                load_coefficients,
+            )
+            from digiquant.strategies.sdca.risk_index import (
+                RiskIndexBuildResult,
+                build_risk_index,
+                write_risk_index,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        if risk_model != "btc_power_law":
+            return json.dumps({"error": f"unknown risk_model {risk_model!r}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            coeff_path = Path(coefficients_path) if coefficients_path else None
+            if coeff_path is not None and not coeff_path.exists():
+                return json.dumps({"error": f"coefficients file not found: {coeff_path}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            model = BtcPowerLawRiskModel(load_coefficients(coeff_path))
+            frame = build_risk_index(prices["date"], prices["close"], model)
+            dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
+            path = write_risk_index(frame, dest)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        dates = frame["date"]
+        result = RiskIndexBuildResult(
+            path=str(path),
+            row_count=frame.height,
+            date_start=dates[0],
+            date_end=dates[-1],
+            null_risk_days=int(frame["risk"].null_count()),
+        )
+        return result.model_dump_json(indent=2)
 
     @mcp.tool()
     def digiquant_generate_slapper_tearsheet(

@@ -25,6 +25,7 @@ is the only shared chrome.
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
+| `/iterate`         | Iterate     | utilitarian terminal blend gallery — pick corners, type, CTAs, nav, heroes, density (herdr / agentmail / omarchy); preference ledger → `design/BLEND.md` |
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer), empty/error states |
 | `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
@@ -53,12 +54,13 @@ is the only shared chrome.
   paired red — the single always-on colour domain. **These colour overrides
   live in the reference's `globals.css` only; `tokens.css` (which the live sites
   build from) is untouched.**
-- **Two voices.** `--font-display` (Fraunces serif by default) for human claims,
-  never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps;
-  `--font-sans` (Geist Sans) for body. All three swap together as a coordinated
-  **type suite** from the nav's suite selector (see `type-store.ts`; 5 suites:
-  default, plex, editorial, grotesk, terminal) — display + body + mono move as a
-  set so you evaluate the whole pairing.
+- **One voice (v0.1).** `--font-display`, `--font-sans`, and `--font-mono` all
+  default to the Geist Mono stack. Hierarchy is size and tracking, not a second
+  face. Serif is an escape hatch via the type-suite picker (`serif-legacy`,
+  `editorial`, …) — comparison furniture, not the shipping default. All three
+  tokens still swap together as a coordinated **type suite** from the nav
+  selector (see `type-store.ts`; suites: default, plex, editorial, grotesk,
+  terminal, utilitarian, omarchy).
 - **Motion laws.** One motion moment per surface; always honour
   `prefers-reduced-motion` (render the final state); content must read without
   JS. Import Motion as `m` etc. from `motion/react` (LazyMotion is provided

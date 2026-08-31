@@ -96,7 +96,7 @@ export function OrderBook({
     <div
       role="table"
       aria-label={label}
-      className={`rounded-[12px] border border-hair bg-surface py-2 font-mono [font-variant-numeric:tabular-nums]${
+      className={`rounded-none border border-hair bg-surface py-2 font-mono [font-variant-numeric:tabular-nums]${
         className ? ` ${className}` : ""
       }`}
     >

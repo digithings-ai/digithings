@@ -131,3 +131,12 @@ def test_query_data_description_warns_no_close_in_price_technicals():
     assert "close" in description
     # Must guide the model to use price_history for OHLCV.
     assert "OHLCV" in description or "price_history" in description
+
+
+@pytest.mark.unit
+def test_query_data_description_mentions_house_workspace_default():
+    """Agents must learn Group A books default to house, not an unfiltered scan."""
+    query_data_tool = next(t for t in DATA_TOOLS if t["function"]["name"] == "query_data")
+    description = query_data_tool["function"]["description"]
+    assert "house workspace_id" in description
+    assert "eq.workspace_id" in description

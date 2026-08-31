@@ -77,7 +77,7 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
     <div className={className}>
       {summary && summary.length > 0 ? (
         <div
-          className="pl-summary flex flex-wrap gap-x-[2rem] gap-y-0 rounded-[10px] border border-hair bg-surface/55 px-[1.1rem] py-[0.85rem]"
+          className="pl-summary flex flex-wrap gap-x-[2rem] gap-y-0 rounded-none border border-hair bg-surface/55 px-[1.1rem] py-[0.85rem]"
           role="list"
         >
           {summary.map((s) => (

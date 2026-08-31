@@ -152,6 +152,61 @@ def test_all_cash_day_writes_cash_row() -> None:
     assert cash["contract"] == "current_book_lookback"
 
 
+def test_house_book_ignores_same_date_overlay_positions() -> None:
+    from digiquant.olympus.tenancy import house_workspace_id
+
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    house = str(house_workspace_id())
+    client = FakeSupabaseClient(
+        canned_reads={
+            "positions": [
+                {
+                    "date": "2026-06-12",
+                    "ticker": "AAPL",
+                    "weight_pct": 100,
+                    "sector_bucket": "sector-technology",
+                    "workspace_id": house,
+                },
+                {
+                    "date": "2026-06-12",
+                    "ticker": "OVERLAY",
+                    "weight_pct": 99,
+                    "sector_bucket": "sector-overlay",
+                    "workspace_id": overlay,
+                },
+            ],
+            "price_history": _prices(),
+        }
+    )
+    written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
+    assert written == 1
+    assert reconciles is True
+    rows = {r["ticker"]: r for r in client.store["current_book_lookback"]}
+    assert "AAPL" in rows
+    assert "OVERLAY" not in rows
+
+
+def test_overlay_only_positions_are_noop_for_house_lookback() -> None:
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    client = FakeSupabaseClient(
+        canned_reads={
+            "positions": [
+                {
+                    "date": "2026-06-12",
+                    "ticker": "OVERLAY",
+                    "weight_pct": 100,
+                    "workspace_id": overlay,
+                },
+            ],
+            "price_history": _prices(),
+        }
+    )
+    written, reconciles = refresh_attribution_mod.refresh_attribution(client=client, as_of=AS_OF)
+    assert written == 0
+    assert reconciles is True
+    assert "current_book_lookback" not in client.store
+
+
 def test_bad_date_returns_2(capsys) -> None:
     assert refresh_attribution_mod.main(["--date", "nope"]) == 2
     assert "bad --date" in capsys.readouterr().err

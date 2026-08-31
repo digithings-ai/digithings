@@ -13,6 +13,11 @@ import { usePathname } from "next/navigation";
 
 const FAMILIES = [
   { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
+  {
+    href: "/iterate",
+    label: "Iterate",
+    blurb: "Utilitarian terminal blend — pick corners, type, CTAs, heroes (herdr / agentmail / omarchy).",
+  },
   { href: "/controls", label: "Controls", blurb: "Custom dropdown pane, search, nav buttons, form fields." },
   { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
   { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
@@ -39,10 +44,11 @@ export function ContentsOverview() {
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
-      <h2 className="title">Thirteen families, one system.</h2>
+      <h2 className="title">Fourteen families, one system.</h2>
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
-        motion laws. Start anywhere — the top bar carries the same map.
+        motion laws. Start on Iterate when the blend is in flux — otherwise start anywhere; the
+        top bar carries the same map.
       </p>
 
       <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">

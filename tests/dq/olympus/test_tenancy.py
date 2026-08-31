@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
@@ -15,8 +16,10 @@ from digiquant.olympus.tenancy import (
     WorkspaceMember,
     WorkspaceMemberRole,
     WorkspaceType,
+    eq_house_workspace,
     house_workspace_id,
     house_workspace_row,
+    resolved_workspace_id,
     system_workspace_id,
     system_workspace_row,
     workspace_id_for_slug,
@@ -102,3 +105,21 @@ def test_workspace_member_model() -> None:
     )
     assert member.role is WorkspaceMemberRole.OWNER
     assert member.workspace_id == _HOUSE_ID
+
+
+def test_eq_house_workspace_pins_house_when_omitted() -> None:
+    query = MagicMock()
+    query.eq.return_value = query
+    out = eq_house_workspace(query)
+    query.eq.assert_called_once_with("workspace_id", str(house_workspace_id()))
+    assert out is query
+
+
+def test_eq_house_workspace_pins_explicit_overlay_id() -> None:
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    query = MagicMock()
+    query.eq.return_value = query
+    eq_house_workspace(query, overlay)
+    query.eq.assert_called_once_with("workspace_id", overlay)
+    assert resolved_workspace_id(None) == house_workspace_id()
+    assert resolved_workspace_id("") == house_workspace_id()

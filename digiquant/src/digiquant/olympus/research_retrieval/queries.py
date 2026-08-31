@@ -3,6 +3,11 @@
 WP14.4 binds drill-down tools to compiled :class:`ContextManifest` rows — document
 access resolves through manifest legacy refs; enforce mode rejects un-pinned calls
 and latest-date fallbacks.
+
+Group A book reads (`positions`, `nav_history`, `portfolio_metrics`) are
+house-scoped so an overlay same-calendar row cannot leak into Olympus pages.
+House document lookups (`query_research` / `_query_documents_row`) likewise
+default to the house ``workspace_id``.
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ from digiquant.olympus.research_retrieval.blinding import (
 from digiquant.olympus.research_retrieval.cache import ResearchCache, _parse_row_date
 from digiquant.olympus.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.olympus.research_retrieval.store import LoadedResearchState
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -161,29 +167,27 @@ def _query_documents_row(
     document_key: str,
     as_of_date: date,
 ) -> tuple[dict[str, Any] | None, date | None]:
-    exact_resp = (
+    exact_resp = _eq_house(
         client.table("documents")
         .select("date, document_key, payload, doc_type")
         .eq("document_key", document_key)
         .eq("date", as_of_date.isoformat())
         .limit(1)
-        .execute()
-    )
+    ).execute()
     exact_rows = list(getattr(exact_resp, "data", None) or [])
     if exact_rows:
         row = exact_rows[0]
         row_date = _parse_row_date(row.get("date"))
         return row, row_date
 
-    fallback_resp = (
+    fallback_resp = _eq_house(
         client.table("documents")
         .select("date, document_key, payload, doc_type")
         .eq("document_key", document_key)
         .lt("date", as_of_date.isoformat())
         .order("date", desc=True)
         .limit(1)
-        .execute()
-    )
+    ).execute()
     fallback_rows = list(getattr(fallback_resp, "data", None) or [])
     if not fallback_rows:
         return None, None
@@ -223,31 +227,34 @@ def _query_digest_row(
     return row, _parse_row_date(row.get("date"))
 
 
+def _eq_house(query: Any) -> Any:
+    """Olympus pages / research tools read the house book, never overlay same-date rows."""
+    return query.eq("workspace_id", str(house_workspace_id()))
+
+
 def _positions_for_as_of(
     client: SupabaseClient,
     *,
     as_of_date: date,
     ticker: str | None = None,
 ) -> tuple[list[dict[str, Any]], date | None]:
-    exact_resp = (
+    exact_resp = _eq_house(
         client.table("positions")
         .select("date, ticker, weight_pct, entry_date")
         .eq("date", as_of_date.isoformat())
-        .execute()
-    )
+    ).execute()
     exact_rows = list(getattr(exact_resp, "data", None) or [])
     if exact_rows:
         rows = exact_rows
         resolved = as_of_date
     else:
-        fallback_resp = (
+        fallback_resp = _eq_house(
             client.table("positions")
             .select("date, ticker, weight_pct, entry_date")
             .lt("date", as_of_date.isoformat())
             .order("date", desc=True)
             .limit(200)
-            .execute()
-        )
+        ).execute()
         fallback_rows = list(getattr(fallback_resp, "data", None) or [])
         if not fallback_rows:
             return [], None
@@ -262,39 +269,36 @@ def _positions_for_as_of(
 
 
 def _nav_for_as_of(client: SupabaseClient, *, as_of_date: date) -> dict[str, Any]:
-    exact_resp = (
+    exact_resp = _eq_house(
         client.table("nav_history")
         .select("date, nav, cash_pct, invested_pct")
         .eq("date", as_of_date.isoformat())
         .limit(1)
-        .execute()
-    )
+    ).execute()
     exact_rows = list(getattr(exact_resp, "data", None) or [])
     if exact_rows:
         nav_row = exact_rows[0]
         nav_date = str(nav_row.get("date") or as_of_date.isoformat())
     else:
-        fallback_resp = (
+        fallback_resp = _eq_house(
             client.table("nav_history")
             .select("date, nav, cash_pct, invested_pct")
             .lt("date", as_of_date.isoformat())
             .order("date", desc=True)
             .limit(1)
-            .execute()
-        )
+        ).execute()
         fallback_rows = list(getattr(fallback_resp, "data", None) or [])
         if not fallback_rows:
             return {}
         nav_row = fallback_rows[0]
         nav_date = str(nav_row.get("date") or "")
 
-    metrics_resp = (
+    metrics_resp = _eq_house(
         client.table("portfolio_metrics")
         .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
         .eq("date", nav_date)
         .limit(1)
-        .execute()
-    )
+    ).execute()
     metrics_rows = list(getattr(metrics_resp, "data", None) or [])
     snapshot: dict[str, Any] = {
         "date": nav_date,

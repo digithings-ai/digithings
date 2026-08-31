@@ -4,8 +4,8 @@
  */
 
 import {
+  ensureCallerWorkspace,
   jsonError,
-  resolveCallerWorkspace,
   type AdminClient,
   type WorkspaceRow,
 } from "./supabase-admin.ts";
@@ -15,7 +15,8 @@ export type AuthUser = {
   email?: string | null;
   /**
    * plan_tier from auth.users.app_metadata (T2 claim sync).
-   * Fail-closed gates in settings read this claim — UI `can()` is presentation only.
+   * Presentation / JWT-side only — settings entitlement gates read
+   * `workspaces.plan_tier` (authoritative after Stripe CAS), not this claim.
    */
   plan_tier?: string | null;
 };
@@ -33,15 +34,16 @@ export function requireBearerHeader(authHeader: string | null): Response | null 
 }
 
 /**
- * Resolve caller workspace and enforce membership + optional workspace_id match.
- * Returns 403 WORKSPACE_FORBIDDEN on membership / id mismatch.
+ * Resolve caller workspace (ensuring Observer personal workspace if missing)
+ * and enforce membership + optional workspace_id match.
+ * Returns 403 WORKSPACE_FORBIDDEN on membership / id mismatch / bootstrap failure.
  */
 export async function requireWorkspaceMember(
   admin: AdminClient,
   user: AuthUser,
   requestedWorkspaceId: string | null,
 ): Promise<AuthedOwner> {
-  const resolved = await resolveCallerWorkspace(admin, user.id);
+  const resolved = await ensureCallerWorkspace(admin, user.id);
   if (!resolved) {
     return {
       ok: false,
