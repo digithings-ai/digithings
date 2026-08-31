@@ -1,7 +1,7 @@
 "use client";
 /**
- * Homepage strategy spotlight — the BTC / ETH / SOL slapper plus BTC
- * BTC SDCA Strat (btc_sdca) tearsheet previews on the
+ * Homepage strategy spotlight — BTC/ETH/SOL L/S plus BTC-SDCA
+ * (btc_sdca) tearsheet previews on the
  * canonical <DeckStack/> sticky cascade (@digithings/web, promoted from the
  * design reference's card deck, #1450).
  *
@@ -45,6 +45,7 @@ import { SignalDelayChip } from "@/components/tearsheet/signal-delay";
 import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase, strategyDisplayName } from "@/components/tearsheet/strategy-names";
+import { StrategyTypeChip } from "@/components/tearsheet/strategy-type-chip";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
 import { isDcaIndexEntry, isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "@/components/tearsheet/dca";
@@ -52,7 +53,7 @@ import { BacktestOnlyChip } from "@/components/tearsheet/honesty";
 
 const SUITE_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper", "btc_sdca"] as const;
 
-/** Order the live index into the BTC / ETH / SOL / SDCA spotlight sequence. */
+/** Order the live index into the BTC L/S → ETH L/S → SOL L/S → BTC-SDCA sequence. */
 function orderSuite(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
   return SUITE_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
     (s): s is StrategyIndexEntry => Boolean(s),
@@ -60,8 +61,7 @@ function orderSuite(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
 }
 
 function suiteRailLabel(id: string, entry?: StrategyIndexEntry): string {
-  if (id === "btc_sdca") return "SDCA";
-  return entry ? symbolBase(entry.symbol) : id.split("_")[0]?.toUpperCase() || id;
+  return strategyDisplayName(id, entry?.label);
 }
 
 const PREVIEW_PANE_H = 220;
@@ -202,6 +202,7 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
             <span>{label}</span>
           </h3>
           <div className="ts-meta">
+            <StrategyTypeChip strategy={strategyId} />
             {dca ? (
               <>
                 <BacktestOnlyChip />
@@ -357,6 +358,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
+            <StrategyTypeChip strategy={entry.strategy} kind={data?.kind ?? entry.kind} />
             <SignalDelayChip days={data?.signal_delay_days ?? entry.signal_delay_days} />
             {dca ? <BacktestOnlyChip /> : null}
             <span className="ts-meta-text">

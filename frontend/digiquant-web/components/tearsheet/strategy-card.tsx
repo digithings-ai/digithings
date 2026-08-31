@@ -14,6 +14,7 @@ import { isDcaIndexEntry, lastAllocatedPctFromIndex, ALLOCATED_KPI_LABEL, VS_LUM
 import { LiveMetricsBadge } from "./live-metrics";
 import { SignalDelayChip } from "./signal-delay";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
+import { StrategyTypeChip } from "./strategy-type-chip";
 import { cagrPctFromGrowth } from "./stats";
 import { type StrategyIndexEntry } from "./types";
 
@@ -30,6 +31,7 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
           <AssetLogoFor strategy={e.strategy} symbol={e.symbol} size={32} className="ts-card-logo" />
           <div className="ts-card-title-text">
             <span className="ts-card-name">{strategyDisplayName(e.strategy, e.label) || asset}</span>
+            <StrategyTypeChip strategy={e.strategy} kind={e.kind} className="ts-card-kind" />
             <span className="ts-card-period">{e.period_start} → {e.period_end}</span>
             {e.signal_delay_days ? (
               <div className="mt-1.5">
