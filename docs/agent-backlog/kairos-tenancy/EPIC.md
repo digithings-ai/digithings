@@ -114,8 +114,10 @@ persist_enabled=0`). Overlay `--execute` refuses without `OLYMPUS_OVERLAY_PERSIS
 `persist_disabled` and look like a hop. Migration 110 makes overlay **documents**
 safe from anon leak; **positions / nav_history / ledger** still collide on 097's
 legacy `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and 069's
-one-root-per-run_date. House ops scripts still upsert `on_conflict=date`, so an
-overlay same-day book would fail or rewrite the house row. Do not set
+one-root-per-run_date. House ops writers on `develop` now stamp house
+`workspace_id` and target the widened UNIQUEs (#3280 materialize, #3281 metrics,
+P6 ops-book PR). Overlay same-day books still collide until those 097 keys are
+**dropped** on `core` (after `main` house GHA writers are also widened). Do not set
 `OLYMPUS_OVERLAY_PERSIST=1` expecting a private book — persist-on still cannot
 prove the overlay remaining hop until P6 drops those arbiters. BYOK rows on
 that workspace are still **0**, so `--execute` would skip `no_credentials` even

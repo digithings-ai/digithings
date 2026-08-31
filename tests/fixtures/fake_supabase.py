@@ -80,6 +80,11 @@ class _FakeQuery:
         self._filters.append(("like", col, pattern))
         return self
 
+    def is_(self, col: str, val: str) -> "_FakeQuery":
+        # PostgREST ``.is_(col, "null")``. Used by house ops scripts.
+        self._filters.append(("is", col, val))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
         self._order = (col, desc)
         return self
@@ -146,6 +151,11 @@ class _FakeQuery:
                 return False
             if op == "like" and not str(row.get(col, "")).startswith(str(val).rstrip("%")):
                 return False
+            if op == "is":
+                if str(val).lower() == "null" and row_val is not None:
+                    return False
+                if str(val).lower() != "null" and row_val is None:
+                    return False
         return True
 
     def execute(self) -> _FakeResponse:

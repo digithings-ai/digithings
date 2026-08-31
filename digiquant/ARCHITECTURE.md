@@ -3251,13 +3251,17 @@ books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 (`legacy_book_unique`) while migration 097's legacy `UNIQUE(date)` /
 `UNIQUE(date, ticker)` / `PRIMARY KEY (date)` and ledger
 `uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
-keys — H9 `commit_io` and `portfolio_materialize` now upsert the widened
-`(workspace_id, …)` targets, but remaining house ops scripts
-(`refresh_performance_metrics`, `update_tearsheet`, `sync_positions_from_rebalance`)
-still use `on_conflict="date"`, so an overlay row for the same calendar date
-either fails the legacy arbiter or is rewritten by those writers. Roadmap P6
-drops those arbiters and patches every remaining house writer; until then only
-documents are multi-tenant-safe. Overlay publish
+keys — H9 `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
+now upsert the widened `(workspace_id, …)` targets, as do the remaining house
+ops scripts (`update_tearsheet`, `sync_positions_from_rebalance`,
+`materialize_snapshot` positions, `backfill_execution_prices`,
+`reconcile_position_events_from_positions`). Overlay private books still refuse
+(`legacy_book_unique`) until P6 **drops** 097's legacy `UNIQUE(date)` /
+`UNIQUE(date, ticker)` / `PRIMARY KEY (date)` on `core` — do not apply that
+drop until `main`'s house GHA writers are on the widened conflict (documents
+hotfix #3278; nav/positions still on `main` H9 until a follow-up hotfix after
+the 12:00 UTC house cron). `daily_snapshots` stays `UNIQUE(date)` (house-only).
+Until the unique-drop, overlay persist-on cannot prove the remaining hop. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
