@@ -1,6 +1,6 @@
 # digithings copy & information architecture guide
 
-**Status:** Living document · **Last updated:** 2026-08-30
+**Status:** Living document · **Last updated:** 2026-08-31
 
 Authoritative voice, CTA, and section-map reference for all public surfaces. Implements Layer D of the [design evolution spec](../../docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md) and extends [`references/scans/copy-patterns.md`](references/scans/copy-patterns.md).
 
@@ -15,7 +15,7 @@ Authoritative voice, CTA, and section-map reference for all public surfaces. Imp
 | Tone | Technical, precise, ownership-oriented — closer to x.ai infrastructure than Cursor consumer warmth |
 | Product names | lowercase: digithings, digiquant, digichat |
 | Proper nouns | NautilusTrader, LangGraph, LiteLLM, Polars |
-| CTAs | **Literal destinations** — never naked "Get started" |
+| CTAs | **Literal destinations** — never naked "Get started". On digiquant.io the destination is the **dashboard** (`open dashboard`), not a repeat of the site name. |
 | Proof | Real data only — GitHub stars, backtest counts, release dates |
 | Serif | Marketing hero display only; dashboards use sans + mono |
 
@@ -83,7 +83,7 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 
 | Pattern | digithings.ai | digiquant.io | digichat | dashboard |
 |---------|---------------|--------------|----------|---------|
-| Primary | `ask digichat` | `open digiquant` | `sign in` / `new chat` | context action |
+| Primary | `ask digichat` | `open dashboard` | `sign in` / `new chat` | context action |
 | Secondary | `read docs` → | `browse strategies` → | `view on github` → | `export` / `run` |
 | Developer | `make stack-local` | `git clone …` | `copy api command` | — |
 | Explore | `explore digigraph` → | `view tearsheets` → | — | tab label |
@@ -95,12 +95,12 @@ Examples from references: Graphite "Review faster, ship sooner"; Cursor "Agents 
 |---------------|-----------------|
 | Download for macOS | `git clone` / `docker compose` |
 | Get API Key | `make stack-local` / issue-key |
-| Get started | `ask digichat` / `open digiquant` |
+| Get started | `ask digichat` / `open dashboard` |
 | Start free trial | `run a backtest` (digiquant) |
 | Explore → | `read docs` / module pages |
 | Contact sales | `contact@digithings.ai` |
 
-**Avoid:** "Get started" without naming the destination.
+**Avoid:** "Get started" without naming the destination. On digiquant.io, do not use the site name as the dashboard CTA (`open digiquant`) — the wordmark already says digiquant; the destination is the **dashboard**. Compact nav: mark + `dashboard`. Off-site (digithings.ai) may still name the product.
 
 ---
 
@@ -188,14 +188,14 @@ Minimal — no marketing columns. Literal nav labels only; document in dashboard
 4. Bento — Pipeline · Strategies · Pricing — #1214
 5. Strategy suite — existing scroll stack (second story, not second pin)
 6. Pricing — `PricingMatrix` + `FaqAccordion` — Phase E
-7. Closing CTA — `open digiquant`
+7. Closing CTA — `open dashboard`
 8. Footer
 
 **Draft hero copy:**
 
 - **h1:** "A quant hedge fund. *In a box you own.*"
 - **sub:** "Backtest · optimize · paper · live — NautilusTrader under the hood."
-- **primary:** `open digiquant` · **secondary:** `browse strategies` →
+- **primary:** `open dashboard` · **secondary:** `browse strategies` →
 
 ### digichat (#1218)
 
@@ -233,6 +233,7 @@ Only ship when there is real news (Graphite integration-bar model).
 8. Stock testimonials without real attribution
 9. "Get started" without naming the destination
 10. Fake tier limits ("limited AI requests") on open-core pricing
+11. Repeating the site name as the dashboard CTA on digiquant.io (`open digiquant` / a nav pill that just says `digiquant`)
 
 Full list: [`EVOLUTION.md` §10](EVOLUTION.md) · [design spec §6](../../docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md).
 

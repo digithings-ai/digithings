@@ -376,7 +376,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 |------|---------|-------|
 | `.closing-cta__title` | Headline | Literal, reads best ≤ ~20ch. |
 | `.closing-cta__sub` | Optional one-line support | ≤ ~48ch; omit for a bare title. |
-| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open digiquant"). |
+| `.closing-cta__actions` → `.btn.btn-primary` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open dashboard"). |
 | `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching `.btn`/`.bento__cta`. |
 
 **Copy variants** (shown in `frontend/digiweb/design/smoke/index.html`):
@@ -384,7 +384,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | Surface | Title | Primary | Secondary |
 |---------|-------|---------|-----------|
 | digithings.ai | "Build your agent stack in the open." | Start building | Read the architecture → |
-| digiquant.io | "One graph, research to execution." | Open digiquant | Browse strategies → |
+| digiquant.io | "One graph, research to execution." | Open dashboard | Browse strategies → |
 
 | Class | Role |
 |-------|------|

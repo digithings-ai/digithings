@@ -73,7 +73,7 @@ Extracted from live site copy on Graphite, Cursor, and x.ai — 2026-06-29.
 |---------------|-----------------|
 | Download for macOS | `git clone` / docker compose |
 | Get API Key | `make stack-local` / issue-key |
-| Get started | `ask digichat` / `open digiquant` |
+| Get started | `ask digichat` / `open dashboard` |
 | Start free trial | `run a backtest` (digiquant) |
 | Explore → | `read docs` / module pages |
 | Contact sales | `contact@digithings.ai` |

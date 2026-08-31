@@ -28,7 +28,7 @@ const COMMAND_GROUPS: { label: string; commands: Command[] }[] = [
   {
     label: "Navigate",
     commands: [
-      { id: "desk", label: "Open digiquant", hint: "O", livery: "digiquant" },
+      { id: "desk", label: "Open dashboard", hint: "O", livery: "digiquant" },
       { id: "vault", label: "Open the vault", hint: "V", livery: "digivault" },
       { id: "changelog", label: "View changelog", hint: "L" },
       { id: "theme", label: "Toggle theme", hint: "T" },

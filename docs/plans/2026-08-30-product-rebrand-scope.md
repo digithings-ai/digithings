@@ -1,7 +1,7 @@
 # Product rebrand scope — drop Olympus / Atlas / Hermes / Kairos
 
 > **Date:** 2026-08-30
-> **Status:** Accepted — product name is **digiquant** (ADR-0026). Wave 1 (user-facing copy) and wave 3 identifiers (`DigiquantMark`, `PerformanceTearsheetView`, …, with one-release aliases) ship on this branch. Folder / npm / CI workflow rename needs a `feat/` or `task/<N>-slug` branch (`.github/workflows` is blocked on `cursor/*`).
+> **Status:** Accepted — product name is **digiquant** (ADR-0026). On-site CTA is **`open dashboard`** (mark + `dashboard` in compact nav) — the site wordmark is already digiquant. Wave 1 copy and wave 3 identifiers ship on this branch. Folder / npm / CI workflow rename needs a `feat/` or `task/<N>-slug` branch.
 > **Does not:** rewrite packages, `/olympus/` URLs, tables, workflows, or live-trading paths in wave 1
 > **Human gate:** yes — kairos **package** rename later touches execution; path/OAuth move is wave 2
 

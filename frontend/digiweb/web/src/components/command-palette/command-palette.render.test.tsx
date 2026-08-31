@@ -22,7 +22,7 @@ const GROUPS: CommandPaletteGroup[] = [
   },
   {
     label: "Navigate",
-    items: [{ id: "desk", label: "Open digiquant", description: "research + portfolio" }],
+    items: [{ id: "desk", label: "Open dashboard", description: "research + portfolio" }],
   },
 ];
 

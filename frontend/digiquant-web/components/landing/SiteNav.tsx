@@ -12,8 +12,10 @@
  * The dashboard CTA opens the app at `/olympus/` (a full cross-app
  * navigation — the dashboard is a separate export assembled into `dist/olympus/`, so
  * it's a plain <a>, not a Next <Link>, and matches the subsystems page).
- * The in-nav "Desk" text link still scrolls to the `/#desk` explainer section —
- * text link explains, button launches. Path `/olympus/` stays until ADR-0026 wave 2.
+ * Visible label is **dashboard** (mark + word) — the site wordmark is already
+ * digiquant; repeating it here names the destination as the site. "Desk" in
+ * the text links still scrolls to `/#desk`. Path `/olympus/` stays until
+ * ADR-0026 wave 2.
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
@@ -53,17 +55,17 @@ export function SiteNav() {
           <a
             className="dq-nav-olympus-cta olympus-cta max-[880px]:hidden!"
             href="/olympus/"
-            aria-label="Open the digiquant dashboard"
+            aria-label="Open the dashboard"
           >
             <DigiquantMark size={16} />
-            <span>digiquant</span>
+            <span>dashboard</span>
           </a>
         </>
       }
       cta={
-        <a className="btn btn-primary olympus-cta" href="/olympus/" aria-label="Open the digiquant dashboard">
+        <a className="btn btn-primary olympus-cta" href="/olympus/" aria-label="Open the dashboard">
           <DigiquantMark size={18} />
-          <span>digiquant</span>
+          <span>dashboard</span>
         </a>
       }
     />

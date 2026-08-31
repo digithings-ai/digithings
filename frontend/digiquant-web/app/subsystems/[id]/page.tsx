@@ -91,7 +91,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           <pre className="codeblock">{s.initSnippet.code}</pre>
 
           <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap", marginTop: "2rem" }}>
-            <a className="btn btn-primary" href="/olympus/">Open digiquant <span aria-hidden="true">→</span></a>
+            <a className="btn btn-primary" href="/olympus/">Open dashboard <span aria-hidden="true">→</span></a>
             <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">Source</a>
           </div>
 

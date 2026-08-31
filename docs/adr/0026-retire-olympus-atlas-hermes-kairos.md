@@ -12,7 +12,7 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 
 ## Decision
 
-1. **The product is digiquant.** There is no second dashboard brand. User-facing copy, titles, CTAs, and PWA names say digiquant. The mark (nested arcs) is the digiquant dashboard mark.
+1. **The product is digiquant.** There is no second dashboard brand. The mark is the dashboard mark. On digiquant.io the operator surface is the **dashboard**: compact nav is mark + `dashboard`, full CTAs say `open dashboard` — not a repeat of the site name. PWA / document titles stay digiquant.
 2. **Subsystems are jobs, not brands.** User-facing words are **research**, **portfolio**, and **execution**. Do not introduce replacement proper nouns for atlas / hermes / kairos.
 3. **Internal phase IDs stay.** A0–A4 and H1–H9 remain graph coordinates.
 4. **Do not rewrite history.** SQL migrations, historical ADR bodies, and `olympus_*` / `atlas_run_diagnostics` table names stay. Amend, do not edit-in-place.

@@ -64,7 +64,7 @@ export default function Home() {
               git clone https://github.com/digithings-ai/digithings.git
             </p>
             <a className="btn btn-primary" href="/olympus/">
-              Open digiquant
+              Open dashboard
             </a>
             <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
