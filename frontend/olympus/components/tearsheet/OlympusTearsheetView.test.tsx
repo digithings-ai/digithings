@@ -1,10 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { OlympusTearsheetView } from './OlympusTearsheetView';
-import type { OlympusTearsheet } from './types';
+import { PerformanceTearsheetView } from './OlympusTearsheetView';
+import type { PerformanceTearsheet } from './types';
 
-const sample: OlympusTearsheet = {
+const sample: PerformanceTearsheet = {
   currentNav: 112.5,
   netReturnPct: 12.5,
   benchmarkReturnPct: 8.25,
@@ -65,11 +65,11 @@ const sample: OlympusTearsheet = {
   ],
 };
 
-function html(data: OlympusTearsheet = sample) {
-  return renderToStaticMarkup(createElement(OlympusTearsheetView, { data }));
+function html(data: PerformanceTearsheet = sample) {
+  return renderToStaticMarkup(createElement(PerformanceTearsheetView, { data }));
 }
 
-describe('OlympusTearsheetView', () => {
+describe('PerformanceTearsheetView', () => {
   it('leads with percentage returns — single excess metric, no relative-gain duplicate', () => {
     const out = html();
     expect(out).not.toContain('>NAV index<');

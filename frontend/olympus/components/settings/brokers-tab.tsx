@@ -5,13 +5,16 @@ import {
   ALPACA_OAUTH_STATE_KEY,
   alpacaOAuthRedirectUri,
   buildAlpacaAuthorizeUrl,
-  publicAlpacaClientId,
+  resolveAlpacaOauthClientId,
 } from '@/lib/settings/alpaca-oauth';
 import {
   connectBrokerApiKey,
+  getAppUrls,
+  getFills,
   listBrokers,
   revokeBroker,
   type BrokerConnectionView,
+  type FillView,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 
@@ -20,6 +23,9 @@ export type BrokersTabProps = {
   listFn?: typeof listBrokers;
   connectFn?: typeof connectBrokerApiKey;
   revokeFn?: typeof revokeBroker;
+  fillsFn?: typeof getFills;
+  /** Test seam: GET /app-urls (public Alpaca client id). */
+  appUrlsFn?: typeof getAppUrls;
   /** Test seam: capture authorize URL instead of navigating. */
   onAuthorizeNavigate?: (url: string) => void;
 };
@@ -50,25 +56,40 @@ export function BrokersTab({
   listFn = listBrokers,
   connectFn = connectBrokerApiKey,
   revokeFn = revokeBroker,
+  fillsFn = getFills,
+  appUrlsFn = getAppUrls,
   onAuthorizeNavigate,
 }: BrokersTabProps) {
   const [rows, setRows] = useState<BrokerConnectionView[]>([]);
+  const [fills, setFills] = useState<FillView[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [broker, setBroker] = useState<'alpaca' | 'ibkr'>('alpaca');
   const [keyId, setKeyId] = useState('');
   const [secret, setSecret] = useState('');
   const [busy, setBusy] = useState(false);
+  const [oauthClientId, setOauthClientId] = useState('');
 
   const refresh = useCallback(async () => {
     if (!api) return;
     try {
       const list = await listFn(api);
       setRows(list.map(sanitizeConnection));
+      try {
+        setFills(await fillsFn(api));
+      } catch {
+        setFills([]);
+      }
+      try {
+        const urls = await appUrlsFn(api);
+        setOauthClientId(urls.alpaca_oauth_client_id ?? '');
+      } catch {
+        setOauthClientId('');
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load connections');
     }
-  }, [api, listFn]);
+  }, [api, listFn, fillsFn, appUrlsFn]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- load connections after mount */
@@ -101,7 +122,7 @@ export function BrokersTab({
   }
 
   function onAlpacaOAuth() {
-    const clientId = publicAlpacaClientId();
+    const clientId = resolveAlpacaOauthClientId(oauthClientId);
     if (!clientId) {
       setError('Alpaca OAuth client id is not configured.');
       return;
@@ -253,6 +274,37 @@ export function BrokersTab({
                     Revoke
                   </button>
                 ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="space-y-2" data-testid="brokers-fills">
+        <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+          Paper fills
+        </p>
+        <p className="text-xs text-ink-mute">
+          Mirrored Alpaca paper executions for this workspace. The remaining hop
+          requires a fingerprint with a non-empty symbol **and** an Alpaca paper
+          OAuth connection — API-key paper rows do not prove it.
+        </p>
+        {fills.length === 0 ? (
+          <p className="text-sm text-ink-mute">No paper fills mirrored yet.</p>
+        ) : (
+          <ul className="divide-y divide-hair border border-hair">
+            {fills.map((fill) => (
+              <li
+                key={fill.id}
+                className="px-3 py-2 text-sm"
+                data-testid="broker-fill-row"
+              >
+                <p className="font-mono text-ink">
+                  {fill.symbol} · {fill.quantity}
+                </p>
+                <p className="text-xs text-ink-mute">
+                  {fill.executed_at ?? fill.recorded_at ?? ''}
+                </p>
               </li>
             ))}
           </ul>

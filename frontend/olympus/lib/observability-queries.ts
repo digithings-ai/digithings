@@ -16,7 +16,7 @@
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
  *
- * Exception — accounting NAV (#2599 / #3029): `fetchOlympusTearsheet` FAILS CLOSED when
+ * Exception — accounting NAV (#2599 / #3029): `fetchPerformanceTearsheet` FAILS CLOSED when
  * `public_accounting_nav_history` errors. Swallowing that into an empty series looked like
  * a healthy empty book and hid unapplied migrations 072–074.
  */
@@ -26,7 +26,7 @@ import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
 import type {
   BenchmarkComparison,
-  OlympusTearsheet,
+  PerformanceTearsheet,
   PerformanceHoldingRow,
   PortfolioReturnPoint,
 } from '@/components/tearsheet/types';
@@ -44,6 +44,7 @@ import {
   roundPct,
   soldWeightPct,
 } from './position-event-economics';
+import { houseBook } from './house-workspace';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -474,7 +475,7 @@ function realizedSellEvents(
   return events.filter((event) => event.event === 'EXIT' || event.event === 'TRIM');
 }
 
-export function buildOlympusTearsheet(args: {
+export function buildPerformanceTearsheet(args: {
   nav: TableRow<'nav_history'>[];
   positions: TableRow<'positions'>[];
   metrics: TableRow<'portfolio_metrics'> | null;
@@ -483,7 +484,7 @@ export function buildOlympusTearsheet(args: {
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
   /** Latest closes for open-book tickers when positions rows lack marks. */
   holdingMarks?: Array<{ ticker: string; date: string; close: number }>;
-}): OlympusTearsheet {
+}): PerformanceTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const inceptionDate = navAsc[0]?.date ?? null;
   const navSeries = buildPortfolioReturnSeries(navAsc);
@@ -594,10 +595,10 @@ export function buildOlympusTearsheet(args: {
   };
 }
 
-export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
+export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet> {
   if (!isSupabaseConfigured() || !supabase) {
     // Configured-but-empty must still render the empty-state tear sheet — return a zeroed build.
-    return buildOlympusTearsheet({
+    return buildPerformanceTearsheet({
       nav: [],
       positions: [],
       metrics: null,
@@ -620,14 +621,12 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
 
   const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
-      sb
-        .from('positions')
-        .select('*')
+      houseBook(sb, 'positions')
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
-      sb.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1)
+      houseBook(sb, 'portfolio_metrics').order('date', { ascending: false }).limit(1)
     ),
     // Book attribution tab stays on current-book lookback (diagnostic). Realized daily
     // contribution is public_daily_realized_attribution — do not mix into this series.
@@ -639,9 +638,7 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         .limit(ATTRIBUTION_LIMIT)
     ),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
-      sb
-        .from('position_events')
-        .select('*')
+      houseBook(sb, 'position_events')
         // EXIT = full close; TRIM = partial sell — both are realized vs average entry.
         .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })
@@ -697,7 +694,7 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         )
       : Promise.resolve({ rows: [], ok: true as const }),
   ]);
-  return buildOlympusTearsheet({
+  return buildPerformanceTearsheet({
     nav: navHistory,
     positions: positionsRes.rows,
     metrics: metricsRes.rows[0] ?? null,
@@ -707,3 +704,7 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
     holdingMarks: holdingMarksRes.rows,
   });
 }
+
+/** @deprecated Use buildPerformanceTearsheet / fetchPerformanceTearsheet. */
+export const buildOlympusTearsheet = buildPerformanceTearsheet;
+export const fetchOlympusTearsheet = fetchPerformanceTearsheet;

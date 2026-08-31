@@ -26,6 +26,11 @@ Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_his
 append. Phase 9 evolution LLM is **not** on the daily path; beliefs distillation is
 on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 
+House CLI close-out (`cli_main`, not `run_atlas_then_hermes`): after a non-retry
+exit, fail-soft K5 `dispatch_house_notifications_after_chain` attempts today's
+digest (`force_digest=True`). Overlay nested chain skips this so overlay jobs
+cannot send house mail. Missing Mailgun env logs and returns.
+
 ---
 
 ## H1–H9 path map

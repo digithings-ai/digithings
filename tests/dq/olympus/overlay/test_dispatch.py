@@ -32,11 +32,13 @@ def _ws(
     *,
     tier: PlanTier = PlanTier.CUSTOM,
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    plan_floor: PlanTier | None = None,
 ) -> WorkspaceEntitlement:
     return WorkspaceEntitlement(
         workspace_id=uuid4(),
         plan_tier=tier,
         subscription_status=status,
+        plan_floor=plan_floor,
     )
 
 
@@ -83,6 +85,40 @@ def test_missing_byok_skips_no_credentials() -> None:
     assert result.skip_reason is OverlaySkipReason.NO_CREDENTIALS
     assert result.job.status is JobStatus.SKIPPED
     assert result.job.error == OverlaySkipReason.NO_CREDENTIALS.value
+
+
+def test_creator_plan_floor_custom_without_stripe_claims() -> None:
+    """D1: entitlement_grants.plan_floor=custom unlocks Kairos overlay without Stripe."""
+    store = MemoryJobRunStore()
+    result = dispatch_overlay_daily(
+        store=store,
+        workspace=_ws(
+            tier=PlanTier.FREE,
+            status=SubscriptionStatus.NONE,
+            plan_floor=PlanTier.CUSTOM,
+        ),
+        run_date=_RUN,
+        byok=_ok_byok(),
+    )
+    assert result.claimed is True
+    assert result.skip_reason is None
+    assert result.job.status is JobStatus.RUNNING
+
+
+def test_baseline_plan_floor_without_stripe_skips_overlay() -> None:
+    store = MemoryJobRunStore()
+    result = dispatch_overlay_daily(
+        store=store,
+        workspace=_ws(
+            tier=PlanTier.FREE,
+            status=SubscriptionStatus.NONE,
+            plan_floor=PlanTier.BASELINE,
+        ),
+        run_date=_RUN,
+        byok=_ok_byok(),
+    )
+    assert result.claimed is False
+    assert result.skip_reason is OverlaySkipReason.NOT_ENTITLED
 
 
 def test_entitled_custom_and_enterprise_claim() -> None:

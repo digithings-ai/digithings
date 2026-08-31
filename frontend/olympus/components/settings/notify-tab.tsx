@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  getNotificationLog,
   getNotifications,
   patchNotifications,
   SettingsHttpError,
+  type NotificationLogEvent,
   type NotificationPrefs,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
@@ -13,12 +15,14 @@ export type NotifyTabProps = {
   api: SettingsApiOptions | null;
   getFn?: typeof getNotifications;
   patchFn?: typeof patchNotifications;
+  logFn?: typeof getNotificationLog;
 };
 
 export function NotifyTab({
   api,
   getFn = getNotifications,
   patchFn = patchNotifications,
+  logFn = getNotificationLog,
 }: NotifyTabProps) {
   const [email, setEmail] = useState('');
   const [dailyDigest, setDailyDigest] = useState(false);
@@ -29,6 +33,7 @@ export function NotifyTab({
   const [notReady, setNotReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [events, setEvents] = useState<NotificationLogEvent[]>([]);
 
   const applyPrefs = useCallback((prefs: NotificationPrefs) => {
     setEmail(typeof prefs.email === 'string' ? prefs.email : '');
@@ -50,6 +55,11 @@ export function NotifyTab({
     try {
       const prefs = await getFn(api);
       applyPrefs(prefs);
+      try {
+        setEvents(await logFn(api));
+      } catch {
+        setEvents([]);
+      }
     } catch (err) {
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
         setNotReady(true);
@@ -62,7 +72,7 @@ export function NotifyTab({
     } finally {
       setLoading(false);
     }
-  }, [api, getFn, applyPrefs]);
+  }, [api, getFn, logFn, applyPrefs]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate prefs after mount */
@@ -184,6 +194,31 @@ export function NotifyTab({
       >
         {busy ? 'Saving…' : 'Save preferences'}
       </button>
+
+      <div className="space-y-2" data-testid="notify-log">
+        <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+          Delivery log
+        </p>
+        {events.length === 0 ? (
+          <p className="text-sm text-ink-mute">No digest events logged yet.</p>
+        ) : (
+          <ul className="divide-y divide-hair border border-hair">
+            {events.map((event) => (
+              <li
+                key={`${event.event_key}:${event.sent_date}:${event.sent_at}`}
+                className="px-3 py-2 text-sm"
+                data-testid="notify-log-row"
+              >
+                <p className="font-mono text-ink">{event.event_key}</p>
+                <p className="text-xs text-ink-mute">
+                  {event.sent_date}
+                  {event.sent_at ? ` · ${event.sent_at}` : ''}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

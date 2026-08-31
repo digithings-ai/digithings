@@ -12,7 +12,7 @@ import {
   runTearsheetPrint,
   toneClass,
 } from '@digithings/web';
-import type { OlympusTearsheet, PerformanceHoldingRow } from './types';
+import type { PerformanceTearsheet, PerformanceHoldingRow } from './types';
 import {
   PortfolioContributionChart,
 } from './PortfolioPerformanceCharts';
@@ -151,7 +151,7 @@ function LedgerDoorway({ sellCount }: { sellCount: number }) {
   );
 }
 
-export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
+export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet }) {
   const [, setPrinting] = useState(false);
   const [benchmarkTicker, setBenchmarkTicker] = useState(
     data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
@@ -207,7 +207,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
             aria-label="Download performance tear sheet as PDF"
             title="Download PDF"
             onClick={() =>
-              runTearsheetPrint({ documentTitle: 'Olympus performance', setPrinting })
+              runTearsheetPrint({ documentTitle: 'digiquant performance', setPrinting })
             }
           >
             <Download size={17} aria-hidden />
@@ -276,3 +276,6 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
     </div>
   );
 }
+
+/** @deprecated Use PerformanceTearsheetView. One-release alias (ADR-0026 wave 3). */
+export const OlympusTearsheetView = PerformanceTearsheetView;

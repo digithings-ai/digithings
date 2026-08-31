@@ -29,7 +29,12 @@ const supabaseMock = vi.hoisted(() => {
         },
       };
     }),
-    signInWithOAuth: vi.fn(async () => ({ data: {}, error: null })),
+    signInWithOAuth: vi.fn(async () => ({
+      data: { url: 'https://accounts.example.test/oauth?state=1' },
+      error: null,
+    })),
+    signInWithPassword: vi.fn(async () => ({ data: { session: null, user: null }, error: null })),
+    signUp: vi.fn(async () => ({ data: { session: null, user: null }, error: null })),
     signOut: vi.fn(async () => {
       session = null;
       for (const cb of [...listeners]) cb('SIGNED_OUT', null);
@@ -46,6 +51,8 @@ const supabaseMock = vi.hoisted(() => {
       auth.getSession.mockClear();
       auth.onAuthStateChange.mockClear();
       auth.signInWithOAuth.mockClear();
+      auth.signInWithPassword.mockClear();
+      auth.signUp.mockClear();
       auth.signOut.mockClear();
     },
     setSession(next: typeof session) {
@@ -103,6 +110,8 @@ describe('AuthProvider', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     act(() => {
       root.unmount();
     });
@@ -161,18 +170,79 @@ describe('AuthProvider', () => {
     expect(container.querySelector('[data-has-session="0"]')).not.toBeNull();
   });
 
-  it('signInWithOAuth delegates to supabase-js with PKCE redirect including /olympus', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+  it('signInWithOAuth delegates to supabase-js with PKCE redirect including /dashboard', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
+    const assign = vi.fn();
+    vi.stubGlobal('location', {
+      origin: 'http://localhost:3000',
+      assign,
+    });
     await mountProbe();
     await act(async () => {
       await latest!.signInWithOAuth('github');
     });
     const call = supabaseMock.auth.signInWithOAuth.mock.calls[0]?.[0] as {
       provider: string;
-      options: { redirectTo: string };
+      options: { redirectTo: string; skipBrowserRedirect?: boolean; queryParams?: unknown };
     };
     expect(call.provider).toBe('github');
-    expect(call.options.redirectTo).toMatch(/\/olympus\/auth\/callback\/$/);
-    expect(call.options.redirectTo).toBe(`${window.location.origin}/olympus/auth/callback/`);
+    expect(call.options.skipBrowserRedirect).toBe(true);
+    expect(call.options.queryParams).toBeUndefined();
+    expect(call.options.redirectTo).toMatch(/\/dashboard\/auth\/callback\/$/);
+    expect(call.options.redirectTo).toBe('http://localhost:3000/dashboard/auth/callback/');
+    expect(assign).toHaveBeenCalledWith('https://accounts.example.test/oauth?state=1');
+  });
+
+  it('signInWithOAuth(google) sends offline + select_account query params', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
+    const assign = vi.fn();
+    vi.stubGlobal('location', {
+      origin: 'http://localhost:3000',
+      assign,
+    });
+    await mountProbe();
+    await act(async () => {
+      await latest!.signInWithOAuth('google');
+    });
+    const call = supabaseMock.auth.signInWithOAuth.mock.calls[0]?.[0] as {
+      provider: string;
+      options: { queryParams?: Record<string, string>; skipBrowserRedirect?: boolean };
+    };
+    expect(call.provider).toBe('google');
+    expect(call.options.skipBrowserRedirect).toBe(true);
+    expect(call.options.queryParams).toEqual({
+      access_type: 'offline',
+      prompt: 'select_account',
+    });
+    expect(assign).toHaveBeenCalledTimes(1);
+  });
+
+  it('signInWithOAuth throws when the provider returns no URL', async () => {
+    supabaseMock.auth.signInWithOAuth.mockResolvedValueOnce({ data: {}, error: null });
+    await mountProbe();
+    await expect(latest!.signInWithOAuth('google')).rejects.toThrow(/Google did not return a redirect URL/);
+  });
+
+  it('signInWithPassword and signUpWithPassword delegate to supabase-js', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
+    vi.stubGlobal('location', { origin: 'http://localhost:3000', assign: vi.fn() });
+    await mountProbe();
+    await act(async () => {
+      await latest!.signInWithPassword('a@b.c', 'secret12');
+    });
+    expect(supabaseMock.auth.signInWithPassword).toHaveBeenCalledWith({
+      email: 'a@b.c',
+      password: 'secret12',
+    });
+    let signupResult: { session: unknown } | undefined;
+    await act(async () => {
+      signupResult = await latest!.signUpWithPassword('a@b.c', 'secret12');
+    });
+    expect(supabaseMock.auth.signUp).toHaveBeenCalledWith({
+      email: 'a@b.c',
+      password: 'secret12',
+      options: { emailRedirectTo: 'http://localhost:3000/dashboard/auth/callback/' },
+    });
+    expect(signupResult).toEqual({ session: null });
   });
 });

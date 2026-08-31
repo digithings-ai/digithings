@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Database, Search } from 'lucide-react';
-import { useAtlasTheme } from '@/components/theme-provider';
+import { useDashboardTheme } from '@/components/theme-provider';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { normalizePathname } from '@/lib/pathname';
 import {
@@ -11,7 +11,8 @@ import {
   OverlayProfileSurface,
   PrivateBookSurface,
 } from '@/components/tier/custom-workspace-surfaces';
-import type { PlanTier } from '@/lib/entitlements';
+import { can, type PlanTier } from '@/lib/entitlements';
+import { usePlanTier } from '@/lib/use-entitlement';
 
 export interface SettingsContentProps {
   /** Tighter spacing for the sidebar popover; slightly fuller for the page. */
@@ -52,9 +53,14 @@ export function SettingsContent({
   tier,
 }: SettingsContentProps) {
   const pathname = usePathname();
-  const { theme, setTheme } = useAtlasTheme();
+  const { theme, setTheme } = useDashboardTheme();
   const pipe = pipelineActive(pathname);
   const settings = settingsActive(pathname);
+  const sessionTier = usePlanTier();
+  const resolvedTier = tier ?? sessionTier;
+  const showPrivateBook = can(resolvedTier, 'private_book');
+  const showBroker = can(resolvedTier, 'broker_status');
+  const showOverlay = can(resolvedTier, 'overlay_profile');
 
   return (
     <div className={variant === 'page' ? 'space-y-6' : 'space-y-5'}>
@@ -118,10 +124,12 @@ export function SettingsContent({
 
       {variant === 'page' ? (
         <div className="space-y-3" data-testid="settings-workspace-gates">
-          <p className="text-[10px] font-medium text-ink-mute">Workspace</p>
-          <PrivateBookSurface tier={tier} />
-          <BrokerStatusSurface tier={tier} />
-          <OverlayProfileSurface tier={tier} />
+          {showPrivateBook || showBroker || showOverlay ? (
+            <p className="text-[10px] font-medium text-ink-mute">Workspace</p>
+          ) : null}
+          {showPrivateBook ? <PrivateBookSurface tier={resolvedTier} /> : null}
+          {showBroker ? <BrokerStatusSurface tier={resolvedTier} /> : null}
+          {showOverlay ? <OverlayProfileSurface tier={resolvedTier} /> : null}
           <div
             id="billing"
             data-testid="settings-billing-anchor"

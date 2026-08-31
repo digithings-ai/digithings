@@ -1,7 +1,10 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "frontend/digiweb/design/spec/index.html",
+      "frontend/digiweb/design/smoke/index.html"
+    ],
     "ignoreValues": [
       {
         "rule": "overused-font",

@@ -3,8 +3,10 @@
  * Components call these functions; never touch Supabase directly.
  *
  * Session-aware (T1): `supabase` is the PKCE client when
- * `NEXT_PUBLIC_OLYMPUS_AUTH=1` (JWT from supabase-js storage; RLS scopes rows).
- * Flag off → classic anon client (today's behavior). Query text is unchanged.
+ * `NEXT_PUBLIC_DASHBOARD_AUTH=1` (JWT from supabase-js storage; RLS scopes rows).
+ * Flag off → classic anon client. Group A book tables always go through
+ * `houseBook()` so a signed-in Custom member's overlay rows cannot mix into
+ * the public house dashboard (migration 109 SELECT is house OR membership).
  */
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -60,6 +62,7 @@ import { normalizePositionEvent } from './position-events';
 import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
+import { houseBook } from './house-workspace';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
 function asStringArray(v: unknown): string[] {
@@ -574,7 +577,7 @@ export async function fetchAllTickers(): Promise<string[]> {
   const TICKER_UNION_LIMIT = 2000;
 
   const [posRes, decRes, docRes, covRes] = await Promise.all([
-    supabase.from('positions').select('ticker').limit(TICKER_UNION_LIMIT),
+    houseBook(supabase, 'positions', 'ticker').limit(TICKER_UNION_LIMIT),
     supabase.from('decision_log').select('ticker').limit(TICKER_UNION_LIMIT),
     supabase
       .from('documents')
@@ -660,9 +663,11 @@ async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]
   if (!supabase) return [];
   return paginatedFetch<PositionEventRowPick>(
     async (offset, pageSize) => {
-      const { data, error } = await supabase!
-        .from('position_events')
-        .select('id,date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
+      const { data, error } = await houseBook(
+        supabase!,
+        'position_events',
+        'id,date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason',
+      )
         .order('date', { ascending: false })
         .range(offset, offset + pageSize - 1);
       return { data, error };
@@ -714,7 +719,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     // maybeSingle: empty RLS (or no Sunday run) must not 406/PGRST116 — Brief
     // falls through to the empty-digest shell instead of a hard query failure.
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).maybeSingle(),
-    supabase.from('positions').select('*').order('date', { ascending: false }).limit(5000),
+    houseBook(supabase, 'positions').order('date', { ascending: false }).limit(5000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
@@ -722,7 +727,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       .from(ACCOUNTING_NAV_VIEW)
       .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
       .order('date', { ascending: true }),
-    supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
+    houseBook(supabase, 'portfolio_metrics').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.
     // Paginated via fetchDocumentsIndexForDashboard so the calendar never truncates
     // regardless of history depth (~45 docs/day × DOCUMENTS_INDEX_MAX rows supported).
@@ -1723,9 +1728,11 @@ export async function fetchPositionPriceChart(
   let evOffset = 0;
   const EVENT_MAX = 8000;
   while (evOffset < EVENT_MAX) {
-    const { data, error } = await supabase
-      .from('position_events')
-      .select('date, event, price, reason, weight_pct, prev_weight_pct')
+    const { data, error } = await houseBook(
+      supabase,
+      'position_events',
+      'date, event, price, reason, weight_pct, prev_weight_pct',
+    )
       .eq('ticker', t)
       .gte('date', safeFrom)
       .lte('date', end)
@@ -2086,10 +2093,9 @@ export async function getPositionHistory(
   fromDate?: string
 ): Promise<Pick<TableRow<'positions'>, 'date' | 'ticker' | 'weight_pct'>[]> {
   return querySupabase((sb) => {
-    let q = sb
-      .from('positions')
-      .select('date, ticker, weight_pct')
-      .order('date', { ascending: true });
+    let q = houseBook(sb, 'positions', 'date, ticker, weight_pct').order('date', {
+      ascending: true,
+    });
     if (fromDate) q = q.gte('date', fromDate);
     return q;
   });
@@ -2100,10 +2106,7 @@ export async function getPositionEvents(
   ticker?: string
 ): Promise<TableRow<'position_events'>[]> {
   return querySupabase((sb) => {
-    let q = sb
-      .from('position_events')
-      .select('*')
-      .order('date', { ascending: false });
+    let q = houseBook(sb, 'position_events').order('date', { ascending: false });
     if (fromDate) q = q.gte('date', fromDate);
     if (ticker) q = q.eq('ticker', ticker);
     return q.limit(200);

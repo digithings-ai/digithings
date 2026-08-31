@@ -31,8 +31,8 @@ describe("olympus security-headers", () => {
   });
 
   it("scopes the CSP to the dashboard so landing-page Google Fonts keep working", () => {
-    expect(publicHeaders).toContain("/olympus*");
-    const landingBlock = publicHeaders.split("/olympus*")[0];
+    expect(publicHeaders).toContain("/dashboard*");
+    const landingBlock = publicHeaders.split("/dashboard*")[0];
     expect(landingBlock).not.toContain("Content-Security-Policy");
   });
 });

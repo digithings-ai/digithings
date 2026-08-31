@@ -245,7 +245,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Prerequisite | Status (2026-08-30) | Blocks |
 |--------------|---------------------|--------|
 | Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** and **pushed to `core` EF secrets** (2026-08-30 via `sbp_` + `supabase secrets set`). | K3 seal; settings brokers; T4 BYOK at runtime |
-| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET in VM** → `http://127.0.0.1:3001` and **pushed to `core` EF secrets**. | OAuth redirect pin; checkout return URLs |
+| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET on `core` to `https://digiquant.io`** (2026-08-31). Observer `GET /settings/app-urls` returns Alpaca `…/olympus/settings/brokers/callback/` + billing `…/olympus/settings/?tab=billing` (no loopback; public client id empty until Alpaca secrets land). settings **v32**, checkout **v8**, portal **v9**. | OAuth redirect pin; checkout return URLs |
 | Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
@@ -370,8 +370,10 @@ curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
 # 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
-# 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
-#    (private persist needs OLYMPUS_OVERLAY_PERSIST=1 only after cutover 900)
+# 4) Overlay run (T4): `OLYMPUS_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`
+#    Persist is safe after migration **110** (not 900). `--execute` refuses without the flag
+#    (`OVERLAY_EXECUTE_NOT_CONFIGURED: OLYMPUS_OVERLAY_PERSIST`) so the hop cannot be
+#    `persist_disabled`. Requires BYOK present_and_unsealable. Never `--execute --all`.
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run

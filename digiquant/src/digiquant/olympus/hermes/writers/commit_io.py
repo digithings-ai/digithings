@@ -30,7 +30,11 @@ from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.overlay.persist import hermes_document_key, require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    hermes_document_key,
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -91,10 +95,21 @@ def _effective_conviction(analyst: Any, debate: Any) -> float | None:
     return round(_clamp_conviction(base + delta), 2)
 
 
-def _prior_nav(client: SupabaseClient, run_date: date) -> float:
+def _prior_nav(
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | UUID | None = None,
+) -> float:
+    """Latest ``nav_history.nav`` strictly before ``run_date`` for one workspace.
+
+    Omitted ``workspace_id`` is the house — never an unfiltered date scan. Overlay
+    must pass its id so a later private NAV cannot compound the house index.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("nav_history")
         .select("date, nav")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -212,13 +227,18 @@ def _interval_price_returns(
     return returns
 
 
-def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[str, Any]]) -> float:
+def _compute_nav(
+    client: SupabaseClient,
+    run_date: date,
+    prior_book: list[dict[str, Any]],
+    workspace_id: str | UUID | None = None,
+) -> float:
     """NAV for ``run_date`` = prior NAV compounded by the prior book's interval return.
 
     See :func:`_interval_price_returns` for why the return is measured over the
     interval since the prior book date rather than the latest one-day delta (#1745).
     """
-    prior_nav = _prior_nav(client, run_date)
+    prior_nav = _prior_nav(client, run_date, workspace_id)
     held = {
         str(r.get("ticker")): _coerce_float(r.get("weight_pct"))
         for r in prior_book
@@ -497,13 +517,14 @@ def book_portfolio(
         if rationale:
             row["rationale"] = rationale
 
+    overlay_ws = getattr(state.config, "workspace_id", None)
     prior_book = load_prior_book(
         client,
         run_date,
         include_risk_fields=_position_risk_fields_enabled(),
-        workspace_id=getattr(state.config, "workspace_id", None),
+        workspace_id=overlay_ws,
     )
-    nav = _compute_nav(client, run_date, prior_book)
+    nav = _compute_nav(client, run_date, prior_book, workspace_id=overlay_ws)
 
     if _position_risk_fields_enabled():
         try:
@@ -533,9 +554,12 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
-    overlay_ws = getattr(state.config, "workspace_id", None)
     workspace_id = str(resolved_workspace_id(overlay_ws))
     require_overlay_persist(workspace_id)
+    # Legacy UNIQUE(date) / UNIQUE(date,ticker) still sit beside the widened
+    # (workspace_id, …) keys (migration 097). Overlay rows for the same calendar
+    # date collide with house or get rewritten by house on_conflict=date upserts.
+    require_overlay_legacy_book_safe(workspace_id)
 
     client.table("nav_history").upsert(
         {

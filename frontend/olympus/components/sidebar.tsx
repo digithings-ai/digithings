@@ -5,12 +5,12 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
-import { olympusBasePath } from '@/lib/supabase';
+import { dashboardBasePath } from '@/lib/supabase';
 import { useCanAccessProduct } from '@/lib/use-entitlement';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
@@ -53,7 +53,7 @@ function routeActive(pathname: string, base: string, href: string): boolean {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const base = olympusBasePath();
+  const base = dashboardBasePath();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();
@@ -151,7 +151,7 @@ export default function Sidebar() {
             className={`flex items-center justify-between gap-2 w-full ${sidebarCollapsed ? 'md:hidden' : ''}`}
           >
             <div className="flex items-center gap-2.5 min-w-0" aria-label="digiquant">
-              <AtlasMark className="shrink-0" />
+              <DashboardMark className="shrink-0" />
             </div>
             <button
               type="button"
@@ -165,7 +165,7 @@ export default function Sidebar() {
           <div
             className={`${sidebarCollapsed ? 'hidden md:flex' : 'hidden'} flex-col items-center gap-3 w-full py-1`}
           >
-            <AtlasMark className="shrink-0" />
+            <DashboardMark className="shrink-0" />
             <button
               type="button"
               onClick={toggleSidebar}
@@ -205,19 +205,20 @@ export default function Sidebar() {
         >
           {authEnabled && user ? (
             <div
-              className={`mb-3 flex flex-col gap-2 ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              className={`acct-session-rail ${sidebarCollapsed ? 'md:items-center' : ''}`}
               data-testid="sidebar-auth-identity"
             >
               <p
-                className={`truncate text-xs text-ink-mute ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                className={`acct-session-email ${sidebarCollapsed ? 'md:sr-only' : ''}`}
                 title={identityLabel}
               >
                 {identityLabel}
               </p>
+              <p className={`acct-session-meta ${sidebarCollapsed ? 'md:sr-only' : ''}`}>signed in</p>
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className={`inline-flex items-center gap-2 border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
+                className={`btn-ghost inline-flex items-center justify-center gap-2 px-3 py-1.5 text-xs ${
                   sidebarCollapsed ? 'md:justify-center md:px-2' : ''
                 }`}
                 aria-label="Sign out"
@@ -226,7 +227,7 @@ export default function Sidebar() {
                 <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
               </button>
               {signOutError ? (
-                <p className="text-xs text-down" role="alert">
+                <p className="acct-error" role="alert">
                   {signOutError}
                 </p>
               ) : null}

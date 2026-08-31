@@ -2,10 +2,11 @@
 
 Binding behavior
 ----------------
-1. Entitlement: ``plan_tier ∈ {custom, enterprise}`` AND ``subscription_status =
-   active`` AND BYOK present-and-unsealable. Otherwise a ``job_runs`` row is
-   written ``skipped`` with ``error`` = ``not_entitled`` / ``no_credentials`` —
-   visible, never silent.
+1. Entitlement: (paid Custom/Enterprise with ``subscription_status = active``)
+   **or** D1 ``entitlement_grants.plan_floor ∈ {custom, enterprise}`` (creator/ops
+   without Stripe), **and** BYOK present-and-unsealable. Otherwise a ``job_runs``
+   row is written ``skipped`` with ``error`` = ``not_entitled`` / ``no_credentials``
+   — visible, never silent.
 2. Idempotent claim: ``idempotency_key = f"{workspace_id}:overlay_daily:{run_date}"``.
    Insert-first on that unique key; claim is ``FOR UPDATE SKIP LOCKED``-style
    (in-memory store serializes the same "first claimer wins" rule). A second
@@ -226,13 +227,19 @@ class SupabaseJobRunStore:
 
 
 class WorkspaceEntitlement(BaseModel):
-    """The three billing columns dispatch reads — no Stripe writes."""
+    """Billing columns dispatch reads — no Stripe writes.
+
+    ``plan_floor`` is the owner's ``entitlement_grants`` row (D1 creator/ops), or
+    ``None`` when the workspace has no grant. Paying customers keep
+    ``workspaces.plan_tier`` + ``subscription_status`` as the Stripe path.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     workspace_id: UUID
     plan_tier: PlanTier
     subscription_status: SubscriptionStatus
+    plan_floor: PlanTier | None = None
 
 
 def overlay_idempotency_key(workspace_id: UUID, run_date: date) -> str:
@@ -244,16 +251,22 @@ def _now() -> datetime:
     return datetime.now(tz=UTC)
 
 
+def overlay_billing_entitled(workspace: WorkspaceEntitlement) -> bool:
+    """Paid Custom/Enterprise (Stripe active) or D1 custom+ ops grant (no Stripe)."""
+    paid = (
+        workspace.plan_tier.value in ENTITLED_TIERS
+        and workspace.subscription_status is SubscriptionStatus.ACTIVE
+    )
+    grant = workspace.plan_floor is not None and workspace.plan_floor.value in ENTITLED_TIERS
+    return paid or grant
+
+
 def evaluate_entitlement(
     workspace: WorkspaceEntitlement,
     byok: ByokProbe,
 ) -> OverlaySkipReason | None:
     """Return a skip reason, or ``None`` when the workspace may run."""
-    entitled = (
-        workspace.plan_tier.value in ENTITLED_TIERS
-        and workspace.subscription_status is SubscriptionStatus.ACTIVE
-    )
-    if not entitled:
+    if not overlay_billing_entitled(workspace):
         return OverlaySkipReason.NOT_ENTITLED
     if not byok.present_and_unsealable:
         return OverlaySkipReason.NO_CREDENTIALS
@@ -348,5 +361,6 @@ __all__ = [
     "WorkspaceEntitlement",
     "dispatch_overlay_daily",
     "evaluate_entitlement",
+    "overlay_billing_entitled",
     "overlay_idempotency_key",
 ]

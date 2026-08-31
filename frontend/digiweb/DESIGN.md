@@ -206,7 +206,7 @@ Responsive behavior collapses through one shared breakpoint (`760px`) for most m
 
 ## Elevation & Depth
 
-**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. Olympus states this as an explicit house rule: "FLAT — no glass morphism on content."
+**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."
 
 A soft, theme-invariant black shadow (`rgba(0,0,0,.45–.65)`, always a plain black rgba, never `color-mix`-tinted) is reserved *exclusively* for genuinely floating overlay chrome that sits above the page: the dropdown menu pane, the tooltip bubble, the typed hero terminal, the toast stack, and the command palette. These are the only surfaces in the entire system that cast a real elevation shadow.
 

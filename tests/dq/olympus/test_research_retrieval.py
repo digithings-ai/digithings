@@ -38,6 +38,7 @@ from digiquant.olympus.research_retrieval.store import (
     RoleRetrievalManifestStore,
 )
 from digiquant.olympus.research_retrieval.tools import resolve_retrieval_manifest_mode
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.olympus.test_context_compiler import _evidence, _loaded_state
@@ -307,6 +308,91 @@ class TestQueryPortfolio:
             as_of_date=date(2026, 6, 19),
         )
         assert out["as_of_date"] == "2026-06-17"
+
+    def test_house_book_ignores_same_date_overlay_rows(self) -> None:
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        house = str(house_workspace_id())
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {
+                        "date": "2026-06-19",
+                        "ticker": "SPY",
+                        "weight_pct": 12.0,
+                        "workspace_id": house,
+                    },
+                    {
+                        "date": "2026-06-19",
+                        "ticker": "OVERLAY",
+                        "weight_pct": 99.0,
+                        "workspace_id": overlay,
+                    },
+                ],
+                "nav_history": [
+                    {
+                        "date": "2026-06-19",
+                        "nav": 1.02,
+                        "cash_pct": 5.0,
+                        "invested_pct": 95.0,
+                        "workspace_id": house,
+                    },
+                    {
+                        "date": "2026-06-19",
+                        "nav": 999.0,
+                        "cash_pct": 0.0,
+                        "invested_pct": 100.0,
+                        "workspace_id": overlay,
+                    },
+                ],
+                "theses": [],
+                "decision_log": [],
+            }
+        )
+        out = query_portfolio(
+            client,
+            run_date=date(2026, 6, 20),
+            phase="h7_pm",
+            as_of_date=date(2026, 6, 19),
+        )
+        assert [row["ticker"] for row in out["positions"]] == ["SPY"]
+        assert out["nav"]["nav"] == 1.02
+
+    def test_overlay_only_as_of_does_not_seed_house_fallback(self) -> None:
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        house = str(house_workspace_id())
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {
+                        "date": "2026-06-17",
+                        "ticker": "SPY",
+                        "weight_pct": 10.0,
+                        "workspace_id": house,
+                    },
+                    {
+                        "date": "2026-06-19",
+                        "ticker": "OVERLAY",
+                        "weight_pct": 99.0,
+                        "workspace_id": overlay,
+                    },
+                ],
+                "nav_history": [
+                    {"date": "2026-06-17", "nav": 1.01, "workspace_id": house},
+                    {"date": "2026-06-19", "nav": 999.0, "workspace_id": overlay},
+                ],
+                "theses": [],
+                "decision_log": [],
+            }
+        )
+        out = query_portfolio(
+            client,
+            run_date=date(2026, 6, 20),
+            phase="h7_pm",
+            as_of_date=date(2026, 6, 19),
+        )
+        assert out["as_of_date"] == "2026-06-17"
+        assert out["positions"][0]["ticker"] == "SPY"
+        assert out["nav"]["nav"] == 1.01
 
 
 @pytest.mark.unit

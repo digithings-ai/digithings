@@ -15,6 +15,10 @@
    state/structural rules unlayered — see its header). No @source needed:
    the controls carry no Tailwind utilities. */
 @import "@digithings/web/styles/controls-core.css";
+/* Account surfaces (login / signup / session / settings) — grammar from
+   digiweb/reference/app/account/account.css. Imported after controls-core so
+   .acct-btn-block can override .btn-* display. */
+@import "./account-surfaces.css";
 /* NumberedStages spine/node art (system → How it works, F4 #1450). */
 @import "@digithings/web/styles/stages.css";
 /* effects-chrome (TabStrip — subpage tab bar) manages its own layering:

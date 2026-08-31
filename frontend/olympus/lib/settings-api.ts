@@ -54,6 +54,34 @@ export type ProfileTip = {
   watchlist?: string[];
   themes?: string[];
   research_budget_usd?: number | null;
+  /** Workspace billing snapshot — never Stripe customer/subscription ids. */
+  plan_tier?: string;
+  subscription_status?: string;
+  has_stripe_subscription?: boolean;
+};
+
+export type JobRunView = {
+  id: string;
+  job_type: string;
+  status: string;
+  error: string | null;
+  idempotency_key: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type FillView = {
+  id: string;
+  symbol: string;
+  quantity: number;
+  executed_at: string | null;
+  recorded_at: string | null;
+};
+
+export type NotificationLogEvent = {
+  event_key: string;
+  sent_date: string;
+  sent_at: string;
 };
 
 export type ProviderCredentialView = {
@@ -273,6 +301,52 @@ export async function getNotifications(
   return request<NotificationPrefs>(opts, 'GET', `/settings/notifications${q}`);
 }
 
+export async function getJobs(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<JobRunView[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ jobs: JobRunView[] }>(opts, 'GET', `/settings/jobs${q}`);
+  return data.jobs ?? [];
+}
+
+export async function getFills(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<FillView[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ fills: FillView[] }>(opts, 'GET', `/settings/fills${q}`);
+  return data.fills ?? [];
+}
+
+export async function getNotificationLog(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<NotificationLogEvent[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ events: NotificationLogEvent[] }>(
+    opts,
+    'GET',
+    `/settings/notifications/log${q}`,
+  );
+  return data.events ?? [];
+}
+
+export type AppUrls = {
+  alpaca_redirect_uri: string;
+  billing_return_url: string;
+  /** Public Alpaca OAuth client id; empty when EF secret is unset. Never the secret. */
+  alpaca_oauth_client_id: string;
+};
+
+export async function getAppUrls(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<AppUrls> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  return request<AppUrls>(opts, 'GET', `/settings/app-urls${q}`);
+}
+
 export async function patchNotifications(
   opts: SettingsApiOptions,
   payload: {
@@ -299,4 +373,17 @@ export async function createCustomerPortal(
   payload: { workspace_id?: string } = {},
 ): Promise<{ url: string }> {
   return request(opts, 'POST', '/customer-portal', payload);
+}
+
+export type RedeemInviteResult = {
+  ok: true;
+  already_granted: boolean;
+  product_key: string;
+};
+
+export async function redeemInvite(
+  opts: SettingsApiOptions,
+  payload: { code: string; product_key?: string; workspace_id?: string },
+): Promise<RedeemInviteResult> {
+  return request<RedeemInviteResult>(opts, 'POST', '/settings/access/redeem-invite', payload);
 }

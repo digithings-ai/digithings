@@ -594,7 +594,9 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             active_theses = []
         try:
-            portfolio_performance = load_portfolio_performance_snapshot(deps.client, state.run_date)
+            portfolio_performance = load_portfolio_performance_snapshot(
+                deps.client, state.run_date, workspace_id=config.workspace_id
+            )
         except _SUPABASE_READ_ERRORS:
             portfolio_performance = {}
 

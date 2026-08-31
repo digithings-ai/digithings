@@ -14,12 +14,15 @@ import {
   getSupabaseClient,
   isOlympusAuthEnabled,
   oauthRedirectTo,
+  oauthSignInOptions,
+  type OAuthProvider,
 } from './supabase';
+import { formatAuthError, isDuplicateSignupUser } from './auth-errors';
 
-export type OAuthProvider = 'google' | 'github';
+export type { OAuthProvider };
 
 export interface AuthContextValue {
-  /** True when NEXT_PUBLIC_OLYMPUS_AUTH=1 (build-time). */
+  /** True when NEXT_PUBLIC_DASHBOARD_AUTH=1 (or OLYMPUS_AUTH alias) at build time. */
   authEnabled: boolean;
   session: Session | null;
   user: User | null;
@@ -29,13 +32,23 @@ export interface AuthContextValue {
    */
   loading: boolean;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  /** Session is present when confirm-email is off; otherwise the caller must not claim mail arrived. */
+  signUpWithPassword: (
+    email: string,
+    password: string,
+  ) => Promise<{ session: Session | null }>;
   signOut: () => Promise<void>;
 }
 
 /** Exported so entitlement hooks can read session without throwing outside the tree. */
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
+function missingClient(): Error {
+  return new Error(
+    'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const authEnabled = isOlympusAuthEnabled();
@@ -79,15 +92,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithOAuth = useCallback(async (provider: OAuthProvider) => {
     const client = getSupabaseClient();
     if (!client) {
-      throw new Error(
-        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
-      );
+      throw missingClient();
     }
-    const { error } = await client.auth.signInWithOAuth({
+    const { data, error } = await client.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: oauthRedirectTo() },
+      options: oauthSignInOptions(provider),
     });
     if (error) throw error;
+    if (!data.url) {
+      throw new Error(
+        formatAuthError(
+          provider === 'google'
+            ? 'Google did not return a redirect URL. Enable the Google provider in Supabase Auth and add this origin to Redirect URLs.'
+            : 'Sign-in did not return a redirect URL. Enable the provider in Supabase Auth.',
+          'oauth',
+        ),
+      );
+    }
+    window.location.assign(data.url);
+  }, []);
+
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw missingClient();
+    }
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }, []);
+
+  const signUpWithPassword = useCallback(async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw missingClient();
+    }
+    const { data, error } = await client.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: oauthRedirectTo() },
+    });
+    if (error) throw error;
+    if (isDuplicateSignupUser(data.user)) {
+      throw new Error(
+        formatAuthError(new Error('User already registered'), 'signup'),
+      );
+    }
+    return { session: data.session };
   }, []);
 
   const signOut = useCallback(async () => {
@@ -108,9 +158,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       loading,
       signInWithOAuth,
+      signInWithPassword,
+      signUpWithPassword,
       signOut,
     }),
-    [authEnabled, session, loading, signInWithOAuth, signOut],
+    [
+      authEnabled,
+      session,
+      loading,
+      signInWithOAuth,
+      signInWithPassword,
+      signUpWithPassword,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

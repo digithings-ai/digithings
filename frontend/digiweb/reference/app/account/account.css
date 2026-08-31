@@ -285,6 +285,36 @@
   color: var(--ink-mute);
 }
 
+.acct-setting-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem 0;
+}
+
+.acct-setting-tab {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.38rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  color: var(--ink-mute);
+}
+
+.acct-setting-tab-on {
+  background: var(--accent-weak);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--hair));
+}
+
+.acct-setting-tab-note {
+  margin: 0.55rem 1.1rem 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 52ch;
+}
+
 .acct-danger {
   display: flex;
   justify-content: space-between;

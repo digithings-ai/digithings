@@ -12,6 +12,12 @@
  *   POST   /keys/revoke        — mark revoked (fail closed on unknown)
  *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
  *   PATCH  /notifications      — upsert notification_prefs (workspace member)
+ *   GET    /notifications/log  — notification_log event keys (digest proof; no bodies)
+ *   GET    /jobs               — job_runs for the caller's workspace (overlay hop proof)
+ *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
+ *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
+ *                                + public Alpaca OAuth client id (never the secret)
+ *   POST   /access/redeem-invite — hashed FX Hub invite → client_product_grants
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -49,6 +55,15 @@ import {
   type BrokerCredential,
   type MasterKey,
 } from "./vault.ts";
+import {
+  pinnedAlpacaRedirectUriFromOrigin,
+  publicAlpacaOauthClientId,
+  settingsBillingReturnUrl,
+} from "./app-url.ts";
+import {
+  redeemProductInvite,
+  type InviteStore,
+} from "./invite.ts";
 
 export type SettingsDeps = {
   admin: AdminClient;
@@ -65,6 +80,10 @@ export type SettingsDeps = {
   now?: () => Date;
   /** Override APP_URL for pinned OAuth redirect_uri (tests). */
   appUrl?: string;
+  /** SHA-256 hex of the FX Hub invite (Supabase secret FX_HUB_INVITE_HASH). */
+  inviteHash?: string | null;
+  /** Tests inject an in-memory store; production uses PostgREST. */
+  inviteStore?: InviteStore;
 };
 
 const FINGERPRINT_COLUMNS =
@@ -87,7 +106,7 @@ const LLM_PROVIDERS = new Set([
 export const BYOK_AAD_PURPOSE = "llm";
 
 /** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
-export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";
+export { ALPACA_OAUTH_CALLBACK_PATH } from "./app-url.ts";
 
 function pathOf(url: URL): string {
   // Supabase mounts at /settings or /functions/v1/settings — strip both prefixes.
@@ -140,6 +159,9 @@ export async function handleSettingsRequest(
   if (method === "POST" && path === "/keys/revoke") {
     return revokeKey(req, deps);
   }
+  if (method === "GET" && path === "/notifications/log") {
+    return listNotificationLog(req, deps);
+  }
   if (
     method === "GET" &&
     (path === "/notifications" || path === "/notifications/")
@@ -148,6 +170,18 @@ export async function handleSettingsRequest(
   }
   if (method === "PATCH" && path === "/notifications") {
     return patchNotifications(req, deps);
+  }
+  if (method === "GET" && (path === "/jobs" || path === "/jobs/")) {
+    return listJobs(req, deps);
+  }
+  if (method === "GET" && (path === "/fills" || path === "/fills/")) {
+    return listFills(req, deps);
+  }
+  if (method === "GET" && (path === "/app-urls" || path === "/app-urls/")) {
+    return getAppUrls(req, deps);
+  }
+  if (method === "POST" && path === "/access/redeem-invite") {
+    return redeemInvite(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
@@ -201,11 +235,7 @@ export function pinnedAlpacaRedirectUri(appUrl?: string): string {
     Deno.env.get("APP_URL") ??
     Deno.env.get("NEXT_PUBLIC_APP_URL") ??
     "";
-  const base = raw.replace(/\/+$/, "");
-  if (!base) {
-    throw new Error("APP_URL unset");
-  }
-  return `${base}${ALPACA_OAUTH_CALLBACK_PATH}`;
+  return pinnedAlpacaRedirectUriFromOrigin(raw);
 }
 
 function isUniqueViolation(err: { code?: string; message?: string }): boolean {
@@ -215,6 +245,24 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
 }
 
 const DEFAULT_PROFILE_KEY = "workspace";
+
+function withWorkspaceBilling(
+  body: Record<string, unknown>,
+  workspace: {
+    plan_tier: string;
+    subscription_status: string;
+    stripe_subscription_id?: string | null;
+  },
+): Record<string, unknown> {
+  const stripeSub = workspace.stripe_subscription_id;
+  return {
+    ...body,
+    plan_tier: workspace.plan_tier,
+    subscription_status: workspace.subscription_status,
+    // Boolean only — never the Stripe customer/subscription id.
+    has_stripe_subscription: typeof stripeSub === "string" && stripeSub.length > 0,
+  };
+}
 
 function emptyProfileBody(
   workspaceId: string,
@@ -289,6 +337,29 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
   };
 }
 
+/** GET /app-urls — member read of pinned Alpaca + billing URLs + public client id. */
+async function getAppUrls(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+  try {
+    const raw =
+      deps.appUrl ??
+      Deno.env.get("APP_URL") ??
+      Deno.env.get("NEXT_PUBLIC_APP_URL") ??
+      "";
+    return jsonOk({
+      alpaca_redirect_uri: pinnedAlpacaRedirectUri(raw),
+      billing_return_url: settingsBillingReturnUrl(raw),
+      // Public client id only — never ALPACA_OAUTH_CLIENT_SECRET.
+      alpaca_oauth_client_id: publicAlpacaOauthClientId(),
+    });
+  } catch {
+    return jsonError(500, "APP_URL_NOT_CONFIGURED", "APP_URL is not configured");
+  }
+}
+
 /**
  * GET /profile — tip overlay for hydrate (member authz; no tier write gate).
  * Empty contract: no tip → 200 with version_id/recorded_at null and empty label
@@ -328,10 +399,14 @@ async function getProfile(req: Request, deps: SettingsDeps): Promise<Response> {
   }
 
   if (!tip) {
-    return jsonOk(emptyProfileBody(authz.workspace.id, profileKey));
+    return jsonOk(
+      withWorkspaceBilling(emptyProfileBody(authz.workspace.id, profileKey), authz.workspace),
+    );
   }
 
-  return jsonOk(profileResponseBody(tip as Record<string, unknown>));
+  return jsonOk(
+    withWorkspaceBilling(profileResponseBody(tip as Record<string, unknown>), authz.workspace),
+  );
 }
 
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
@@ -532,6 +607,97 @@ async function listBrokers(req: Request, deps: SettingsDeps): Promise<Response> 
   }));
 
   return jsonOk({ connections });
+}
+
+const JOB_COLUMNS =
+  "id, workspace_id, job_type, status, error, idempotency_key, started_at, finished_at";
+
+async function listJobs(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("job_runs")
+    .select(JOB_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("started_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "job_runs not available");
+  }
+
+  const jobs = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    job_type: row.job_type,
+    status: row.status,
+    error: row.error ?? null,
+    idempotency_key: row.idempotency_key,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+  }));
+  return jsonOk({ jobs });
+}
+
+const FILL_COLUMNS = "id, workspace_id, symbol, quantity, executed_at, recorded_at";
+
+async function listFills(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("broker_executions")
+    .select(FILL_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("executed_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "broker_executions not available");
+  }
+
+  const fills = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    symbol: row.symbol,
+    quantity: row.quantity,
+    executed_at: row.executed_at,
+    recorded_at: row.recorded_at,
+  }));
+  return jsonOk({ fills });
+}
+
+const NOTIFY_LOG_COLUMNS = "event_key, sent_date, sent_at";
+
+async function listNotificationLog(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("notification_log")
+    .select(NOTIFY_LOG_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("sent_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "notification_log not available");
+  }
+
+  const events = (data ?? []).map((row: Record<string, unknown>) => ({
+    event_key: row.event_key,
+    sent_date: row.sent_date,
+    sent_at: row.sent_at,
+  }));
+  return jsonOk({ events });
 }
 
 async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response> {
@@ -1305,10 +1471,136 @@ async function exchangeAlpacaCodeDefault(args: {
   };
 }
 
+function postgrestInviteStore(
+  admin: AdminClient,
+  uuid: () => string,
+): InviteStore {
+  return {
+    async countAttempts(userId, sinceIso) {
+      const { data, error } = await admin
+        .from("product_invite_attempts")
+        .select("id")
+        .eq("user_id", userId)
+        .gte("attempted_at", sinceIso);
+      if (error) {
+        if (String(error.message ?? "").includes("does not exist")) return 0;
+        throw new Error("invite attempts unavailable");
+      }
+      return Array.isArray(data) ? data.length : 0;
+    },
+    async recordAttempt(row) {
+      const { error } = await admin.from("product_invite_attempts").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && !String(error.message ?? "").includes("does not exist")) {
+        throw new Error("invite attempt write failed");
+      }
+    },
+    async listActiveCodes(productKey) {
+      const { data, error } = await admin
+        .from("product_invite_codes")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at")
+        .eq("product_key", productKey);
+      if (error || !Array.isArray(data)) return [];
+      return data.filter((row): row is {
+        id: string;
+        code_hash: string;
+        max_redemptions: number | null;
+        redemption_count: number;
+        revoked_at: string | null;
+      } => typeof row.id === "string" && typeof row.code_hash === "string");
+    },
+    async hasGrant(email, productKey) {
+      const { data, error } = await admin
+        .from("client_product_grants")
+        .select("product_key")
+        .eq("email", email);
+      if (error || !Array.isArray(data)) return false;
+      return data.some((row) => row.product_key === productKey);
+    },
+    async insertGrant(email, productKey, note) {
+      const { error } = await admin.from("client_product_grants").insert({
+        email,
+        product_key: productKey,
+        note,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("product grant insert failed");
+      }
+    },
+    async recordRedemption(row) {
+      const { error } = await admin.from("product_invite_redemptions").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("invite redemption write failed");
+      }
+    },
+    async incrementRedemptionCount(id) {
+      const { data } = await admin
+        .from("product_invite_codes")
+        .select("redemption_count")
+        .eq("id", id)
+        .maybeSingle();
+      const current =
+        data && typeof data.redemption_count === "number" ? data.redemption_count : 0;
+      await admin
+        .from("product_invite_codes")
+        .update({ redemption_count: current + 1 })
+        .eq("id", id);
+    },
+    async recordAdminAudit(row) {
+      if (!row.workspace_id) return;
+      await admin.from("notification_log").insert({
+        workspace_id: row.workspace_id,
+        event_key: row.event_key,
+        sent_date: row.sent_date,
+        sent_at: row.sent_at,
+      });
+    },
+  };
+}
+
+async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const requestedWorkspaceId =
+    typeof body.workspace_id === "string" ? body.workspace_id : null;
+  const member = await resolveMember(deps, requestedWorkspaceId);
+  const workspaceId = member.ok ? member.workspace.id : null;
+  const store = deps.inviteStore ??
+    postgrestInviteStore(deps.admin, deps.uuid ?? (() => crypto.randomUUID()));
+  const result = await redeemProductInvite({
+    userId: deps.user.id,
+    email: deps.user.email,
+    productKey: body.product_key,
+    code: body.code,
+    envHash: deps.inviteHash,
+    workspaceId,
+    store,
+    now: deps.now?.(),
+  });
+  if (!result.ok) {
+    return jsonError(result.status, result.code, result.message);
+  }
+  return jsonOk({
+    ok: true,
+    already_granted: result.alreadyGranted,
+    product_key: result.productKey,
+  });
+}
+
 /** Helper for index.ts — build deps from a verified user + admin client. */
 export function createDefaultDeps(user: AuthUser, admin?: AdminClient): SettingsDeps {
   return {
     admin: admin ?? createAdminClient(),
     user,
+    inviteHash: Deno.env.get("FX_HUB_INVITE_HASH") ?? null,
   };
 }

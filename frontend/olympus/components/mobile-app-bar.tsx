@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu, Search, X } from 'lucide-react';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 
 /**
@@ -29,7 +29,7 @@ export default function MobileAppBar() {
           {mobileNavOpen ? <X size={22} strokeWidth={2} /> : <Menu size={22} strokeWidth={2} />}
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-center">
-          <AtlasMark className="shrink-0" />
+          <DashboardMark className="shrink-0" />
         </div>
         <button
           type="button"

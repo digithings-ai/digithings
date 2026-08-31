@@ -21,7 +21,7 @@
  *
  * Kept in a separate file from marks.tsx on purpose: build-manifest.mjs names an
  * entry from the FIRST PascalCase export it finds, so aliasing these into
- * marks.tsx would silently rename that entry away from OlympusMark.
+ * marks.tsx would silently rename that entry away from DigiquantMark.
  */
 import {
   AnimatedLockup as SharedAnimatedLockup,

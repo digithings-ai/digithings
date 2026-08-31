@@ -26,7 +26,7 @@ const ROWS: TerminalManifestRow[] = [
     status: "online",
     blurb: "quant engine · backtest to live",
     detail:
-      "the quant engine — backtest, optimize, and paper-trade on one\nrail.\n\nAtlas watches the portfolio; Hermes narrates the market.\n\nstack   NautilusTrader  ·  Polars",
+      "the quant engine — backtest, optimize, and paper-trade on one\nrail.\n\nResearch watches the book; portfolio narrates the market.\n\nstack   NautilusTrader  ·  Polars",
   },
   {
     id: "digisearch",

@@ -10,18 +10,29 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
  * Inlined at build time — static export has no runtime env.
  */
 export function isOlympusAuthEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1';
+  return (
+    process.env.NEXT_PUBLIC_DASHBOARD_AUTH === '1' ||
+    process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1'
+  );
 }
+
+const FALLBACK_DASHBOARD_BASE_PATH = '/dashboard';
 
 /**
  * App basePath for client URLs. Sourced from next.config.mjs `env` (same value
- * as `basePath: '/olympus'`). Hard fallback keeps OAuth correct if env is missing.
+ * as `basePath: '/dashboard'`). Hard fallback keeps OAuth correct if env is missing.
  */
-export function olympusBasePath(): string {
-  const raw = process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ?? '/olympus';
+export function dashboardBasePath(): string {
+  const raw =
+    process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH ||
+    process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ||
+    FALLBACK_DASHBOARD_BASE_PATH;
   const trimmed = raw.replace(/\/+$/, '');
-  return trimmed || '/olympus';
+  return trimmed || FALLBACK_DASHBOARD_BASE_PATH;
 }
+
+/** @deprecated Use dashboardBasePath. */
+export const olympusBasePath = dashboardBasePath;
 
 /**
  * Build the browser Supabase client.
@@ -40,7 +51,9 @@ export function buildSupabaseClient(
         flowType: 'pkce',
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // Callback page owns `exchangeCodeForSession`. Auto-detect would
+        // race the one-shot PKCE code (see PipelineClient).
+        detectSessionInUrl: false,
       },
     });
   }
@@ -63,8 +76,61 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
 
 export const isSupabaseConfigured = (): boolean => Boolean(supabase);
 
+export type OAuthProvider = 'google' | 'github';
+
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}${olympusBasePath()}/auth/callback/`;
+  return `${window.location.origin}${dashboardBasePath()}/auth/callback/`;
+}
+
+/**
+ * Options for supabase-js `signInWithOAuth`.
+ *
+ * `skipBrowserRedirect` is required: Google (unlike GitHub) often returns a URL
+ * that the default supabase-js location swap drops on static `/dashboard/`
+ * basePath. The caller assigns `data.url` itself after a missing-URL check.
+ */
+export function oauthSignInOptions(provider: OAuthProvider): {
+  redirectTo: string;
+  skipBrowserRedirect: true;
+  queryParams?: Record<string, string>;
+} {
+  const options: {
+    redirectTo: string;
+    skipBrowserRedirect: true;
+    queryParams?: Record<string, string>;
+  } = {
+    redirectTo: oauthRedirectTo(),
+    skipBrowserRedirect: true,
+  };
+  if (provider === 'google') {
+    options.queryParams = {
+      access_type: 'offline',
+      prompt: 'select_account',
+    };
+  }
+  return options;
+}
+
+/** Parse `error` / `error_description` from the PKCE callback search or hash. */
+export function oauthCallbackErrorFromLocation(search: string, hash: string): string | null {
+  const query = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+  const code = query.get('error') || hashParams.get('error');
+  if (!code) return null;
+  const desc = query.get('error_description') || hashParams.get('error_description');
+  if (!desc) return code;
+  try {
+    return `${code}: ${decodeURIComponent(desc.replace(/\+/g, ' '))}`;
+  } catch {
+    return `${code}: ${desc}`;
+  }
+}
+
+/** PKCE `code` query param on `/auth/callback/` (Google/GitHub both use this). */
+export function oauthPkceCodeFromLocation(search: string): string | null {
+  const query = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const code = query.get('code');
+  return code && code.length > 0 ? code : null;
 }

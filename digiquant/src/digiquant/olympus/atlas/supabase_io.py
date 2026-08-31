@@ -28,7 +28,7 @@ from typing import Any, Protocol, TypedDict  # score:allow untyped any — Proto
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
-from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.overlay.persist import is_private_workspace, require_overlay_persist
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -318,6 +318,7 @@ def publish_daily_snapshot(
     run_type: str,
     baseline_date: str | None = None,
     digest_markdown: str | None = None,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
     """Upsert one row into ``daily_snapshots`` on ``date``.
 
@@ -325,7 +326,16 @@ def publish_daily_snapshot(
     ``templates/digest-snapshot-schema.json``). Stored in the ``snapshot``
     JSONB column; the legacy column set (``bias`` fields, etc.) is populated
     by downstream readers or a follow-up schema migration — not this adapter.
+
+    This table has no ``workspace_id`` (unique on ``date``). Overlay workspaces
+    must not upsert it — that would last-writer-wins over the house Brief.
+    Omitted ``workspace_id`` is the house path.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
+    if is_private_workspace(scoped):
+        raise ValueError(
+            "daily_snapshots is the house digest table; overlay workspaces must not upsert it"
+        )
     row: DailySnapshotUpsertRow = {
         "date": date_str,
         "run_type": run_type,
@@ -611,11 +621,19 @@ def load_active_theses_rows(
 def load_portfolio_performance_snapshot(
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a later private NAV cannot
+    become the house PM snapshot.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     nav_resp = (
         client.table("nav_history")
         .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -629,6 +647,7 @@ def load_portfolio_performance_snapshot(
     metrics_resp = (
         client.table("portfolio_metrics")
         .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("workspace_id", scoped)
         .eq("date", nav_date)
         .limit(1)
         .execute()

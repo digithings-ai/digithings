@@ -69,6 +69,10 @@ class _FakeQuery:
         self._filters.append(("eq", col, val))
         return self
 
+    def neq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("neq", col, val))
+        return self
+
     def in_(self, col: str, vals: list[Any] | tuple[Any, ...]) -> "_FakeQuery":
         # Match the Supabase Python client surface — ``in_`` filters rows whose
         # column value is one of ``vals``.
@@ -78,6 +82,11 @@ class _FakeQuery:
     def like(self, col: str, pattern: str) -> "_FakeQuery":
         # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
         self._filters.append(("like", col, pattern))
+        return self
+
+    def is_(self, col: str, val: str) -> "_FakeQuery":
+        # PostgREST ``.is_(col, "null")``. Used by house ops scripts.
+        self._filters.append(("is", col, val))
         return self
 
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
@@ -136,6 +145,8 @@ class _FakeQuery:
                 continue
             if op == "eq" and row_val != val:
                 return False
+            if op == "neq" and row_val == val:
+                return False
             if op == "lt" and str(row.get(col, "")) >= str(val):
                 return False
             if op == "lte" and str(row.get(col, "")) > str(val):
@@ -146,6 +157,11 @@ class _FakeQuery:
                 return False
             if op == "like" and not str(row.get(col, "")).startswith(str(val).rstrip("%")):
                 return False
+            if op == "is":
+                if str(val).lower() == "null" and row_val is not None:
+                    return False
+                if str(val).lower() != "null" and row_val is None:
+                    return False
         return True
 
     def execute(self) -> _FakeResponse:

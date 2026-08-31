@@ -98,7 +98,7 @@ export function can(tier: PlanTier, artifactClass: ArtifactClass): boolean {
 /**
  * Resolve plan tier from a Supabase session.
  *
- * Flag coupling (pre-cutover): when `NEXT_PUBLIC_OLYMPUS_AUTH` is off, return
+ * Flag coupling (pre-cutover): when `isOlympusAuthEnabled()` is off, return
  * `enterprise` so today's operator UI stays fully visible and T5 can merge
  * before the auth cutover.
  *
@@ -148,3 +148,101 @@ export const ARTIFACT_CLASSES: readonly ArtifactClass[] = [
 ] as const;
 
 export const ALL_PLAN_TIERS: readonly PlanTier[] = PLAN_TIERS;
+
+/** Settings tab ids — keep in sync with `app/settings/page.tsx`. */
+export type SettingsTabId =
+  | 'profile'
+  | 'pipeline'
+  | 'keys'
+  | 'brokers'
+  | 'notifications'
+  | 'billing'
+  | 'about';
+
+export type SettingsTabDef = {
+  id: SettingsTabId;
+  label: string;
+  /** Artifact class required to show the tab. Null = visible on every plan. */
+  requires: ArtifactClass | null;
+};
+
+/**
+ * Settings IA: Custom+ tabs are omitted (not greyed) when the effective tier
+ * cannot use them. Observer/Baseline never see Profile, Pipeline, Keys, Brokers.
+ */
+export const SETTINGS_TAB_DEFS: readonly SettingsTabDef[] = [
+  { id: 'profile', label: 'Profile', requires: 'overlay_profile' },
+  { id: 'pipeline', label: 'Pipeline', requires: 'overlay_profile' },
+  { id: 'keys', label: 'Keys', requires: 'overlay_profile' },
+  { id: 'brokers', label: 'Brokers', requires: 'broker_status' },
+  { id: 'notifications', label: 'Notifications', requires: null },
+  { id: 'billing', label: 'Billing', requires: null },
+  { id: 'about', label: 'About', requires: null },
+];
+
+/** Tabs the current plan may actually use — unavailable tabs are omitted. */
+export function settingsTabsVisible(tier: PlanTier): readonly SettingsTabDef[] {
+  return SETTINGS_TAB_DEFS.filter(
+    (tab) => tab.requires === null || can(tier, tab.requires),
+  );
+}
+
+export function defaultSettingsTab(tier: PlanTier): SettingsTabId {
+  return settingsTabsVisible(tier)[0]?.id ?? 'about';
+}
+
+function isSettingsTabId(value: string): value is SettingsTabId {
+  return SETTINGS_TAB_DEFS.some((tab) => tab.id === value);
+}
+
+/**
+ * Resolve `/settings#billing` (and sibling tab hashes) to a visible tab.
+ * Unknown or gated hashes return null so the page keeps its default.
+ */
+export function settingsTabFromLocationHash(
+  hash: string,
+  visibleIds: readonly SettingsTabId[],
+): SettingsTabId | null {
+  const raw = (hash.startsWith('#') ? hash.slice(1) : hash).trim();
+  const id = raw.split(/[?&]/, 1)[0] ?? '';
+  if (!isSettingsTabId(id)) return null;
+  return visibleIds.includes(id) ? id : null;
+}
+
+/**
+ * Resolve Stripe checkout/portal return URLs (`?tab=billing`, `?checkout=`).
+ * Query wins over hash. Gated or unknown tabs return null.
+ */
+export function settingsTabFromSearch(
+  search: string,
+  visibleIds: readonly SettingsTabId[],
+): SettingsTabId | null {
+  const raw = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(raw);
+  const tab = params.get('tab');
+  if (tab !== null && isSettingsTabId(tab) && visibleIds.includes(tab)) {
+    return tab;
+  }
+  const checkout = params.get('checkout');
+  if (
+    (checkout === 'success' || checkout === 'cancel') &&
+    visibleIds.includes('billing')
+  ) {
+    return 'billing';
+  }
+  return null;
+}
+
+/** Query (`?tab=` / `?checkout=`) then hash (`#billing`), then the plan default. */
+export function resolveSettingsTab(
+  search: string,
+  hash: string,
+  visibleIds: readonly SettingsTabId[],
+  fallback: SettingsTabId,
+): SettingsTabId {
+  return (
+    settingsTabFromSearch(search, visibleIds) ??
+    settingsTabFromLocationHash(hash, visibleIds) ??
+    fallback
+  );
+}

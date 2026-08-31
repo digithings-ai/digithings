@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from datetime import date as dt_date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from digiquant.olympus.tenancy import house_workspace_id
 
 try:
     from supabase import create_client  # type: ignore
@@ -61,16 +62,18 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
     return float(o) if o is not None else None
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Backfill position_events.price from price_history.open.")
-    ap.add_argument("--date", default=dt_date.today().isoformat(), help="YYYY-MM-DD")
-    args = ap.parse_args()
-    d = args.date
+def _house_id() -> str:
+    return str(house_workspace_id())
 
-    sb = _sb()
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
+
+
+def backfill_prices_for_date(sb: Any, d: str) -> int:
+    """Fill null ``position_events.price`` from ``price_history.open`` for house rows."""
     res = (
-        sb.table("position_events")
-        .select("date,ticker,event,price,weight_pct,reason,thesis_id")
+        _eq_house(sb.table("position_events").select("date,ticker,event,price,weight_pct,reason,thesis_id"))
         .eq("date", d)
         .is_("price", "null")
         .execute()
@@ -90,6 +93,7 @@ def main() -> int:
             print(f"   skip {ticker}: no price_history.open for {d}")
             continue
         up = {
+            "workspace_id": _house_id(),
             "date": d,
             "ticker": str(ticker),
             "event": row.get("event"),
@@ -98,11 +102,18 @@ def main() -> int:
             "reason": row.get("reason"),
             "thesis_id": row.get("thesis_id"),
         }
-        sb.table("position_events").upsert(up, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(up, on_conflict="workspace_id,date,ticker").execute()
         updated += 1
 
     print(f"✅ backfilled price on {updated} of {len(rows)} event(s) for {d}")
-    return 0
+    return updated
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Backfill position_events.price from price_history.open.")
+    ap.add_argument("--date", default=dt_date.today().isoformat(), help="YYYY-MM-DD")
+    args = ap.parse_args()
+    return 0 if backfill_prices_for_date(_sb(), args.date) >= 0 else 1
 
 
 if __name__ == "__main__":

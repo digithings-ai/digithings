@@ -1,4 +1,8 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { createElement, act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { BrokersTab, sanitizeConnection } from './brokers-tab';
@@ -72,6 +76,7 @@ describe('BrokersTab', () => {
     );
     expect(html).toContain('settings-brokers-tab');
     expect(html).toContain('IBKR (beta)');
+    expect(html).toContain('brokers-fills');
     expect(html).not.toContain(secret);
   });
 
@@ -111,5 +116,92 @@ describe('BrokersTab', () => {
       }),
     );
     expect(html).not.toContain('SHOULD-NOT-RENDER');
+  });
+
+  it('hydrates paper fills from GET /fills', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const fillsFn = vi.fn(async () => [
+      {
+        id: 'fill-1',
+        symbol: 'AAPL',
+        quantity: 1,
+        executed_at: '2026-08-31T14:00:00Z',
+        recorded_at: '2026-08-31T14:00:01Z',
+      },
+    ]);
+    await act(async () => {
+      root.render(
+        createElement(BrokersTab, {
+          api: { accessToken: 'tok' },
+          listFn: vi.fn(async () => []),
+          connectFn: vi.fn(),
+          revokeFn: vi.fn(),
+          fillsFn,
+          appUrlsFn: vi.fn(async () => ({
+            alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+            billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
+            alpaca_oauth_client_id: '',
+          })),
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fillsFn).toHaveBeenCalledOnce();
+    expect(host.querySelector('[data-testid="broker-fill-row"]')?.textContent).toMatch(/AAPL/);
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
+  });
+
+  it('starts Alpaca OAuth with public client id from GET /app-urls', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const navigated: string[] = [];
+    const appUrlsFn = vi.fn(async () => ({
+      alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+      billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
+      alpaca_oauth_client_id: 'cid-from-ef',
+    }));
+    await act(async () => {
+      root.render(
+        createElement(BrokersTab, {
+          api: { accessToken: 'tok' },
+          listFn: vi.fn(async () => []),
+          connectFn: vi.fn(),
+          revokeFn: vi.fn(),
+          fillsFn: vi.fn(async () => []),
+          appUrlsFn,
+          onAuthorizeNavigate: (url) => {
+            navigated.push(url);
+          },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(appUrlsFn).toHaveBeenCalledOnce();
+    const button = host.querySelector('[data-testid="alpaca-oauth-connect"]');
+    expect(button).toBeTruthy();
+    await act(async () => {
+      (button as HTMLButtonElement).click();
+    });
+    expect(navigated).toHaveLength(1);
+    const u = new URL(navigated[0]!);
+    expect(u.searchParams.get('client_id')).toBe('cid-from-ef');
+    expect(u.searchParams.get('env')).toBe('paper');
+    expect(navigated[0]).not.toMatch(/secret/i);
+    act(() => {
+      root.unmount();
+    });
+    host.remove();
   });
 });

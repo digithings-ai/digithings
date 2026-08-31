@@ -18,6 +18,25 @@ import urllib.request
 from typing import Any
 
 import pytest
+from digiquant.olympus.kairos.remaining_hops import (
+    RemainingHopEvidence,
+    proven_remaining_hops,
+    remaining_hop_blockers,
+)
+from digiquant.olympus.kairos.staging_e2e import (
+    OBSERVER_HOPS,
+    REMAINING_LIVE_HOPS,
+    STAGING_CHECKOUT_BODY,
+    HopExpectation,
+    collect_remaining_evidence,
+    format_remaining_hops_failure,
+    hop_ok,
+    public_app_urls_ok,
+    remaining_hops_unproven,
+    resolve_staging_jwt,
+    run_observer_hops,
+    run_staging_e2e,
+)
 from digiquant.olympus.kairos.staging_secrets import (
     KAIROS_STAGING_OPTIONAL_SECRETS,
     KAIROS_STAGING_REQUIRED_SECRETS,
@@ -85,6 +104,585 @@ def test_empty_and_placeholder_values_count_as_missing(
     assert "NOTIFY_FROM" in missing
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("kind", "http", "code", "expected"),
+    (
+        (HopExpectation.READ_OK, 200, None, True),
+        (HopExpectation.READ_OK, 401, "UNAUTHENTICATED", False),
+        (HopExpectation.TIER_FORBIDDEN, 403, "TIER_FORBIDDEN", True),
+        (HopExpectation.TIER_FORBIDDEN, 200, None, False),
+        (HopExpectation.TIER_FORBIDDEN, 404, "NOT_FOUND", False),
+        (HopExpectation.PRICE_OR_SESSION, 500, "PRICE_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 500, "STRIPE_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 500, "APP_URL_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 200, None, True),
+        (HopExpectation.PRICE_OR_SESSION, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.NOT_FOUND, 404, "NOT_FOUND", True),
+        (HopExpectation.NOT_FOUND, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.PUBLIC_URLS_OK, 200, None, False),
+        (HopExpectation.PREFS_DIGEST_ON, 200, None, False),
+        (HopExpectation.PREFS_DIGEST_ON, 403, "TIER_FORBIDDEN", False),
+    ),
+)
+def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
+    assert hop_ok(kind, http, code) is expected
+
+
+@pytest.mark.unit
+def test_prefs_digest_on_requires_daily_digest_true() -> None:
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {"daily_digest": True}) is True
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {"daily_digest": False}) is False
+    assert hop_ok(HopExpectation.PREFS_DIGEST_ON, 200, None, {}) is False
+
+
+@pytest.mark.unit
+def test_staging_checkout_is_custom_not_baseline() -> None:
+    """Broker/overlay/fill remaining hops are Custom+; Baseline would dead-end Observer."""
+    assert STAGING_CHECKOUT_BODY == {"tier": "custom", "interval": "monthly"}
+    hop = next(row for row in OBSERVER_HOPS if row.path == "/create-checkout-session")
+    assert hop.body == STAGING_CHECKOUT_BODY
+    assert hop.body is not None
+    assert hop.body.get("tier") != "baseline"
+
+
+@pytest.mark.unit
+def test_public_app_urls_ok_requires_digiquant_origin() -> None:
+    good = {
+        "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, good) is True
+    loopback = {
+        **good,
+        "alpaca_redirect_uri": "http://127.0.0.1:3001/dashboard/settings/brokers/callback/",
+    }
+    assert public_app_urls_ok(200, loopback) is False
+    named_loopback = {
+        **good,
+        "billing_return_url": "http://localhost:3001/dashboard/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, named_loopback) is False
+    missing_dashboard = {
+        **good,
+        "billing_return_url": "https://digiquant.io/settings/billing",
+    }
+    assert public_app_urls_ok(200, missing_dashboard) is False
+    extra_public_client = {
+        **good,
+        "alpaca_oauth_client_id": "cid-public",
+    }
+    assert public_app_urls_ok(200, extra_public_client) is True
+
+
+class _FakeHttp:
+    """Method+path canned responses — never a live network."""
+
+    def __init__(self, by_key: dict[tuple[str, str], tuple[int, dict[str, object]]]) -> None:
+        self.by_key = by_key
+        self.bodies: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def __call__(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        body: dict[str, object] | None = None,
+    ) -> tuple[int, dict[str, object]]:
+        del headers
+        self.bodies.append((method, url, body))
+        matches: list[tuple[int, tuple[int, dict[str, object]]]] = []
+        for (m, suffix), payload in self.by_key.items():
+            if m == method and url.rstrip("/").endswith(suffix):
+                matches.append((len(suffix), payload))
+        if not matches:
+            return 599, {"code": "MISSING_FAKE"}
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return matches[0][1]
+
+
+def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]:
+    forbidden = (403, {"code": "TIER_FORBIDDEN"})
+    return {
+        ("GET", "/settings/profile"): (200, {"workspace_id": "ws"}),
+        ("GET", "/settings/notifications"): (
+            200,
+            {"workspace_id": "ws", "daily_digest": True},
+        ),
+        ("GET", "/settings/notifications/log"): (200, {"events": []}),
+        ("PATCH", "/settings/notifications"): (200, {"daily_digest": True}),
+        ("GET", "/settings/brokers"): (200, {"connections": []}),
+        ("GET", "/settings/keys"): (200, {"keys": []}),
+        ("GET", "/settings/app-urls"): (
+            200,
+            {
+                "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+                "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
+            },
+        ),
+        ("GET", "/settings/jobs"): (200, {"jobs": []}),
+        ("GET", "/settings/fills"): (200, {"fills": []}),
+        ("PATCH", "/settings/profile"): forbidden,
+        ("POST", "/settings/brokers/connect"): forbidden,
+        ("POST", "/settings/keys/connect"): forbidden,
+        ("POST", "/create-checkout-session"): (500, {"code": "PRICE_NOT_CONFIGURED"}),
+        ("POST", "/settings/brokers"): (404, {"code": "NOT_FOUND"}),
+    }
+
+
+@pytest.mark.unit
+def test_observer_hops_pass_on_core_contract() -> None:
+    results = run_observer_hops(
+        http=_FakeHttp(_observer_ok_fakes()),
+        jwt="test-jwt",
+        anon_key="anon",
+        functions_base="https://example.test/functions/v1",
+    )
+    assert all(row.ok for row in results)
+    forbidden = [row for row in results if row.kind is HopExpectation.TIER_FORBIDDEN]
+    assert len(forbidden) == 3
+
+
+@pytest.mark.unit
+def test_observer_hops_fail_when_connect_is_not_forbidden() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/brokers/connect")] = (200, {"id": "should-not-seal"})
+    results = run_observer_hops(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    connect = next(row for row in results if row.label == "POST /settings/brokers/connect")
+    assert connect.ok is False
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(_observer_ok_fakes()),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 2
+    assert any("TIER_FORBIDDEN" in line or "Observer hops" in line for line in logs)
+    assert any("STRIPE_SECRET_KEY" in line for line in logs)
+    blob = "\n".join(logs)
+    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "browser_stripe_checkout" in blob
+    assert "digest_email_received" in blob
+    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=no_alpaca_paper_oauth" in blob
+    assert "blocker=overlay_not_succeeded" in blob
+    assert "blocker=no_paper_fill" in blob
+    assert "blocker=no_digest_log" in blob
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_observer_regression_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/profile")] = (401, {"code": "UNAUTHENTICATED"})
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
+
+
+@pytest.mark.unit
+def test_resolve_staging_jwt_prefers_env_token() -> None:
+    resolved = resolve_staging_jwt(
+        http=_FakeHttp({}),
+        environ={"KAIROS_STAGING_USER_JWT": "  abc  "},
+    )
+    assert resolved.token == "abc"
+    assert resolved.attempted_grant is False
+
+
+@pytest.mark.unit
+def test_remaining_hops_unproven_filters_proven_map() -> None:
+    assert remaining_hops_unproven() == REMAINING_LIVE_HOPS
+    leftover = remaining_hops_unproven({"browser_stripe_checkout": True})
+    assert leftover == REMAINING_LIVE_HOPS[1:]
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_ops_custom_none_does_not_count_as_stripe() -> None:
+    proven = proven_remaining_hops(RemainingHopEvidence(subscription_status="none"))
+    assert proven["browser_stripe_checkout"] is False
+    assert remaining_hops_unproven(proven) == REMAINING_LIVE_HOPS
+    # Live ops-custom workspace is plan_tier=custom with subscription_status=none
+    # and no Stripe ids — grant/ops custom must not prove checkout.
+    grant = proven_remaining_hops(
+        RemainingHopEvidence(
+            plan_tier="custom",
+            subscription_status="none",
+            has_stripe_subscription=False,
+        )
+    )
+    assert grant["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_house_active_without_stripe_does_not_count() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(subscription_status="active", has_stripe_subscription=False)
+    )
+    assert proven["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_baseline_stripe_does_not_count() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(
+            subscription_status="active",
+            has_stripe_subscription=True,
+            plan_tier="baseline",
+        )
+    )
+    assert proven["browser_stripe_checkout"] is False
+    custom = proven_remaining_hops(
+        RemainingHopEvidence(
+            subscription_status="active",
+            has_stripe_subscription=True,
+            plan_tier="custom",
+        )
+    )
+    assert custom["browser_stripe_checkout"] is True
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_digest_log_without_inbox_is_not_received() -> None:
+    proven = proven_remaining_hops(RemainingHopEvidence(digest_event_keys=("digest:2026-08-31",)))
+    assert proven["digest_email_received"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_digest_requires_pref_on() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(
+            digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
+            daily_digest_enabled=False,
+        )
+    )
+    assert proven["digest_email_received"] is False
+    on = proven_remaining_hops(
+        RemainingHopEvidence(
+            digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
+            daily_digest_enabled=True,
+        )
+    )
+    assert on["digest_email_received"] is True
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_skipped_overlay_is_not_claimed() -> None:
+    skipped = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "skipped"),)))
+    assert skipped["overlay_daily_claimed"] is False
+    not_entitled = proven_remaining_hops(
+        RemainingHopEvidence(jobs=(("overlay_daily", "not_entitled"),))
+    )
+    assert not_entitled["overlay_daily_claimed"] is False
+    running = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "running"),)))
+    assert running["overlay_daily_claimed"] is False
+    persist_disabled = proven_remaining_hops(
+        RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
+    )
+    assert persist_disabled["overlay_daily_claimed"] is False
+    succeeded = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "succeeded"),)))
+    assert succeeded["overlay_daily_claimed"] is True
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_alpaca_live_does_not_count_as_paper() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(connections=(("alpaca", "live", "active", "oauth"),))
+    )
+    assert proven["alpaca_paper_oauth_connect"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_alpaca_api_key_does_not_count_as_oauth() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(connections=(("alpaca", "paper", "active", "api_key"),))
+    )
+    assert proven["alpaca_paper_oauth_connect"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_fill_without_oauth_is_not_mirrored() -> None:
+    api_key_fill = proven_remaining_hops(
+        RemainingHopEvidence(
+            connections=(("alpaca", "paper", "active", "api_key"),),
+            fill_count=1,
+        )
+    )
+    assert api_key_fill["paper_fill_mirrored"] is False
+    assert api_key_fill["alpaca_paper_oauth_connect"] is False
+    fill_only = proven_remaining_hops(RemainingHopEvidence(fill_count=1))
+    assert fill_only["paper_fill_mirrored"] is False
+    oauth_fill = proven_remaining_hops(
+        RemainingHopEvidence(
+            connections=(("alpaca", "paper", "active", "oauth"),),
+            fill_count=1,
+        )
+    )
+    assert oauth_fill["paper_fill_mirrored"] is True
+    assert oauth_fill["alpaca_paper_oauth_connect"] is True
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_all_five_from_product_state() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(
+            subscription_status="active",
+            has_stripe_subscription=True,
+            plan_tier="custom",
+            connections=(("alpaca", "paper", "active", "oauth"),),
+            jobs=(("overlay_daily", "succeeded"),),
+            fill_count=1,
+            digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
+            daily_digest_enabled=True,
+        )
+    )
+    assert remaining_hops_unproven(proven) == ()
+    assert all(proven[name] for name in REMAINING_LIVE_HOPS)
+    assert (
+        remaining_hop_blockers(
+            RemainingHopEvidence(
+                subscription_status="active",
+                has_stripe_subscription=True,
+                plan_tier="custom",
+                connections=(("alpaca", "paper", "active", "oauth"),),
+                jobs=(("overlay_daily", "succeeded"),),
+                fill_count=1,
+                digest_event_keys=("digest:2026-08-31",),
+                digest_inbox_confirmed=True,
+                daily_digest_enabled=True,
+            )
+        )
+        == {}
+    )
+
+
+@pytest.mark.unit
+def test_remaining_hop_blockers_observer_and_house_gates() -> None:
+    observer = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="free",
+            subscription_status="none",
+            connections=(("alpaca", "paper", "active", "api_key"),),
+            fill_count=1,
+            digest_event_keys=("digest:2026-08-31",),
+            daily_digest_enabled=True,
+        )
+    )
+    assert observer["browser_stripe_checkout"] == "plan_tier_not_custom"
+    assert observer["alpaca_paper_oauth_connect"] == "alpaca_api_key_not_oauth"
+    assert observer["overlay_daily_claimed"] == "overlay_not_succeeded"
+    assert observer["paper_fill_mirrored"] == "fill_without_oauth"
+    assert observer["digest_email_received"] == "digest_inbox_unconfirmed"
+    house = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="enterprise",
+            subscription_status="active",
+            has_stripe_subscription=False,
+        )
+    )
+    assert house["browser_stripe_checkout"] == "missing_stripe_ids"
+    grant = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="custom",
+            subscription_status="none",
+            has_stripe_subscription=False,
+        )
+    )
+    assert grant["browser_stripe_checkout"] == "missing_stripe_ids"
+    persist = remaining_hop_blockers(
+        RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
+    )
+    assert persist["overlay_daily_claimed"] == "overlay_persist_disabled"
+
+
+@pytest.mark.unit
+def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/profile")] = (
+        200,
+        {"workspace_id": "ws", "subscription_status": "none", "plan_tier": "ops-custom"},
+    )
+    evidence = collect_remaining_evidence(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    assert evidence.subscription_status == "none"
+    assert evidence.plan_tier == "ops-custom"
+    assert evidence.has_stripe_subscription is False
+    assert evidence.fill_count == 0
+    assert evidence.daily_digest_enabled is True
+    assert evidence.surface_http_ok is True
+    assert proven_remaining_hops(evidence)["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_collect_remaining_evidence_ignores_fills_without_symbol() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/fills")] = (200, {"fills": [{}, {"symbol": ""}]})
+    evidence = collect_remaining_evidence(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    assert evidence.fill_count == 0
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_remaining_hop_surface_503_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/jobs")] = (503, {"code": "NOT_READY"})
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/profile")] = (
+        200,
+        {
+            "workspace_id": "ws",
+            "subscription_status": "active",
+            "plan_tier": "custom",
+            "has_stripe_subscription": True,
+        },
+    )
+    fakes[("GET", "/settings/brokers")] = (
+        200,
+        {
+            "connections": [
+                {"broker": "alpaca", "env": "paper", "status": "active", "auth_kind": "oauth"}
+            ]
+        },
+    )
+    fakes[("GET", "/settings/jobs")] = (
+        200,
+        {"jobs": [{"job_type": "overlay_daily", "status": "succeeded"}]},
+    )
+    fakes[("GET", "/settings/fills")] = (200, {"fills": [{"id": "f1", "symbol": "AAPL"}]})
+    fakes[("GET", "/settings/notifications/log")] = (
+        200,
+        {"events": [{"event_key": "digest:2026-08-31"}]},
+    )
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={
+            "KAIROS_STAGING_USER_JWT": "test-jwt",
+            "KAIROS_STAGING_DIGEST_INBOX_CONFIRMED": "1",
+        },
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 0
+    blob = "\n".join(logs)
+    assert "all remaining hops proven" in blob
+    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" not in blob
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "webhook",
+    (
+        (400, {"code": "SIGNATURE_INVALID"}),
+        (200, {"received": True}),
+        (502, {"code": "UPSTREAM"}),
+        (400, {}),
+    ),
+)
+def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
+    webhook: tuple[int, dict[str, object]],
+) -> None:
+    """Secrets + checkout URL + any non-unconfigured webhook ≠ EPIC.md E2E complete."""
+    wh_http, wh_body = webhook
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/create-checkout-session")] = (
+        200,
+        {"url": "https://checkout.stripe.test/cs_test"},
+    )
+    fakes[("POST", "/stripe-webhook")] = (wh_http, wh_body)
+    environ = {name: f"test-placeholder-{name}" for name in KAIROS_STAGING_REQUIRED_SECRETS}
+    environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
+    logs: list[str] = []
+    fake = _FakeHttp(fakes)
+    rc = run_staging_e2e(
+        http=fake,
+        environ=environ,
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 4
+    assert rc != 0
+    checkout_bodies = [
+        body
+        for method, url, body in fake.bodies
+        if method == "POST" and url.rstrip("/").endswith("/create-checkout-session")
+    ]
+    assert checkout_bodies
+    assert all(body == STAGING_CHECKOUT_BODY for body in checkout_bodies)
+    blob = "\n".join(logs)
+    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    for hop in (
+        "browser_stripe_checkout",
+        "alpaca_paper_oauth_connect",
+        "overlay_daily_claimed",
+        "paper_fill_mirrored",
+        "digest_email_received",
+    ):
+        assert hop in blob
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_password_grant_failure_exits_3() -> None:
+    rc = run_staging_e2e(
+        http=_FakeHttp(
+            {("POST", "/auth/v1/token?grant_type=password"): (400, {"error": "invalid"})}
+        ),
+        environ={
+            "KAIROS_STAGING_EMAIL": "user@example.test",
+            "KAIROS_STAGING_PASSWORD": "not-logged",
+            "CORE_SUPABASE_ANON_KEY": "anon",
+        },
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
+
+
+@pytest.mark.unit
+def test_observer_connect_hops_omit_secret_fields() -> None:
+    connect = [hop for hop in OBSERVER_HOPS if hop.kind is HopExpectation.TIER_FORBIDDEN]
+    for hop in connect:
+        body = hop.body or {}
+        assert "secret" not in body
+        assert "key_id" not in body
+
+
 def _http_json(
     method: str,
     url: str,
@@ -139,7 +737,7 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
         "POST",
         checkout_url,
         headers={"Authorization": f"Bearer {jwt}"},
-        body={"tier": "baseline", "interval": "monthly"},
+        body=STAGING_CHECKOUT_BODY,
     )
     code = str(body.get("code") or "")
     if status >= 500 and code in {"PRICE_NOT_CONFIGURED", "STRIPE_NOT_CONFIGURED"}:
@@ -170,7 +768,9 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
             "stripe-webhook still STRIPE_NOT_CONFIGURED — set STRIPE_WEBHOOK_SECRET "
             "on core EF secrets and redeploy stripe-webhook"
         )
-    # Remaining hops (browser Checkout, Alpaca OAuth, overlay, digest) need
-    # interactive Stripe + Mailgun accept — CLI documents them for the agent.
-    assert status == 200
-    assert wh_status != 0  # contacted
+    # Remaining hops (browser Checkout, Alpaca OAuth, overlay, fill, digest)
+    # are still unproven. Passing this mark after checkout would fake EPIC.md E2E.
+    pytest.fail(
+        format_remaining_hops_failure(remaining_hops_unproven())
+        + f" (checkout HTTP {status}; webhook HTTP {wh_status})"
+    )

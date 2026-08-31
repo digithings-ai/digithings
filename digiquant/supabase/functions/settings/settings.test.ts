@@ -17,6 +17,10 @@ import {
   pinnedAlpacaRedirectUri,
 } from "../_shared/settings-handlers.ts";
 import {
+  sha256Hex,
+  type InviteStore,
+} from "../_shared/invite.ts";
+import {
   buildAad,
   canonicalJson,
   fingerprint,
@@ -46,6 +50,9 @@ interface Store {
   brokers: Array<Record<string, unknown>>;
   keys: Array<Record<string, unknown>>;
   prefs: Array<Record<string, unknown>>;
+  jobs: Array<Record<string, unknown>>;
+  fills: Array<Record<string, unknown>>;
+  notifyLog: Array<Record<string, unknown>>;
   /** Ops/creator plan floors keyed by lowercased email (migration 108). */
   entitlementGrants: Map<string, string>;
   /** Client product keys keyed by lowercased email. */
@@ -86,6 +93,9 @@ function freshStore(): Store {
     brokers: [],
     keys: [],
     prefs: [],
+    jobs: [],
+    fills: [],
+    notifyLog: [],
     entitlementGrants: new Map(),
     productGrants: new Map(),
   };
@@ -422,6 +432,32 @@ function mockAdmin(store: Store): AdminClient {
         return { data: rows, error: null };
       }
 
+      if (table === "job_runs" || table === "broker_executions" || table === "notification_log") {
+        const source =
+          table === "job_runs"
+            ? store.jobs
+            : table === "broker_executions"
+            ? store.fills
+            : store.notifyLog;
+        let rows = [...source];
+        for (const f of filters) {
+          if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+        }
+        if (orderCol) {
+          const col = orderCol;
+          rows.sort((a, b) => {
+            const av = String(a[col] ?? "");
+            const bv = String(b[col] ?? "");
+            return orderAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+          });
+        }
+        if (limitN != null) rows = rows.slice(0, limitN);
+        if (wantSingle || maybeSingle) {
+          return { data: rows[0] ?? null, error: null };
+        }
+        return { data: rows, error: null };
+      }
+
       return { data: null, error: { message: `unknown table ${table}` } };
     };
 
@@ -499,6 +535,9 @@ async function call(
     userId?: string;
     planTier?: string | null;
     auth?: boolean;
+    email?: string;
+    inviteHash?: string | null;
+    inviteStore?: InviteStore;
   } = {},
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const userId = opts.userId ?? USER_A;
@@ -506,12 +545,14 @@ async function call(
     admin: mockAdmin(store),
     user: {
       id: userId,
-      email: "owner@example.com",
+      email: opts.email ?? "owner@example.com",
       plan_tier: opts.planTier === undefined ? "custom" : opts.planTier,
     },
     vaultKey: TEST_KEY,
     uuid: nextUuid,
     appUrl: APP_URL,
+    inviteHash: opts.inviteHash,
+    inviteStore: opts.inviteStore,
     exchangeAlpacaCode: async ({ redirectUri }) => {
       // Capture that exchange uses server-pinned URI.
       if (redirectUri !== pinnedAlpacaRedirectUri(APP_URL)) {
@@ -1125,6 +1166,21 @@ Deno.test("PATCH notifications: partial update merges prior row", async () => {
   assertEquals(json.digest_hour_utc, 12);
 });
 
+Deno.test("PATCH notifications: free Observer can enable daily_digest", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "observer@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: false,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.holding_change_alerts, false);
+  assertEquals(json.execution_alerts, false);
+});
+
 Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "PATCH", "/notifications", {
@@ -1288,9 +1344,227 @@ Deno.test("sealCredential called with AAD binding (workspace:broker:env)", async
   );
 });
 
-Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
+Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/olympus"),
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+});
+
+Deno.test("GET profile: includes workspace billing snapshot without Stripe ids", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, {
+    ...wsRow(WS_A, "free"),
+    subscription_status: "none",
+    stripe_customer_id: "cus_secret",
+    stripe_subscription_id: "sub_secret",
+  });
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.plan_tier, "free");
+  assertEquals(json.subscription_status, "none");
+  assertEquals(json.has_stripe_subscription, true);
+  assertEquals(json.stripe_customer_id, undefined);
+  assertEquals(json.stripe_subscription_id, undefined);
+});
+
+Deno.test("GET /jobs: member lists overlay job_runs; other workspace isolated", async () => {
+  const store = freshStore();
+  store.jobs.push({
+    id: "job-a",
+    workspace_id: WS_A,
+    job_type: "overlay_daily",
+    status: "succeeded",
+    error: null,
+    idempotency_key: `${WS_A}:overlay_daily:2026-08-31`,
+    started_at: "2026-08-31T00:00:00Z",
+    finished_at: "2026-08-31T00:01:00Z",
+  });
+  store.jobs.push({
+    id: "job-b",
+    workspace_id: WS_B,
+    job_type: "overlay_daily",
+    status: "succeeded",
+    error: null,
+    idempotency_key: `${WS_B}:overlay_daily:2026-08-31`,
+    started_at: "2026-08-31T00:00:00Z",
+    finished_at: "2026-08-31T00:01:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/jobs");
+  assertEquals(status, 200);
+  const jobs = json.jobs as Array<Record<string, unknown>>;
+  assertEquals(jobs.length, 1);
+  assertEquals(jobs[0]!.id, "job-a");
+  assertEquals(jobs[0]!.job_type, "overlay_daily");
+  assertEquals(jobs[0]!.status, "succeeded");
+});
+
+Deno.test("GET /fills: member lists broker_executions fingerprints", async () => {
+  const store = freshStore();
+  store.fills.push({
+    id: "fill-a",
+    workspace_id: WS_A,
+    symbol: "AAPL",
+    quantity: 1,
+    executed_at: "2026-08-31T14:00:00Z",
+    recorded_at: "2026-08-31T14:00:01Z",
+    external_fill_id: "ext-secret",
+  });
+  store.fills.push({
+    id: "fill-b",
+    workspace_id: WS_B,
+    symbol: "MSFT",
+    quantity: 2,
+    executed_at: "2026-08-31T14:00:00Z",
+    recorded_at: "2026-08-31T14:00:01Z",
+    external_fill_id: "other",
+  });
+  const { status, json } = await call(store, "GET", "/fills");
+  assertEquals(status, 200);
+  const fills = json.fills as Array<Record<string, unknown>>;
+  assertEquals(fills.length, 1);
+  assertEquals(fills[0]!.symbol, "AAPL");
+  assertEquals(fills[0]!.external_fill_id, undefined);
+});
+
+Deno.test("GET /notifications/log: member lists digest event keys only", async () => {
+  const store = freshStore();
+  store.notifyLog.push({
+    workspace_id: WS_A,
+    event_key: "digest:2026-08-31",
+    sent_date: "2026-08-31",
+    sent_at: "2026-08-31T12:00:00Z",
+  });
+  store.notifyLog.push({
+    workspace_id: WS_B,
+    event_key: "digest:2026-08-31",
+    sent_date: "2026-08-31",
+    sent_at: "2026-08-31T12:00:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/notifications/log");
+  assertEquals(status, 200);
+  const events = json.events as Array<Record<string, unknown>>;
+  assertEquals(events.length, 1);
+  assertEquals(events[0]!.event_key, "digest:2026-08-31");
+});
+
+Deno.test("GET /app-urls: pinned Alpaca + billing return under /dashboard", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/app-urls");
+  assertEquals(status, 200);
+  assertEquals(
+    json.alpaca_redirect_uri,
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    json.billing_return_url,
+    "https://app.example/dashboard/settings/?tab=billing",
+  );
+  assertEquals(json.alpaca_oauth_client_id, "");
+});
+
+Deno.test("GET /app-urls: public client id only (secret never in body)", async () => {
+  const previousId = Deno.env.get("ALPACA_OAUTH_CLIENT_ID");
+  const previousSecret = Deno.env.get("ALPACA_OAUTH_CLIENT_SECRET");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_ID", "cid-public");
+  Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", "must-not-leak");
+  try {
+    const store = freshStore();
+    const { status, json } = await call(store, "GET", "/app-urls");
+    assertEquals(status, 200);
+    assertEquals(json.alpaca_oauth_client_id, "cid-public");
+    const blob = JSON.stringify(json);
+    assertEquals(blob.includes("must-not-leak"), false);
+    assertEquals(blob.includes("CLIENT_SECRET"), false);
+  } finally {
+    if (previousId === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_ID");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_ID", previousId);
+    if (previousSecret === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
+    else Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", previousSecret);
+  }
+});
+
+function memInviteStore(): InviteStore & { grants: Map<string, string[]> } {
+  const grants = new Map<string, string[]>();
+  const attempts: Array<{ user_id: string; attempted_at: string }> = [];
+  const store: InviteStore & { grants: Map<string, string[]> } = {
+    grants,
+    countAttempts: async (userId, sinceIso) =>
+      attempts.filter((a) => a.user_id === userId && a.attempted_at >= sinceIso).length,
+    recordAttempt: async (row) => {
+      attempts.push(row);
+    },
+    listActiveCodes: async () => [],
+    hasGrant: async (email, productKey) => (grants.get(email) ?? []).includes(productKey),
+    insertGrant: async (email, productKey) => {
+      const prev = grants.get(email) ?? [];
+      grants.set(email, [...prev, productKey]);
+    },
+    recordRedemption: async () => {},
+    incrementRedemptionCount: async () => {},
+  };
+  return store;
+}
+
+Deno.test("POST /access/redeem-invite: env hash grants fx_hub", async () => {
+  const plain = "12x-desk-invite-alpha";
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: plain, product_key: "fx_hub" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex(plain),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 200);
+  assertEquals(json.ok, true);
+  assertEquals(json.product_key, "fx_hub");
+  assertEquals(json.already_granted, false);
+  assertEquals(inviteStore.grants.get("teammate@12x.example"), ["fx_hub"]);
+});
+
+Deno.test("POST /access/redeem-invite: wrong code is 403 without a grant", async () => {
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "totally-wrong-invite" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 403);
+  assertEquals(json.code, "INVITE_INVALID");
+  assertEquals(inviteStore.grants.size, 0);
+});
+
+Deno.test("POST /access/redeem-invite: missing email is 400", async () => {
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "12x-desk-invite-alpha" },
+    {
+      email: "",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore: memInviteStore(),
+    },
+  );
+  assertEquals(status, 400);
+  assertEquals(json.code, "EMAIL_REQUIRED");
 });

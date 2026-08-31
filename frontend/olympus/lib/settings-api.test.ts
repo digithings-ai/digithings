@@ -2,9 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   connectBrokerApiKey,
   connectProviderKey,
+  getAppUrls,
+  getFills,
+  getJobs,
+  getNotificationLog,
   getNotifications,
   getProfile,
   isBillingConfigured,
+  redeemInvite,
   saveProfile,
   SettingsHttpError,
 } from './settings-api';
@@ -162,6 +167,81 @@ describe('settings-api', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('getJobs GETs member-scoped job_runs', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/jobs');
+      expect(init?.method).toBe('GET');
+      return new Response(
+        JSON.stringify({
+          jobs: [
+            {
+              id: 'job-a',
+              job_type: 'overlay_daily',
+              status: 'succeeded',
+              error: null,
+              idempotency_key: 'k',
+              started_at: '2026-08-31T00:00:00Z',
+              finished_at: '2026-08-31T00:01:00Z',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const jobs = await getJobs({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.job_type).toBe('overlay_daily');
+  });
+
+  it('getFills omits broker external ids from the typed view', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/fills');
+      return new Response(
+        JSON.stringify({
+          fills: [
+            {
+              id: 'f1',
+              symbol: 'AAPL',
+              quantity: 1,
+              executed_at: '2026-08-31T14:00:00Z',
+              recorded_at: '2026-08-31T14:00:01Z',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const fills = await getFills({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(fills[0]?.symbol).toBe('AAPL');
+    expect(JSON.stringify(fills)).not.toContain('external_fill_id');
+  });
+
+  it('getNotificationLog GETs digest event keys', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/notifications/log');
+      return new Response(
+        JSON.stringify({
+          events: [{ event_key: 'digest:2026-08-31', sent_date: '2026-08-31', sent_at: 't' }],
+        }),
+        { status: 200 },
+      );
+    });
+    const events = await getNotificationLog({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(events[0]?.event_key).toBe('digest:2026-08-31');
+  });
+
   it('maps 409 to SettingsHttpError', async () => {
     const fetchImpl = vi.fn(
       async () =>
@@ -187,5 +267,50 @@ describe('settings-api', () => {
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     expect(isBillingConfigured()).toBe(false);
     process.env.NEXT_PUBLIC_SUPABASE_URL = prev;
+  });
+
+  it('getAppUrls returns public client id and never a secret field', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/app-urls');
+      return new Response(
+        JSON.stringify({
+          alpaca_redirect_uri: 'https://digiquant.io/dashboard/settings/brokers/callback/',
+          billing_return_url: 'https://digiquant.io/dashboard/settings/?tab=billing',
+          alpaca_oauth_client_id: 'cid-public',
+        }),
+        { status: 200 },
+      );
+    });
+    const urls = await getAppUrls({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(urls.alpaca_oauth_client_id).toBe('cid-public');
+    expect(JSON.stringify(urls)).not.toMatch(/secret/i);
+  });
+
+  it('redeemInvite posts the code to /settings/access/redeem-invite', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/access/redeem-invite');
+      expect(init?.method).toBe('POST');
+      expect(JSON.parse(String(init?.body))).toEqual({
+        code: '12x-desk-invite-alpha',
+        product_key: 'fx_hub',
+      });
+      return new Response(
+        JSON.stringify({ ok: true, already_granted: false, product_key: 'fx_hub' }),
+        { status: 200 },
+      );
+    });
+    const result = await redeemInvite(
+      {
+        accessToken: 'tok',
+        functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+      { code: '12x-desk-invite-alpha', product_key: 'fx_hub' },
+    );
+    expect(result).toEqual({ ok: true, already_granted: false, product_key: 'fx_hub' });
   });
 });
