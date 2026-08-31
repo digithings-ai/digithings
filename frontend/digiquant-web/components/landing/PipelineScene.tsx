@@ -73,7 +73,7 @@ const HEADS: [tag: string, h: string, p: string][] = [
   [
     "03 — Execution",
     "The stage after the book is committed.",
-    "Paper routing exists; live venue cutover stays human-gated. Broker adapters that are not wired raise NotImplementedError.",
+    "Paper routing is ready. Live venues stay off until you turn them on.",
   ],
 ];
 

@@ -86,8 +86,8 @@ export default function Home() {
                 <h2 className="dq-title">The desk, in four numbers.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   No projections — every figure is a property of the shipped stack: the
-                  subsystems, the pipeline, and the published tearsheets. Live stays zero because
-                  there is no execution path: every broker adapter is a stub.
+                  subsystems, the pipeline, and the published tearsheets. Live stays zero
+                  because nothing is sent to a venue yet.
                 </p>
               </div>
             </Reveal>
