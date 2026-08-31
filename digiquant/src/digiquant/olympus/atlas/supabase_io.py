@@ -473,11 +473,15 @@ def load_prior_analyst_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
 
     Returns ``{ticker: {date, document_key, conviction_score, stance, thesis_excerpt}}``.
     Empty when ``tickers`` is empty or no prior analyst docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private analyst rows cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -485,9 +489,11 @@ def load_prior_analyst_summaries(
         return {}
     keys = [f"analyst/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -517,12 +523,16 @@ def load_prior_deliberation_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
     Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
     document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
     Empty when ``tickers`` is empty or no prior deliberation docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private deliberation cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -530,9 +540,11 @@ def load_prior_deliberation_summaries(
         return {}
     keys = [f"deliberation/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -685,6 +697,7 @@ def load_prior_context(
     snapshot_lookback: int = 2,
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
+    workspace_id: str | None = None,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
@@ -702,6 +715,13 @@ def load_prior_context(
       on extreme churn days; any key whose latest write predates the floor
       is treated as absent, which is the same behavior the sub-graph gets
       on a fresh tenant.
+
+    ``documents`` are house-scoped when ``workspace_id`` is omitted so overlay
+    private (and overlay-copied corpus) rows cannot seed house preflight.
+    ``load_prior_context``, ``load_prior_analyst_summaries``,
+    ``load_prior_deliberation_summaries``, ``load_latest_beliefs_document``, and
+    ``query_institutional_absence_streak`` all pin house. ``daily_snapshots``
+    stays date-only (house-only ``UNIQUE(date)``; overlay publish skips it).
     """
     from datetime import timedelta
 
@@ -720,9 +740,11 @@ def load_prior_context(
     # missing segment the same regardless of whether it never existed or
     # simply hasn't been refreshed recently.
     floor = (run_date - timedelta(days=documents_lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     docs_resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -1149,11 +1171,14 @@ def load_latest_beliefs_document(
     *,
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Latest ``beliefs`` document strictly before ``run_date`` for PM context."""
+    """Latest house ``beliefs`` document strictly before ``run_date`` for PM context."""
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .eq("document_key", "beliefs")
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -1170,6 +1195,7 @@ def query_institutional_absence_streak(
     run_date: date,
     lookback_days: int = 30,
     document_key_prefix: str = "inst-",
+    workspace_id: str | None = None,
 ) -> int:
     """Count consecutive recent run-dates with **no** institutional document published.
 
@@ -1193,13 +1219,18 @@ def query_institutional_absence_streak(
     skipped institutional ingest do. Returns ``0`` when the most recent run did
     publish an ``inst-*`` document (breaker stays open) and ``0`` on an empty
     window (first-ever / fresh tenant — never trip the breaker without evidence).
+
+    Omitted ``workspace_id`` is the house — overlay ``inst-*`` rows cannot clear
+    or extend the house absence streak.
     """
     from datetime import timedelta
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)

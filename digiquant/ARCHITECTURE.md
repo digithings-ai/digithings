@@ -3241,8 +3241,10 @@ house event pages, `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
 stamps house `workspace_id` on those same Group A tables when `eq` omits it
-(`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). The olympus dashboard
-Group A readers (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`)
+(`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). House preflight
+`load_prior_context` / analyst and deliberation continuity / beliefs /
+institutional-absence documents also pin house so overlay private docs cannot
+seed the house graph. The olympus dashboard Group A readers (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`)
 go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
 member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later

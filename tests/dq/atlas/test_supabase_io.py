@@ -331,6 +331,38 @@ class TestLoadPriorContext:
         assert "analyst/SPY" not in ctx.latest_segments
         assert "deliberation/SPY" not in ctx.latest_segments
 
+    def test_overlay_documents_do_not_seed_house_prior_context(self) -> None:
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        overlay_key = f"overlay/{overlay}/pm-direction-memo"
+        docs = [
+            {
+                "date": "2026-04-19",
+                "document_key": overlay_key,
+                "doc_type": "pm",
+                "payload": {"secret": "overlay"},
+                "workspace_id": overlay,
+            },
+            {
+                "date": "2026-04-18",
+                "document_key": "macro",
+                "doc_type": "macro",
+                "payload": {"regime": "house"},
+                "workspace_id": house,
+            },
+            {
+                "date": "2026-04-19",
+                "document_key": "macro",
+                "doc_type": "macro",
+                "payload": {"regime": "overlay-copy"},
+                "workspace_id": overlay,
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"daily_snapshots": [], "documents": docs})
+        ctx = load_prior_context(client=client, run_date=date(2026, 4, 20))
+        assert overlay_key not in ctx.latest_segments
+        assert ctx.latest_segments["macro"]["payload"] == {"regime": "house"}
+
 
 @pytest.mark.unit
 class TestContinuityLoaders:
@@ -360,6 +392,33 @@ class TestContinuityLoaders:
         assert out["SHY"]["date"] == "2026-06-18"
         assert out["SHY"]["conviction_score"] == 2
         assert "yields peaked" in out["SHY"]["thesis_excerpt"]
+
+    def test_load_prior_analyst_summaries_ignores_overlay_same_key(self) -> None:
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        docs = [
+            {
+                "date": "2026-06-18",
+                "document_key": "analyst/SHY",
+                "payload": {"stance": "buy", "conviction_score": 9, "thesis": "overlay"},
+                "workspace_id": overlay,
+            },
+            {
+                "date": "2026-06-17",
+                "document_key": "analyst/SHY",
+                "payload": {
+                    "stance": "hold",
+                    "conviction_score": 1,
+                    "thesis": "house",
+                },
+                "workspace_id": house,
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        out = load_prior_analyst_summaries(client, date(2026, 6, 19), ["SHY"])
+        assert out["SHY"]["date"] == "2026-06-17"
+        assert out["SHY"]["conviction_score"] == 1
+        assert out["SHY"]["thesis_excerpt"] == "house"
 
     def test_load_prior_deliberation_summaries_latest_per_ticker(self) -> None:
         docs = [

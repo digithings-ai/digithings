@@ -6,6 +6,8 @@ and latest-date fallbacks.
 
 Group A book reads (`positions`, `nav_history`, `portfolio_metrics`) are
 house-scoped so an overlay same-calendar row cannot leak into Olympus pages.
+House document lookups (`query_research` / `_query_documents_row`) likewise
+default to the house ``workspace_id``.
 """
 
 from __future__ import annotations
@@ -165,29 +167,27 @@ def _query_documents_row(
     document_key: str,
     as_of_date: date,
 ) -> tuple[dict[str, Any] | None, date | None]:
-    exact_resp = (
+    exact_resp = _eq_house(
         client.table("documents")
         .select("date, document_key, payload, doc_type")
         .eq("document_key", document_key)
         .eq("date", as_of_date.isoformat())
         .limit(1)
-        .execute()
-    )
+    ).execute()
     exact_rows = list(getattr(exact_resp, "data", None) or [])
     if exact_rows:
         row = exact_rows[0]
         row_date = _parse_row_date(row.get("date"))
         return row, row_date
 
-    fallback_resp = (
+    fallback_resp = _eq_house(
         client.table("documents")
         .select("date, document_key, payload, doc_type")
         .eq("document_key", document_key)
         .lt("date", as_of_date.isoformat())
         .order("date", desc=True)
         .limit(1)
-        .execute()
-    )
+    ).execute()
     fallback_rows = list(getattr(fallback_resp, "data", None) or [])
     if not fallback_rows:
         return None, None

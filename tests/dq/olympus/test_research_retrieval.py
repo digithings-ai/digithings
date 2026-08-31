@@ -75,6 +75,35 @@ class TestQueryResearch:
         assert out["as_of_date"] == "2026-06-19"
         assert out["payload"] == {"headline": "Fri macro"}
 
+    def test_document_ignores_overlay_same_key_listed_first(self) -> None:
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "payload": {"headline": "overlay"},
+                        "workspace_id": overlay,
+                    },
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "payload": {"headline": "house"},
+                        "workspace_id": house,
+                    },
+                ]
+            }
+        )
+        out = query_research(
+            client,
+            run_date=date(2026, 6, 20),
+            document_key="macro",
+            as_of_date=date(2026, 6, 19),
+        )
+        assert out["payload"] == {"headline": "house"}
+
     def test_document_prior_published_fallback(self) -> None:
         client = FakeSupabaseClient(
             canned_reads={
