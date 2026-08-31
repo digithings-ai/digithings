@@ -51,11 +51,8 @@ describe('alpaca-oauth paths (real dashboardBasePath)', () => {
 
   it('falls back to /dashboard when BASE_PATH env is empty', async () => {
     vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '');
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '');
-    // dashboardBasePath is already loaded — exercise via path helpers' dependency:
     const { dashboardBasePath } = await import('@/lib/supabase');
-    // Module cache may retain prior env; assert the helper contract directly:
-    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH || '/dashboard';
+    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || '/dashboard';
     const trimmed = raw.replace(/\/+$/, '');
     expect(trimmed || '/dashboard').toBe('/dashboard');
     void dashboardBasePath;

@@ -86,7 +86,7 @@ describe('isOlympusAuthPath', () => {
     expect(isOlympusAuthCallbackPath('/auth/callback')).toBe(true);
     expect(isOlympusAuthCallbackPath('/auth/callback/')).toBe(true);
     expect(isOlympusAuthCallbackPath('/dashboard/auth/callback')).toBe(true);
-    expect(isOlympusAuthCallbackPath('/olympus/auth/callback')).toBe(true);
+    expect(isOlympusAuthCallbackPath('/olympus/auth/callback')).toBe(false);
     expect(isOlympusAuthCallbackPath('/login')).toBe(false);
     expect(isOlympusAuthCallbackPath('/signup')).toBe(false);
   });
@@ -95,9 +95,9 @@ describe('isOlympusAuthPath', () => {
     expect(isOlympusAuthPath('/dashboard/login')).toBe(true);
     expect(isOlympusAuthPath('/dashboard/signup')).toBe(true);
     expect(isOlympusAuthPath('/dashboard/auth/callback/')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/login')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/signup')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/auth/callback/')).toBe(true);
+    expect(isOlympusAuthPath('/olympus/login')).toBe(false);
+    expect(isOlympusAuthPath('/olympus/signup')).toBe(false);
+    expect(isOlympusAuthPath('/olympus/auth/callback/')).toBe(false);
   });
 
   it('rejects lookalike paths that previously bypassed via endsWith', () => {

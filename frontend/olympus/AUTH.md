@@ -4,8 +4,7 @@ The digiquant dashboard at `digiquant.io/dashboard/` is a **static export** (D6)
 reads Supabase with the **publishable anon key baked into the JS bundle**. Until
 app auth cutover, every relevant table still has an `anon` RLS policy of
 `USING (true)`, so **anyone with the URL can read all published data**. The anon
-key cannot be hidden in a static bundle. Bookmarks to `/olympus/` 308 onto
-`/dashboard/`.
+key cannot be hidden in a static bundle. The public path is `/dashboard/` only.
 
 ## App auth (T1)
 
@@ -19,7 +18,7 @@ storage). Routes:
 | `/dashboard/signup/` | Same card, create-account mode (`signUpWithPassword`) |
 | `/dashboard/auth/callback/` | Client-side PKCE completion (static page — no route handlers) |
 
-Everything is behind `NEXT_PUBLIC_DASHBOARD_AUTH=1` (build-time; `NEXT_PUBLIC_OLYMPUS_AUTH=1` remains a one-release alias). Flag **off**
+Everything is behind `NEXT_PUBLIC_DASHBOARD_AUTH=1` (build-time). Flag **off**
 (default) ⇒ no behavior change; prerendered DOM verified identical to today's
 shell: `AuthGate` passes children through and queries use the classic anon client.
 
@@ -56,8 +55,6 @@ provider is not an app bug.
 NEXT_PUBLIC_SUPABASE_URL=…
 NEXT_PUBLIC_SUPABASE_ANON_KEY=…
 NEXT_PUBLIC_DASHBOARD_AUTH=1
-# One-release alias still honoured:
-# NEXT_PUBLIC_OLYMPUS_AUTH=1
 ```
 
 Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server env.
@@ -65,15 +62,15 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 ### Supabase dashboard (human performs)
 
 1. Authentication → Providers → enable **Google** and **GitHub** (D4).
-2. Authentication → URL configuration → Redirect URLs, allow **both** until
-   vendor consoles are cut over (Alpaca `redirect_uri` is exact-match):
+2. Authentication → URL configuration → Redirect URLs (Alpaca `redirect_uri` is
+   exact-match; list only dashboard paths):
    - `https://digiquant.io/dashboard/auth/callback/`
-   - `https://digiquant.io/olympus/auth/callback/` (308s onto dashboard; keep listed)
-   - `http://127.0.0.1:3001/dashboard/auth/callback/` (dev; dashboard historically on 3001)
-3. Alpaca OAuth app → Redirect URI, **add before dropping the old one**:
+   - `https://www.digiquant.io/dashboard/auth/callback/`
+   - `http://127.0.0.1:3001/dashboard/auth/callback/` (dev)
+   - `http://localhost:3001/dashboard/auth/callback/` (dev)
+3. Alpaca OAuth app → Redirect URI:
    - `https://digiquant.io/dashboard/settings/brokers/callback/`
-   - keep `https://digiquant.io/olympus/settings/brokers/callback/` until traffic drains
-4. Cloudflare Access: add `/dashboard/*` (and keep `/olympus/*` until 308s + twin copy go).
+4. Cloudflare Access, if used: `https://digiquant.io/dashboard*` only.
 5. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 
@@ -82,20 +79,18 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 `/dashboard/login` and `/dashboard/auth/callback` are static routes. They must exist
 on `main` for Cloudflare Pages to stop 404ing those paths. Enabling
 `NEXT_PUBLIC_DASHBOARD_AUTH=1` (build-time; `scripts/build-digiquant.sh` defaults
-`NEXT_PUBLIC_OLYMPUS_AUTH=1` and mirrors it onto `NEXT_PUBLIC_DASHBOARD_AUTH`
-when `CF_PAGES=1` and the vars are unset) shows the LoginScreen / AuthGate
+`NEXT_PUBLIC_DASHBOARD_AUTH=1` when `CF_PAGES=1` and the var is unset) shows the LoginScreen / AuthGate
 **without** applying `migrations/cutover/900_*`. Anon RLS stays until the
 coordinated cutover below — do **not** treat Auth-UI-on as full tenancy cutover.
 
 ### Cutover checklist (coordinated release — human)
 
 1. Merge T0 workspaces/RLS (incl. drafted anon-policy drop) when ready.
-2. Confirm `NEXT_PUBLIC_DASHBOARD_AUTH=1` (or the `NEXT_PUBLIC_OLYMPUS_AUTH=1`
-   alias) on the digiquant.io Cloudflare Pages build (or leave unset so
-   `build-digiquant.sh` defaults them on under `CF_PAGES=1`).
+2. Confirm `NEXT_PUBLIC_DASHBOARD_AUTH=1` on the digiquant.io Cloudflare Pages
+   build (or leave unset so `build-digiquant.sh` defaults it on under `CF_PAGES=1`).
 3. Redeploy the static dashboard bundle.
 4. Apply cutover SQL `900_*` only after Access + Auth UI plan (never auto).
-5. Owner removes Cloudflare Access from production `/dashboard/*` and `/olympus/*` (D7).
+5. Owner removes Cloudflare Access from production `/dashboard/*` (D7).
 6. Keep Access on **staging** only (below).
 
 **HUMAN GATE:** auth flow review before merge; production cutover is owner-led.
@@ -121,8 +116,7 @@ owned); do not encode it in this repo.
 
 ### Historical production Access (pre-cutover)
 
-Before T1 cutover, production `/dashboard/*` (and the `/olympus/*` 308) may still
-use Access as the only gate. Until Access is live on that path, treat the URL as public. Migration
+Before T1 cutover, production `/dashboard/*` may still use Access as the only gate. Until Access is live on that path, treat the URL as public. Migration
 [`033_revoke_anon_run_diagnostics.sql`](../../digiquant/supabase/migrations/033_revoke_anon_run_diagnostics.sql)
 already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 `positions.pm_notes` stays readable (PM commentary the dashboard renders).
@@ -154,7 +148,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 
 ## FX Hub (12x) — invite after login
 
-Identity for FX Hub is the same Supabase Auth session as the rest of Olympus.
+Identity for FX Hub is the same Supabase Auth session as the rest of the dashboard.
 The healthy medium is **short login (Google/GitHub)** plus a **rotatable hashed
 invite** that writes the caller's email into `client_product_grants`. That is
 preferable to the operator pasting every 12x address, and it is preferable to a
@@ -171,6 +165,6 @@ Operator steps:
    registered). Mailgun digest is a separate secret; until it exists the
    notification is the table row + `notification_log` event `fx_hub_invite_redeemed`.
 
-Cloudflare Access on **`/olympus/twelve-x*` only** remains a human Zero Trust
-option if the team should never see the rest of Olympus — it is not encoded here.
+Cloudflare Access on **`/dashboard/twelve-x*`** remains a human Zero Trust
+option if the team should never see the rest of the dashboard — it is not encoded here.
 

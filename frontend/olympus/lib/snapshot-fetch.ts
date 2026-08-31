@@ -14,8 +14,8 @@
  * Anonymous read works under migration 011's `anon_read` SELECT RLS policy
  * (`digiquant/supabase/migrations/011_anon_read_daily_snapshots.sql`).
  *
- * Optional BFF (`NEXT_PUBLIC_OLYMPUS_USE_BFF=1`): inject `bffFetch` in tests or
- * host Olympus on a Node runtime with your own `/api/snapshots` handler. Static
+ * Optional BFF (`NEXT_PUBLIC_DASHBOARD_USE_BFF=1`): inject `bffFetch` in tests or
+ * host the dashboard on a Node runtime with your own `/api/snapshots` handler. Static
  * export (`output: 'export'` on digiquant.io) cannot ship App Router API routes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -31,7 +31,7 @@ type SB = SupabaseClient<Database>;
 
 /** Browser opt-in: fetch `/api/snapshots` instead of anon Supabase (REM-036 BFF path). */
 export function isBffSnapshotEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_OLYMPUS_USE_BFF === '1';
+  return process.env.NEXT_PUBLIC_DASHBOARD_USE_BFF === '1';
 }
 
 /** Narrow `daily_snapshots` row pick — only what we need to assemble the envelope. */

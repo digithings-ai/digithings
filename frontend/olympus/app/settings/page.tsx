@@ -83,7 +83,7 @@ export default function SettingsPage() {
     <div className={`${SUBPAGE_MAX} py-6 md:py-8 space-y-6`}>
       <header className="space-y-2">
         <p className="acct-settings-kicker">
-          olympus <span className="text-ink-mute">· settings</span>
+          dashboard <span className="text-ink-mute">· settings</span>
         </p>
         <h1 className="font-display text-3xl tracking-tight text-ink">The desk, not the product.</h1>
         <p className="acct-settings-copy">
@@ -133,7 +133,7 @@ export default function SettingsPage() {
               lastRunDate={meta?.last_updated ?? null}
               lastRunAt={meta?.last_run_at ?? null}
               runType={meta?.latest_snapshot_run_type ?? null}
-              version={process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
+              version={process.env.NEXT_PUBLIC_DASHBOARD_VERSION ?? 'v0.1 · dev'}
               dataSourceHost={dataSourceHost()}
               onOpenPalette={openCommandPalette}
             />

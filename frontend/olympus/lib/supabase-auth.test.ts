@@ -17,7 +17,7 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
   });
 
   it('flag off: createClient is called with url+key only (anon client)', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '');
     const { buildSupabaseClient, isOlympusAuthEnabled } = await import('./supabase');
     expect(isOlympusAuthEnabled()).toBe(false);
     createClient.mockClear();
@@ -27,7 +27,7 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
   });
 
   it('flag on: createClient uses PKCE auth options', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const { buildSupabaseClient, isOlympusAuthEnabled } = await import('./supabase');
     expect(isOlympusAuthEnabled()).toBe(true);
     createClient.mockClear();
@@ -82,9 +82,7 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     // Re-import would be cached; exercise the fallback via direct logic:
     // when NEXT_PUBLIC_DASHBOARD_BASE_PATH is empty string, still normalize.
     vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '');
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '');
-    // Module already loaded — call through with empty env by re-reading:
-    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH || '/dashboard';
+    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || '/dashboard';
     const trimmed = raw.replace(/\/+$/, '');
     expect(trimmed || '/dashboard').toBe('/dashboard');
   });

@@ -35,4 +35,8 @@ describe("olympus security-headers", () => {
     const landingBlock = publicHeaders.split("/dashboard*")[0];
     expect(landingBlock).not.toContain("Content-Security-Policy");
   });
+
+  it("does not keep a CSP path for retired /olympus*", () => {
+    expect(publicHeaders).not.toContain("/olympus*");
+  });
 });

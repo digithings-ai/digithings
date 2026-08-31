@@ -36,7 +36,7 @@ export function canAccessProduct(
  * not yet applied). Comma-separated emails; not a secret — allowlist only.
  */
 export function creatorEmailsFromEnv(
-  raw: string | undefined = process.env.NEXT_PUBLIC_OLYMPUS_CREATOR_EMAILS,
+  raw: string | undefined = process.env.NEXT_PUBLIC_DASHBOARD_CREATOR_EMAILS,
 ): readonly string[] {
   if (!raw?.trim()) return ['chris.stefan@proton.me'];
   return raw
@@ -46,7 +46,7 @@ export function creatorEmailsFromEnv(
 }
 
 export function productGrantsFromEnv(
-  raw: string | undefined = process.env.NEXT_PUBLIC_OLYMPUS_PRODUCT_GRANTS,
+  raw: string | undefined = process.env.NEXT_PUBLIC_DASHBOARD_PRODUCT_GRANTS,
 ): ReadonlyMap<string, readonly string[]> {
   const map = new Map<string, string[]>();
   // Seed creator → fx_hub always (matches migration 108).

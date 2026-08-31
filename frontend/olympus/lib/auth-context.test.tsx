@@ -72,7 +72,7 @@ vi.mock('./supabase', async () => {
     ...actual,
     isOlympusAuthEnabled: () => true,
     getSupabaseClient: () => supabaseMock.client,
-    // Keep real oauthRedirectTo / olympusBasePath — do not stub the redirect URL.
+    // Keep real oauthRedirectTo / dashboardBasePath — do not stub the redirect URL.
   };
 });
 

@@ -7,11 +7,6 @@
 /pricing                 /contact/                301
 /pricing/                /contact/                301
 
-# Dashboard path wave (ADR-0026): /olympus → /dashboard. Query strings preserved.
-/olympus                 /dashboard/              308
-/olympus/                /dashboard/              308
-/olympus/*               /dashboard/:splat        308
-
 # Subsystem slugs: atlas/hermes/kairos → research/portfolio/execution.
 /subsystems/atlas        /subsystems/research/    301
 /subsystems/atlas/       /subsystems/research/    301
