@@ -95,9 +95,9 @@ supabase secrets set \
 ```
 
 `APP_URL` must be the **site origin** (`https://digiquant.io`) — never
-`http://127.0.0.1` and never a path that already includes `/dashboard` or
-`/olympus` (helpers in `_shared/app-url.ts` strip those suffixes to avoid
-doubling `basePath`). Pinned OAuth callback:
+`http://127.0.0.1` and never a path that already includes `/dashboard`
+(helpers in `_shared/app-url.ts` strip a trailing `/dashboard`, and a leftover
+`/olympus` suffix, to avoid doubling `basePath`). Pinned OAuth callback:
 `{origin}/dashboard/settings/brokers/callback/`. Billing return:
 `{origin}/dashboard/settings/?tab=billing`.
 

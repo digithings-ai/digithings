@@ -91,8 +91,8 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** (`frontend/olympus` folder name is historical;
-ADR-0026). Bookmarks under `/olympus/` 308 onto `/dashboard/`.
+Public path is **`/dashboard/`** only (`frontend/olympus` folder name is historical;
+ADR-0026). `/olympus/` is retired — no redirect alias.
 
 When touching `digiquant/src/digiquant/olympus/` **or** `frontend/olympus/` Group A queries:
 

@@ -35,13 +35,13 @@ After filing, edit each issue to add `Parent: #E` (or use the epic checklist to 
 | K4 | Intent router + broker sync | `component:digiquant` | `module/digiquant` | med | claude | sonnet | no (paper only) |
 | K5 | Email notifications v0 | `component:digiquant` | `module/digiquant` | low | cursor | sonnet | no |
 | T0 | Workspaces + RLS boundary | `component:digiquant` | `module/digiquant` | high | claude | sonnet | review RLS carefully |
-| T1 | Supabase Auth login | (olympus UI) | `develop` | med | claude | sonnet | **yes — auth flow** |
+| T1 | Supabase Auth login | (dashboard UI) | `develop` | med | claude | sonnet | **yes — auth flow** |
 | T2 | Stripe tiers | `component:digiquant` | `module/digiquant` | med | claude | sonnet | **yes — webhook secrets** |
-| T3 | Settings: profile/brokers/notify | (olympus UI) | `develop` | med | claude | sonnet | no |
+| T3 | Settings: profile/brokers/notify | (dashboard UI) | `develop` | med | claude | sonnet | no |
 | T4 | Overlay pipeline runs | `component:digiquant` | `module/digiquant` | high | claude | sonnet | no (budget-guarded) |
-| T5 | Tier-gated UI | (olympus UI) | `develop` | med | cursor | sonnet | no |
+| T5 | Tier-gated UI | (dashboard UI) | `develop` | med | cursor | sonnet | no |
 
-Olympus UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `frontend/olympus` routes
+Dashboard UI WPs (T1/T3/T5) are one-hop to `develop` (no module tier — `frontend/olympus` routes
 per `docs/agents/COMPONENT_ROUTING.md`); use a `cursor/<slug>` or `task/<N>-<slug>` branch off
 `origin/develop`. digiquant WPs use `make task ISSUE=N` (module branches were synced 2026-08-29,
 PRs #3083–#3090).
@@ -93,7 +93,7 @@ Code merges on mocked tests; deploys wait on the table above.
 
 ## Deployment / cutover
 
-Operator runbook (merge state, migrations 096–105, Edge Functions, Olympus flags,
+Operator runbook (merge state, migrations 096–105, Edge Functions, dashboard flags,
 human prerequisites, cutover checklist, E2E skeleton, rollback):
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
