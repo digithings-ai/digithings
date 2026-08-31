@@ -129,14 +129,6 @@ def test_run_and_write_btc_sdca_skips_calibrations(
         raise AssertionError("sdca is not a round-trip book")
 
     monkeypatch.setattr(gts, "trades_from_positions", _boom_round_trips)
-
-    def _keep_weights(weights, _sources):
-        return weights
-
-    monkeypatch.setattr(
-        "digiquant.strategies.sdca.optimize.drop_extras_missing_sources",
-        _keep_weights,
-    )
     settings = gts.load_settings()
     with caplog.at_level(logging.WARNING):
         entry = gts.run_and_write(

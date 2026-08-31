@@ -740,7 +740,7 @@ def run_and_write(
         preset = load_preset(preset_name)
         tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
         raw_w = sdca_cfg.get("indicator_weights") or {}
-        weights = SdcaCompositeWeights(
+        published_weights = SdcaCompositeWeights(
             valuation=float(raw_w.get("valuation", 1.0)),
             m2=float(raw_w.get("m2", 0.0)),
             rs_eth=float(raw_w.get("rs_eth", 0.0)),
@@ -760,7 +760,12 @@ def run_and_write(
         )
 
         sources = load_sdca_extra_sources(cache_dir)
-        weights = drop_extras_missing_sources(weights, sources)
+        weights = drop_extras_missing_sources(published_weights, sources)
+        dropped_this_run = [
+            name
+            for name in ("m2", "dxy", "rs_eth")
+            if getattr(published_weights, name) > 0.0 and getattr(weights, name) == 0.0
+        ]
         try:
             load_btc_optimized_provenance()
         except Exception:
@@ -786,12 +791,12 @@ def run_and_write(
             "indicator_weights": weights.model_dump(),
         }
         extra_weights = (
-            weights.m2,
-            weights.rs_eth,
-            weights.dxy,
-            weights.weekly_rsi,
-            weights.weekly_macd,
-            weights.sma_band,
+            published_weights.m2,
+            published_weights.rs_eth,
+            published_weights.dxy,
+            published_weights.weekly_rsi,
+            published_weights.weekly_macd,
+            published_weights.sma_band,
         )
         extras_unused = all(w == 0.0 for w in extra_weights)
         provenance_notes.append(
@@ -811,17 +816,23 @@ def run_and_write(
             )
         else:
             keepers: list[str] = []
-            if weights.valuation:
-                keepers.append(f"power law {weights.valuation:g}")
-            if weights.m2:
-                keepers.append(f"M2 {weights.m2:g}")
-            if weights.dxy:
-                keepers.append(f"DXY {weights.dxy:g}")
+            if published_weights.valuation:
+                keepers.append(f"power law {published_weights.valuation:g}")
+            if published_weights.m2:
+                keepers.append(f"M2 {published_weights.m2:g}")
+            if published_weights.dxy:
+                keepers.append(f"DXY {published_weights.dxy:g}")
             provenance_notes.append(
                 "Published index is a composite valuation index ("
                 + " + ".join(keepers)
                 + "). Weekly RSI/MACD, SMA band, and BTC/ETH RS remain unused "
                 "(weight 0)."
+            )
+        if dropped_this_run:
+            provenance_notes.append(
+                "This run omitted "
+                + ", ".join(dropped_this_run)
+                + " (missing source series)."
             )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "

@@ -28,7 +28,7 @@ describe("strategy notes", () => {
     expect(lines.join(" ")).toMatch(/composite valuation index/i);
     expect(lines.join(" ")).toMatch(/power law \+ M2 \+ DXY/i);
     expect(lines.join(" ")).toMatch(/remaining cash/i);
-    expect(lines.join(" ")).toMatch(/not a live trading strategy/i);
+    expect(lines.join(" ")).toMatch(/not a live strategy/i);
     expect(lines.join(" ")).toMatch(/Buy-and-hold is the public benchmark/i);
     expect(lines.join(" ")).not.toMatch(/beat the market/i);
     expect(lines.join(" ")).not.toMatch(/power-law remaining-book/i);
