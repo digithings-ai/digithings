@@ -32,11 +32,15 @@ publish must skip it (see ``publish_phase``) even with persist on.
 / ``UNIQUE(date, market)``. Overlay persist-on still compiles H1–H5,
 preflight_reflect, and Atlas preflight with the overlay client; a same-date
 upsert last-writer-wins the house corpus, and ``resolve_pending`` would stamp
-house reflections by id. ``skip_overlay_shared_register`` no-ops those writes
-for a private workspace. Independent of persist-on and of staged cutover 113
-(113 does not add theses/decision_log/onchain tenancy). Private overlay is
-H7–H9 book only (T4). Overlay still injects ``market_context["onchain_positioning"]``
-in-memory; only the DB upsert is skipped.
+house reflections by id. Overlay ``run_atlas_then_hermes`` also always
+reaches ``_run_beliefs_fold`` after a fail-soft H9 book refuse; distillation
+reads every unfolded house ``decision_log`` row and stamps
+``beliefs_folded_at`` by id. ``skip_overlay_shared_register`` no-ops those
+writes for a private workspace. Independent of persist-on and of staged
+cutover 113 (113 does not add theses/decision_log/onchain tenancy). Private
+overlay is H7–H9 book only (T4). Overlay still injects
+``market_context["onchain_positioning"]`` in-memory; only the DB upsert is
+skipped.
 """
 
 from __future__ import annotations
@@ -117,6 +121,7 @@ def skip_overlay_shared_register(workspace_id: UUID | str | None) -> bool:
     / ``UNIQUE(date, ticker)`` / ``UNIQUE(run_date, ticker)`` /
     ``UNIQUE(date, market)`` last-writer-wins the house row. Overlay
     ``preflight_reflect`` must not ``resolve_pending`` house reflections by id.
+    Overlay ``_run_beliefs_fold`` must not stamp house ``beliefs_folded_at``.
     Callers that omit *workspace_id* stay on the house write path. Do not reuse
     :func:`require_overlay_legacy_book_safe` here — that gate lifts after 113;
     these tables stay shared until a theses/decision_log/onchain tenancy

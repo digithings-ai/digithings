@@ -32,13 +32,14 @@ from digiquant.olympus.atlas.phases.preflight import (
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseError
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
 )
 from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 _logger = logging.getLogger(__name__)
 
@@ -240,6 +241,29 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseExceptio
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
+def _preflight_config(deps: ChainDeps) -> AtlasConfigBundle | None:
+    """Pin overlay workspace on initial state before fail-soft graph invoke.
+
+    Overlay identity is loaded in Atlas preflight. If Atlas raises at graph
+    level, ``_safe_invoke_graph`` returns the original state. Beliefs fold
+    then ran with ``workspace_id=None`` (house path) and stamped house
+    ``decision_log``. Call the preflight config loader once up front so a
+    private workspace skip is already on the last-good state. House loaders
+    that omit ``workspace_id`` still fold. Tests may pass ``atlas=None``.
+    """
+    atlas = getattr(deps, "atlas", None)
+    if atlas is None:
+        return None
+    preflight = getattr(atlas, "preflight", None)
+    if preflight is None:
+        return None
+    loader = getattr(preflight, "config_loader", None)
+    if not callable(loader):
+        return None
+    loaded = loader()
+    return loaded if isinstance(loaded, AtlasConfigBundle) else None
+
+
 def _safe_invoke_graph(
     graph: Any, state: AtlasResearchState, checkpointer: Any, thread_base: str | None, label: str
 ) -> AtlasResearchState:
@@ -299,11 +323,19 @@ def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: A
     """
     if deps.atlas.preflight.client is None:
         return
+    if skip_overlay_shared_register(state.config.workspace_id):
+        # Overlay persist-on still reaches this post-publish fold after a
+        # fail-soft H9 ``legacy_book_unique``. Distillation reads every
+        # unfolded house ``decision_log`` row and stamps ``beliefs_folded_at``
+        # by id — a shared-register smash, same class as ``resolve_pending``.
+        _logger.info("chain: overlay workspace skips beliefs fold (shared decision_log)")
+        return
     try:
         run_beliefs_distillation_if_triggered(
             client=deps.atlas.preflight.client,
             atlas_input=atlas_input,
             run_type=_legacy_run_type(atlas_input.refresh_scope),
+            workspace_id=state.config.workspace_id,
         )
     except Exception as exc:  # an optional backlog fold must never kill a booked run
         _logger.exception("chain: beliefs distillation failed; continuing")
@@ -345,7 +377,9 @@ def run_atlas_then_hermes(
     non-None overrides preferences.
 
     ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
-    (#2628 / WP4.1). Atlas preflight then pins one ``research_state_pin``
+    (#2628 / WP4.1) and, when the preflight ``config_loader`` is present, the
+    overlay ``workspace_id`` so a fail-soft Atlas crash cannot fold beliefs as
+    house. Atlas preflight then pins one ``research_state_pin``
     (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
     it does not re-call ``now()`` or re-select state as ingestion continues.
 
@@ -365,6 +399,12 @@ def run_atlas_then_hermes(
     if manage_usage:
         _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
+        pinned = _preflight_config(deps)
+        if pinned is not None:
+            # Preserve the already-pinned knowledge_cutoff_at. Overlay identity
+            # must be on last-good state before fail-soft graph invoke; a raising
+            # loader stays inside this envelope so diagnostics still flush.
+            state = state.model_copy(update={"config": pinned})
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
             _run_beliefs_fold(state, deps, atlas_input)
