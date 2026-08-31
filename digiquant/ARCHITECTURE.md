@@ -1487,8 +1487,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
-  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
-  and a segment whose patch cannot merge falls back to full-mode regeneration
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
+  LLM `PatchOp.op='add'` (RFC 6902's name for that write) maps onto `set` so a
+  hedge like house GHA 33426508863 `ops.6.op='add'` does not force a full-mode
+  regeneration. A segment whose patch cannot merge falls back to full-mode regeneration
   instead of carrying + degrading the run (#1641). That fallback is **counted, not
   silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
   `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
