@@ -540,7 +540,6 @@ class TestSdcaStrategyOrderPendingGuard:
         assert strategy._submit_market.call_args.args[0] == OrderSide.SELL
         assert sell_qty > 0
 
-
     @pytest.mark.parametrize(
         "handler_name", ["on_order_canceled", "on_order_rejected", "on_order_expired"]
     )
