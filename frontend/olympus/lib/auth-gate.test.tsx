@@ -61,10 +61,10 @@ vi.mock('@/components/app-frame', () => ({
 }));
 
 vi.mock('@/components/login-screen', () => ({
-  LoginScreen: () => createElement('div', { 'data-login': '1' }, 'Sign in to Olympus'),
+  LoginScreen: () => createElement('div', { 'data-login': '1' }, 'Sign in to digiquant'),
 }));
 
-vi.mock('@/components/atlas-mark', () => ({ AtlasMark: () => null }));
+vi.mock('@/components/atlas-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
 
 import { AuthGate, isOlympusAuthCallbackPath, isOlympusAuthPath } from './auth-gate';
 
@@ -144,7 +144,7 @@ describe('AuthGate', () => {
     mountedState.client = true;
     const html = renderGate();
     expect(html).toContain('data-login="1"');
-    expect(html).toContain('Sign in to Olympus');
+    expect(html).toContain('Sign in to digiquant');
     expect(html).not.toContain('protected-child');
     expect(html).not.toContain('data-frame');
   });

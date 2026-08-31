@@ -2,12 +2,12 @@
 
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import AtlasLoader from '@/components/AtlasLoader';
+import DigiquantLoader from '@/components/AtlasLoader';
 import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
 
 function RedirectFallback() {
-  return <AtlasLoader fullScreen={false} />;
+  return <DigiquantLoader fullScreen={false} />;
 }
 
 /** Old `/library` URLs → Pipeline node (preserve date/docKey when present). */

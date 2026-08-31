@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOlympusTearsheet } from './observability-queries';
+import { buildPerformanceTearsheet } from './observability-queries';
 import type { TableRow } from './database.types';
 
 const position = (
@@ -95,9 +95,9 @@ const trimEvent = (
   created_at: null,
 });
 
-describe('buildOlympusTearsheet', () => {
+describe('buildPerformanceTearsheet', () => {
   it('falls back to persisted headline returns when NAV history is too short to derive', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [{ date: '2026-05-01', nav: 999, cash_pct: 20, invested_pct: 80 }],
       positions: [position('2026-07-17', 'AAA', 20)],
       metrics,
@@ -116,7 +116,7 @@ describe('buildOlympusTearsheet', () => {
   it('builds exact base-zero portfolio return and weighted contribution points', () => {
     const first = { ...position('2026-07-01', 'AAA', 20), current_price: 100 };
     const latest = { ...position('2026-07-17', 'AAA', 20), current_price: 110 };
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
@@ -133,7 +133,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('prefers NAV-derived portfolio return over a conflicting persisted net_return_pct', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
@@ -160,7 +160,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('never reports positive since-inception when the base-100 NAV index is under 100', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
         { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
@@ -184,7 +184,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('derives net return from filtered navSeries even when an early raw row is non-finite', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-07-01', nav: Number.NaN, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-02', nav: 100, cash_pct: 20, invested_pct: 80 },
@@ -205,7 +205,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('builds populated benchmark comparisons aligned to the NAV window', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-02', nav: 103, cash_pct: 20, invested_pct: 80 },
@@ -250,7 +250,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('uses a clearly labeled live fallback when no persisted metrics row exists', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
@@ -272,7 +272,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('partitions full attribution history by the latest current book', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [
         position('2026-06-20', 'OLD', 10, 90, 100),
@@ -298,7 +298,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('includes TRIM fills for still-open names with realized % vs average entry', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [
         position('2026-08-20', 'XLF', 20, 52, 50),
@@ -321,7 +321,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('fails closed on realized % when average entry is missing', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-08-27', 'XLF', 15, 55, null)],
       metrics,
@@ -335,7 +335,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('lists each EXIT and TRIM event rather than one row per ticker', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [
         position('2026-07-01', 'GLD', 10, 200, 180),
@@ -356,7 +356,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('ignores attribution-only ghosts with no EXIT/TRIM ledger evidence', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-07-17', 'AAA', 20)],
       metrics,
@@ -371,7 +371,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('keeps contribution keys scoped to the latest current book', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [
         { date: '2026-06-20', nav: 100, cash_pct: 20, invested_pct: 80 },
         { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
@@ -391,7 +391,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('keeps current holdings visible when their attribution row is missing', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-07-17', 'AAA', 20)],
       metrics,
@@ -410,7 +410,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('derives open unrealized from entry vs current_price when stored pct is null', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-08-27', 'VGK', 20, 92.7, 90.99)],
       metrics,
@@ -426,7 +426,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('fills missing marks from holdingMarks (price_history) and stamps AS OF to the close date', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-08-27', 'VGK', 20.0551, null, 90.99)],
       metrics,
@@ -446,7 +446,7 @@ describe('buildOlympusTearsheet', () => {
   });
 
   it('fails closed on unrealized when entry exists but no mark is available', () => {
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [position('2026-08-27', 'VGK', 20, null, 90.99)],
       metrics,
@@ -466,7 +466,7 @@ describe('buildOlympusTearsheet', () => {
       unrealized_pnl_pct: 2.417848,
       metrics_as_of: '2026-08-25',
     };
-    const result = buildOlympusTearsheet({
+    const result = buildPerformanceTearsheet({
       nav: [],
       positions: [marked],
       metrics,

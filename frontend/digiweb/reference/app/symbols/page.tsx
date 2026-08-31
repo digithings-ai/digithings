@@ -2,7 +2,7 @@ import "./symbols.css";
 import Image from "next/image";
 import { Emblem, emblems, StackRow, type StackItem } from "@digithings/web";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
-import { OlympusMark, Wordmark } from "@/components/symbols/marks";
+import { DigiquantMark, Wordmark } from "@/components/symbols/marks";
 import {
   AnimatedLockup,
   HairlineWordmark,
@@ -147,9 +147,9 @@ export default function SymbolsPage() {
           </figure>
           <figure className="sym-cell sym-cell--mark">
             <span className="sym-mark">
-              <OlympusMark size={40} />
+              <DigiquantMark size={40} />
             </span>
-            <figcaption className="sym-label">olympus mark</figcaption>
+            <figcaption className="sym-label">digiquant mark</figcaption>
           </figure>
         </div>
         <div className="sym-grid sym-grid--wide">

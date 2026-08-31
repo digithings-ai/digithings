@@ -30,7 +30,10 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace }),
 }));
 
-vi.mock('@/components/atlas-mark', () => ({ AtlasMark: () => createElement('span', null, 'mark') }));
+vi.mock('@/components/atlas-mark', () => ({
+  DashboardMark: () => createElement('span', null, 'mark'),
+  AtlasMark: () => createElement('span', null, 'mark'),
+}));
 
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => authMock,
@@ -65,6 +68,7 @@ describe('LoginScreen', () => {
       root.render(createElement(LoginScreen));
     });
     expect(container.textContent).toContain('Open the desk.');
+    expect(container.textContent).toContain('digiquant');
     expect(container.textContent).toContain('Continue with Google');
     expect(container.textContent).toContain('Continue with GitHub');
     expect(container.textContent).toContain('Sign in with email');

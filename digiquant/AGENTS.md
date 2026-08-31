@@ -87,7 +87,7 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ---
 
-## Olympus (Atlas + Hermes)
+## Dashboard (research + portfolio)
 
 When touching `digiquant/src/digiquant/olympus/`:
 

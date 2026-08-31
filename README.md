@@ -75,7 +75,7 @@ make pull-ghcr && make up-ghcr
 
 See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
 
-**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). Atlas/Hermes phases route on **pinned** per-capability models selected from `config/olympus_models.yaml` per the active `OLYMPUS_MODEL_TIER` (`openrouter/openrouter/auto` is reserved for the OpenRouter diagnostic scripts, not phase routing and not grounding — grounding resolves a web-search-capable model from the active tier via `get_grounding_model()` — see `digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md` "OpenRouter model tiers"). Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
+**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). Research/portfolio phases route on **pinned** per-capability models selected from `config/olympus_models.yaml` per the active `OLYMPUS_MODEL_TIER` (`openrouter/openrouter/auto` is reserved for the OpenRouter diagnostic scripts, not phase routing and not grounding — grounding resolves a web-search-capable model from the active tier via `get_grounding_model()` — see `digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md` "OpenRouter model tiers"). Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):
 

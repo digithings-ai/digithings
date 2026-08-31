@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import { useAuth, type OAuthProvider } from '@/lib/auth-context';
 
 const STRENGTH_WORDS = ['', 'weak', 'fair', 'good', 'strong'] as const;
@@ -23,7 +23,7 @@ function passwordStrength(password: string): number {
 export type LoginScreenMode = 'signin' | 'signup';
 
 /**
- * Full-page login / signup for Olympus (static-export PKCE).
+ * Full-page login / signup for the digiquant dashboard (static-export PKCE).
  * Grammar from digiweb account LoginCard / SignupCard (oauth-first).
  */
 export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScreenMode }) {
@@ -79,10 +79,10 @@ export function LoginScreen({ initialMode = 'signin' }: { initialMode?: LoginScr
     <div className="acct-login-shell qn-blueprint-bg">
       <div className="acct-login-card">
         <div className="acct-login-mark">
-          <AtlasMark className="shrink-0" />
+          <DashboardMark className="shrink-0" />
         </div>
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-          olympus{' '}
+          digiquant{' '}
           <span className="text-ink-mute">{signUp ? '· create account' : '· sign in'}</span>
         </p>
         <h1 className="mt-2 font-display text-[1.45rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink">

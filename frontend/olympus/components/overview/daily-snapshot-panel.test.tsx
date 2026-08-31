@@ -119,6 +119,8 @@ describe('DailySnapshotPanel — present envelope', () => {
     );
     expect(html).toContain('snapshot-stale-banner');
     expect(html).toContain('Stale brief');
+    expect(html).not.toContain('Atlas');
+    expect(html).not.toContain('Olympus');
   });
 
   it('asserts no leftover mock/stub strings appear in the rendered output', () => {
@@ -129,6 +131,8 @@ describe('DailySnapshotPanel — present envelope', () => {
     expect(html.toLowerCase()).not.toContain('lorem ipsum');
     expect(html.toLowerCase()).not.toContain('todo');
     expect(html.toLowerCase()).not.toContain('placeholder');
+    expect(html).not.toContain('Atlas');
+    expect(html).not.toContain('Olympus');
   });
 });
 
@@ -142,6 +146,8 @@ describe('DailySnapshotPanel — empty / error states', () => {
     );
     expect(html).toContain('snapshot-empty');
     expect(html).toContain('No brief');
+    expect(html).not.toContain('Atlas');
+    expect(html).not.toContain('Olympus');
   });
 
   it('shows the empty banner with the unconfigured reason', () => {

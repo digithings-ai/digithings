@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AtlasMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/atlas-mark';
 import {
   getSupabaseClient,
   oauthCallbackErrorFromLocation,
@@ -109,10 +109,10 @@ export default function AuthCallbackPage() {
     <div className="acct-login-shell qn-blueprint-bg">
       <div className="acct-login-card">
         <div className="acct-login-mark">
-          <AtlasMark className="shrink-0" />
+          <DashboardMark className="shrink-0" />
         </div>
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-          olympus <span className="text-ink-mute">· sign in</span>
+          digiquant <span className="text-ink-mute">· sign in</span>
         </p>
         <p className="mt-3 font-mono text-[0.78rem] text-ink-mute" role="status">
           {message}

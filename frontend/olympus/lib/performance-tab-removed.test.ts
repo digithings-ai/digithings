@@ -10,7 +10,7 @@ import { join, relative } from 'node:path';
  * for six weeks. `PortfolioTabId` is `'holdings' | 'theses'`, so `?tab=performance`
  * renders Holdings (see portfolio-url-state.test.ts); the live Performance
  * screen is `app/portfolio/performance/page.tsx`, which renders
- * `OlympusTearsheetView` over persisted `portfolio_metrics` and, per its own
+ * `PerformanceTearsheetView` over persisted `portfolio_metrics` and, per its own
  * docstring, "does not recalculate headline metrics from raw NAV".
  *
  * This test exists because the subtree carried two confirmed WRONG-NUMBER bugs
@@ -111,6 +111,6 @@ describe('orphaned Performance tab stays deleted (#1747, #1761)', () => {
     expect(urlState).toContain("href: '/portfolio/performance'");
     expect(existsSync(join(root, 'app/portfolio/performance/page.tsx'))).toBe(true);
     const page = readFileSync(join(root, 'app/portfolio/performance/page.tsx'), 'utf8');
-    expect(page).toContain('OlympusTearsheetView');
+    expect(page).toContain('PerformanceTearsheetView');
   });
 });

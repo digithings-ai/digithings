@@ -52,7 +52,7 @@ Parser registry (PDF, DOCX, HTML, Markdown, CSV, text with OCR fallback). 5+ chu
 - Expand backend registry to include Qdrant, Weaviate, LanceDB
 - Selective indexing rules enforcement (draft/final state tracking via digistore)
 - Index access control: read digikey JWT scopes and filter results by user permissions
-- digiquant research library indexing (finalized Atlas documents)
+- digiquant research library indexing (finalized research documents)
 - digithings-guide index live on digithings.ai (powers the site's chat demo)
 
 **Open source vs. proprietary:** Entirely open. The retrieval infrastructure is commodity. Client-specific index configurations and the documents within them are private.

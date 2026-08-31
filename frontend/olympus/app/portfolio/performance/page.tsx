@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
+import { PerformanceTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { fetchOlympusTearsheet } from '@/lib/observability-queries';
+import { fetchPerformanceTearsheet } from '@/lib/observability-queries';
 import { useCan } from '@/lib/use-entitlement';
-import type { OlympusTearsheet } from '@/components/tearsheet/types';
+import type { PerformanceTearsheet } from '@/components/tearsheet/types';
 
 /**
  * Tearsheet — persisted cumulative returns and stored holding-attribution
@@ -19,13 +19,13 @@ import type { OlympusTearsheet } from '@/components/tearsheet/types';
  */
 export default function PerformancePage() {
   const allowed = useCan('house_weights_nav');
-  const [data, setData] = useState<OlympusTearsheet | null>(null);
+  const [data, setData] = useState<PerformanceTearsheet | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!allowed) return;
     let alive = true;
-    fetchOlympusTearsheet()
+    fetchPerformanceTearsheet()
       .then((d) => {
         if (alive) setData(d);
       })
@@ -52,7 +52,7 @@ export default function PerformancePage() {
             // bare: .ts-page already owns the container + padding (#1548)
             <PageSkeleton bare />
           ) : (
-            <OlympusTearsheetView data={data} />
+            <PerformanceTearsheetView data={data} />
           )}
         </EntitledSurface>
       </div>
