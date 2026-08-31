@@ -55,6 +55,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 from digiquant.olympus.overlay.runner import pin_seam_config
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
@@ -672,10 +673,17 @@ def build_preflight_reflect_node(
     """Return the Phase B reflect node bound to ``deps``."""
 
     def reflect(state: AtlasResearchState) -> dict[str, Any]:
+        if skip_overlay_shared_register(state.config.workspace_id):
+            logger.info(
+                "overlay skip shared register decision_log / forecast outcomes "
+                "(house-only leftover uniques)"
+            )
+            return {}
         resolve_pending(
             client=deps.client,
             run_date=state.run_date,
             reflector=deps.reflector,
+            workspace_id=state.config.workspace_id,
         )
         # WP5.2 — typed forecast outcomes beside decision_log reflection.
         try:

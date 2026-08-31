@@ -1,7 +1,7 @@
-"""Overlay must not last-writer-win house theses / analyst / vehicle registers.
+"""Overlay must not last-writer-win house theses / analyst / vehicle / decision_log.
 
-``theses``, ``analyst_coverage``, and ``thesis_vehicles`` have no
-``workspace_id`` column. Overlay persist-on is not a license to upsert them.
+Those tables have no ``workspace_id`` column. Overlay persist-on is not a
+license to upsert them.
 """
 
 from __future__ import annotations
@@ -10,7 +10,16 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.decision_log import (
+    ReflectorOutput,
+    persist_pending,
+    resolve_pending,
+)
+from digiquant.olympus.atlas.phases.preflight import (
+    PreflightReflectDeps,
+    build_preflight_reflect_node,
+)
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.models.thesis import (
     ThesisReviewOutput,
     ThesisStatusUpdate,
@@ -231,3 +240,119 @@ def test_overlay_materialize_skips_theses_register(
     }
     build_materialize_node(MaterializeDeps(client=house_client))(house_state)
     assert [r["thesis_id"] for r in house_client.store["theses"]] == ["spy"]
+
+
+def _analyst_state(*, workspace_id: str | None) -> AtlasResearchState:
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=workspace_id),
+    )
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            "SPY": {
+                "ticker": "SPY",
+                "conviction_score": 3,
+                "stance": "buy",
+                "thesis": "overlay must not smash house",
+                "risks": "",
+                "sources": [],
+            }
+        }
+    )
+    return state
+
+
+def test_overlay_persist_on_does_not_write_decision_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    overlay_count = persist_pending(
+        client=overlay_client,
+        state=_analyst_state(workspace_id=str(overlay)),
+    )
+    assert overlay_count == 0
+    assert overlay_client.store.get("decision_log", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_count = persist_pending(
+        client=house_client,
+        state=_analyst_state(workspace_id=str(house_workspace_id())),
+    )
+    omitted = FakeSupabaseClient()
+    omitted_count = persist_pending(client=omitted, state=_analyst_state(workspace_id=None))
+    assert house_count == 1
+    assert omitted_count == 1
+    assert [r["ticker"] for r in house_client.store["decision_log"]] == ["SPY"]
+    assert [r["ticker"] for r in omitted.store["decision_log"]] == ["SPY"]
+
+
+def test_overlay_resolve_pending_does_not_stamp_house_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    pending = {
+        "id": "row-house",
+        "run_id": "house-run",
+        "run_date": "2026-08-20",
+        "ticker": "SPY",
+        "stance": "buy",
+        "conviction": 3,
+        "thesis": "t",
+        "benchmark": "SPY",
+        "holding_days": 1,
+        "status": "pending",
+    }
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": [pending]})
+    overlay_client.store["decision_log"] = [dict(pending)]
+    called: list[object] = []
+
+    def reflector(_inputs: dict[str, object]) -> ReflectorOutput:
+        called.append(_inputs)
+        raise AssertionError("overlay must not invoke the house reflector")
+
+    resolved = resolve_pending(
+        client=overlay_client,
+        run_date=_RUN,
+        reflector=reflector,
+        workspace_id=str(overlay),
+    )
+    assert resolved == 0
+    assert called == []
+    assert overlay_client.store["decision_log"][0]["status"] == "pending"
+
+
+def test_overlay_preflight_reflect_skips_decision_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    calls: list[str] = []
+
+    def fake_resolve_pending(**_kwargs: object) -> int:
+        calls.append("decision_log")
+        return 0
+
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.phases.preflight.resolve_pending",
+        fake_resolve_pending,
+    )
+    node = build_preflight_reflect_node(PreflightReflectDeps(client=FakeSupabaseClient()))
+    overlay_state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=str(overlay)),
+    )
+    assert node(overlay_state) == {}
+    assert calls == []
+
+    house_state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
+    )
+    assert node(house_state) == {}
+    assert calls == ["decision_log"]
