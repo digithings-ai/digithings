@@ -88,7 +88,8 @@ script is house-owned).
 | Relying on RLS alone for the dashboard | RLS may allow overlay; UI must still `houseBook()` |
 | Test `_FakeQuery` treating missing column as house | **Test-only**; production PostgREST `eq` matches only equal rows |
 | Overlay `--execute` with persist off | Refuses / finishes `persist_disabled` — not a remaining-hop proof |
-| Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date` |
+| Staged cutover **113** (drop legacy `UNIQUE(date)`) | Not auto-applied; do not copy to top-level or apply on `core` while `main` writers still upsert `on_conflict=date`. [#3331](https://github.com/digithings-ai/digithings/pull/3331) stamps house `workspace_id` on those writers but **does not** widen the conflict target. `pipeline-olympus.yml` checks out `ref: main` even when the schedule event is on default `develop`. |
+| Main house GHA vs develop tenancy writers | Live cron executes **main**. Develop already stamps via `house_workspace_id()` and upserts `on_conflict=workspace_id,date` — that is not what the scheduled job runs. Do not assume a green develop unit run proves the house publish. |
 | `OLYMPUS_OVERLAY_PERSIST=1` before 113 on target | Persist-on still cannot prove a private overlay book while legacy uniques collide |
 
 ## Related
