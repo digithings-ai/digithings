@@ -72,6 +72,18 @@ def house_positions_in_range(sb: Any, start: str, end: str) -> list[dict[str, An
     return list(getattr(res, "data", None) or [])
 
 
+def house_documents_in_range(sb: Any, start: str, end: str) -> list[dict[str, Any]]:
+    """House ``documents`` in [start, end]. Overlay same-date rows are excluded."""
+    res = (
+        eq_house_workspace(sb.table("documents").select("*"))
+        .gte("date", start)
+        .lte("date", end)
+        .order("date,document_key")
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
+
+
 def _date_range(start: str, end: str) -> list[str]:
     d = date.fromisoformat(start)
     e = date.fromisoformat(end)
@@ -100,16 +112,8 @@ def export_state(start: str, end: str, out_dir: Path) -> None:
     snap_path.write_text(json.dumps(snap_rows, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"✅ Exported {len(snap_rows)} daily_snapshots rows → {snap_path}")
 
-    # documents
-    res2 = (
-        sb.table("documents")
-        .select("*")
-        .gte("date", start)
-        .lte("date", end)
-        .order("date,document_key")
-        .execute()
-    )
-    doc_rows = getattr(res2, "data", None) or []
+    # documents (house only — overlay private docs must not land in a house backup)
+    doc_rows = house_documents_in_range(sb, start, end)
     doc_path = out_dir / "documents.json"
     doc_path.write_text(json.dumps(doc_rows, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"✅ Exported {len(doc_rows)} documents rows → {doc_path}")

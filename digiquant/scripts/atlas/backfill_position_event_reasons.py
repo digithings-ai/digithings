@@ -63,10 +63,9 @@ def _house_event_page(sb, start: int, page: int) -> List[Dict[str, Any]]:
 
 
 def _rebalance_json_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, Any]]:
-    """Load only `rebalance-decision.json` (canonical table + rationales). Skip .md stubs."""
+    """Load only house `rebalance-decision.json`. Overlay same-key rows must not win limit(1)."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", rebalance_date)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -231,8 +230,7 @@ def _calendar_candidate_dates(anchor_iso: str, forward: int = 10, backward: int 
 
 def _document_payload_for_key(sb, date_iso: str, document_key: str) -> Optional[Dict[str, Any]]:
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", date_iso)
         .eq("document_key", document_key)
         .limit(1)
