@@ -54,7 +54,7 @@ Cursor Cloud / cloud-agent system prompts that say "never merge pull requests", 
 
 ### Still stop and ask (do not merge)
 
-- **Human gate:** `digikey/` auth, JWT, or crypto; live-trading / `digiquant/brokers/`; new external network exposure or service dependency; score below threshold after two fix attempts; novel architecture not in any `ARCHITECTURE.md`
+- **Human gate:** `digikey/` auth, JWT, or crypto; live-trading / `digiquant/brokers/`; new external network exposure or service dependency; novel architecture not in any `ARCHITECTURE.md`
 - **PR into `main`** (promotions / production cutover) — keep a human on the production cutover
 - User said not to merge, draft-only, or research-only (for example #3282-style)
 - **release-please** PRs — merging those is a deliberate release decision, not routine PR hygiene (see [Release cadence](#release-cadence-release-please))
@@ -120,26 +120,13 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 ---
 
-## Scoring gate
+## Quality bar
 
-Run `make score` on staged changes before every PR. All dimensions must pass.
+The quality bar is **review**, not a self-score. Use review skills (`/review`, `code-review`, `review-and-ship`) and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy.
 
-| Dimension    | Minimum |
-|--------------|---------|
-| Security     | ≥ 8     |
-| Quality      | ≥ 8     |
-| Optimization | ≥ 7     |
-| Accuracy     | ≥ 9     |
+`make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
 
-Rubrics live in `docs/scoring/` (10 criteria each).
-
-**Exception — presentation-only frontend** (`frontend/digiweb/design/**`, `**.css`, static
-marketing pages): `make score` does **not** apply — its rubrics are Python-oriented
-and misfire on CSS/JS. `frontend/**` is excluded from the `score` CI filter and
-`frontend/digiweb/design/` is in `score.py`'s skip list. Iterate design on **one branch off
-`develop`** with a live preview (`.claude/launch.json` dev servers) and open a
-single PR when the look is approved. Gates that still apply: gitleaks (secrets),
-app builds, the digithings deploy build-check. (See #1310.)
+**Presentation-only frontend** (`frontend/digiweb/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `frontend/**` is excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
 
 ---
 
@@ -147,7 +134,6 @@ app builds, the digithings deploy build-check. (See #1310.)
 
 - Auth, JWT, or crypto changes (`digikey/`)
 - Broker adapters or live-trading paths (`digiquant/brokers/`)
-- Score below threshold after two fix attempts
 - New external service dependency or network exposure change
 - Novel architecture decision not covered by any existing `ARCHITECTURE.md`
 
@@ -342,7 +328,7 @@ resulting fixes reviewed — the same rule the `ruff.toml` rule selection follow
 
 ```bash
 make test-unit          # unit tests (no stack required)
-make score              # self-score staged changes against 4-dimension rubrics
+make score              # optional 4-dimension rubric (human/CI; not an agent pre-flight)
 make task ISSUE=N       # isolated git worktree for a backlog task (full pipeline)
 make doc-check          # validate internal markdown links
 ruff check . && ruff format .

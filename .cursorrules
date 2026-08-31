@@ -12,7 +12,6 @@
 #   - LangGraph supervisor+subgraph orchestration only
 #   - LiteLLM routing (caching mandatory)
 #   - NautilusTrader for all backtest/optimize
-#   - Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
 #   - Never touch live-trading paths without explicit human approval
 #   - Digi product/module names always lowercase (digithings, digichat, …) — never DigiThings/DigiChat
 #
@@ -21,7 +20,8 @@
 #   2. Read {component}/ARCHITECTURE.md  (technical reference)
 #
 # Backlog: docs/agent-backlog/INDEX.md + GitHub Issues labeled agent-task
-# Scoring: docs/scoring/  |  Workflow: docs/agents/AGENT_WORKFLOW.md
+# Workflow: docs/agents/AGENT_WORKFLOW.md
+# Quality bar: review skills / CODE_REVIEW_POLICY hatches — not make score.
 # Skills, not a ritual: pick spec / TDD / triage / fix-ci / deslop / review-and-ship as they fit.
 # Autopilot: CI green, comments triaged, review+deslop skills when the diff warrants it, then merge.
 # Merge-when-ready (AGENTS.md): merge task PRs into their base when CI+review are done.

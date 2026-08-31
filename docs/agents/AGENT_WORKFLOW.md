@@ -43,18 +43,9 @@ Run `ruff check . && ruff format --check .` after all Python changes.
 
 ---
 
-## 4. Scoring gate
+## 4. Quality bar
 
-Before opening a PR, run `make score`. All dimensions must pass:
-
-| Dimension    | Minimum | Rubric |
-|--------------|---------|--------|
-| Security     | ≥ 8     | `docs/scoring/SECURITY.md` |
-| Quality      | ≥ 8     | `docs/scoring/QUALITY.md` |
-| Optimization | ≥ 7     | `docs/scoring/OPTIMIZATION.md` |
-| Accuracy     | ≥ 9     | `docs/scoring/ACCURACY.md` |
-
-If any dimension fails: fix, re-stage, re-run. If it fails twice, escalate — do not open a PR with known violations.
+Review, not a self-score. Use review skills (`/review`, `code-review`, `review-and-ship`) and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. `make score` is optional (human/CI). Do not treat a passing self-score as a substitute for review.
 
 ---
 
@@ -80,7 +71,6 @@ Stop and request human input when:
 | Changes to `digikey/` (auth, JWT, crypto) | Auth integrity |
 | Broker adapters or live-trading paths | Live-trading risk |
 | New `0.0.0.0` binding or external service dependency | Security perimeter |
-| Score below threshold after two fix attempts | Quality gate |
 | Novel architecture not in any `ARCHITECTURE.md` | ADR required |
 | Test failures you can't diagnose within two attempts | Escalate |
 
@@ -92,10 +82,10 @@ When escalating: describe what you were doing, what you found, and what decision
 
 ```bash
 make status              # list open agent-task issues
-make task ISSUE=N        # create worktree, implement, test, score, PR, merge
+make task ISSUE=N        # create worktree, implement, test, PR, merge
 ```
 
-Always implement in the worktree (`make task` creates it at `.worktrees/task/N-slug/`). Stage all changes before the score step. If score fails twice, escalate.
+Always implement in the worktree (`make task` creates it at `.worktrees/task/N-slug/`).
 
 ---
 
@@ -121,7 +111,6 @@ When the PR is merge-ready, **merge it into its base**. Task PRs into their stac
 | `digikey/` auth, JWT, crypto | Auth integrity |
 | Live-trading / `digiquant/brokers/` | Live-trading risk |
 | New external network exposure or service dependency | Security perimeter |
-| Score below threshold after two fix attempts | Quality gate |
 | Novel architecture not in any `ARCHITECTURE.md` | ADR required |
 | PR into `main` | Production cutover |
 | User said not to merge / draft-only / research-only | Explicit hold |

@@ -59,7 +59,6 @@ All regenerated from `agents.yml` + `agents/sources/*`. Cursor and Copilot don't
 **Skills** (`.claude/skills/`) — workflows triggered by name:
 
 - `worktree-task-start` — pre-flight checklist wrapping `make task ISSUE=N`.
-- `score-and-fix` — run `make score`, walk rubric fixes for each failing dimension.
 - `write-acceptance-criteria` — Given/When/Then format + test command mapping.
 - `ci-triage` / `triage` — diagnose red CI on a PR; bucket failures, give fix commands.
 
@@ -67,7 +66,7 @@ All regenerated from `agents.yml` + `agents/sources/*`. Cursor and Copilot don't
 
 - `/task` — start a backlog task end-to-end (`make task ISSUE=N`).
 - `/spec` — generate a GitHub Issue body from a goal.
-- `/score` — run the 4-dimension scoring gate on staged changes.
+- `/score` — optional 4-dimension rubric on staged changes (not a pre-PR gate).
 - `/triage` — CI triage on the current PR.
 - `/normalize` — reshape rambling input into a structured instruction block.
 
@@ -124,25 +123,15 @@ make task ISSUE=N                   # branches task/N-<slug> in an isolated work
 # ... do the work ...
 ruff check . && ruff format .
 make test-unit                      # pytest -m unit
-make score                          # 4-dimension gate; MUST pass before commit
 make commit MSG="feat(digiquant): short imperative subject (#N)"
 make pr                             # opens the PR with template pre-filled (requires gh)
 ```
 
-`make commit` runs conventional-commit validation + scoring. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`.
+`make commit` runs conventional-commit validation. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`. Quality bar is **review** ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
 
-### Scoring gate — `make score`
+### Optional `make score`
 
-Four dimensions, hard thresholds. PRs that fall below fail CI:
-
-| Dimension | Minimum |
-|---|---|
-| Security | ≥ 8 |
-| Quality | ≥ 8 |
-| Optimization | ≥ 7 |
-| Accuracy | ≥ 9 |
-
-Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` skill) to walk failures dimension-by-dimension.
+`make score` and [`docs/scoring/`](docs/scoring/) are an optional human/CI tool (CI may still run the score job on a PR diff). Do not treat them as an agent pre-flight. Review skills own security, quality, optimization, and accuracy.
 
 ### GitHub project automation
 
@@ -155,7 +144,7 @@ Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` sk
 ## 5. PR review flow
 
 1. **Pre-push**: local `pre-push` hook blocks pushes to non-origin remotes, pushes to `main` without `ALLOW_MAIN_PUSH=1`, and live-trading-path pushes without a `Human-Approved-By:` trailer.
-2. **CI on open**: lint, unit tests, scoring gate, doc-link check, agents-init drift check.
+2. **CI on open**: lint, unit tests, optional score job, doc-link check, agents-init drift check.
 3. **Review**: invoke `/review` on your own PR — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see AGENTS.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available. Then merge when merge-ready ([AGENTS.md § Merge-when-ready](AGENTS.md#merge-when-ready)).
 4. **CI red?** `/triage <N>` buckets failures by type and proposes minimal fix commands.
 5. **Security-sensitive changes**: run `/security-review` on the branch before requesting review.
@@ -206,7 +195,7 @@ make batch-candidates               # group open tasks for parallel execution
 make new-task                       # interactive issue creation
 make task ISSUE=N                   # start backlog task in isolated worktree
 make parse-error                    # identify component from a Python traceback
-make score                          # self-score staged changes
+make score                          # optional 4-dimension rubric (human/CI)
 make commit MSG="feat(x):…"         # validated conventional commit
 make pr                             # open PR with template
 

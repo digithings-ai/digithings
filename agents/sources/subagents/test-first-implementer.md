@@ -41,7 +41,6 @@ If grep finds a test that already covers the acceptance criterion but is current
 
 - If the test requires a fixture or mock you cannot construct without guessing, stop and ask.
 - If the test requires a live service (digigraph running on :8000), switch to `pytest -m e2e` and tell the user to `make up` first — do not try to mock around an e2e test.
-- If `make score` fails twice after implementation, escalate per `docs/agents/AGENT_WORKFLOW.md`.
 
 ## Never
 

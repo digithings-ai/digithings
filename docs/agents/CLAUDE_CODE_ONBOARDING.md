@@ -31,7 +31,7 @@ make task ISSUE=<N>
 This creates a task worktree on `task/N-<slug>` from `develop` (or the active
 `module/<component>` branch), pre-loads the component's `AGENTS.md` /
 `ARCHITECTURE.md`, and lands Claude in the worktree with the branch already set
-up for workflow-edit permissions. Implement, run `make score`, commit, and
+up for workflow-edit permissions. Implement, test, commit, and
 open the PR via `make pr`.
 
 The local path does **not** require any repo secret. The Claude Code Max
@@ -132,15 +132,14 @@ Canonical rules in `AGENTS.md` + `agents.yml`. Key constraints:
 - **Never touch without human approval:** `SECURITY.md`, `docs/scoring/`,
   `config/litellm.yaml`, `projects/`, live-trading paths
 
-### 2d. Scoring gate
-
-Before opening the PR, run the self-score:
+### 2d. Before the PR
 
 ```bash
-make score          # must pass: Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9
 make test-unit      # all unit tests green (or component-specific test-cmd)
 ruff check .        # zero violations
 ```
+
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` when that policy needs a hatch. `make score` is optional (human/CI).
 
 ### 2e. PR submission
 
@@ -152,10 +151,10 @@ make pr             # opens PR via gh CLI, pre-fills template
 PR must:
 - Target `develop` (or the active `module/<component>` branch)
 - Body must contain `Closes #<issue-number>`
-- Body must fill the PR template checklist (scoring, test evidence, doc flag)
+- Body must fill the PR template (test evidence, doc flag)
 - Title format: `feat(<component>): <description> (#<issue-number>)`
 
-The `PR quality gate` CI check enforces scoring and linkage.
+CI may still run `make score` on the PR diff; that is optional human/CI tooling, not an agent pre-flight. Issue linkage is a convention (see [AGENTS.md](../../AGENTS.md)).
 
 ---
 
@@ -192,7 +191,7 @@ Use `/spec` in Claude Code to generate a compliant issue body.
 - **Issue board:** the dispatch comment is posted with a run-log link when
   cloud dispatch fires with a valid key
 - **PR board:** branches named `task/N-*` (both local and cloud) appear in the
-  PR list and are subject to the standard PR quality gate
+  PR list and are subject to the standard CI and review coverage hatches
 
 If a cloud dispatch appears stuck or wrong, cancel the Action run and file a
 follow-up `exec:claude` issue with the error logs.

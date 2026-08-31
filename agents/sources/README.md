@@ -60,7 +60,7 @@ subagent policy for the full reasoning.
 |---------|-------------|-------------|
 | `/normalize` | `normalize.md` | Invoke `dictation-normalizer` subagent. |
 | `/spec` | `spec.md` | Invoke `spec-writer` subagent. |
-| `/score` | `score.md` | Run the scoring gate via `make score`. |
+| `/score` | `score.md` | Optional `make score` rubric on staged changes (not a pre-PR gate). |
 | `/task` | `task.md` | Start a backlog task via `make task ISSUE=N`. |
 | `/triage` | `triage.md` | Triage CI failures for a PR number. |
 | `/review` | `review.md` | Run the review lens fan-out (correctness, claim accuracy, regression, security, CI/deploy) for a PR number, in-session when Bugbot is unavailable. |

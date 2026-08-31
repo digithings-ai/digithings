@@ -22,7 +22,6 @@ rules:
   - "LangGraph supervisor+subgraph orchestration only"
   - "LiteLLM routing (caching mandatory)"
   - "NautilusTrader for all backtest/optimize"
-  - "Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR"
   - "Never touch live-trading paths without explicit human approval"
   - "Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing."
   - "Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors."
@@ -79,7 +78,6 @@ tier_routing:
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
   - "Any change that touches live-trading paths"
-  - "Score below threshold on any dimension"
   - "New external service dependency or infrastructure change"
   - "Novel architecture decision not covered by existing ARCHITECTURE.md specs"
 
@@ -154,7 +152,7 @@ agent_capabilities:
     make_target: agents-init
 
   - id: scorer
-    description: "Self-score staged changes against 4-dimension rubrics"
+    description: "Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight)"
     script: scripts/score.py
     make_target: score
 
@@ -258,7 +256,7 @@ orchestration:
     - create_worktree
     - implement
     - test
-    - finish_task  # run make score, commit, open PR
+    - finish_task  # commit, open PR
     - autopilot     # CI + comments; review/deslop skills when the diff warrants it
     - merge         # merge-ready task PRs into their base (see AGENTS.md)
     - cleanup_worktree
