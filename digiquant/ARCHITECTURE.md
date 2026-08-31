@@ -3212,7 +3212,9 @@ to `kairos-cron-check.yml` on a `chore/` or `feat/` branch. Missing
 must never pass `--execute`, `--all`, or invoke `hermes.chain`.
 
 **Omitted `workspace_id` means the house.** Readers and writers that leave the
-argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
+argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
+`_prior_nav`, `_recent_navs` / `breaker_scale_from_nav_history`,
+`opening_snapshot` Group A reads, `_prune_orphan_positions`, `_rows_for_date`,
 `_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
 mean "every row".
 
@@ -3314,8 +3316,12 @@ receive `workspace_id=` when overlay; house constructors stay on
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
 house paper fills are the `execute_at_open` job (date-scoped, house stamp on
 writes; Group A reads filter `workspace_id` so an overlay same-date row cannot
-shape HOLD/EXIT);
-external venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
+shape HOLD/EXIT). The house GHA chain (`hermes.chain`) Group A reads
+(`commit_io._prior_nav`, `portfolio_materialize._prior_nav`,
+`load_portfolio_performance_snapshot`, `breaker_scale_from_nav_history`,
+`opening_snapshot` positions/NAV) likewise filter `workspace_id` so overlay
+NAV/positions cannot compound the house index, trip the breaker, or seed lots.
+External venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
 `PAPER_INTERNAL`, live-env raise before submit; then overlay `workspace_id` is
 threaded into `_pending_order_heads` / `_directions_by_order`; missing ledger
 `workspace_id` → `ForeignWorkspaceIntentError`). Omitted `workspace_id` on those
