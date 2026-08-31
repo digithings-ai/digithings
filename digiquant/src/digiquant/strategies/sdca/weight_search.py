@@ -29,9 +29,7 @@ from digiquant.strategies.sdca.walk_forward import (
     SdcaOptimizeObjective,
     SdcaTrialEvaluator,
     WalkForwardFold,
-    is_feasible,
     make_walk_forward_folds,
-    objective_score,
     window_slice,
 )
 
@@ -91,10 +89,17 @@ def _mean_oos(scores: Sequence[FoldScore]) -> float:
 
 
 def _is_rank_score(scores: Sequence[FoldScore], objective: SdcaOptimizeObjective) -> float:
-    """Mean IS objective. Any infeasible IS fold → −inf (OOS is not used)."""
-    if not scores or any(not is_feasible(s.in_sample, objective) for s in scores):
+    """Mean IS vs-flat-DCA. Capital floor still applies; drawdown cap does not.
+
+    BTC remaining-% books routinely print >50% IS drawdown. Using the Stage B
+    cap here dropped every extra combo. Keep/drop is "did this extra help
+    vs flat DCA while deploying capital", not the curve's DD rail.
+    """
+    if not scores:
         return float("-inf")
-    return sum(objective_score(s.in_sample, objective) for s in scores) / len(scores)
+    if any(s.in_sample.capital_deployed_pct < objective.capital_deployed_floor_pct for s in scores):
+        return float("-inf")
+    return sum(s.in_sample.vs_flat_dca_pct for s in scores) / len(scores)
 
 
 def _score_weights_on_cached_folds(
@@ -124,7 +129,7 @@ def _score_weights_on_cached_folds(
                 fold=fold,
                 in_sample=in_sample,
                 out_of_sample=out_of_sample,
-                feasible=is_feasible(in_sample, objective),
+                feasible=in_sample.capital_deployed_pct >= objective.capital_deployed_floor_pct,
             )
         )
     return scores

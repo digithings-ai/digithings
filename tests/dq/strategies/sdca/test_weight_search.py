@@ -109,6 +109,45 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
     assert result.mean_is_vs_flat_dca_pct > result.mean_oos_vs_flat_dca_pct - 50.0
 
 
+def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
+    """IS drawdown above the Stage B 50% cap must not zero the extra grid."""
+    dates = _dates()
+    prices = [100.0 + 0.2 * i for i in range(len(dates))]
+    zeros = [0.0] * len(dates)
+
+    def evaluator(
+        window_dates: list[date],
+        window_prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        rsi_w = 0.0
+        for ind in extra_indicators or []:
+            if getattr(ind, "name", "") == "weekly_rsi":
+                rsi_w = float(ind.weight)
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
+            vs_lump_pct=-1.0,
+            capital_deployed_pct=40.0,
+            max_drawdown_pct=61.0,
+        )
+
+    result = optimize_stage_a_by_backtest(
+        dates,
+        prices,
+        extra_z={"weekly_rsi": zeros},
+        rails_fitter=_fitter,
+        evaluator=evaluator,
+        shape=_SHAPE,
+        search_names=("weekly_rsi",),
+        grid=(0.0, 1.0),
+        valuation_grid=(1.0,),
+    )
+    assert result.weights.weekly_rsi == pytest.approx(1.0)
+
+
 def test_backtest_search_skips_enabled_extra_without_z() -> None:
     dates = _dates()
     prices = [100.0] * len(dates)
