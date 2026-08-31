@@ -33,8 +33,8 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | [**ROADMAP.md**](ROADMAP.md) | Phased plan |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System diagram and interfaces |
 | [**SECURITY.md**](SECURITY.md) | Threat model, non-negotiable defaults, reporting |
-| [**AGENTS.md**](AGENTS.md) | Rules for AI coding agents |
-| [**CLAUDE.md**](CLAUDE.md) | Claude Code quick reference |
+| [**AGENTS.md**](AGENTS.md) | Canonical rules for AI coding agents |
+| [**CLAUDE.md**](CLAUDE.md) | Pointer at AGENTS.md (Claude Code loader) |
 | [**CONTRIBUTING.md**](CONTRIBUTING.md) | How to contribute |
 | [**docs/LLM_PROVIDERS.md**](docs/LLM_PROVIDERS.md) | Free-tier + cheap LLM providers, LiteLLM wiring |
 | [**docs/providers/**](docs/providers/README.md) | Step-by-step API-key setup per provider |
