@@ -3312,7 +3312,9 @@ the private book / NAV (`commit_io`), and the ledger chain (`ledger_io` models
 receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
-house paper fills are the `execute_at_open` job (date-scoped, house stamp);
+house paper fills are the `execute_at_open` job (date-scoped, house stamp on
+writes; Group A reads filter `workspace_id` so an overlay same-date row cannot
+shape HOLD/EXIT);
 external venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
 `PAPER_INTERNAL`, live-env raise before submit; then overlay `workspace_id` is
 threaded into `_pending_order_heads` / `_directions_by_order`; missing ledger
