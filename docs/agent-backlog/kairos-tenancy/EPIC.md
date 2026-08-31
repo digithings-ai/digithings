@@ -165,7 +165,7 @@ pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exi
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
-**Landed 2026-08-31T11:24Z (not epic-complete):** house documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278) on `main` (`2df473110`). Core 105 unique is `(workspace_id, date, document_key)`; `main` still upserted `(date, document_key)` so house daily run 33321137776 failed `42P10` and did not commit the book. Live probe of the new conflict target: throwaway upsert then delete, `cleanup_remaining=0`. Pages still `119b7838` / `2026-08-31T10:45:27Z` (account IA + Observer greps; remaining hops in the client chunk). Staging E2E still blocked on vendor secrets.
+**Landed 2026-08-31T11:42Z (not epic-complete):** overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277) on `develop` (`11d45bfb0`) — persist-on private `positions`/`nav`/`ledger` writes raise `legacy_book_unique`. House documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278) on `main` (`2df473110`, CI 36/36 green). Core 105 unique is `(workspace_id, date, document_key)`; next 12:00 UTC `pipeline-olympus` is the live book-commit proof. Pages still `119b7838` / `2026-08-31T10:45:27Z`. Staging E2E still blocked on vendor secrets.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /

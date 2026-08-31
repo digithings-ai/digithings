@@ -3251,10 +3251,13 @@ books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 (`legacy_book_unique`) while migration 097's legacy `UNIQUE(date)` /
 `UNIQUE(date, ticker)` / `PRIMARY KEY (date)` and ledger
 `uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
-keys — house ops scripts still upsert with `on_conflict="date"`, so an overlay
-row for the same calendar date either fails the legacy arbiter or is rewritten
-by the next house upsert. Roadmap P6 drops those arbiters and patches every
-house writer; until then only documents are multi-tenant-safe. Overlay publish
+keys — H9 `commit_io` and `portfolio_materialize` now upsert the widened
+`(workspace_id, …)` targets, but remaining house ops scripts
+(`refresh_performance_metrics`, `update_tearsheet`, `sync_positions_from_rebalance`)
+still use `on_conflict="date"`, so an overlay row for the same calendar date
+either fails the legacy arbiter or is rewritten by those writers. Roadmap P6
+drops those arbiters and patches every remaining house writer; until then only
+documents are multi-tenant-safe. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
