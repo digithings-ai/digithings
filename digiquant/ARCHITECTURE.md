@@ -3148,6 +3148,14 @@ never the JWT claim. Preferring a stale elevated `app_metadata.plan_tier` after
 cancel (when claim sync failed) would fail-open and still seal broker credentials
 or append overlay profiles on a `free` workspace.
 
+**FX Hub invite (12x).** `POST /functions/v1/settings/access/redeem-invite`
+requires a session JWT. The Edge Function hashes the submitted code and
+compares it to `FX_HUB_INVITE_HASH` (Supabase secret, never `NEXT_PUBLIC_*`)
+and/or `product_invite_codes` (migration 112). A match INSERTs
+`client_product_grants (email, product_key='fx_hub')` and appends
+`product_invite_redemptions` for the operator. This is not a login-optional
+passphrase — the static export still bakes the anon key.
+
 Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.

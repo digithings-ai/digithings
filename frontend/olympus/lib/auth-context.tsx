@@ -17,6 +17,7 @@ import {
   oauthSignInOptions,
   type OAuthProvider,
 } from './supabase';
+import { formatAuthError, isDuplicateSignupUser } from './auth-errors';
 
 export type { OAuthProvider };
 
@@ -32,7 +33,11 @@ export interface AuthContextValue {
   loading: boolean;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   signInWithPassword: (email: string, password: string) => Promise<void>;
-  signUpWithPassword: (email: string, password: string) => Promise<void>;
+  /** Session is present when confirm-email is off; otherwise the caller must not claim mail arrived. */
+  signUpWithPassword: (
+    email: string,
+    password: string,
+  ) => Promise<{ session: Session | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -96,9 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
     if (!data.url) {
       throw new Error(
-        provider === 'google'
-          ? 'Google did not return a redirect URL. Enable the Google provider in Supabase Auth and add this origin to Redirect URLs.'
-          : 'Sign-in did not return a redirect URL. Enable the provider in Supabase Auth.',
+        formatAuthError(
+          provider === 'google'
+            ? 'Google did not return a redirect URL. Enable the Google provider in Supabase Auth and add this origin to Redirect URLs.'
+            : 'Sign-in did not return a redirect URL. Enable the provider in Supabase Auth.',
+          'oauth',
+        ),
       );
     }
     window.location.assign(data.url);
@@ -118,12 +126,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!client) {
       throw missingClient();
     }
-    const { error } = await client.auth.signUp({
+    const { data, error } = await client.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: oauthRedirectTo() },
     });
     if (error) throw error;
+    if (isDuplicateSignupUser(data.user)) {
+      throw new Error(
+        formatAuthError(new Error('User already registered'), 'signup'),
+      );
+    }
+    return { session: data.session };
   }, []);
 
   const signOut = useCallback(async () => {

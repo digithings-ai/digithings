@@ -7,7 +7,7 @@ connect/revoke, and notification prefs.
 |---------|-------|
 | `verify_jwt` | **true** |
 | CORS | OPTIONS → 204 + Allow-* (digiquant.io browser callers) |
-| Deploy | After K3 + migrations **096–108** (108 = creator/product grants) |
+| Deploy | After K3 + migrations **096–108** (108 = creator/product grants) + **112** (invite codes) |
 
 ## Tier gate (effective plan)
 
@@ -70,6 +70,7 @@ Profile schema re-validation imports the real
 | `GET` | `/jobs` | Member-scoped `job_runs` (id, job_type, status, error, idempotency_key, started_at, finished_at; limit 50). Service-role read — PostgREST `authenticated` is revoked. Empty → **200** `{jobs: []}`. |
 | `GET` | `/fills` | Member-scoped `broker_executions` fingerprints (id, symbol, quantity, executed_at, recorded_at — never `external_fill_id`). Empty → **200** `{fills: []}`. |
 | `GET` | `/app-urls` | Member read of pinned Alpaca `redirect_uri`, billing return URL, and **public** Alpaca OAuth client id (never `ALPACA_OAUTH_CLIENT_SECRET`). Empty client id → `""` until EF secrets land. |
+| `POST` | `/access/redeem-invite` | JWT required. Body `{ code, product_key? }`. Compares SHA-256 of `code` to secret `FX_HUB_INVITE_HASH` and/or `product_invite_codes`. On match, INSERT `client_product_grants` for the caller email (`fx_hub`). Rate-limited. Does not accept a missing email (OAuth without email → `EMAIL_REQUIRED`). Never returns whether the env hash exists. |
 
 ## Writes vs remaining-hop Stripe
 
@@ -90,6 +91,7 @@ supabase secrets set \
   APP_URL=https://app.example \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…   # never NEXT_PUBLIC_
+  FX_HUB_INVITE_HASH=…           # sha256 hex of the 12x invite; never NEXT_PUBLIC_
 ```
 
 Pinned OAuth callback: `{APP_URL}/olympus/settings/brokers/callback/`.
@@ -103,5 +105,6 @@ deno test --allow-env --allow-read \
   _shared/access.test.ts \
   _shared/app-url.test.ts \
   _shared/cors.test.ts \
+  _shared/invite.test.ts \
   settings/settings.test.ts
 ```

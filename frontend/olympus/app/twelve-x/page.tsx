@@ -21,7 +21,7 @@ export default function TwelveXPage() {
       <ClientProductGate
         productKey="fx_hub"
         title="FX Hub"
-        body="FX Hub is a client product. Access is limited to the creator and an email allowlist (12x clients). Ask the operator to add your email if you expected access."
+        body="FX Hub is a client product for the 12x team. Sign in, then redeem the invite the operator shared — or ask them to add your email."
       >
         <Suspense
           fallback={
