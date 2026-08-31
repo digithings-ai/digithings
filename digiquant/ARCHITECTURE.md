@@ -2655,9 +2655,12 @@ graduates onto its own project.
 `macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
 cross-project price copy is therefore **superseded**. `#1066` adds a shared
 `economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
-incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
-ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
-twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
+incl. `event_datetime_utc` + the impact CHECK + unique `external_id`; additive
+`economic_calendar_authenticated_select` in `114` so signed-in JWT users can
+SELECT the same public calendar as anon — do not number this `113`, which is
+the staged cutover under `migrations/cutover/`): the twelve-x
+ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the dashboard
+twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEvents` in
 `frontend/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
