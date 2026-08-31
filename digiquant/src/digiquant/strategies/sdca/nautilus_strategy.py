@@ -206,7 +206,29 @@ class SdcaStrategy(Strategy):
     def _spendable_cash(self) -> float:
         prec = max(0, self._quote_precision())
         scale = 10**prec
-        return max(0.0, math.floor(self._cash * scale + 1e-12) / scale)
+        floored = max(0.0, math.floor(self._cash * scale + 1e-12) / scale)
+        venue = self._venue_free_quote()
+        if venue is None:
+            return floored
+        return max(0.0, min(floored, venue))
+
+    def _venue_free_quote(self) -> float | None:
+        """Free quote balance on the Nautilus account, if the strategy is registered."""
+        if self._instrument is None:
+            return None
+        try:
+            account = self.portfolio.account(venue=self._instrument.id.venue)
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return None
+        if account is None:
+            return None
+        try:
+            free = account.balance_free(self._instrument.quote_currency)
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return None
+        if free is None:
+            return None
+        return float(free.as_double())
 
     def _submit_market(
         self,

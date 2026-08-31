@@ -698,6 +698,26 @@ class TestSdcaStrategyQuoteCashFloor:
         strategy._submit_market.assert_called_once()
         assert strategy._submit_market.call_args.args[0] == OrderSide.BUY
 
+    def test_on_bar_skips_buy_when_venue_cash_is_zero(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Nautilus USD cash is the venue truth; inflated shadow cash must not
+        size a buy that overdrafts and halts the engine.
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._cash = 100.0
+        strategy._venue_free_quote = lambda: 0.0  # type: ignore[method-assign]
+        strategy._submit_market = Mock()
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 1), 26_532.76)
+
+        strategy.on_bar(bar)
+
+        strategy._submit_market.assert_not_called()
+
     def test_submit_buy_skips_when_notional_exceeds_spendable(
         self,
         instrument: Instrument,
