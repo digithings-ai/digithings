@@ -61,8 +61,8 @@ digiquant/results/
 .local_digikey.sqlite
 /*.sqlite
 
-# Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
-frontend/olympus/public/dashboard-data.json
+# Dashboard static portfolio fallback — stop tracking after REM-037 (JAN-007)
+frontend/dashboard/public/dashboard-data.json
 
 # digithings-web OpenAPI explorer assets (copied at prebuild / predev from
 # docs/openapi/ + swagger-ui-dist — never commit the vendored copies).

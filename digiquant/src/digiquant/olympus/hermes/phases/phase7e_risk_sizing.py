@@ -734,6 +734,7 @@ def _build_sized_book(
             deps.client,
             state.run_date,
             config=BreakerConfig.from_preferences(state.config.preferences),
+            workspace_id=getattr(state.config, "workspace_id", None),
         )
         breaker_scale = breaker.scale
         breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""

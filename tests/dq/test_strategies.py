@@ -341,3 +341,87 @@ class TestSdcaRiskIndexNautilusChain:
 
         assert strategy._asset_units > 0, "cheap-rail buy must fill at least once"
         engine.dispose()
+
+
+@SKIP_NATIVE_CRASH
+@pytest.mark.unit
+class TestSdcaRiskIndexNautilusChain:
+    """Full #3168 chain: BtcPowerLawRiskModel → build_risk_index → parquet →
+    SdcaStrategy in a real BacktestEngine that submits at least one order.
+    """
+
+    def test_synthetic_fixture_submits_at_least_one_order(self, tmp_path) -> None:
+        pytest.importorskip("nautilus_trader")
+        import datetime as _dt
+        from datetime import date
+
+        import pandas as pd
+        from digiquant.strategies.sdca.btc_power_law import (
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+        from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
+        from nautilus_trader.backtest.engine import BacktestEngine
+        from nautilus_trader.model.currencies import USDT
+        from nautilus_trader.model.data import BarSpecification, BarType
+        from nautilus_trader.model.enums import AccountType, BarAggregation, OmsType, PriceType
+        from nautilus_trader.model.objects import Money
+        from nautilus_trader.persistence.wranglers import BarDataWrangler
+        from nautilus_trader.test_kit.providers import TestInstrumentProvider
+
+        n = 40
+        start = date(2020, 1, 1)
+        dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
+        model = BtcPowerLawRiskModel(load_coefficients())
+        rails = model.rails(dates)
+        # Price at the low rail → valuation-z = +3 → risk = 0 → max buy.
+        price = rails["low"].alias("price")
+        frame = build_risk_index(dates, price, model)
+        assert frame["risk"].drop_nulls().min() == pytest.approx(0.0)
+        risk_path = write_risk_index(frame, tmp_path / "risk.parquet")
+
+        instrument = TestInstrumentProvider.btcusdt_binance()
+        bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
+        initial_cash = 100_000.0
+        strategy = SdcaStrategy(
+            SdcaStrategyConfig(
+                instrument_id=instrument.id,
+                bar_type=bar_type,
+                initial_cash=initial_cash,
+                risk_path=str(risk_path),
+            )
+        )
+
+        engine = BacktestEngine()
+        engine.add_venue(
+            venue=instrument.id.venue,
+            oms_type=OmsType.NETTING,
+            account_type=AccountType.CASH,
+            base_currency=None,
+            starting_balances=[Money(initial_cash, USDT)],
+        )
+        engine.add_instrument(instrument)
+
+        prices = price.to_list()
+        ohlcv_df = pl.DataFrame(
+            {
+                "timestamp": [_dt.datetime.combine(d, _dt.time.min) for d in dates.to_list()],
+                "open": prices,
+                "high": prices,
+                "low": prices,
+                "close": prices,
+            }
+        )
+        pd_df = ohlcv_df.select(["open", "high", "low", "close"]).to_pandas()
+        pd_df.index = pd.to_datetime(ohlcv_df["timestamp"].to_pandas(), utc=True)
+        pd_df.index.name = "timestamp"
+        pd_df["volume"] = 1.0
+        wrangler = BarDataWrangler(bar_type=bar_type, instrument=instrument)
+        bars = wrangler.process(pd_df)
+        engine.add_data(bars)
+        engine.add_strategy(strategy)
+        engine.run()
+
+        assert strategy._asset_units > 0, "cheap-rail buy must fill at least once"
+        engine.dispose()

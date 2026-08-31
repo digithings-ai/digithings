@@ -25,11 +25,13 @@ Before making any change to `digiquant/`:
 
 - [ ] Read `ARCHITECTURE.md` section for the area you're touching (data, strategies, backtest, optimize, server)
 - [ ] Read `docs/NAUTILUS_NAVIGATION.md` if touching any strategy, backtest runner, or Nautilus wrapper
+- [ ] If touching Group A books (`positions`, `nav_history`, `position_events`, `portfolio_metrics`), overlay cron, or house GHA writers/readers — read [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md)
 - [ ] Run `pytest tests/ -m unit -k "digiquant" -v` — passes before and after
 - [ ] Run `ruff check digiquant/ && ruff format --check digiquant/` — zero errors
 - [ ] Confirm no `import pandas` outside the [pandas allowlist](#pandas-allowlist-rem-058059) below
 - [ ] Confirm no live-trading path touched (broker adapters, order submission) without human gate
 - [ ] Confirm `BacktestResult` Pydantic model is unchanged or versioned if modified
+- [ ] Confirm new Group A reads/writes pin `workspace_id` (house via `eq_house_workspace` / `house_workspace_id()`, overlay via explicit id) — never date-only scans
 
 ---
 
@@ -88,17 +90,22 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ---
 
-## Olympus (Atlas + Hermes)
+## Dashboard (research + portfolio)
 
-When touching `digiquant/src/digiquant/olympus/`:
+Public path is **`/dashboard/`** only (`frontend/dashboard`; ADR-0026). `/olympus/` is retired — no redirect alias.
+
+When touching `digiquant/src/digiquant/olympus/` **or** `frontend/dashboard/` Group A queries:
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § Atlas + Hermes and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
-2. Read component guides: [`src/digiquant/olympus/atlas/docs/AGENTS.md`](src/digiquant/olympus/atlas/docs/AGENTS.md),
+2. Read **house book scope**: [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md) —
+   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_data`
+   stamps `HOUSE_BOOK_READ_TABLES`.
+3. Read component guides: [`src/digiquant/olympus/atlas/docs/AGENTS.md`](src/digiquant/olympus/atlas/docs/AGENTS.md),
    [`src/digiquant/olympus/hermes/docs/AGENTS.md`](src/digiquant/olympus/hermes/docs/AGENTS.md).
-3. **One graph, one daily cadence** — do not add `OLYMPUS_HERMES_LITE`, `run_type` graph forks,
+4. **One graph, one daily cadence** — do not add `OLYMPUS_HERMES_LITE`, `run_type` graph forks,
    or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
-4. **Edit-mode extension pattern** (`digiquant.olympus.edit_mode`):
+5. **Edit-mode extension pattern** (`digiquant.olympus.edit_mode`):
    - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
      at node entry.
    - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
@@ -112,11 +119,12 @@ When touching `digiquant/src/digiquant/olympus/`:
      `attention_plan_graph.maybe_publish_attention_plan_shadow` (Atlas
      `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
      `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
-     a published document; never actuate (`enforce` absent).5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+     a published document; never actuate (`enforce` absent).
+6. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
-6. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
+7. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
 
 ---
 
@@ -139,7 +147,9 @@ the full module map.
   `SdcaStrategyConfig` construction is still valid for tests. Do not pass
   `trade_size` into configs that do not declare it (`config_declares_field`).
   `m2_liquidity` remains unregistered — same runtime-path pattern, not a
-  second special case.
+  second special case. Research parquets also come from
+  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
+  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble them.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
   mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the

@@ -6,6 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { CORS_HEADERS } from "./cors.ts";
 
 export type AdminClient = SupabaseClient;
 
@@ -53,14 +54,14 @@ export function jsonError(
 ): Response {
   return new Response(JSON.stringify({ code, message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
 }
 
 export function jsonOk(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
 }
 
@@ -94,6 +95,32 @@ export async function resolveCallerWorkspace(
   if (normalized.length === 0) return null;
   const owner = normalized.find((r) => r.role === "owner");
   return owner ?? normalized[0]!;
+}
+
+/**
+ * Observer bootstrap: if the caller has no membership, call
+ * `ensure_personal_workspace` (migration 107) then re-resolve.
+ * Covers users created before the auth.users trigger existed.
+ * Never invents membership client-side — RPC owns create + owner insert.
+ */
+export async function ensureCallerWorkspace(
+  admin: AdminClient,
+  userId: string,
+): Promise<{ workspace: WorkspaceRow; role: string } | null> {
+  const existing = await resolveCallerWorkspace(admin, userId);
+  if (existing) return existing;
+
+  const { error } = await admin.rpc("ensure_personal_workspace", {
+    p_user_id: userId,
+  });
+  if (error) {
+    console.error(
+      "ensure_personal_workspace failed",
+      error.code ?? "unknown",
+    );
+    return null;
+  }
+  return resolveCallerWorkspace(admin, userId);
 }
 
 export async function listWorkspaceMembers(

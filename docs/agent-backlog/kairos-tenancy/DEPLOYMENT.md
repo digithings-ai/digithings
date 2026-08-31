@@ -4,6 +4,7 @@
 > order when promoting the program to the live `core` Supabase project and
 > digiquant.io. Cross-links:
 > [EPIC](EPIC.md) ·
+> [HUMAN-UNBLOCK](HUMAN-UNBLOCK.md) (ordered secret → EF → Auth → Stripe → Alpaca → flag) ·
 > [issue pack README](README.md) ·
 > [implementation spec](../../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md)
 > (D1–D10 locked).
@@ -56,7 +57,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 
 | Item | Status |
 |------|--------|
-| `NEXT_PUBLIC_OLYMPUS_AUTH` | Keep **off** (unset/empty) on Cloudflare Pages — safe for pre-cutover promote |
+| `NEXT_PUBLIC_DASHBOARD_AUTH` | Narrow Auth Pages PR defaults **on** under `CF_PAGES=1` when unset (UI gate only; anon RLS remains). Set `=0` to force classic shell. Full tenancy still needs cutover `900` (human, §6) |
 | Cutover `900` | **Not applied**; stays under `migrations/cutover/` (not top-level) |
 | Branch | `cursor/promote-kairos-pages-3d52` = `origin/develop` tip (`f92a8810`, merge of #3181) |
 | Draft PR develop→main | **Not opened** — agent `gh` token can merge/ready existing PRs + push branches, but **cannot** `createPullRequest` / comment / label (`Resource not accessible by integration`). **Parent:** open draft PR `base=main` `head=cursor/promote-kairos-pages-3d52` (title/body recipe in `COMPLETION_AUDIT.md`). |
@@ -94,7 +95,7 @@ cutover (§6).
 Use only when the workflow cannot run (emergency) or for a staging clone.
 
 ```bash
-# Link CLI to core (project ref from frontend/olympus/lib/database.types.ts)
+# Link CLI to core (project ref from frontend/dashboard/lib/database.types.ts)
 supabase link --project-ref rwagjbkvxkdwqmouagad
 
 # Option A — Supabase CLI (applies pending files the CLI tracks; still prefer
@@ -125,15 +126,15 @@ ORDER BY version;
 
 ## 3. Edge Function deploys
 
-### Live status on `core` (2026-08-30, agent update)
+### Live status on `core` (2026-08-30, sbp unlock + settings v18)
 
 | Function | Status | Notes |
 |----------|--------|-------|
-| `prices-live` | ACTIVE | Pre-existing |
-| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
+| `prices-live` | ACTIVE v8 | Pre-existing |
+| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Awaits `STRIPE_WEBHOOK_SECRET` — unauth POST → `STRIPE_NOT_CONFIGURED` |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v13** (thin GitHub-raw → `17a84b30…` / #3187 develop tip) | GET `/profile` + GET `/notifications` hydrate + PATCH upsert live (#3161+#3177+#3184+#3187). Smoke: missing/invalid JWT → gateway `401` (`settings-v13-smoke.log`). Full monorepo 9-file bundle staged; prefer once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Supabase MCP has no secrets tool; Management API 403 without `sbp_`). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v18** | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v18-smoke.log`). EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Mailgun still absent). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -207,25 +208,25 @@ Cloudflare Pages env for the digiquant.io project:
 |-----|-------|
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://rwagjbkvxkdwqmouagad.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (anon publishable key) |
-| `NEXT_PUBLIC_OLYMPUS_AUTH` | unset / empty |
+| `NEXT_PUBLIC_DASHBOARD_AUTH` | unset / empty |
 
-Behavior: classic anon client; Cloudflare Access may still gate `/olympus/*`.
+Behavior: classic anon client; Cloudflare Access may still gate `/dashboard/*`.
 
 ### Flag on (cutover)
 
 | Var | Value |
 |-----|-------|
-| `NEXT_PUBLIC_OLYMPUS_AUTH` | `1` |
+| `NEXT_PUBLIC_DASHBOARD_AUTH` | `1` |
 | (same URL + anon key) | |
 
 Then **Retry deployment** / push to `main` so `scripts/build-digiquant.sh`
-rebuilds `frontend/olympus` with the flag inlined (static export).
+rebuilds `frontend/dashboard` with the flag inlined (static export).
 
 Local verify:
 
 ```bash
-cd frontend/olympus
-NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
+cd frontend/dashboard
+NEXT_PUBLIC_DASHBOARD_AUTH=1 npm run build
 # out/ must still be static-export clean
 ```
 
@@ -233,25 +234,34 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 
 ## 5. Prerequisites — agent progress vs still blocked (names only)
 
+> **Human action order:** follow [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) (Cursor env
+> secrets → EF secrets → redeploy → Auth providers → Stripe webhook → paper Alpaca →
+> flag cutover). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183)
+> until secrets are live and cutover is intentional.
+>
 > Secret **values** live in VM `.env` / `.local/secrets/` (gitignored) and must be
 > copied into Supabase EF secrets + Cursor environment secret store. Never commit values.
 
 | Prerequisite | Status (2026-08-30) | Blocks |
 |--------------|---------------------|--------|
-| Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** (agent-generated). **Not yet** on Supabase EF secrets (needs `sbp_` PAT or dashboard). | K3 seal; settings brokers; T4 BYOK at runtime |
-| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET in VM** → `http://127.0.0.1:3001` (local Olympus staging until preview/prod URL chosen). **Not yet** on EF secrets. | OAuth redirect pin; checkout return URLs |
+| Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** and **pushed to `core` EF secrets** (2026-08-30 via `sbp_` + `supabase secrets set`). | K3 seal; settings brokers; T4 BYOK at runtime |
+| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET on `core` to `https://digiquant.io`** (2026-08-31). Observer `GET /settings/app-urls` returns Alpaca `…/olympus/settings/brokers/callback/` + billing `…/olympus/settings/?tab=billing` (no loopback; public client id empty until Alpaca secrets land). settings **v32**, checkout **v8**, portal **v9**. | OAuth redirect pin; checkout return URLs |
 | Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
-| Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — Cursor/VM env **declares** the names but values are **empty** (re-checked 2026-08-30 follow-up); MCP `GET /v4/domains` → auth failed. Fail-soft notify path OK (`MailgunConfig.from_env()` → `None`). **Not** in `.local/secrets/kairos.env` (nothing nonempty to persist). **Not yet** on Supabase EF secrets (needs real key + `sbp_`). No live send attempted. | K5 digest / alerts |
-| Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
-| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; Agent Mail inbox has no Alpaca verification thread; KYC/browser wall | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked post-#3181; `eyJ…`, len 1486; **no** `sbp_` prefix; no new vendor keys). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
+| Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
+| Supabase Auth providers (Google, GitHub) on `core` | **Partial** — **GitHub Enabled** (OAuth App still named `digiquant olympus` in the vendor console + callback). Site URL `https://digiquant.io` + `/dashboard/auth/callback/` allow-list. **Google Disabled** (skipped captcha console). | T1 login when flag on (GitHub path ready; Google still human) |
+| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; no API secrets to push. | Product broker connect |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Unlocked (agent VM)** — PAT on disk as `.local/secrets/digithings-supabase-pat` (label **digithings**; old “cursor cloud agent” naming retired). Management API `secrets list` OK. EF vault/`APP_URL` intact. **Human:** re-paste `sbp_…` into Cursor env labeled **digithings**. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md). | EF secrets; CLI deploy |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
 | PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) … [#3181](https://github.com/digithings-ai/digithings/pull/3181) | **Merged** to `develop` (2026-08-30; tip `f92a8810`) | notifications + schema/docs + audits; settings EF was **v11** |
 | PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
+| PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
+| Agent unlock (2026-08-30) | **Partial** — `sbp_` + vault/APP_URL + settings **v22** + checkout **v5** + GitHub Auth + Agentmail + bootstrap (mig 107) + loud-fail `scripts/kairos_staging_e2e.py`; JWT settings **200**; uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) merged | Waiting `PARTIAL_UNLOCK`. Checkout `PRICE_NOT_CONFIGURED`. Vendors still empty. #3183 left draft. |
+| Live-retry (2026-08-30) | **Partial** — re-scan 0 vendor EF secrets; free→`TIER_FORBIDDEN`→ops custom; vault seal; notify prefs→Agentmail; `MAILGUN_NOT_CONFIGURED` CLI; overlay/router 45 unit; local Olympus Auth+GitHub OAuth UI | Staging E2E still blocked. Branch `cursor/kairos-live-retry-3d52`. Audit `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`. |
+| PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 
 ## 6. Cutover checklist
@@ -263,11 +273,11 @@ ledger, §3 functions are live, and §5 rows needed for launch are green.
 apply staged SQL → verification (anon + free JWT) → frontend research-view
 cutover PR merged/deployed → **then** remove Access.
 
-- [ ] **Keep Cloudflare Access ON** for production `/olympus/*` (staging overlay
+- [ ] **Keep Cloudflare Access ON** for production `/dashboard/*` (staging overlay
       retained throughout).
-- [ ] **Flag flip:** set `NEXT_PUBLIC_OLYMPUS_AUTH=1` on Cloudflare Pages; rebuild
+- [ ] **Flag flip:** set `NEXT_PUBLIC_DASHBOARD_AUTH=1` on Cloudflare Pages; rebuild
       digiquant.io (`scripts/build-digiquant.sh`).
-- [ ] **Smoke login:** Google + GitHub PKCE → `/olympus/auth/callback/` → session
+- [ ] **Smoke login:** Google + GitHub PKCE → `/dashboard/auth/callback/` → session
       (Access still in front).
 - [ ] **Anon-drop + weight/NAV close (manual):**
       1. Confirm preconditions in
@@ -290,14 +300,14 @@ cutover PR merged/deployed → **then** remove Access.
 - [ ] **Frontend research-view cutover** (named task below) merged and Pages
       redeployed — Observer/anon paths no longer `.from('daily_snapshots')` for
       payload.
-- [ ] **Cloudflare Access removal (LAST):** remove production `/olympus/*`
+- [ ] **Cloudflare Access removal (LAST):** remove production `/dashboard/*`
       application; keep staging overlay (D7).
 
 ### Named follow-up — frontend (T1-train; do **not** land on this branch)
 
 Cutover SQL revokes base `daily_snapshots` SELECT from anon/authenticated and
 exposes research via `public_daily_research`. Inventory of reads that break
-until the dashboard switches (file: `frontend/olympus/lib/`):
+until the dashboard switches (file: `frontend/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
@@ -339,19 +349,31 @@ Document the chosen approach on the epic before re-exposing the views.
 
 Per [EPIC.md](EPIC.md) program-level acceptance (staging / Stripe test mode):
 
+Agent-runnable loud-fail gate (names missing secrets; **never** paper-fakes):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+# or: pytest -m staging_e2e tests/dq/olympus/kairos/test_staging_e2e.py
+```
+
+Full manual chain once secrets land on Cursor env **and** core EF:
+
 ```bash
 # Skeleton — fill URLs/keys from staging; do not commit secrets.
 set -euo pipefail
-BASE_URL="${BASE_URL:-https://staging.example/olympus}"
-# 1) Signup / login (Supabase Auth Google or GitHub) — manual browser or supabase-js
+SUPABASE_FUNCTIONS="${SUPABASE_FUNCTIONS:-https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1}"
+# 1) Signup / login (Supabase Auth GitHub or Email/Agentmail) — manual browser or supabase-js
 # 2) Subscribe (Stripe test Checkout → Baseline or Custom)
 curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -H "Authorization: Bearer $USER_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"price_env":"STRIPE_PRICE_BASELINE_MONTHLY"}'
+  -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
-# 3) Connect Alpaca paper (Settings → brokers; OAuth or API key)
-# 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
+# 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
+# 4) Overlay run (T4): `OLYMPUS_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`
+#    Persist is safe after migration **110** (not 900). `--execute` refuses without the flag
+#    (`OVERLAY_EXECUTE_NOT_CONFIGURED: OLYMPUS_OVERLAY_PERSIST`) so the hop cannot be
+#    `persist_disabled`. Requires BYOK present_and_unsealable. Never `--execute --all`.
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run
@@ -373,9 +395,9 @@ PATH="$PWD/.venv/bin:$PATH" pytest -m unit tests/dq/olympus/ -q
 |-------|--------------|----------|
 | Migrations 096–105 on `main` | Apply error mid-chain | Fix forward (new migration). Do **not** delete ledger rows. Self-wrapping / IF NOT EXISTS files are replay-safe; cancel-in-progress only loses a ledger INSERT (next run retries). |
 | Edge Functions | Bad deploy / secret miss | `supabase functions deploy <name>` prior known-good SHA; unset bad secrets carefully. Stripe webhook: disable endpoint in Dashboard if signatures fail. |
-| Olympus flag on | Login broken / empty chrome | Set `NEXT_PUBLIC_OLYMPUS_AUTH=` empty; rebuild Pages → anon path restored **only if** anon policies still exist. |
+| Auth flag on | Login broken / empty chrome | Set `NEXT_PUBLIC_DASHBOARD_AUTH=` empty; rebuild Pages → anon path restored **only if** anon policies still exist. |
 | Anon-drop applied | Dashboard blank for Observer / research broken | Keep Access on; roll forward with `public_daily_research` frontend switch. Do not rewrite history. Emergency: forward migration re-creating old anon policies only while Access still gates the URL. |
-| Cloudflare Access removed too early | Public URL + anon/free JWT still reads weights/NAV | Re-enable Access on `/olympus/*` immediately; finish verification before removing again. |
+| Cloudflare Access removed too early | Public URL + anon/free JWT still reads weights/NAV | Re-enable Access on `/dashboard/*` immediately; finish verification before removing again. |
 | Stripe / vault | Wrong keys | Rotate Stripe webhook secret; generate new vault key only with a re-seal plan (K3 rotation out of scope — avoid rotating after seal without a job). |
 
 **Ordering tip:** Access on → flag flip → login smoke → apply cutover SQL →
@@ -388,5 +410,5 @@ verify anon **and** free JWT see zero weights/NAV → ship frontend
 
 - Staged SQL:
   [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
-- T1 cutover notes: [`frontend/olympus/AUTH.md`](../../../frontend/olympus/AUTH.md)
+- T1 cutover notes: [`frontend/dashboard/AUTH.md`](../../../frontend/dashboard/AUTH.md)
 - db-migrate mechanics: [`digiquant/supabase/README.md`](../../../digiquant/supabase/README.md)

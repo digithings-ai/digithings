@@ -9,6 +9,7 @@ import {
   mapStripeStatus,
   planTierForSubscriptionStatus,
   planTierFromPriceId,
+  priceEnvKey,
 } from "./tiers.ts";
 
 Deno.test("loadPriceTierEnv reads Deno.env keys", () => {
@@ -59,4 +60,11 @@ Deno.test("planTierForSubscriptionStatus gates paid tiers", () => {
   assertEquals(planTierForSubscriptionStatus("canceled", "bm", prices), "free");
   assertEquals(planTierForSubscriptionStatus("active", "bm", prices), "baseline");
   assertEquals(planTierForSubscriptionStatus("past_due", "cm", prices), "custom");
+});
+
+Deno.test("priceEnvKey names Stripe price secrets for Checkout errors", () => {
+  assertEquals(priceEnvKey("baseline", "monthly"), "STRIPE_PRICE_BASELINE_MONTHLY");
+  assertEquals(priceEnvKey("baseline", "annual"), "STRIPE_PRICE_BASELINE_ANNUAL");
+  assertEquals(priceEnvKey("custom", "monthly"), "STRIPE_PRICE_CUSTOM_MONTHLY");
+  assertEquals(priceEnvKey("custom", "annual"), "STRIPE_PRICE_CUSTOM_ANNUAL");
 });

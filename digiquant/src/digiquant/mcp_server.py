@@ -199,6 +199,9 @@ def create_mcp_server() -> Any:
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
         ``macro_series_observations``, ``trading_calendar``. Operator-internal
         telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        Group A books (``positions``, ``nav_history``, ``position_events``,
+        ``portfolio_metrics``) default to the house ``workspace_id`` when
+        ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
         ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
         """
         from digiquant.olympus.atlas.data.queries import query_data

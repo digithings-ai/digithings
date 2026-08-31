@@ -7,7 +7,7 @@ import { TagsInput } from "@digithings/web";
 /**
  * Tags / chips input — the multi-select filter. Type and Enter (or comma) to
  * add a chip, × or Backspace-on-empty to remove, click a suggestion to add it.
- * Chips wear a hairline pill; the field lights the accent on focus. Keyboard-
+ * Chips wear a hairline rectangle; the field lights the accent on focus. Keyboard-
  * complete and dedup-guarded. Accent reads under the monochrome default.
  * Consumes the shared <TagsInput/> primitive from @digithings/web (the
  * suggestions row included — already-added values are filtered out).

@@ -57,6 +57,29 @@ def test_write_note_overwrite(tmp_path: Path) -> None:
     assert vault.get_note("a") is not None
 
 
+def test_bulk_writes_update_backlinks_without_rescanning_vault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bulk writes must not turn one initial index scan into one scan per note."""
+    vault = Vault(tmp_path)
+    reindex_calls = 0
+    original_reindex = vault.reindex
+
+    def count_reindex() -> None:
+        nonlocal reindex_calls
+        reindex_calls += 1
+        original_reindex()
+
+    monkeypatch.setattr(vault, "reindex", count_reindex)
+    for index in range(40):
+        target = f"note-{index - 1}" if index else "note-39"
+        vault.write_note(f"note-{index}", body=f"links to [[{target}]]\n")
+
+    assert reindex_calls == 0
+    assert vault.backlinks("note-0") == ("note-1",)
+    assert vault.backlinks("note-39") == ("note-0",)
+
+
 def test_create_rejects_path_escape(tmp_path: Path) -> None:
     vault = _vault_with_notes(tmp_path)
     with pytest.raises(VaultError):

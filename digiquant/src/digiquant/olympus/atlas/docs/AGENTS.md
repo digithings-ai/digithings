@@ -75,4 +75,4 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 - Platform setup: `docs/agentic/PLATFORMS.md`
 - Skills catalog: `docs/agentic/SKILLS-CATALOG.md`
 - Workflows: `docs/agentic/WORKFLOWS.md`
-- Development conventions: `CLAUDE.md`
+- Development conventions: root `AGENTS.md` (`CLAUDE.md` is a pointer)

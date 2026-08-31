@@ -15,6 +15,7 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint: heterogeneous fixture / kwargs dicts
 )
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
@@ -113,6 +114,39 @@ class TestPreflightOnchain:
         rows = deps.client.store.get("onchain_cohort_positioning", [])
         assert any(r["market"] == "ETH" for r in rows)
         assert all(r["_on_conflict"] == "date,market" for r in rows)
+
+    def test_overlay_injects_market_context_without_persisting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import digiquant.olympus.atlas.phases.preflight as pf_mod
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
+
+        overlay = uuid4()
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": [{"date": "2026-04-26", "ticker": "SPY"}],
+                "macro_series_observations": [],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+        )
+        node = build_preflight_node(deps)
+        state = AtlasResearchState(
+            run_type="baseline",
+            run_date=date(2026, 4, 26),
+            config=AtlasConfigBundle(workspace_id=str(overlay)),
+        )
+        with patch.object(pf_mod, "get_onchain_cohort_positioning", lambda: _canned_positioning()):
+            out = node(state)
+
+        mc = out["data_layer"].market_context
+        assert "onchain_positioning" in mc
+        assert client.store.get("onchain_cohort_positioning", []) == []
 
     def test_absent_when_provider_returns_empty(self) -> None:
         import digiquant.olympus.atlas.phases.preflight as pf_mod

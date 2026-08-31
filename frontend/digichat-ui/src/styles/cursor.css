@@ -23,7 +23,7 @@
   color: var(--ink-soft);
   background: var(--accent-weak, color-mix(in srgb, var(--accent) 13%, transparent));
   border: 1px solid var(--hair);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.18rem 0.55rem;
   cursor: pointer;
   transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);

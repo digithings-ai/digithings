@@ -73,7 +73,7 @@ export function ChatThinking({
     <div className={`flex flex-col items-start gap-[0.55rem]${className ? ` ${className}` : ""}`}>
       <button
         type="button"
-        className={`think-chip inline-flex cursor-pointer items-center gap-[0.5rem] rounded-full border border-hair px-[0.7rem] py-[0.35rem] font-mono text-[0.7rem] text-ink-mute${
+        className={`think-chip inline-flex cursor-pointer items-center gap-[0.5rem] rounded-none border border-hair px-[0.7rem] py-[0.35rem] font-mono text-[0.7rem] text-ink-mute${
           isOpen ? " open" : ""
         }`}
         aria-expanded={isOpen}

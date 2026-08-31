@@ -55,7 +55,7 @@ describe("Button", () => {
 });
 
 describe("Badge", () => {
-  it("defaults to the reference tier-pill dress", () => {
+  it("defaults to the reference tier-badge dress", () => {
     const html = renderToStaticMarkup(<Badge>core</Badge>);
     expect(html).toContain("ctl-badge-ref");
     expect(html).toContain('data-slot="badge"');

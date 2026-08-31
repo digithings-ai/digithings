@@ -49,7 +49,7 @@ export function SkeletonReference() {
 
       <SkeletonGroup busy={loading} className="mt-[1.1rem] flex flex-col gap-[1rem]">
         {/* profile / strategy card */}
-        <article className="flex items-center gap-[0.9rem] rounded-[12px] border border-hair bg-surface px-[1.1rem] py-[1rem]">
+        <article className="flex items-center gap-[0.9rem] rounded-none border border-hair bg-surface px-[1.1rem] py-[1rem]">
           {loading ? (
             <>
               <Skeleton variant="circle" />
@@ -82,7 +82,7 @@ export function SkeletonReference() {
         <div className="grid grid-cols-3 gap-[0.7rem] max-[560px]:grid-cols-1">
           {METRICS.map((m, i) => (
             <div
-              className="flex min-h-[4.4rem] flex-col gap-[0.5rem] rounded-[10px] border border-hair bg-surface px-[1rem] py-[0.9rem]"
+              className="flex min-h-[4.4rem] flex-col gap-[0.5rem] rounded-none border border-hair bg-surface px-[1rem] py-[0.9rem]"
               key={m.k}
             >
               {loading ? (

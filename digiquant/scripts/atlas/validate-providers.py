@@ -364,27 +364,35 @@ def check_openrouter_function_tools() -> bool:
 
 
 def check_openrouter_web_search() -> bool:
-    """Validate the OpenRouter ``openrouter:web_search`` server-tool path (Olympus grounding).
+    """Validate Olympus native web grounding (built-in search on ``get_grounding_model``).
 
-    A plain chat ping succeeds even when server tools 404 — that's the alt-/inst-/macro
-    ungrounded failure mode. This exercises the same digillm path as ``fetch_web_grounding``."""
-    print(_bold("\n4. OpenRouter web search (grounding pre-pass)"))
+    Production pools are perplexity/``:online`` only (#2567) — this exercises the
+    digillm **native** branch used by ``fetch_web_grounding``, not the Exa
+    ``openrouter:web_search`` toolkit fallback.
+    """
+    print(_bold("\n4. OpenRouter web search (Olympus native grounding)"))
     if not os.environ.get("OPENROUTER_API_KEY", "").strip():
         return check("Web search ping", False, "OPENROUTER_API_KEY not set")
     try:
         _ensure_importable()
-        from digigraph.model_config import get_grounding_model
+        from digigraph.model_config import get_grounding_model, is_web_search_capable_model
         from digillm import openrouter_web_search
 
         model = get_grounding_model() or "openrouter/perplexity/sonar"
+        if not is_web_search_capable_model(model):
+            return check(
+                f"Web search ({model})",
+                False,
+                "grounding model is not web-search-capable (Olympus requires native search)",
+            )
         t0 = time.monotonic()
-        result = openrouter_web_search(model, "latest US CPI headline release", max_results=3)
+        result = openrouter_web_search(model, "latest US CPI headline release")
         elapsed = time.monotonic() - t0
         ok = result is not None and bool(result[0].strip())
         detail = (
             f"{elapsed:.1f}s — model={model}, sources={len(result[1]) if result else 0}"
             if ok
-            else "no grounding text returned (check server-tool routing / grounding_model)"
+            else "no grounding text returned (check native search / grounding_model)"
         )
         return check(f"Web search ({model})", ok, detail)
     except Exception as exc:

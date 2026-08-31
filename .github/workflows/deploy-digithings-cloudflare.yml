@@ -131,7 +131,7 @@ on:
       # of them fails this build even though nothing here imports that workspace. Four of
       # the eight sit outside this site's closure; three are reached by a lane that
       # installs at the root — frontend/digichat by ci.yml's `digichat`,
-      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. Two of
+      # frontend/digiquant-web by its `web`, frontend/dashboard by its `dashboard`. Two of
       # those lanes run `npm ci`, which catches a bad range by a different route than the
       # distinction drawn above: not by resolving it, but by refusing to run at all when
       # manifest and lock disagree. Cover either way. The fourth,
