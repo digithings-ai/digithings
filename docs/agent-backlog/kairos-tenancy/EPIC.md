@@ -155,7 +155,7 @@ pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exi
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
-**Landed 2026-08-31T09:48Z (not epic-complete):** account Settings IA [#3264](https://github.com/digithings-ai/digithings/pull/3264) + remaining-hop harness [#3269](https://github.com/digithings-ai/digithings/pull/3269) on `develop`; Pages account UI [#3266](https://github.com/digithings-ai/digithings/pull/3266) on `main` (live HTML at 09:49Z still showed the pre-IA tab set; wait for Cloudflare Pages). Remaining hops stay on `develop` until a later promote.
+**Landed 2026-08-31T10:45Z (not epic-complete):** account Settings IA [#3264](https://github.com/digithings-ai/digithings/pull/3264) + remaining-hop harness [#3269](https://github.com/digithings-ai/digithings/pull/3269) on `develop`. Pages was frozen on `f1a196e5` after #3266's Cloudflare build failed (Observer SSG missing Pipeline/Keys greps). [#3275](https://github.com/digithings-ai/digithings/pull/3275) gated those greps; live `digiquant.io/build-info.json` is `119b7838` / `2026-08-31T10:45:27Z`. Settings export is Observer IA (“The desk, not the product.”; Notifications | Billing | About). Remaining hops are in the live client chunk. Staging E2E still blocked on vendor secrets.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
