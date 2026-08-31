@@ -3244,6 +3244,10 @@ copy overlay ``DIGEST.md`` into house ``daily_snapshots.digest_markdown``),
 `fold_document_deltas` house delta/base payloads (overlay deltas must not
 publish into the house book), `validate_pipeline_step.fetch_document_rows`,
 `backfill_pm_rebalance_and_activity` document payload lookups,
+`pipeline_review_to_github` / `pipeline_meta_review` house pipeline-review
+docs (overlay reviews must not file GitHub issues),
+`format_deliberation_transcripts_chat` house transcripts (overlay rows must
+not be rewritten by id),
 `audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
