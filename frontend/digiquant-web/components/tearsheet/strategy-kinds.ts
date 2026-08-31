@@ -20,7 +20,7 @@ export const KIND_LABELS: Record<StrategyKind, string> = {
   short_only: SHORT_ONLY_KIND,
   relative_strength: "Relative strength",
   rotation: "Rotation",
-  dca: "DCA",
+  dca: "Remaining-book DCA",
 };
 
 export function kindLabel(kind: string | undefined): string {
@@ -30,6 +30,7 @@ export function kindLabel(kind: string | undefined): string {
 
 export function inferKind(strategyId: string, explicit?: string): StrategyKind {
   if (explicit && explicit in KIND_LABELS) return explicit as StrategyKind;
+  if (strategyId.includes("sdca") || /(?:^|_)dca(?:_|$)/.test(strategyId)) return "dca";
   if (strategyId.includes("slapper")) return "long_short";
   return "long_short";
 }

@@ -48,15 +48,15 @@
     }
   },
   "btc_optimized": {
-    "description": "Walk-forward search winner (#3174). Checked-in shape matches accumulate_and_distribute until an operator re-runs run_sdca_walk_forward with the Nautilus evaluator on real BTC history. Not a published digiquant.io number. Provenance: btc_optimized_provenance.json. Do not --push-supabase.",
+    "description": "Concentrated remaining-book curve (high max daily % of remaining cash/coins at the extremes). Shape was searched on a frozen 3-member index (power law + M2 + DXY) then applied to the published richer composite (those plus weekly log-MACD + RSI). Objective is total return with fill-concentration gates. beats_flat_dca_oos stays false. Re-run: digiquant sdca-optimize-curve. Do not --push-supabase from the agent environment.",
     "long_only": false,
     "shape": {
-      "buy_max_rate": 10.0,
-      "buy_knee_risk": 35.0,
-      "sell_knee_risk": 80.0,
-      "sell_max_rate": 10.0,
-      "buy_curvature": 1.0,
-      "sell_curvature": 2.0
+      "buy_max_rate": 35.5,
+      "buy_knee_risk": 24.1,
+      "sell_knee_risk": 71.9,
+      "sell_max_rate": 21.0,
+      "buy_curvature": 1.3,
+      "sell_curvature": 4.0
     }
   }
 }

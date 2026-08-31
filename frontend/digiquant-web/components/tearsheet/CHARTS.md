@@ -45,15 +45,38 @@ Screen-only reuse: the homepage preview deck
 `CandlestickChart` (compact) — one engine backs every price surface in this
 app. Do not fork the engine per surface.
 
-## Schema 1.3 — DCA block (#3171, renderer #3172)
+## Schema 1.3 — DCA kind (#3172)
 
 `TearsheetData.dca` is an optional `TearsheetDcaBreakdown`. Slapper payloads
-omit it and must render unchanged. When `dca` is present (`kind == "dca"`):
+omit it and render unchanged. Drive off **null KPIs** (`win_rate_pct` /
+`profit_factor` / `long` / `short`), not a slug allowlist.
 
-- Headline trade KPIs (`win_rate_pct`, `profit_factor`, `long`, `short`) are
-  JSON `null` — hide those tiles; do **not** show a 0% win rate.
-- Library card: prefer `vs_lump_pct` and `capital_deployed_pct` over win rate
-  / trade count (index extras mirror these).
-- Charts to add in #3172: valuation rails, risk-band strip, accumulation
-  view, three-way equity (SDCA / lump / flat DCA). `dca.vs_flat_dca_pct` is
-  the signal-vs-blind-DCA number. All `dca.*_pct` fields are ×100 percents.
+| Surface | Renders | Source |
+|---|---|---|
+| Valuation rails (log spot + low/median/high) | `MultiTimeSeries` | family (#3172) |
+| Risk-band strip (0–100, labelled bands) | `RiskBandStrip` | family (#3172) |
+| Allocation (MTM allocated %; fill markers) | `AllocationStepChart` + cost-basis overlay | family |
+| Equity overlay (SDCA vs buy & hold) | `MultiTimeSeries` on the Equity tab | family |
+
+Rails / risk / cost-basis / lump / flat series are optional diagnostic
+fields (`rails`, `risk_curve`, `cost_basis_curve`, `lump_equity_curve`,
+`flat_dca_equity_curve`). Tabs degrade away when a series is absent —
+the publish path copies #3168 diagnostic columns so these charts do not
+degrade on a shipped `btc_sdca` payload.
+
+Library cards for `kind === "dca"` (or when `vs_lump_pct` is present)
+headline **vs buy & hold**, **total return**, **max drawdown**, and
+**allocated %**. vs-flat DCA is not a public comparable.
+Do not present curve-sign `buy_days`/`sell_days` as fill counts.
+
+Latest signal for a DCA book is **buy / sell / hold** plus the remaining-book
+rate (percent of remaining cash or remaining BTC), as of `period_end` (3-day
+delay). Allocated is MTM, never a negative "Deployed". The primary chart is
+**Fills** (`AllocationStepChart` with sized buy/sell markers). The risk tab is
+the **composite valuation index** (power law + M2 + DXY + weekly log-MACD + RSI).
+
+Public title is **BTC SDCA Strat**. Honesty (`beats_flat_dca_oos` false,
+backtest only) lives in notes, not title chips.
+
+Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
+All `dca.*_pct` fields are ×100 percents.

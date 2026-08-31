@@ -12,8 +12,10 @@ renderer (``frontend/digiquant/strategies/<strategy>.json``).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,7 +28,32 @@ from pydantic import BaseModel, Field
 # 1.3 — optional ``dca: TearsheetDcaBreakdown`` (#3171). Absent on every existing
 # payload, so 1.0–1.2 fixtures still validate. For ``kind == "dca"`` books,
 # ``win_rate_pct`` / ``profit_factor`` / ``long`` / ``short`` are JSON ``null``.
+# Optional diagnostic series (``rails``, ``risk_curve``, …) and ``current_signal``
+# are omitted from slapper dumps via ``to_json()`` so those payloads stay unchanged.
+# Public-honesty extras (``beats_flat_dca_oos``) are optional on the same path —
+# absent means "do not claim an OOS win", never a silent true.
 SCHEMA_VERSION = "1.3"
+
+# Extra keys set only on DCA publish. ``to_json`` drops them when unset so a
+# Slapper dump does not grow ``null`` fields (#3170 slapper identity).
+_OPTIONAL_PUBLISH_KEYS = (
+    "current_signal",
+    "rails",
+    "risk_curve",
+    "cost_basis_curve",
+    "capital_deployed_curve",
+    "lump_equity_curve",
+    "flat_dca_equity_curve",
+    "allocated_pct_curve",
+    "fill_markers",
+    "indicator_curves",
+    "indicator_weights",
+    "curve_knees",
+    "label",
+    "kind",
+    "avg_trade_pct",
+    "beats_flat_dca_oos",
+)
 
 
 class SeriesPoint(BaseModel):
@@ -48,6 +75,70 @@ class OHLCBar(BaseModel):
     h: float = Field(..., description="High")
     l: float = Field(..., description="Low")  # noqa: E741 — OHLC convention, compact chart key
     c: float = Field(..., description="Close")
+
+
+class TearsheetRailPoint(BaseModel):
+    """One day's valuation rails (low / median / high) from the #3168 diagnostics."""
+
+    t: str = Field(..., description="ISO date")
+    low: float
+    median: float
+    high: float
+
+
+class TearsheetFillMarker(BaseModel):
+    """One day's aggregated buy or sell from actual Nautilus fills.
+
+    ``book_frac`` is ``|trade_usd| / portfolio`` that day — the fraction of
+    the book moved — not the curve remaining-book rate.
+    """
+
+    t: str
+    side: Literal["buy", "sell"]
+    book_frac: float = Field(..., ge=0.0)
+    price: float
+    trade_usd: float
+
+
+class TearsheetIndicatorCurve(BaseModel):
+    """One composite-member series on the 0–100 risk scale.
+
+    ``display_name`` is the user-facing label (``valuation`` → ``power law``).
+    ``in_index`` is true iff ``weight > 0``.
+    """
+
+    name: str
+    display_name: str
+    weight: float = Field(..., ge=0.0)
+    in_index: bool
+    points: list[SeriesPoint] = Field(default_factory=list)
+
+
+class TearsheetCurveKnees(BaseModel):
+    """Buy-start / sell-start risk thresholds from the published curve shape."""
+
+    buy_knee_risk: float
+    sell_knee_risk: float
+    preset: str = ""
+
+
+class CurrentSignal(BaseModel):
+    """Open-leg snapshot at period end.
+
+    For slapper books ``position`` is the story (long / short / flat). For
+    ``kind == "dca"`` the story is ``risk`` / ``band`` / ``daily_rate_pct``
+    (percent of remaining cash on buys, remaining holdings on sells).
+    ``position`` stays long/flat on DCA only because ``strategy_signals.position``
+    is CHECK-constrained to ``long``/``flat``/``short``.
+    """
+
+    position: str = Field(..., description="long | short | flat")
+    entry_label: str = ""
+    last_signal_date: str = ""
+    last_price: float | None = None
+    risk: float | None = None
+    band: str | None = None
+    daily_rate_pct: float | None = None
 
 
 class StatBlock(BaseModel):
@@ -116,17 +207,42 @@ class TearsheetDcaBreakdown(BaseModel):
         description="avg_cost_basis / final close × 100 (percent of last price)",
     )
     capital_deployed_pct: float = Field(
-        ..., description="Final net deployed / initial capital × 100"
+        ...,
+        description=(
+            "Final net deployed / initial capital × 100. Goes negative after sells — "
+            "do not render as 'Deployed'. Public UI uses allocated_pct."
+        ),
     )
     capital_deployed_peak_pct: float = Field(
         ..., description="Peak net deployed / initial capital × 100"
     )
     units_accumulated: float = Field(..., description="Ending position size")
-    buy_days: int = 0
-    sell_days: int = 0
+    buy_days: int = Field(
+        0,
+        description="Days with curve rate > 0 (sign of the daily rate, not fill count)",
+    )
+    sell_days: int = Field(
+        0,
+        description="Days with curve rate < 0 (sign of the daily rate, not fill count)",
+    )
     no_trade_days: int = 0
     avg_risk: float | None = None
     avg_rate: float | None = None
+    allocated_pct: float | None = Field(
+        None,
+        description=(
+            "Final mark-to-market allocated % = 100 * units * price / "
+            "(cash + units * price). Always in [0, 100] when the book is long-only."
+        ),
+    )
+    fill_buy_days: int | None = Field(
+        None,
+        description="Days with a non-zero buy fill (daily_trade_usd > 0), not curve-sign",
+    )
+    fill_sell_days: int | None = Field(
+        None,
+        description="Days with a non-zero sell fill (daily_trade_usd < 0), not curve-sign",
+    )
 
 
 class TearsheetData(BaseModel):
@@ -180,9 +296,41 @@ class TearsheetData(BaseModel):
 
     notes: list[str] = Field(default_factory=list)
 
+    # ── DCA diagnostics + current signal (omitted on slapper dumps) ───────
+    current_signal: CurrentSignal | None = None
+    rails: list[TearsheetRailPoint] | None = None
+    risk_curve: list[SeriesPoint] | None = None
+    cost_basis_curve: list[SeriesPoint] | None = None
+    capital_deployed_curve: list[SeriesPoint] | None = None
+    lump_equity_curve: list[SeriesPoint] | None = None
+    flat_dca_equity_curve: list[SeriesPoint] | None = None
+    allocated_pct_curve: list[SeriesPoint] | None = None
+    fill_markers: list[TearsheetFillMarker] | None = None
+    indicator_curves: list[TearsheetIndicatorCurve] | None = None
+    indicator_weights: dict[str, float] | None = None
+    curve_knees: TearsheetCurveKnees | None = None
+    label: str | None = None
+    kind: str | None = None
+    avg_trade_pct: float | None = None
+    beats_flat_dca_oos: bool | None = Field(
+        None,
+        description=(
+            "Walk-forward OOS vs flat DCA. False / omitted = do not claim an OOS win. "
+            "Full-sample Nautilus vs_flat_dca_pct is not this flag."
+        ),
+    )
+
     def to_json(self, *, indent: int | None = 2) -> str:
-        """Serialize to a JSON string for the static renderer to fetch."""
-        return self.model_dump_json(indent=indent)
+        """Serialize to a JSON string for the static renderer to fetch.
+
+        Optional DCA publish keys are dropped when unset so Slapper payloads
+        do not grow new ``null`` fields.
+        """
+        data = self.model_dump(mode="json")
+        for key in _OPTIONAL_PUBLISH_KEYS:
+            if key not in self.model_fields_set:
+                data.pop(key, None)
+        return json.dumps(data, indent=indent)
 
 
 def _utc_now_iso() -> str:
@@ -224,6 +372,72 @@ def _opt_float(v: object) -> float | None:
     return None if v is None else float(v)  # type: ignore[arg-type]
 
 
+def _points(
+    series: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None,
+) -> list[SeriesPoint]:
+    if not series:
+        return []
+    out: list[SeriesPoint] = []
+    for item in series:
+        if isinstance(item, Mapping):
+            out.append(SeriesPoint(t=str(item["t"]), v=float(item["v"])))
+        else:
+            out.append(SeriesPoint(t=str(item[0]), v=float(item[1])))
+    return out
+
+
+def _rails(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None,
+) -> list[TearsheetRailPoint]:
+    if not series:
+        return []
+    out: list[TearsheetRailPoint] = []
+    for item in series:
+        if isinstance(item, TearsheetRailPoint):
+            out.append(item)
+        else:
+            out.append(
+                TearsheetRailPoint(
+                    t=str(item["t"]),
+                    low=float(item["low"]),
+                    median=float(item["median"]),
+                    high=float(item["high"]),
+                )
+            )
+    return out
+
+
+def _fill_markers(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None,
+) -> list[TearsheetFillMarker]:
+    if not series:
+        return []
+    out: list[TearsheetFillMarker] = []
+    for item in series:
+        if isinstance(item, TearsheetFillMarker):
+            out.append(item)
+        else:
+            out.append(TearsheetFillMarker.model_validate(item))
+    return out
+
+
+def _indicator_curves(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetIndicatorCurve] | None,
+) -> list[TearsheetIndicatorCurve]:
+    if not series:
+        return []
+    out: list[TearsheetIndicatorCurve] = []
+    for item in series:
+        if isinstance(item, TearsheetIndicatorCurve):
+            out.append(item)
+        else:
+            raw = dict(item)
+            pts = raw.get("points") or []
+            raw["points"] = _points(pts)  # type: ignore[arg-type]
+            out.append(TearsheetIndicatorCurve.model_validate(raw))
+    return out
+
+
 def _build_tearsheet(
     summary: Mapping[str, object],
     trades: Sequence[Mapping[str, object]],
@@ -236,6 +450,28 @@ def _build_tearsheet(
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
     signal_delay_days: int = 0,
     dca: TearsheetDcaBreakdown | None = None,
+    current_signal: CurrentSignal | Mapping[str, object] | None = None,
+    rails: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None = None,
+    risk_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    cost_basis_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    capital_deployed_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    lump_equity_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    flat_dca_equity_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
+    label: str | None = None,
+    kind: str | None = None,
+    avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
 ) -> TearsheetData:
     """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
@@ -249,6 +485,7 @@ def _build_tearsheet(
     ``dca`` is the schema 1.3 DCA block; when set, trade-based KPIs
     (``win_rate_pct``, ``profit_factor``, ``long``, ``short``) are forced to
     ``None`` so a renderer cannot confuse "not applicable" with zero.
+    Diagnostic overlays and ``current_signal`` are passed only for DCA publish.
     """
     overall = summary.get("all")
     overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
@@ -279,6 +516,48 @@ def _build_tearsheet(
     long_block = summary.get("long")
     short_block = summary.get("short")
     dca_mode = dca is not None
+
+    extras: dict[str, object] = {}
+    if current_signal is not None:
+        extras["current_signal"] = (
+            current_signal
+            if isinstance(current_signal, CurrentSignal)
+            else CurrentSignal.model_validate(current_signal)
+        )
+    if rails is not None:
+        extras["rails"] = _rails(rails)
+    if risk_curve is not None:
+        extras["risk_curve"] = _points(risk_curve)
+    if cost_basis_curve is not None:
+        extras["cost_basis_curve"] = _points(cost_basis_curve)
+    if capital_deployed_curve is not None:
+        extras["capital_deployed_curve"] = _points(capital_deployed_curve)
+    if lump_equity_curve is not None:
+        extras["lump_equity_curve"] = _points(lump_equity_curve)
+    if flat_dca_equity_curve is not None:
+        extras["flat_dca_equity_curve"] = _points(flat_dca_equity_curve)
+    if allocated_pct_curve is not None:
+        extras["allocated_pct_curve"] = _points(allocated_pct_curve)
+    if fill_markers is not None:
+        extras["fill_markers"] = _fill_markers(fill_markers)
+    if indicator_curves is not None:
+        extras["indicator_curves"] = _indicator_curves(indicator_curves)
+    if indicator_weights is not None:
+        extras["indicator_weights"] = {str(k): float(v) for k, v in indicator_weights.items()}
+    if curve_knees is not None:
+        extras["curve_knees"] = (
+            curve_knees
+            if isinstance(curve_knees, TearsheetCurveKnees)
+            else TearsheetCurveKnees.model_validate(curve_knees)
+        )
+    if label is not None:
+        extras["label"] = label
+    if kind is not None:
+        extras["kind"] = kind
+    if avg_trade_pct is not None:
+        extras["avg_trade_pct"] = avg_trade_pct
+    if beats_flat_dca_oos is not None:
+        extras["beats_flat_dca_oos"] = beats_flat_dca_oos
 
     return TearsheetData(
         strategy=str(summary.get("strategy", "")),
@@ -314,6 +593,7 @@ def _build_tearsheet(
         ohlc_bars=[OHLCBar(t=t, o=o, h=h, l=low, c=c) for t, o, h, low, c in (ohlc_bars or [])],
         trades=[] if dca_mode else trade_records,
         notes=list(notes or []),
+        **extras,  # type: ignore[arg-type]
     )
 
 
@@ -351,13 +631,37 @@ def from_nautilus_run(
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
     signal_delay_days: int = 0,
     dca: TearsheetDcaBreakdown | None = None,
+    current_signal: CurrentSignal | Mapping[str, object] | None = None,
+    rails: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None = None,
+    risk_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    cost_basis_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    capital_deployed_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    lump_equity_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    flat_dca_equity_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
+    label: str | None = None,
+    kind: str | None = None,
+    avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
 ) -> TearsheetData:
     """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
     ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
     ``from_pine`` so the renderer consumes one schema regardless of engine.
     ``signal_delay_days`` records the public end-date shift applied upstream
     (#1462); pass 0 for undelayed (internal) runs. Pass ``dca`` for a
-    ``kind == "dca"`` book (#3171) — trade KPIs become ``null``.
+    ``kind == "dca"`` book (#3171) — trade KPIs become ``null``. Diagnostic
+    overlays and ``current_signal`` are copied onto the payload so #3172
+    charts do not degrade; omit them on Slapper runs.
     """
     return _build_tearsheet(
         summary,
@@ -370,6 +674,22 @@ def from_nautilus_run(
         ohlc_bars=ohlc_bars,
         signal_delay_days=signal_delay_days,
         dca=dca,
+        current_signal=current_signal,
+        rails=rails,
+        risk_curve=risk_curve,
+        cost_basis_curve=cost_basis_curve,
+        capital_deployed_curve=capital_deployed_curve,
+        lump_equity_curve=lump_equity_curve,
+        flat_dca_equity_curve=flat_dca_equity_curve,
+        allocated_pct_curve=allocated_pct_curve,
+        fill_markers=fill_markers,
+        indicator_curves=indicator_curves,
+        indicator_weights=indicator_weights,
+        curve_knees=curve_knees,
+        label=label,
+        kind=kind,
+        avg_trade_pct=avg_trade_pct,
+        beats_flat_dca_oos=beats_flat_dca_oos,
     )
 
 
@@ -449,6 +769,11 @@ __all__ = [
     "StatBlock",
     "TearsheetDcaBreakdown",
     "TearsheetData",
+    "TearsheetRailPoint",
+    "TearsheetFillMarker",
+    "TearsheetIndicatorCurve",
+    "TearsheetCurveKnees",
+    "CurrentSignal",
     "TradeRecord",
     "from_nautilus",
     "from_nautilus_run",

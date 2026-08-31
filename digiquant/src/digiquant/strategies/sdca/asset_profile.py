@@ -152,8 +152,8 @@ def technicals_from_ohlcv(
 
 
 def stage_a_search_names(profile: SdcaAssetProfile) -> tuple[str, ...]:
-    """Stage A searches extras on the profile allowlist (plugins optional)."""
-    names = profile.generic_technicals()
+    """Stage A searches every extra on the profile allowlist (plugins included)."""
+    names = tuple(profile.extra_indicators)
     return names if names else GENERIC_TECHNICAL_NAMES
 
 

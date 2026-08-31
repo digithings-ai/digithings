@@ -105,6 +105,7 @@ class TestSdcaAssetProfileBtcV1:
         assert set(BTC_PLUGIN_INDICATOR_NAMES).issubset(set(profile.extra_indicators))
         assert profile.plugin_extras() == BTC_PLUGIN_INDICATOR_NAMES
         assert profile.generic_technicals() == GENERIC_TECHNICAL_NAMES
+        assert stage_a_search_names(profile) == GENERIC_TECHNICAL_NAMES + BTC_PLUGIN_INDICATOR_NAMES
 
     def test_signal_delay_default_does_not_publish_eth(self) -> None:
         payload = json.loads(_SETTINGS.read_text())
@@ -170,9 +171,13 @@ class TestGenericTechnicalsFromAnyOhlcv:
         assert btc_z["weekly_rsi"] != eth_z["weekly_rsi"]
 
     def test_calibrated_rsi_length_changes_z(self) -> None:
-        n = 280
+        n = 400
         dates = _dates(n)
-        close = pl.Series([100.0 + 8.0 * ((i % 20) - 10) for i in range(n)])
+        # Chop, then a blow-off: RSI(14) crosses the rich cap before RSI(28).
+        close = pl.Series(
+            [100.0 + 4.0 * ((i % 20) - 10) for i in range(200)]
+            + [100.0 + 5.0 * i for i in range(200)]
+        )
         default = weekly_rsi_z(dates, close)
         slower = weekly_rsi_z(dates, close, length=28)
         finite = [

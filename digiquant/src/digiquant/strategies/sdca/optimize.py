@@ -173,6 +173,42 @@ def _first_existing(root: Path, names: tuple[str, ...]) -> Path | None:
     return None
 
 
+def load_sdca_extra_sources(root: Path | str | None) -> ExtraIndicatorSources:
+    """Load FRED/ETH siblings from ``root``. Missing files stay None."""
+    if root is None:
+        return ExtraIndicatorSources()
+    base = Path(root)
+    m2_path = _first_existing(base, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
+    eth_path = _first_existing(base, ("ETH-USD.csv", "ETH-USD.parquet"))
+    dxy_path = _first_existing(base, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
+    eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
+    dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    return ExtraIndicatorSources(
+        m2_dates=m2_dates,
+        m2_values=m2_values,
+        eth_dates=eth_dates,
+        eth_close=eth_close,
+        dxy_dates=dxy_dates,
+        dxy_values=dxy_values,
+    )
+
+
+def drop_extras_missing_sources(
+    weights: SdcaCompositeWeights,
+    sources: ExtraIndicatorSources,
+) -> SdcaCompositeWeights:
+    """Zero plugin extras whose source series is absent (oscillators stay)."""
+    payload = weights.model_dump()
+    if payload["m2"] > 0.0 and sources.m2_dates is None:
+        payload["m2"] = 0.0
+    if payload["rs_eth"] > 0.0 and sources.eth_dates is None:
+        payload["rs_eth"] = 0.0
+    if payload["dxy"] > 0.0 and sources.dxy_dates is None:
+        payload["dxy"] = 0.0
+    return SdcaCompositeWeights(**payload)
+
+
 def load_sdca_extra_z(
     dates: list[date],
     prices: list[float],
@@ -191,35 +227,14 @@ def load_sdca_extra_z(
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
     price_s = pl.Series("price", list(prices), dtype=pl.Float64)
     extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s)
-    if root is None:
-        return extra
-    m2_path = _first_existing(root, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
-    eth_path = _first_existing(root, ("ETH-USD.csv", "ETH-USD.parquet"))
-    dxy_path = _first_existing(root, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
-    m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
-    eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
-    dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    sources = load_sdca_extra_sources(root)
     weights = SdcaCompositeWeights(
         valuation=1.0,
-        m2=1.0 if m2_dates is not None else 0.0,
-        rs_eth=1.0 if eth_dates is not None else 0.0,
-        dxy=1.0 if dxy_dates is not None else 0.0,
+        m2=1.0 if sources.m2_dates is not None else 0.0,
+        rs_eth=1.0 if sources.eth_dates is not None else 0.0,
+        dxy=1.0 if sources.dxy_dates is not None else 0.0,
     )
-    extra.update(
-        extra_z_vectors(
-            date_s,
-            price_s,
-            weights,
-            ExtraIndicatorSources(
-                m2_dates=m2_dates,
-                m2_values=m2_values,
-                eth_dates=eth_dates,
-                eth_close=eth_close,
-                dxy_dates=dxy_dates,
-                dxy_values=dxy_values,
-            ),
-        )
-    )
+    extra.update(extra_z_vectors(date_s, price_s, weights, sources))
     return extra
 
 
@@ -423,6 +438,14 @@ def persist_btc_optimized(
     return provenance
 
 
+def load_btc_optimized_provenance(
+    provenance_path: Path | None = None,
+) -> SdcaOptimizeProvenance:
+    """Read the checked-in ``btc_optimized`` sidecar (OOS flag, not a live claim)."""
+    path = provenance_path or _PROVENANCE_PATH
+    return SdcaOptimizeProvenance.model_validate_json(path.read_text())
+
+
 def walk_forward_to_optimize_result(
     result: SdcaWalkForwardResult,
     *,
@@ -462,6 +485,9 @@ __all__ = [
     "SdcaWalkForwardResult",
     "SensitivityReport",
     "btc_power_law_rails_fitter",
+    "drop_extras_missing_sources",
+    "load_btc_optimized_provenance",
+    "load_sdca_extra_sources",
     "load_sdca_extra_z",
     "load_sdca_ohlcv",
     "persist_btc_optimized",

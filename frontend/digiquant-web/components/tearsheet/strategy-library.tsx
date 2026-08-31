@@ -28,7 +28,7 @@ function sortEntries(items: Enriched[], key: SortKey): Enriched[] {
       case "max_drawdown":
         return b.max_drawdown_pct - a.max_drawdown_pct;
       case "win_rate":
-        return b.win_rate_pct - a.win_rate_pct;
+        return (b.win_rate_pct ?? 0) - (a.win_rate_pct ?? 0);
       case "trades":
         return b.total_trades - a.total_trades;
       default:
