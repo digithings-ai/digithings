@@ -16,13 +16,13 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 2. **Subsystems are jobs, not brands.** User-facing words are **research**, **portfolio**, and **execution**. Do not introduce replacement proper nouns for atlas / hermes / kairos.
 3. **Internal phase IDs stay.** A0–A4 and H1–H9 remain graph coordinates.
 4. **Do not rewrite history.** SQL migrations, historical ADR bodies, and `olympus_*` / `atlas_run_diagnostics` table names stay. Amend, do not edit-in-place.
-5. **Rollout is layered.** Copy and chrome first. The public path `/olympus/` and OAuth callbacks stay until vendor consoles (GitHub, Supabase, Alpaca, Cloudflare Access) can move together. Python packages `digiquant.olympus.{atlas,hermes,kairos}` and env `OLYMPUS_*` stay until a dedicated two-hop `module/digiquant` PR. The kairos **package** rename is human-gated (execution path).
+5. **Rollout is layered.** Wave 2 (this change) serves the dashboard at `/dashboard/` with 308s from `/olympus/*`. Vendor consoles (Supabase, Alpaca, Cloudflare Access) must list **both** callback URLs until traffic drains — Alpaca `redirect_uri` is exact-match, so add the new URI before dropping the old. Python packages `digiquant.olympus.{atlas,hermes,kairos}` and env `OLYMPUS_*` stay until a dedicated two-hop `module/digiquant` PR. The kairos **package** rename is human-gated (execution path).
 
 ## Consequences
 
 **Positive:** One product name on digiquant.io; landing and dashboard say the same thing; agent docs stop teaching four Greek names as the architecture.
 
-**Negative / tradeoffs:** `/olympus/` remains in the address bar and in OAuth redirect URLs until wave 2. Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`, `.olympus-mark`) and the `frontend/olympus` folder stay until a `feat/` or `task/<N>-slug` branch can edit `.github/workflows`. TypeScript identifiers (`DigiquantMark`, `PerformanceTearsheetView`, `DashboardMark`) move in wave 3 with one-release aliases. Historical issues and ADRs still say the old names.
+**Negative / tradeoffs:** `/olympus/` 308s onto `/dashboard/` until vendor consoles drop the old callback URLs. Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`, `.olympus-mark`) and the `frontend/olympus` folder stay until a `feat/` or `task/<N>-slug` branch can edit `.github/workflows`. Historical issues and ADRs still say the old names.
 
 ## Links
 

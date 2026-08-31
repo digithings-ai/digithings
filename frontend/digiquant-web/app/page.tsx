@@ -62,7 +62,7 @@ export default function Home() {
               <span className="prompt">$</span>
               git clone https://github.com/digithings-ai/digithings.git
             </p>
-            <a className="btn btn-primary" href="/olympus/">
+            <a className="btn btn-primary" href="/dashboard/">
               Open dashboard
             </a>
             <span className="dqhero-scroll-label">Scroll to explore</span>

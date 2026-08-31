@@ -92,7 +92,7 @@ supabase secrets set \
   ALPACA_OAUTH_CLIENT_SECRET=…   # never NEXT_PUBLIC_
 ```
 
-Pinned OAuth callback: `{APP_URL}/olympus/settings/brokers/callback/`.
+Pinned OAuth callback: `{APP_URL}/dashboard/settings/brokers/callback/`.
 
 ## Tests
 

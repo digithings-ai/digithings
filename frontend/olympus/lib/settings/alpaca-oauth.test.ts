@@ -10,20 +10,20 @@ import {
   resolveAlpacaOauthClientId,
 } from './alpaca-oauth';
 
-describe('alpaca-oauth paths (real olympusBasePath)', () => {
+describe('alpaca-oauth paths (real dashboardBasePath)', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
   });
 
-  it('callback path includes /olympus and trailing slash', () => {
-    expect(alpacaOAuthCallbackPath()).toBe('/olympus/settings/brokers/callback/');
+  it('callback path includes /dashboard and trailing slash', () => {
+    expect(alpacaOAuthCallbackPath()).toBe('/dashboard/settings/brokers/callback/');
   });
 
-  it('authorize URL is the real Alpaca paper URL with /olympus redirect', () => {
+  it('authorize URL is the real Alpaca paper URL with /dashboard redirect', () => {
     const redirectUri = alpacaOAuthRedirectUri('https://app.example');
     expect(redirectUri).toBe(
-      'https://app.example/olympus/settings/brokers/callback/',
+      'https://app.example/dashboard/settings/brokers/callback/',
     );
     const url = buildAlpacaAuthorizeUrl({
       clientId: 'cid-public',
@@ -39,25 +39,26 @@ describe('alpaca-oauth paths (real olympusBasePath)', () => {
     expect(u.searchParams.get('state')).toBe('nonce-abc');
     expect(u.searchParams.get('client_id')).toBe('cid-public');
     expect(u.searchParams.get('redirect_uri')).toBe(
-      'https://app.example/olympus/settings/brokers/callback/',
+      'https://app.example/dashboard/settings/brokers/callback/',
     );
     expect(u.searchParams.get('scope')).toBe('account:write trading');
-    // Must never drop the olympus segment (T1 bug).
-    expect(u.searchParams.get('redirect_uri')).toContain('/olympus/');
+    // Must never drop the dashboard segment (T1 bug).
+    expect(u.searchParams.get('redirect_uri')).toContain('/dashboard/');
     expect(u.searchParams.get('redirect_uri')).not.toBe(
       'https://app.example/settings/brokers/callback',
     );
   });
 
-  it('falls back to /olympus when BASE_PATH env is empty', async () => {
+  it('falls back to /dashboard when BASE_PATH env is empty', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '');
     vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '');
-    // olympusBasePath is already loaded — exercise via path helpers' dependency:
-    const { olympusBasePath } = await import('@/lib/supabase');
+    // dashboardBasePath is already loaded — exercise via path helpers' dependency:
+    const { dashboardBasePath } = await import('@/lib/supabase');
     // Module cache may retain prior env; assert the helper contract directly:
-    const raw = process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ?? '/olympus';
+    const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH || '/dashboard';
     const trimmed = raw.replace(/\/+$/, '');
-    expect(trimmed || '/olympus').toBe('/olympus');
-    void olympusBasePath;
+    expect(trimmed || '/dashboard').toBe('/dashboard');
+    void dashboardBasePath;
   });
 });
 
@@ -86,7 +87,7 @@ describe('resolveAlpacaOAuthCallback ordering', () => {
     expect(phase.kind).toBe('exchange');
     if (phase.kind === 'exchange') {
       expect(phase.redirectUri).toBe(
-        'https://app.example/olympus/settings/brokers/callback/',
+        'https://app.example/dashboard/settings/brokers/callback/',
       );
       expect(phase.code).toBe('auth-code');
     }

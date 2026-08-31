@@ -170,8 +170,8 @@ describe('AuthProvider', () => {
     expect(container.querySelector('[data-has-session="0"]')).not.toBeNull();
   });
 
-  it('signInWithOAuth delegates to supabase-js with PKCE redirect including /olympus', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+  it('signInWithOAuth delegates to supabase-js with PKCE redirect including /dashboard', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
     const assign = vi.fn();
     vi.stubGlobal('location', {
       origin: 'http://localhost:3000',
@@ -188,13 +188,13 @@ describe('AuthProvider', () => {
     expect(call.provider).toBe('github');
     expect(call.options.skipBrowserRedirect).toBe(true);
     expect(call.options.queryParams).toBeUndefined();
-    expect(call.options.redirectTo).toMatch(/\/olympus\/auth\/callback\/$/);
-    expect(call.options.redirectTo).toBe('http://localhost:3000/olympus/auth/callback/');
+    expect(call.options.redirectTo).toMatch(/\/dashboard\/auth\/callback\/$/);
+    expect(call.options.redirectTo).toBe('http://localhost:3000/dashboard/auth/callback/');
     expect(assign).toHaveBeenCalledWith('https://accounts.example.test/oauth?state=1');
   });
 
   it('signInWithOAuth(google) sends offline + select_account query params', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
     const assign = vi.fn();
     vi.stubGlobal('location', {
       origin: 'http://localhost:3000',
@@ -224,7 +224,7 @@ describe('AuthProvider', () => {
   });
 
   it('signInWithPassword and signUpWithPassword delegate to supabase-js', async () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
     vi.stubGlobal('location', { origin: 'http://localhost:3000', assign: vi.fn() });
     await mountProbe();
     await act(async () => {
@@ -240,7 +240,7 @@ describe('AuthProvider', () => {
     expect(supabaseMock.auth.signUp).toHaveBeenCalledWith({
       email: 'a@b.c',
       password: 'secret12',
-      options: { emailRedirectTo: 'http://localhost:3000/olympus/auth/callback/' },
+      options: { emailRedirectTo: 'http://localhost:3000/dashboard/auth/callback/' },
     });
   });
 });

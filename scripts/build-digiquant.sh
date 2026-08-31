@@ -3,10 +3,10 @@
 # Assembles into dist/:
 #   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
-#   2. frontend/olympus/out/       — the Olympus dashboard (basePath /olympus)
-#      → dist/olympus/
+#   2. frontend/olympus/out/       — the dashboard (basePath /dashboard)
+#      → dist/dashboard/
 # The digiquant-web export ships public/_headers (root /* security headers +
-# /olympus* CSP), so it governs both surfaces. Olympus is unchanged.
+# /dashboard* CSP, plus /olympus* while 308s still land there).
 set -euo pipefail
 
 # Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
@@ -66,16 +66,28 @@ echo "--- building digiquant-web (Next.js static export) ---"
 npm --workspace frontend/digiquant-web run build
 cp -r frontend/digiquant-web/out/. dist/
 
-# 2. Olympus dashboard (basePath /olympus) → dist/olympus/.
-echo "--- building Olympus dashboard ---"
+# 2. Dashboard (basePath /dashboard) → dist/dashboard/.
+echo "--- building dashboard ---"
 # T1 Pages gap: default Auth login UI on Cloudflare Pages without cutover 900
 # (anon RLS remains until intentional human cutover). Explicit
-# NEXT_PUBLIC_OLYMPUS_AUTH=0 keeps the classic pre-auth shell.
+# NEXT_PUBLIC_OLYMPUS_AUTH=0 or NEXT_PUBLIC_DASHBOARD_AUTH=0 keeps the classic
+# pre-auth shell. The OLYMPUS_* names remain one-release aliases so existing
+# Pages project env still works.
 if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" ]; then
   export NEXT_PUBLIC_OLYMPUS_AUTH=1
 fi
+if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_DASHBOARD_AUTH:-}" ]; then
+  export NEXT_PUBLIC_DASHBOARD_AUTH="${NEXT_PUBLIC_OLYMPUS_AUTH:-1}"
+fi
 echo "NEXT_PUBLIC_OLYMPUS_AUTH=${NEXT_PUBLIC_OLYMPUS_AUTH:-<unset>}"
+echo "NEXT_PUBLIC_DASHBOARD_AUTH=${NEXT_PUBLIC_DASHBOARD_AUTH:-<unset>}"
 npm --workspace frontend/olympus run build
+mkdir -p dist/dashboard
+cp -r frontend/olympus/out/. dist/dashboard/
+# One-release twin: .github/workflows/deploy-digiquant-cloudflare.yml still
+# asserts `test -d dist/olympus` and cannot be edited on cursor/* branches.
+# HTML asset URLs are /dashboard/_next/… so the twin is a fallback if a
+# 308 from /olympus/* is not applied; drop it when the workflow path updates.
 mkdir -p dist/olympus
 cp -r frontend/olympus/out/. dist/olympus/
 
@@ -88,14 +100,15 @@ echo "digiquant.io" > dist/CNAME
 echo "--- writing dist/build-info.json ---"
 bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 
-# Sanity: landing, a subsystem page, the root _headers, and Olympus must exist.
+# Sanity: landing, a subsystem page, the root _headers, and the dashboard must exist.
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — digiquant-web did not export" >&2; exit 1; }
-[ -f dist/subsystems/atlas/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
+[ -f dist/subsystems/research/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
-[ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — Olympus did not export" >&2; exit 1; }
+[ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard did not export" >&2; exit 1; }
+[ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — legacy-path twin not exported" >&2; exit 1; }
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
-[ -f dist/olympus/login/index.html ] || { echo "ERROR: dist/olympus/login/index.html missing — Auth login route not exported" >&2; exit 1; }
-[ -f dist/olympus/auth/callback/index.html ] || { echo "ERROR: dist/olympus/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
+[ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported" >&2; exit 1; }
+[ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
 # Settings (T3 + Observer IA). Cloudflare Pages sets CF_PAGES=1, and this script
 # then defaults NEXT_PUBLIC_OLYMPUS_AUTH=1, so the static shell is the anonymous
 # Observer view: Notifications | Billing | About. Pipeline/Keys testids are
@@ -103,24 +116,24 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 # path — requiring them is why #3266/#3273 never reached live digiquant.io
 # (GitHub Actions omits CF_PAGES, auth stays off, tierFromSession returns
 # enterprise, and the same greps pass there). Landed on main as #3275.
-[ -f dist/olympus/settings/index.html ] || { echo "ERROR: dist/olympus/settings/index.html missing — Settings route not exported" >&2; exit 1; }
-grep -q 'The desk, not the product' dist/olympus/settings/index.html \
+[ -f dist/dashboard/settings/index.html ] || { echo "ERROR: dist/dashboard/settings/index.html missing — Settings route not exported" >&2; exit 1; }
+grep -q 'The desk, not the product' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing Observer IA heading" >&2; exit 1; }
-grep -q 'settings-tab-notifications' dist/olympus/settings/index.html \
+grep -q 'settings-tab-notifications' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing Notifications tab marker" >&2; exit 1; }
-grep -q 'settings-tab-billing' dist/olympus/settings/index.html \
+grep -q 'settings-tab-billing' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing Billing tab marker" >&2; exit 1; }
-grep -q 'settings-tab-about' dist/olympus/settings/index.html \
+grep -q 'settings-tab-about' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing About tab marker" >&2; exit 1; }
 if [ "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" != "1" ]; then
-  grep -q 'settings-tab-pipeline' dist/olympus/settings/index.html \
+  grep -q 'settings-tab-pipeline' dist/dashboard/settings/index.html \
     || { echo "ERROR: settings export missing Pipeline tab marker — stale pre-T3 shell?" >&2; exit 1; }
-  grep -q 'settings-tab-keys' dist/olympus/settings/index.html \
+  grep -q 'settings-tab-keys' dist/dashboard/settings/index.html \
     || { echo "ERROR: settings export missing Keys tab marker — BYOK surface not in export?" >&2; exit 1; }
 fi
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/
-echo "--- dist/olympus/ contents ---"
-ls -la dist/olympus/ | head -10
+echo "--- dist/dashboard/ contents ---"
+ls -la dist/dashboard/ | head -10

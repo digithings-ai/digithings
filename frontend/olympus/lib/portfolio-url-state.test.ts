@@ -33,7 +33,7 @@ describe('portfolio-url-state', () => {
 
   it('canonicalizes ?tab=performance to /portfolio/performance (dedicated route)', () => {
     const target = canonicalizeLegacyPortfolioSearch(
-      '/olympus/portfolio',
+      '/dashboard/portfolio',
       new URLSearchParams('tab=performance')
     );
 
@@ -51,7 +51,7 @@ describe('portfolio-url-state', () => {
 
   it('canonicalizes legacy thesis deep links to the query-param thesis route (#1760)', () => {
     const target = canonicalizeLegacyPortfolioSearch(
-      '/olympus/portfolio',
+      '/dashboard/portfolio',
       new URLSearchParams('tab=thesis&thesis=SHY&date=2026-06-17')
     );
 

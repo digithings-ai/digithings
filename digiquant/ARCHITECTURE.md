@@ -3119,11 +3119,11 @@ spec D1) and denormalized `workspaces` billing columns for RLS.
 | Function | Auth | Role |
 |----------|------|------|
 | `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
-| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env; success/cancel → `{APP_URL}/olympus/settings/?tab=billing&checkout=…` (`_shared/app-url.ts`) |
-| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id`; return `{APP_URL}/olympus/settings/?tab=billing` |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env; success/cancel → `{APP_URL}/dashboard/settings/?tab=billing&checkout=…` (`_shared/app-url.ts`) |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id`; return `{APP_URL}/dashboard/settings/?tab=billing` |
 
 `APP_URL` / `NEXT_PUBLIC_APP_URL` is the **site origin** (`https://digiquant.io`).
-Helpers strip a trailing `/olympus` so a mistaken path does not double the basePath.
+Helpers strip a trailing `/dashboard` or `/olympus` so a mistaken path does not double the basePath.
 Loopback origins (`127.0.0.1`) break Alpaca `redirect_uri` and Stripe return URLs;
 `GET /settings/app-urls` is the Observer probe. It also returns the public
 Alpaca OAuth client id (never the secret) so Brokers connect can start as soon

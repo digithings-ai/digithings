@@ -6,24 +6,24 @@ import { DQ_FOOTER, DQ_FOOTER_META } from "../../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 
 // Poster grammar (canon §12): epithet ≤ 6 words, honest to function; fine
-// print is a real repo path or a real function plus the livery. Posters wear
-// the standard accent-<module> scope — and atlas · hermes · kairos are
-// backend langgraphs, so their accents resolve to ink under [data-theme]
+// print is a job-word coordinate, not a retired package path. Posters wear
+// the standard accent-<job> scope — research / portfolio / execution accents
+// alias the existing mark tokens and resolve to ink under [data-theme]
 // (tokens.css ruling, 2026-07-08): the poster reads monochrome by design,
 // and the digiquant phosphor on these pages is reserved for the terminal
 // moments below it (cmdline, init codeblock, CTAs).
 const POSTER: Record<string, { epithet: string; fine: string }> = {
-  atlas: {
+  research: {
     epithet: "scheduled market research.",
-    fine: "digiquant/src/digiquant/olympus/atlas/",
+    fine: "daily research graph · A0–A4",
   },
-  hermes: {
+  portfolio: {
     epithet: "deliberation to a sized book.",
-    fine: "digiquant/src/digiquant/olympus/hermes/",
+    fine: "portfolio deliberation graph · H1–H9",
   },
-  kairos: {
+  execution: {
     epithet: "execution after the book.",
-    fine: "digiquant/src/digiquant/olympus/kairos/",
+    fine: "paper execution router",
   },
 };
 
@@ -91,7 +91,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           <pre className="codeblock">{s.initSnippet.code}</pre>
 
           <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap", marginTop: "2rem" }}>
-            <a className="btn btn-primary" href="/olympus/">Open dashboard <span aria-hidden="true">→</span></a>
+            <a className="btn btn-primary" href="/dashboard/">Open dashboard <span aria-hidden="true">→</span></a>
             <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">Source</a>
           </div>
 

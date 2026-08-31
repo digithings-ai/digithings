@@ -64,8 +64,8 @@ def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
     if any(marker in blob for marker in _LOOPBACK_MARKERS):
         return False
     return alpaca.startswith(
-        f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/brokers/callback"
-    ) and billing.startswith(f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/")
+        f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/brokers/callback"
+    ) and billing.startswith(f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/")
 
 
 class HttpJson(Protocol):

@@ -1335,14 +1335,18 @@ Deno.test("sealCredential called with AAD binding (workspace:broker:env)", async
   );
 });
 
-Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
+Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example/olympus"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
 });
 
@@ -1443,17 +1447,17 @@ Deno.test("GET /notifications/log: member lists digest event keys only", async (
   assertEquals(events[0]!.event_key, "digest:2026-08-31");
 });
 
-Deno.test("GET /app-urls: pinned Alpaca + billing return under /olympus", async () => {
+Deno.test("GET /app-urls: pinned Alpaca + billing return under /dashboard", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "GET", "/app-urls");
   assertEquals(status, 200);
   assertEquals(
     json.alpaca_redirect_uri,
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     json.billing_return_url,
-    "https://app.example/olympus/settings/?tab=billing",
+    "https://app.example/dashboard/settings/?tab=billing",
   );
   assertEquals(json.alpaca_oauth_client_id, "");
 });

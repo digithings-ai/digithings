@@ -1,4 +1,4 @@
-const URL_PARSE_BASE = 'https://olympus.local';
+const URL_PARSE_BASE = 'https://dashboard.local';
 
 /**
  * Portfolio ("the book") in-shell tabs after the redesign: Holdings · Theses.
