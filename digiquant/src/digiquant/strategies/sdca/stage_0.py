@@ -251,7 +251,7 @@ def _drop_reason(
     if sell_days <= 0:
         return "never-sell (long-only dump); cadence diagnostic is not an OOS substitute"
     if not feasible_oos:
-        return "OOS failed Stage B capital floor / drawdown cap"
+        return "no OOS fold passed Stage B capital floor / drawdown cap"
     if mean_oos <= baseline_oos:
         return f"OOS vs-flat {mean_oos:.4f} did not beat {NAMED_BASELINE} {baseline_oos:.4f}"
     return None
@@ -321,7 +321,7 @@ def run_stage_0(
     for code_id, wf, _weights, cadence in raw:
         mean_is = _mean_is(wf.fold_scores)
         mean_oos = _mean_oos(wf.fold_scores)
-        feasible = all(is_feasible(s.out_of_sample, obj) for s in wf.fold_scores)
+        feasible = any(is_feasible(s.out_of_sample, obj) for s in wf.fold_scores)
         reason = _drop_reason(
             code_id=code_id,
             mean_oos=mean_oos,

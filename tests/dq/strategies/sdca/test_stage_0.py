@@ -192,6 +192,49 @@ class TestStage0OosGate:
         m2 = next(row for row in report.solos if row.code_id == "m2")
         assert m2.keep is False
 
+    def test_one_infeasible_oos_fold_still_keeps_when_mean_oos_beats(self) -> None:
+        """Stage B ranks on feasible OOS folds; it does not require every fold."""
+        dates = _dates()
+        prices = [100.0] * len(dates)
+
+        def evaluator(
+            window_dates: list[date],
+            window_prices: list[float],
+            model: RiskModel,
+            shape: SdcaCurveShape,
+            valuation_weight: float,
+            extra_indicators: object = None,
+        ) -> SdcaTrialMetrics:
+            is_window = window_dates[0] == date(2020, 1, 1)
+            m2_w = _weight_of(extra_indicators, "m2")
+            vs = (4.0 if is_window else 1.0) + (1.0 if is_window else 6.0) * m2_w
+            # Fold-1 OOS starts 2020-02-02 on this 80-day calendar.
+            deployed = 5.0 if (not is_window and window_dates[0] >= date(2020, 2, 2)) else 40.0
+            if not is_window and window_dates[0] >= date(2020, 2, 18):
+                deployed = 40.0
+            return SdcaTrialMetrics(
+                vs_flat_dca_pct=vs + 0.1 * valuation_weight,
+                vs_lump_pct=0.0,
+                capital_deployed_pct=deployed,
+                max_drawdown_pct=12.0,
+            )
+
+        report = run_stage_0(
+            dates,
+            prices,
+            extra_z={"m2": [0.0] * len(dates)},
+            rails_fitter=_fitter,
+            evaluator=evaluator,
+            evaluator_label="curve_simulator",
+            search_names=("m2",),
+            shape_trials=_TRIALS,
+            cadence_fn=lambda *_a, **_k: _cadence(sell_days=4),
+        )
+        m2 = next(row for row in report.solos if row.code_id == "m2")
+        assert m2.feasible_oos is True
+        assert m2.keep is True
+        assert report.survivors == (POWER_LAW_CODE_ID, "m2")
+
 
 class TestStage1SurvivorWeights:
     def test_grid_excludes_zero_so_drop_cannot_cheaply_win(self) -> None:

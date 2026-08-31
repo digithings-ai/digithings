@@ -661,7 +661,8 @@ default optimize run still matches the power-law-only chart.
 power-law curve. The operator path is now **solo-then-combine**: Stage 0
 (`stage_0.run_stage_0`) fits a remaining-book curve to each extra and to
 power law alone; extras must beat named baseline `power_law_solo` on the
-**same walk-forward OOS folds** (plus Stage B capital floor / drawdown cap)
+**same walk-forward OOS folds** (plus Stage B capital floor / drawdown cap
+on at least one OOS fold, matching walk-forward ranking)
 and must sell. IS vs-flat is reported, not the keep rule. If no extra
 beats OOS, power-law-only remains published — do not force extras back in.
 Stage 1 (`optimize_stage_1_survivor_weights`) then searches non-negative
