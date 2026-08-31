@@ -56,7 +56,7 @@ omit it and render unchanged. Drive off **null KPIs** (`win_rate_pct` /
 | Valuation rails (log spot + low/median/high) | `MultiTimeSeries` | family (#3172) |
 | Risk-band strip (0–100, labelled bands) | `RiskBandStrip` | family (#3172) |
 | Allocation (MTM allocated % vs cash; fill markers) | `AllocationStepChart` + cost-basis overlay | family |
-| Three-way equity (SDCA / lump / flat DCA) | `MultiTimeSeries` on the Equity tab | family |
+| Equity overlay (SDCA vs buy & hold) | `MultiTimeSeries` on the Equity tab | family |
 
 Rails / risk / cost-basis / lump / flat series are optional diagnostic
 fields (`rails`, `risk_curve`, `cost_basis_curve`, `lump_equity_curve`,

@@ -751,7 +751,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                   onView={setViewFromChart}
                   fullSpan={fullSpan}
                   resetView={presetView}
-                  ariaLabel="SDCA equity versus lump-sum and flat DCA"
+                  ariaLabel="SDCA equity versus buy and hold"
                 />
               ) : chartScale === "log" ? (
                 <TimeSeries points={chartEquity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Equity curve in dollars, log scale" />
