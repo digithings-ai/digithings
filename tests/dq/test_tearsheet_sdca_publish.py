@@ -246,6 +246,9 @@ def test_trade_size_only_passed_when_config_declares_it() -> None:
 
     assert config_declares_field("btc_slapper", "trade_size") is True
     assert config_declares_field("btc_sdca", "trade_size") is False
+    assert config_declares_field("btc_sdca", "preset") is False
+    assert config_declares_field("btc_sdca", "indicator_weights") is False
+    assert config_declares_field("btc_sdca", "risk_path") is True
 
     inst = InstrumentId.from_str("BTC-USD.SIM")
     bar = BarType.from_str("BTC-USD.SIM-1-DAY-LAST-EXTERNAL")

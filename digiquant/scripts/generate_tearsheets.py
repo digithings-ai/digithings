@@ -414,7 +414,11 @@ def run_nautilus(
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
-    injected: dict[str, object] = dict(calibration or {})
+    injected: dict[str, object] = {
+        k: v
+        for k, v in dict(calibration or {}).items()
+        if config_declares_field(strategy, k)
+    }
     if config_declares_field(strategy, "size_pct_equity"):
         injected.setdefault("size_pct_equity", float(d["size_pct_equity"]))
     trade_size = Decimal(1) if config_declares_field(strategy, "trade_size") else None
