@@ -34,7 +34,7 @@
     "btc_sdca": {
       "symbol": "BTC-USD",
       "ccxt_symbol": "BTC/USD",
-      "label": "BTC Strategic DCA",
+      "label": "BTC power-law remaining-book",
       "kind": "dca",
       "strategy_type": "sdca",
       "sdca": {

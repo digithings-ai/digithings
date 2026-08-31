@@ -168,6 +168,11 @@ the full module map.
   Preset `btc_optimized` still sells (`long_only: false`). Walk-forward
   OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
   DCA; provenance stays honest.
+- **Public copy.** User-facing name is **power-law remaining-book**. Do not
+  call the published book a multi-indicator composite while extras are 0.
+  Do not render `capital_deployed_pct` as "Deployed" (goes negative after
+  sells) — show MTM allocated %. `StrategyNotes` must render for SDCA
+  (not slapper-only). Full-sample Nautilus vs-flat is not OOS.
 
 ### RiskModel providers (#1082)
 

@@ -56,7 +56,7 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     settings = gts.load_settings()
     entry = settings["strategies"]["btc_sdca"]
     assert entry["symbol"] == "BTC-USD"
-    assert entry["label"] == "BTC Strategic DCA"
+    assert entry["label"] == "BTC power-law remaining-book"
     assert entry["kind"] == "dca"
     assert gts.strategy_type_of(settings, "btc_sdca") == "sdca"
     assert gts.strategy_type_of(settings, "btc_slapper") == "slapper"
@@ -166,6 +166,15 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert "Coefficients" in " ".join(payload["notes"])
     assert "Preset btc_optimized" in " ".join(payload["notes"])
     assert "valuation:1.0" in " ".join(payload["notes"])
+    assert "power-law remaining-book" in " ".join(payload["notes"]).lower()
+    assert payload["beats_flat_dca_oos"] is False
+    assert "beats_flat_dca_oos=false" in " ".join(payload["notes"])
+    assert "not a live strategy" in " ".join(payload["notes"]).lower()
+    assert not any("curve_simulator" in n.lower() for n in payload["notes"])
+    assert not any("stage 1" in n.lower() for n in payload["notes"])
+    assert payload["dca"]["allocated_pct"] is not None
+    assert 0.0 <= payload["dca"]["allocated_pct"] <= 100.0
+    assert "power-law only" in " ".join(payload["notes"]).lower()
     assert not any("calibrations.example" in rec.message for rec in caplog.records)
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
 

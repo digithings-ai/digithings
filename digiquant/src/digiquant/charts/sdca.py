@@ -100,7 +100,7 @@ def plot_equity_vs_hold(inputs: Mapping[str, object], path: Path) -> Path:
 
 
 def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
-    """Composite risk 0–100 with accumulate/distribute knees and faint log BTC."""
+    """Power-law risk 0–100 with accumulate/distribute knees and faint log BTC."""
     plt = _require_mpl()
     risk = inputs["risk"]
     if not risk:
@@ -113,7 +113,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
 
     fig, ax = plt.subplots(figsize=(12.5, 6.2), dpi=160)
     ax.set_ylim(0, 100)
-    ax.plot(risk_t, risk_v, color=_INDEX, lw=1.5, label="composite index")
+    ax.plot(risk_t, risk_v, color=_INDEX, lw=1.5, label="power-law risk")
     ax.axhline(
         buy_k,
         color=_BUY,
@@ -128,7 +128,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
         lw=1.2,
         label=f"distribute starts (overbought, risk {sell_k:.0f})",
     )
-    ax.set_ylabel("Composite index (0 cheap → 100 rich)")
+    ax.set_ylabel("Power-law risk (0 cheap → 100 rich)")
 
     prices = inputs["prices"]
     dates = _dates(inputs["dates"])  # type: ignore[arg-type]
@@ -157,7 +157,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
     else:
         ax.legend(frameon=False, loc="upper left", fontsize=9)
 
-    ax.set_title("Aggregate composite index — power law, buy/sell knees")
+    ax.set_title("Power-law risk — accumulate / distribute knees")
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
@@ -204,7 +204,7 @@ def plot_indicator_multiples(inputs: Mapping[str, object], path: Path) -> Path:
                 fontsize=9,
             )
         ax.set_ylabel("0–100")
-    fig.suptitle("Underlying indicators in the composite (power law = code id valuation)", y=1.01)
+    fig.suptitle("Underlying indicators (power law in index; extras unused at weight 0)", y=1.01)
     fig.tight_layout()
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
@@ -358,7 +358,7 @@ def render_sdca_diagnostic_charts(
     out_dir.mkdir(parents=True, exist_ok=True)
     return [
         plot_equity_vs_hold(inputs, out_dir / f"{prefix}_equity_vs_hold.png"),
-        plot_valuation_index(inputs, out_dir / f"{prefix}_composite_index.png"),
+        plot_valuation_index(inputs, out_dir / f"{prefix}_power_law_risk.png"),
         plot_indicator_multiples(inputs, out_dir / f"{prefix}_indicator_multiples.png"),
         plot_allocation(inputs, out_dir / f"{prefix}_allocation.png"),
     ]

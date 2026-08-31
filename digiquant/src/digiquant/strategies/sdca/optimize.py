@@ -438,6 +438,14 @@ def persist_btc_optimized(
     return provenance
 
 
+def load_btc_optimized_provenance(
+    provenance_path: Path | None = None,
+) -> SdcaOptimizeProvenance:
+    """Read the checked-in ``btc_optimized`` sidecar (OOS flag, not a live claim)."""
+    path = provenance_path or _PROVENANCE_PATH
+    return SdcaOptimizeProvenance.model_validate_json(path.read_text())
+
+
 def walk_forward_to_optimize_result(
     result: SdcaWalkForwardResult,
     *,
@@ -478,6 +486,7 @@ __all__ = [
     "SensitivityReport",
     "btc_power_law_rails_fitter",
     "drop_extras_missing_sources",
+    "load_btc_optimized_provenance",
     "load_sdca_extra_sources",
     "load_sdca_extra_z",
     "load_sdca_ohlcv",

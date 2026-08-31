@@ -66,6 +66,10 @@ def test_harness_and_fill_replay_agree() -> None:
     assert dca.units_accumulated == pytest.approx(report.units_accumulated)
     assert dca.buy_days == report.buy_days
     assert dca.sell_days == report.sell_days
+    assert dca.allocated_pct is not None
+    assert 0.0 <= dca.allocated_pct <= 100.0
+    assert dca.fill_buy_days == sum(1 for u in state["daily_trade_usd"] if u > 1e-8)
+    assert dca.fill_sell_days == sum(1 for u in state["daily_trade_usd"] if u < -1e-8)
     # 100×: vs_flat_dca is a true percent on this rising-then-falling book.
     assert dca.vs_flat_dca_pct != pytest.approx(dca.vs_flat_dca_pct / 100.0)
 

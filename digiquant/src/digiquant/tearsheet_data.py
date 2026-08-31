@@ -30,6 +30,8 @@ from pydantic import BaseModel, Field
 # ``win_rate_pct`` / ``profit_factor`` / ``long`` / ``short`` are JSON ``null``.
 # Optional diagnostic series (``rails``, ``risk_curve``, …) and ``current_signal``
 # are omitted from slapper dumps via ``to_json()`` so those payloads stay unchanged.
+# Public-honesty extras (``beats_flat_dca_oos``) are optional on the same path —
+# absent means "do not claim an OOS win", never a silent true.
 SCHEMA_VERSION = "1.3"
 
 # Extra keys set only on DCA publish. ``to_json`` drops them when unset so a
@@ -50,6 +52,7 @@ _OPTIONAL_PUBLISH_KEYS = (
     "label",
     "kind",
     "avg_trade_pct",
+    "beats_flat_dca_oos",
 )
 
 
@@ -204,17 +207,42 @@ class TearsheetDcaBreakdown(BaseModel):
         description="avg_cost_basis / final close × 100 (percent of last price)",
     )
     capital_deployed_pct: float = Field(
-        ..., description="Final net deployed / initial capital × 100"
+        ...,
+        description=(
+            "Final net deployed / initial capital × 100. Goes negative after sells — "
+            "do not render as 'Deployed'. Public UI uses allocated_pct."
+        ),
     )
     capital_deployed_peak_pct: float = Field(
         ..., description="Peak net deployed / initial capital × 100"
     )
     units_accumulated: float = Field(..., description="Ending position size")
-    buy_days: int = 0
-    sell_days: int = 0
+    buy_days: int = Field(
+        0,
+        description="Days with curve rate > 0 (sign of the daily rate, not fill count)",
+    )
+    sell_days: int = Field(
+        0,
+        description="Days with curve rate < 0 (sign of the daily rate, not fill count)",
+    )
     no_trade_days: int = 0
     avg_risk: float | None = None
     avg_rate: float | None = None
+    allocated_pct: float | None = Field(
+        None,
+        description=(
+            "Final mark-to-market allocated % = 100 * units * price / "
+            "(cash + units * price). Always in [0, 100] when the book is long-only."
+        ),
+    )
+    fill_buy_days: int | None = Field(
+        None,
+        description="Days with a non-zero buy fill (daily_trade_usd > 0), not curve-sign",
+    )
+    fill_sell_days: int | None = Field(
+        None,
+        description="Days with a non-zero sell fill (daily_trade_usd < 0), not curve-sign",
+    )
 
 
 class TearsheetData(BaseModel):
@@ -284,6 +312,13 @@ class TearsheetData(BaseModel):
     label: str | None = None
     kind: str | None = None
     avg_trade_pct: float | None = None
+    beats_flat_dca_oos: bool | None = Field(
+        None,
+        description=(
+            "Walk-forward OOS vs flat DCA. False / omitted = do not claim an OOS win. "
+            "Full-sample Nautilus vs_flat_dca_pct is not this flag."
+        ),
+    )
 
     def to_json(self, *, indent: int | None = 2) -> str:
         """Serialize to a JSON string for the static renderer to fetch.
@@ -436,6 +471,7 @@ def _build_tearsheet(
     label: str | None = None,
     kind: str | None = None,
     avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
 ) -> TearsheetData:
     """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
@@ -520,6 +556,8 @@ def _build_tearsheet(
         extras["kind"] = kind
     if avg_trade_pct is not None:
         extras["avg_trade_pct"] = avg_trade_pct
+    if beats_flat_dca_oos is not None:
+        extras["beats_flat_dca_oos"] = beats_flat_dca_oos
 
     return TearsheetData(
         strategy=str(summary.get("strategy", "")),
@@ -614,6 +652,7 @@ def from_nautilus_run(
     label: str | None = None,
     kind: str | None = None,
     avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
 ) -> TearsheetData:
     """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
     ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
@@ -650,6 +689,7 @@ def from_nautilus_run(
         label=label,
         kind=kind,
         avg_trade_pct=avg_trade_pct,
+        beats_flat_dca_oos=beats_flat_dca_oos,
     )
 
 

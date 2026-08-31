@@ -26,6 +26,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.chart_series import (
+    allocated_pct,
     allocated_pct_series,
     cash_from_net_deployed,
     catalog_indicator_curves,
@@ -137,6 +138,11 @@ def breakdown_from_daily(
         else:
             no_trade_days += 1
 
+    cash_end = cash_from_net_deployed(net_deployed, initial_cash)[-1]
+    fill_eps = 1e-8
+    fill_buy_days = sum(1 for u in daily_trade_usd if float(u) > fill_eps)
+    fill_sell_days = sum(1 for u in daily_trade_usd if float(u) < -fill_eps)
+
     return TearsheetDcaBreakdown(
         vs_lump_pct=(final_pv / final_lump - 1.0) * 100.0,
         vs_flat_dca_pct=(final_pv / final_flat - 1.0) * 100.0,
@@ -150,6 +156,9 @@ def breakdown_from_daily(
         no_trade_days=no_trade_days,
         avg_risk=(risk_sum / non_null) if non_null else None,
         avg_rate=(rate_sum / non_null) if non_null else None,
+        allocated_pct=allocated_pct(cash_end, float(asset_units[-1]), final_price),
+        fill_buy_days=fill_buy_days,
+        fill_sell_days=fill_sell_days,
     )
 
 

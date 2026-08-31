@@ -712,6 +712,7 @@ def run_and_write(
     calibration: dict | None = None
     provenance_notes: list[str] = []
     sdca_index = None
+    beats_flat_dca_oos: bool | None = None
     if family == "slapper":
         calibration = resolve_calibrations(
             strategy,
@@ -754,11 +755,16 @@ def run_and_write(
             idx_dates = idx_dates.cast(pl.Date)
         from digiquant.strategies.sdca.optimize import (
             drop_extras_missing_sources,
+            load_btc_optimized_provenance,
             load_sdca_extra_sources,
         )
 
         sources = load_sdca_extra_sources(cache_dir)
         weights = drop_extras_missing_sources(weights, sources)
+        try:
+            beats_flat_dca_oos = bool(load_btc_optimized_provenance().beats_flat_dca_oos)
+        except Exception:
+            beats_flat_dca_oos = False
         extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
         index = materialize_sdca_risk_index(
             ohlcv,
@@ -776,6 +782,15 @@ def run_and_write(
             "preset": preset_name,
             "indicator_weights": weights.model_dump(),
         }
+        extra_weights = (
+            weights.m2,
+            weights.rs_eth,
+            weights.dxy,
+            weights.weekly_rsi,
+            weights.weekly_macd,
+            weights.sma_band,
+        )
+        extras_unused = all(w == 0.0 for w in extra_weights)
         provenance_notes.append(
             "SDCA risk index built from the signal-delayed OHLCV frame "
             f"{index['date'].min()} → {index['date'].max()} "
@@ -785,6 +800,12 @@ def run_and_write(
             f"weekly_rsi:{weights.weekly_rsi}/weekly_macd:{weights.weekly_macd}/"
             f"sma_band:{weights.sma_band})."
         )
+        if extras_unused:
+            provenance_notes.append(
+                "Published index is power-law only (valuation weight 1.0). Extra "
+                "indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH RS) are "
+                "unused (weight 0) — not a multi-indicator composite."
+            )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
             f"({coefficients.fit_rows} rows). Preset {preset_name}."
@@ -792,7 +813,8 @@ def run_and_write(
         provenance_notes.append(
             "Nautilus venue: spot CurrencyPair + CASH (remaining cash / remaining "
             "holdings). Engine bars from trade_start; risk index uses the full "
-            "delayed cache. Not a long/short book; not broker live-trading."
+            "delayed cache. Remaining-book sizing. Not a long/short book; "
+            "not broker live-trading; backtest only."
         )
 
     engine_ohlcv = ohlcv
@@ -905,10 +927,15 @@ def run_and_write(
     if family == "sdca":
         notes = [
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"DCA book (buy % of remaining cash / sell % of remaining holdings), "
-            f"marked to market (not 100% equity compounding), "
-            f"trade window from {trade_start}. Not a long/short book."
+            f"power-law remaining-book (buy % of remaining cash / sell % of remaining "
+            f"holdings), marked to market (not 100% equity compounding), "
+            f"trade window from {trade_start}. Backtest only — not a live strategy."
         ]
+        notes.append(
+            "Full-sample Nautilus vs-flat / vs-lump is the backtest window, not "
+            "walk-forward out-of-sample. "
+            f"beats_flat_dca_oos={'true' if beats_flat_dca_oos else 'false'}."
+        )
     else:
         notes = [
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
@@ -937,6 +964,7 @@ def run_and_write(
             "curve_knees": sdca_overlays.get("curve_knees"),
             "label": entry.get("label"),
             "kind": entry.get("kind"),
+            "beats_flat_dca_oos": beats_flat_dca_oos,
         }
     td = from_nautilus_run(
         summary,
@@ -1000,6 +1028,8 @@ def run_and_write(
         index_entry["vs_lump_pct"] = dca_block.vs_lump_pct
         index_entry["vs_flat_dca_pct"] = dca_block.vs_flat_dca_pct
         index_entry["capital_deployed_pct"] = dca_block.capital_deployed_pct
+        index_entry["allocated_pct"] = dca_block.allocated_pct
+        index_entry["beats_flat_dca_oos"] = beats_flat_dca_oos
 
     if push_supabase:
         _push_tearsheet_to_supabase(strategy, td, equity_curve, current_signal, index_entry)
@@ -1040,6 +1070,10 @@ def _push_tearsheet_to_supabase(
         payload["vs_lump_pct"] = index_entry["vs_lump_pct"]
         payload["vs_flat_dca_pct"] = index_entry["vs_flat_dca_pct"]
         payload["capital_deployed_pct"] = index_entry["capital_deployed_pct"]
+        if "allocated_pct" in index_entry:
+            payload["allocated_pct"] = index_entry["allocated_pct"]
+        if "beats_flat_dca_oos" in index_entry:
+            payload["beats_flat_dca_oos"] = index_entry["beats_flat_dca_oos"]
 
     curve = [{"t": t, "v": v} for t, v in equity_curve]
     upsert_tearsheet(

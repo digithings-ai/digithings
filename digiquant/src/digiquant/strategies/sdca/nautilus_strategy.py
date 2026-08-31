@@ -367,7 +367,7 @@ register(
         "curve_nodes": DEFAULT_BTC_NODES,
     },
     aliases=["sdca"],
-    description="BTC Strategic DCA: composite risk → accumulation/distribution curve",
+    description="BTC power-law remaining-book: valuation rails → accumulate/distribute curve",
 )
 
 

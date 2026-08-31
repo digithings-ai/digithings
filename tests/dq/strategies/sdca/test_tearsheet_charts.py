@@ -291,12 +291,14 @@ def test_from_nautilus_run_roundtrips_new_overlay_keys() -> None:
         ],
         indicator_weights={"valuation": 1.0, "m2": 0.0},
         curve_knees={"buy_knee_risk": 25.0, "sell_knee_risk": 70.0, "preset": "btc_optimized"},
+        beats_flat_dca_oos=False,
     )
     dumped = json.loads(ts.to_json())
     assert dumped["allocated_pct_curve"][1]["v"] == pytest.approx(40.0)
     assert dumped["fill_markers"][0]["side"] == "buy"
     assert dumped["indicator_curves"][0]["display_name"] == "power law"
     assert dumped["curve_knees"]["buy_knee_risk"] == pytest.approx(25.0)
+    assert dumped["beats_flat_dca_oos"] is False
     # Slapper identity: a dump without these kwargs still omits them.
     slapper = json.loads(
         from_pine(
@@ -325,6 +327,7 @@ def test_from_nautilus_run_roundtrips_new_overlay_keys() -> None:
     )
     assert "allocated_pct_curve" not in slapper
     assert "fill_markers" not in slapper
+    assert "beats_flat_dca_oos" not in slapper
 
 
 @pytest.mark.skipif(
@@ -374,7 +377,7 @@ def test_render_sdca_charts_writes_four_pngs(tmp_path: Path) -> None:
     paths = render_sdca_diagnostic_charts(payload, tmp_path, prefix="test")
     assert len(paths) == 4
     names = {p.name for p in paths}
-    assert "test_composite_index.png" in names
+    assert "test_power_law_risk.png" in names
     for path in paths:
         assert path.exists()
         assert path.stat().st_size > 8_000

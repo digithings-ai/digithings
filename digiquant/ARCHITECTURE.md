@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-30
+**Last updated:** 2026-08-31
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -276,12 +276,19 @@ sells**. Diagnostic charts use `allocated_pct_curve` =
 curve-rate-sign `buy_days`/`sell_days`), `indicator_curves` (0–100 risk
 scale per member; user-facing name for `valuation` is **power law**),
 `indicator_weights`, and `curve_knees` (published `btc_optimized` buy
-knee 25 / sell knee 70). Older 1.3 payloads omit those keys; the
-renderer reconstructs allocation and fill dots from equity +
-capital_deployed + OHLC. `current_signal` for a DCA book is today's **risk, band, and remaining-book
-daily rate** (not long/short). `strategy_signals.position` stays
-`long`/`flat` only because that table is CHECK-constrained; the tearsheet
-UI reads `risk`/`band`/`daily_rate_pct`. Slapper dumps omit these keys.
+knee 25 / sell knee 70). The DCA block also carries `allocated_pct`
+(final MTM allocated %, never negative) and `fill_buy_days` /
+`fill_sell_days` (actual fills). Public UI KPIs show **MTM allocated**,
+not capital deployed. `beats_flat_dca_oos` is copied from
+`btc_optimized_provenance.json` onto the payload (currently **false**) —
+full-sample Nautilus `vs_flat_dca_pct` is **not** this flag. Older 1.3
+payloads omit those keys; the renderer reconstructs allocation and fill
+dots from equity + capital_deployed + OHLC and treats a missing OOS flag
+as "do not claim an OOS win". `current_signal` for a DCA book is today's
+**risk, band, and remaining-book daily rate** (not long/short).
+`strategy_signals.position` stays `long`/`flat` only because that table
+is CHECK-constrained; the tearsheet UI reads `risk`/`band`/`daily_rate_pct`.
+Slapper dumps omit these keys.
 
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
@@ -289,7 +296,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs); the public env (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) must be set in the Cloudflare Pages build for the client to light up.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public copy for `btc_sdca` is **BTC power-law remaining-book** (not "beat the market", not a live strategy); `StrategyNotes` render remaining-book notes (not slapper-only). The public env (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) must be set in the Cloudflare Pages build for the client to light up. Operator go-live still requires merging the halt-fixed stack to `main` and `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from that tree — agents do not push.
 
 Regenerate only when calibrations are available from **one** of:
 
