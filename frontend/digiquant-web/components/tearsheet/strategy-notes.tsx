@@ -19,6 +19,13 @@ export function strategyLibraryDescription(): string[] {
 }
 
 export function theoryCopy(asset: string, strategy: string): string[] {
+  if (strategy.includes("sdca")) {
+    return [
+      `${asset}-SDCA sizes each day as a percent of remaining cash (buy) or remaining ${asset} (sell) from a composite valuation index (power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI).`,
+      "Illustrative Nautilus backtest with a 3-day signal delay — not a live strategy. Buy-and-hold is the public benchmark. Walk-forward vs flat DCA is not a published beat.",
+    ];
+  }
+  if (!isSlapperStrategy(strategy)) return [];
   const lines = [
     `Mean-reversion signals tuned for high-probability local tops and bottoms work alongside a medium-horizon trend layer, calibrated for long and short participation on ${asset}. Entries can fire from either layer or both; exits follow the same logic — staying with meaningful trends while navigating volatile extremes.`,
   ];
@@ -35,7 +42,7 @@ function metaLines(data: TearsheetData): string[] {
     .map((n) =>
       n
         .replace(/NautilusTrader\s+backtest,?\s*/gi, "")
-        .replace(/\s*Slapper/gi, " long/short")
+        .replace(/\s*Slapper/gi, " L/S")
         .trim(),
     )
     .filter(Boolean);
@@ -47,6 +54,33 @@ function metaLines(data: TearsheetData): string[] {
   ];
 }
 
+/** Theory-only notes (used when the live store has not published a payload yet). */
+export function RemainingBookNotes({
+  strategy,
+  asset,
+  printing = false,
+}: {
+  strategy: string;
+  asset: string;
+  printing?: boolean;
+}) {
+  const theory = theoryCopy(asset, strategy);
+  if (theory.length === 0) return null;
+  return (
+    <details className="ts-strategy-notes" open={printing || undefined}>
+      <summary className="ts-strategy-notes-summary">
+        <span className="ts-strategy-notes-label">Notes</span>
+        <span className="ts-strategy-notes-chevron" aria-hidden="true" />
+      </summary>
+      <div className="ts-strategy-notes-body">
+        {theory.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export function StrategyNotes({
   data,
   asset,
@@ -56,8 +90,6 @@ export function StrategyNotes({
   asset: string;
   printing?: boolean;
 }) {
-  if (!isSlapperStrategy(data.strategy)) return null;
-
   const theory = theoryCopy(asset, data.strategy);
   const meta = metaLines(data);
   if (theory.length === 0 && meta.length === 0) return null;

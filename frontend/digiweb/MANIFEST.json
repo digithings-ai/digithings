@@ -583,6 +583,12 @@
         "summary": "Tearsheet charts — the print-grade tearsheet core: a 6-up KPI strip over a signed contribution stack with the exact portfolio-return line, then the tabbed SVG chart deck (candles with trade entry/exit markers + hover cards, equity with a linear/log toggle, underwater drawdown, per-trade P&L with the unrealized open leg, and the 3x3 returns matrix)."
       },
       {
+        "name": "TearsheetDcaReference",
+        "id": "tearsheet-dca",
+        "path": "reference/components/tearsheet-dca-reference.tsx",
+        "summary": "DCA overlay charts — valuation rails (spot + low/median/high) and the composite-risk band strip."
+      },
+      {
         "name": "TearsheetTradeLogReference",
         "id": "tearsheet-trade-log",
         "path": "reference/components/tearsheet-trade-log-reference.tsx",
