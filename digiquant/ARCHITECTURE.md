@@ -3191,8 +3191,10 @@ exception fails that claimed row (`job_runs.error` = structured code or
 exception type name, never the payload) and continues the batch. Persist-off
 finishes `persist_disabled`, which the staging harness does **not** treat
 as proven (hop requires `succeeded` only). `--execute` apply also requires
-`DIGIQUANT_VAULT_MASTER_KEY` and `OLYMPUS_OVERLAY_PERSIST=1` (safe after
-migration 110; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either is missing) so a
+`DIGIQUANT_VAULT_MASTER_KEY` and `OLYMPUS_OVERLAY_PERSIST=1` (documents-safe
+after migration 110; positions/NAV/ledger still blocked by legacy single-tenant
+UNIQUEs until P6 — see Persist flag; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either
+is missing) so a
 production cron cannot finish `persist_disabled` and look like a hop. Do not run
 `--all` / `--execute --all` against Observer until Stripe + BYOK land;
 skipped rows are not a remaining-hop proof. The cron module does
@@ -3241,11 +3243,19 @@ non-house/non-system rows; **migration 110** narrows ``anon_read`` on
 workspace-scoped private books to house (documents: house+system) so overlay
 rows cannot leak to anon. Cutover 900 still DROPs those policies.
 
-**Persist flag.** Overlay private-phase writes (`documents` / `positions` /
-`nav_history` / ledger) require `OLYMPUS_OVERLAY_PERSIST=1` (default off).
-Production may enable that flag **after migration 110** is applied on the
-target (anon house-only on private books). Overlay publish **skips**
-`daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
+**Persist flag.** Overlay private-phase **document** writes require
+`OLYMPUS_OVERLAY_PERSIST=1` (default off). Production may enable that flag
+**after migration 110** is applied on the target (anon house-only on private
+books) so overlay `documents` rows do not leak through `anon_read`. Overlay
+**positions / nav_history / portfolio_metrics / ledger** writes remain refused
+(`legacy_book_unique`) while migration 097's legacy `UNIQUE(date)` /
+`UNIQUE(date, ticker)` / `PRIMARY KEY (date)` and ledger
+`uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
+keys — house ops scripts still upsert with `on_conflict="date"`, so an overlay
+row for the same calendar date either fails the legacy arbiter or is rewritten
+by the next house upsert. Roadmap P6 drops those arbiters and patches every
+house writer; until then only documents are multi-tenant-safe. Overlay publish
+**skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
@@ -3281,7 +3291,8 @@ one active `workspace_provider_credentials` row (unique-conflict = revoke then
 insert, same as the settings Edge Function). House/system and non-entitled
 workspaces (Observer free without `plan_floor`) are refused. Do not seal a
 placeholder or a house process-env key. Overlay `--execute` still requires
-`present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110.
+`present_and_unsealable` plus `OLYMPUS_OVERLAY_PERSIST=1` after migration 110
+(documents only; book/ledger stay `legacy_book_unique` until P6).
 
 **Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
 for `None` / house / system UUIDs. Overlay tenant routing threads
