@@ -604,3 +604,21 @@ Recovering a **single** missing day that is genuinely recoverable (prices exist,
 committed, only the metrics row is absent) is still supported: `--date YYYY-MM-DD`. That is not
 this case — for 06-27 → 07-16 there is no committed book to compute from.
 
+### Booked positions, missing ledger commit (#3330)
+
+If `positions` / `nav_history` / `pm-rebalance` exist for the date but
+`portfolio_ledger_commits` does not (H9 `append_commit_chain` died after
+`book_portfolio` — historically `23502` `workspace_id` NOT NULL while cron
+checked out `main`), do **not** re-run the cheap-tier LLM pipeline. Recover the
+already-decided book:
+
+```bash
+python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD
+python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD --apply
+```
+
+Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger
+commit and a `commit-run/{run_id}` document. Idempotent when a committed
+manifest already exists. Requires `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
+

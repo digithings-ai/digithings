@@ -1006,9 +1006,14 @@ class TestCommitChainLedger:
             capture_output=True,
             text=True,
         ).stdout.split()
+        # ``ledger_io`` is the only writer. Pipeline caller is H9. ``recover_ledger``
+        # is the operator recovery caller for a booked-but-uncommitted day (#3330): it
+        # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
+        # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
             "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
             "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
 
     def test_identical_same_date_fingerprint_appends_nothing(self) -> None:

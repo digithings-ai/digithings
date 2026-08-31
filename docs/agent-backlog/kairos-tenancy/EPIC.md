@@ -64,11 +64,16 @@ Wave E
       stringify hotfix [#3334](https://github.com/digithings-ai/digithings/pull/3334)
       squash-merged to `main` as `3601f72df` (2026-08-31T20:39Z): `_json_safe`
       coerces `UUID` the same way it already coerced `date`/`datetime` (GHA
-      retries died in `publish_document` after the `23502`). Next scheduled GHA
-      (`cron: "0 12 * * *"`, ~12:00 UTC) is the live book-commit proof. Do
-      **not** `workflow_dispatch`; do **not** apply staged 113 while main writers
-      still upsert date-only. Unit green is not a substitute for a green house
-      publish.
+      retries died in `publish_document` after the `23502`). Monday 2026-08-31
+      house book was recovered operator-side without LLM rerun: ledger
+      `8ab9840f-0946-4026-860b-cce20f75eb93`, document
+      `commit-run/52066e03-6c50-44bb-af18-e263664eacd4` (house workspace, recorded
+      2026-08-31T20:01:20Z). Conflicting [#3332](https://github.com/digithings-ai/digithings/pull/3332)
+      is the original recovery CLI (atlas-graph red: `test_h9_is_the_only_ledger_writer`).
+      Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
+      *pipeline* book-commit proof. Do **not** `workflow_dispatch`; do **not**
+      apply staged 113 while main writers still upsert date-only. Unit green is
+      not a substitute for a green house publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
