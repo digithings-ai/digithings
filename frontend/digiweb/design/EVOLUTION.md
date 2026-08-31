@@ -169,7 +169,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Minimize marketing wrapper; chat surface **is** the pitch (Cursor model).
 
-### Olympus (`frontend/olympus/`)
+### Olympus (`frontend/dashboard/`)
 
 **Mode:** Professional dashboard — **creativity stops here**
 
@@ -182,7 +182,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Flatten `glass-card` → `surface` + hairline; mono uppercase labels for metrics; align with `quant-native` utilities.
 
-### twelve-x (`frontend/olympus/components/twelve-x/`)
+### twelve-x (`frontend/dashboard/components/twelve-x/`)
 
 **Mode:** Data-dense FX research utility
 
@@ -322,7 +322,7 @@ Add to `tokens.css` when implementing primitives:
 
 ### Phase D — Dashboard flattening
 
-- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
+- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/dashboard/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [x] twelve-x xAI utility polish (#1217) — **audit: already there**. Section/table headers use `uppercase tracking-wider` mono-style labels (`ConsensusDataTable`, `IntelligenceTab`, `MoversStrip`); metrics use `font-mono tabular-nums`; chips/panels are flat (`.glass-card` = flat panel, per #1216); `MoversStrip` is already a real-data headline FX metric strip. No mesh/serif/scrolly. Forcing the shared `StatCounter` over the working `MoversStrip` would be churn — left as-is.
 - [x] digichat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
 
@@ -368,7 +368,7 @@ From user iteration log + reference analysis:
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
 | `frontend/digithings-web/components/landing/` | digithings landing components |
 | `frontend/digiquant-web/components/landing/` | digiquant landing components |
-| `frontend/olympus/components/twelve-x/` | twelve-x research UI |
+| `frontend/dashboard/components/twelve-x/` | twelve-x research UI |
 
 ---
 

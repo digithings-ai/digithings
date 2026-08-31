@@ -24,8 +24,10 @@ Hermes consumes the daily Atlas digest (`DigestPayload`) and runs **H1–H9**:
 - **Production:** `python -m digiquant.olympus.hermes.chain --cadence daily`
   (`--refresh-scope` for operator full refresh: `none|all|segments|hermes|digest|beliefs`).
   Deprecated shim: `--run-type baseline|delta` (warns; `monthly` rejected).
+  After a non-retry exit, fail-soft K5 digest close-out runs (`force_digest=True`).
 - **Standalone:** `python -m digiquant.olympus.hermes.graph --from-digest <state.json>`
 - **Library:** `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)`
+  (overlay nested path — does **not** send house mail)
 
 ## Extension checklist (§9–§11)
 
@@ -72,7 +74,8 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 - **H9 terminal:** `commit_run` upserts `positions`, `nav_history`, syncs `theses` /
   `thesis_vehicles`, publishes brief, appends `decision_log`
 - **Atlas `publish_phase`:** research segments + digest only (chain terminal after Hermes)
-- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node
+- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node.
+  Overlay nested chain skips the fold so persist-on cannot stamp house `decision_log`.
 
 ## Testing
 

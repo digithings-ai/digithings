@@ -258,7 +258,8 @@ unchanged keys, so the diet does **not** disturb the stable→volatile prompt-ca
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds, lower `max_search_results`. A **blanket** fan-out cap is still
+thresholds. (`max_search_results` is unused under native Olympus grounding —
+Exa toolkit only.) A **blanket** fan-out cap is still
 rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
 prioritised round-robin *within* the cap, so the reduction falls on the
@@ -320,7 +321,7 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | Env | Values | Effect |
 |---|---|---|
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
-| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + Olympus native web grounding (`get_grounding_model` / Perplexity / `:online`) |
 
 `apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
 sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
@@ -341,16 +342,18 @@ provider yields a step **failure**, not a 240-minute job **cancellation**.
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
 | **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass (unreachable from production — see below) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra); production grounding uses built-in search on `perplexity/sonar` or `:online` models from `get_grounding_model()` / `web_search_models` — billed per that model's page |
+| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** Olympus production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding** resolves via `get_grounding_model()` from the tier's `web_search_models`
-pool. Every production pool entry is `perplexity/sonar` or an `:online` variant, so
-digillm uses built-in provider search — not the `openrouter:web_search` Exa server tool
-(which remains the path for non-`:online`/non-Perplexity models and is what check 4 in
-`validate-providers.py` exercises).
+**Web grounding (Olympus)** resolves via `get_grounding_model()` from the tier's
+`web_search_models` pool. Every production pool entry is `perplexity/sonar` or an
+`:online` variant — **web-search-capable models only** (#2567). digillm uses
+built-in provider search; Olympus call sites do **not** pass Exa `engine` /
+`max_results`. The Exa `openrouter:web_search` server tool remains a digillm /
+digigraph toolkit fallback for non-native models (opt-in / diagnostics). Check 4
+in `validate-providers.py` exercises the **native** Olympus path.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are

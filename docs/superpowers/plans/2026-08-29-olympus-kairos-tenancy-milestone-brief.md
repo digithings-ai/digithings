@@ -295,7 +295,7 @@ Each issue should cite this brief + the vision brief + `MIGRATION-ROADMAP-DIGITH
 - [Olympus pipeline metaplan](2026-08-06-olympus-pipeline-metaplan.md) — Progress / Kairos groundwork strip
 - [Wave 3 migration roadmap](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
 - [docs/vision/olympus.md](../../vision/olympus.md), [docs/vision/digiquant.md](../../vision/digiquant.md)
-- [frontend/olympus/AUTH.md](../../../frontend/olympus/AUTH.md), [frontend/olympus/README.md](../../../frontend/olympus/README.md)
+- [frontend/dashboard/AUTH.md](../../../frontend/dashboard/AUTH.md), [frontend/dashboard/README.md](../../../frontend/dashboard/README.md)
 - [digiquant/docs/profiles/README.md](../../../digiquant/docs/profiles/README.md)
 - Broker stubs: `digiquant/src/digiquant/brokers/`
 

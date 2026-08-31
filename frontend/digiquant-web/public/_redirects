@@ -1,8 +1,16 @@
 # Back-compat for the legacy static digiquant.io URLs.
-/atlas.html           /subsystems/atlas/   301
-/atlas                /subsystems/atlas/   301
-/index.html           /                    301
-/pipeline             /#pipeline           301
-/pipeline/            /#pipeline           301
-/pricing              /contact/            301
-/pricing/             /contact/            301
+/atlas.html              /subsystems/research/    301
+/atlas                   /subsystems/research/    301
+/index.html              /                        301
+/pipeline                /#pipeline               301
+/pipeline/               /#pipeline               301
+/pricing                 /contact/                301
+/pricing/                /contact/                301
+
+# Subsystem slugs: atlas/hermes/kairos → research/portfolio/execution.
+/subsystems/atlas        /subsystems/research/    301
+/subsystems/atlas/       /subsystems/research/    301
+/subsystems/hermes       /subsystems/portfolio/   301
+/subsystems/hermes/      /subsystems/portfolio/   301
+/subsystems/kairos       /subsystems/execution/   301
+/subsystems/kairos/      /subsystems/execution/   301

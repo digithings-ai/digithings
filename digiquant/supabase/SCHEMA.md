@@ -645,6 +645,24 @@ Settings / billing Edge Functions call the RPC via `service_role` when
 `_shared/supabase-admin.ts`), so pre-trigger users still bootstrap on first JWT
 settings call.
 
+### Creator / client-product grants (108)
+
+Product gating without widening free Observer:
+
+| Object | Purpose |
+|--------|---------|
+| `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`baseline`,`custom`,`enterprise`). Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `custom` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
+| `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom Olympus products reuse the same table. 12x client emails via ops insert **or** hashed invite redeem (migration 112). Seed: creator → `fx_hub`. |
+| `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. |
+| `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math. |
+| `product_invite_codes` | SHA-256 hex of invite codes (`product_key`, `code_hash`). service_role only. |
+| `product_invite_redemptions` | Who redeemed (user_id, email, source `env`\|`table`). Admin ledger. |
+| `product_invite_attempts` | Rate-limit ledger for redeem. |
+
+Olympus UI + settings EF resolve **effective** tier (never JWT claim alone) so creator
+baseline/Kairos works while Stripe captchas block Checkout. Free remains teaser-only
+(`digest_summary` + `portfolio_teaser`; no brokers/automations).
+
 ### New tables (096)
 
 | Table | PK | Purpose |
@@ -688,7 +706,7 @@ NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
 
 | Table | Backfill target | Column DEFAULT | Constraints changed |
 |-------|-----------------|----------------|---------------------|
-| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 drops legacy) |
+| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 stages the drop in `cutover/113`, not auto-applied) |
 | `position_events` | house | house id | **keep** `position_events_date_ticker_key`; **add** `uq_position_events_workspace_date_ticker` |
 | `nav_history` | house | house id | **keep** PK `(date)`; **add** `uq_nav_history_workspace_date (workspace_id, date)` |
 | `portfolio_metrics` | house | house id | **keep** `portfolio_metrics_date_key`; **add** `uq_portfolio_metrics_workspace_date` |
@@ -697,9 +715,18 @@ NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
 | `olympus_profile_config` | **system** (house-default row) | **none** | column + FK only |
 
 House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_snapshot`,
-`accounting.io`, `execute_at_open`) stamp `house_workspace_id()` explicitly.
-Legacy scripts (`refresh_performance_metrics.py`, `sync_positions_from_rebalance.py`,
-`update_tearsheet.py`, …) lean on Group A DEFAULTs + legacy UNIQUEs until roadmap P6.
+`accounting.io`, `execute_at_open`, `portfolio_materialize`,
+`refresh_performance_metrics`) stamp `house_workspace_id()` explicitly.
+Ops / recovery scripts (`sync_positions_from_rebalance.py`, `update_tearsheet.py`,
+`materialize_snapshot.py` positions, `backfill_execution_prices.py`,
+`reconcile_position_events_from_positions.py`) now stamp the same house id and
+target the widened UNIQUEs. P6 stages the 097 legacy date-only drop in
+`migrations/cutover/113_drop_legacy_book_uniques.sql` (not auto-applied;
+`db-migrate.yml` is `-maxdepth 1`). Do **not** copy 113 to top-level or apply
+it on `core` until `main` house GHA writers are on the widened conflict
+(`origin/main` `commit_io` / `portfolio_materialize` still `on_conflict=date`).
+`require_overlay_legacy_book_safe` stays until 113 is actually applied.
+Proof: `tests/dq/olympus/test_cutover_113.py`.
 
 ### Authenticated RLS (098) — anon untouched until T1
 
@@ -711,6 +738,59 @@ both marked `TODO(T5)` for the tier CHECK. **No existing `anon_read` policy is d
 or narrowed in this WP** — that cutover ships inside T1's release train. Two-JWT
 executable proof is documented in the 098 header; structural assertions live in
 `tests/dq/olympus/test_migration_tenancy.py`.
+
+### Authenticated house teaser read — migration 109 (hotfix)
+
+Auth Pages JWT (`role=authenticated`) emptied Brief/Portfolio because classic
+`anon_read` policies are `TO anon` only. Pre-cutover **900** (do **not** apply
+cutover here), migration 109 adds:
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `authenticated_read_house_teaser` | `daily_snapshots`, `theses`, `instruments` | `true` (shared teaser; no `workspace_id`) |
+| `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
+
+`anon_read` on those book tables was **USING (true)** until **110**. Proof:
+`tests/dq/olympus/test_migration_109_house_teaser.py`. Numbering: **108** is
+creator/product grants (independent); **109** is this RLS hotfix.
+
+### Anon house-only private books — migration 110
+
+Pre-cutover: 109 made authenticated SELECT house-OR-membership, but left
+`anon_read USING (true)` — anon was wider than a signed-in member. Overlay
+persist would have leaked private books. Migration **110** recreates
+`anon_read` (same policy name so cutover 900 still DROPs it):
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `anon_read` | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID only |
+| `anon_read` | `documents` | house **OR** system |
+
+Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
+`instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
+**Documents** may persist under `OLYMPUS_OVERLAY_PERSIST=1` after 110.
+**positions / nav_history / ledger** stay refused (`legacy_book_unique`) while
+097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
+069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
+`develop` already upsert the widened `(workspace_id, …)` targets; the leftover
+097 keys still reject a second workspace's same-date row. Staged cutover **113**
+(`migrations/cutover/113_drop_legacy_book_uniques.sql`) DROPs those 097 keys and
+widens the 069 one-root indexes to `(workspace_id, run_date[, symbol])`. It is
+**not** auto-applied. Do not copy it to top-level or apply on `core` until
+`main` house GHA writers are also widened. Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. This is **not** cutover 900: anon can still
+read house weights/NAV. `daily_snapshots` `UNIQUE(date)` is kept (house-only).
+Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py`,
+`tests/dq/olympus/overlay/test_persist.py`, and
+`tests/dq/olympus/test_cutover_113.py`.
+
+Staged cutover **900** section A2 restores 098 membership-only
+`authenticated_select_own_workspace` on the four book tables and drops
+`authenticated_read_house_teaser` on `daily_snapshots` (SELECT already REVOKEd
+in 900 §B). `theses` / `instruments` teasers stay (T5 research). 900 is not
+auto-applied; do not promote it to `core` until T1-train cutover. Proof:
+`tests/dq/olympus/test_cutover_900.py` plus `scripts/rls_proof/` (59/59 with
+900 applied on a throwaway DB).
 
 ### Broker credential vault — migration 099 (K3, Kairos tenancy)
 
@@ -834,6 +914,17 @@ in the same change.
   `olympus_accounting_*` / `olympus_profile_config` / `workspaces` /
   `workspace_members` (previously fully revoked) so the new policies can fire; write
   grants stay `service_role`-only.
+- **Exception — Authenticated house teaser (migration 109, hotfix):** Auth Pages
+  JWT (`role=authenticated`) could not SELECT house Brief/Portfolio rows because
+  `anon_read` is `TO anon` only. 109 adds `authenticated_read_house_teaser`
+  (`USING (true)`) on `daily_snapshots` / `theses` / `instruments`, and expands
+  `authenticated_select_own_workspace` on `positions` / `position_events` /
+  `nav_history` / `portfolio_metrics` with a house-workspace OR. **Anon policies
+  are untouched.** The olympus dashboard still filters those Group A tables to
+  the house UUID via `houseBook()` so overlay rows a Custom JWT can SELECT
+  never mix into Brief / Holdings / Performance. Staged cutover 900 §A2 reverts
+  the book-table house UUID so
+  free JWTs cannot read house weights after `anon_read` is dropped.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the

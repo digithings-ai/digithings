@@ -16,7 +16,7 @@ relevance:
 **Role:** Always-on runtime · heartbeat · audit · **Tier:** support
 
 ## Overview
-A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.
+A heartbeat service that keeps agents running: research-runner scheduling and drift detection, calling digigraph over HTTP on an interval.
 
 Every action lands in an append-only audit log, and it runs no LLM of its own.
 

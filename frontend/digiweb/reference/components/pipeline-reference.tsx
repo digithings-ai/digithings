@@ -1,6 +1,6 @@
 /**
  * Pipeline — a workflow visualization ported from the olympus dashboard's
- * pipeline section (frontend/olympus/components/pipeline). A left→right flow of
+ * pipeline section (frontend/dashboard/components/pipeline). A left→right flow of
  * stages with a parallel fan-out group; each step carries its diagnostics
  * (wall time · tokens · model), connectors show how one feeds the next, and
  * selecting a node opens its inputs/outputs and full diagnostics. Works for

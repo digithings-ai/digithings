@@ -31,7 +31,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple  # score:allow untyped any — duck-typed PostgREST rows
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -49,6 +49,17 @@ except ImportError:
     _HAS_SB = False
 
 ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 _SEVERITY_RANK = {"info": 1, "warn": 2, "error": 3}
 
@@ -84,9 +95,9 @@ def _document_key(track: str, date_str: str) -> str:
 
 
 def _load_payload_from_supabase(sb, date_str: str, document_key: str) -> Dict[str, Any]:
+    """House ``pipeline_review`` payload. Overlay same-key rows must not file GitHub issues."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", date_str)
         .eq("document_key", document_key)
         .limit(1)

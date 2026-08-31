@@ -19,6 +19,8 @@ import {
   jsonError,
   jsonOk,
 } from "../_shared/supabase-admin.ts";
+import { corsPreflight } from "../_shared/cors.ts";
+import { settingsBillingReturnUrl } from "../_shared/app-url.ts";
 import { createClient } from "@supabase/supabase-js";
 import {
   loadPriceTierEnv,
@@ -30,6 +32,9 @@ type Interval = "monthly" | "annual";
 type PaidTier = Extract<PlanTier, "baseline" | "custom">;
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflight();
+  }
   if (req.method !== "POST") {
     return jsonError(405, "METHOD_NOT_ALLOWED", "POST only");
   }
@@ -95,7 +100,10 @@ Deno.serve(async (req) => {
   );
   if (!authz.ok) return authz.response;
 
-  const appUrl = (Deno.env.get("NEXT_PUBLIC_APP_URL") ?? "").replace(/\/$/, "");
+  const appUrl = (Deno.env.get("NEXT_PUBLIC_APP_URL") ?? Deno.env.get("APP_URL") ?? "").replace(
+    /\/$/,
+    "",
+  );
   if (!appUrl) {
     return jsonError(500, "APP_URL_NOT_CONFIGURED", "App URL not configured");
   }
@@ -107,8 +115,8 @@ Deno.serve(async (req) => {
       customerEmail: user.email,
       priceId,
       workspaceId: authz.workspace.id,
-      successUrl: `${appUrl}/settings/billing?checkout=success`,
-      cancelUrl: `${appUrl}/settings/billing?checkout=cancel`,
+      successUrl: settingsBillingReturnUrl(appUrl, "success"),
+      cancelUrl: settingsBillingReturnUrl(appUrl, "cancel"),
     });
     return jsonOk({ id: session.id, url: session.url });
   } catch (err) {

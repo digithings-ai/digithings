@@ -124,7 +124,7 @@ html {
   scroll-padding-top: var(--dq-nav-h);
 }
 #pipeline,
-#olympus,
+#desk,
 #strategies,
 #pricing {
   scroll-margin-top: var(--dq-nav-h);
@@ -150,29 +150,63 @@ html {
   .btn-icon svg { display: block; }
 }
 
-/* Olympus CTA (NavShell sheet slot): real Olympus mark + label */
-.olympus-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
-/* Desktop tail twin (SiteNav.tsx) — plain icon + label in the theme's own ink
-   tone, no `.btn-primary` fill. Same treatment as digithings.ai's
-   `.dt-nav-chat-cta`. */
-.dq-nav-olympus-cta { color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 0; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
-.dq-nav-olympus-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.olympus-mark { transform-origin: 50% 50%; }
-/* mark strokes are fully drawn at rest; the Open-Olympus button replays the
-   dashboard's loader (stroke-draw + scale pulse) on hover. */
-.olympus-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
-.olympus-stroke-1 { --ol-len: 120; }
-.olympus-stroke-2 { --ol-len: 190; }
-.olympus-stroke-3 { --ol-len: 45; }
-.olympus-stroke-4 { --ol-len: 165; }
-.olympus-cta:hover .olympus-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-.olympus-cta:hover .olympus-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
-.olympus-cta:hover .olympus-stroke-2 { animation-delay: 0.03s; }
-.olympus-cta:hover .olympus-stroke-3 { animation-delay: 0.06s; }
-.olympus-cta:hover .olympus-stroke-4 { animation-delay: 0.09s; }
+/* Dashboard mark CTA (NavShell sheet slot + desktop tail). */
+.dq-cta { display: inline-flex; align-items: center; gap: 0.45rem; }
+/* Desktop tail — teal mark only. No label: the wordmark is already
+   digiquant, and the accessible name is on the <a>. */
+.dq-nav-mark-cta {
+  color: var(--accent);
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  justify-content: center;
+  text-decoration: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  opacity: 0.96;
+  transition: opacity 0.18s var(--ease), background 0.18s var(--ease);
+}
+.dq-nav-mark-cta:hover { opacity: 1; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.dq-mark { transform-origin: 50% 50%; }
+/* Strokes are fully drawn at rest. Idle: replay the dashboard loader once
+   every 10s (1.55s of motion, then hold). Hover: the same 1.55s loop. */
+.dq-stroke { stroke-dasharray: var(--ol-len, 200); stroke-dashoffset: 0; }
+.dq-stroke-1 { --ol-len: 120; }
+.dq-stroke-2 { --ol-len: 190; }
+.dq-stroke-3 { --ol-len: 45; }
+.dq-stroke-4 { --ol-len: 165; }
+.dq-nav-mark-cta .dq-mark { animation: ol-pulse-idle 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dq-nav-mark-cta .dq-stroke { animation: ol-draw-idle 10s ease-in-out infinite; }
+.dq-cta:hover .dq-mark { animation: ol-pulse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.dq-cta:hover .dq-stroke { animation: ol-draw 1.55s ease-in-out infinite; }
+.dq-cta .dq-stroke-2,
+.dq-cta:hover .dq-stroke-2 { animation-delay: 0.03s; }
+.dq-cta .dq-stroke-3,
+.dq-cta:hover .dq-stroke-3 { animation-delay: 0.06s; }
+.dq-cta .dq-stroke-4,
+.dq-cta:hover .dq-stroke-4 { animation-delay: 0.09s; }
 @keyframes ol-pulse { 0% { transform: scale(0.82); } 35% { transform: scale(1); } 55% { transform: scale(0.72); } 72% { transform: scale(1.03); } 100% { transform: scale(1); } }
 @keyframes ol-draw { 0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; } 10% { opacity: 1; } 40%, 55% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .olympus-cta:hover .olympus-mark, .olympus-cta:hover .olympus-stroke { animation: none; } }
+/* 1.55s of ol-pulse / ol-draw packed into the first 15.5% of a 10s cycle. */
+@keyframes ol-pulse-idle {
+  0% { transform: scale(0.82); }
+  5.4% { transform: scale(1); }
+  8.5% { transform: scale(0.72); }
+  11.2% { transform: scale(1.03); }
+  15.5%, 100% { transform: scale(1); }
+}
+@keyframes ol-draw-idle {
+  0% { stroke-dashoffset: var(--ol-len); opacity: 0.4; }
+  1.6% { opacity: 1; }
+  6.2%, 100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dq-nav-mark-cta .dq-mark,
+  .dq-nav-mark-cta .dq-stroke,
+  .dq-cta:hover .dq-mark,
+  .dq-cta:hover .dq-stroke { animation: none; }
+}
 
 /* push subpage content (no full-bleed hero) clear of the fixed nav; relative so
    the ambient mesh can anchor to the top band without covering the footer */
@@ -297,7 +331,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 }
 
 /* ---- OLYMPUS: scroll-pinned hedge-fund-in-a-box track ---- */
-.dq-olympus { background: var(--bg); }
+.dq-desk { background: var(--bg); }
 
 /* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
    for a beat so a live change is perceptible, not silent. Money colours only
@@ -322,10 +356,10 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 /* kinetic 3D Olympus mark behind the scene — opacity + scale driven by scroll
    progress in PipelineScene (rotateX gives the laid-back 3D read). */
 .dqp-logo-bg { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; pointer-events: none; color: var(--accent); opacity: 0; transform: perspective(900px) rotateX(20deg) scale(0.82); transform-origin: 50% 55%; }
-.dqp-logo-bg .olympus-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
+.dqp-logo-bg .dq-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
 .dqp-scene-head { text-align: center; margin-bottom: clamp(1.4rem, 4vw, 2.6rem); }
-.dqp-olympus { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
-.dqp-olympus svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
+.dqp-desk { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.dqp-desk svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
 .dqp-scene-title { font-family: var(--font-display); font-size: clamp(1.5rem, 3.2vw, 2.3rem); font-weight: 400; letter-spacing: -0.015em; margin-top: 0.5rem; color: var(--ink); }
 .dqp-rail { position: relative; display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 2rem; padding: 0 8px; }
 .dqp-rail::before { content: ""; position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--hair); }
@@ -335,15 +369,18 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-node.on .dqp-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 16px var(--accent-weak); }
 .dqp-lab { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); transition: color 0.3s; }
 .dqp-node.on .dqp-lab { color: var(--ink); }
-.dqp-heads { position: relative; max-width: 760px; min-height: 150px; margin: 0.4rem auto 0; }
+.dqp-heads { position: relative; max-width: 760px; min-height: 11.25rem; margin: 0.4rem auto 0; }
 .dqp-ehead { position: absolute; inset: 0; opacity: 0; transform: translateY(10px); transition: opacity 0.55s var(--ease), transform 0.55s var(--ease); pointer-events: none; }
 .dqp-ehead.show { opacity: 1; transform: none; }
 .dqp-etag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.5rem; }
 .dqp-ehead h3 { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
 /* left-align the body to match the left-aligned tag + heading (was centered) */
 .dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
-/* #000 here is a mask alpha ramp (fully-opaque stop), not a color — leave rule */
-.dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
+/* #000 here is a mask alpha ramp (fully-opaque stop), not a color — leave rule.
+   Padding on the track is load-bearing: `.dqp-step.cur` lifts the active card
+   (`translateY(-5px)`), and without this inset the In-development card (and
+   every other phase card on the slide) collides with the engine copy above. */
+.dqp-track { margin-top: 2.4rem; overflow: hidden; padding: 1.75rem 2px 1rem; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
 .dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 0; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
 .dqp-step.lit { opacity: 1; border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
@@ -372,7 +409,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-golink:hover .dqp-golink-arrow { transform: translateX(5px); }
 @media (prefers-reduced-motion: reduce) { .dqp-golink-arrow, .dqp-golink:hover .dqp-golink-arrow { transition: none; transform: none; } }
 .dqp-spacer { border: none; background: transparent; opacity: 0; padding: 0; pointer-events: none; }
-@media (max-width: 820px) { .dqp-step { width: 150px; } .dqp-heads { min-height: 180px; } .dqp-scrolly { height: 360vh; } .dqp-node { width: 90px; } }
+@media (max-width: 820px) { .dqp-step { width: 150px; } .dqp-heads { min-height: 14rem; } .dqp-scrolly { height: 360vh; } .dqp-node { width: 90px; } }
 
 /* ---- STRATEGY SUITE: tearsheet previews on the canonical deck stack ----
    Stack mechanics (sticky cascade, slots runway, side rail, narrow-viewport

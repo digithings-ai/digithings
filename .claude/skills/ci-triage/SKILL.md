@@ -23,7 +23,7 @@ Fetch the CI output for the PR. Options:
 | **Format** | `ruff format`, `prettier` diff | `ruff format .` / `npx prettier --write .` |
 | **Broken links** | `make doc-check` failures | Fix or remove the dead markdown link |
 | **Unit tests** | `pytest` / `vitest` failures | Run the failing test locally; fix the code |
-| **Scoring gate** | `make score` exits non-zero | Run `score-and-fix` skill |
+| **Score CI job** | `make score` / `test-score` exits non-zero | Run `make score` locally to see rubric findings; fix real issues. Optional tool, not a pre-PR ritual. |
 | **Docker / compose** | `make up` / service health failures | Check `docker compose logs <service>` |
 | **Other** | Anything else | Read the raw log; escalate if unclear |
 
@@ -44,6 +44,6 @@ Apply the minimal fix for each bucket. Do not touch code outside the failing sco
 After fixes:
 ```bash
 git add <changed files>
-make score          # re-run gate if scoring was a bucket
+make score          # re-run only if the score CI job was a bucket
 git push            # re-triggers CI
 ```

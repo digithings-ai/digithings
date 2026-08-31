@@ -80,7 +80,7 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 | Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
 | Score gate | `test-score.yml` | Heuristic diff scan via `scripts/score.py` |
 | Nautilus smoke | `test-nautilus.yml` | Linux `digiquant[nautilus]` parser tests |
-| Olympus | `test-olympus.yml` | Vitest + static export build (`frontend/olympus/`) |
+| Dashboard | `test-dashboard.yml` | Vitest + static export build (`frontend/dashboard/`) |
 | Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
 | E2E contract | `test-e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
 | E2E stack | `test-e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |

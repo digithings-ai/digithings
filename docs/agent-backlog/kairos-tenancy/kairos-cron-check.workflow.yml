@@ -1,0 +1,79 @@
+name: "Pipeline: Kairos cron check"
+
+# Fail-closed probe for overlay dispatch env, Alpaca paper sync env, and Mailgun.
+# Separate process from pipeline-olympus.yml on purpose: overlay usage.start is
+# process-global, so overlay must never share the house Hermes chain job.
+#
+# Probe only. The run: steps below are --check / --dry-run. They must never
+# pass --execute, --all, or invoke digiquant.olympus.hermes.chain.
+# Do not run --execute --all against Observer until Stripe + BYOK land.
+#
+# Checkout is the triggering ref (default branch is develop), not a pin to main:
+# overlay / kairos sync CLIs live on develop until a Pages/promote hop. This is
+# a read-only env probe, not a production apply.
+#
+# Expected red until GitHub secrets include CORE_SUPABASE_* (or SUPABASE_*)
+# plus MAILGUN_API_KEY / MAILGUN_DOMAIN / NOTIFY_FROM. Missing names fail
+# closed (exit 2). That is the production signal, not a skip.
+#
+# Install: copy this file to .github/workflows/kairos-cron-check.yml on a
+# chore/ or feat/ branch. cursor/* branches cannot write .github/workflows/.
+# tests/scripts/test_kairos_cron_workflow.py pins the probe-only invariants
+# against this spec; if the installed workflow exists it must match byte-for-byte.
+
+on:
+  schedule:
+    # 15 minutes after house daily (0 12 * * *) so the jobs overlap in wall
+    # time but never in-process.
+    - cron: "15 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kairos-cron-check
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+      MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+      NOTIFY_FROM: ${{ secrets.NOTIFY_FROM }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # supabase extra arrives via atlas. NautilusTrader stays out — this job
+      # never runs the graph.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra atlas
+
+      - name: Probe overlay + sync + Mailgun env
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python scripts/kairos_cron_check.py
+
+      - name: Overlay dry-run (no job_runs writes)
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python -m digiquant.olympus.overlay --dry-run
+
+      - name: Kairos sync dry-run (no unseal, no poll)
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python -m digiquant.olympus.kairos.sync_cron --dry-run

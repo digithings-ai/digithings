@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from uuid import UUID
 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +19,14 @@ def upsert_analyst_coverage(
     ticker: str,
     document_key: str,
     thesis_ids: list[str] | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> None:
     """Write ``analyst_coverage`` row for *ticker* (migration 024)."""
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register analyst_coverage (house-only UNIQUE(date, ticker))"
+        )
+        return
     row = {
         "date": run_date.isoformat(),
         "ticker": ticker,

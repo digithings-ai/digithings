@@ -12,8 +12,15 @@ the existing `prices-live/` lane (`deno.json` import map → `npm:@supabase/supa
 | `settings` | `true` | Profile / brokers / notifications (T3) |
 
 Shared modules live under [`_shared/`](_shared/): `stripe.ts`, `tiers.ts`,
-`supabase-admin.ts`, `webhook-handler.ts`, `billing-auth.ts`, `vault.ts`
+`supabase-admin.ts`, `webhook-handler.ts`, `billing-auth.ts`, `cors.ts`
+(browser preflight for digiquant.io → Functions), `vault.ts`
 (K3 public contract mirror), `profile-schemas.ts`, `settings-handlers.ts`.
+
+Browser callers on `digiquant.io` send `Authorization` (and often `Content-Type`),
+which triggers an OPTIONS preflight. `settings`, `create-checkout-session`, and
+`customer-portal` answer OPTIONS with `204` + `Access-Control-Allow-*` before
+auth; `jsonError` / `jsonOk` also emit those headers so error responses stay
+readable from the static origin.
 
 ## Settings (T3) — architecture note
 
@@ -24,6 +31,11 @@ never the reserved `house` key), and seals broker credentials with the vault
 `{workspace_id}:{broker}:{env}`). Responses never include ciphertext or
 plaintext. `GET /notifications` hydrates prefs (empty → 200 defaults, `updated_at: null`;
 no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
+Member-scoped service-role reads: `GET /jobs` (`job_runs`), `GET /fills`
+(`broker_executions` fingerprints, no `external_fill_id`), `GET /notifications/log`
+(event keys only), `GET /app-urls` (pinned Alpaca redirect_uri + billing return
+URL under `/dashboard`, plus the public Alpaca OAuth client id — never the secret). `GET /profile` includes workspace `plan_tier` +
+`subscription_status` and `has_stripe_subscription` (boolean only) and never Stripe ids.
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
 on the target DB. See [`settings/README.md`](settings/README.md).
@@ -52,11 +64,15 @@ supabase secrets set \
   STRIPE_PRICE_BASELINE_ANNUAL=price_… \
   STRIPE_PRICE_CUSTOM_MONTHLY=price_… \
   STRIPE_PRICE_CUSTOM_ANNUAL=price_… \
-  NEXT_PUBLIC_APP_URL=https://olympus.example.com \
+  NEXT_PUBLIC_APP_URL=https://digiquant.io \
   DIGIQUANT_VAULT_MASTER_KEY="$(openssl rand -base64 32)" \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…
 ```
+
+**Checkout / portal return URLs** append `/dashboard/settings/?tab=billing`.
+`APP_URL` on `core` must be `https://digiquant.io` (origin only — never loopback,
+never a path that already includes `/dashboard` or `/olympus`).
 
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` are injected by
 the Edge Runtime — do not put the service role key in app env files that ship to
@@ -83,6 +99,9 @@ cd digiquant/supabase/functions
 
 # Install Deno if needed: https://deno.land (# or: curl -fsSL https://deno.land/install.sh | sh)
 deno test --allow-env --allow-read \
+  _shared/app-url.test.ts \
+  _shared/access.test.ts \
+  _shared/cors.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
   stripe-webhook/stripe-webhook.test.ts \

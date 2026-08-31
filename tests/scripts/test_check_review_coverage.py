@@ -658,6 +658,12 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
     Skips (rather than fails) when a ref can't be resolved at all -- e.g. a
     shallow or partial clone that never fetched one of these branches -- since
     that's an environment limitation, not a claim about BASELINE_SHA itself.
+    The same hatch applies when BASELINE_SHA itself is missing from the object
+    database of a shallow clone: ``git merge-base --is-ancestor`` then exits 128
+    with ``fatal: Not a valid object name``, which is what ``ruff-and-scripts``
+    on ``ci.yml`` (default fetch-depth 1) reported against ``origin/main``.
+    A full clone with a bad pin still fails: the skip is gated on
+    ``git rev-parse --is-shallow-repository``.
     """
     for ref in ("origin/main", "origin/develop"):
         resolvable = subprocess.run(
@@ -668,9 +674,38 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
         if resolvable.returncode != 0:
             pytest.skip(f"{ref} is not resolvable in this checkout")
 
+        baseline_present = subprocess.run(
+            ["git", "cat-file", "-e", f"{crc.BASELINE_SHA}^{{commit}}"],
+            cwd=crc.REPO_ROOT,
+            capture_output=True,
+        )
+        if baseline_present.returncode != 0:
+            shallow = subprocess.run(
+                ["git", "rev-parse", "--is-shallow-repository"],
+                cwd=crc.REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if shallow.returncode == 0 and shallow.stdout.strip() == "true":
+                pytest.skip(
+                    "BASELINE_SHA is not in this clone's object database "
+                    "(shallow checkout — ci.yml ruff-and-scripts uses default fetch-depth 1)"
+                )
+            pytest.fail(
+                f"BASELINE_SHA {crc.BASELINE_SHA} is not a valid commit object in a full clone"
+            )
+
         result = subprocess.run(
             ["git", "merge-base", "--is-ancestor", crc.BASELINE_SHA, ref],
             cwd=crc.REPO_ROOT,
             capture_output=True,
         )
         assert result.returncode == 0, f"BASELINE_SHA is not an ancestor of {ref}"
+
+
+def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
+    """Shallow clones must skip; a full clone with a bad pin must still fail."""
+    src = Path(__file__).read_text(encoding="utf-8")
+    assert '["git", "cat-file", "-e"' in src
+    assert "--is-shallow-repository" in src
+    assert "pytest.fail" in src
