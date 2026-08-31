@@ -510,7 +510,11 @@ to `>= 0` regardless of the curve's own sign, as a safety override independent
 of which curve is configured. `on_bar()` skips sizing a new order while a
 prior one is still open (`_order_pending`, cleared on
 fill-complete/canceled/rejected/expired/denied), so two bars can never size
-off the same unreserved cash/asset_units. Shadow `_cash`/`_asset_units` are
+off the same unreserved cash/asset_units. Fill-complete also fires when the
+leftover is below `size_increment` (quantization dust must not freeze the
+book). A pending flag whose bar date is in the past is canceled so a later
+distribute day can still sell — otherwise a 2023 leftover blocked the 2025
+top. Shadow `_cash`/`_asset_units` are
 updated from real `OrderFilled` events (`on_order_filled()`), not the
 pre-submission estimate, so they track Nautilus's actual quantity-quantized
 execution state rather than drifting from it; a fill's `commission` is also

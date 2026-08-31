@@ -13,7 +13,10 @@ sources of truth for the allocation decision. Shadow ``_cash``/
 pre-submission estimate, so they track Nautilus's actual (quantized)
 execution state. ``on_bar()`` skips sizing a new order while a prior one is
 still open (terminal-state guard, see ``_order_pending``), so two bars can
-never size off the same unreserved capacity.
+never size off the same unreserved capacity. A leftover below the instrument
+``size_increment`` still clears pending (quantization dust must not freeze
+the book), and a pending flag whose bar date is in the past is canceled so
+a later distribute day can still sell.
 
 Usage:
     import polars as pl
@@ -103,6 +106,7 @@ class SdcaStrategy(Strategy):
         # while a prior order is still open — see _submit_market()/on_order_filled().
         self._order_pending: bool = False
         self._pending_qty: float = 0.0
+        self._pending_bar_date: date | None = None
 
     def _load_risk_index(self) -> dict[date, float | None]:
         """Load the pre-computed risk parquet into a date -> risk map."""
@@ -154,13 +158,18 @@ class SdcaStrategy(Strategy):
         self.subscribe_bars(self.config.bar_type)
 
     def on_bar(self, bar: Bar) -> None:
-        if self._order_pending:
-            # A prior order hasn't reached a terminal state yet — sizing off
-            # _cash/_asset_units now would double-spend capacity already
-            # committed to that order.
-            return
-
         bar_date = unix_nanos_to_dt(bar.ts_event).date()
+        if self._order_pending:
+            if self._pending_bar_date is not None and bar_date != self._pending_bar_date:
+                # A leftover pending flag must not freeze the book across
+                # daily bars (last fill 2023-09-15 blocked the 2025 top).
+                self.cancel_all_orders(self.config.instrument_id)
+                self._clear_pending()
+            else:
+                # A prior order hasn't reached a terminal state yet — sizing off
+                # _cash/_asset_units now would double-spend capacity already
+                # committed to that order.
+                return
         risk = self._risk_index.get(bar_date)
         if risk is None:
             return  # no risk data for this date, or an explicit no-data day
@@ -176,13 +185,15 @@ class SdcaStrategy(Strategy):
         if rate > 0:
             if buy_usd <= 0:
                 return
-            self._submit_market(OrderSide.BUY, buy_usd / close)
+            self._submit_market(OrderSide.BUY, buy_usd / close, bar_date)
         elif rate < 0:
             if sell_units <= 0:
                 return
-            self._submit_market(OrderSide.SELL, sell_units)
+            self._submit_market(OrderSide.SELL, sell_units, bar_date)
 
-    def _submit_market(self, side: OrderSide, quantity: float) -> None:
+    def _submit_market(
+        self, side: OrderSide, quantity: float, bar_date: date | None = None
+    ) -> None:
         """Submit a market order sized from the sdca allocation loop.
 
         Remaining-book compounding can size below the instrument increment
@@ -206,7 +217,13 @@ class SdcaStrategy(Strategy):
         )
         self._order_pending = True
         self._pending_qty = qty.as_double()
+        self._pending_bar_date = bar_date
         self.submit_order(order)
+
+    def _clear_pending(self) -> None:
+        self._order_pending = False
+        self._pending_qty = 0.0
+        self._pending_bar_date = None
 
     def on_order_filled(self, event: OrderFilled) -> None:
         """Sync shadow cash/asset_units from a real fill (post-quantization).
@@ -218,9 +235,10 @@ class SdcaStrategy(Strategy):
         ``last_px`` (not cumulative) keeps this correct across partial fills.
 
         Also decrements ``_pending_qty`` by this fill and clears
-        ``_order_pending`` once the whole requested quantity has filled —
-        tracked from our own submitted quantity rather than querying order
-        state, since ``OrderFilled`` carries no ``leaves_qty``.
+        ``_order_pending`` once the leftover is unfillable (zero, or below
+        the instrument ``size_increment``). Tracked from our own submitted
+        quantity rather than querying order state, since ``OrderFilled``
+        carries no ``leaves_qty``. Dust leftover must not freeze ``on_bar()``.
         """
         filled_units = event.last_qty.as_double()
         filled_price = event.last_px.as_double()
@@ -244,24 +262,24 @@ class SdcaStrategy(Strategy):
             self._cash -= event.commission.as_double()
 
         self._pending_qty -= filled_units
-        if self._pending_qty <= 1e-9:
-            self._order_pending = False
+        leftover = self._pending_qty
+        increment = 0.0
+        if self._instrument is not None:
+            increment = self._instrument.size_increment.as_double()
+        if leftover <= 1e-9 or (increment > 0.0 and leftover < increment):
+            self._clear_pending()
 
     def on_order_canceled(self, event: OrderCanceled) -> None:
-        self._order_pending = False
-        self._pending_qty = 0.0
+        self._clear_pending()
 
     def on_order_rejected(self, event: OrderRejected) -> None:
-        self._order_pending = False
-        self._pending_qty = 0.0
+        self._clear_pending()
 
     def on_order_expired(self, event: OrderExpired) -> None:
-        self._order_pending = False
-        self._pending_qty = 0.0
+        self._clear_pending()
 
     def on_order_denied(self, event: OrderDenied) -> None:
-        self._order_pending = False
-        self._pending_qty = 0.0
+        self._clear_pending()
 
     def on_stop(self) -> None:
         # Leave remaining cash / remaining holdings open. Flattening at engine
@@ -272,8 +290,7 @@ class SdcaStrategy(Strategy):
     def on_reset(self) -> None:
         self._cash = self.config.initial_cash
         self._asset_units = 0.0
-        self._order_pending = False
-        self._pending_qty = 0.0
+        self._clear_pending()
 
 
 # ─── Registry (#3170) ────────────────────────────────────────────────────────

@@ -398,6 +398,26 @@ class TestSdcaStrategyOrderPendingGuard:
         assert strategy._cash == pytest.approx(100_000.0)
         assert strategy._asset_units == pytest.approx(0.0)
 
+    def test_on_bar_skips_when_pending_same_bar_date(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Same-bar pending must still skip; only a later date unsticks."""
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_bar_date = date(2020, 1, 1)
+        strategy.cancel_all_orders = Mock()
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 1), 100.0)
+
+        strategy.on_bar(bar)
+
+        strategy.cancel_all_orders.assert_not_called()
+        assert strategy._order_pending is True
+        assert strategy._cash == pytest.approx(100_000.0)
+
     def test_submit_market_skips_dust_below_size_increment(
         self,
         instrument: Instrument,
@@ -464,6 +484,62 @@ class TestSdcaStrategyOrderPendingGuard:
 
         assert strategy._order_pending is True
         assert strategy._pending_qty == pytest.approx(1.0)
+
+    def test_order_filled_clears_pending_when_remainder_below_increment(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Quantization leftover must not freeze on_bar() for years.
+
+        The 2023-09-15 last fill left pending_qty above 1e-9 but below the
+        instrument increment, so every later bar (including the 2025 top)
+        was skipped and the book never sold.
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        increment = instrument.size_increment.as_double()
+        strategy._order_pending = True
+        strategy._pending_qty = increment + (increment / 2.0)
+        event = Mock(is_buy=True, commission=Money(0.0, USDT))
+        event.last_qty.as_double.return_value = increment
+        event.last_px.as_double.return_value = 100.0
+
+        strategy.on_order_filled(event)
+
+        assert strategy._order_pending is False
+        assert strategy._pending_qty == pytest.approx(0.0)
+
+    def test_stale_pending_from_prior_day_does_not_block_sell(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """A pending flag that survives into the next daily bar must unstick
+        so distribute days at a cycle top can still sell.
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_qty = 1.0
+        strategy._pending_bar_date = date(2020, 1, 1)
+        strategy._cash = 0.0
+        strategy._asset_units = 2.0
+        strategy._risk_index = {date(2020, 1, 2): 100.0}
+        strategy.cancel_all_orders = Mock()
+        strategy._submit_market = Mock()
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 2), 100.0)
+
+        strategy.on_bar(bar)
+
+        strategy.cancel_all_orders.assert_called_once_with(instrument_id)
+        strategy._submit_market.assert_called_once()
+        sell_qty = strategy._submit_market.call_args.args[1]
+        assert strategy._submit_market.call_args.args[0] == OrderSide.SELL
+        assert sell_qty > 0
+
 
     @pytest.mark.parametrize(
         "handler_name", ["on_order_canceled", "on_order_rejected", "on_order_expired"]
