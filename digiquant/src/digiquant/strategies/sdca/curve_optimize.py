@@ -134,6 +134,7 @@ class CurveOptimizeResult(BaseModel):
     frozen_weights: dict[str, float]
     evaluator: str = "curve_simulator"
     beats_flat_dca_oos: bool = False
+    unconstrained_return_pct: float = 0.0
     notes: str = ""
 
 
@@ -381,13 +382,25 @@ def search_curve(
         raise ValueError("no valid curve trials to evaluate")
     feasible = [s for s in ranked if s.feasible]
     pool = feasible or ranked
-    best = max(pool, key=lambda s: s.total_return_pct)
+    unconstrained = max(pool, key=lambda s: s.total_return_pct)
+    concentrated = [
+        s
+        for s in feasible
+        if beats_baseline_concentration(s.concentration, baseline_score.concentration)
+    ]
+    # Persist candidate is max return among concentration-beating trials, not the
+    # unconstrained drip (higher remaining-book rates at the same knees can raise
+    # return while spreading fills through the cheap/rich bands).
+    best = max(concentrated, key=lambda s: s.total_return_pct) if concentrated else unconstrained
     beat_ret = best.total_return_pct > baseline_score.total_return_pct + 1e-9
     beat_conc = beats_baseline_concentration(best.concentration, baseline_score.concentration)
     persist_ok = bool(best.feasible and beat_ret and beat_conc)
     notes = (
         f"Frozen index weights {frozen_weights.model_dump()}. "
-        f"Objective=total_return_pct evaluator={evaluator}. "
+        f"Objective=total_return_pct among concentration-beating trials "
+        f"evaluator={evaluator}. "
+        f"Unconstrained max return={unconstrained.total_return_pct:.4f} "
+        f"shape={params_from_shape(unconstrained.shape)}. "
         f"vs-flat-DCA logged only (best={best.vs_flat_dca_pct:.4f}). "
         "beats_flat_dca_oos is not set from this in-sample search. "
         "Do not --push-supabase from this command."
@@ -403,6 +416,7 @@ def search_curve(
         frozen_weights=frozen_weights.model_dump(),
         evaluator=evaluator,
         beats_flat_dca_oos=False,
+        unconstrained_return_pct=unconstrained.total_return_pct,
         notes=notes,
     )
 

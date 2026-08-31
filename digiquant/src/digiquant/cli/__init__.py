@@ -314,6 +314,7 @@ def sdca_optimize_curve(
         f"best return={result.best.total_return_pct:.2f}% "
         f"vs_lump={result.best.vs_lump_pct:.2f}% "
         f"vs_flat_logged={result.best.vs_flat_dca_pct:.2f}% "
+        f"unconstrained_return={result.unconstrained_return_pct:.2f}% "
         f"feasible={result.best.feasible} reasons={result.best.reject_reasons}"
     )
     click.echo(

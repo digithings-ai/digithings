@@ -254,6 +254,84 @@ class TestSearchAndPersist:
             result.best.concentration.buy_mean_risk <= result.baseline.concentration.buy_mean_risk
         )
 
+    def test_higher_return_drip_does_not_win_over_concentrated(self) -> None:
+        """A long risk≈20 plateau lets a 25-knee linear dump cash before the bottom."""
+        n_plateau, n_bottom, n_mid, n_rich = 50, 20, 15, 30
+        prices: list[float] = []
+        risks: list[float] = []
+        for i in range(n_plateau):
+            prices.append(80.0 - 0.1 * i)
+            risks.append(20.0)
+        for i in range(n_bottom):
+            t = i / max(n_bottom - 1, 1)
+            prices.append(75.0 - 25.0 * t)
+            risks.append(18.0 - 13.0 * t)
+        for i in range(n_mid):
+            t = i / max(n_mid - 1, 1)
+            prices.append(50.0 + 30.0 * t)
+            risks.append(40.0 + 20.0 * t)
+        for i in range(n_rich):
+            t = i / max(n_rich - 1, 1)
+            prices.append(80.0 + 40.0 * t)
+            risks.append(80.0 + 15.0 * t)
+        dates_list = [
+            date(2022, 1, 1) + timedelta(days=i) for i in range(n_plateau + n_bottom + n_mid)
+        ]
+        dates_list.extend(date(2025, 6, 1) + timedelta(days=i) for i in range(n_rich))
+        dates = pl.Series("date", dates_list, dtype=pl.Date)
+        prices_s = pl.Series(prices)
+        risk_s = pl.Series(risks)
+        baseline = _published_shape()
+        drip = _shape(
+            buy_max_rate=35.0,
+            buy_knee_risk=25.0,
+            buy_curvature=1.0,
+            sell_max_rate=25.0,
+            sell_knee_risk=70.0,
+            sell_curvature=2.0,
+        )
+        clustered = _shape(
+            buy_max_rate=20.0,
+            buy_knee_risk=12.0,
+            buy_curvature=3.0,
+            sell_max_rate=20.0,
+            sell_knee_risk=85.0,
+            sell_curvature=3.0,
+        )
+        result = search_curve(
+            dates,
+            prices_s,
+            risk_s,
+            trials=[
+                {
+                    "buy_max_rate": drip.buy_max_rate,
+                    "buy_knee_risk": drip.buy_knee_risk,
+                    "sell_knee_risk": drip.sell_knee_risk,
+                    "sell_max_rate": drip.sell_max_rate,
+                    "buy_curvature": drip.buy_curvature,
+                    "sell_curvature": drip.sell_curvature,
+                },
+                {
+                    "buy_max_rate": clustered.buy_max_rate,
+                    "buy_knee_risk": clustered.buy_knee_risk,
+                    "sell_knee_risk": clustered.sell_knee_risk,
+                    "sell_max_rate": clustered.sell_max_rate,
+                    "buy_curvature": clustered.buy_curvature,
+                    "sell_curvature": clustered.sell_curvature,
+                },
+            ],
+            initial_cash=1000.0,
+            baseline=baseline,
+            frozen_weights=published_indicator_weights(),
+        )
+        drip_score = score_shape_on_index(dates, prices_s, risk_s, drip, 1000.0)
+        clustered_score = score_shape_on_index(dates, prices_s, risk_s, clustered, 1000.0)
+        assert clustered_score.concentration.buy_mean_risk is not None
+        assert drip_score.concentration.buy_mean_risk is not None
+        assert clustered_score.concentration.buy_mean_risk < drip_score.concentration.buy_mean_risk
+        assert result.best.shape.buy_knee_risk == pytest.approx(12.0)
+        assert result.unconstrained_return_pct >= result.best.total_return_pct - 1e-9
+
     def test_persist_requires_return_and_concentration(self, tmp_path: Path) -> None:
         dates, prices, risk = _v_cycle()
         baseline = _published_shape()
