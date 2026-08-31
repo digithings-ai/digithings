@@ -4,7 +4,7 @@ Rules and context for Claude Code in this repo. See also [docs/agents/AGENT_WORK
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research / portfolio / execution sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **digiquant dashboard** (`frontend/olympus`, served at `/olympus/` until the path wave). Sub-graphs live at `digiquant/src/digiquant/olympus/atlas/` (research), `…/hermes/` (portfolio), `…/kairos/` (execution). Package paths keep the old names until a dedicated rename PR. Old `apps/digiquant-atlas/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research / portfolio / execution sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **digiquant dashboard** (`frontend/dashboard`, public path `/dashboard/` — ADR-0026). Sub-graphs live at `digiquant/src/digiquant/olympus/atlas/` (research), `…/hermes/` (portfolio), `…/kairos/` (execution). Package paths keep the old names until a dedicated rename PR. Old `apps/digiquant-atlas/` is gone.
 
 ## Non-negotiable rules
 

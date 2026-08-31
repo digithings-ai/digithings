@@ -9,8 +9,8 @@
  * dismissal, and body-scroll lock all live in the primitive; only the dress
  * arrives from here.
  *
- * Dashboard CTA is a plain <a href="/dashboard/"> (separate export; Cloudflare
- * 308s /olympus/* onto this path). Desktop: teal mark only. Sheet: Open dashboard.
+ * Dashboard CTA is a plain <a href="/dashboard/"> (separate export).
+ * Desktop: teal mark only. Sheet: Open dashboard.
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
@@ -33,9 +33,9 @@ export function SiteNav() {
           >
             <GitHubGlyph />
           </a>
-          {/* Icon-only desktop twin. hidden! beats unlayered .olympus-cta display. */}
+          {/* Icon-only desktop twin. hidden! beats unlayered .dq-cta display. */}
           <a
-            className="dq-nav-olympus-cta olympus-cta max-[880px]:hidden!"
+            className="dq-nav-mark-cta dq-cta max-[880px]:hidden!"
             href="/dashboard/"
             aria-label="Open the dashboard"
           >
@@ -44,7 +44,7 @@ export function SiteNav() {
         </>
       }
       cta={
-        <a className="btn btn-primary olympus-cta" href="/dashboard/" aria-label="Open the dashboard">
+        <a className="btn btn-primary dq-cta" href="/dashboard/" aria-label="Open the dashboard">
           <DigiquantMark size={18} />
           <span>Open dashboard</span>
         </a>

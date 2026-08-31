@@ -89,6 +89,8 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
+Public path is **`/dashboard/`** only (`frontend/dashboard`; ADR-0026). `/olympus/` is retired — no redirect alias.
+
 When touching `digiquant/src/digiquant/olympus/`:
 
 1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § Atlas + Hermes and

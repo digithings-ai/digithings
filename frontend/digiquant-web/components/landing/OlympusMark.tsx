@@ -1,11 +1,9 @@
 /**
- * The digiquant dashboard mark, ported from frontend/olympus so digiquant.io
- * matches the operator surface. Strokes carry `olympus-stroke-N` classes so the
+ * The digiquant dashboard mark, ported from frontend/dashboard so digiquant.io
+ * matches the operator surface. Strokes carry `dq-stroke-N` classes so the
  * dashboard's loader animation (stroke-draw + scale pulse) can be replayed on
  * hover via CSS (see globals.css). Uses currentColor, so it inherits the
- * surrounding text/button colour. CSS class names stay until the path wave.
- *
- * `OlympusMark` is a one-release alias of `DigiquantMark` (ADR-0026 wave 3).
+ * surrounding text/button colour.
  */
 export function DigiquantMark({ size = 22, className }: { size?: number; className?: string }) {
   return (
@@ -16,10 +14,10 @@ export function DigiquantMark({ size = 22, className }: { size?: number; classNa
       fill="none"
       aria-hidden="true"
       focusable="false"
-      className={["olympus-mark", className].filter(Boolean).join(" ")}
+      className={["dq-mark", className].filter(Boolean).join(" ")}
     >
       <path
-        className="olympus-stroke olympus-stroke-1"
+        className="dq-stroke dq-stroke-1"
         stroke="currentColor"
         strokeWidth="2.2"
         strokeLinecap="round"
@@ -27,7 +25,7 @@ export function DigiquantMark({ size = 22, className }: { size?: number; classNa
         d="M4.2774,32.5293a11.6485,11.6485,0,0,1,23.2219,1.32h0c0,3.2166.0022,11.6479.0022,11.6479"
       />
       <path
-        className="olympus-stroke olympus-stroke-2"
+        className="dq-stroke dq-stroke-2"
         stroke="currentColor"
         strokeWidth="2.2"
         strokeLinecap="round"
@@ -35,7 +33,7 @@ export function DigiquantMark({ size = 22, className }: { size?: number; classNa
         d="M3.3047,29.8574q-.0277-.4816-.0279-.97a16.61,16.61,0,1,1,33.2209,0v0c0,4.5869.0031,16.6095.0031,16.6095"
       />
       <circle
-        className="olympus-stroke olympus-stroke-3"
+        className="dq-stroke dq-stroke-3"
         stroke="currentColor"
         strokeWidth="2"
         cx="16.5007"
@@ -43,7 +41,7 @@ export function DigiquantMark({ size = 22, className }: { size?: number; classNa
         r="5.0328"
       />
       <path
-        className="olympus-stroke olympus-stroke-4"
+        className="dq-stroke dq-stroke-4"
         stroke="currentColor"
         strokeWidth="2.2"
         strokeLinecap="round"
@@ -53,6 +51,3 @@ export function DigiquantMark({ size = 22, className }: { size?: number; classNa
     </svg>
   );
 }
-
-/** @deprecated Use DigiquantMark. One-release alias (ADR-0026 wave 3). */
-export const OlympusMark = DigiquantMark;
