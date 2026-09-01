@@ -72,7 +72,7 @@ describe('pipeline topology status audit', () => {
 
     const matrix = auditStaticTopologyRunStatuses(day);
     expect(matrix.inputs).toBe('stage-overview');
-    expect(matrix['inputs:preflight']).toBe('state-only');
+    expect(matrix['inputs:preflight']).toBe('expected-artifact-missing');
     expect(matrix['inputs:attention-plan']).toBe('not-run');
     expect(matrix.research).toBe('stage-overview');
     expect(matrix['research:macro']).toBe('persisted-artifact');
@@ -80,7 +80,7 @@ describe('pipeline topology status audit', () => {
     expect(matrix['research:alt-data']).toBe('expected-artifact-missing');
     expect(matrix['research:scorecard']).toBe('persisted-artifact');
     expect(matrix.synthesis).toBe('stage-overview');
-    expect(matrix['synthesis:consolidate']).toBe('state-only');
+    expect(matrix['synthesis:consolidate']).toBe('expected-artifact-missing');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');
     expect(matrix.selection).toBe('not-run');
     expect(matrix['selection:thesis']).toBe('not-run');
@@ -119,7 +119,7 @@ describe('pipeline topology status audit', () => {
     expect(matrix.synthesis).toBe('stage-overview');
     expect(matrix['synthesis:digest']).toBe('persisted-artifact');
     expect(matrix.selection).toBe('stage-overview');
-    expect(matrix['selection:thesis']).toBe('state-only');
+    expect(matrix['selection:thesis']).toBe('expected-artifact-missing');
     expect(matrix['selection:analysts']).toBe('parallel-dispatch');
     expect(matrix['selection:pm-direction']).toBe('persisted-artifact');
     expect(matrix.decision).toBe('stage-overview');
@@ -137,9 +137,9 @@ describe('pipeline topology status audit', () => {
     expect(bands.learning).toBe(false);
 
     const matrix = auditStaticTopologyRunStatuses(day);
-    expect(matrix['inputs:preflight']).toBe('state-only');
+    expect(matrix['inputs:preflight']).toBe('expected-artifact-missing');
     expect(matrix['inputs:attention-plan']).toBe('not-run');
-    expect(matrix['synthesis:consolidate']).toBe('state-only');
+    expect(matrix['synthesis:consolidate']).toBe('expected-artifact-missing');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');
     expect(matrix.selection).toBe('not-run');
     expect(matrix['selection:analysts']).toBe('not-run');

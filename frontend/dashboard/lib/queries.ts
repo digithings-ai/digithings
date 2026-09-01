@@ -178,6 +178,8 @@ export type LibraryDocumentView =
   | 'deliberation'
   | 'evolution_sources'
   | 'opportunity_screener'
+  | 'inputs'
+  | 'bias_row'
   | 'diffable'
   | 'analyst'
   | 'risk_debate';
@@ -206,7 +208,15 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
     return 'rebalance';
   }
   if (key === 'delta-request.json' || dt === 'delta_request') return 'delta_request';
-  if (key === 'opportunity-screener.json' || dt === 'opportunity_screen') return 'opportunity_screener';
+  if (key === 'inputs' || dt === 'inputs') return 'inputs';
+  if (key === 'bias-row' || dt === 'bias_row') return 'bias_row';
+  if (
+    key === 'opportunity-screener' ||
+    key === 'opportunity-screener.json' ||
+    dt === 'opportunity_screen'
+  ) {
+    return 'opportunity_screener';
+  }
   // Pipeline per-ticker analyst specialist reports (`analyst/{ticker}`) — structured card view.
   if (key.startsWith('analyst/')) return 'analyst';
   // Hermes risk-temperament debate singleton (`risk-debate`) — reuse deliberation structured view.

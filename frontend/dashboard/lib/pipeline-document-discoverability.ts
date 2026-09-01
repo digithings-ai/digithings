@@ -25,6 +25,7 @@ export interface DocumentDiscovery {
  * Absence of a key on a real day is fine; classification must still succeed.
  */
 export const REPRESENTATIVE_RUN_DOCUMENT_KEYS: readonly string[] = [
+  'inputs',
   'attention-plan',
   'macro',
   'alt-cta-positioning',
@@ -33,8 +34,11 @@ export const REPRESENTATIVE_RUN_DOCUMENT_KEYS: readonly string[] = [
   'sector-technology',
   'sector-scorecard',
   'document-deltas/macro',
+  'bias-row',
   'digest',
   'digest-delta',
+  'thesis/thesis-review',
+  'opportunity-screener',
   'analyst/QQQ',
   'deliberation/QQQ',
   'risk-debate',
@@ -45,10 +49,14 @@ export const REPRESENTATIVE_RUN_DOCUMENT_KEYS: readonly string[] = [
 ];
 
 const TOPOLOGY_LEAF_KEYS = new Set<string>([
+  'inputs',
   'attention-plan',
   'macro',
   'sector-scorecard',
+  'bias-row',
   ...DIGEST_DOCUMENT_KEYS,
+  'thesis/thesis-review',
+  'opportunity-screener',
   'pm-direction-memo',
   'pm-rebalance',
   'beliefs',

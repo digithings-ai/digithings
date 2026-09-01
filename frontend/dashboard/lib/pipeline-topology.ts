@@ -55,7 +55,6 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       id: 'preflight',
       label: 'Preflight / market data',
       description: 'Checks that the run has complete, current inputs and records readiness in pipeline state.',
-      stateOnly: true,
     },
     // WP13-class AttentionPlan shadow (#1945 glass-box): published as
     // `attention-plan` when the shadow planner runs. Absence is expected until
@@ -116,12 +115,11 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
     label: 'Synthesis',
     description: 'Reconciles the research set into one directional read and a daily narrative for decision-makers.',
     subSteps: [
-    // Phase 6 emits only the in-state bias row (phase6_bias_row) — no document.
+    // Phase 6 bias row is published as `bias-row` from Atlas publish_phase.
     {
       id: 'consolidate',
       label: 'Consolidate bias',
       description: 'Combines specialist signals into the directional bias carried forward in pipeline state.',
-      stateOnly: true,
     },
     {
       id: 'digest',
@@ -134,18 +132,16 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
     label: 'Selection',
     description: 'Turns the synthesized view into challenged, screened, and risk-sized portfolio candidates.',
     subSteps: [
-    // H1–H3 build thesis documents into state slots only; H4 screener likewise.
+    // H1 publishes `thesis/thesis-review`; H4 publishes `opportunity-screener`.
     {
       id: 'thesis',
       label: 'Thesis framing',
       description: 'Frames candidate investment theses and the evidence each candidate must satisfy.',
-      stateOnly: true,
     },
     {
       id: 'screener',
       label: 'Screener',
       description: 'Applies the run criteria to narrow the candidate set before deeper analyst work.',
-      stateOnly: true,
     },
     {
       id: 'analysts',
