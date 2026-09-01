@@ -101,22 +101,32 @@ production cron CLIs, remaining-hop proofs from Settings product state, staged
 900 §A2 membership-only restore, and a fail-closed GHA **spec** (not installed:
 `cursor/*` cannot write `.github/workflows/`).
 
-**Schema (`core`):** migrations **096–110** applied (`110_anon_house_only_private_books`
-narrows `anon_read` on private books to house; documents house+system). Live probe
+**Schema (`core`):** migrations **096–110** plus **112** applied. `110_anon_house_only_private_books`
+narrows `anon_read` on private books to house; documents house+system. **112**
+(`112_product_invite_codes.sql`, stamped 2026-09-01T01:10Z) adds hashed FX Hub
+invite tables (RLS on, `service_role` only; invite rows = 0). **111 unused**
+(reserved for Group A unique-drop). Staged cutover **113** (legacy book uniques)
+**not applied**. Repo **114** (calendar authenticated SELECT) is **not** on the
+olympus ledger — live policy already existed; stamp via human [#3340](https://github.com/digithings-ai/digithings/pull/3340)
+`db-migrate` on `main`. CLI also lists `113_economic_calendar_authenticated_select`
+(calendar SELECT applied under the **wrong number** — not the unique-drop). Live probe
 2026-08-31: overlay doc visible to service (1) and hidden from `anon` (0); house
 `positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
 (throwaway DB + 001–110 + staged 900 A2): **pre-cutover 110 8/8 + post-cutover 59/59 PASS** (2026-08-31).
 
 **Edge Functions (`core`):** `settings` **v32 ACTIVE** (`verify_jwt=true`, includes
 `GET /jobs` `/fills` `/notifications/log` `/app-urls` + public Alpaca client id).
-ESZIP source matches this branch (no redeploy this pass). Checkout **v8** / portal
+ESZIP source matches the v32 tree: **no** `POST /access/redeem-invite` (that
+route is on `develop` and needs the 112 tables, which are now on `core`). Do
+**not** redeploy settings to pick up redeem-invite while live Pages 404
+`/dashboard` — that deploy also pins app URLs. Checkout **v8** / portal
 **v9** / webhook **v7** (`verify_jwt=false`). Checkout/portal await Stripe price
 secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
 Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
 under **`/olympus`**, no loopback). Live Pages still serve `/olympus/*`
-(site `/build-info.json` commit `9f898ec1d` / `2026-08-31T20:13:43Z` after the
+(site `/build-info.json` commit `3601f72df` / `2026-08-31T20:42:57Z` after the
 #3331 Pages rebuild; `/olympus/build-info.json` is 404 HTML). `/dashboard/*`
 is **404**. Develop `app-url.ts` and the staging harness pin `/dashboard/...`.
 **Do not redeploy** settings EF with `/dashboard` URLs while live Pages 404
