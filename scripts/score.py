@@ -73,6 +73,7 @@ _FILE_ALLOW_CACHE: dict[str, frozenset[str]] = {}
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
 SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     "scripts/score.py",
+    "docs/agent-backlog/",
     "docs/reviews/",
     "digigraph/docs/SECURITY.md",
     "digigraph/src/digigraph/tools/analytics/execute_python.py",
