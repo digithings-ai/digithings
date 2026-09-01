@@ -66,13 +66,15 @@ class TestFreshSeed:
         assert navs[0]["nav"] == 100.0
         assert navs[0]["date"] == "2026-06-12"
         assert navs[0]["invested_pct"] == 100.0
-        assert navs[0]["_on_conflict"] == "date"
+        assert navs[0]["_on_conflict"] == "workspace_id,date"
         assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
         positions = {r["ticker"]: r for r in client.store["positions"]}
         assert positions["SPY"]["weight_pct"] == 60.0
         assert positions["TLT"]["weight_pct"] == 40.0
-        assert all(r["_on_conflict"] == "date,ticker" for r in client.store["positions"])
+        assert all(
+            r["_on_conflict"] == "workspace_id,date,ticker" for r in client.store["positions"]
+        )
         assert all(
             r["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
             for r in client.store["positions"]
@@ -190,11 +192,14 @@ class TestGuards:
         rec = [{"ticker": "SPY", "target_pct": 100}]
         _run(client, rec)
         _run(client, rec)
-        # Both runs upsert on the same (date,ticker)/date keys — the on_conflict
-        # contract makes the DB collapse them; the fake appends, so we just
-        # assert every write declares the idempotency key.
-        assert all(r["_on_conflict"] == "date" for r in client.store["nav_history"])
-        assert all(r["_on_conflict"] == "date,ticker" for r in client.store["positions"])
+        # Both runs upsert on the widened (workspace_id, date[, ticker]) keys —
+        # leftover UNIQUE(date) still blocks overlay until 113; house uses the
+        # 097 unique. The fake appends, so we just assert every write declares
+        # the idempotency key.
+        assert all(r["_on_conflict"] == "workspace_id,date" for r in client.store["nav_history"])
+        assert all(
+            r["_on_conflict"] == "workspace_id,date,ticker" for r in client.store["positions"]
+        )
 
 
 def _state_with_analysts(recommended, analysts, debates=None) -> AtlasResearchState:
@@ -637,7 +642,7 @@ class TestPortfolioMetricsWriter:
         assert row["alpha"] is not None
         # Sanity: sharpe should be positive for a positive-return series
         assert row["sharpe"] > 0
-        assert row["_on_conflict"] == "date"
+        assert row["_on_conflict"] == "workspace_id,date"
         assert row["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
     def test_metrics_null_when_insufficient_history(self) -> None:
@@ -665,7 +670,7 @@ class TestPortfolioMetricsWriter:
         assert row["pnl_pct"] is not None
 
     def test_metrics_idempotent_upsert_on_date(self) -> None:
-        """Re-running on the same date produces an upsert (on_conflict='date')."""
+        """Re-running on the same date produces an upsert (on_conflict='workspace_id,date')."""
         nav_rows = [
             {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 6)
         ]
@@ -673,7 +678,7 @@ class TestPortfolioMetricsWriter:
         _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
         _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
         for row in client.store["portfolio_metrics"]:
-            assert row["_on_conflict"] == "date"
+            assert row["_on_conflict"] == "workspace_id,date"
 
     def test_materialize_node_writes_portfolio_metrics(self) -> None:
         """The materialize node should call _upsert_portfolio_metrics after nav_history."""
