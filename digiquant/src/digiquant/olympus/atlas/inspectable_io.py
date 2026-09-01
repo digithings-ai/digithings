@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 from datetime import date
 from typing import Any  # score:allow untyped any — JSON-derived prior-context / bias-row slots
 
@@ -20,8 +19,6 @@ from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     publish_document,
 )
-
-logger = logging.getLogger(__name__)
 
 INPUTS_DOCUMENT_KEY = "inputs"
 BIAS_ROW_DOCUMENT_KEY = "bias-row"
