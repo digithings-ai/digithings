@@ -283,14 +283,15 @@ it does not prove Stripe.
 
 **Landed 2026-08-31 — [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`):**
 squash-merged from `cursor/dashboard-rebrand-rebase-3d52`. Combines #3320
-(no `/olympus/` public path, no 308s, `NEXT_PUBLIC_DASHBOARD_*`) + #3297
+(no `/olympus/` source twin, `NEXT_PUBLIC_DASHBOARD_*`) + #3297
 (`frontend/olympus` → `frontend/dashboard`, npm package `dashboard`) + leftover-key
 sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_build_digiquant_dashboard_path.py`,
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
 `9f898ec1d`, site `/build-info.json`) still serve `/olympus/` until a **human**
-coordinates Pages+EF `/dashboard` cutover. **Do not** weaken `public_app_urls_ok`
-to `/olympus`.
+coordinates Pages+EF `/dashboard` cutover. The promotion merge restores a temporary
+308 from `/olympus/*` to `/dashboard/*` for bookmark safety; **do not** weaken
+`public_app_urls_ok` to accept `/olympus`.
 House GHA `33426508863` (schedule on default `develop`, checkout `ref: main`)
 **failed** (`23502` null `workspace_id` on `portfolio_ledger_commits`; book not
 committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on

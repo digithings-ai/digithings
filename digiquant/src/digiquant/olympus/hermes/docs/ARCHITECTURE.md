@@ -23,7 +23,9 @@ preflight + preflight_reflect (Atlas)
 
 Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_history`,
 `theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
-append. Phase 9 evolution LLM is **not** on the daily path; beliefs distillation is
+append. Book/ledger writes stamp house `workspace_id` (migration 097) while keeping
+date-only upsert conflict targets until cutover 113. Phase 9 evolution LLM is **not**
+on the daily path; beliefs distillation is
 on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 
 House CLI close-out (`cli_main`, not `run_atlas_then_hermes`): after a non-retry

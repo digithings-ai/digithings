@@ -1,4 +1,4 @@
-"""Pin the dashboard export to dist/dashboard/ — no olympus twin, 308, or probe."""
+"""Pin the dashboard export and temporary legacy-path redirect."""
 
 from __future__ import annotations
 
@@ -45,10 +45,11 @@ def test_site_smoke_probes_dashboard_url() -> None:
     assert 'probe "https://digiquant.io/olympus/" "text/html"' not in text
 
 
-def test_pages_redirects_have_no_olympus_rules() -> None:
+def test_pages_redirects_olympus_to_dashboard_permanently() -> None:
     text = REDIRECTS.read_text(encoding="utf-8")
-    assert "/olympus" not in text
-    assert "308" not in text
+    assert "/olympus/*" in text
+    assert "/dashboard/:splat" in text
+    assert "308" in text
 
 
 def test_pages_headers_do_not_scope_csp_to_olympus() -> None:

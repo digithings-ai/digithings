@@ -4,7 +4,8 @@
 #   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
 #   2. frontend/dashboard/out/     — the dashboard (basePath /dashboard)
-#      → dist/dashboard/ only. /olympus/ is retired (no twin, no 308).
+#      → dist/dashboard/ only. The landing export keeps a temporary 308 from
+#      /olympus/* to /dashboard/* so existing bookmarks do not fail closed.
 # The digiquant-web export ships public/_headers (root /* security headers +
 # /dashboard* CSP).
 set -euo pipefail
