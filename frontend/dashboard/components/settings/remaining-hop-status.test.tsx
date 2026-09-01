@@ -117,4 +117,56 @@ describe('RemainingHopStatus', () => {
     expect(el.textContent).toContain('Custom Stripe checkout required');
     expect(el.textContent).toContain('api_key paper does not prove OAuth');
   });
+
+  it('names leftover UNIQUE overlay failure instead of generic not-succeeded', async () => {
+    const el = await mount(
+      createElement(RemainingHopStatus, {
+        api: { accessToken: 'tok' },
+        getProfileFn: vi.fn(async () => ({
+          version_id: null,
+          workspace_id: 'ws',
+          profile_key: 'workspace',
+          schema_version: 1,
+          label: 'Workspace',
+          supersedes_id: null,
+          recorded_at: null,
+          investment: null,
+          assets: null,
+          plan_tier: 'custom',
+          subscription_status: 'none',
+          has_stripe_subscription: false,
+        })),
+        listBrokersFn: vi.fn(async () => []),
+        getJobsFn: vi.fn(async () => [
+          {
+            id: 'j1',
+            job_type: 'overlay_daily',
+            status: 'failed',
+            error: 'legacy_book_unique',
+            idempotency_key: 'k1',
+            started_at: null,
+            finished_at: null,
+          },
+        ]),
+        getFillsFn: vi.fn(async () => []),
+        getLogFn: vi.fn(async () => []),
+        getNotificationsFn: vi.fn(async () => ({
+          workspace_id: 'ws',
+          email: 'observer@example.com',
+          daily_digest: true,
+          holding_change_alerts: false,
+          execution_alerts: false,
+          digest_hour_utc: 13,
+          updated_at: '2026-08-31T00:00:00Z',
+        })),
+      }),
+    );
+    expect(
+      el.querySelector('[data-testid="remaining-hop-overlay_daily_claimed"]')?.getAttribute('data-proven'),
+    ).toBe('false');
+    expect(
+      el.querySelector('[data-testid="remaining-hop-overlay_daily_claimed"]')?.getAttribute('data-blocker'),
+    ).toBe('overlay_legacy_book_unique');
+    expect(el.textContent).toContain('legacy UNIQUE(date) still blocks overlay');
+  });
 });

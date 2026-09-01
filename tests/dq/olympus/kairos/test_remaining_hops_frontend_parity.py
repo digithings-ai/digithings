@@ -16,6 +16,7 @@ from digiquant.olympus.kairos.remaining_hops import (
     REMAINING_LIVE_HOPS,
     STRIPE_CHECKOUT_TIERS,
 )
+from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
 
 pytestmark = pytest.mark.unit
 
@@ -113,4 +114,6 @@ def test_frontend_blocker_codes_match_python() -> None:
     assert "plan_tier_not_custom" in source
     assert "alpaca_api_key_not_oauth" in source
     assert "overlay_persist_disabled" in source
+    assert "overlay_legacy_book_unique" in source
+    assert f".includes('{LEGACY_BOOK_UNIQUE_CODE}')" in source
     assert "digest_inbox_unconfirmed" in source

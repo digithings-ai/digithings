@@ -575,6 +575,27 @@ def test_remaining_hop_blockers_observer_and_house_gates() -> None:
         RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
     )
     assert persist["overlay_daily_claimed"] == "overlay_persist_disabled"
+    persist_wins = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "persist_disabled"),),
+            overlay_job_errors=("legacy_book_unique",),
+        )
+    )
+    assert persist_wins["overlay_daily_claimed"] == "overlay_persist_disabled"
+    legacy = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "failed"),),
+            overlay_job_errors=("legacy_book_unique",),
+        )
+    )
+    assert legacy["overlay_daily_claimed"] == "overlay_legacy_book_unique"
+    other_fail = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "failed"),),
+            overlay_job_errors=("BudgetExhausted",),
+        )
+    )
+    assert other_fail["overlay_daily_claimed"] == "overlay_not_succeeded"
 
 
 @pytest.mark.unit
@@ -597,6 +618,42 @@ def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
     assert evidence.daily_digest_enabled is True
     assert evidence.surface_http_ok is True
     assert proven_remaining_hops(evidence)["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_collect_remaining_evidence_reads_overlay_job_errors() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/jobs")] = (
+        200,
+        {
+            "jobs": [
+                {
+                    "job_type": "overlay_daily",
+                    "status": "failed",
+                    "error": "legacy_book_unique",
+                },
+                {"job_type": "overlay_daily", "status": "running"},
+                {
+                    "job_type": "other",
+                    "status": "failed",
+                    "error": "legacy_book_unique",
+                },
+            ]
+        },
+    )
+    evidence = collect_remaining_evidence(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    assert evidence.jobs == (
+        ("overlay_daily", "failed"),
+        ("overlay_daily", "running"),
+        ("other", "failed"),
+    )
+    assert evidence.overlay_job_errors == ("legacy_book_unique",)
+    assert remaining_hop_blockers(evidence)["overlay_daily_claimed"] == "overlay_legacy_book_unique"
 
 
 @pytest.mark.unit
