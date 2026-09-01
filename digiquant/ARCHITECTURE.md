@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-31
+**Last updated:** 2026-09-01
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -3321,10 +3321,14 @@ Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
 **House pipeline proof:** `python scripts/kairos_house_pipeline_proof.py` lists
-`pipeline-olympus.yml` runs. Exit **0** only for a **schedule** success strictly
+`pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
+on `develop` `207dd0a68`). Exit **0** only for a **schedule** success strictly
 after #3334 on `main` (`2026-08-31T20:39Z`). `workflow_dispatch` never counts.
 Exit **3** until the next `cron: "0 12 * * *"`. Exit **2** if that schedule
-fails. The CLI refuses `--dispatch` / `--apply`.
+fails. The CLI refuses `--dispatch` / `--apply`. Fail-softs for the last
+schedule's Gemini schema errors are still human-merge on `main` (#3343 → #3348
+→ #3351 → #3354) — merge them before the cron or checkout `ref: main` stays at
+`3601f72df`.
 
 **Entry points:**
 
