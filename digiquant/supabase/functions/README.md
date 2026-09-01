@@ -34,7 +34,7 @@ no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / 
 Member-scoped service-role reads: `GET /jobs` (`job_runs`), `GET /fills`
 (`broker_executions` fingerprints, no `external_fill_id`), `GET /notifications/log`
 (event keys only), `GET /app-urls` (pinned Alpaca redirect_uri + billing return
-URL under `/olympus`, plus the public Alpaca OAuth client id — never the secret). `GET /profile` includes workspace `plan_tier` +
+URL under `/dashboard`, plus the public Alpaca OAuth client id — never the secret). `GET /profile` includes workspace `plan_tier` +
 `subscription_status` and `has_stripe_subscription` (boolean only) and never Stripe ids.
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
@@ -64,15 +64,15 @@ supabase secrets set \
   STRIPE_PRICE_BASELINE_ANNUAL=price_… \
   STRIPE_PRICE_CUSTOM_MONTHLY=price_… \
   STRIPE_PRICE_CUSTOM_ANNUAL=price_… \
-  NEXT_PUBLIC_APP_URL=https://olympus.example.com \
+  NEXT_PUBLIC_APP_URL=https://digiquant.io \
   DIGIQUANT_VAULT_MASTER_KEY="$(openssl rand -base64 32)" \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…
 ```
 
-**Checkout / portal return URLs** append `/olympus/settings/?tab=billing`.
+**Checkout / portal return URLs** append `/dashboard/settings/?tab=billing`.
 `APP_URL` on `core` must be `https://digiquant.io` (origin only — never loopback,
-never a path that already includes `/olympus`).
+never a path that already includes `/dashboard` or `/olympus`).
 
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` are injected by
 the Edge Runtime — do not put the service role key in app env files that ship to

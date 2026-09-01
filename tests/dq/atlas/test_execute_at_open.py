@@ -51,6 +51,7 @@ _book_weights = _mod._book_weights
 build_events_from_positions_book = _mod.build_events_from_positions_book
 build_events_from_digest_snapshot = _mod.build_events_from_digest_snapshot
 _hold_events_for_positions_not_in_rebalance = _mod._hold_events_for_positions_not_in_rebalance
+_event_tickers_for_date = _mod._event_tickers_for_date
 resolve_rebalance_payload_fallback = _mod.resolve_rebalance_payload_fallback
 
 
@@ -386,6 +387,64 @@ class TestHoldEventsPriorWeight:
         assert by_ticker["FXI"]["prev_weight_pct"] is None  # genuinely new
 
 
+class TestHouseScopedBookReads:
+    """P6: overlay rows on the same calendar date must not shape the house ledger."""
+
+    _OVERLAY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+    def test_event_tickers_ignore_overlay_rows(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "position_events": [
+                    {"date": "2026-07-31", "ticker": "UUP", "event": "HOLD"},
+                    {
+                        "date": "2026-07-31",
+                        "ticker": "EVIL",
+                        "event": "OPEN",
+                        "workspace_id": self._OVERLAY,
+                    },
+                ]
+            }
+        )
+        tickers = _event_tickers_for_date(sb, "2026-07-31")
+        assert "UUP" in tickers
+        assert "EVIL" not in tickers
+
+    def test_hold_events_ignore_overlay_positions(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "positions": [
+                    *_BOOK_0731,
+                    {
+                        "date": "2026-07-31",
+                        "ticker": "EVIL",
+                        "weight_pct": "50.0",
+                        "workspace_id": self._OVERLAY,
+                    },
+                ]
+            }
+        )
+        holds = _hold_events_for_positions_not_in_rebalance(sb, "2026-07-31", set())
+        assert "EVIL" not in {e["ticker"] for e in holds}
+
+    def test_prior_book_date_ignores_overlay_only_gap_filler(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "positions": [
+                    *_BOOK_0729,
+                    {
+                        "date": "2026-07-30",
+                        "ticker": "EVIL",
+                        "weight_pct": "100.0",
+                        "workspace_id": self._OVERLAY,
+                    },
+                    *_BOOK_0731,
+                ]
+            }
+        )
+        assert _prior_book_date(sb, "2026-07-31") == "2026-07-29"
+
+
 # ─── The document-date walk must keep its calendar semantics ─────────────────
 
 
@@ -614,10 +673,12 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the kill switch to its default-on state for every test in this module.
 
     ``ledger_enabled`` reads the process environment and defaults to **on**, so a
-    developer with ``OLYMPUS_PORTFOLIO_LEDGER=0`` exported would otherwise see the whole
+    developer with ``DIGIQUANT_PORTFOLIO_LEDGER=0`` (or alias
+    ``OLYMPUS_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
     authoritative path silently skipped and the suite still pass.
     """
     monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_PORTFOLIO_LEDGER", raising=False)
 
 
 class TestOpenMarksAreDecimal:
@@ -922,7 +983,7 @@ class TestBuildEventsFromPaperFillsDeclines:
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
-        assert "OLYMPUS_PORTFOLIO_LEDGER" in declined
+        assert "DIGIQUANT_PORTFOLIO_LEDGER" in declined
 
     def test_declines_when_a_ledger_read_raises(self) -> None:
         """Production's migration tail is 065, so the tables are not there yet.

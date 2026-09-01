@@ -41,6 +41,14 @@ _ensure_importable()
 from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
 
 
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
+
+
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
@@ -117,8 +125,7 @@ def _prior_book_date(sb, execution_date: str) -> Optional[str]:
     except (TypeError, ValueError):
         return None
     res = (
-        sb.table("positions")
-        .select("date")
+        _eq_house(sb.table("positions").select("date"))
         .lt("date", execution_date)
         .neq("ticker", "CASH")
         .order("date", desc=True)
@@ -136,7 +143,9 @@ def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
     """Non-CASH ``TICKER -> weight_pct`` for one `positions` date ({} when absent)."""
     if not book_date:
         return {}
-    res = sb.table("positions").select("ticker,weight_pct").eq("date", book_date).execute()
+    res = (
+        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
+    )
     out: Dict[str, float] = {}
     for row in getattr(res, "data", None) or []:
         if not isinstance(row, dict):
@@ -179,8 +188,7 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
 def _rebalance_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, Any]]:
     """Load rebalance_decision for a given documents.date (fast path + fallback scan)."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", rebalance_date)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -193,8 +201,7 @@ def _rebalance_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, A
             return p
 
     res2 = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", rebalance_date)
         .order("document_key", desc=True)
         .execute()
@@ -260,7 +267,9 @@ def resolve_rebalance_payload_fallback(
 
 
 def _event_tickers_for_date(sb, execution_date: str) -> Set[str]:
-    res = sb.table("position_events").select("ticker").eq("date", execution_date).execute()
+    res = (
+        _eq_house(sb.table("position_events").select("ticker")).eq("date", execution_date).execute()
+    )
     out: Set[str] = set()
     for r in getattr(res, "data", None) or []:
         if isinstance(r, dict) and r.get("ticker"):
@@ -272,8 +281,7 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
     if not prior_date:
         return None
     res = (
-        sb.table("positions")
-        .select("weight_pct")
+        _eq_house(sb.table("positions").select("weight_pct"))
         .eq("date", prior_date)
         .eq("ticker", ticker)
         .limit(1)
@@ -320,8 +328,7 @@ def _hold_events_for_positions_not_in_rebalance(
     position_events for this date (so we do not overwrite OPEN/TRIM/etc.).
     """
     res = (
-        sb.table("positions")
-        .select("ticker,weight_pct,thesis_id,rationale")
+        _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id,rationale"))
         .eq("date", execution_date)
         .execute()
     )
@@ -442,11 +449,12 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
     existing ``build_events_from_paper_fills`` path and its outputs stay
     byte-identical. External venues are reachable only when
-    ``OLYMPUS_KAIROS_ROUTING`` is on *and* a workspace with an active paper
-    ``broker_connections`` row is supplied — that path is wired by the Kairos
-    router, not by mutating the paper-fill writer.
+    ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``) is on
+    *and* a workspace with an active paper ``broker_connections`` row is
+    supplied — that path is wired by the execution router, not by mutating
+    the paper-fill writer.
 
-    Invalid / empty ``OLYMPUS_KAIROS_WORKSPACE_ID`` values warn and fall back to
+    Invalid / empty ``DIGIQUANT_EXECUTION_WORKSPACE_ID`` values warn and fall back to
     ``None`` (house) rather than crashing the open job.
 
     Returns the venue's string value (``ExecutionVenue`` value) so this script
@@ -464,7 +472,7 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
             resolved = UUID(raw)
         except ValueError:
             print(
-                f"⚠️  OLYMPUS_KAIROS_WORKSPACE_ID={workspace_id!r} is not a valid UUID; "
+                f"⚠️  DIGIQUANT_EXECUTION_WORKSPACE_ID={raw!r} is not a valid UUID; "
                 f"treating as house (paper_internal).",
                 file=sys.stderr,
             )
@@ -525,7 +533,7 @@ def build_events_from_paper_fills(
         return None, f"the digiquant package is not importable from this script ({exc})"
 
     if not ledger_enabled():
-        return None, "the OLYMPUS_PORTFOLIO_LEDGER kill switch is off"
+        return None, "the DIGIQUANT_PORTFOLIO_LEDGER kill switch is off"
 
     # Parsed here, inside the decline contract, rather than at the first use below. This
     # function's promise to its caller is `(None, reason)` on every way the ledger can
@@ -730,8 +738,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     not necessarily the prior weekday.
     """
     res = (
-        sb.table("positions")
-        .select("ticker,weight_pct,thesis_id")
+        _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id"))
         .eq("date", execution_d)
         .execute()
     )
@@ -912,10 +919,12 @@ def main() -> int:
 
     sb = _sb()
 
-    # Kairos venue-dispatch seam (K4). House path: workspace_id is unset →
+    # Execution venue-dispatch seam. House path: workspace_id is unset →
     # paper_internal → existing ledger paper fills, unchanged. External routing
     # is env-gated inside resolve_venue; this script does not submit to brokers.
-    venue = resolve_execution_venue_for_run(os.environ.get("OLYMPUS_KAIROS_WORKSPACE_ID"))
+    from digiquant.olympus.envcompat import EXECUTION_WORKSPACE_ID, env_lookup
+
+    venue = resolve_execution_venue_for_run(env_lookup(EXECUTION_WORKSPACE_ID) or None)
     if venue != "paper_internal":
         print(
             f"error: execute_at_open external venue {venue!r} requires the Kairos "

@@ -23,7 +23,7 @@ import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple  # score:allow untyped any — duck-typed PostgREST rows
 
 try:
     import jsonschema
@@ -43,9 +43,20 @@ except ImportError:
     load_dotenv = None  # type: ignore
 
 ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMAS_DIR = ROOT / "templates" / "schemas"
 DIGEST_SCHEMA = ROOT / "templates" / "digest-snapshot-schema.json"
 DELTA_REQ_SCHEMA = ROOT / "templates" / "delta-request-schema.json"
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 DOC_TYPE_TO_SCHEMA = {
     "weekly_digest": "weekly-digest.schema.json",
@@ -103,11 +114,12 @@ def _sb():
 
 
 def fetch_all_documents(sb, only_key_substr: Optional[str]) -> List[Dict[str, Any]]:
+    """House ``documents`` pages. Overlay rows must not be rewritten by id."""
     rows: List[Dict[str, Any]] = []
     start = 0
     page = 500
     while True:
-        q = sb.table("documents").select("*").order("date", desc=False)
+        q = eq_house_workspace(sb.table("documents").select("*")).order("date", desc=False)
         if only_key_substr:
             q = q.ilike("document_key", f"%{only_key_substr}%")
         res = q.range(start, start + page - 1).execute()

@@ -278,6 +278,9 @@ export {
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
+  AllocationStepChart,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -322,8 +325,19 @@ export {
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,
   TEARSHEET_DEMO,
+  RISK_BANDS,
+  riskBandLabel,
+  dcaRateCopy,
+  type RiskBand,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
+  type AllocationStepChartProps,
+  type AllocationFillMarker,
+  type OverlayTone,
+  type ChartLegendKind,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
@@ -362,7 +376,12 @@ export {
   type CommandPaletteGroup,
   type CommandPaletteItem,
 } from "./components/command-palette";
-export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";
+export {
+  DigiquantMark,
+  Wordmark,
+  type DigiquantMarkProps,
+  type WordmarkProps,
+} from "./components/symbols/marks";
 // Terminal identity — the `digi` + block-cursor lockup and the hairline display
 // cut. Supersedes `Wordmark` for new work; `Wordmark`/`Colophon` stay for the
 // surfaces already using them.

@@ -34,6 +34,7 @@ from digiquant.olympus.overlay.dispatch import (
     dispatch_overlay_daily,
     overlay_billing_entitled,
 )
+from digiquant.olympus.overlay.persist import overlay_persist_enabled
 from digiquant.olympus.tenancy import (
     PlanTier,
     SubscriptionStatus,
@@ -481,7 +482,7 @@ def main(
             loaded=loaded,
             run_date=run_date,
             byok_workspace_ids=present,
-            persist_enabled=(env.get("OLYMPUS_OVERLAY_PERSIST") or "").strip() == "1",
+            persist_enabled=overlay_persist_enabled(env),
         )
         return 0
 

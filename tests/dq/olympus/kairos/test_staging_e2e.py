@@ -12,12 +12,12 @@ Not a substitute for paper-fakes ``tests/integration/test_kairos_tenancy_chain.p
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Any
 
 import pytest
+from digiquant.olympus.envcompat import STAGING_FUNCTIONS_BASE, STAGING_USER_JWT, env_lookup
 from digiquant.olympus.kairos.remaining_hops import (
     RemainingHopEvidence,
     proven_remaining_hops,
@@ -25,8 +25,10 @@ from digiquant.olympus.kairos.remaining_hops import (
 )
 from digiquant.olympus.kairos.staging_e2e import (
     OBSERVER_HOPS,
+    REDEEM_INVITE_MOUNTED_CODES,
     REMAINING_LIVE_HOPS,
     STAGING_CHECKOUT_BODY,
+    STAGING_REDEEM_INVITE_BODY,
     HopExpectation,
     collect_remaining_evidence,
     format_remaining_hops_failure,
@@ -45,8 +47,7 @@ from digiquant.olympus.kairos.staging_secrets import (
 )
 
 CORE_FUNCTIONS_BASE = (
-    os.environ.get("KAIROS_STAGING_FUNCTIONS_BASE")
-    or "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
+    env_lookup(STAGING_FUNCTIONS_BASE) or "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
 )
 
 
@@ -123,6 +124,11 @@ def test_empty_and_placeholder_values_count_as_missing(
         (HopExpectation.PUBLIC_URLS_OK, 200, None, False),
         (HopExpectation.PREFS_DIGEST_ON, 200, None, False),
         (HopExpectation.PREFS_DIGEST_ON, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 403, "INVITE_INVALID", True),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 400, "EMAIL_REQUIRED", True),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 404, "NOT_FOUND", False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 200, None, False),
+        (HopExpectation.REDEEM_INVITE_MOUNTED, 429, "INVITE_RATE_LIMIT", False),
     ),
 )
 def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
@@ -147,32 +153,95 @@ def test_staging_checkout_is_custom_not_baseline() -> None:
 
 
 @pytest.mark.unit
+def test_redeem_invite_hop_uses_short_code_without_secrets() -> None:
+    """Short dummy must not grant, hash, or count toward INVITE_MAX_ATTEMPTS."""
+    hop = next(row for row in OBSERVER_HOPS if row.path == "/settings/access/redeem-invite")
+    assert hop.method == "POST"
+    assert hop.kind is HopExpectation.REDEEM_INVITE_MOUNTED
+    assert hop.body == STAGING_REDEEM_INVITE_BODY
+    code = str(STAGING_REDEEM_INVITE_BODY["code"])
+    assert len(code) < 10
+    assert hop.body is not None
+    assert set(hop.body) == {"code"}
+    assert "INVITE_INVALID" in REDEEM_INVITE_MOUNTED_CODES
+    assert "EMAIL_REQUIRED" in REDEEM_INVITE_MOUNTED_CODES
+
+
+@pytest.mark.unit
+def test_observer_hops_fail_when_redeem_invite_is_missing() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/access/redeem-invite")] = (404, {"code": "NOT_FOUND"})
+    results = run_observer_hops(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key="anon",
+        functions_base="https://example.test/functions/v1",
+    )
+    redeem = next(row for row in results if row.kind is HopExpectation.REDEEM_INVITE_MOUNTED)
+    assert redeem.ok is False
+    assert redeem.http == 404
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/access/redeem-invite")] = (404, {"code": "NOT_FOUND"})
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 3
+    blob = "\n".join(logs)
+    assert "redeem-invite not mounted" in blob
+    assert "POST /settings/access/redeem-invite http=404" in blob
+    # Path-contract / redeem-invite misses must still name remaining hops.
+    # Live 2026-09-01: Observer JWT Settings GETs are 200 while app-urls pin
+    # /olympus and redeem-invite 404s — hiding hops behind exit 3 hid E2E state.
+    assert "remaining hop product-state" in blob
+    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=overlay_not_succeeded" in blob
+
+
+@pytest.mark.unit
 def test_public_app_urls_ok_requires_digiquant_origin() -> None:
     good = {
-        "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
-        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+        "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
     }
     assert public_app_urls_ok(200, good) is True
     loopback = {
         **good,
-        "alpaca_redirect_uri": "http://127.0.0.1:3001/olympus/settings/brokers/callback/",
+        "alpaca_redirect_uri": "http://127.0.0.1:3001/dashboard/settings/brokers/callback/",
     }
     assert public_app_urls_ok(200, loopback) is False
     named_loopback = {
         **good,
-        "billing_return_url": "http://localhost:3001/olympus/settings/?tab=billing",
+        "billing_return_url": "http://localhost:3001/dashboard/settings/?tab=billing",
     }
     assert public_app_urls_ok(200, named_loopback) is False
-    missing_olympus = {
+    missing_dashboard = {
         **good,
         "billing_return_url": "https://digiquant.io/settings/billing",
     }
-    assert public_app_urls_ok(200, missing_olympus) is False
+    assert public_app_urls_ok(200, missing_dashboard) is False
     extra_public_client = {
         **good,
         "alpaca_oauth_client_id": "cid-public",
     }
     assert public_app_urls_ok(200, extra_public_client) is True
+    retired_olympus = {
+        "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, retired_olympus) is False
+    mixed_olympus_billing = {
+        **good,
+        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, mixed_olympus_billing) is False
 
 
 class _FakeHttp:
@@ -217,8 +286,8 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
         ("GET", "/settings/app-urls"): (
             200,
             {
-                "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
-                "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+                "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
+                "billing_return_url": "https://digiquant.io/dashboard/settings/?tab=billing",
             },
         ),
         ("GET", "/settings/jobs"): (200, {"jobs": []}),
@@ -228,6 +297,7 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
         ("POST", "/settings/keys/connect"): forbidden,
         ("POST", "/create-checkout-session"): (500, {"code": "PRICE_NOT_CONFIGURED"}),
         ("POST", "/settings/brokers"): (404, {"code": "NOT_FOUND"}),
+        ("POST", "/settings/access/redeem-invite"): (403, {"code": "INVITE_INVALID"}),
     }
 
 
@@ -271,7 +341,7 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     assert any("TIER_FORBIDDEN" in line or "Observer hops" in line for line in logs)
     assert any("STRIPE_SECRET_KEY" in line for line in logs)
     blob = "\n".join(logs)
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" in blob
     assert "browser_stripe_checkout" in blob
     assert "digest_email_received" in blob
     assert "blocker=plan_tier_not_custom" in blob
@@ -510,6 +580,27 @@ def test_remaining_hop_blockers_observer_and_house_gates() -> None:
         RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
     )
     assert persist["overlay_daily_claimed"] == "overlay_persist_disabled"
+    persist_wins = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "persist_disabled"),),
+            overlay_job_errors=("legacy_book_unique",),
+        )
+    )
+    assert persist_wins["overlay_daily_claimed"] == "overlay_persist_disabled"
+    legacy = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "failed"),),
+            overlay_job_errors=("legacy_book_unique",),
+        )
+    )
+    assert legacy["overlay_daily_claimed"] == "overlay_legacy_book_unique"
+    other_fail = remaining_hop_blockers(
+        RemainingHopEvidence(
+            jobs=(("overlay_daily", "failed"),),
+            overlay_job_errors=("BudgetExhausted",),
+        )
+    )
+    assert other_fail["overlay_daily_claimed"] == "overlay_not_succeeded"
 
 
 @pytest.mark.unit
@@ -532,6 +623,42 @@ def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
     assert evidence.daily_digest_enabled is True
     assert evidence.surface_http_ok is True
     assert proven_remaining_hops(evidence)["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_collect_remaining_evidence_reads_overlay_job_errors() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/jobs")] = (
+        200,
+        {
+            "jobs": [
+                {
+                    "job_type": "overlay_daily",
+                    "status": "failed",
+                    "error": "legacy_book_unique",
+                },
+                {"job_type": "overlay_daily", "status": "running"},
+                {
+                    "job_type": "other",
+                    "status": "failed",
+                    "error": "legacy_book_unique",
+                },
+            ]
+        },
+    )
+    evidence = collect_remaining_evidence(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    assert evidence.jobs == (
+        ("overlay_daily", "failed"),
+        ("overlay_daily", "running"),
+        ("other", "failed"),
+    )
+    assert evidence.overlay_job_errors == ("legacy_book_unique",)
+    assert remaining_hop_blockers(evidence)["overlay_daily_claimed"] == "overlay_legacy_book_unique"
 
 
 @pytest.mark.unit
@@ -602,7 +729,7 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
     assert rc == 0
     blob = "\n".join(logs)
     assert "all remaining hops proven" in blob
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" not in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" not in blob
 
 
 @pytest.mark.unit
@@ -646,7 +773,7 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
     assert checkout_bodies
     assert all(body == STAGING_CHECKOUT_BODY for body in checkout_bodies)
     blob = "\n".join(logs)
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" in blob
     for hop in (
         "browser_stripe_checkout",
         "alpaca_paper_oauth_connect",
@@ -719,16 +846,16 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
 
     Or::
 
-        PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+        PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
     """
     missing = missing_kairos_staging_secrets()
     if missing:
         pytest.fail(format_missing_secrets_failure(missing))
 
-    jwt = (os.environ.get("KAIROS_STAGING_USER_JWT") or "").strip()
+    jwt = env_lookup(STAGING_USER_JWT).strip()
     if not jwt:
         pytest.fail(
-            format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"])
+            format_missing_secrets_failure([STAGING_USER_JWT])
             + " (Agentmail/GitHub Auth session JWT for create-checkout-session)"
         )
 

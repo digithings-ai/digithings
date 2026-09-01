@@ -21,6 +21,18 @@ import sys
 from datetime import date as dt_date
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
 try:
     from supabase import create_client  # type: ignore[import-not-found]
 
@@ -49,8 +61,7 @@ def _sb():
 
 def _latest_positions_date(client) -> dt_date | None:
     resp = (
-        client.table("positions")
-        .select("date")
+        eq_house_workspace(client.table("positions").select("date"))
         .neq("ticker", "CASH")
         .order("date", desc=True)
         .limit(1)

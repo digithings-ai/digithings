@@ -34,7 +34,7 @@ rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md
 
 Live apps import `@digithings/design` tokens and `@digithings/web` primitives —
 they do not fork a second look. Phase 3 product-local fights on this branch:
-digichat shadcn `--radius` pinned to 0, olympus `.glass-card` retired, leftover
+digichat shadcn `--radius` pinned to 0, dashboard `.glass-card` retired, leftover
 `rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
 Themed `--font-family` follows `--font-sans` (mono); unthemed `:root` Inter
 remains a sans escape hatch.
@@ -53,7 +53,7 @@ barrel, re-exported from `src/index.ts`:
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from olympus `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from dashboard `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
 | `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
@@ -69,7 +69,7 @@ print-grade SVG tearsheet grammar (`.ts-*`) promoted from
 Engine ruling: canvas families are for screen-only dashboards; any surface
 with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
 `@digithings/design/tearsheet/styles.css` is deprecated in favour of the
-family sheet (kept only until digiquant-web/olympus swap their imports).
+family sheet (kept only until digiquant-web/dashboard swap their imports).
 
 Family notes: the dashboard time-series primitives ride **TradingView
 Lightweight Charts** (`lightweight-charts` is a package dependency; hosts fill
@@ -87,7 +87,7 @@ app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
 the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
 rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
-like olympus's subpage tab bar).
+like the dashboard's subpage tab bar).
 
 Page-level dashboard composition is specified by
 `reference/components/dashboard-workspace-reference.tsx` on the Finance page.
@@ -103,7 +103,7 @@ liveries live inside utilities); shared sheets import with `layer(components)`;
 package components rendered by an app need an `@source` line. The adoption
 playbook and the CI guard contract live in [MIGRATION.md](MIGRATION.md)
 (`scripts/check_frontend_canon.py`, enforced by the unconditional
-`frontend-canon` job in `ci.yml` — plus redundantly in the web/olympus/digichat
+`frontend-canon` job in `ci.yml` — plus redundantly in the web/dashboard/digichat
 test jobs).
 
 ### The move touched deploy config
@@ -196,7 +196,7 @@ queries silently.
 
 Each product app also owns explicit 32px fallback, 180px Apple touch, and
 192/512px web-app PNGs plus a maskable 512px variant. digithings and digiquant
-use the compact terminal mark; Olympus uses the canonical four-stroke mark.
+use the compact terminal mark; the digiquant dashboard uses the canonical four-stroke mark.
 Tab and Apple metadata publish light/dark pairs with media queries. Web App
 Manifest icons use one contrast-safe default because installed icons are cached
 by the operating system and the manifest standard has no live colour-scheme

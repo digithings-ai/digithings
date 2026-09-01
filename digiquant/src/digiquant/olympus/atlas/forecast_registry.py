@@ -79,6 +79,12 @@ class RegistryWriteResult:
         return self.degraded_reason is None and not self.conflicts
 
 
+# Migration 079 ``olympus_forecast_amendments_reason_check``: length 1..2000.
+# H9 persist is fail-soft after booking; a 23514 here degrades the registry
+# without rebooking (house GHA 33426508863 BITO amendment).
+AMENDMENT_REASON_MAX_LEN = 2000
+
+
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
     """Single INSERT gate — keeps ``upsert``/``update`` out of this module."""
     if not rows:
@@ -114,7 +120,7 @@ def _amendment_row(amendment: ForecastAmendment) -> dict[str, Any]:
         "ticker": amendment.ticker.strip().upper(),
         "source_run_id": amendment.source_run_id,
         "provider_invocation_id": amendment.provider_invocation_id,
-        "reason": amendment.reason,
+        "reason": amendment.reason.strip()[:AMENDMENT_REASON_MAX_LEN],
         "terms": amendment.terms.model_dump(mode="json"),
         "new_evidence_ids": list(amendment.new_evidence_ids),
         "contradiction_ids": list(amendment.contradiction_ids),

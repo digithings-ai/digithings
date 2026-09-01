@@ -12,7 +12,6 @@ lessons into a single ``documents`` row (``document_key=beliefs``,
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
@@ -21,6 +20,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Callable,
     Literal,
 )
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -37,7 +37,9 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     query_unfolded_resolved_decisions,
 )
+from digiquant.olympus.envcompat import BELIEFS_BACKLOG, env_lookup
 from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ class BeliefsBlob(BaseModel):
 
 def beliefs_backlog_threshold() -> int:
     """``OLYMPUS_BELIEFS_BACKLOG`` env override; default 20."""
-    raw = os.environ.get("OLYMPUS_BELIEFS_BACKLOG", "").strip()
+    raw = env_lookup(BELIEFS_BACKLOG).strip()
     if not raw:
         return DEFAULT_BELIEFS_BACKLOG
     try:
@@ -143,12 +145,18 @@ def distill_beliefs(
     lessons: list[dict[str, Any]] | None = None,
     active_theses: list[dict[str, Any]] | None = None,
     llm_runner: Callable[..., BeliefsBlob] | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> bool:
     """Run one beliefs distillation call and persist the document.
 
     Returns ``True`` when a document was written; ``False`` when there was
-    nothing to fold (no unfolded resolved rows).
+    nothing to fold (no unfolded resolved rows). Overlay workspaces skip:
+    ``decision_log`` has no ``workspace_id`` and ``beliefs_folded_at`` would
+    stamp house lessons by id.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("beliefs: overlay workspace skips house decision_log fold")
+        return False
     unfolded = query_unfolded_resolved_decisions(client=client)
     if not unfolded:
         return False
@@ -195,6 +203,8 @@ def _beliefs_node_factory(
     deps: BeliefsDistillationDeps,
 ) -> Callable[[HermesState], dict[str, Any]]:
     def _node(state: HermesState) -> dict[str, Any]:
+        if skip_overlay_shared_register(state.config.workspace_id):
+            return {}
         if not should_distill_beliefs(
             refresh_scope=state.refresh_scope,
             backlog_count=count_unfolded_resolved_decisions(deps.client),
@@ -204,6 +214,7 @@ def _beliefs_node_factory(
             client=deps.client,
             run_date=state.run_date,
             run_type=state.run_type,
+            workspace_id=state.config.workspace_id,
         )
         return {}
 
@@ -242,8 +253,11 @@ def run_beliefs_distillation_if_triggered(
     client: SupabaseClient,
     atlas_input: AtlasInput,
     run_type: str,
+    workspace_id: UUID | str | None = None,
 ) -> bool:
     """Chain-level entry: distill when operator scope or backlog demands it."""
+    if skip_overlay_shared_register(workspace_id):
+        return False
     backlog = count_unfolded_resolved_decisions(client)
     if not should_distill_beliefs(refresh_scope=atlas_input.refresh_scope, backlog_count=backlog):
         return False
@@ -265,4 +279,5 @@ def run_beliefs_distillation_if_triggered(
         run_date=atlas_input.run_date,
         run_type=run_type,
         lessons=lessons,
+        workspace_id=workspace_id,
     )

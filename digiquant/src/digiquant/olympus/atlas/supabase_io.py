@@ -24,11 +24,23 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
+from uuid import UUID
 
+import httpx
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
-from digiquant.olympus.overlay.persist import is_private_workspace, require_overlay_persist
+from digiquant.olympus.overlay.persist import (
+    is_private_workspace,
+    require_overlay_persist,
+    skip_overlay_shared_register,
+)
+from digiquant.olympus.postgrest_timeout import (
+    CONNECT_TIMEOUT_SECONDS,
+    POOL_TIMEOUT_SECONDS,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
+)
 from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -173,11 +185,21 @@ def build_client(cfg: SupabaseConfig) -> SupabaseClient:
     The ``supabase`` package is an optional extra; this helper defers the
     import so unit tests (which use :class:`FakeSupabaseClient`) never need
     it installed. Production entry points (commit 9's graph compiler) call
-    this once at startup.
+    this once at startup. PostgREST uses an explicit httpx timeout (#3319).
     """
+    from supabase.lib.client_options import SyncClientOptions
+
     from supabase import create_client  # deferred — supabase is an optional dep
 
-    return create_client(cfg.url, cfg.service_key)  # type: ignore[return-value]
+    options = SyncClientOptions(
+        postgrest_client_timeout=httpx.Timeout(
+            connect=CONNECT_TIMEOUT_SECONDS,
+            read=READ_TIMEOUT_SECONDS,
+            write=WRITE_TIMEOUT_SECONDS,
+            pool=POOL_TIMEOUT_SECONDS,
+        )
+    )
+    return create_client(cfg.url, cfg.service_key, options)  # type: ignore[return-value]
 
 
 def _audit(event_type: str, payload: dict[str, Any]) -> None:
@@ -198,16 +220,14 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _json_safe(value: Any) -> Any:
-    """Recursively coerce ``date``/``datetime`` to ISO strings.
+    """Recursively coerce values the stdlib ``json`` encoder cannot handle.
 
-    The Supabase client serializes upsert bodies with the stdlib ``json``
-    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
-    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
-    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
-    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
-    in ``payload["date"]``. Coercing here, at the single write boundary,
-    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
-    once instead of relying on each one to pre-serialize its dates.
+    The Supabase client serializes upsert bodies with httpx ``json.dumps``.
+    LangGraph checkpoint rehydration yields plain dicts with raw ``date`` /
+    ``datetime`` / ``UUID`` instead of a Pydantic ``model_dump(mode="json")``.
+    House GHA ``33426508863`` retried H9 ``publish_document`` after a ledger
+    ``23502`` and died with ``TypeError: Object of type UUID is not JSON
+    serializable``. Coercing at this write boundary covers every caller.
     """
     if isinstance(value, dict):
         return {key: _json_safe(val) for key, val in value.items()}
@@ -215,6 +235,8 @@ def _json_safe(value: Any) -> Any:
         return [_json_safe(item) for item in value]
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
     return value
 
 
@@ -361,6 +383,7 @@ def upsert_onchain_cohort_positioning(
     *,
     client: SupabaseClient,
     rows: list[dict[str, Any]],
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Idempotently upsert per-(date,market) on-chain cohort positioning rows (#801).
 
@@ -368,7 +391,18 @@ def upsert_onchain_cohort_positioning(
     preflight caller can skip cleanly on a Hyperdash outage without a special case. Upserts one
     row at a time on ``(date, market)`` — the per-run market set is small (a handful) and this
     matches the single-dict upsert convention used by every other writer here.
+
+    This table has no ``workspace_id`` column (leftover ``UNIQUE(date, market)``). Overlay
+    persist-on is not a license to last-writer-win the house research row. Private workspaces
+    skip the upsert and return 0; callers that omit *workspace_id* stay on the house write
+    path. Independent of ``OLYMPUS_OVERLAY_PERSIST`` and of staged cutover 113.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register onchain_cohort_positioning "
+            "(house-only UNIQUE(date, market))"
+        )
+        return 0
     if not rows:
         return 0
     for row in rows:
@@ -473,11 +507,15 @@ def load_prior_analyst_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
 
     Returns ``{ticker: {date, document_key, conviction_score, stance, thesis_excerpt}}``.
     Empty when ``tickers`` is empty or no prior analyst docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private analyst rows cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -485,9 +523,11 @@ def load_prior_analyst_summaries(
         return {}
     keys = [f"analyst/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -517,12 +557,16 @@ def load_prior_deliberation_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
     Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
     document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
     Empty when ``tickers`` is empty or no prior deliberation docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private deliberation cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -530,9 +574,11 @@ def load_prior_deliberation_summaries(
         return {}
     keys = [f"deliberation/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -621,11 +667,19 @@ def load_active_theses_rows(
 def load_portfolio_performance_snapshot(
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a later private NAV cannot
+    become the house PM snapshot.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     nav_resp = (
         client.table("nav_history")
         .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -639,6 +693,7 @@ def load_portfolio_performance_snapshot(
     metrics_resp = (
         client.table("portfolio_metrics")
         .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("workspace_id", scoped)
         .eq("date", nav_date)
         .limit(1)
         .execute()
@@ -676,6 +731,7 @@ def load_prior_context(
     snapshot_lookback: int = 2,
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
+    workspace_id: str | None = None,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
@@ -693,6 +749,13 @@ def load_prior_context(
       on extreme churn days; any key whose latest write predates the floor
       is treated as absent, which is the same behavior the sub-graph gets
       on a fresh tenant.
+
+    ``documents`` are house-scoped when ``workspace_id`` is omitted so overlay
+    private (and overlay-copied corpus) rows cannot seed house preflight.
+    ``load_prior_context``, ``load_prior_analyst_summaries``,
+    ``load_prior_deliberation_summaries``, ``load_latest_beliefs_document``, and
+    ``query_institutional_absence_streak`` all pin house. ``daily_snapshots``
+    stays date-only (house-only ``UNIQUE(date)``; overlay publish skips it).
     """
     from datetime import timedelta
 
@@ -711,9 +774,11 @@ def load_prior_context(
     # missing segment the same regardless of whether it never existed or
     # simply hasn't been refreshed recently.
     floor = (run_date - timedelta(days=documents_lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     docs_resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -1140,11 +1205,14 @@ def load_latest_beliefs_document(
     *,
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Latest ``beliefs`` document strictly before ``run_date`` for PM context."""
+    """Latest house ``beliefs`` document strictly before ``run_date`` for PM context."""
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .eq("document_key", "beliefs")
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -1161,6 +1229,7 @@ def query_institutional_absence_streak(
     run_date: date,
     lookback_days: int = 30,
     document_key_prefix: str = "inst-",
+    workspace_id: str | None = None,
 ) -> int:
     """Count consecutive recent run-dates with **no** institutional document published.
 
@@ -1184,13 +1253,18 @@ def query_institutional_absence_streak(
     skipped institutional ingest do. Returns ``0`` when the most recent run did
     publish an ``inst-*`` document (breaker stays open) and ``0`` on an empty
     window (first-ever / fresh tenant — never trip the breaker without evidence).
+
+    Omitted ``workspace_id`` is the house — overlay ``inst-*`` rows cannot clear
+    or extend the house absence streak.
     """
     from datetime import timedelta
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)

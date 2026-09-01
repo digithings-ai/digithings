@@ -24,6 +24,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
+from uuid import UUID
+
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -119,17 +122,26 @@ def compute_breaker_scale(
     )
 
 
-def _recent_navs(client: Any, as_of: date, lookback_days: int) -> list[float]:
+def _recent_navs(
+    client: Any,
+    as_of: date,
+    lookback_days: int,
+    workspace_id: str | UUID | None = None,
+) -> list[float]:
     """Chronological NAV values in ``(as_of − lookback, as_of]``.
 
     Look-ahead-guarded (``.lte(as_of)``): a future NAV row can never enter the window.
     A query error is *propagated* — the public :func:`breaker_scale_from_nav_history`
     catches it and degrades to a neutral scale.
+
+    Omitted ``workspace_id`` is the house — never an unfiltered date scan.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
     since = (as_of - timedelta(days=max(1, lookback_days))).isoformat()
     resp = (
         client.table("nav_history")
         .select("date,nav")
+        .eq("workspace_id", scoped)
         .lte("date", as_of.isoformat())
         .gte("date", since)
         .order("date", desc=False)  # ascending → chronological, current = last
@@ -148,13 +160,21 @@ def _recent_navs(client: Any, as_of: date, lookback_days: int) -> list[float]:
 
 
 def breaker_scale_from_nav_history(
-    client: Any, as_of: date, *, config: BreakerConfig | None = None
+    client: Any,
+    as_of: date,
+    *,
+    config: BreakerConfig | None = None,
+    workspace_id: str | UUID | None = None,
 ) -> BreakerState:
     """Read the recent ``nav_history`` window and compute the breaker. Fail-soft: a
-    read error degrades to a neutral 1.0 scale (the breaker never blocks a run)."""
+    read error degrades to a neutral 1.0 scale (the breaker never blocks a run).
+
+    Omitted ``workspace_id`` is the house — an overlay crash NAV cannot trip
+    the house breaker.
+    """
     config = config or BreakerConfig()
     try:
-        navs = _recent_navs(client, as_of, config.lookback_days)
+        navs = _recent_navs(client, as_of, config.lookback_days, workspace_id)
     except Exception as exc:  # breaker is best-effort; never fail the run
         logger.warning("breaker: nav_history read failed (%s); neutral scale", exc)
         return BreakerState(1.0, 0.0, None, None, f"nav_history read failed: {exc}")

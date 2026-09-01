@@ -43,10 +43,11 @@ update in lockstep.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Bump when fields are added/removed/renamed or semantics change.
 # The on-disk schema export lives at ``digiquant/docs/schemas/atlas_snapshot.v{N}.json``.
@@ -92,6 +93,20 @@ class RiskItem(BaseModel):
     horizon_hours: int = Field(ge=1, le=168)
     label: str = Field()
     trigger: str = Field()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_horizon_hours(cls, data: object) -> object:
+        # Same live typo as phase7_synthesis.RiskItem (house GHA 33426508863).
+        # Pop always: extra=forbid rejects leftover alias, and a dual-key edit
+        # merge must take the newly patched typo over a stale canonical value.
+        if not isinstance(data, Mapping):
+            return data
+        if "horizon_hourse" not in data:
+            return data
+        out = dict(data)
+        out["horizon_hours"] = out.pop("horizon_hourse")
+        return out
 
 
 # ─── Source citation primitives (mirrors digiquant.olympus.atlas.segments) ──────────

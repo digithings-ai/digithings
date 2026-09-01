@@ -178,7 +178,9 @@ class TestPreflightReflectDaily:
 
         called: dict[str, int] = {"resolve": 0}
 
-        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:
+        def stub_resolve(
+            *, client: Any, run_date: Any, reflector: Any, workspace_id: Any = None
+        ) -> int:
             called["resolve"] += 1
             return 0
 

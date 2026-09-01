@@ -17,6 +17,10 @@ import {
   pinnedAlpacaRedirectUri,
 } from "../_shared/settings-handlers.ts";
 import {
+  sha256Hex,
+  type InviteStore,
+} from "../_shared/invite.ts";
+import {
   buildAad,
   canonicalJson,
   fingerprint,
@@ -531,6 +535,9 @@ async function call(
     userId?: string;
     planTier?: string | null;
     auth?: boolean;
+    email?: string;
+    inviteHash?: string | null;
+    inviteStore?: InviteStore;
   } = {},
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const userId = opts.userId ?? USER_A;
@@ -538,12 +545,14 @@ async function call(
     admin: mockAdmin(store),
     user: {
       id: userId,
-      email: "owner@example.com",
+      email: opts.email ?? "owner@example.com",
       plan_tier: opts.planTier === undefined ? "custom" : opts.planTier,
     },
     vaultKey: TEST_KEY,
     uuid: nextUuid,
     appUrl: APP_URL,
+    inviteHash: opts.inviteHash,
+    inviteStore: opts.inviteStore,
     exchangeAlpacaCode: async ({ redirectUri }) => {
       // Capture that exchange uses server-pinned URI.
       if (redirectUri !== pinnedAlpacaRedirectUri(APP_URL)) {
@@ -1335,14 +1344,18 @@ Deno.test("sealCredential called with AAD binding (workspace:broker:env)", async
   );
 });
 
-Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
+Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example/olympus"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
 });
 
@@ -1443,17 +1456,17 @@ Deno.test("GET /notifications/log: member lists digest event keys only", async (
   assertEquals(events[0]!.event_key, "digest:2026-08-31");
 });
 
-Deno.test("GET /app-urls: pinned Alpaca + billing return under /olympus", async () => {
+Deno.test("GET /app-urls: pinned Alpaca + billing return under /dashboard", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "GET", "/app-urls");
   assertEquals(status, 200);
   assertEquals(
     json.alpaca_redirect_uri,
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     json.billing_return_url,
-    "https://app.example/olympus/settings/?tab=billing",
+    "https://app.example/dashboard/settings/?tab=billing",
   );
   assertEquals(json.alpaca_oauth_client_id, "");
 });
@@ -1477,4 +1490,81 @@ Deno.test("GET /app-urls: public client id only (secret never in body)", async (
     if (previousSecret === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
     else Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", previousSecret);
   }
+});
+
+function memInviteStore(): InviteStore & { grants: Map<string, string[]> } {
+  const grants = new Map<string, string[]>();
+  const attempts: Array<{ user_id: string; attempted_at: string }> = [];
+  const store: InviteStore & { grants: Map<string, string[]> } = {
+    grants,
+    countAttempts: async (userId, sinceIso) =>
+      attempts.filter((a) => a.user_id === userId && a.attempted_at >= sinceIso).length,
+    recordAttempt: async (row) => {
+      attempts.push(row);
+    },
+    listActiveCodes: async () => [],
+    hasGrant: async (email, productKey) => (grants.get(email) ?? []).includes(productKey),
+    insertGrant: async (email, productKey) => {
+      const prev = grants.get(email) ?? [];
+      grants.set(email, [...prev, productKey]);
+    },
+    recordRedemption: async () => {},
+    incrementRedemptionCount: async () => {},
+  };
+  return store;
+}
+
+Deno.test("POST /access/redeem-invite: env hash grants fx_hub", async () => {
+  const plain = "12x-desk-invite-alpha";
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: plain, product_key: "fx_hub" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex(plain),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 200);
+  assertEquals(json.ok, true);
+  assertEquals(json.product_key, "fx_hub");
+  assertEquals(json.already_granted, false);
+  assertEquals(inviteStore.grants.get("teammate@12x.example"), ["fx_hub"]);
+});
+
+Deno.test("POST /access/redeem-invite: wrong code is 403 without a grant", async () => {
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "totally-wrong-invite" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 403);
+  assertEquals(json.code, "INVITE_INVALID");
+  assertEquals(inviteStore.grants.size, 0);
+});
+
+Deno.test("POST /access/redeem-invite: missing email is 400", async () => {
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "12x-desk-invite-alpha" },
+    {
+      email: "",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore: memInviteStore(),
+    },
+  );
+  assertEquals(status, 400);
+  assertEquals(json.code, "EMAIL_REQUIRED");
 });

@@ -31,7 +31,7 @@ jobs:
       digillm: ${{ steps.filter.outputs.digillm }}
       digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
-      olympus: ${{ steps.filter.outputs.olympus }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
       web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
@@ -98,13 +98,13 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
-            olympus:
-              - 'frontend/olympus/**'
+            dashboard:
+              - 'frontend/dashboard/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/test-olympus.yml'
+              - '.github/workflows/test-dashboard.yml'
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
@@ -299,10 +299,10 @@ jobs:
     if: needs.changes.outputs.digichat == 'true'
     uses: ./.github/workflows/test-digichat.yml
 
-  olympus:
+  dashboard:
     needs: changes
-    if: needs.changes.outputs.olympus == 'true'
-    uses: ./.github/workflows/test-olympus.yml
+    if: needs.changes.outputs.dashboard == 'true'
+    uses: ./.github/workflows/test-dashboard.yml
 
   web:
     needs: changes
@@ -568,7 +568,7 @@ jobs:
       - digillm
       - digifetch
       - digichat
-      - olympus
+      - dashboard
       - web
       - score
       - e2e-contract

@@ -20,6 +20,7 @@ from digiquant.olympus.edit_mode import (
     resolve_edit_mode,
     stale_full_days,
 )
+from pydantic import ValidationError
 
 _DELTA_EXAMPLE = (
     Path(__file__).resolve().parents[3]
@@ -344,6 +345,24 @@ def test_patch_op_leaves_short_reason_untouched() -> None:
     op = PatchOp(op="set", path="/headline", value="x", reason="short and fine")
     assert op.reason == "short and fine"
     assert PatchOp(op="set", path="/h", value="x").reason is None
+
+
+@pytest.mark.unit
+def test_patch_op_add_maps_to_set() -> None:
+    """House GHA 33426508863: DocumentPatch ops.6.op='add' (RFC 6902 name).
+
+    This module's ``set`` already implements RFC add, including ``/-`` list
+    append. Mapping to ``append`` would require a list target and would break
+    ``add`` on a scalar path like ``/headline``.
+    """
+    assert PatchOp(op="add", path="/headline", value="x").op == "set"
+    assert PatchOp.model_validate({"op": "Add", "path": "/material_findings/-"}).op == "set"
+
+
+@pytest.mark.unit
+def test_patch_op_unknown_verb_is_still_rejected() -> None:
+    with pytest.raises(ValidationError, match="op"):
+        PatchOp(op="upsert", path="/headline", value="x")
 
 
 @pytest.mark.unit

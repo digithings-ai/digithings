@@ -8,9 +8,13 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Literal,
 )
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 PatchOpType = Literal["set", "append", "remove"]
+# RFC 6902 names the write verb ``add``. This module's ``set`` is that verb
+# (object replace-or-insert, and ``/-`` / past-end list append). House GHA
+# 33426508863 rejected ``ops.6.op='add'`` and regenerated the segment.
+_PATCH_OP_SYNONYMS: dict[str, PatchOpType] = {"add": "set"}
 EditMode = Literal["full", "edit", "skip"]
 ArtifactKey = tuple[str, str]
 FullArtifactBody = dict[str, Any]
@@ -25,6 +29,14 @@ class PatchOp(BaseModel):
     # Free prose — no max_length / soft-truncate. A 240-char hard cap used to
     # discard entire DocumentPatches (#1740); truncating just reintroduces loss.
     reason: str | None = None
+
+    @field_validator("op", mode="before")
+    @classmethod
+    def _normalize_op(cls, v: object) -> object:
+        if not isinstance(v, str):
+            return v
+        token = v.strip().lower()
+        return _PATCH_OP_SYNONYMS.get(token, token)
 
 
 class DocumentPatch(BaseModel):

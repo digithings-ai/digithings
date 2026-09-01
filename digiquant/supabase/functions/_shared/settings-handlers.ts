@@ -17,6 +17,7 @@
  *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
  *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
  *                                + public Alpaca OAuth client id (never the secret)
+ *   POST   /access/redeem-invite — hashed FX Hub invite → client_product_grants
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -59,6 +60,10 @@ import {
   publicAlpacaOauthClientId,
   settingsBillingReturnUrl,
 } from "./app-url.ts";
+import {
+  redeemProductInvite,
+  type InviteStore,
+} from "./invite.ts";
 
 export type SettingsDeps = {
   admin: AdminClient;
@@ -75,6 +80,10 @@ export type SettingsDeps = {
   now?: () => Date;
   /** Override APP_URL for pinned OAuth redirect_uri (tests). */
   appUrl?: string;
+  /** SHA-256 hex of the FX Hub invite (Supabase secret FX_HUB_INVITE_HASH). */
+  inviteHash?: string | null;
+  /** Tests inject an in-memory store; production uses PostgREST. */
+  inviteStore?: InviteStore;
 };
 
 const FINGERPRINT_COLUMNS =
@@ -170,6 +179,9 @@ export async function handleSettingsRequest(
   }
   if (method === "GET" && (path === "/app-urls" || path === "/app-urls/")) {
     return getAppUrls(req, deps);
+  }
+  if (method === "POST" && path === "/access/redeem-invite") {
+    return redeemInvite(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
@@ -1459,10 +1471,136 @@ async function exchangeAlpacaCodeDefault(args: {
   };
 }
 
+function postgrestInviteStore(
+  admin: AdminClient,
+  uuid: () => string,
+): InviteStore {
+  return {
+    async countAttempts(userId, sinceIso) {
+      const { data, error } = await admin
+        .from("product_invite_attempts")
+        .select("id")
+        .eq("user_id", userId)
+        .gte("attempted_at", sinceIso);
+      if (error) {
+        if (String(error.message ?? "").includes("does not exist")) return 0;
+        throw new Error("invite attempts unavailable");
+      }
+      return Array.isArray(data) ? data.length : 0;
+    },
+    async recordAttempt(row) {
+      const { error } = await admin.from("product_invite_attempts").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && !String(error.message ?? "").includes("does not exist")) {
+        throw new Error("invite attempt write failed");
+      }
+    },
+    async listActiveCodes(productKey) {
+      const { data, error } = await admin
+        .from("product_invite_codes")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at")
+        .eq("product_key", productKey);
+      if (error || !Array.isArray(data)) return [];
+      return data.filter((row): row is {
+        id: string;
+        code_hash: string;
+        max_redemptions: number | null;
+        redemption_count: number;
+        revoked_at: string | null;
+      } => typeof row.id === "string" && typeof row.code_hash === "string");
+    },
+    async hasGrant(email, productKey) {
+      const { data, error } = await admin
+        .from("client_product_grants")
+        .select("product_key")
+        .eq("email", email);
+      if (error || !Array.isArray(data)) return false;
+      return data.some((row) => row.product_key === productKey);
+    },
+    async insertGrant(email, productKey, note) {
+      const { error } = await admin.from("client_product_grants").insert({
+        email,
+        product_key: productKey,
+        note,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("product grant insert failed");
+      }
+    },
+    async recordRedemption(row) {
+      const { error } = await admin.from("product_invite_redemptions").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("invite redemption write failed");
+      }
+    },
+    async incrementRedemptionCount(id) {
+      const { data } = await admin
+        .from("product_invite_codes")
+        .select("redemption_count")
+        .eq("id", id)
+        .maybeSingle();
+      const current =
+        data && typeof data.redemption_count === "number" ? data.redemption_count : 0;
+      await admin
+        .from("product_invite_codes")
+        .update({ redemption_count: current + 1 })
+        .eq("id", id);
+    },
+    async recordAdminAudit(row) {
+      if (!row.workspace_id) return;
+      await admin.from("notification_log").insert({
+        workspace_id: row.workspace_id,
+        event_key: row.event_key,
+        sent_date: row.sent_date,
+        sent_at: row.sent_at,
+      });
+    },
+  };
+}
+
+async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const requestedWorkspaceId =
+    typeof body.workspace_id === "string" ? body.workspace_id : null;
+  const member = await resolveMember(deps, requestedWorkspaceId);
+  const workspaceId = member.ok ? member.workspace.id : null;
+  const store = deps.inviteStore ??
+    postgrestInviteStore(deps.admin, deps.uuid ?? (() => crypto.randomUUID()));
+  const result = await redeemProductInvite({
+    userId: deps.user.id,
+    email: deps.user.email,
+    productKey: body.product_key,
+    code: body.code,
+    envHash: deps.inviteHash,
+    workspaceId,
+    store,
+    now: deps.now?.(),
+  });
+  if (!result.ok) {
+    return jsonError(result.status, result.code, result.message);
+  }
+  return jsonOk({
+    ok: true,
+    already_granted: result.alreadyGranted,
+    product_key: result.productKey,
+  });
+}
+
 /** Helper for index.ts — build deps from a verified user + admin client. */
 export function createDefaultDeps(user: AuthUser, admin?: AdminClient): SettingsDeps {
   return {
     admin: admin ?? createAdminClient(),
     user,
+    inviteHash: Deno.env.get("FX_HUB_INVITE_HASH") ?? null,
   };
 }

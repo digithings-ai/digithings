@@ -466,7 +466,10 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
 
 def get_olympus_tier() -> str:
     """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``olympus_models.yaml`` default."""
-    raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
+    if "DIGIQUANT_MODEL_TIER" in os.environ:
+        raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
+    else:
+        raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
     if raw in _VALID_OLYMPUS_TIERS:
         return raw
     return _load_olympus_models().default_tier or "cheap"

@@ -6,7 +6,7 @@ import os
 import sys
 from datetime import date as dt_date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any  # score:allow untyped any — duck-typed Supabase client + rows
 
 try:
     from supabase import create_client  # type: ignore
@@ -24,6 +24,19 @@ except ImportError:
     pass
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
@@ -34,6 +47,46 @@ def _sb():
     return create_client(url, key)
 
 
+def house_zero_weight_non_cash_on_date(sb: Any, d: str) -> list[dict[str, Any]]:
+    """House-book zero-weight non-CASH rows for one date. Overlay books are out of scope."""
+    res = (
+        eq_house_workspace(sb.table("positions").select("ticker,weight_pct"))
+        .eq("date", d)
+        .neq("ticker", "CASH")
+        .eq("weight_pct", 0)
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
+
+
+def latest_house_nav_date(sb: Any) -> str | None:
+    nav = (
+        eq_house_workspace(sb.table("nav_history").select("date"))
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(nav, "data", None) or []
+    if not rows:
+        return None
+    raw = rows[0].get("date")
+    return str(raw)[:10] if raw else None
+
+
+def latest_house_metrics_date(sb: Any) -> str | None:
+    pm = (
+        eq_house_workspace(sb.table("portfolio_metrics").select("date"))
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(pm, "data", None) or []
+    if not rows:
+        return None
+    raw = rows[0].get("date")
+    return str(raw)[:10] if raw else None
+
+
 def _fail(msg: str) -> None:
     print(f"❌ {msg}", file=sys.stderr)
 
@@ -42,9 +95,14 @@ def _pass(msg: str) -> None:
     print(f"✅ {msg}")
 
 
-def _has_research_delta(sb, d: str) -> bool:
-    """True if any documents row for this date carries a research_delta payload (any document_key)."""
-    res = sb.table("documents").select("payload").eq("date", d).limit(500).execute()
+def _has_research_delta(sb: Any, d: str) -> bool:
+    """True if any house documents row for this date carries a research_delta payload."""
+    res = (
+        eq_house_workspace(sb.table("documents").select("payload"))
+        .eq("date", d)
+        .limit(500)
+        .execute()
+    )
     for r in getattr(res, "data", None) or []:
         p = r.get("payload")
         if isinstance(p, dict) and p.get("doc_type") == "research_delta":
@@ -52,10 +110,9 @@ def _has_research_delta(sb, d: str) -> bool:
     return False
 
 
-def _has_research_doc(sb, d: str) -> bool:
+def _has_research_doc(sb: Any, d: str) -> bool:
     res = (
-        sb.table("documents")
-        .select("payload,document_key")
+        eq_house_workspace(sb.table("documents").select("payload,document_key"))
         .eq("date", d)
         .limit(500)
         .execute()
@@ -78,10 +135,21 @@ def _has_research_doc(sb, d: str) -> bool:
     return False
 
 
-def _has_rebalance_doc(sb, d: str) -> bool:
+def house_digest_on_date(sb: Any, d: str) -> list[dict[str, Any]]:
+    """House ``digest`` row for ``d``. Overlay same-key rows must not pass validation."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("date,document_key,payload"))
+        .eq("date", d)
+        .eq("document_key", "digest")
+        .limit(1)
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
+
+
+def _has_rebalance_doc(sb: Any, d: str) -> bool:
+    res = (
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", d)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -142,15 +210,7 @@ def main() -> int:
         else:
             _pass("documents: digest or research_delta present")
     else:
-        doc = (
-            sb.table("documents")
-            .select("date,document_key,payload")
-            .eq("date", d)
-            .eq("document_key", "digest")
-            .limit(1)
-            .execute()
-        )
-        drows = getattr(doc, "data", None) or []
+        drows = house_digest_on_date(sb, d)
         if not drows:
             _fail(f"documents missing digest for {d}")
             fails += 1
@@ -170,31 +230,21 @@ def main() -> int:
 
     # positions: no zero-weight non-CASH (skip for research-only days that did not touch positions)
     if mode != "research":
-        pos = (
-            sb.table("positions")
-            .select("ticker,weight_pct")
-            .eq("date", d)
-            .neq("ticker", "CASH")
-            .eq("weight_pct", 0)
-            .execute()
-        )
-        prows = getattr(pos, "data", None) or []
+        prows = house_zero_weight_non_cash_on_date(sb, d)
         if prows:
             _fail(f"positions has {len(prows)} zero-weight non-CASH rows for {d}")
             fails += 1
         else:
             _pass("positions has no zero-weight non-CASH rows")
 
-    # nav_history and portfolio_metrics: at least one row exists (we validate freshness elsewhere)
-    nav = sb.table("nav_history").select("date").order("date", desc=True).limit(1).execute()
-    if not (getattr(nav, "data", None) or []):
+    # nav_history and portfolio_metrics: at least one house row (we validate freshness elsewhere)
+    if latest_house_nav_date(sb) is None:
         _fail("nav_history empty")
         fails += 1
     else:
         _pass("nav_history non-empty")
 
-    pm = sb.table("portfolio_metrics").select("date").order("date", desc=True).limit(1).execute()
-    if not (getattr(pm, "data", None) or []):
+    if latest_house_metrics_date(sb) is None:
         _fail("portfolio_metrics empty")
         fails += 1
     else:

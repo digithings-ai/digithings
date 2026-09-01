@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Collection, Mapping
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
@@ -19,6 +18,12 @@ from digiquant.olympus.atlas.phases._node_factory import (
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
+from digiquant.olympus.envcompat import (
+    ATTEMPT,
+    DELIBERATION_MAX_ROUNDS,
+    DELIBERATION_MIN_ROUNDS,
+    env_lookup,
+)
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
     fanout_ticker,
@@ -43,8 +48,10 @@ from digiquant.olympus.hermes.models.forecast import (
     ForecastAmendment,
     ForecastAssessment,
     ForecastTerms,
+    fill_forecast_tenor_from_base,
     materialize_forecast_amendment,
     resolve_effective_forecast,
+    unwrap_forecast_terms_payload,
 )
 from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
 from digiquant.olympus.hermes.roster_cap import capped_tickers
@@ -84,7 +91,7 @@ DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
 
 def _h6_attempt_id() -> str:
-    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
 
@@ -169,7 +176,7 @@ def _maybe_attempt_missing_fact_amendment(
 
 def deliberation_max_rounds() -> int:
     """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
-    raw = os.environ.get("ATLAS_DELIBERATION_MAX_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MAX_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
     try:
@@ -187,7 +194,7 @@ def deliberation_min_rounds() -> int:
     path (instant convergence). The caller clamps it to ``max_rounds`` so it can never
     deadlock the loop.
     """
-    raw = os.environ.get("ATLAS_DELIBERATION_MIN_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MIN_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MIN_ROUNDS
     try:
@@ -300,7 +307,10 @@ def _resolve_from_debate(
             None,
         )
     try:
-        terms = ForecastTerms.model_validate(amendment_terms_raw)
+        payload = unwrap_forecast_terms_payload(amendment_terms_raw)
+        if not isinstance(payload, dict):
+            raise TypeError("amendment terms must be an object")
+        terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
         amendment = materialize_forecast_amendment(
             base=base,
             terms=terms,
