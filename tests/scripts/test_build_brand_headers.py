@@ -128,3 +128,14 @@ def test_header_svg_is_outlined_not_text(header_mod) -> None:
     assert lay.word in svg or "path d=" in svg
     assert f'width="{lay.spec.width}"' in svg
     assert f'height="{lay.spec.height}"' in svg
+
+
+def test_brand_kit_ts_matches_og_headlines(og_headlines) -> None:
+    """The /brand page constants must track HEADLINES — --check does not read TS."""
+    kit = (REPO_ROOT / "frontend" / "digithings-web" / "lib" / "brandKit.ts").read_text(
+        encoding="utf-8"
+    )
+    copy = og_headlines["digithings"]
+    assert f'export const BRAND_WORD = "{copy["word"]}"' in kit
+    assert f'export const BRAND_TAGLINE = "{copy["line"]}"' in kit
+    assert f'export const BRAND_DOMAIN = "{copy["domain"]}"' in kit
