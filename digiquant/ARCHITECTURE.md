@@ -1200,7 +1200,9 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
   dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so H9 can
-  re-persist after registry fail-soft (#2790). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  re-persist after registry fail-soft (#2790). Out-of-range H6 `conviction_delta`
+  (live `-3` on `DeliberationAnalystTurn`) clamps to `[-2, 2]` at the model
+  boundary so the debate is kept. **H7 forecast-reference-only (#2660 / WP4.5):** after the
   PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
   typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
   (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
@@ -1504,6 +1506,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   status is unchanged — a fallback that then succeeds in full mode is still `ok` —
   but a segment that paid for a patch call *and* a full regeneration is now visible
   to a cost audit.
+  Digest `RiskItem` maps the live typo `horizon_hourse` onto `horizon_hours`
+  (house GHA 33426508863; otherwise the edit merge fell back to full).
 
   **Content identity (#1749/#1751).** A merge can succeed structurally and change nothing:
   the model emits `set` ops whose values already hold, or declares `status="skipped"`.
