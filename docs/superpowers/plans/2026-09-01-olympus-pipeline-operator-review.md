@@ -1,16 +1,15 @@
 # Olympus pipeline operator review — implementation plan
 
-> **For agentic workers:** implement one work package per task PR. Do not land this
-> document as a single mega-diff. Each WP is independently reviewable and testable.
-> Use test-first-implementer (or equivalent TDD) inside a WP; do not start WP-C/E/H
-> until WP-A/B have a hatch on the record if they share files.
+> **Archive.** Investigation and work-package design from the 2026-08-31 operator
+> walk. WP-A through WP-I shipped on separate PRs into `develop` (see the table
+> under Work packages). WP-J remains parked. Do not re-implement these WPs.
 
 **Date:** 2026-09-01
-**Source:** Operator walk of the Olympus dashboard pipeline for **2026-08-31**, plus
+**Source:** Operator walk of the olympus dashboard pipeline for **2026-08-31**, plus
 code investigation of Atlas A0–A4, Hermes H1–H9, and `frontend/dashboard` pipeline
 chrome.
-**Status:** Plan only. This document authorizes no runtime change until a GitHub
-issue exists per WP (`Fixes #<N>` / `task/<N>-slug`).
+**Status:** Shipped on `develop` (WP-A–I, 2026-09-01). WP-J parked until the
+operator specifies roster width. Historical plan — not an open backlog.
 **Distinct from:** [2026-08-06 architecture review](../../reviews/2026-08-06-olympus-pipeline-review.md)
 (learning-loop / evidence ledger). This pass is **operator readability**: produced
 documents, research, and whether the pipeline page shows a real run.
@@ -242,10 +241,25 @@ that note.** Default: leave H5 width as-is.
 
 ## Work packages
 
-Ship in this order. Each WP is its own issue + `task/<N>-slug` PR. Do not combine
-chrome with H8 policy.
+Original sequence and specs below. Shipped as independent PRs into `develop`
+(do not combine chrome with H8 policy). WP-J is still parked.
+
+| WP | Shipped as |
+|---|---|
+| A chrome | [#3397](https://github.com/digithings-ai/digithings/pull/3397) |
+| B persist silent steps | [#3398](https://github.com/digithings-ai/digithings/pull/3398) |
+| C research memos | [#3403](https://github.com/digithings-ai/digithings/pull/3403) |
+| D drop scorecard | [#3399](https://github.com/digithings-ai/digithings/pull/3399) |
+| E digest stitcher | [#3406](https://github.com/digithings-ai/digithings/pull/3406) |
+| F H6 chat | [#3401](https://github.com/digithings-ai/digithings/pull/3401) |
+| G H7 view + confidence | [#3404](https://github.com/digithings-ai/digithings/pull/3404) |
+| H H8 confidence sizing | [#3405](https://github.com/digithings-ai/digithings/pull/3405) |
+| I daily beliefs | [#3402](https://github.com/digithings-ai/digithings/pull/3402) |
+| J analyst roster width | parked |
 
 ### WP-A — Pipeline chrome (frontend)
+
+**Shipped:** [#3397](https://github.com/digithings-ai/digithings/pull/3397)
 
 **Issue title:** Pipeline nodes expand in place; sidebar only for documents
 
@@ -275,6 +289,8 @@ chrome with H8 policy.
 ---
 
 ### WP-B — Publish inspectable I/O for today’s silent steps
+
+**Shipped:** [#3398](https://github.com/digithings-ai/digithings/pull/3398)
 
 **Issue title:** Persist Inputs, bias row, thesis review, and screener as documents
 
@@ -306,6 +322,8 @@ opens a real artifact, not a guide card.
 ---
 
 ### WP-C — Research memos (schema + prompt + renderer)
+
+**Shipped:** [#3403](https://github.com/digithings-ai/digithings/pull/3403)
 
 **Issue title:** Atlas research is a markdown report, not a JSON dump
 
@@ -346,6 +364,8 @@ change without digest/H1 compile+unit tests.
 
 ### WP-D — Remove sector scorecard
 
+**Shipped:** [#3399](https://github.com/digithings-ai/digithings/pull/3399)
+
 **Issue title:** Drop the deterministic sector-scorecard node
 
 - Delete `build_phase5_scorecard` from the daily graph (keep the function behind
@@ -361,6 +381,8 @@ node; tests that required the node are rewritten around sector memos.
 ---
 
 ### WP-E — Daily digest as stitched subsection reports
+
+**Shipped:** [#3406](https://github.com/digithings-ai/digithings/pull/3406)
 
 **Issue title:** Digest orchestrator + topical sub-agents, markdown, two-day continuity
 
@@ -392,6 +414,8 @@ boundary note) in the same PR.
 
 ### WP-F — Deliberation as a conversation
 
+**Shipped:** [#3401](https://github.com/digithings-ai/digithings/pull/3401)
+
 **Issue title:** H6 is a professional chat, not a report stack
 
 **Prompts**
@@ -421,6 +445,8 @@ title); hermes unit that analyst H6 path does not load the H5 skill.
 
 ### WP-G — PM direction as the conclusion surface
 
+**Shipped:** [#3404](https://github.com/digithings-ai/digithings/pull/3404)
+
 **Issue title:** Dedicated H7 view: narrative, action, rank, confidence; hide audit fields
 
 **Schema:** add `confidence: float` in `[0, 1]` on `TickerDirection` (display as
@@ -442,6 +468,8 @@ how sure, whether we are adding/holding/exiting.”
 ---
 
 ### WP-H — Confidence-aware sizing (explain gold first)
+
+**Shipped:** [#3405](https://github.com/digithings-ai/digithings/pull/3405)
 
 **Issue title:** H8 scales risk by PM confidence; rank is order not size
 
@@ -468,6 +496,8 @@ that hatch.
 
 ### WP-I — Daily learning
 
+**Shipped:** [#3402](https://github.com/digithings-ai/digithings/pull/3402)
+
 **Issue title:** Beliefs / daily lessons fold every house run
 
 Change `should_distill_beliefs` so the house daily path always runs a **short**
@@ -489,9 +519,9 @@ carries prior beliefs.
 
 ### WP-J — Analyst roster width (parked)
 
-Operator: “31 analyst calls… I find that’s extensive.” Cap is 30 + held
-overshoot. **No code until they specify the desired roster** (held-only,
-thesis-linked only, lower `ATLAS_MAX_ANALYSTS`, etc.).
+**Parked.** No PR. Operator: “31 analyst calls… I find that’s extensive.” Cap is
+30 + held overshoot. **No code until they specify the desired roster**
+(held-only, thesis-linked only, lower `ATLAS_MAX_ANALYSTS`, etc.).
 
 ---
 
@@ -510,6 +540,7 @@ WP-A chrome
 ```
 
 Do not start WP-C and WP-E in the same PR. Do not start WP-H before WP-G.
+(Sequence followed; WP-A–I are on `develop`. WP-J still parked.)
 
 ---
 
@@ -524,11 +555,11 @@ Do not start WP-C and WP-E in the same PR. Do not start WP-H before WP-G.
 
 ---
 
-## First slice when execution starts
+## Execution record
 
-WP-A only: failing layout tests for “expanded research sub-steps share the stage
-x and stack in y”; implement; `npm run test` in `frontend/dashboard`; no Python.
-Then WP-B on a `module/digiquant` current-base branch.
+First slice was WP-A (#3397): layout tests for expanded research sub-steps
+sharing stage `x` and stacking in `y`; `npm run test` in `frontend/dashboard`.
+WP-B followed as #3398. Remaining WPs C–I shipped as listed above. WP-J parked.
 
 ---
 
