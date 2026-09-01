@@ -16,6 +16,7 @@ Do **not** follow a hard-coded numbered pipeline. Pick the **skills that fit thi
 |------|------------------------------|
 | Spec / planning | `/spec`, spec-writer, writing-plans |
 | Implementation | test-driven-development, `test-first-implementer` |
+| Quant strategy research | [digiquant/AGENTS.md](digiquant/AGENTS.md) § Strategy research loop — one branch, add/drop an indicator, look at fills, keep or revert |
 | CI / conflicts | `/triage`, `fix-ci`, `fix-merge-conflicts` |
 | Shipping | `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship` |
 
