@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabaseHouse as supabase } from './supabase';
 import { PUBLIC_PERIOD_STATUS_VIEW } from './accounting-views';
 import type { ViewRow } from './database.types';
 

@@ -1,4 +1,7 @@
 # Back-compat for the legacy static digiquant.io URLs.
+/olympus                /dashboard/               308
+/olympus/               /dashboard/               308
+/olympus/*              /dashboard/:splat         308
 /atlas.html              /subsystems/research/    301
 /atlas                   /subsystems/research/    301
 /index.html              /                        301

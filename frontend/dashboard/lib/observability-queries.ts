@@ -21,7 +21,7 @@
  * a healthy empty book and hid unapplied migrations 072–074.
  */
 
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabaseHouse as supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
 import type { AtlasRunDiagnostics } from './types';
 import type {
