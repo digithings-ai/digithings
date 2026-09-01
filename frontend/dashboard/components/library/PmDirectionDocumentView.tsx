@@ -60,12 +60,15 @@ async function fetchPmDirectionActionContext(docDate: string): Promise<PmActionC
       .limit(1),
   ]);
 
-  const rebalanceRow = rebalanceRes.data?.[0]?.payload;
+  // Promise.all unifies the two Postgrest builders so `.data` collapses to
+  // `never`; pin the documents.payload row the same way queries.ts does.
+  type PayloadRow = { payload: unknown };
+  const rebalanceRow = (rebalanceRes.data as PayloadRow[] | null)?.[0]?.payload;
   const rebalance =
     rebalanceRow && typeof rebalanceRow === 'object' && !Array.isArray(rebalanceRow)
       ? (rebalanceRow as Record<string, unknown>)
       : null;
-  const priorPayload = priorRes.data?.[0]?.payload;
+  const priorPayload = (priorRes.data as PayloadRow[] | null)?.[0]?.payload;
   return buildPmActionContext({
     priorRoster: rosterFromPayload(priorPayload),
     rebalance,
