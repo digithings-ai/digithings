@@ -10,7 +10,7 @@ Update an **existing** forex document; do not rewrite from scratch.
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"forex"`.
-Patch paths: `/headline`, `/bias`, `/dxy_trend`, `/policy_divergence`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

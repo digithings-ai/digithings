@@ -134,45 +134,17 @@ China constitutes ~25-30% of EEM — a dedicated China read:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# International and EM — {as-of date of the data}
+
+## Developed markets
+Japan, Europe, UK — drivers dated.
+
+## Emerging markets
+China, broader EM, EMB — PBOC, DXY, country risk.
+
+## Geopolitics
+Regional items that actually moved this window.
 ```
-### 🌏 INTERNATIONAL & EMERGING MARKETS
-**Bias**: [Bullish EM / Bearish EM / DM-preferred / Neutral] | Confidence: [High / Medium / Low]
-
-**DM (Developed Markets):**
-| ETF | Region | Price | 24h | Driver |
-|-----|--------|-------|-----|--------|
-| EFA | Broad DM ex-US | $X | ±X% | |
-| EWJ | Japan | $X | ±X% | BOJ: [hawkish/dovish] |
-| EWG | Germany | $X | ±X% | PMI/political |
-| EWU | UK | $X | ±X% | BoE/GBP |
-
-**Emerging Markets:**
-| ETF | Region | Price | 24h | Driver |
-|-----|--------|-------|-----|--------|
-| EEM | Broad EM | $X | ±X% | |
-| MCHI | China | $X | ±X% | PBOC / stimulus |
-| EWZ | Brazil | $X | ±X% | commodity/BRL |
-| EWT | Taiwan | $X | ±X% | TSMC / cross-strait |
-| EMB | EM Debt | $X | ±X% | spread direction |
-
-**China Signal (Top Priority):**
-- PBOC action: [Any stimulus / rate cut / RRR change]
-- Economy: [PMI, property, consumer — improving or worsening?]
-- Geopolitical: [Any Taiwan or trade war development]
-
-**DXY Effect**: [Current DXY direction + impact on EM and international ETF returns]
-
-**EM Risk Appetite**: [Are capital flows moving toward or away from EM?]
-
-**Geopolitical Regional Risks:**
-- Iran War: [Middle East / shipping route effect]
-- Taiwan: [Any cross-strait tension update]
-- Europe: [NATO/Ukraine/ECB signal]
-
-**EMB (EM Debt)**: $X — [Spread direction and key country risk]
-
-**Implication for Portfolio**: [Do we need international ETF exposure? Are EEM/MCHI/EWJ attractive vs domestic?]
-```
-
----
-

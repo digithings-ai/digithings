@@ -58,30 +58,17 @@ Scan for notable sweeps/blocks and infer hedging vs speculation.
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date every figure inline. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Options and derivatives — {as-of date of the data}
+
+## Volatility complex
+VIX, term structure, skew — numbers with the data date.
+
+## Positioning
+Put/call, GEX, max pain, unusual activity you actually retrieved.
+
+## Near-term read
+What the structure implies for risk over the next sessions.
 ```
-### 🎰 OPTIONS & DERIVATIVES INTELLIGENCE
-**Overall Options Sentiment**: [Hedged / Neutral / Complacent / Aggressive Bullish / Extreme Fear]
-
-**Volatility Complex:**
-- VIX: X.X | [Interpretation]
-- Term structure: 1M: X | 3M: X | 6M: X → [Contango/Backwardation]
-- SKEW: X — [Tail hedging elevated/moderate/low]
-
-**Put/Call Ratios:**
-- Total: X.XX | SPY: X.XX | Equity-only: X.XX
-
-**Gamma Exposure (GEX):**
-- SPX GEX: [Positive/Negative]
-- Gamma flip: XXXX | Key walls: support XXXX / resistance XXXX
-
-**Max Pain**: SPX/SPY weekly max pain = XXXX
-
-**Implied Volatility**: SPY 30d IV: X% | IV Rank: X
-
-**Unusual Options Activity:**
-- [Name/ETF]: [trade] — [what it implies]
-
-**Implication for Positioning**:
-[2-3 sentences on near-term risk and what options structure implies.]
-```
-
