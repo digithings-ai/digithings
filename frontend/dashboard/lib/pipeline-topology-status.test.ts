@@ -95,7 +95,7 @@ describe('pipeline topology status audit', () => {
     }
   });
 
-  it('Hermes commit implies Atlas+Hermes reached; Learning stays dark without beliefs', () => {
+  it('Hermes commit implies Learning should have published a same-date beliefs doc (WP-I)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {
@@ -124,8 +124,8 @@ describe('pipeline topology status audit', () => {
     expect(matrix['selection:pm-direction']).toBe('persisted-artifact');
     expect(matrix.decision).toBe('stage-overview');
     expect(matrix['decision:commit']).toBe('persisted-artifact');
-    expect(matrix.learning).toBe('not-run');
-    expect(matrix['learning:beliefs']).toBe('not-run');
+    expect(matrix.learning).toBe('stage-overview');
+    expect(matrix['learning:beliefs']).toBe('expected-artifact-missing');
   });
 
   it('recorded run with zero documents: Atlas-only reach; Hermes/Learning stay not-run', () => {

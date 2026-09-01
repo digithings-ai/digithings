@@ -157,7 +157,7 @@ describe('layoutPipeline', () => {
     expect(byId('synthesis:consolidate')?.documentKey).toBeUndefined();
     expect(byId('synthesis:consolidate')?.stateOnly).toBeUndefined();
     expect(byId('synthesis:consolidate')?.runStatus).toBe('expected-artifact-missing');
-    // beliefs fold resolves when the on-demand doc is present (#1383)
+    // beliefs fold resolves when the same-date daily document is present (WP-I)
     expect(byId('learning:beliefs')?.documentKey).toBe('beliefs');
     expect(byId('learning:beliefs')?.runStatus).toBe('persisted-artifact');
     // Decision collapses onto the booked book; commit-run is not a graph node.
@@ -214,7 +214,7 @@ describe('layoutPipeline', () => {
     expect(l.nodes.some((n) => n.documentKey?.startsWith('commit-run/'))).toBe(false);
   });
 
-  it('beliefs node is inert (no documentKey) on non-trigger days', () => {
+  it('beliefs node has no documentKey until the same-date fold publishes', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},
