@@ -8,13 +8,16 @@ that path 404s would break Auth callbacks and billing returns.
 Default is ``--check`` (probe only). ``--apply`` deploys the three APP_URL
 functions only after every required path returns 200 on the public origin
 **and** this checkout pins ``/dashboard`` URLs and mounts
-``POST /access/redeem-invite`` (migration 112 tables are already on ``core``).
-Never weakens ``public_app_urls_ok``.
+``POST /access/redeem-invite`` (migration 112 tables are already on ``core``)
+**and** the live settings ESZIP still contains those executable markers after
+deploy (settings v32 has neither). Never weakens ``public_app_urls_ok``.
 """
 
 from __future__ import annotations
 
 import argparse
+import http.client
+import os
 import re
 import subprocess
 import urllib.error
@@ -34,13 +37,16 @@ from digiquant.olympus.kairos.vendor_secret_files import (
 EXIT_PAGES_DASHBOARD_NOT_READY: int = 3
 EXIT_APPLY_FAILED: int = 4
 EXIT_CHECKOUT_STALE: int = 5
+EXIT_LIVE_EF_STALE: int = 6
+MANAGEMENT_API_ORIGIN = "https://api.supabase.com"
+MANAGEMENT_API_USER_AGENT = "Mozilla/5.0 kairos-pages-dashboard-gate/1.0 (+digithings)"
 
 _REPO_ROOT = Path(__file__).resolve().parents[5]
 _SETTINGS_HANDLERS = (
     Path("digiquant") / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
 )
 _APP_URL_TS = Path("digiquant") / "supabase" / "functions" / "_shared" / "app-url.ts"
-_REDEEM_INVITE_RE = re.compile(r'path\s*===\s*"/access/redeem-invite"')
+_REDEEM_INVITE_RE = re.compile(r'method\s*===\s*"POST"\s*&&\s*path\s*===\s*"/access/redeem-invite"')
 _ALPACA_DASHBOARD_RE = re.compile(
     r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/dashboard/settings/brokers/callback/"\s*;'
 )
@@ -74,6 +80,12 @@ _PROBE_HEADERS = {
 
 ProbeFn = Callable[[str], tuple[int, str]]
 RunArgv = Callable[[Sequence[str]], None]
+LiveSourceFn = Callable[[], str]
+HttpBytesFn = Callable[[str], bytes]
+
+
+class LiveSettingsFetchError(Exception):
+    """Live settings ESZIP could not be fetched. Never includes token values."""
 
 
 class PagesPathResult(BaseModel):
@@ -154,6 +166,39 @@ def _strip_ts_comments(source: str) -> str:
     return "\n".join(stripped)
 
 
+def _regex_in_code(source: str, pattern: re.Pattern[str]) -> bool:
+    """True when ``pattern`` matches a non-comment occurrence."""
+    text = _strip_ts_comments(source)
+    return pattern.search(text) is not None
+
+
+def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str]:
+    """Executable redeem-invite + ``/dashboard`` pins; ``/olympus`` pins fail."""
+    where = "live settings bundle" if live else "checkout"
+    extra = (
+        " — deploy did not mount 112 redeem"
+        if live
+        else " — do not deploy settings from this tree (112 tables would sit unused)"
+    )
+    if not _regex_in_code(source, _REDEEM_INVITE_RE):
+        return False, f"pages dashboard gate: {where} missing POST /access/redeem-invite{extra}"
+    if not _regex_in_code(source, _ALPACA_DASHBOARD_RE):
+        return (
+            False,
+            f"pages dashboard gate: {where} does not pin /dashboard Alpaca callback",
+        )
+    if not _regex_in_code(source, _SETTINGS_DASHBOARD_RE):
+        return (
+            False,
+            f"pages dashboard gate: {where} does not pin /dashboard settings path",
+        )
+    if _regex_in_code(source, _ALPACA_OLYMPUS_RE):
+        return False, f"pages dashboard gate: {where} still pins /olympus Alpaca callback"
+    if _regex_in_code(source, _SETTINGS_OLYMPUS_RE):
+        return False, f"pages dashboard gate: {where} still pins /olympus settings path"
+    return True, ""
+
+
 def checkout_ready_for_ef_apply(repo_root: Path) -> tuple[bool, str]:
     """True when this tree can deploy settings after /dashboard is live.
 
@@ -164,39 +209,10 @@ def checkout_ready_for_ef_apply(repo_root: Path) -> tuple[bool, str]:
     handlers = repo_root / _SETTINGS_HANDLERS
     app_url = repo_root / _APP_URL_TS
     try:
-        handlers_text = _strip_ts_comments(handlers.read_text(encoding="utf-8"))
-        app_url_text = _strip_ts_comments(app_url.read_text(encoding="utf-8"))
+        source = handlers.read_text(encoding="utf-8") + "\n" + app_url.read_text(encoding="utf-8")
     except OSError:
         return False, "pages dashboard gate: settings EF source unreadable"
-    if _REDEEM_INVITE_RE.search(handlers_text) is None:
-        return (
-            False,
-            "pages dashboard gate: checkout missing POST /access/redeem-invite — "
-            "do not deploy settings from this tree (112 tables would sit unused)",
-        )
-    if _ALPACA_DASHBOARD_RE.search(app_url_text) is None:
-        return (
-            False,
-            "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
-            "Alpaca callback — do not deploy settings from this tree",
-        )
-    if _SETTINGS_DASHBOARD_RE.search(app_url_text) is None:
-        return (
-            False,
-            "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
-            "settings path — do not deploy settings from this tree",
-        )
-    if _ALPACA_OLYMPUS_RE.search(app_url_text) is not None:
-        return (
-            False,
-            "pages dashboard gate: checkout still pins /olympus Alpaca callback",
-        )
-    if _SETTINGS_OLYMPUS_RE.search(app_url_text) is not None:
-        return (
-            False,
-            "pages dashboard gate: checkout still pins /olympus settings path",
-        )
-    return True, ""
+    return settings_bundle_ready(source, live=False)
 
 
 def format_pages_dashboard_blocked(report: PagesDashboardReport) -> str:
@@ -212,6 +228,69 @@ def _run_argv(argv: Sequence[str]) -> None:
     subprocess.run(argv, check=True, capture_output=True, text=True)
 
 
+def _http_bytes(url: str, *, token: str, timeout: float = 60.0) -> bytes:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "*/*",
+            "User-Agent": MANAGEMENT_API_USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return bytes(response.read())
+    except urllib.error.HTTPError as exc:
+        raise LiveSettingsFetchError(f"live settings bundle HTTP {int(exc.code)}") from None
+    except (OSError, http.client.HTTPException):
+        raise LiveSettingsFetchError("live settings bundle fetch failed") from None
+
+
+def fetch_live_settings_bundle(
+    *,
+    project_ref: str = CORE_PROJECT_REF,
+    token: str | None = None,
+    http_bytes: HttpBytesFn | None = None,
+) -> str:
+    """Download the live settings ESZIP. Never logs the token or bundle."""
+    secret = (token if token is not None else os.environ.get("SUPABASE_ACCESS_TOKEN", "")).strip()
+    if not secret:
+        raise LiveSettingsFetchError("SUPABASE_ACCESS_TOKEN missing")
+    url = f"{MANAGEMENT_API_ORIGIN}/v1/projects/{project_ref}/functions/settings/body"
+    getter: HttpBytesFn = http_bytes or (lambda u: _http_bytes(u, token=secret))
+    raw = getter(url)
+    if not raw:
+        raise LiveSettingsFetchError("live settings bundle empty")
+    return raw.decode("latin-1")
+
+
+def _verify_live_settings(
+    log: Callable[[str], None],
+    live_source: LiveSourceFn | None,
+    *,
+    project_ref: str,
+) -> int:
+    if live_source is None and os.environ.get("PYTEST_CURRENT_TEST"):
+        log("pages dashboard gate: live_source required under pytest")
+        return EXIT_LIVE_EF_STALE
+    try:
+        bundle = (
+            live_source()
+            if live_source is not None
+            else fetch_live_settings_bundle(project_ref=project_ref)
+        )
+    except LiveSettingsFetchError as exc:
+        log(f"pages dashboard gate: live settings fetch failed ({exc})")
+        return EXIT_LIVE_EF_STALE
+    ready, reason = settings_bundle_ready(bundle, live=True)
+    if not ready:
+        log(reason)
+        return EXIT_LIVE_EF_STALE
+    log("pages dashboard gate: live settings bundle has redeem-invite + /dashboard pins")
+    return 0
+
+
 def run_pages_dashboard_gate(
     *,
     apply: bool,
@@ -221,6 +300,7 @@ def run_pages_dashboard_gate(
     run: RunArgv = _run_argv,
     project_ref: str = CORE_PROJECT_REF,
     repo_root: Path | None = None,
+    live_source: LiveSourceFn | None = None,
 ) -> int:
     report = probe_pages_dashboard(origin=origin, probe=probe)
     for item in report.results:
@@ -243,7 +323,7 @@ def run_pages_dashboard_gate(
         log("pages dashboard gate apply failed (supabase output not echoed)")
         return EXIT_APPLY_FAILED
     log("pages dashboard gate: settings/checkout/portal deployed")
-    return 0
+    return _verify_live_settings(log, live_source, project_ref=project_ref)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -251,8 +331,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Deploy settings/checkout/portal only if live /dashboard paths are 200 "
-        "and this checkout has redeem-invite + /dashboard app URLs",
+        help="Deploy settings/checkout/portal only if live /dashboard paths are 200, "
+        "this checkout has redeem-invite + /dashboard app URLs, and the live "
+        "settings ESZIP contains those same executable markers",
     )
     parser.add_argument(
         "--origin",

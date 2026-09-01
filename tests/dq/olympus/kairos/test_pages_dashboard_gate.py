@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 from pathlib import Path
 
 import pytest
@@ -10,17 +11,35 @@ from digiquant.olympus.kairos.pages_dashboard_gate import (
     DASHBOARD_URL_FUNCTIONS,
     EXIT_APPLY_FAILED,
     EXIT_CHECKOUT_STALE,
+    EXIT_LIVE_EF_STALE,
     EXIT_PAGES_DASHBOARD_NOT_READY,
     PROBE_USER_AGENT,
+    LiveSettingsFetchError,
+    fetch_live_settings_bundle,
     format_pages_dashboard_blocked,
     probe_pages_dashboard,
     run_pages_dashboard_gate,
+    settings_bundle_ready,
 )
 from digiquant.olympus.kairos.vendor_secret_files import function_deploy_argv
 
 pytestmark = pytest.mark.unit
 
 ORIGIN = "https://digiquant.io"
+READY_LIVE_BUNDLE = (
+    '  if (method === "POST" && path === "/access/redeem-invite") {\n'
+    'export const ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/settings/brokers/callback/";\n'
+    'export const SETTINGS_PATH = "/dashboard/settings/";\n'
+)
+V32_LIVE_BUNDLE = (
+    "ESZIP2.3\x00// binary junk without the route\n"
+    'export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";\n'
+    'export const SETTINGS_PATH = "/olympus/settings/";\n'
+)
+
+
+def _ready_live() -> str:
+    return READY_LIVE_BUNDLE
 
 
 def _ok_probe(url: str) -> tuple[int, str]:
@@ -105,6 +124,7 @@ def test_apply_deploys_url_functions_when_ready() -> None:
         log=lambda _msg: None,
         probe=_ok_probe,
         run=run,
+        live_source=_ready_live,
     )
     assert code == 0
     assert [row[4] for row in deployed] == list(DASHBOARD_URL_FUNCTIONS)
@@ -255,3 +275,186 @@ def test_apply_refuses_comment_only_dashboard_paths(tmp_path: Path) -> None:
     )
     assert code == EXIT_CHECKOUT_STALE
     assert deployed == []
+
+
+def test_ready_live_bundle_passes_and_v32_fails() -> None:
+    ok, _reason = settings_bundle_ready(READY_LIVE_BUNDLE)
+    assert ok is True
+    stale, reason = settings_bundle_ready(V32_LIVE_BUNDLE)
+    assert stale is False
+    assert "redeem-invite" in reason or "/olympus" in reason
+
+
+def test_comment_only_markers_are_not_ready() -> None:
+    blob = (
+        '// if (method === "POST" && path === "/access/redeem-invite") {\n'
+        '// export const ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/settings/brokers/callback/";\n'
+        '// export const SETTINGS_PATH = "/dashboard/settings/";\n'
+    )
+    ok, _reason = settings_bundle_ready(blob)
+    assert ok is False
+
+
+def test_block_comment_markers_are_not_ready() -> None:
+    blob = (
+        "/*\n"
+        'if (method === "POST" && path === "/access/redeem-invite") {\n'
+        'export const ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/settings/brokers/callback/";\n'
+        'export const SETTINGS_PATH = "/dashboard/settings/";\n'
+        "*/\n"
+    )
+    ok, _reason = settings_bundle_ready(blob)
+    assert ok is False
+
+
+def test_get_redeem_invite_is_not_ready() -> None:
+    blob = (
+        '  if (method === "GET" && path === "/access/redeem-invite") {\n'
+        'export const ALPACA_OAUTH_CALLBACK_PATH = "/dashboard/settings/brokers/callback/";\n'
+        'export const SETTINGS_PATH = "/dashboard/settings/";\n'
+    )
+    ok, reason = settings_bundle_ready(blob)
+    assert ok is False
+    assert "redeem-invite" in reason
+
+
+def test_apply_passes_project_ref_to_live_fetch() -> None:
+    seen: list[str] = []
+
+    def http_bytes(url: str) -> bytes:
+        seen.append(url)
+        return b"ESZIP2.3\x00" + READY_LIVE_BUNDLE.encode("utf-8")
+
+    logs: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=logs.append,
+        probe=_ok_probe,
+        run=lambda _argv: None,
+        live_source=lambda: fetch_live_settings_bundle(
+            project_ref="alternate-project",
+            token="sbp_test",
+            http_bytes=http_bytes,
+        ),
+        project_ref="alternate-project",
+    )
+    assert code == 0
+    assert seen == [
+        "https://api.supabase.com/v1/projects/alternate-project/functions/settings/body"
+    ]
+
+
+def test_apply_refuses_when_live_bundle_still_v32() -> None:
+    deployed: list[str] = []
+
+    def run(argv: list[str] | tuple[str, ...]) -> None:
+        deployed.append(" ".join(argv))
+
+    logs: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=logs.append,
+        probe=_ok_probe,
+        run=run,
+        live_source=lambda: V32_LIVE_BUNDLE,
+    )
+    assert code == EXIT_LIVE_EF_STALE
+    assert deployed  # deploy already ran; live proof is after
+    assert any("live settings" in msg for msg in logs)
+
+
+def test_apply_refuses_when_live_fetch_fails() -> None:
+    deployed: list[str] = []
+
+    def run(argv: list[str] | tuple[str, ...]) -> None:
+        deployed.append(" ".join(argv))
+
+    def boom() -> str:
+        raise LiveSettingsFetchError("SUPABASE_ACCESS_TOKEN missing")
+
+    logs: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=logs.append,
+        probe=_ok_probe,
+        run=run,
+        live_source=boom,
+    )
+    assert code == EXIT_LIVE_EF_STALE
+    assert deployed
+    assert any("live settings" in msg or "ACCESS_TOKEN" in msg for msg in logs)
+
+
+def test_check_does_not_fetch_live_bundle() -> None:
+    def fail_live() -> str:
+        raise AssertionError("check must not fetch live settings")
+
+    code = run_pages_dashboard_gate(
+        apply=False,
+        log=lambda _msg: None,
+        probe=_ok_probe,
+        live_source=fail_live,
+    )
+    assert code == 0
+
+
+def test_fetch_live_settings_bundle_decodes_eszip(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SUPABASE_ACCESS_TOKEN", raising=False)
+    payload = b"ESZIP2.3\x00" + READY_LIVE_BUNDLE.encode("utf-8")
+
+    def http_bytes(url: str) -> bytes:
+        assert url.endswith("/functions/settings/body")
+        assert "rwagjbkvxkdwqmouagad" in url
+        return payload
+
+    text = fetch_live_settings_bundle(token="sbp_test", http_bytes=http_bytes)
+    assert "redeem-invite" in text
+    ok, _reason = settings_bundle_ready(text)
+    assert ok is True
+
+
+def test_fetch_live_settings_bundle_requires_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SUPABASE_ACCESS_TOKEN", raising=False)
+    with pytest.raises(LiveSettingsFetchError, match="SUPABASE_ACCESS_TOKEN"):
+        fetch_live_settings_bundle(token="", http_bytes=lambda _url: b"nope")
+
+
+def test_fetch_uses_project_ref() -> None:
+    urls: list[str] = []
+
+    def http_bytes(url: str) -> bytes:
+        urls.append(url)
+        return b"ESZIP"
+
+    fetch_live_settings_bundle(project_ref="otherref", token="x", http_bytes=http_bytes)
+    assert urls == ["https://api.supabase.com/v1/projects/otherref/functions/settings/body"]
+
+
+def test_apply_under_pytest_requires_live_source() -> None:
+    deployed: list[str] = []
+
+    def run(argv: list[str] | tuple[str, ...]) -> None:
+        deployed.append(" ".join(argv))
+
+    logs: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=logs.append,
+        probe=_ok_probe,
+        run=run,
+    )
+    assert code == EXIT_LIVE_EF_STALE
+    assert deployed
+    assert any("live_source required" in msg for msg in logs)
+
+
+def test_incomplete_read_maps_to_fetch_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> object:
+        raise http.client.IncompleteRead(partial=b"x")
+
+    monkeypatch.setattr(
+        "digiquant.olympus.kairos.pages_dashboard_gate.urllib.request.urlopen",
+        boom,
+    )
+    with pytest.raises(LiveSettingsFetchError, match="fetch failed"):
+        fetch_live_settings_bundle(token="sbp_test")
