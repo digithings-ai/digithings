@@ -74,7 +74,8 @@ Wave E
       [#3332](https://github.com/digithings-ai/digithings/pull/3332) (atlas-graph
       red: `test_h9_is_the_only_ledger_writer`; overlaps #3335 `_json_safe`).
       Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
-      *pipeline* book-commit proof. Do **not** `workflow_dispatch`; do **not**
+      *pipeline* book-commit proof (`python scripts/kairos_house_pipeline_proof.py`,
+      exit 3 until that schedule). Do **not** `workflow_dispatch`; do **not**
       apply staged 113 while main writers still upsert date-only. Unit green is
       not a substitute for a green house publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
