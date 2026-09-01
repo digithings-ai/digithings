@@ -1,9 +1,8 @@
 """Shared segment output-model primitives.
 
-Every phase 1–5 segment produces a structured report; the shape has a common
-core (segment, date, bias, headline, findings, sources, notes) plus
-segment-specific extensions. Those extensions live with their phase modules;
-this file defines the reusable core.
+Phase 1–5 segments emit a :class:`ResearchMemo` (markdown ``body`` plus a thin
+envelope). :class:`SegmentReport` remains the digest/snapshot core until the
+digest stitcher (WP-E) lands. This file defines both.
 
 Kept minimal on purpose — the legacy Atlas system does not have strict
 per-segment schemas beyond the overall digest/delta contracts in
@@ -28,7 +27,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -442,13 +441,119 @@ class Source(BaseModel):
         return _coerce_source_record(data)
 
 
-class SegmentReport(BaseModel):
-    """Common shape for Phase 1–5 segment reports.
+def compose_legacy_research_body(data: Mapping[str, Any]) -> str:
+    """Build a readable markdown body from a historical SegmentReport row.
 
-    Phase-specific sub-classes add structured metrics (sentiment scores,
-    flow direction, yield curve shape, etc.). Phase 7 synthesis reads only
-    the fields here when assembling the master digest, so downstream
-    consumers never depend on segment-specific extensions.
+    Library rows published before WP-C have ``headline`` / ``material_findings``
+    / ``notes`` and no ``body``. Edit-merge re-validates the prior through the
+    live output model, so a missing ``body`` must not hard-fail.
+    """
+    parts: list[str] = []
+    headline = data.get("headline")
+    if isinstance(headline, str) and headline.strip():
+        parts.append(headline.strip())
+    findings = data.get("material_findings")
+    if isinstance(findings, list):
+        bullets: list[str] = []
+        for item in findings:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Finding"
+            summary = _string_value(item.get("summary")) or ""
+            line = f"- **{label}**" + (f" — {summary}" if summary else "")
+            bullets.append(line)
+        if bullets:
+            parts.append("\n".join(bullets))
+    notes = data.get("notes")
+    if isinstance(notes, str) and notes.strip():
+        parts.append(notes.strip())
+    return "\n\n".join(parts)
+
+
+class ResearchMemo(BaseModel):
+    """Thin envelope for Phase 1–5 research. The operator artifact is ``body``.
+
+    ``internal_bias`` is a non-rendered directional token for digest/triage/
+    phase-6. ``sources`` is grounding for downstream synthesis, not a rendered
+    appendix. Historical metric fields (``yield_curve_shape``, …) are allowed
+    extras so old library rows still validate.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    segment: str = Field(
+        description="Stable segment slug, e.g. 'alt-sentiment-news', 'macro'.",
+    )
+    date: _date
+    body: str = Field(
+        default="",
+        description=(
+            "Markdown memo with inline [title](url) citations. Variable depth is "
+            "allowed. Do not invent data-quality or confidence scores."
+        ),
+    )
+    sources: list[Source] = Field(
+        default_factory=list,
+        description="Optional grounding sources for digest/H1 — not a user appendix.",
+    )
+    internal_bias: Bias | None = Field(
+        default=None,
+        description=(
+            "Non-rendered directional token for digest/triage/phase-6. Never print "
+            "as 'Bias: mixed' in the operator memo."
+        ),
+    )
+    regime_label: str = Field(
+        default="",
+        description="Optional short regime token (macro) for the pipeline strip.",
+    )
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def _parse_json_list_items(cls, v: object) -> object:
+        if not isinstance(v, list):
+            return v
+        return [_parse_json_object(item) for item in v]
+
+    @field_validator("internal_bias", mode="before")
+    @classmethod
+    def _normalize_internal_bias(cls, v: object) -> object:
+        if v is None or not isinstance(v, str):
+            return v
+        token = _literal_token(v)
+        if token in _BIAS_MEMBERS:
+            return token
+        mapped = _BIAS_SYNONYMS.get(token)
+        if mapped in _BIAS_MEMBERS:
+            return mapped
+        canonical = canonical_literal(v, _BIAS_MEMBERS)
+        return canonical if canonical is not None else v
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compose_legacy_body(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        if str(data.get("body") or "").strip():
+            return data
+        composed = compose_legacy_research_body(data)
+        if not composed and data.get("internal_bias") is not None:
+            return data
+        if not composed and not data.get("headline") and not data.get("material_findings"):
+            return data
+        out = dict(data)
+        if composed:
+            out["body"] = composed
+        if out.get("internal_bias") is None and out.get("bias") is not None:
+            out["internal_bias"] = out["bias"]
+        return out
+
+
+class SegmentReport(BaseModel):
+    """Digest / snapshot core (bias, headline, findings).
+
+    Phase 1–5 research uses :class:`ResearchMemo`. This shape remains on
+    ``DigestSnapshot`` until the digest stitcher (WP-E) lands.
     """
 
     segment: str = Field(

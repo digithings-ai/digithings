@@ -85,6 +85,31 @@ EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
 #     fabricated number does not make it true. Detecting that needs a numeric-fidelity
 #     validator cross-checking prose against `price_technicals`; the instruction below only
 #     makes the claim auditable.
+# Appended to every Phase 1–5 skill (full and edit). The JSON skeleton used to
+# win over the markdown templates already in the skills; this block is the
+# contract the renderer and digest slim assume.
+RESEARCH_MEMO_RULES = """## Research memo (required)
+
+Write a markdown `body` — that is the operator artifact, not a JSON dump.
+
+Suggested skeleton (variable depth is allowed; skip empty sections):
+
+```markdown
+# {Topic} — {as-of date of the data}
+
+## {Topical heading 1}
+Prose with inline [title](url) citations.
+
+## {Topical heading 2}
+…
+```
+
+Use 2–5 topical `##` sections that fit today's evidence. Do **not** invent
+data-quality or confidence scores. Do **not** emit a Signals section. Do **not**
+print `Bias:` at the top. Optional `internal_bias` is a non-rendered token for
+digest/triage only. `sources` is grounding, not an appendix dump."""
+
+
 QUANTITATIVE_FINDING_RULES = """## Dating your numbers (required)
 
 Every figure you quote must carry the date of the DATA — not the date of this run.
@@ -146,7 +171,7 @@ def load_skill(slug: str) -> str:
         raise SkillNotFoundError(f"skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return f"{body.strip()}\n\n{QUANTITATIVE_FINDING_RULES}"
+    return f"{body.strip()}\n\n{RESEARCH_MEMO_RULES}\n\n{QUANTITATIVE_FINDING_RULES}"
 
 
 @lru_cache(maxsize=64)
@@ -164,7 +189,10 @@ def load_skill_edit(slug: str) -> str:
         raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return f"{body.strip()}\n\n{EDIT_SCHEMA_CONSTRAINTS}\n\n{QUANTITATIVE_FINDING_RULES}"
+    return (
+        f"{body.strip()}\n\n{RESEARCH_MEMO_RULES}\n\n"
+        f"{EDIT_SCHEMA_CONSTRAINTS}\n\n{QUANTITATIVE_FINDING_RULES}"
+    )
 
 
 def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:
