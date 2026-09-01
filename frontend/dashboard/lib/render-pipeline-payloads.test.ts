@@ -119,6 +119,13 @@ describe('shape sniffers', () => {
   it('classifies segment reports', () => {
     expect(isSegmentReportPayload(BONDS_PAYLOAD)).toBe(true);
     expect(isSegmentReportPayload(REBALANCE_EMPTY)).toBe(false);
+    expect(
+      isSegmentReportPayload({
+        segment: 'macro',
+        date: '2026-08-31',
+        body: '# Macro — 2026-08-31\n\nGrowth is slowing.',
+      })
+    ).toBe(true);
   });
 
   it('sniffers are standalone-correct: the master digest is not a segment report', () => {
@@ -133,15 +140,44 @@ describe('shape sniffers', () => {
 });
 
 describe('renderSegmentReportMarkdown', () => {
-  it('renders headline, bias, findings, signals, notes and sources', () => {
+  it('renders a research memo as title plus markdown body', () => {
+    const md = renderSegmentReportMarkdown({
+      segment: 'alt-sentiment-news',
+      date: '2026-08-31',
+      body: '# Sentiment — 2026-08-31\n\nRisk faded after [Powell](https://example.com/fed).',
+      sources: [{ id: 'fed', title: 'Powell', url: 'https://example.com/fed' }],
+      internal_bias: 'bearish',
+    });
+    expect(md).toContain('# Alt Sentiment News — 2026-08-31');
+    expect(md).toContain('Risk faded after [Powell](https://example.com/fed).');
+    expect(md).not.toContain('**Bias:**');
+    expect(md).not.toContain('## Signals');
+    expect(md).not.toContain('## Sources');
+    expect(md).not.toContain('internal_bias');
+  });
+
+  it('falls back to findings and notes for old SegmentReport JSON', () => {
     const md = renderSegmentReportMarkdown(BONDS_PAYLOAD);
     expect(md).toContain('# Bonds — 2026-06-12');
-    expect(md).toContain('**Bias:** neutral');
     expect(md).toContain('Curve steepens');
     expect(md).toContain('**CTAs short USTs** — Systematic funds hold short duration');
-    expect(md).toContain('**Yield Curve Shape:** steepening');
     expect(md).toContain('No spread data retrieved.');
-    expect(md).toContain('[Rates wrap](https://example.com/rates)');
+    expect(md).not.toContain('**Bias:**');
+    expect(md).not.toContain('## Signals');
+    expect(md).not.toContain('Yield Curve Shape');
+    expect(md).not.toContain('Data Quality');
+    expect(md).not.toContain('Confidence');
+  });
+
+  it('does not leak data_quality or confidence even when old rows still have them', () => {
+    const md = renderSegmentReportMarkdown({
+      ...BONDS_PAYLOAD,
+      data_quality: 'median',
+      confidence: 0.7,
+    });
+    expect(md.toLowerCase()).not.toContain('data quality');
+    expect(md.toLowerCase()).not.toContain('confidence');
+    expect(md).not.toContain('median');
   });
 
   it('omits null metric fields instead of rendering empty rows', () => {
