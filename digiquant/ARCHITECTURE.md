@@ -1487,8 +1487,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
-  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
-  and a segment whose patch cannot merge falls back to full-mode regeneration
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
+  LLM `PatchOp.op='add'` (RFC 6902's name for that write) maps onto `set` so a
+  hedge like house GHA 33426508863 `ops.6.op='add'` does not force a full-mode
+  regeneration. A segment whose patch cannot merge falls back to full-mode regeneration
   instead of carrying + degrading the run (#1641). That fallback is **counted, not
   silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
   `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
@@ -1759,7 +1761,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   from prior published rows, so a required field would raise on all ~660 existing rows and #1641
   would convert each into a full regeneration, and #1740 showed a strict constraint on an
   informational field discards the whole patch. It makes a quoted figure auditable; it cannot
-  tell whether the figure is real.
+  tell whether the figure is real. House GHA 33426508863 `sector-real-estate` then showed a
+  second failure class: missing `summary` (prose under `text`/`detail`) and Gemini JSON-string
+  Object envelopes whose `properties`/`fields` maps arrive as JSON objects *or* lists of
+  `[key, {stringValue}]` pairs (`}]],"type":"Object"` in the live ValidationError).
+  `Finding`/`Source` coerce those shapes before validate so the node does
+  not carry the sector baseline; summary/label fill only from explicit prose aliases
+  (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
+  with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).

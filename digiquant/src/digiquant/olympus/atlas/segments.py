@@ -14,6 +14,7 @@ to read, and leaves room for richer per-segment fields in sub-classes.
 
 from __future__ import annotations
 
+import json
 import logging
 import time as _time
 from collections.abc import Mapping
@@ -228,6 +229,127 @@ def canonical_literal(raw: str, members: frozenset[str]) -> str | None:
     return None
 
 
+def _parse_json_object(value: object) -> object:
+    """Parse a JSON-object string; leave anything else untouched."""
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped.startswith("{"):
+        return value
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+    return parsed if isinstance(parsed, dict) else value
+
+
+def _string_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, Mapping):
+        inner = value.get("stringValue") or value.get("string_value")
+        if isinstance(inner, str) and inner.strip():
+            return inner
+    return None
+
+
+def _as_field_mapping(value: object) -> Mapping[str, Any] | None:
+    """Gemini Struct maps arrive as JSON objects *or* lists of ``[key, value]`` pairs.
+
+    House GHA 33426508863 truncated the live envelope as
+    ``'{"completionState":"comp...k."}]],"type":"Object"}'`` — the ``}]],`` before
+    ``type`` is a list-of-pairs map, not a JSON object. A mixed/invalid sequence is
+    not flattened.
+    """
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str) or not isinstance(value, (list, tuple)) or not value:
+        return None
+    out: dict[str, Any] = {}
+    for item in value:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            key, val = item[0], item[1]
+        elif isinstance(item, Mapping) and isinstance(item.get("key"), str):
+            key, val = item["key"], item.get("value")
+        else:
+            return None
+        if not isinstance(key, str) or not key.strip() or key in out:
+            return None
+        out[key] = val
+    return out
+
+
+def _flatten_wrapped_record(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Unwrap Gemini/LiteLLM object envelopes onto a flat Finding/Source dict."""
+    if any(key in data for key in ("label", "summary", "id", "text", "description", "detail")):
+        return dict(data)
+    for wrapper_key in ("properties", "fields", "structValue", "value"):
+        inner = _as_field_mapping(data.get(wrapper_key))
+        if inner is None:
+            continue
+        flat: dict[str, Any] = {}
+        for key, val in inner.items():
+            text = _string_value(val)
+            flat[key] = text if text is not None else val
+        if flat:
+            return flat
+    return dict(data)
+
+
+def _pick_aliased_str(data: Mapping[str, Any], names: tuple[str, ...]) -> str | None:
+    for name in names:
+        text = _string_value(data.get(name))
+        if text is not None:
+            return text
+    return None
+
+
+def _first_clause(summary: str) -> str | None:
+    """First clause for a derived label; ``$45.36`` must not split on the decimal."""
+    for idx, char in enumerate(summary):
+        if char in ".?!" and (idx + 1 == len(summary) or summary[idx + 1].isspace()):
+            return summary[:idx].strip()[:80] or None
+    return summary.strip()[:80] or None
+
+
+def _coerce_finding_record(data: object) -> object:
+    """Map LLM hedges onto Finding without a full-mode regeneration.
+
+    House GHA 33426508863 ``sector-real-estate``: attempt 1 omitted ``summary``
+    (``as_of`` + a long prose field); attempt 2 emitted JSON-string Gemini
+    Object envelopes. Carrying the sector baseline is the expensive outcome.
+    """
+    data = _parse_json_object(data)
+    if not isinstance(data, Mapping):
+        return data
+    out = _flatten_wrapped_record(data)
+    if _string_value(out.get("summary")) is None:
+        picked = _pick_aliased_str(
+            out, ("text", "description", "detail", "body", "finding", "content", "narrative")
+        )
+        if picked is not None:
+            out["summary"] = picked
+    if _string_value(out.get("label")) is None:
+        picked = _pick_aliased_str(out, ("title", "headline", "name"))
+        if picked is None:
+            picked = _first_clause(_string_value(out.get("summary")) or "")
+        if picked is not None:
+            out["label"] = picked
+    return out
+
+
+def _coerce_source_record(data: object) -> object:
+    data = _parse_json_object(data)
+    if not isinstance(data, Mapping):
+        return data
+    out = _flatten_wrapped_record(data)
+    if _string_value(out.get("id")) is None:
+        picked = _pick_aliased_str(out, ("source_id", "sourceId", "name"))
+        if picked is not None:
+            out["id"] = picked
+    return out
+
+
 class Finding(BaseModel):
     """One material finding produced by a segment analyst."""
 
@@ -301,6 +423,11 @@ class Finding(BaseModel):
         # Unparseable but non-empty: keep it, capped. Disclosure beats silence.
         return raw[:32]
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_shape(cls, data: object) -> object:
+        return _coerce_finding_record(data)
+
 
 class Source(BaseModel):
     """One source cited by the segment's findings."""
@@ -308,6 +435,11 @@ class Source(BaseModel):
     id: str = Field(description="Stable identifier used by Finding.source_ids")
     title: str | None = Field(default=None)
     url: str | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_shape(cls, data: object) -> object:
+        return _coerce_source_record(data)
 
 
 class SegmentReport(BaseModel):
@@ -363,6 +495,14 @@ class SegmentReport(BaseModel):
             "high. Note in 'notes' when it diverges from the data_quality grade."
         ),
     )
+
+    @field_validator("material_findings", "sources", mode="before")
+    @classmethod
+    def _parse_json_list_items(cls, v: object) -> object:
+        """Gemini sometimes emits nested objects as JSON strings (house GHA 33426508863)."""
+        if not isinstance(v, list):
+            return v
+        return [_parse_json_object(item) for item in v]
 
     @model_validator(mode="before")
     @classmethod
