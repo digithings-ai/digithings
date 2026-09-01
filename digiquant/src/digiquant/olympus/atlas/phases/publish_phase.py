@@ -128,13 +128,21 @@ def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> st
 
 
 def _is_degenerate(body: Any) -> bool:
-    """A content-free segment: the analyst graded the evidence ``data_quality == "absent"``
-    AND produced no material findings (Pillar 1E). Publishing it would surface a
-    confident-looking empty document, so it is suppressed. A segment with findings — or one
-    graded high/medium/low (or ungraded ``None``) — always publishes."""
+    """A content-free segment is suppressed rather than published empty.
+
+    New memos: empty ``body`` and no leftover findings/headline.
+    Legacy: ``data_quality == "absent"`` and no material findings (Pillar 1E).
+    """
     if not isinstance(body, dict):
         return False
-    return body.get("data_quality") == "absent" and not (body.get("material_findings") or [])
+    md = str(body.get("body") or "").strip()
+    if md:
+        return False
+    findings = body.get("material_findings") or []
+    headline = str(body.get("headline") or "").strip()
+    if body.get("data_quality") == "absent" and not findings:
+        return True
+    return not findings and not headline
 
 
 def _log_suppressed(slug: str, body: dict[str, Any]) -> None:

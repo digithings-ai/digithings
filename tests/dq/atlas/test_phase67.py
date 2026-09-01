@@ -98,6 +98,17 @@ class TestPhase6BiasRow:
         assert row["cta_direction"] == "neutral"
         assert row["notes"] == ""  # filled by Phase 7
 
+    def test_prefers_internal_bias_over_legacy_bias(self) -> None:
+        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        state = _seed_state_through_phase5()
+        equity = state.phase5_outputs["equity"]
+        equity.payload.body["internal_bias"] = "bearish"
+        equity.payload.body["bias"] = "bullish"
+        result = compiled.invoke(state)
+        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        assert final.phase6_bias_row is not None
+        assert final.phase6_bias_row["equity_bias"] == "bearish"
+
     def test_no_llm_call(self) -> None:
         """Phase 6 is pure aggregation."""
         compiled = build_pipeline(AtlasResearchState, [build_phase6()])
@@ -389,10 +400,37 @@ def _carried_slot(slug: str, baseline: date = date(2026, 4, 19)) -> SegmentSlot:
 
 @pytest.mark.unit
 class TestSlimSegmentBodyForDigest:
+    def test_memo_body_is_the_digest_input_not_json_slots(self) -> None:
+        """WP-C: slim the markdown memo; do not feed bias/findings/data_quality."""
+        body = {
+            "segment": "alt-sentiment-news",
+            "date": "2026-08-31",
+            "body": "# Sentiment — 2026-08-31\n\n" + ("risk faded. " * 400),
+            "sources": [
+                {"id": "fed", "title": "Powell", "url": "https://example.com/fed"},
+            ],
+            "internal_bias": "bearish",
+            "data_quality": "high",
+            "confidence": 0.7,
+            "headline": "should not be preferred over body",
+            "bias": "bullish",
+            "material_findings": [{"label": "x", "summary": "y"}],
+        }
+        slim = _slim_segment_body(body, 2000)
+        assert len(json.dumps(slim, default=str, sort_keys=True)) <= 2000
+        assert slim["segment"] == "alt-sentiment-news"
+        assert slim["internal_bias"] == "bearish"
+        assert "risk faded" in slim["body"]
+        assert slim["body"].endswith("...")
+        assert "data_quality" not in slim
+        assert "confidence" not in slim
+        assert "material_findings" not in slim
+        assert "bias" not in slim
+        assert "headline" not in slim
+        assert slim["sources"][0]["id"] == "fed"
+
     def test_truncates_and_prioritizes_under_budget(self) -> None:
-        """Slimming keeps decision-relevant fields (identity, findings, sources,
-        notes), truncates verbose text with a marker, drops arbitrary extension
-        prose + nested blobs, and never exceeds the char budget (#1559)."""
+        """Legacy JSON rows compose into a memo body; data_quality/confidence drop."""
         long_text = "x" * 500
         body = {
             "segment": "macro",
@@ -414,26 +452,20 @@ class TestSlimSegmentBodyForDigest:
         }
         budget = 5000
         slim = _slim_segment_body(body, budget)
-        # Hard budget adherence — the serialized body never exceeds the allowance.
         assert len(json.dumps(slim, default=str, sort_keys=True)) <= budget
-        # Identity + stance always kept.
         assert slim["segment"] == "macro"
-        assert slim["bias"] == "bullish"
+        assert slim["internal_bias"] == "bullish"
         assert slim["regime_label"] == "Risk-on / Policy easing"
-        assert slim["data_quality"] == "high"
-        # Verbose text truncated with a marker.
-        assert slim["notes"].endswith("...")
-        assert len(slim["notes"]) <= 303
-        # Findings summaries capped; source_ids capped at 3.
-        assert len(slim["material_findings"][0]["summary"]) <= 243
-        assert slim["material_findings"][0]["source_ids"] == ["s1", "s2", "s3"]
-        # Arbitrary extension prose + nested blobs are dropped.
+        assert "Rates easing" in slim["body"]
+        assert "Fed" in slim["body"]
+        assert "data_quality" not in slim
+        assert "confidence" not in slim
+        assert "material_findings" not in slim
         assert "macro_summary" not in slim
         assert "nested_blob" not in slim
 
     def test_tight_budget_keeps_headline_over_verbose_fields(self) -> None:
-        """Under a tight budget, identity + headline survive; lower-priority
-        notes/sources are dropped rather than the budget being blown."""
+        """Under a tight budget, identity + memo body survive."""
         body = {
             "segment": "bonds",
             "bias": "bearish",
@@ -448,7 +480,9 @@ class TestSlimSegmentBodyForDigest:
         slim = _slim_segment_body(body, budget)
         assert len(json.dumps(slim, default=str, sort_keys=True)) <= budget
         assert slim["segment"] == "bonds"
-        assert slim["headline"].startswith("Curve steepening")
+        assert "Curve steepening" in slim["body"]
+        assert "material_findings" not in slim
+        assert "headline" not in slim
 
 
 @pytest.mark.unit
@@ -772,6 +806,7 @@ def _verbose_segment_body(slug: str) -> dict[str, Any]:
             }
             for i in range(18)
         ],
+        "body": f"# {slug} — 2026-07-12\n\n" + _BUDGET_LONG * 4,
         "notes": _BUDGET_LONG,
         "data_quality": "medium",
         "confidence": 0.55,
@@ -889,11 +924,11 @@ class TestDigestInputBudget:
         state = _full_baseline_state(sector_count=20)
         phase_inputs = _digest_phase_inputs(state)
         body = phase_inputs["phase5"]["sector-0"]["body"]
-        # Verbose finding summaries are truncated with a marker (findings are the
-        # highest-priority variable content, so at least one always survives).
-        assert body["material_findings"], "findings must survive the budget"
-        assert body["material_findings"][0]["summary"].endswith("...")
-        assert len(body["material_findings"][0]["summary"]) <= 243
+        # WP-C: the markdown memo is the digest input; JSON findings/slots are dropped.
+        assert isinstance(body.get("body"), str) and body["body"].strip()
+        assert body["body"].endswith("...")
+        assert "material_findings" not in body
+        assert "headline" not in body
         # Arbitrary extension prose is dropped, not synthesized from.
         assert "detailed_analysis" not in body
         assert "outlook" not in body

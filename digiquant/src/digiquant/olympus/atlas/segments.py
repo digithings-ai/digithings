@@ -212,6 +212,35 @@ def _literal_fields(model: type[BaseModel]) -> dict[str, tuple[frozenset[str], b
     return cached
 
 
+def _apply_literal_axis_normalization(cls: type[BaseModel], data: object) -> object:
+    """Map LLM synonyms onto ``Literal[...]`` fields; optional axes fail-soft to None."""
+    if not isinstance(data, Mapping):
+        return data
+    fields = _literal_fields(cls)
+    if not fields:
+        return data
+    patched: dict[str, Any] | None = None
+    for name, (members, optional) in fields.items():
+        raw = data.get(name)
+        if not isinstance(raw, str) or raw in members:
+            continue
+        canonical = canonical_literal(raw, members)
+        if canonical is None and not optional:
+            logger.warning(
+                "%s.%s: no synonym for %r on a required axis %s — rejecting",
+                cls.__name__,
+                name,
+                raw,
+                sorted(members),
+            )
+            continue
+        if patched is None:
+            patched = dict(data)
+        patched[name] = canonical
+        logger.info("%s.%s: normalized %r → %r", cls.__name__, name, raw, canonical)
+    return data if patched is None else patched
+
+
 def _literal_token(value: str) -> str:
     """Case/whitespace/hyphen-insensitive form: ``'Risk-On '`` → ``'risk_on'``."""
     return "_".join(value.strip().lower().replace("-", " ").replace("_", " ").split())
@@ -527,7 +556,7 @@ class ResearchMemo(BaseModel):
         if mapped in _BIAS_MEMBERS:
             return mapped
         canonical = canonical_literal(v, _BIAS_MEMBERS)
-        return canonical if canonical is not None else v
+        return canonical
 
     @model_validator(mode="before")
     @classmethod
@@ -547,6 +576,12 @@ class ResearchMemo(BaseModel):
         if out.get("internal_bias") is None and out.get("bias") is not None:
             out["internal_bias"] = out["bias"]
         return out
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_literal_axes(cls, data: object) -> object:
+        """Map LLM synonyms onto Literal chip fields of ResearchMemo subclasses."""
+        return _apply_literal_axis_normalization(cls, data)
 
 
 class SegmentReport(BaseModel):
@@ -614,49 +649,21 @@ class SegmentReport(BaseModel):
     def _normalize_literal_axes(cls, data: object) -> object:
         """Map LLM synonyms onto every ``Literal[...]`` field of *any* subclass (#1741).
 
-        ``cls`` is the concrete subclass here, so one validator on the base covers all
-        30 Literal axes across the six phase modules — including the ones that had no
-        validator at all and therefore hard-failed ``model_validate`` on values like
-        ``relative_strength_vs_spy='neutral'`` or ``risk_appetite='neutral'``.
+        ``cls`` is the concrete subclass here, so one validator on the base covers
+        Literal axes on digest/snapshot models. Phase 1–5 memos use the same helper
+        on :class:`ResearchMemo`.
 
         Fields that declare their own ``mode="before"`` validator (``bias``,
-        ``data_quality``, ``flow_direction``) are skipped outright — see
+        ``data_quality``, ``internal_bias``) are skipped outright — see
         ``_fields_with_own_before_validator``.
 
         Two fail-soft tiers, deliberately different:
         * **Optional** axis with no exact synonym → ``None``. Informational field;
           an unparseable value must never fail a merge (the #1641 contract).
         * **Required** axis with no exact synonym → the raw value is left untouched
-          so Pydantic still rejects it. ``growth`` (expanding|slowing|contracting)
-          and ``inflation`` (hot|cooling|cold) have no non-directional member, so a
-          "total" mapping would have to invent a macro call that Phases 4–7 then
-          consume as fact. A loud failure is the honest outcome.
+          so Pydantic still rejects it. Digest ``bias`` stays required.
         """
-        if not isinstance(data, Mapping):
-            return data
-        fields = _literal_fields(cls)
-        if not fields:
-            return data
-        patched: dict[str, Any] | None = None
-        for name, (members, optional) in fields.items():
-            raw = data.get(name)
-            if not isinstance(raw, str) or raw in members:
-                continue
-            canonical = canonical_literal(raw, members)
-            if canonical is None and not optional:
-                logger.warning(
-                    "%s.%s: no synonym for %r on a required axis %s — rejecting",
-                    cls.__name__,
-                    name,
-                    raw,
-                    sorted(members),
-                )
-                continue
-            if patched is None:
-                patched = dict(data)
-            patched[name] = canonical
-            logger.info("%s.%s: normalized %r → %r", cls.__name__, name, raw, canonical)
-        return data if patched is None else patched
+        return _apply_literal_axis_normalization(cls, data)
 
     @field_validator("bias", mode="before")
     @classmethod

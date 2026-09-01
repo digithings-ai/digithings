@@ -86,3 +86,11 @@ def test_loaded_skills_instruct_markdown_not_fake_metrics() -> None:
 def test_edit_skills_also_carry_research_memo_rules() -> None:
     body = load_skill_edit("bonds")
     assert RESEARCH_MEMO_RULES in body
+
+
+def test_digest_skill_does_not_get_research_memo_rules() -> None:
+    """Digest stays DigestSnapshot JSON until WP-E; do not ask it for a memo body."""
+    body = load_skill("digest")
+    assert RESEARCH_MEMO_RULES not in body
+    edit = load_skill_edit("digest")
+    assert RESEARCH_MEMO_RULES not in edit

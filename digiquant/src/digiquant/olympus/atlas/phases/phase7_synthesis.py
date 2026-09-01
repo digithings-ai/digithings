@@ -28,7 +28,7 @@ from digiquant.olympus.atlas.research_attention import (
     resolve_attention_plan_for_node,
     resolve_research_attention_rollout_mode,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import SegmentReport, compose_legacy_research_body
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
@@ -322,18 +322,13 @@ _DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (
     _DIGEST_MODEL_CONTEXT_TOKENS - _DIGEST_NON_SEGMENT_RESERVE_TOKENS
 ) * _DIGEST_CHARS_PER_TOKEN
 # Per-segment floor so a huge roster never starves a segment below a usable
-# minimum (headline + a couple of findings). At the 120k budget this binds only
+# minimum (title + a couple of paragraphs). At the 120k budget this binds only
 # past ~100 segments — far beyond the ~27-segment baseline.
 _DIGEST_SEGMENT_MIN_CHARS = 1_200
 
-# Per-field caps applied within a segment's char budget (decision-relevant fields
-# first; verbose per-segment extension prose is dropped — Phase 7 synthesizes
-# from headlines/findings/bias, not from segment-specific fields).
-_DIGEST_HEADLINE_MAX = 400
-_DIGEST_FINDING_LABEL_MAX = 120
-_DIGEST_FINDING_SUMMARY_MAX = 240
-_DIGEST_NOTES_MAX = 300
-_DIGEST_MAX_SOURCE_IDS = 3
+# Per-field caps applied within a segment's char budget. Phase 7 synthesizes
+# from the markdown memo body (WP-C), not from SegmentReport JSON slots.
+_DIGEST_BODY_MAX = 8_000
 
 # Max length of each string field kept on a retained prior-digest payload in
 # shared_context (continuity tone only — not a diff of last week's detail).
@@ -347,55 +342,43 @@ def _truncate_str(value: str, max_len: int) -> str:
 
 
 def _slim_segment_body(body: dict[str, Any], char_budget: int) -> dict[str, Any]:
-    """Compress one segment body for master-digest inputs under ``char_budget`` (#1559).
+    """Compress one segment body for master-digest inputs under ``char_budget``.
 
-    Fills the most decision-relevant fields first — identity + stance, then
-    material findings, then sources, then notes — and stops before the serialized
-    body would exceed ``char_budget``. Verbose per-segment extension prose (e.g.
-    ``detailed_analysis``, ``outlook``) is dropped: Phase 7 reads headlines,
-    findings, and bias, not segment-specific fields. Fully deterministic (no LLM);
-    truncation appends an ellipsis marker.
-
-    ``char_budget`` is derived from a run-wide total split across the segment
-    count (see ``_per_segment_char_budget``), so a full baseline roster fits.
+    Prefers the WP-C markdown ``body``. Historical SegmentReport rows are
+    composed into a memo first. Machine tokens kept: ``internal_bias`` (or
+    legacy ``bias``) and ``regime_label``. ``data_quality`` / ``confidence``
+    and leftover metric slots are dropped.
     """
+    working = dict(body)
+    md = working.get("body")
+    if not (isinstance(md, str) and md.strip()):
+        composed = compose_legacy_research_body(working)
+        if composed:
+            working["body"] = composed
+        if working.get("internal_bias") is None and working.get("bias") is not None:
+            working["internal_bias"] = working["bias"]
+
     out: dict[str, Any] = {}
-    # 1. Identity + stance — always kept; cheap and the core of the synthesis read.
-    for key in ("segment", "date", "bias", "data_quality", "confidence", "regime_label"):
-        if key in body:
-            val = body[key]
-            if isinstance(val, (str, int, float, bool)) or val is None:
-                out[key] = val
-    headline = body.get("headline")
-    if isinstance(headline, str) and headline:
-        out["headline"] = _truncate_str(headline, _DIGEST_HEADLINE_MAX)
+    for key in ("segment", "date", "internal_bias", "regime_label"):
+        if key not in working:
+            continue
+        val = working[key]
+        if isinstance(val, (str, int, float, bool)) or val is None:
+            out[key] = val
 
     def _fits(candidate: dict[str, Any]) -> bool:
         return len(json.dumps(candidate, default=str, sort_keys=True)) <= char_budget
 
-    # 2. Material findings — the primary research signal; add until the budget bites.
-    findings = body.get("material_findings")
-    if isinstance(findings, list):
-        kept: list[dict[str, Any]] = []
-        for item in findings:
-            if not isinstance(item, dict):
-                continue
-            source_ids = item.get("source_ids")
-            trimmed = {
-                "label": _truncate_str(str(item.get("label", "")), _DIGEST_FINDING_LABEL_MAX),
-                "summary": _truncate_str(str(item.get("summary", "")), _DIGEST_FINDING_SUMMARY_MAX),
-                "source_ids": source_ids[:_DIGEST_MAX_SOURCE_IDS]
-                if isinstance(source_ids, list)
-                else [],
-            }
-            if not _fits({**out, "material_findings": [*kept, trimmed]}):
-                break
-            kept.append(trimmed)
-        if kept:
-            out["material_findings"] = kept
+    memo = working.get("body")
+    if isinstance(memo, str) and memo.strip():
+        identity_chars = len(json.dumps(out, default=str, sort_keys=True))
+        source_reserve = 180
+        room = max(80, char_budget - identity_chars - source_reserve)
+        out["body"] = _truncate_str(memo, min(_DIGEST_BODY_MAX, room))
+        while not _fits(out) and len(out["body"]) > 80:
+            out["body"] = _truncate_str(out["body"][:-3], max(80, len(out["body"]) // 2))
 
-    # 3. Sources — citation provenance; add until the budget bites.
-    sources = body.get("sources")
+    sources = working.get("sources")
     if isinstance(sources, list):
         kept_sources: list[dict[str, Any]] = []
         for src in sources:
@@ -407,14 +390,6 @@ def _slim_segment_body(body: dict[str, Any], char_budget: int) -> dict[str, Any]
             kept_sources.append(trimmed_src)
         if kept_sources:
             out["sources"] = kept_sources
-
-    # 4. Notes — lowest priority; only if room remains.
-    notes = body.get("notes")
-    if isinstance(notes, str) and notes:
-        candidate_notes = _truncate_str(notes, _DIGEST_NOTES_MAX)
-        if _fits({**out, "notes": candidate_notes}):
-            out["notes"] = candidate_notes
-
     return out
 
 

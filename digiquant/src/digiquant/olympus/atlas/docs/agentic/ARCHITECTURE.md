@@ -178,7 +178,7 @@ published **no** `inst-*` document and records the count on
 `DataLayerSnapshot.institutional_absence_streak` (`institutional_data_available` is the
 boolean flag). On a **delta** run, once that streak reaches
 `phase2_institutional.ABSENCE_BREAKER_THRESHOLD` (3), Phase 2 skips the paid `inst-*`
-LLM/search nodes and writes a deterministic `data_quality="absent"` stub (zero search spend)
+LLM/search nodes and writes a deterministic empty-`body` stub (zero search spend)
 carrying a `circuit_breaker` marker; publish suppresses the empty stub and diagnostics records
 the skip + reason under `breakdown.phase2_outputs.circuit_breaker_skips`. **Baseline always
 runs Phase 2 fully** — a baseline re-probes the layer rather than inheriting a stale absence.
@@ -202,7 +202,9 @@ Skill: `skills/macro/SKILL.md`
 | **Policy** | Fed/ECB/BOJ stance, rate trajectory, QT pace |
 | **Risk Appetite** | VIX structure, credit spreads, EM flows, safe-haven demand |
 
-Output: a regime label (e.g., `Growth Slowing / Inflation Sticky / Policy Tightening / Risk-Off`) plus portfolio implications.
+Output: a markdown research memo (`body`) plus optional 4-factor chips
+(`growth` / `inflation` / `policy` / `risk_appetite`) and a short `regime_label`
+for the pipeline strip.
 
 ---
 
@@ -299,7 +301,7 @@ directly.
 
 **Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
 
-- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` greedily fills the decision-relevant fields (identity + stance → findings → sources → notes) up to that allowance and drops verbose extension prose; a full 34-segment day assembles to ~30k tokens.
+- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` keeps identity + markdown `body` (composing legacy headline/findings when `body` is missing) plus optional `internal_bias` / `regime_label` / `sources`, and drops `data_quality` / `confidence` / leftover metric slots; a full 34-segment day assembles to ~30k tokens.
 - **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
 
 **Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
@@ -500,7 +502,7 @@ config/hedge-funds.md ───────────────────�
 Supabase daily_snapshots/documents ───┐    │(all skills read)│
 (prior context queried at session start)│   │                 │
                                       ▼    ▼                 ▼
-         Phase 1 ─► segment JSON ──► Phase 2 ─► Phase 3 ─► Phase 4 ─► Phase 5
+         Phase 1 ─► markdown memo ──► Phase 2 ─► Phase 3 ─► Phase 4 ─► Phase 5
                                                     │
                                  (macro regime anchors all phases below)
                                                     │
