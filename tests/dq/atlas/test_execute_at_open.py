@@ -875,6 +875,28 @@ class TestBuildEventsFromPaperFills:
         assert "07-29" in by_ticker["UUP"]["reason"]
         assert "display only" in by_ticker["UUP"]["reason"]
 
+    def test_dust_fill_with_unchanged_display_weight_is_hold(self) -> None:
+        """House 2026-09-01 FXI/VGK/XLF: ~0.05–0.14 share true-ups at the same 5/25/20%.
+
+        Activity names the event from the fill, so a lot-level true-up became ADD/TRIM
+        of +0.0pp. OPEN/EXIT still come from residual quantity (#1743); only ADD/TRIM
+        whose displayed weight did not move at 1-decimal pp collapse to HOLD.
+        """
+        ledger = (
+            _Ledger()
+            .order("IJR", "add", "0.14", weight="0.05", mark="35.36")
+            .holding("IJR", "100", open_price="35.00")
+        )
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert declined == ""
+        assert events is not None
+        ijr = _events_by_ticker(events)["IJR"]
+        assert ijr["event"] == "HOLD"
+        assert ijr["weight_pct"] == pytest.approx(5.0)
+        assert ijr["prev_weight_pct"] == pytest.approx(5.0)
+
     def test_a_trim_that_closes_the_position_is_an_exit(self) -> None:
         """The #1743 class of mislabelling, from the other direction.
 

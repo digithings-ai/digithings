@@ -160,6 +160,21 @@ def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
     return out
 
 
+# Desk Activity shows weight deltas at 1 decimal pp. A fill that does not move that
+# display is a lot true-up, not a position change (house 2026-09-01 FXI/VGK/XLF).
+_DESK_PP_DECIMALS = 1
+
+
+def _desk_weight_unchanged(weight_pct: Optional[float], prev_weight_pct: Optional[float]) -> bool:
+    """True when both weights exist and round to a 0.0pp move at desk precision."""
+    if weight_pct is None or prev_weight_pct is None:
+        return False
+    delta = float(weight_pct) - float(prev_weight_pct)
+    if not (delta == delta):  # NaN
+        return False
+    return round(delta, _DESK_PP_DECIMALS) == 0.0
+
+
 def _parse_pct(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -631,6 +646,11 @@ def build_events_from_paper_fills(
         # and 0.29 comes out 28.999999999999996. Writing those into a numeric column would
         # make ordinary weights look like rounding artefacts.
         weight_pct = float(weight * 100) if weight is not None else None
+        prev_weight_pct = prior_weights.get(fill.symbol)
+        # Lot-level true-ups (0.05–0.14 shares) keep the displayed weight the same and
+        # must not land as ADD/TRIM of +0.0pp. OPEN/EXIT still follow residual quantity.
+        if event_kind in ("ADD", "TRIM") and _desk_weight_unchanged(weight_pct, prev_weight_pct):
+            event_kind = "HOLD"
         row = PositionEventRow(
             date=execution_d,
             ticker=fill.symbol,
@@ -640,7 +660,7 @@ def build_events_from_paper_fills(
             # the prior weight cannot be derived from the lots. It is read from the
             # last committed `positions` book purely so the UI can show a delta, and
             # the reason string below says so rather than implying the ledger holds it.
-            prev_weight_pct=prior_weights.get(fill.symbol),
+            prev_weight_pct=prev_weight_pct,
             price=float(fill.price),
             reason=(
                 f"{event_kind} — filled {fill.quantity} share(s) at {fill.price} from order "

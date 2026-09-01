@@ -3,6 +3,7 @@
 import { useMemo, useState, Fragment } from 'react';
 import Link from 'next/link';
 import type { DashboardPositionEvent } from '@/lib/types';
+import { isMaterialBookEvent } from '@/lib/brief-book-event';
 import { thesisDetailHref, tickerDossierHref } from '@/lib/portfolio-url-state';
 import { usablePmRationale } from '@/lib/pm-rationale';
 
@@ -97,7 +98,7 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
   const activity = useMemo(
     () =>
       events
-        .filter((event) => event.event !== 'HOLD')
+        .filter((event) => isMaterialBookEvent(event))
         .slice()
         .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker)),
     [events]
