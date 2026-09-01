@@ -13,11 +13,15 @@ from digiquant.olympus.kairos.house_pipeline_proof import (
     EXIT_WAITING_SCHEDULE,
     UUID_HOTFIX_MERGED_AT,
     UUID_HOTFIX_SHA_PREFIX,
+    FailsoftPrRow,
     HouseWorkflowRun,
     OriginMainRef,
     evaluate_proof,
+    failsofts_merge_ready,
+    format_failsoft_pr_line,
     format_proof_line,
     main,
+    parse_failsoft_pr,
     parse_github_runs,
     proof_exit_code,
     select_proof_run,
@@ -334,6 +338,7 @@ def test_main_exits_5_without_listing_when_main_is_uuid_hotfix() -> None:
         resolve_origin_main=lambda: OriginMainRef(
             sha=_UUID_HOTFIX_MAIN, committed_at=UUID_HOTFIX_MERGED_AT
         ),
+        list_failsoft_prs=lambda: (),
         log=logs.append,
         log_err=logs.append,
     )
@@ -359,3 +364,105 @@ def test_main_resolve_origin_main_failure_exits_4() -> None:
     )
     assert rc == EXIT_LIST_FAILED
     assert "origin/main" in err[0]
+
+
+def test_parse_failsoft_pr_skips_malformed() -> None:
+    row = parse_failsoft_pr(
+        {"number": 3343, "state": "OPEN", "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN"}
+    )
+    assert row == FailsoftPrRow(
+        number=3343, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"
+    )
+    assert parse_failsoft_pr({"number": "nope"}) is None
+    assert parse_failsoft_pr("ignore") is None
+
+
+def test_failsofts_merge_ready_requires_open_mergeable() -> None:
+    ready = (
+        FailsoftPrRow(number=3343, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3348, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3351, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3354, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+    )
+    assert failsofts_merge_ready(ready) is True
+    blocked = (
+        *ready[:3],
+        FailsoftPrRow(
+            number=3354, state="OPEN", mergeable="CONFLICTING", merge_state_status="DIRTY"
+        ),
+    )
+    assert failsofts_merge_ready(blocked) is False
+    assert failsofts_merge_ready(()) is False
+
+
+def test_format_failsoft_pr_line_names_stack_and_refuses_author_merge() -> None:
+    rows = (
+        FailsoftPrRow(number=3343, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3348, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3351, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+        FailsoftPrRow(number=3354, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"),
+    )
+    line = format_failsoft_pr_line(rows)
+    assert "#3343 OPEN MERGEABLE CLEAN" in line
+    assert "#3354 OPEN MERGEABLE CLEAN" in line
+    assert "stack ready" in line
+    assert "do not merge from authoring agent" in line
+    dirty = format_failsoft_pr_line(
+        (
+            FailsoftPrRow(
+                number=3343, state="OPEN", mergeable="CONFLICTING", merge_state_status="DIRTY"
+            ),
+        )
+    )
+    assert "not all MERGEABLE" in dirty
+
+
+def test_main_exit_5_logs_injected_failsoft_pr_status() -> None:
+    logs: list[str] = []
+    rc = main(
+        [],
+        list_runs=lambda: (),
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_UUID_HOTFIX_MAIN, committed_at=UUID_HOTFIX_MERGED_AT
+        ),
+        list_failsoft_prs=lambda: (
+            FailsoftPrRow(
+                number=3343, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"
+            ),
+            FailsoftPrRow(
+                number=3348, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"
+            ),
+            FailsoftPrRow(
+                number=3351, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"
+            ),
+            FailsoftPrRow(
+                number=3354, state="OPEN", mergeable="MERGEABLE", merge_state_status="CLEAN"
+            ),
+        ),
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == EXIT_MAIN_MISSING_FAILSOFTS
+    assert any("stack ready" in line for line in logs)
+    assert any("#3343 OPEN MERGEABLE CLEAN" in line for line in logs)
+    assert any("do not merge from authoring agent" in line for line in logs)
+
+
+def test_main_exit_5_skips_failsoft_line_on_oserror() -> None:
+    def _boom() -> tuple[FailsoftPrRow, ...]:
+        raise OSError("gh pr view failed")
+
+    logs: list[str] = []
+    rc = main(
+        [],
+        list_runs=lambda: (),
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_UUID_HOTFIX_MAIN, committed_at=UUID_HOTFIX_MERGED_AT
+        ),
+        list_failsoft_prs=_boom,
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == EXIT_MAIN_MISSING_FAILSOFTS
+    assert any("main_missing_failsofts" in line for line in logs)
+    assert not any("failsofts=" in line for line in logs)

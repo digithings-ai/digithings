@@ -14,7 +14,8 @@ Exit codes:
   2 — counting schedule completed with failure
   3 — no counting schedule yet (waiting for cron ``0 12 * * *``)
   4 — could not list runs / resolve ``origin/main``, or the CLI was asked to dispatch
-  5 — ``origin/main`` is still UUID-hotfix ``3601f72df`` (merge #3343 → #3348 → #3351 → #3354)
+  5 — ``origin/main`` is still UUID-hotfix ``3601f72df`` (merge #3343 → #3348 → #3351 → #3354).
+      Also prints ``failsofts=`` mergeability (OPEN/MERGEABLE/CLEAN). Never merges those PRs.
 """
 
 from __future__ import annotations
