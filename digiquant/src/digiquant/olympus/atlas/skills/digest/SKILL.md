@@ -40,7 +40,9 @@ The `phase_inputs` block contains:
 - `phase3` — macro analysis (regime classification, yield curve, central bank, inflation, geopolitics).
   The `regime_label` field from phase3 is the authoritative short regime token.
 - `phase4` — asset classes (bonds, commodities, forex, crypto, international equities).
-- `phase5` — US equities plus sector sub-agent outputs (11 GICS sectors).
+- `phase5` — US equities plus the 11 GICS **sector memos** (`sector-technology` …
+  `sector-comms`). Those memos are the authority for sector leadership; there is
+  no rolled-up `sector-scorecard`.
 - `custom_prompt` (optional) — a targeted question or override injected by the operator for this
   run. When present, treat it as the top priority and address it explicitly in `notes`.
 
@@ -94,8 +96,9 @@ equities (EM vs DM divergence). Focus on cross-asset confirmation or divergence 
 macro regime.
 
 ### `us_equities_summary` (paragraph, ~120 words)
-Synthesize phase5 outputs: market-cap-weighted index bias, sector leadership and laggards
-(by GICS tier), breadth reading, and any single-stock or earnings catalyst dominating the
+Synthesize phase5 outputs: market-cap-weighted index bias, then sector leadership
+and laggards drawn from the **sector memos** (not a comparative scorecard),
+breadth reading, and any single-stock or earnings catalyst dominating the
 session. Confirm or contradict the macro regime signal from equities' perspective.
 
 ### `thesis_tracker` (paragraph, default "")

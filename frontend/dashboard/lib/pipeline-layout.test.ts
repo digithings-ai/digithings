@@ -36,7 +36,6 @@ describe('layoutPipeline', () => {
       'Macro',
       'Asset-classes',
       'Sectors',
-      'Sector scorecard',
     ]);
     expect(subs.every((n) => n.x === research!.x)).toBe(true);
     const ys = subs.map((n) => n.y);
@@ -136,7 +135,7 @@ describe('layoutPipeline', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},
-      presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-scorecard', 'beliefs', 'commit-run/123', 'commit-run/999']),
+      presentKeys: new Set(['macro', 'pm-direction-memo', 'sector-technology', 'beliefs', 'commit-run/123', 'commit-run/999']),
       artifacts: [],
     };
     const exp: ExpansionState = {
@@ -152,8 +151,8 @@ describe('layoutPipeline', () => {
     // digest absent that day -> no documentKey (golden rule)
     expect(byId('synthesis:digest')?.documentKey).toBeUndefined();
     expect(byId('synthesis:digest')?.runStatus).toBe('expected-artifact-missing');
-    // sector-scorecard is a research leaf (Phase-5 equities output, #1538)
-    expect(byId('research:scorecard')?.documentKey).toBe('sector-scorecard');
+    // sector memos are fan-out branches; the scorecard leaf is gone (WP-D)
+    expect(byId('research:scorecard')).toBeUndefined();
     // consolidate is a real document once bias-row is present
     expect(byId('synthesis:consolidate')?.documentKey).toBeUndefined();
     expect(byId('synthesis:consolidate')?.stateOnly).toBeUndefined();

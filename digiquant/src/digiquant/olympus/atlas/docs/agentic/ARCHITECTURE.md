@@ -247,17 +247,12 @@ Supabase: asset-class segments → `documents`.
 | 5J | `skills/sector-materials/SKILL.md` |
 | 5K | `skills/sector-real-estate/SKILL.md` |
 | 5L | `skills/sector-comms/SKILL.md` |
-| 5M | *(orchestrator synthesis)* — sector scorecard in materialized digest / snapshot |
 
-Supabase: US equities + 11 sector documents → `documents`.
+Supabase: US equities + 11 sector **memos** → `documents`. There is no
+deterministic `sector-scorecard` step; digest and PM read the sector memos
+directly.
 
 **Phase 5A covers**: SPY/QQQ/IWM, market breadth (NYSE A/D line, new 52W highs/lows), factor performance (value, growth, momentum, quality, small cap).
-
-**Phase 5M** produces a final sector scorecard after all 11 agents complete:
-```
-SECTOR SCORECARD — {{DATE}}
-| Sector | ETF | Bias | Confidence | Key Driver |
-```
 
 ---
 
@@ -294,7 +289,7 @@ SECTOR SCORECARD — {{DATE}}
 3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
 4. **Macro** — full regime read (from published macro segment)
 5. **Asset Classes** — bonds, commodities, forex, crypto, international
-6. **US Equities** — overview + full sector scorecard (11 sectors, OW/UW/N + key driver each)
+6. **US Equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
 7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
 8. **Risk Radar** — what could break the current bias in 24–72 hours
 

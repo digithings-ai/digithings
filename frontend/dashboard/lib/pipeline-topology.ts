@@ -102,13 +102,6 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       description: 'Dispatches sector specialists in parallel to compare leadership, risk, and relative opportunity.',
       fanout: { id: 'sectors', label: 'Sectors', defaultCount: 11 },
     },
-    // Phase-5 equities output — published as `sector-scorecard` (category "sector"),
-    // a research artifact, NOT the Phase-6 consolidate output it was once wired to.
-    {
-      id: 'scorecard',
-      label: 'Sector scorecard',
-      description: 'Ranks the sector research into a compact comparative scorecard for downstream synthesis.',
-    },
   ]},
   {
     id: 'synthesis',

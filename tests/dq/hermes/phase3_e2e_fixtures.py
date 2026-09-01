@@ -109,7 +109,6 @@ ATLAS_COMPILED_NODES = frozenset(
         "crypto",
         "equity",
         "sector-technology",
-        "sector-scorecard",
         "consolidate",
         "master-digest",
     }
