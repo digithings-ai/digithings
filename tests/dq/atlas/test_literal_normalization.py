@@ -168,6 +168,11 @@ class TestObservedProductionOffenders:
             (SentimentNewsReport, "retail_sentiment_stance", "fear", "risk_off"),
             (SentimentNewsReport, "retail_sentiment_stance", "bearish", "risk_off"),
             (SentimentNewsReport, "retail_sentiment_stance", "downbeat", "risk_off"),
+            # pipeline-olympus 33426508863 — edit-merge of alt-sentiment-news. `bias`
+            # owns its own before-validator, so the generic `_LITERAL_SYNONYMS`
+            # `cautious → (neutral, mixed)` table never ran and the segment paid a
+            # full-mode regeneration.
+            (SentimentNewsReport, "bias", "cautious", "neutral"),
         ],
     )
     def test_synonym_resolves_onto_the_fields_own_literal(
@@ -245,6 +250,25 @@ class TestDedicatedValidatorsKeepOwnership:
     def test_bias_synonyms_survive(self) -> None:
         body = {**_minimal_body(SectorReport), "bias": "very_positive"}
         assert SectorReport.model_validate(body).bias == "strong_bullish"
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("cautious", "neutral"),
+            (" Cautious ", "neutral"),
+            ("risk_on", "bullish"),
+            ("RISK-ON", "bullish"),
+        ],
+    )
+    def test_bias_consults_generic_synonym_table(self, raw: str, expected: str) -> None:
+        """Dedicated `bias` validator must still resolve `_LITERAL_SYNONYMS` hedges.
+
+        `very_positive` lives only on `_BIAS_SYNONYMS`; `cautious` / `risk_on` live
+        on the generic table. Skipping that table is how 33426508863 regenerated
+        `alt-sentiment-news` after a merge `literal_error`.
+        """
+        body = {**_minimal_body(SentimentNewsReport), "bias": raw}
+        assert SentimentNewsReport.model_validate(body).bias == expected
 
     def test_unknown_bias_is_still_rejected(self) -> None:
         body = {**_minimal_body(SectorReport), "bias": _NOT_A_MEMBER}

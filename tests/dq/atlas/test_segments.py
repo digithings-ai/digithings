@@ -66,6 +66,11 @@ def test_bias_synonym_still_normalizes() -> None:
     assert _report(bias="positive").bias == "bullish"
 
 
+def test_bias_cautious_maps_to_neutral() -> None:
+    # House GHA 33426508863: Gemini emitted bias='cautious' on SentimentNewsReport.
+    assert _report(bias="cautious").bias == "neutral"
+
+
 class TestFlowDirectionSynonyms:
     """#1641 — flow_direction synonyms normalize instead of failing the merge.
 
