@@ -62,6 +62,9 @@ DASHBOARD_PATHS: tuple[str, ...] = (
     "/dashboard/login/",
     "/dashboard/auth/callback/",
     "/dashboard/settings/",
+    # EF --apply pins ALPACA_OAUTH_CALLBACK_PATH here. Live /olympus twin is 200;
+    # do not treat Pages ready (and then redeploy app URLs) while this 404s.
+    "/dashboard/settings/brokers/callback/",
 )
 
 # Functions that inline APP_URL + /dashboard paths. Do not include
