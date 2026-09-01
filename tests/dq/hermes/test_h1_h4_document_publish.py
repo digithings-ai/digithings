@@ -68,7 +68,9 @@ class TestH1PublishesThesisReviewDocument:
 
 @pytest.mark.unit
 class TestH4PublishesOpportunityScreener:
-    def test_h4_upserts_flat_opportunity_screener_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_h4_upserts_flat_opportunity_screener_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
 
         monkeypatch.setenv("HERMES_HELD_GATE", "off")

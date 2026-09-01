@@ -415,9 +415,7 @@ def _publish_screener_document(
     roster: list[FocusRosterEntry],
     excluded: list[ExcludedTicker],
 ) -> None:
-    document = build_screener_document(
-        run_date=state.run_date, roster=roster, excluded=excluded
-    )
+    document = build_screener_document(run_date=state.run_date, roster=roster, excluded=excluded)
     date_str = state.run_date.isoformat()
     workspace_id = state.config.workspace_id
     publish_document(
