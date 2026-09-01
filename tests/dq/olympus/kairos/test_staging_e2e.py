@@ -12,12 +12,12 @@ Not a substitute for paper-fakes ``tests/integration/test_kairos_tenancy_chain.p
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from typing import Any
 
 import pytest
+from digiquant.olympus.envcompat import STAGING_FUNCTIONS_BASE, STAGING_USER_JWT, env_lookup
 from digiquant.olympus.kairos.remaining_hops import (
     RemainingHopEvidence,
     proven_remaining_hops,
@@ -47,8 +47,7 @@ from digiquant.olympus.kairos.staging_secrets import (
 )
 
 CORE_FUNCTIONS_BASE = (
-    os.environ.get("KAIROS_STAGING_FUNCTIONS_BASE")
-    or "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
+    env_lookup(STAGING_FUNCTIONS_BASE) or "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
 )
 
 
@@ -342,7 +341,7 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     assert any("TIER_FORBIDDEN" in line or "Observer hops" in line for line in logs)
     assert any("STRIPE_SECRET_KEY" in line for line in logs)
     blob = "\n".join(logs)
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" in blob
     assert "browser_stripe_checkout" in blob
     assert "digest_email_received" in blob
     assert "blocker=plan_tier_not_custom" in blob
@@ -730,7 +729,7 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
     assert rc == 0
     blob = "\n".join(logs)
     assert "all remaining hops proven" in blob
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" not in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" not in blob
 
 
 @pytest.mark.unit
@@ -774,7 +773,7 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
     assert checkout_bodies
     assert all(body == STAGING_CHECKOUT_BODY for body in checkout_bodies)
     blob = "\n".join(logs)
-    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "DIGIQUANT_STAGING_E2E_REMAINING_HOPS:" in blob
     for hop in (
         "browser_stripe_checkout",
         "alpaca_paper_oauth_connect",
@@ -847,16 +846,16 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
 
     Or::
 
-        PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+        PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
     """
     missing = missing_kairos_staging_secrets()
     if missing:
         pytest.fail(format_missing_secrets_failure(missing))
 
-    jwt = (os.environ.get("KAIROS_STAGING_USER_JWT") or "").strip()
+    jwt = env_lookup(STAGING_USER_JWT).strip()
     if not jwt:
         pytest.fail(
-            format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"])
+            format_missing_secrets_failure([STAGING_USER_JWT])
             + " (Agentmail/GitHub Auth session JWT for create-checkout-session)"
         )
 

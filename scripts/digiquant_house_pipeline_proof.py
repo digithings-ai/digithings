@@ -7,7 +7,7 @@ Lists ``pipeline-olympus.yml`` runs. A **schedule** success strictly after
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_house_pipeline_proof.py
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_house_pipeline_proof.py
 
 Exit codes:
   0 — post-hotfix schedule succeeded

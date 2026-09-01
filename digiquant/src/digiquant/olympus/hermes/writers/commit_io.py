@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import StrEnum
@@ -25,6 +24,7 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_book,
     publish_document,
 )
+from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
 from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
@@ -41,8 +41,8 @@ from digiquant.olympus.tenancy import resolved_workspace_id
 logger = logging.getLogger(__name__)
 
 _SEED_NAV = 100.0
-_RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
-_PRETRADE_RISK_MODE_ENV = "OLYMPUS_PRETRADE_RISK_MODE"
+_RISK_FIELDS_ENV = POSITION_RISK_FIELDS
+_PRETRADE_RISK_MODE_ENV = PRETRADE_RISK_MODE
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
@@ -63,7 +63,7 @@ _NAV_INTERVAL_TICKER_BATCH = max(1, _NAV_INTERVAL_ROW_BUDGET // (_NAV_INTERVAL_W
 
 
 def _position_risk_fields_enabled() -> bool:
-    return os.environ.get(_RISK_FIELDS_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    return env_lookup(_RISK_FIELDS_ENV).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _coerce_float(val: Any) -> float:
@@ -978,7 +978,7 @@ class PreTradeRiskValidation:
 
 def resolve_pretrade_risk_mode() -> PreTradeRiskMode:
     """Read ``OLYMPUS_PRETRADE_RISK_MODE``; unknown values fall back to shadow."""
-    raw = os.environ.get(_PRETRADE_RISK_MODE_ENV, PreTradeRiskMode.SHADOW.value).strip().lower()
+    raw = env_lookup(_PRETRADE_RISK_MODE_ENV, default=PreTradeRiskMode.SHADOW.value).strip().lower()
     try:
         return PreTradeRiskMode(raw)
     except ValueError:

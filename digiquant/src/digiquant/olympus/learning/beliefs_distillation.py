@@ -12,7 +12,6 @@ lessons into a single ``documents`` row (``document_key=beliefs``,
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
@@ -38,6 +37,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     query_unfolded_resolved_decisions,
 )
+from digiquant.olympus.envcompat import BELIEFS_BACKLOG, env_lookup
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
@@ -73,7 +73,7 @@ class BeliefsBlob(BaseModel):
 
 def beliefs_backlog_threshold() -> int:
     """``OLYMPUS_BELIEFS_BACKLOG`` env override; default 20."""
-    raw = os.environ.get("OLYMPUS_BELIEFS_BACKLOG", "").strip()
+    raw = env_lookup(BELIEFS_BACKLOG).strip()
     if not raw:
         return DEFAULT_BELIEFS_BACKLOG
     try:

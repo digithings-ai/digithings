@@ -11,8 +11,8 @@ checkout; exit 6 = a live bundle still looks like v32.
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_pages_dashboard_gate.py
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_pages_dashboard_gate.py --apply
 """
 
 from __future__ import annotations

@@ -33,6 +33,7 @@ from digiquant.olympus.atlas.phases.preflight import (
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseError
+from digiquant.olympus.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
@@ -98,9 +99,10 @@ OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
 
 
 def _outer_attempt() -> int:
-    """The CI outer-retry attempt number, from ``OLYMPUS_ATTEMPT``.
+    """The CI outer-retry attempt number, from ``DIGIQUANT_ATTEMPT``.
 
-    ``pipeline-olympus.yml``'s retry loop exports it per attempt (#1762). Falls back to 1 —
+    ``pipeline-olympus.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
+    per attempt (#1762). Readers accept both names. Falls back to 1 —
     a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
     the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
 
@@ -109,8 +111,8 @@ def _outer_attempt() -> int:
     and treated as attempt 1, which at worst re-collides two attempts the way the pre-#1762
     code always did.
     """
-    raw = os.environ.get(OUTER_ATTEMPT_ENV)
-    if raw is None or not raw.strip():
+    raw = env_lookup(ATTEMPT)
+    if not raw.strip():
         return 1
     try:
         attempt = int(raw)
@@ -194,7 +196,7 @@ def _invoke_resumable(
 def _degraded_run_pct() -> float:
     """``ATLAS_DEGRADED_RUN_PCT`` (failed-segment %% that marks a run degraded); default 50."""
     try:
-        return float(os.environ.get("ATLAS_DEGRADED_RUN_PCT", "") or 50.0)
+        return float(env_lookup(DEGRADED_RUN_PCT) or 50.0)
     except ValueError:
         return 50.0
 

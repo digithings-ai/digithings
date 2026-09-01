@@ -24,6 +24,15 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.olympus.envcompat import (
+    STAGING_ANON_KEY,
+    STAGING_DIGEST_INBOX_CONFIRMED,
+    STAGING_EMAIL,
+    STAGING_FUNCTIONS_BASE,
+    STAGING_PASSWORD,
+    STAGING_USER_JWT,
+    env_lookup,
+)
 from digiquant.olympus.kairos.remaining_hops import (
     EXIT_REMAINING_HOPS_UNPROVEN,
     REMAINING_LIVE_HOPS,
@@ -286,7 +295,7 @@ def run_observer_hops(
 
 
 def _digest_inbox_confirmed(environ: Mapping[str, str]) -> bool:
-    raw = (environ.get("KAIROS_STAGING_DIGEST_INBOX_CONFIRMED") or "").strip().lower()
+    raw = env_lookup(STAGING_DIGEST_INBOX_CONFIRMED, environ=environ).strip().lower()
     return raw in {"1", "true", "yes"}
 
 
@@ -444,11 +453,11 @@ def password_grant_access_token(
 
 def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> JwtResolution:
     """JWT from env, or password grant when email/password/anon are set."""
-    direct = (environ.get("KAIROS_STAGING_USER_JWT") or "").strip()
+    direct = env_lookup(STAGING_USER_JWT, environ=environ).strip()
     if direct:
         return JwtResolution(token=direct)
-    email = (environ.get("KAIROS_STAGING_EMAIL") or "").strip()
-    password = (environ.get("KAIROS_STAGING_PASSWORD") or "").strip()
+    email = env_lookup(STAGING_EMAIL, environ=environ).strip()
+    password = env_lookup(STAGING_PASSWORD, environ=environ).strip()
     anon = _anon_from_env(environ)
     supabase_url = (environ.get("CORE_SUPABASE_URL") or DEFAULT_SUPABASE_URL).strip()
     if not (email and password and anon):
@@ -464,11 +473,12 @@ def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> JwtRes
 
 
 def _anon_from_env(environ: Mapping[str, str]) -> str | None:
-    for name in ("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY", "KAIROS_STAGING_ANON_KEY"):
+    for name in ("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"):
         value = (environ.get(name) or "").strip()
         if value:
             return value
-    return None
+    alias = env_lookup(STAGING_ANON_KEY, environ=environ).strip()
+    return alias or None
 
 
 def run_staging_e2e(
@@ -481,16 +491,16 @@ def run_staging_e2e(
     """Run Observer hops (if JWT) then vendor-secret / checkout phases."""
     env = os.environ if environ is None else environ
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
-    functions_base = (env.get("KAIROS_STAGING_FUNCTIONS_BASE") or DEFAULT_FUNCTIONS_BASE).rstrip(
-        "/"
-    )
+    functions_base = (
+        env_lookup(STAGING_FUNCTIONS_BASE, environ=env) or DEFAULT_FUNCTIONS_BASE
+    ).rstrip("/")
 
     resolved = resolve_staging_jwt(http=http, environ=env)
     if resolved.attempted_grant and not resolved.token:
         err(
             "Password grant failed "
             f"HTTP {resolved.grant_http} — credentials not logged. "
-            "Check KAIROS_STAGING_EMAIL/PASSWORD."
+            "Check DIGIQUANT_STAGING_EMAIL/PASSWORD."
         )
         return 3
     jwt = resolved.token
@@ -531,7 +541,7 @@ def run_staging_e2e(
     else:
         log(
             "kairos_staging_e2e: Observer hops skipped "
-            "(set KAIROS_STAGING_USER_JWT or KAIROS_STAGING_EMAIL+PASSWORD+ANON)"
+            "(set DIGIQUANT_STAGING_USER_JWT or DIGIQUANT_STAGING_EMAIL+PASSWORD+ANON)"
         )
         unproven = remaining_hops_unproven()
 
@@ -544,7 +554,7 @@ def run_staging_e2e(
         return 2
 
     if not jwt:
-        err(format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"]))
+        err(format_missing_secrets_failure([STAGING_USER_JWT]))
         err(format_remaining_hops_failure(unproven))
         return 2
 

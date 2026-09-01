@@ -4,7 +4,7 @@
  * Mirrors ``digiquant.olympus.kairos.remaining_hops.proven_remaining_hops``
  * and ``remaining_hop_blockers``. The Settings About panel never claims
  * digest inbox confirmation — that flag is operator-only
- * (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also requires
+ * (`DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also requires
  * ``daily_digest`` on; dispatch skips prefs that are off. Paper fills do not
  * prove the hop unless an Alpaca paper OAuth connection is also present.
  * Baseline Stripe does not prove checkout — broker connect and overlay stay

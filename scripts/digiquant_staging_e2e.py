@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Agent-runnable Kairos staging E2E gate (core Supabase).
+"""Agent-runnable digiquant staging E2E gate (core Supabase).
 
 Phase A: Observer Settings hops when a JWT (or email/password) is present —
 reads 200, Custom writes ``TIER_FORBIDDEN``, and
@@ -15,7 +15,7 @@ the webhook must clear ``STRIPE_NOT_CONFIGURED``. Unproven hops → exit 4.
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
 
 Exit codes:
   0 — all five remaining hops proven (Stripe subscription boolean + status,

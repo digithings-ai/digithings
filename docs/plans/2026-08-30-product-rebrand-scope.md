@@ -77,7 +77,7 @@ Treat “rename everything” as **thousands of edits across two branch hops**, 
 |-------|----------|----------------|
 | Python package | `digiquant.olympus.{atlas,hermes,kairos}` (~342 files under `olympus/`) | Wave 4, after the public name is live. Kairos package rename is **human-gated** (execution). |
 | CLI entry | `python -m digiquant.olympus.hermes.chain` | Cron + `pipeline-olympus.yml`. Alias the old module if renamed. |
-| Env vars | ~40 `OLYMPUS_*` (Python/CLI, wave 5) plus `OLYMPUS_KAIROS_ROUTING`. Public dashboard keys are `NEXT_PUBLIC_DASHBOARD_*` — do not add `NEXT_PUBLIC_OLYMPUS_*` aliases. |
+| Env vars | Canonical `DIGIQUANT_*` with retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` aliases (`envcompat.py`). Public dashboard keys are `NEXT_PUBLIC_DASHBOARD_*`. |
 | CSS | `.oly-*` (~20 classes), `.accent-atlas`, `.olympus-mark` | Keep `.oly-` as an internal prefix. Users never see it. |
 | npm | workspace folder `frontend/dashboard`, package name `dashboard` | Shipped with wave 3. |
 | CI | `test-dashboard.yml` (was `test-olympus.yml`), `pipeline-olympus.yml`, `test-atlas-graph.yml`, `validate-olympus-pools.yml`, `pipeline-atlas-metrics.yml` | Frontend workflow renamed with the folder. Pipeline names stay until wave 4. |
@@ -201,7 +201,7 @@ Ship **copy before paths, paths before packages, packages before tables**. Front
 | **2** | Public path + redirects + OAuth + Access + Alpaca callback + CSP. `basePath` + `dist/<name>/`. | Med — every redirect and vendor console | Human (auth redirects) |
 | **3** | `frontend/dashboard` folder + npm workspace name. Keep `.oly-*` CSS. | Med | one-hop `develop` |
 | **4** | Python package / CLI / CI workflow names. Compat import shims for one release. | High | two-hop `module/digiquant` |
-| **5** | Env-var aliases only if a public contract needs them. Prefer keeping `OLYMPUS_*`. | Med | ops |
+| **5** | Operator secrets/flags: canonical `DIGIQUANT_*` with retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` aliases. CLI paths `scripts/digiquant_*.py`. Prefer the new names in new env and docs. | Med | ops |
 | **never** | Rewrite old SQL migrations, ADR bodies, issue titles, or `olympus_*` / `atlas_run_diagnostics` table names. | — | — |
 
 Kairos → execution in **code** is a separate, human-gated task. Wave 1 may already say “execution” on the landing page without touching `digiquant.olympus.kairos`.

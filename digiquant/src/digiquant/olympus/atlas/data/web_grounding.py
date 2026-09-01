@@ -16,7 +16,6 @@ Requires ``OPENROUTER_API_KEY``. Fails soft on error or missing key unless
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from functools import lru_cache
 from pathlib import Path
@@ -25,6 +24,8 @@ from typing import (
 )
 
 import yaml
+
+from digiquant.olympus.envcompat import WEB_SEARCH, env_lookup
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 
@@ -38,7 +39,7 @@ class OlympusWebSearchError(RuntimeError):
 
 def olympus_web_search_required() -> bool:
     """Return True when the run must fail if web grounding is unavailable."""
-    return os.environ.get("OLYMPUS_WEB_SEARCH", "").strip().lower() in (
+    return env_lookup(WEB_SEARCH).strip().lower() in (
         "required",
         "1",
         "true",

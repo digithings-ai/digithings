@@ -8,8 +8,8 @@ secret values. Refuses house/system and non-entitled workspaces.
 
 Usage (repo root)::
 
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
-    PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py \\
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_seal_byok.py
+    PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_seal_byok.py \\
         --apply --workspace-id <entitled-uuid>
 """
 

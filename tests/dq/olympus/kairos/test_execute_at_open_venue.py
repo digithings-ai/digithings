@@ -31,7 +31,7 @@ def test_garbage_workspace_env_falls_back_to_house(capsys: pytest.CaptureFixture
     venue = mod.resolve_execution_venue_for_run("not-a-uuid")
     assert venue == "paper_internal"
     err = capsys.readouterr().err
-    assert "not a valid UUID" in err or "OLYMPUS_KAIROS_WORKSPACE_ID" in err
+    assert "not a valid UUID" in err or "DIGIQUANT_EXECUTION_WORKSPACE_ID" in err
 
 
 def test_empty_workspace_env_is_house() -> None:

@@ -673,10 +673,12 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the kill switch to its default-on state for every test in this module.
 
     ``ledger_enabled`` reads the process environment and defaults to **on**, so a
-    developer with ``OLYMPUS_PORTFOLIO_LEDGER=0`` exported would otherwise see the whole
+    developer with ``DIGIQUANT_PORTFOLIO_LEDGER=0`` (or alias
+    ``OLYMPUS_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
     authoritative path silently skipped and the suite still pass.
     """
     monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_PORTFOLIO_LEDGER", raising=False)
 
 
 class TestOpenMarksAreDecimal:
@@ -981,7 +983,7 @@ class TestBuildEventsFromPaperFillsDeclines:
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
-        assert "OLYMPUS_PORTFOLIO_LEDGER" in declined
+        assert "DIGIQUANT_PORTFOLIO_LEDGER" in declined
 
     def test_declines_when_a_ledger_read_raises(self) -> None:
         """Production's migration tail is 065, so the tables are not there yet.

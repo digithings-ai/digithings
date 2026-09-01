@@ -84,7 +84,7 @@ def remaining_hops_unproven(proven: Mapping[str, object] | None = None) -> tuple
 
 
 def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
-    return f"KAIROS_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
+    return f"DIGIQUANT_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
 
 
 def _alpaca_paper_oauth(evidence: RemainingHopEvidence) -> bool:

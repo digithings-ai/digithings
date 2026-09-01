@@ -87,14 +87,14 @@
 
 ```bash
 export SUPABASE_ACCESS_TOKEN="$(tr -d '\n' < .local/secrets/digithings-supabase-pat)"
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
 ```
 
 Check-only (exit 2 until files + required key names exist; never prints values):
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py
 ```
 
 ## Browser tabs left open for human (paused)

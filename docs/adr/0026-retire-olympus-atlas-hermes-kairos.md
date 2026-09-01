@@ -24,6 +24,10 @@ A 2026-08-30 inventory ([docs/plans/2026-08-30-product-rebrand-scope.md](../plan
 
 **Negative / tradeoffs:** `/olympus/` is gone (no 308). Python packages `digiquant.olympus.atlas` and env `OLYMPUS_*` stay until a two-hop `module/digiquant` PR. CSS (`.oly-*`) stays as an internal prefix. The workspace folder is `frontend/dashboard` (npm package `dashboard`). Historical issues and ADRs still say the old names.
 
+## Amendment (2026-09-01)
+
+Wave 5 of the rebrand plan said "prefer keeping `OLYMPUS_*`". Operator secrets, kill switches, and CLI paths now use `DIGIQUANT_*` / `scripts/digiquant_*.py` so merge and env dashboards stay on the product name. Retired names are read-only aliases so live empty kill-switches stay off. Do not set `DIGIQUANT_EXECUTION_ROUTING=1` without an explicit human decision. Do not rewrite SQL, historical ADR bodies, or `.oly-*` CSS. `pipeline-olympus.yml` keeps its filename until after the scheduled house proof (renaming a scheduled GHA on develop would skip the 12:00 UTC run).
+
 ## Links
 
 - Scope: [docs/plans/2026-08-30-product-rebrand-scope.md](../plans/2026-08-30-product-rebrand-scope.md)

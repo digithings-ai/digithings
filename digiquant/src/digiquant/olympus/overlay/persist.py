@@ -3,7 +3,8 @@
 Migration 110 narrows ``anon_read`` on workspace-scoped private books
 (``documents`` / ``positions`` / ``nav_history`` / ``portfolio_metrics``) to the
 house (and house+system for documents). Overlay may persist **documents** once
-an operator sets ``OLYMPUS_OVERLAY_PERSIST=1`` on a target that has 110
+an operator sets ``DIGIQUANT_OVERLAY_PERSIST=1`` (alias ``OLYMPUS_OVERLAY_PERSIST``)
+on a target that has 110
 applied. Cutover 900 is still required before dropping the house teaser for
 anon / free JWTs; it is not the persist precondition.
 
@@ -45,13 +46,14 @@ skipped.
 
 from __future__ import annotations
 
-import os
+from collections.abc import Mapping
 from uuid import UUID
 
+from digiquant.olympus.envcompat import OVERLAY_PERSIST, env_lookup
 from digiquant.olympus.overlay.dispatch import JobStatus
 from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id, system_workspace_id
 
-OVERLAY_PERSIST_ENV = "OLYMPUS_OVERLAY_PERSIST"
+OVERLAY_PERSIST_ENV = OVERLAY_PERSIST
 OVERLAY_DOC_PREFIX = "overlay/"
 LEGACY_BOOK_UNIQUE_CODE = "legacy_book_unique"
 
@@ -86,8 +88,8 @@ class OverlayLegacyBookBlocked(Exception):
         super().__init__(self.message)
 
 
-def overlay_persist_enabled() -> bool:
-    return os.environ.get(OVERLAY_PERSIST_ENV, "").strip() == "1"
+def overlay_persist_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    return env_lookup(OVERLAY_PERSIST_ENV, environ=environ).strip() == "1"
 
 
 def is_private_workspace(workspace_id: UUID | str | None) -> bool:
