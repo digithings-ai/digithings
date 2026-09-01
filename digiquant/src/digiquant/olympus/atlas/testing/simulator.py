@@ -421,7 +421,15 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "PMDirectionMemo": {
         "schema_version": "1.0",
         "date": "2026-04-26",
-        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": "", "confidence": 0.7}],
+        "roster": [
+            {
+                "ticker": "AAPL",
+                "direction": "long",
+                "conviction_rank": 1,
+                "narrative": "",
+                "confidence": 0.7,
+            }
+        ],
         "memo": "synthetic direction memo",
     },
     "RebalanceDecision": {
