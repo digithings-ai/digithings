@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import time
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -46,6 +50,47 @@ def test_run_with_deadline_raises_without_waiting_unbounded() -> None:
     assert elapsed < 2.0, f"deadline wrapper waited {elapsed:.1f}s; must not hang"
 
 
+def test_run_with_deadline_propagates_worker_timeout_error() -> None:
+    def boom() -> None:
+        raise TimeoutError("socket read timed out")
+
+    with pytest.raises(TimeoutError, match="socket read timed out") as excinfo:
+        run_with_deadline(boom, seconds=1.0)
+    assert not isinstance(excinfo.value, PostgrestTimeoutError)
+
+
+def test_deadline_allows_process_exit_while_worker_still_hung() -> None:
+    """Non-daemon workers would pin process exit until the hung call finished."""
+    script = (
+        "import time\n"
+        "from digiquant.olympus.postgrest_timeout import "
+        "PostgrestTimeoutError, run_with_deadline\n"
+        "\n"
+        "def hang() -> None:\n"
+        "    time.sleep(30)\n"
+        "\n"
+        "try:\n"
+        "    run_with_deadline(hang, seconds=0.2)\n"
+        "except PostgrestTimeoutError:\n"
+        "    pass\n"
+    )
+    src = Path(run_with_deadline.__code__.co_filename).resolve().parents[2]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(src)
+    t0 = time.monotonic()
+    proc = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=8,
+        env=env,
+    )
+    wall = time.monotonic() - t0
+    assert proc.returncode == 0, proc.stderr
+    assert wall < 3.0, f"process hung {wall:.1f}s after deadline; daemon thread required"
+
+
 class _HungQuery:
     def select(self, *_a: Any, **_k: Any) -> _HungQuery:
         return self
@@ -78,6 +123,20 @@ def test_last_closes_does_not_wait_unbounded_on_hung_price_history(
         ledger_io._last_closes(client=_HungClient(), tickers={"SPY"}, run_date=RUN_DATE)
     elapsed = time.monotonic() - t0
     assert elapsed < 2.0, f"_last_closes hung for {elapsed:.1f}s on a timed-out client"
+
+
+def test_frozen_symbols_does_not_wait_unbounded_on_hung_paper_executions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ledger_io, "EXECUTE_DEADLINE_SECONDS", 0.05)
+    t0 = time.monotonic()
+    with pytest.raises(PostgrestTimeoutError):
+        ledger_io._frozen_symbols(
+            client=_HungClient(),
+            order_rows=[{"id": "oi-1", "symbol": "SPY", "status": "pending"}],
+        )
+    elapsed = time.monotonic() - t0
+    assert elapsed < 2.0, f"_frozen_symbols hung for {elapsed:.1f}s on a timed-out client"
 
 
 def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
