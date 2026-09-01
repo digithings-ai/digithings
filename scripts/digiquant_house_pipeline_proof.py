@@ -2,18 +2,19 @@
 """Agent-runnable proof that the scheduled house GHA committed after main hotfixes.
 
 Lists ``pipeline-olympus.yml`` runs. A **schedule** success strictly after
-#3334 (2026-08-31T20:39Z) is EPIC house-pipeline acceptance. Never
-``workflow_dispatch``.
+#3334 (2026-08-31T20:39Z) on a ``main`` that is **not** still ``3601f72df``
+is EPIC house-pipeline acceptance. Never ``workflow_dispatch``.
 
 Usage (repo root)::
 
     PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_house_pipeline_proof.py
 
 Exit codes:
-  0 — post-hotfix schedule succeeded
-  2 — post-hotfix schedule completed with failure
-  3 — no post-hotfix schedule yet (waiting for cron ``0 12 * * *``)
-  4 — could not list runs, or the CLI was asked to dispatch
+  0 — schedule success after current ``origin/main`` committer time (and #3334)
+  2 — counting schedule completed with failure
+  3 — no counting schedule yet (waiting for cron ``0 12 * * *``)
+  4 — could not list runs / resolve ``origin/main``, or the CLI was asked to dispatch
+  5 — ``origin/main`` is still UUID-hotfix ``3601f72df`` (merge #3343 → #3348 → #3351 → #3354)
 """
 
 from __future__ import annotations

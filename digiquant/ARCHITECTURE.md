@@ -3353,13 +3353,17 @@ configured.
 
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
 `pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
-on `develop` `207dd0a68`). Exit **0** only for a **schedule** success strictly
-after #3334 on `main` (`2026-08-31T20:39Z`). `workflow_dispatch` never counts.
-Exit **3** until the next `cron: "0 12 * * *"`. Exit **2** if that schedule
-fails. The CLI refuses `--dispatch` / `--apply`. Fail-softs for the last
-schedule's Gemini schema errors are still human-merge on `main` (#3343 → #3348
-→ #3351 → #3354) — merge them before the cron or checkout `ref: main` stays at
-`3601f72df`.
+on `develop` `207dd0a68`). Exit **5** while `origin/main` is still UUID-hotfix
+`3601f72df` — merge fail-softs #3343 → #3348 → #3351 → #3354 before the next
+cron or checkout `ref: main` still misses those writers (the CLI does not list
+runs in that case). `gh run list` `headSha` is the default-branch **trigger**
+(develop), not the job checkout, so counting is `created_at` strictly after
+the later of #3334 (`2026-08-31T20:39Z`) and current `origin/main` committer
+time. Exit **0** only for a **schedule** success after that cutoff.
+`workflow_dispatch` never counts. Exit **3** until a counting
+`cron: "0 12 * * *"` (a 12:00 UTC run that started before fail-softs merged
+does not count). Exit **2** if a counting schedule fails. The CLI refuses
+`--dispatch` / `--apply`.
 
 **Entry points:**
 
