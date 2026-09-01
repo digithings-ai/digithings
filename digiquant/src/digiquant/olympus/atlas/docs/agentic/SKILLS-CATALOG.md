@@ -58,6 +58,8 @@
 | Slug | Role |
 |------|------|
 | `decision-reflector` | Post-decision review |
+| `beliefs-distillation-daily` | Daily short fold of new lessons into prior beliefs |
+| `beliefs-distillation` | Full beliefs rewrite (`refresh_scope=beliefs` / backlog catch-up) |
 | `pipeline-evolution` | Pipeline improvement tracking |
 
 ---

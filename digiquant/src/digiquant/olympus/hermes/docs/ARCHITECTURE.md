@@ -25,8 +25,9 @@ Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_his
 `theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
 append. Book/ledger writes stamp house `workspace_id` (migration 097) while keeping
 date-only upsert conflict targets until cutover 113. Phase 9 evolution LLM is **not**
-on the daily path; beliefs distillation is
-on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
+on the daily path; beliefs distillation is a **daily short fold** after
+publish (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG` selects
+the full rewrite). Empty-lesson days still publish a same-date `beliefs` document.
 
 House CLI close-out (`cli_main`, not `run_atlas_then_hermes`): after a non-retry
 exit, fail-soft K5 `dispatch_house_notifications_after_chain` attempts today's
@@ -608,8 +609,9 @@ so anything that can reach that block with an error-free state becomes an invisi
 Three holes are closed:
 
 1. **Beliefs distillation is fail-soft.** `_run_beliefs_fold` wraps both call sites (the
-   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is an
-   optional on-demand backlog fold (spec §11.1), not a run deliverable — a failure there must
+   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is a
+   daily house-run deliverable (short fold; full rewrite on operator scope or backlog) —
+   a failure there must
    never kill a run that already committed a book. It records `("chain", "beliefs")` instead,
    which degrades the run. Overlay nested chain **skips** the fold
    (`skip_overlay_shared_register`): `decision_log` has no `workspace_id`, and stamping

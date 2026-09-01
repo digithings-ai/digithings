@@ -60,8 +60,9 @@ class ChainDeps:
     Atlas-side deps (preflight, triage, preflight-reflect) come from
     :class:`AtlasGraphDeps`. Hermes-side deps (H1–H9 thesis path) come from
     :class:`HermesGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
-    daily graph — beliefs distillation is on-demand via
-    :func:`run_beliefs_distillation_if_triggered` (spec §11.1). The terminal
+    daily graph — beliefs distillation runs after publish via
+    :func:`run_beliefs_distillation_if_triggered` (daily short fold; full
+    rewrite on ``refresh_scope=beliefs`` or backlog). The terminal
     ``publish`` :class:`PublishDeps` is shared — one Supabase client writes
     everything at the end.
     """
@@ -323,8 +324,8 @@ def resolve_run_id(atlas_input: AtlasInput) -> str:
 def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
     """Fold the beliefs backlog, fail-soft (#1737).
 
-    Beliefs distillation is an *optional* on-demand backlog fold (spec §11.1), not a run
-    deliverable — yet both call sites were bare, so an LLM/Supabase error inside it escaped
+    Beliefs distillation is a daily short fold after publish (WP-I), not a graph node.
+    LLM/Supabase errors must not kill a run that already committed a book. Record it as
     ``run_atlas_then_hermes`` and killed a run that had already committed a book. Record it as
     a chain-level error (so the run reports ``degraded``, not ``ok``) and continue: the
     diagnostics row and the caller's exit code then describe what actually happened.
@@ -345,7 +346,7 @@ def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: A
             run_type=_legacy_run_type(atlas_input.refresh_scope),
             workspace_id=state.config.workspace_id,
         )
-    except Exception as exc:  # an optional backlog fold must never kill a booked run
+    except Exception as exc:  # a daily fold must never kill a booked run
         _logger.exception("chain: beliefs distillation failed; continuing")
         _record_chain_error(state, "beliefs", exc)
 
@@ -469,7 +470,7 @@ def run_atlas_then_hermes(
         # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
 
-        # Automatic beliefs backlog fold (on-demand — not a daily graph node).
+        # Daily short fold (WP-I) — always publishes a same-date beliefs document.
         _run_beliefs_fold(state, deps, atlas_input)
         return state
     except BaseException as exc:
