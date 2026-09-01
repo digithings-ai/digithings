@@ -49,6 +49,7 @@ class TestSimulatorContract:
             "SentimentNewsReport",
             "MacroRegimeReport",
             "DigestSnapshot",
+            "DigestSubsection",
             "RebalanceDecision",
             "RiskDebateSummary",
             "Phase9Artifacts",

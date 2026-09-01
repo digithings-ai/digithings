@@ -89,7 +89,7 @@ def test_edit_skills_also_carry_research_memo_rules() -> None:
 
 
 def test_digest_skill_does_not_get_research_memo_rules() -> None:
-    """Digest stays DigestSnapshot JSON until WP-E; do not ask it for a memo body."""
+    """Digest briefing has its own rules; do not append the Phase 1–5 memo skeleton."""
     body = load_skill("digest")
     assert RESEARCH_MEMO_RULES not in body
     edit = load_skill_edit("digest")

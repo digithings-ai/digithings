@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
-from digiquant.olympus.atlas.snapshot import DigestPayload, RiskItem
+from digiquant.olympus.atlas.phases.phase7_synthesis import RiskItem
+from digiquant.olympus.atlas.snapshot import DigestPayload
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -27,22 +27,22 @@ def _digest(**radar: object) -> dict[str, object]:
 
 def test_horizon_hourse_typo_maps_to_horizon_hours() -> None:
     """Live digest edit merge failed on ``horizon_hourse`` and fell back to full."""
-    digest = DigestSnapshot.model_validate(
-        _digest(
-            horizon_hourse=72,
-            label="Breadth fade",
-            trigger="Three consecutive daily breadth prints.",
-        )
+    item = RiskItem.model_validate(
+        {
+            "horizon_hourse": 72,
+            "label": "Breadth fade",
+            "trigger": "Three consecutive daily breadth prints.",
+        }
     )
-    assert digest.risk_radar[0].horizon_hours == 72
-    assert digest.risk_radar[0].label == "Breadth fade"
+    assert item.horizon_hours == 72
+    assert item.label == "Breadth fade"
 
 
 def test_canonical_horizon_hours_still_validates() -> None:
-    digest = DigestSnapshot.model_validate(
-        _digest(horizon_hours=24, label="FOMC", trigger="Minutes drop.")
+    item = RiskItem.model_validate(
+        {"horizon_hours": 24, "label": "FOMC", "trigger": "Minutes drop."}
     )
-    assert digest.risk_radar[0].horizon_hours == 24
+    assert item.horizon_hours == 24
 
 
 def test_snapshot_mirror_accepts_the_same_typo() -> None:
@@ -56,16 +56,16 @@ def test_snapshot_mirror_accepts_the_same_typo() -> None:
 
 def test_alias_overwrites_stale_canonical_on_dual_key_merge() -> None:
     """Edit merge can leave both keys; the typo is the newly patched value."""
-    digest = DigestSnapshot.model_validate(
-        _digest(
-            horizon_hours=24,
-            horizon_hourse=72,
-            label="Breadth fade",
-            trigger="Three consecutive daily breadth prints.",
-        )
-    )
-    assert digest.risk_radar[0].horizon_hours == 72
     item = RiskItem.model_validate(
+        {
+            "horizon_hours": 24,
+            "horizon_hourse": 72,
+            "label": "Breadth fade",
+            "trigger": "Three consecutive daily breadth prints.",
+        }
+    )
+    assert item.horizon_hours == 72
+    item2 = RiskItem.model_validate(
         {
             "horizon_hours": 24,
             "horizon_hourse": 48,
@@ -73,9 +73,9 @@ def test_alias_overwrites_stale_canonical_on_dual_key_merge() -> None:
             "trigger": "Core above 0.3%.",
         }
     )
-    assert item.horizon_hours == 48
+    assert item2.horizon_hours == 48
 
 
 def test_missing_horizon_still_rejected() -> None:
     with pytest.raises(ValidationError, match="horizon_hours"):
-        DigestSnapshot.model_validate(_digest(label="No horizon", trigger="Missing."))
+        RiskItem.model_validate({"label": "No horizon", "trigger": "Missing."})

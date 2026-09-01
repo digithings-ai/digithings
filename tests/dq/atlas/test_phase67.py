@@ -24,6 +24,7 @@ from digiquant.olympus.atlas.phases.phase7_synthesis import (
     _enforce_research_only_boundary,
     _per_segment_char_budget,
     _slim_segment_body,
+    _subsection_phase_inputs,
     build_phase7,
 )
 from digiquant.olympus.atlas.skills import load_skill
@@ -36,7 +37,8 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp, merge_document_patch
+from digiquant.olympus.atlas.testing.simulator import parse_schema_name
+from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
 from digiquant.olympus.hermes.models.analyst import AnalystPayload
 from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
 from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
@@ -211,40 +213,56 @@ def _digest_payload() -> str:
         {
             "segment": "master-digest",
             "date": "2026-04-26",
-            "bias": "neutral",
-            "headline": "Late-cycle consolidation",
-            "material_findings": [],
+            "body": (
+                "# Daily Digest — 2026-04-26\n\n"
+                "## Market regime\n\nGrowth slowing\n\n"
+                "## Alt-data\n\nRetail bullish; CTAs neutral\n\n"
+                "## Institutional\n\nModest outflows\n\n"
+                "## Asset classes\n\nBonds rallying\n\n"
+                "## US equities\n\nNarrow breadth\n"
+            ),
+            "regime_label": "",
             "sources": [],
-            "notes": "",
-            "market_regime_snapshot": "Growth slowing",
-            "alt_data_dashboard": "Retail bullish; CTAs neutral",
-            "institutional_summary": "Modest outflows",
-            "asset_classes_summary": "Bonds rallying",
-            "us_equities_summary": "Narrow breadth",
-            "thesis_tracker": "",
-            "portfolio_recommendations": "",
-            "actionable_summary": [],
-            "risk_radar": [],
-            "segment_freshness": {},  # will be overwritten by deterministic derivation
+            "segment_freshness": {},
         }
     )
+
+
+def _subsection_payload(slug: str = "macro") -> str:
+    return json.dumps(
+        {
+            "slug": slug,
+            "date": "2026-04-26",
+            "body": f"## {slug}\n\nGrowth slowing",
+            "sources": [],
+        }
+    )
+
+
+def _fake_phase7_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+    name = parse_schema_name(msgs)
+    if name == "DigestSubsection":
+        slug = "macro"
+        for part in msgs[1]["content"]:
+            if isinstance(part, dict) and str(part.get("text", "")).startswith("PHASE_INPUTS"):
+                try:
+                    payload = json.loads(part["text"].split(":", 1)[1].strip())
+                except (ValueError, IndexError):
+                    payload = {}
+                slug = str(payload.get("subsection") or "macro")
+                break
+        return _subsection_payload(slug)
+    return _digest_payload()
 
 
 @pytest.mark.unit
 class TestPhase7Synthesis:
     def test_digest_synthesized_and_freshness_overwritten(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
-            user_block = msgs[1]["content"]
-            schema_part = next(
-                p
-                for p in user_block
-                if isinstance(p, dict) and "OUTPUT_SCHEMA" in p.get("text", "")
-            )
-            assert DigestSnapshot.__name__ in schema_part["text"]
-            return _digest_payload()
+            return _fake_phase7_completion(_m, msgs)
 
         with patch(
             "digigraph.graph.research_agent.completion_text",
@@ -315,32 +333,38 @@ class TestPhase7Synthesis:
             ops=[
                 PatchOp(
                     op="set",
-                    path="/headline",
-                    value="Updated headline",
+                    path="/body",
+                    value="# Daily Digest — 2026-04-26\n\n## Market regime\n\nGrowth slowing after CPI\n",
                     reason="macro shift",
-                ),
-                PatchOp(
-                    op="set",
-                    path="/market_regime_snapshot",
-                    value="Growth slowing after CPI",
-                    reason="regime refresh",
                 ),
             ],
         )
-        expected = merge_document_patch(prior_digest, doc_patch).materialized
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSubsection
+
+        def fake_agent(*, output_model: type, **kwargs: Any) -> Any:
+            del kwargs
+            if output_model is DocumentPatch:
+                return doc_patch
+            if output_model is DigestSubsection:
+                return DigestSubsection(
+                    slug="macro",
+                    date=date(2026, 4, 26),
+                    body="## Macro\n\nGrowth slowing after CPI",
+                )
+            return DigestSnapshot.model_validate(json.loads(_digest_payload()))
+
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
 
         with patch(
             "digiquant.olympus.atlas.phases.phase7_synthesis.run_research_agent",
-            return_value=doc_patch,
+            side_effect=fake_agent,
         ):
             final = AtlasResearchState.model_validate(compiled.invoke(state))
 
         digest = final.phase7_digest
         assert digest is not None
-        assert digest["headline"] == expected["headline"]
-        assert digest["market_regime_snapshot"] == expected["market_regime_snapshot"]
+        assert "Growth slowing after CPI" in digest["body"]
         assert digest["segment_freshness"]["bonds"]["source"] == "today"
         assert "digest-delta" in final.document_deltas
 
@@ -350,33 +374,37 @@ class TestPhase7Synthesis:
 
 @pytest.mark.unit
 class TestPhase7ResearchOnlyBoundary:
-    def test_enforce_strips_position_fields(self) -> None:
+    def test_enforce_strips_trade_verbs_from_body(self) -> None:
         digest = DigestSnapshot.model_validate(
             {
                 "segment": "master-digest",
                 "date": "2026-04-26",
-                "bias": "neutral",
-                "headline": "Test",
-                "market_regime_snapshot": "Growth slowing",
-                "alt_data_dashboard": "Neutral",
-                "institutional_summary": "Flows flat",
-                "asset_classes_summary": "Mixed",
-                "us_equities_summary": "Narrow breadth",
-                "thesis_tracker": "SPY momentum: intact",
-                "portfolio_recommendations": "Overweight XLK; underweight XLF",
+                "body": (
+                    "# Daily Digest\n\n"
+                    "Overweight XLK; underweight XLF. Reduce exposure to cyclicals.\n"
+                ),
             }
         )
         stripped = _enforce_research_only_boundary(digest)
-        assert stripped.thesis_tracker == ""
-        assert stripped.portfolio_recommendations == ""
+        lowered = stripped.body.lower()
+        assert "overweight" not in lowered
+        assert "underweight" not in lowered
+        assert "reduce exposure" not in lowered
+        published = json.loads(json.dumps(stripped.model_dump(mode="json")))
+        # Extras may remain on the model; the stitcher publishes a thin envelope.
+        assert "body" in published
 
     def test_position_fields_stripped_after_synthesis(self) -> None:
         """LLM output with position fields must not leak into persisted digest."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
-        def fake(_m: str, _msgs: list[dict[str, Any]], **_: Any) -> str:
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            name = parse_schema_name(msgs)
+            if name == "DigestSubsection":
+                return _fake_phase7_completion(_m, msgs)
             payload = json.loads(_digest_payload())
+            payload["body"] = "# Daily Digest\n\nOverweight XLK; trim XLF.\n"
             payload["thesis_tracker"] = "SPY momentum: intact"
             payload["portfolio_recommendations"] = "Overweight XLK; trim XLF"
             return json.dumps(payload)
@@ -386,8 +414,11 @@ class TestPhase7ResearchOnlyBoundary:
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert final.phase7_digest is not None
-        assert final.phase7_digest["thesis_tracker"] == ""
-        assert final.phase7_digest["portfolio_recommendations"] == ""
+        assert "thesis_tracker" not in final.phase7_digest
+        assert "portfolio_recommendations" not in final.phase7_digest
+        lowered = final.phase7_digest["body"].lower()
+        assert "overweight" not in lowered
+        assert "trim" not in lowered
 
 
 # ─── Phase 7 today-only digest inputs (#927) ────────────────────────────────
@@ -522,7 +553,7 @@ class TestPhase7TodayOnlyInputs:
             "alt-politician-signals": _carried_slot("alt-politician-signals"),
         }
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         captured: list[dict[str, Any]] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -530,19 +561,18 @@ class TestPhase7TodayOnlyInputs:
                 if isinstance(part, dict) and part.get("text", "").startswith("PHASE_INPUTS"):
                     captured.append(json.loads(part["text"].split(":", 1)[1].strip()))
                     break
-            return _digest_payload()
+            return _fake_phase7_completion(_m, msgs)
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             compiled.invoke(state)
 
         assert captured, "LLM must have been called"
-        phase_inputs = captured[0]
-        # Filtered phase4 has only the fresh "bonds"; the raw bag has 5 entries.
-        assert set(phase_inputs["phase4"]) == {"bonds"}
-        assert len(phase_inputs["phase4"]) < len(state.phase4_outputs)
-        # Filtered phase1 has only the fresh "alt-sentiment-news"; raw bag has 4.
-        assert set(phase_inputs["phase1"]) == {"alt-sentiment-news"}
-        assert len(phase_inputs["phase1"]) < len(state.phase1_outputs)
+        asset = next(c for c in captured if c.get("subsection") == "asset-classes")
+        alt = next(c for c in captured if c.get("subsection") == "alt-data")
+        assert set(asset["phase4"]) == {"bonds"}
+        assert len(asset["phase4"]) < len(state.phase4_outputs)
+        assert set(alt["phase1"]) == {"alt-sentiment-news"}
+        assert len(alt["phase1"]) < len(state.phase1_outputs)
 
 
 # ─── Phase 7 strip trade verbs from actionable_summary (#927) ───────────────
@@ -551,43 +581,20 @@ class TestPhase7TodayOnlyInputs:
 @pytest.mark.unit
 class TestPhase7StripTradeVerbs:
     def test_trade_verbs_rewritten_to_research_language(self) -> None:
-        """Trade/allocation verbs in ``actionable_summary`` are rewritten to
-        watchlist/research language; ``portfolio_recommendations`` stays empty.
-        """
+        """Trade/allocation verbs in the briefing body are rewritten."""
         digest = DigestSnapshot.model_validate(
             {
                 "segment": "master-digest",
                 "date": "2026-04-26",
-                "bias": "neutral",
-                "headline": "Test",
-                "market_regime_snapshot": "Growth slowing",
-                "alt_data_dashboard": "Neutral",
-                "institutional_summary": "Flows flat",
-                "asset_classes_summary": "Mixed",
-                "us_equities_summary": "Narrow breadth",
-                "portfolio_recommendations": "",
-                "actionable_summary": [
-                    {
-                        "priority": 1,
-                        "label": "Overweight semiconductors into earnings",
-                        "rationale": "Add to AI exposure; reduce exposure to financials.",
-                    },
-                    {
-                        "priority": 2,
-                        "label": "Rotate into defensives",
-                        "rationale": "Trim cyclicals and increase exposure to staples.",
-                    },
-                ],
+                "body": (
+                    "Overweight semiconductors into earnings. "
+                    "Add to AI exposure; reduce exposure to financials. "
+                    "Rotate into defensives. Trim cyclicals and increase exposure to staples."
+                ),
             }
         )
         stripped = _enforce_research_only_boundary(digest)
-
-        # portfolio_recommendations stays empty (existing #859 behavior).
-        assert stripped.portfolio_recommendations == ""
-
-        joined = " ".join(
-            f"{item.label} {item.rationale}".lower() for item in stripped.actionable_summary
-        )
+        lowered = stripped.body.lower()
         for verb in (
             "overweight",
             "underweight",
@@ -597,9 +604,7 @@ class TestPhase7StripTradeVerbs:
             "trim",
             "rotate into",
         ):
-            assert verb not in joined, f"trade verb {verb!r} must be rewritten"
-        # Items are preserved (rewritten, not dropped).
-        assert len(stripped.actionable_summary) == 2
+            assert verb not in lowered, f"trade verb {verb!r} must be rewritten"
 
     def test_research_language_left_untouched(self) -> None:
         """Watchlist/research phrasing must pass through unchanged."""
@@ -607,26 +612,15 @@ class TestPhase7StripTradeVerbs:
             {
                 "segment": "master-digest",
                 "date": "2026-04-26",
-                "bias": "neutral",
-                "headline": "Test",
-                "market_regime_snapshot": "Growth slowing",
-                "alt_data_dashboard": "Neutral",
-                "institutional_summary": "Flows flat",
-                "asset_classes_summary": "Mixed",
-                "us_equities_summary": "Narrow breadth",
-                "actionable_summary": [
-                    {
-                        "priority": 1,
-                        "label": "Watch semiconductor breadth",
-                        "rationale": "Monitor AI capex commentary into earnings.",
-                    },
-                ],
+                "body": (
+                    "## Watchlist\n\n"
+                    "Watch semiconductor breadth. Monitor AI capex commentary into earnings."
+                ),
             }
         )
         stripped = _enforce_research_only_boundary(digest)
-        item = stripped.actionable_summary[0]
-        assert item.label == "Watch semiconductor breadth"
-        assert item.rationale == "Monitor AI capex commentary into earnings."
+        assert "Watch semiconductor breadth" in stripped.body
+        assert "Monitor AI capex commentary into earnings." in stripped.body
 
 
 # ─── H5 unified analyst tests ───────────────────────────────────────────────
@@ -922,7 +916,7 @@ class TestDigestInputBudget:
         """Guard against a vacuous budget pass: verbose bodies are genuinely
         truncated and extension prose is dropped in the assembled inputs."""
         state = _full_baseline_state(sector_count=20)
-        phase_inputs = _digest_phase_inputs(state)
+        phase_inputs = _subsection_phase_inputs("us-equities", state)
         body = phase_inputs["phase5"]["sector-0"]["body"]
         # WP-C: the markdown memo is the digest input; JSON findings/slots are dropped.
         assert isinstance(body.get("body"), str) and body["body"].strip()
@@ -955,7 +949,10 @@ class TestDigestInputBudget:
 def _valid_prior_digest(day: str) -> dict[str, Any]:
     payload = json.loads(_digest_payload())
     payload["date"] = day
-    payload["headline"] = "Prior-day headline"
+    payload["body"] = (
+        f"# Daily Digest — {day}\n\n## Headline\n\nPrior-day headline\n\n"
+        "## Market regime\n\nGrowth slowing\n"
+    )
     return payload
 
 
@@ -979,7 +976,7 @@ class TestDigestFailureVisibility:
                 }
             }
         )
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
 
         overflow = RuntimeError(
             "BadRequestError 400: endpoint maximum context length is 64000 tokens, requested ~90690"
@@ -995,7 +992,7 @@ class TestDigestFailureVisibility:
         # Carried-forward provenance stamped on the payload.
         assert digest["carried_from"] == "2026-04-25"
         assert "carried_forward" in digest["continuity"]
-        assert digest["headline"] == "Prior-day headline"  # content is the prior's
+        assert "Prior-day headline" in digest["body"]
 
         # The run is degraded (not 'ok'), and the failure LEADS the error summary.
         summary = diagnostics.summarize_run(final)
@@ -1007,12 +1004,12 @@ class TestDigestFailureVisibility:
     def test_successful_synthesis_has_no_carried_marker(self) -> None:
         """A fresh synthesis must NOT carry a provenance marker — the marker is the
         signal that distinguishes carried-forward from fresh (#1559)."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
         with patch(
             "digigraph.graph.research_agent.completion_text",
-            side_effect=lambda _m, _msgs, **_: _digest_payload(),
+            side_effect=_fake_phase7_completion,
         ):
             final = AtlasResearchState.model_validate(compiled.invoke(state))
 
