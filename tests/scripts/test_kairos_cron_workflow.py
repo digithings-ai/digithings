@@ -6,9 +6,8 @@ digest / Mailgun must never share ``pipeline-olympus.yml``'s Hermes chain job. T
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
 ``hermes.chain`` on that job would be a production apply against Observer.
 
-``cursor/*`` branches cannot write ``.github/workflows/``. Copy the spec onto
-a ``chore/`` or ``feat/`` branch as ``kairos-cron-check.yml``. If that file
-exists, it must match the spec byte-for-byte.
+Install is ``.github/workflows/kairos-cron-check.yml`` copied from the spec
+byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
 """
 
 from __future__ import annotations
@@ -117,9 +116,8 @@ class TestKairosCronSpecIsProbeOnly:
         assert "--all-extras" not in blob
         assert "nautilus" not in blob.lower()
 
-    def test_installed_workflow_matches_spec_when_present(self) -> None:
-        if not INSTALLED.is_file():
-            return
+    def test_installed_workflow_is_present_and_matches_spec(self) -> None:
+        assert INSTALLED.is_file()
         assert INSTALLED.read_text(encoding="utf-8") == SPEC.read_text(encoding="utf-8")
 
 
