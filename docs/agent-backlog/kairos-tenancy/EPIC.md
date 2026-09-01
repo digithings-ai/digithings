@@ -257,6 +257,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **Landed 2026-08-31T21:43Z — [#3338](https://github.com/digithings-ai/digithings/pull/3338) on `develop` (`db3745b7e`):** `114_economic_calendar_authenticated_select.sql`. Do not merge [#3321](https://github.com/digithings-ai/digithings/pull/3321). Live Pages site `/build-info.json` is `3601f72df` (`2026-08-31T20:42:57Z`, after #3334); still `/olympus` 200 / `/dashboard` 404.
 
+**2026-09-01T00:05Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`6ea1846ec`) dual-exports `/olympus` + `/dashboard` from `frontend/olympus`. **Human-merge only**; parallel to house Python hotfixes. Live still `/olympus` 200 / `/dashboard` 404 until that merge + Pages rebuild. Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then EF.
+
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
 [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
