@@ -182,7 +182,8 @@ export type LibraryDocumentView =
   | 'bias_row'
   | 'diffable'
   | 'analyst'
-  | 'risk_debate';
+  | 'risk_debate'
+  | 'pm_direction';
 
 export interface LibraryDocumentResult {
   id: string;
@@ -206,6 +207,9 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
   // `dt === 'rebalance_decision'` covers any future payload-typed variant.
   if (key === 'rebalance-decision.json' || key === 'pm-rebalance' || dt === 'rebalance_decision') {
     return 'rebalance';
+  }
+  if (key === 'pm-direction-memo' || dt === 'pm_direction_memo') {
+    return 'pm_direction';
   }
   if (key === 'delta-request.json' || dt === 'delta_request') return 'delta_request';
   if (key === 'inputs' || dt === 'inputs') return 'inputs';

@@ -15,7 +15,7 @@ Hermes consumes the daily Atlas digest (`DigestPayload`) and runs **H1–H9**:
 | H3–H4 | Vehicle map + opportunity screener | `thesis_vehicles`, focus roster |
 | H5 | Unified `AnalystPayload` per ticker | `phase_hermes.asset_analysts` |
 | H6 | PM↔analyst deliberation (per ticker) | deliberation transcript + summary |
-| H7 | PM direction memo | `PMDirectionMemo` — **no weights** |
+| H7 | PM direction memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
 | H8 | Deterministic risk sizing (7E) | `phase_hermes.sized_book` |
 | H9 | Terminal `commit_run` | `positions`, nav, brief, `decision_log` |
 
