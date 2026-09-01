@@ -319,12 +319,59 @@ and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
 negative. Do not publish `btc_optimized` / composite variants to digiquant.io
 from this WP. No live-trading.
 
-### Remaining-book curve search (frozen index)
+### Strategy research loop
+
+Building a strategy is **trial and error**, not a stack of PRs. Keep one
+working branch. The inner loop is: try a change → see how the book
+behaves → keep or revert. Creativity lives in *what* you try (indicator,
+transform, knee, rate). Speed lives in *not* wrapping each try in a
+review/merge cycle.
+
+Do this, in any order the evidence asks for — skip what you already
+trust:
+
+- **Engine first.** Confirm remaining-book actually trades through the
+  sample (Nautilus halt, dust, pending) *before* hunting extras. A
+  simulator that sells in 2025 and an engine stuck in 2023 is not a
+  research disagreement — it is a bug.
+- **One evaluator per question.** `curve_simulator` is for fast
+  add/drop and curve search (Linux-safe, #42). Nautilus tearsheet is
+  for “does this book sell / allocate the way we think?” Never mix
+  simulator OOS, full-sample vs-flat, and Nautilus fills in one
+  sentence. Buy-and-hold is the public comparable.
+- **Look at fills.** Allocation step + sized buy/sell dots. If buys
+  drip through a bull or sells never cluster at a top, the curve or
+  the index is wrong — do not “fix” it with more PRs or more copy.
+  No percent-cash line (inverse of allocated).
+- **Index then curve, then again.** Add or drop an extra (and its
+  *transform* — 90-day rolling-z will sit rich through a bull).
+  Re-run `sdca-optimize-curve` on **that** composite. Do not freeze
+  weights, fit a curve, then change weights and ship the old curve.
+- **Research feeds the next trial**, it does not become the session.
+  A catalog (TradingView, on-chain, macro) is a list of *candidates*.
+  Pull one, wire data you can actually fetch, look at fills, keep or
+  drop. Do not port 27 scripts or open a research PR per indicator.
+- **Persist last.** Sidecars and charts are cheap. `settings.json` /
+  `btc_optimized` / the public page change when a trial is the
+  candidate, not when the search starts. `--push-supabase` stays
+  operator-only. Public names (asset then type: **BTC-SDCA**) wait
+  until the book looks right.
+
+Anti-patterns from the first BTC-SDCA build:
+
+- A PR per extra hunt, chart, copy pass, and sibling “freeze index”
+  vs “widen index” branch — then a day of consolidating GitHub.
+- Joint extra search on a curve fitted to power law, then treating
+  weight 0 as “extras are useless.”
+- Publishing honesty chrome (“power-law remaining-book”) before the
+  fills chart looked like buy-cheap / sell-rich.
+
+### Remaining-book curve search
 
 When fills look like a slow drip instead of clustering at bottoms/tops,
-search the **curve** on today's published composite — do **not** re-search
-indicator weights. The checked-in `btc_optimized` shape was fit on a
-3-member freeze and then applied to the richer published index.
+search the **curve** on **today's** composite. If you just changed
+indicator weights or transforms, re-run this search — do not reuse a
+curve fitted to a different index.
 
 ```bash
 # Linux-safe curve_simulator. Never --push-supabase.
@@ -339,8 +386,10 @@ PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
 
 Search space is `SdcaCurveShape` only (`buy_max_rate`/`sell_max_rate` up to
 40%/day, knees inside the published 25/70 dead zone, curvature up to 5).
-Objective is `total_return_pct`. vs-flat-DCA is logged, never
-`beats_flat_dca_oos`. Gates require 2025 sells and remaining-book identity.
+Objective is `total_return_pct` plus fill concentration. vs-flat-DCA is
+logged, never `beats_flat_dca_oos`. Gates require remaining-book identity
+and sells in rich windows (including a recent top when the sample has
+one).
 
 ### SDCA test commands
 
