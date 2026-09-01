@@ -135,6 +135,17 @@ without planner graph nodes or enforce-mode promotion. Pipeline simulation
 (`tests/dq/atlas/test_pipeline_simulation.py`) extends the WP11.5 durable
 H5/H6 lineage round-trip with graph-level planner-node guards.
 
+### H1 review persistence
+
+H1 (`persist_thesis_review`) refreshes status/evidence on **existing market**
+theses only. It does not mint rows for LLM-invented ids, and it skips
+vehicle-shaped ids (`vehicle-{ticker}` and the live typo `veicle-{ticker}`).
+Those ghosts landed in the house register on 2026-08-31 / 2026-09-01 as
+`thesis_kind` null + price-technicals notes, then ranked as market theses
+26–28 on the olympus list. H5 owns canonical `vehicle-{ticker}` rows;
+`splitTheses` on the dashboard also routes vehicle-shaped ids out of the
+market spine even when `thesis_kind` is null.
+
 ### H2 market-thesis identity
 
 Every market proposal has a stable lowercase `topic_key` plus an explicit
