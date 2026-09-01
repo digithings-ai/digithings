@@ -290,6 +290,43 @@ def _digest_inbox_confirmed(environ: Mapping[str, str]) -> bool:
     return raw in {"1", "true", "yes"}
 
 
+def _emit_remaining_product_state(
+    *,
+    http: HttpJson,
+    jwt: str,
+    anon_key: str | None,
+    functions_base: str,
+    environ: Mapping[str, str],
+    log: Callable[[str], None],
+    log_err: Callable[[str], None],
+) -> tuple[str, ...] | None:
+    """Log remaining-hop product state. ``None`` when Settings GETs are not 200."""
+    evidence = collect_remaining_evidence(
+        http=http,
+        jwt=jwt,
+        anon_key=anon_key,
+        functions_base=functions_base,
+    )
+    if not evidence.surface_http_ok:
+        log_err(
+            "Remaining-hop Settings GETs failed "
+            "(profile/brokers/jobs/fills/notifications/log must be HTTP 200)."
+        )
+        return None
+    evidence = evidence.model_copy(
+        update={"digest_inbox_confirmed": _digest_inbox_confirmed(environ)}
+    )
+    proven = proven_remaining_hops(evidence)
+    blockers = remaining_hop_blockers(evidence)
+    log("kairos_staging_e2e: remaining hop product-state")
+    for name in REMAINING_LIVE_HOPS:
+        if proven[name]:
+            log(f"  {name} proven=True")
+        else:
+            log(f"  {name} proven=False blocker={blockers.get(name, '')}")
+    return remaining_hops_unproven(proven)
+
+
 def collect_remaining_evidence(
     *,
     http: HttpJson,
@@ -471,36 +508,23 @@ def run_staging_e2e(
             log(f"  {row.label} http={row.http} code={code} ok={row.ok}")
             if not row.ok:
                 failed = True
+        unproven = _emit_remaining_product_state(
+            http=http,
+            jwt=jwt,
+            anon_key=_anon_from_env(env),
+            functions_base=functions_base,
+            environ=env,
+            log=log,
+            log_err=err,
+        )
         if failed:
             err(
                 "Observer hops failed — app-urls path contract, "
                 "redeem-invite not mounted, or TIER_FORBIDDEN / read regression."
             )
             return 3
-        evidence = collect_remaining_evidence(
-            http=http,
-            jwt=jwt,
-            anon_key=_anon_from_env(env),
-            functions_base=functions_base,
-        )
-        if not evidence.surface_http_ok:
-            err(
-                "Remaining-hop Settings GETs failed "
-                "(profile/brokers/jobs/fills/notifications/log must be HTTP 200)."
-            )
+        if unproven is None:
             return 3
-        evidence = evidence.model_copy(
-            update={"digest_inbox_confirmed": _digest_inbox_confirmed(env)}
-        )
-        proven = proven_remaining_hops(evidence)
-        blockers = remaining_hop_blockers(evidence)
-        log("kairos_staging_e2e: remaining hop product-state")
-        for name in REMAINING_LIVE_HOPS:
-            if proven[name]:
-                log(f"  {name} proven=True")
-            else:
-                log(f"  {name} proven=False blocker={blockers.get(name, '')}")
-        unproven = remaining_hops_unproven(proven)
         if not unproven:
             log("kairos_staging_e2e: all remaining hops proven from Settings reads")
             return 0
@@ -577,6 +601,7 @@ __all__ = [
     "RemainingHopEvidence",
     "STAGING_CHECKOUT_BODY",
     "_digest_inbox_confirmed",
+    "_emit_remaining_product_state",
     "collect_remaining_evidence",
     "format_remaining_hops_failure",
     "hop_ok",

@@ -198,6 +198,12 @@ def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
     blob = "\n".join(logs)
     assert "redeem-invite not mounted" in blob
     assert "POST /settings/access/redeem-invite http=404" in blob
+    # Path-contract / redeem-invite misses must still name remaining hops.
+    # Live 2026-09-01: Observer JWT Settings GETs are 200 while app-urls pin
+    # /olympus and redeem-invite 404s — hiding hops behind exit 3 hid E2E state.
+    assert "remaining hop product-state" in blob
+    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=overlay_not_succeeded" in blob
 
 
 @pytest.mark.unit
