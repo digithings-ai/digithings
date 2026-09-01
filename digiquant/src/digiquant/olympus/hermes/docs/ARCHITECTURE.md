@@ -450,7 +450,10 @@ The prune is deliberately **not** fail-soft. That trade is worth naming precisel
 non-transactional gap between `book_portfolio` and `save_commit_manifest` is **not
 closed** — a raise from the prune (or any failure between the two calls) still leaves a
 booked-but-unmanifested date, and the prune itself is one more thing that can raise
-there. What changes is that re-attempts now **converge across** the gap instead of
+there. A hung PostgREST read in `append_commit_chain` (between `book_portfolio` and
+the ledger insert) is the same gap: it must raise within the #3319 deadline (60s
+read / 70s hard ceiling) so the outer retry can fire, not sit until the 240-minute
+job cancel. What changes is that re-attempts now **converge across** the gap instead of
 stacking: the date-keyed guard sees no manifest, re-commits, and re-prunes to the last
 writer's book. Making the prune fail-soft would trade a loud, self-healing gap for a
 silent orphan in a published performance series, which is the defect this closes.

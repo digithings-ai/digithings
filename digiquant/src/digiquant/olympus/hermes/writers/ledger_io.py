@@ -56,6 +56,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
+from digiquant.olympus.postgrest_timeout import EXECUTE_DEADLINE_SECONDS, run_with_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,11 @@ class LedgerAppend:
     unpriced_symbols: list[str]
 
 
+def _execute(query: Any) -> Any:
+    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
+    return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
+
+
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
     """The single INSERT gate for every ledger table.
 
@@ -133,7 +139,7 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
         if isinstance(ws, UUID):
             payload["workspace_id"] = str(ws)
         stamped.append(payload)
-    client.table(table).insert(stamped).execute()
+    _execute(client.table(table).insert(stamped))
 
 
 def _is_cash(ticker: Any) -> bool:
@@ -145,7 +151,7 @@ def _symbol(raw: Any) -> str:
 
 
 def _rows_for_date(*, client: SupabaseClient, table: str, run_date: date) -> list[dict[str, Any]]:
-    resp = client.table(table).select("*").eq("run_date", run_date.isoformat()).execute()
+    resp = _execute(client.table(table).select("*").eq("run_date", run_date.isoformat()))
     return list(resp.data or [])
 
 
@@ -186,13 +192,12 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
     ordered = sorted(tickers)
     latest: dict[str, tuple[str, float]] = {}
     for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
-        resp = (
+        resp = _execute(
             client.table(_PRICE_HISTORY)
             .select("date, ticker, close")
             .in_("ticker", ordered[start : start + _CLOSE_TICKER_BATCH])
             .gte("date", floor)
             .lt("date", run_date.isoformat())
-            .execute()
         )
         for row in resp.data or []:
             ticker = _symbol(row.get("ticker"))
@@ -235,11 +240,8 @@ def _frozen_symbols(*, client: SupabaseClient, order_rows: list[dict[str, Any]])
         return frozen
     # ``paper_executions`` carries no ``run_date`` column — it is reachable only
     # through the order intents it references, so filter on those ids alone.
-    resp = (
-        client.table(PAPER_EXECUTIONS)
-        .select("order_intent_id")
-        .in_("order_intent_id", order_ids)
-        .execute()
+    resp = _execute(
+        client.table(PAPER_EXECUTIONS).select("order_intent_id").in_("order_intent_id", order_ids)
     )
     filled = {str(r.get("order_intent_id")) for r in resp.data or []}
     frozen.update(
