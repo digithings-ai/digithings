@@ -58,4 +58,8 @@ describe('pipeline topology', () => {
       pipelineNodeExplanation('selection', 'selection:deliberation')?.description,
     ).toMatch(/challenge|debate|deliberat/i);
   });
+
+  it('hides commit from the operator graph (ledger-only commit-run)', () => {
+    expect(stageById('decision')!.subSteps.find((s) => s.id === 'commit')?.hiddenFromGraph).toBe(true);
+  });
 });

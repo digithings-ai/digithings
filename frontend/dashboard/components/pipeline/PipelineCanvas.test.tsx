@@ -31,6 +31,7 @@ import PipelineCanvas, {
   focusRectForTarget,
   mobileWalkthroughScrollTarget,
   movePipelineWalkthrough,
+  planCanvasNodeClick,
   planWalkthroughSelection,
   walkthroughModeFromViewport,
   walkthroughNavigationTarget,
@@ -91,9 +92,10 @@ describe('PipelineCanvas', () => {
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    // +1 vs pre-#1945 baseline: Inputs Attention plan leaf
-    expect(html).toContain('1 of 24');
+    // Decision/commit is graph-hidden; walkthrough is stages + visible sub-steps.
+    expect(html).toContain('1 of 23');
     expect(buildPipelineWalkthrough(emptyDay).map((node) => node.label)).toContain('Risk sizing');
+    expect(buildPipelineWalkthrough(emptyDay).some((node) => node.id === 'decision:commit')).toBe(false);
   });
 
   it('adds real fan-out artifacts to the walkthrough without placeholder stops', () => {
@@ -105,7 +107,7 @@ describe('PipelineCanvas', () => {
     };
     const nodes = buildPipelineWalkthrough(day);
 
-    expect(nodes).toHaveLength(25);
+    expect(nodes).toHaveLength(24);
     expect(nodes.find((node) => node.documentKey === 'alt-onchain-positioning')).toBeDefined();
     expect(nodes.some((node) => node.label === 'Alt-data 2')).toBe(false);
   });
@@ -119,6 +121,38 @@ describe('PipelineCanvas', () => {
     expect(html).not.toContain('select-none overflow-hidden cursor-grab');
   });
 
+  it('keeps Decision tappable on mobile when it binds pm-rebalance', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['pm-rebalance']),
+      artifacts: [],
+    };
+    const withBook = renderToStaticMarkup(
+      createElement(PipelineCanvas, {
+        day,
+        initialExpansion: {
+          expandedStages: new Set<PipelineStageId>(['decision']),
+          expandedFanouts: new Set<string>(),
+        },
+        onNodeActivate: () => {},
+      }),
+    );
+    const withoutBook = renderToStaticMarkup(
+      createElement(PipelineCanvas, {
+        day: emptyDay,
+        initialExpansion: {
+          expandedStages: new Set<PipelineStageId>(['decision']),
+          expandedFanouts: new Set<string>(),
+        },
+        onNodeActivate: () => {},
+      }),
+    );
+
+    expect(withBook).toContain('data-mobile-node-id="decision"');
+    expect(withoutBook).not.toContain('data-mobile-node-id="decision"');
+  });
+
   it('renders a touch-first navigator over the complete walkthrough', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
@@ -126,7 +160,7 @@ describe('PipelineCanvas', () => {
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    expect(html).toContain('1 of 24');
+    expect(html).toContain('1 of 23');
     expect(html).toContain('Preflight / market data');
     expect(html).toContain('md:hidden');
     expect(html).toContain('fixed inset-x-0 bottom-0');
@@ -135,12 +169,13 @@ describe('PipelineCanvas', () => {
     expect(html).not.toContain('About this step');
     expect(html).not.toContain('>Open<');
     expect(html).not.toContain('>About<');
+    expect(html).not.toContain('Pipeline guide');
   });
 
   it('clamps full walkthrough keyboard navigation at both ends', () => {
-    expect(movePipelineWalkthrough(0, -1, 24)).toBe(0);
-    expect(movePipelineWalkthrough(0, 1, 24)).toBe(1);
-    expect(movePipelineWalkthrough(23, 1, 24)).toBe(23);
+    expect(movePipelineWalkthrough(0, -1, 23)).toBe(0);
+    expect(movePipelineWalkthrough(0, 1, 23)).toBe(1);
+    expect(movePipelineWalkthrough(22, 1, 23)).toBe(22);
   });
 
   it('opens the selected walkthrough stop during desktop arrow traversal', () => {
@@ -168,13 +203,14 @@ describe('PipelineCanvas', () => {
     expect(walkthroughModeFromViewport(false)).toBe('mobile');
   });
 
-  it('desktop walkthrough steps expand the stop and open detail', () => {
+  it('desktop walkthrough expands the stop but opens detail only when a document exists', () => {
     const nodes = buildPipelineWalkthrough(emptyDay);
     const target = walkthroughNavigationTarget(nodes, 0, 1, 'desktop');
     expect(target).not.toBeNull();
     const plan = planWalkthroughSelection(target!.node, target!.openDetail);
 
-    expect(plan.activateDetail).toBe(true);
+    expect(target!.openDetail).toBe(true);
+    expect(plan.activateDetail).toBe(Boolean(target!.node.documentKey));
     expect([...plan.expansion.expandedStages]).toEqual([target!.node.stageId]);
     expect(plan.focusTarget).toEqual(
       target!.node.kind === 'stage'
@@ -210,7 +246,7 @@ describe('PipelineCanvas', () => {
     const desktop = planWalkthroughSelection(fanoutParent!, true);
     const mobile = planWalkthroughSelection(fanoutParent!, false);
 
-    expect(desktop.activateDetail).toBe(true);
+    expect(desktop.activateDetail).toBe(false);
     expect(mobile.activateDetail).toBe(false);
     expect([...desktop.expansion.expandedFanouts]).toEqual(['research:alt-data']);
     expect([...mobile.expansion.expandedFanouts]).toEqual(['research:alt-data']);
@@ -275,28 +311,141 @@ describe('PipelineCanvas', () => {
   });
 });
 
+describe('planCanvasNodeClick', () => {
+  const emptyExpansion = { expandedStages: new Set<PipelineStageId>(), expandedFanouts: new Set<string>() };
+
+  it('stage clicks expand in place and do not activate without a document', () => {
+    const research: LaidOutNode = {
+      id: 'research',
+      kind: 'stage',
+      stageId: 'research',
+      label: 'Research',
+      x: 184,
+      y: 0,
+      width: 160,
+      height: 48,
+    };
+    const plan = planCanvasNodeClick(research, emptyExpansion);
+    expect(plan.activate).toBe(false);
+    expect([...plan.expansion.expandedStages]).toEqual(['research']);
+    expect(plan.focusTarget).toEqual({ kind: 'stage', stageId: 'research' });
+  });
+
+  it('Decision with pm-rebalance activates the booked book without a guide pane', () => {
+    const decision: LaidOutNode = {
+      id: 'decision',
+      kind: 'stage',
+      stageId: 'decision',
+      label: 'Decision',
+      x: 736,
+      y: 0,
+      width: 160,
+      height: 48,
+      documentKey: 'pm-rebalance',
+    };
+    const plan = planCanvasNodeClick(decision, emptyExpansion);
+    expect(plan.activate).toBe(true);
+    expect([...plan.expansion.expandedStages]).toEqual([]);
+    expect(plan.focusTarget).toEqual({ kind: 'node', nodeId: 'decision' });
+  });
+
+  it('Decision without pm-rebalance does not activate or expand', () => {
+    const decision: LaidOutNode = {
+      id: 'decision',
+      kind: 'stage',
+      stageId: 'decision',
+      label: 'Decision',
+      x: 736,
+      y: 0,
+      width: 160,
+      height: 48,
+    };
+    const plan = planCanvasNodeClick(decision, emptyExpansion);
+    expect(plan.activate).toBe(false);
+    expect([...plan.expansion.expandedStages]).toEqual([]);
+  });
+
+  it('fan-out parents expand under the row and do not open the sidebar', () => {
+    const alt: LaidOutNode = {
+      id: 'research:alt-data',
+      kind: 'substep',
+      stageId: 'research',
+      label: 'Alt-data',
+      x: 184,
+      y: 60,
+      width: 160,
+      height: 48,
+    };
+    const plan = planCanvasNodeClick(alt, {
+      expandedStages: new Set(['research']),
+      expandedFanouts: new Set(),
+    });
+    expect(plan.activate).toBe(false);
+    expect([...plan.expansion.expandedFanouts]).toEqual(['research:alt-data']);
+  });
+
+  it('named documents open the sidebar', () => {
+    const digest: LaidOutNode = {
+      id: 'synthesis:digest',
+      kind: 'substep',
+      stageId: 'synthesis',
+      label: 'Daily digest',
+      x: 368,
+      y: 60,
+      width: 160,
+      height: 48,
+      documentKey: 'digest-delta',
+    };
+    const plan = planCanvasNodeClick(digest, {
+      expandedStages: new Set(['synthesis']),
+      expandedFanouts: new Set(),
+    });
+    expect(plan.activate).toBe(true);
+    expect(plan.focusTarget).toEqual({ kind: 'node', nodeId: 'synthesis:digest' });
+  });
+
+  it('state-only leaves do not open the sidebar', () => {
+    const thesis: LaidOutNode = {
+      id: 'selection:thesis',
+      kind: 'substep',
+      stageId: 'selection',
+      label: 'Thesis framing',
+      x: 552,
+      y: 60,
+      width: 160,
+      height: 48,
+      stateOnly: true,
+    };
+    const plan = planCanvasNodeClick(thesis, {
+      expandedStages: new Set(['selection']),
+      expandedFanouts: new Set(),
+    });
+    expect(plan.activate).toBe(false);
+  });
+});
+
 describe('focusRectForTarget', () => {
   const nodes: LaidOutNode[] = [
     { id: 'research', kind: 'stage', stageId: 'research', label: 'Research', x: 184, y: 0, width: 160, height: 48 },
-    { id: 'research:sectors', kind: 'substep', stageId: 'research', label: 'Sectors', x: 368, y: 0, width: 160, height: 48 },
-    { id: 'research:sectors:0', kind: 'fanout-branch', stageId: 'research', label: 'Technology', x: 368, y: 60, width: 160, height: 48 },
-    { id: 'research:sectors:1', kind: 'fanout-branch', stageId: 'research', label: 'Financials', x: 368, y: 120, width: 160, height: 48 },
-    { id: 'synthesis', kind: 'stage', stageId: 'synthesis', label: 'Synthesis', x: 552, y: 0, width: 160, height: 48 },
+    { id: 'research:sectors', kind: 'substep', stageId: 'research', label: 'Sectors', x: 184, y: 60, width: 160, height: 48 },
+    { id: 'research:sectors:0', kind: 'fanout-branch', stageId: 'research', label: 'Technology', x: 184, y: 120, width: 160, height: 48 },
+    { id: 'research:sectors:1', kind: 'fanout-branch', stageId: 'research', label: 'Financials', x: 184, y: 180, width: 160, height: 48 },
+    { id: 'synthesis', kind: 'stage', stageId: 'synthesis', label: 'Synthesis', x: 368, y: 0, width: 160, height: 48 },
   ];
 
-  it('returns the full revealed stage bounds', () => {
+  it('returns the full revealed stage bounds stacked under the card', () => {
     expect(focusRectForTarget(nodes, { kind: 'stage', stageId: 'research' })).toEqual({
       x: 184,
       y: 0,
-      width: 344,
-      height: 168,
+      width: 160,
+      height: 228,
     });
   });
 
   it('limits fan-out focus to its parent and branches', () => {
     expect(focusRectForTarget(nodes, { kind: 'fanout', nodeId: 'research:sectors' })).toEqual({
-      x: 368,
-      y: 0,
+      x: 184,
+      y: 60,
       width: 160,
       height: 168,
     });

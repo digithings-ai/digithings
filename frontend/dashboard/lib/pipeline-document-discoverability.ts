@@ -55,9 +55,7 @@ const TOPOLOGY_LEAF_KEYS = new Set<string>([
 ]);
 
 function isTopologyLeafKey(documentKey: string): boolean {
-  const k = documentKey.toLowerCase();
-  if (TOPOLOGY_LEAF_KEYS.has(k)) return true;
-  return k.startsWith('commit-run/');
+  return TOPOLOGY_LEAF_KEYS.has(documentKey.toLowerCase());
 }
 
 /**

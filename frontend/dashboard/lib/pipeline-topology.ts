@@ -20,6 +20,11 @@ export interface SubStep {
   stateOnly?: boolean;
   /** Publishes an artifact only when its trigger fires; absence is not a failed persistence. */
   conditionalArtifact?: boolean;
+  /**
+   * Ledger/status only — do not emit this sub-step on the operator graph.
+   * Clicking the parent stage must not open this node as a reading surface.
+   */
+  hiddenFromGraph?: boolean;
 }
 export interface StageDef {
   id: PipelineStageId;
@@ -174,6 +179,7 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       id: 'commit',
       label: 'Commit',
       description: 'Publishes the final run decision and its traceable commit record for inspection.',
+      hiddenFromGraph: true,
     },
   ]},
   {

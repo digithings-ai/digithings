@@ -63,7 +63,7 @@ describe('PipelineNode', () => {
       y: 0,
       width: 160,
       height: 48,
-      // no documentKey — opens topology guidance instead of a run document
+      // no documentKey — click expands or focuses; it must not open a guide pane
     };
 
     it('keeps a leaf substep with no documentKey keyboard and pointer activatable', () => {
