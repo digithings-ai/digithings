@@ -43,7 +43,7 @@ export interface PipelineNodeExplanation {
 
 // Mirrors the real backend graph: Atlas phases (preflight → research fan-outs →
 // consolidate → digest) then Hermes H1–H9 (thesis framing → screener → analysts →
-// deliberation → PM direction → risk sizing → commit) then the on-demand beliefs
+// deliberation → PM direction → risk sizing → commit) then the daily beliefs
 // fold (learning/beliefs_distillation.py, runs after the terminal publish).
 export const PIPELINE_TOPOLOGY: StageDef[] = [
   {
@@ -174,16 +174,14 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
   {
     id: 'learning',
     label: 'Learning',
-    description: 'Folds resolved outcomes back into durable beliefs when the learning trigger is active.',
+    description: 'Folds resolved outcomes into a same-date beliefs document on every house run.',
     subSteps: [
-    // On-demand beliefs distillation (#1383): publishes document_key `beliefs`
-    // only on trigger days (resolved backlog > threshold or refresh_scope=beliefs),
-    // so the node renders inert on most days — that is expected, not drift.
+    // Daily short fold (WP-I): publishes document_key `beliefs` on every house
+    // run date. Full rewrite remains refresh_scope=beliefs (or backlog > 20).
     {
       id: 'beliefs',
       label: 'Beliefs fold',
-      description: 'Distills eligible resolved evidence into updated beliefs for use by future runs.',
-      conditionalArtifact: true,
+      description: 'Distills newly resolved lessons into updated beliefs, or carries prior beliefs when nothing new landed.',
     },
   ]},
 ];

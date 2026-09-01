@@ -1820,8 +1820,11 @@ Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research a
 (`inputs`, `bias-row` when present, segments, digest) — Hermes terminal persist is
 **H9 `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
 plus per-phase inspectable documents (H1 `thesis/thesis-review`, H4 `opportunity-screener`).
-Beliefs distillation runs **on demand**
-(`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
+Beliefs distillation runs **daily** as a short fold after the house chain
+(`today's unfolded lessons` + prior beliefs body). ``refresh_scope=beliefs`` is the
+full rewrite; an unfolded backlog above ``OLYMPUS_BELIEFS_BACKLOG`` is an additional
+full-fold catch-up. Empty-lesson days still publish a same-date `beliefs` document
+that carries the prior body.
 
 #### Day-over-day continuity contract (#859)
 
@@ -2151,9 +2154,9 @@ assuming it is always present.
   - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
     flush is counted and reported as incomplete coverage, never submitted. This is a reachable
     path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
-    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
-    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
-    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    outside any graph node, so LLM-backed provider calls are orphaned when the fold
+    calls the model (daily short fold with new lessons, or a full rewrite). Empty-lesson
+    days carry the prior body with no LLM call. And a run with no `DiagnosticsDeps` has
     no run identifier at all, so no node runs and no logical calls are produced *at the source*.
     A flush can therefore carry attributed and orphaned records together, which is why
     eligibility is decided per record rather than per flush.
@@ -2261,7 +2264,8 @@ so the outer pipeline retry can fire; it must not sit until the GitHub Actions
 240-minute job cancel. The worker is daemon so process exit is not joined to the
 hung call (`ThreadPoolExecutor` workers would reintroduce the stall). No client-level retries on this path (disconnect retries
 are a separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
-beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
+beliefs distillation publishes a same-date document on every house run (short fold;
+full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes

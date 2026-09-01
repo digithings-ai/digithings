@@ -40,8 +40,9 @@ describe('pipeline topology', () => {
     expect(stageById('inputs')!.subSteps.find((s) => s.id === 'attention-plan')!.conditionalArtifact)
       .toBe(true);
   });
-  it('learning stage holds the on-demand beliefs fold (#1383)', () => {
+  it('learning stage holds the daily beliefs fold (WP-I)', () => {
     expect(stageById('learning')!.subSteps.map((s) => s.id)).toEqual(['beliefs']);
+    expect(stageById('learning')!.subSteps[0]!.conditionalArtifact).toBeUndefined();
   });
 
   it('explains every stage and sub-step for the guided pipeline view', () => {

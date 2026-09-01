@@ -78,8 +78,9 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
   `thesis_vehicles`, publishes brief, appends `decision_log`
 - **Atlas `publish_phase`:** research segments + digest, plus inspectable `inputs`
   and `bias-row` (fail-soft; chain terminal after Hermes)
-- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node.
-  Overlay nested chain skips the fold so persist-on cannot stamp house `decision_log`.
+- **Beliefs:** daily short fold via `run_beliefs_distillation_if_triggered` after publish
+  (not an in-graph node). `refresh_scope=beliefs` is the full rewrite. Overlay nested
+  chain skips the fold so persist-on cannot stamp house `decision_log`.
 
 ## Testing
 

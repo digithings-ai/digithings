@@ -124,7 +124,8 @@ export function bandReached(bands: TopologyEvidenceBands, stageId: PipelineStage
   const band = topologyBand(stageId);
   if (band === 'atlas') return bands.atlas;
   if (band === 'hermes') return bands.hermes;
-  return bands.learning;
+  // WP-I: house chain folds beliefs after Hermes terminal on every run.
+  return bands.learning || bands.hermes;
 }
 
 export function resolveSubStepRunStatus(

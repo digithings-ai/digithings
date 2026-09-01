@@ -28,7 +28,7 @@
 |-------|------|-------------------|
 | **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
 | **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
-| **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); beliefs on-demand | `--refresh-scope beliefs` |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); daily beliefs short fold | `--refresh-scope beliefs` (full rewrite) |
 
 **Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
 synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
