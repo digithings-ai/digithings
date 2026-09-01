@@ -131,9 +131,10 @@ under **`/olympus`**, no loopback). Live Pages still serve `/olympus/*`
 is **404**. Develop `app-url.ts` and the staging harness pin `/dashboard/...`.
 **Do not redeploy** settings EF with `/dashboard` URLs while live Pages 404
 that path — Alpaca/billing returns would miss. `kairos_pages_dashboard_gate.py
---apply` now also fetches the live settings ESZIP after deploy and exits **6**
-unless that bundle has executable redeem-invite + `/dashboard` pins (v32 has
-neither). Do **not** weaken
+--apply` now also fetches the live ESZIP for settings / checkout / portal
+after deploy and exits **6** unless each bundle has executable `/dashboard`
+pins and settings has redeem-invite (v32 has `/olympus` on all three).
+Do **not** weaken
 `public_app_urls_ok` to accept `/olympus`; that is a deploy/path contract, not
 a remaining hop. Checkout return URLs on the live EF are
 `/olympus/settings/?tab=billing`. Brokers tab reads the **public** Alpaca OAuth

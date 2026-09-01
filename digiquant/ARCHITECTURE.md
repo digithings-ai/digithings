@@ -3363,14 +3363,15 @@ as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab f
 live Pages. `--apply` deploys `settings` / `create-checkout-session` /
 `customer-portal` only when `/dashboard` login/callback/settings are 200, this
 checkout mounts `POST /access/redeem-invite` and pins `/dashboard` in
-`_shared/app-url.ts`, **and** the live settings ESZIP
-(`GET https://api.supabase.com/v1/projects/{ref}/functions/settings/body`)
-contains those same executable markers (line comments do not count). Settings
-v32 is `/olympus` and has no redeem-invite — `--apply` must not report success
-while that bundle is still live. Exit 3 while Pages 404s; exit 5 if checkout
-source is stale; exit 6 if the live bundle is still stale. Never weakens
-`public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN` for the post-deploy
-ESZIP proof (never logged).
+`_shared/app-url.ts`, **and** the live ESZIP for each of those three functions
+(`GET https://api.supabase.com/v1/projects/{ref}/functions/{slug}/body`)
+contains those executable markers (line and block comments do not count).
+Settings also requires `method === "POST" && path === "/access/redeem-invite"`.
+Live v32 is `/olympus` on settings, checkout, and portal — `--apply` must not
+report success while any of those bundles is still stale. Exit 3 while Pages
+404s; exit 5 if checkout source is stale; exit 6 if a live bundle is still
+stale. Never weakens `public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN`
+for the post-deploy ESZIP proof (never logged).
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
 Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /

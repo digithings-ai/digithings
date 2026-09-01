@@ -21,7 +21,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
 # PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
 # --apply also requires this checkout to pin /dashboard app URLs and
 # POST /access/redeem-invite (exit 5 if run from main / olympus-pinned EF source)
-# and the live settings ESZIP to contain those markers (exit 6 while v32).
+# and each live settings/checkout/portal ESZIP to contain those markers
+# (exit 6 while any bundle is still v32 /olympus).
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
 # when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply

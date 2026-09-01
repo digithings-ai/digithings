@@ -15,6 +15,8 @@ from digiquant.olympus.kairos.pages_dashboard_gate import (
     EXIT_PAGES_DASHBOARD_NOT_READY,
     PROBE_USER_AGENT,
     LiveSettingsFetchError,
+    app_url_bundle_ready,
+    fetch_live_function_bundle,
     fetch_live_settings_bundle,
     format_pages_dashboard_blocked,
     probe_pages_dashboard,
@@ -38,7 +40,7 @@ V32_LIVE_BUNDLE = (
 )
 
 
-def _ready_live() -> str:
+def _ready_live(_slug: str) -> str:
     return READY_LIVE_BUNDLE
 
 
@@ -331,7 +333,8 @@ def test_apply_passes_project_ref_to_live_fetch() -> None:
         log=logs.append,
         probe=_ok_probe,
         run=lambda _argv: None,
-        live_source=lambda: fetch_live_settings_bundle(
+        live_source=lambda _slug: fetch_live_function_bundle(
+            _slug,
             project_ref="alternate-project",
             token="sbp_test",
             http_bytes=http_bytes,
@@ -340,7 +343,8 @@ def test_apply_passes_project_ref_to_live_fetch() -> None:
     )
     assert code == 0
     assert seen == [
-        "https://api.supabase.com/v1/projects/alternate-project/functions/settings/body"
+        f"https://api.supabase.com/v1/projects/alternate-project/functions/{name}/body"
+        for name in DASHBOARD_URL_FUNCTIONS
     ]
 
 
@@ -356,11 +360,11 @@ def test_apply_refuses_when_live_bundle_still_v32() -> None:
         log=logs.append,
         probe=_ok_probe,
         run=run,
-        live_source=lambda: V32_LIVE_BUNDLE,
+        live_source=lambda _slug: V32_LIVE_BUNDLE,
     )
     assert code == EXIT_LIVE_EF_STALE
     assert deployed  # deploy already ran; live proof is after
-    assert any("live settings" in msg for msg in logs)
+    assert any("dashboard" in msg or "olympus" in msg or "redeem-invite" in msg for msg in logs)
 
 
 def test_apply_refuses_when_live_fetch_fails() -> None:
@@ -369,7 +373,7 @@ def test_apply_refuses_when_live_fetch_fails() -> None:
     def run(argv: list[str] | tuple[str, ...]) -> None:
         deployed.append(" ".join(argv))
 
-    def boom() -> str:
+    def boom(_slug: str) -> str:
         raise LiveSettingsFetchError("SUPABASE_ACCESS_TOKEN missing")
 
     logs: list[str] = []
@@ -382,11 +386,11 @@ def test_apply_refuses_when_live_fetch_fails() -> None:
     )
     assert code == EXIT_LIVE_EF_STALE
     assert deployed
-    assert any("live settings" in msg or "ACCESS_TOKEN" in msg for msg in logs)
+    assert any("ACCESS_TOKEN" in msg for msg in logs)
 
 
 def test_check_does_not_fetch_live_bundle() -> None:
-    def fail_live() -> str:
+    def fail_live(_slug: str) -> str:
         raise AssertionError("check must not fetch live settings")
 
     code = run_pages_dashboard_gate(
@@ -458,3 +462,35 @@ def test_incomplete_read_maps_to_fetch_error(monkeypatch: pytest.MonkeyPatch) ->
     )
     with pytest.raises(LiveSettingsFetchError, match="fetch failed"):
         fetch_live_settings_bundle(token="sbp_test")
+
+
+def test_fetch_rejects_unknown_function() -> None:
+    with pytest.raises(LiveSettingsFetchError, match="unknown function"):
+        fetch_live_function_bundle("stripe-webhook", token="x", http_bytes=lambda _url: b"nope")
+
+
+def test_apply_refuses_when_checkout_bundle_still_olympus() -> None:
+    def mixed(slug: str) -> str:
+        if slug == "settings":
+            return READY_LIVE_BUNDLE
+        return V32_LIVE_BUNDLE
+
+    logs: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=logs.append,
+        probe=_ok_probe,
+        run=lambda _argv: None,
+        live_source=mixed,
+    )
+    assert code == EXIT_LIVE_EF_STALE
+    assert any("create-checkout-session" in msg for msg in logs)
+    assert any("dashboard" in msg or "olympus" in msg for msg in logs)
+
+
+def test_app_url_bundle_ready_accepts_dashboard_pins() -> None:
+    ok, _reason = app_url_bundle_ready(READY_LIVE_BUNDLE, where="live checkout bundle")
+    assert ok is True
+    stale, reason = app_url_bundle_ready(V32_LIVE_BUNDLE, where="live checkout bundle")
+    assert stale is False
+    assert "dashboard" in reason or "olympus" in reason
