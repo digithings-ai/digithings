@@ -215,7 +215,8 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
   `ALPACA_API_KEY_SYNC_HELD`. Fill remaining-hop also requires Alpaca paper
   OAuth (an `api_key` fill cannot prove it).
 - Combined `kairos_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
-  + sync store probes pass once `CORE_SUPABASE_*` are set.
+  + sync + route store probes pass once `CORE_SUPABASE_*` are set. Route `--check`
+  logs `routing_enabled=false` and does not submit.
 - Route `--check` / `--dry-run` never submit. `--all` requires
   `OLYMPUS_KAIROS_ROUTING=1` (default off → exit 3 `KAIROS_ROUTING_DISABLED`).
   `python scripts/kairos_route_cron.py`. Do not add the kill switch to
@@ -289,6 +290,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 **2026-09-01T00:20Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`332265428`) is CI-green (dual-export + review coverage) and **human-merge only**. Live still `/olympus` 200 / `/dashboard` 404. Fail-closed EF resume is `python scripts/kairos_pages_dashboard_gate.py` (exit 3 while 404; `--apply` only after 200). Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then the gate `--apply`.
 
 **2026-09-01T00:05Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`6ea1846ec`) dual-exports `/olympus` + `/dashboard` from `frontend/olympus`. **Human-merge only**; parallel to house Python hotfixes. Live still `/olympus` 200 / `/dashboard` 404 until that merge + Pages rebuild. Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then EF.
+
+**2026-09-01T03:11Z — [#3369](https://github.com/digithings-ai/digithings/pull/3369) on `develop` (`986082b76`):** fail-closed overlay route cron (`python scripts/kairos_route_cron.py`). Kill switch still defaults **off**. Do not set `OLYMPUS_KAIROS_ROUTING=1` without an explicit human decision. Does not merge human-gated main PRs. Next scheduled house GHA is still the live book-commit proof.
 
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft

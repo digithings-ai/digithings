@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Agent-runnable loud-fail probe for overlay, kairos sync, and Mailgun cron env.
+"""Agent-runnable loud-fail probe for overlay, kairos sync, route, and Mailgun cron env.
 
 Usage (repo root)::
 
     PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 
-Exit 0 when all three --check probes pass (names only; no dispatch / no send).
+Exit 0 when all four --check probes pass (names only; no dispatch / no send).
 Exit 2 when any probe is unconfigured.
 """
 

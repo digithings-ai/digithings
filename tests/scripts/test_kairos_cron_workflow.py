@@ -106,6 +106,7 @@ class TestKairosCronSpecIsProbeOnly:
         assert "scripts/kairos_cron_check.py" in blob
         assert "digiquant.olympus.overlay --dry-run" in blob
         assert "digiquant.olympus.kairos.sync_cron --dry-run" in blob
+        assert "digiquant.olympus.kairos.route_cron --dry-run" in blob
         for token in FORBIDDEN_APPLY:
             assert token not in blob, token
 
@@ -127,6 +128,7 @@ class TestHousePipelineDoesNotRunOverlay:
         assert "digiquant.olympus.hermes.chain" in blob
         assert "olympus.overlay" not in blob
         assert "kairos.sync_cron" not in blob
+        assert "kairos.route_cron" not in blob
         assert "kairos_cron_check" not in blob
         assert "notify.dispatch" not in blob
 
