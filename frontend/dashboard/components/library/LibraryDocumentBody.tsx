@@ -44,7 +44,7 @@ export default function LibraryDocumentBody({
     case 'risk_debate':
       // `risk_debate` reuses DeliberationDocumentView which now renders the
       // aggressive/conservative/key-tension shape alongside the bull/bear debate.
-      return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+      return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} docDate={docDate} />;
     case 'analyst':
       return <AnalystDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'evolution_sources':

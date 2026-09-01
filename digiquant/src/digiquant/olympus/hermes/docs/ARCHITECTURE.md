@@ -252,7 +252,15 @@ semantics are unchanged.
 Per-ticker cyclic sub-graph (not a single LLM call):
 
 - `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
-- `h6_analyst_response` — analyst responds or revises stance
+- `h6_analyst_response` — analyst answers in meeting prose (not a second H5 report)
+
+Skills: PM loads `deliberation` (`skills/deliberation/deliberation-full.md`). The
+analyst reply loads `deliberation-analyst-response`
+(`skills/deliberation/analyst-response-full.md`) — **not** H5 `asset-analyst`.
+`load_skill_full` resolves hyphenated nested slugs to a sibling `*-full.md` in
+the parent skill folder. When the PM converges, that close is always appended
+to `transcript` so the last bubble is the PM; the dashboard does not repeat a
+`## Conclusion` heading under a non-empty chat.
 
 Termination when either side sets `converged=true` after the min-rounds floor
 (default 2; infra timeouts / max-rounds cap only for early exit). On fingerprint

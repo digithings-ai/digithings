@@ -72,16 +72,57 @@ describe('DeliberationDocumentView H6 chat mapping', () => {
       createElement(DeliberationDocumentView, {
         payload: DBO_H6_PAYLOAD,
         fallbackMarkdown: '# Fallback',
+        docDate: '2026-08-27',
       }),
     );
     expect(html).toContain('data-testid="deliberation-chat"');
     expect(html).toContain('Conviction 0 on a non-held ticker is a non-call');
     expect(html).toContain('Response to PM Challenges');
-    expect(html).toContain('Conclusion');
     // Must not treat chat turns as empty bull/bear round cards
     expect(html).not.toContain('Debate rounds');
     expect(html).not.toContain('Bull thesis');
     expect(html).not.toContain('Bear thesis');
+  });
+
+  it('opens with the H5 analyst report, then role-labeled bubbles without Round N titles', () => {
+    const html = renderToStaticMarkup(
+      createElement(DeliberationDocumentView, {
+        payload: DBO_H6_PAYLOAD,
+        fallbackMarkdown: '# Fallback',
+        docDate: '2026-08-27',
+      }),
+    );
+    const h5Idx = html.indexOf('data-testid="deliberation-h5-report"');
+    const chatIdx = html.indexOf('data-testid="deliberation-chat"');
+    expect(h5Idx).toBeGreaterThanOrEqual(0);
+    expect(chatIdx).toBeGreaterThan(h5Idx);
+    expect(html).toContain('DBO analyst report');
+    expect(html).toMatch(/analyst(%2F|\/)DBO/);
+    expect(html).toContain('data-role="pm"');
+    expect(html).toContain('data-role="analyst"');
+    expect(html).not.toContain('Round 1');
+    expect(html).not.toContain('>Conclusion<');
+    expect(html).not.toContain('>Conclusion</');
+  });
+
+  it('shows Conclusion only when the transcript is empty (carry)', () => {
+    const html = renderToStaticMarkup(
+      createElement(DeliberationDocumentView, {
+        payload: {
+          ticker: 'SHY',
+          net_stance: 'neutral',
+          conclusion: 'Prior agreement still stands.',
+          carried: true,
+          carry_reason: 'fingerprint_skip',
+          converged: true,
+          rounds: [],
+        },
+        fallbackMarkdown: '',
+        docDate: '2026-08-27',
+      }),
+    );
+    expect(html).toContain('Conclusion');
+    expect(html).toContain('Prior agreement still stands');
   });
 
   it('still renders legacy bull/bear debate summaries', () => {

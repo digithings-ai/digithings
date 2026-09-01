@@ -606,16 +606,18 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
   }
 
   if (chat.length) {
-    out.push('## Deliberation', '');
+    if (ticker) {
+      out.push(`**Analyst report:** \`analyst/${ticker}\``, '');
+    }
+    out.push('## Meeting', '');
     chat.forEach((turn) => {
       const role = s(turn.role).trim().toLowerCase() === 'pm' ? 'PM' : 'Analyst';
-      const n = s(turn.round_number).trim();
-      out.push(`### ${role}${n ? ` · Round ${n}` : ''}`, '', cleanMemoProse(s(turn.message)), '');
+      out.push(`**${role}**`, '', cleanMemoProse(s(turn.message)), '');
     });
   }
 
   const conclusion = s(p.conclusion).trim();
-  if (conclusion) out.push('## Conclusion', '', cleanMemoProse(conclusion), '');
+  if (conclusion && chat.length === 0) out.push('## Conclusion', '', cleanMemoProse(conclusion), '');
 
   const bull = s(p.bull_thesis).trim();
   const bear = s(p.bear_thesis).trim();
