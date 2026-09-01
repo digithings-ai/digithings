@@ -121,6 +121,38 @@ describe('PipelineCanvas', () => {
     expect(html).not.toContain('select-none overflow-hidden cursor-grab');
   });
 
+  it('keeps Decision tappable on mobile when it binds pm-rebalance', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['pm-rebalance']),
+      artifacts: [],
+    };
+    const withBook = renderToStaticMarkup(
+      createElement(PipelineCanvas, {
+        day,
+        initialExpansion: {
+          expandedStages: new Set<PipelineStageId>(['decision']),
+          expandedFanouts: new Set<string>(),
+        },
+        onNodeActivate: () => {},
+      }),
+    );
+    const withoutBook = renderToStaticMarkup(
+      createElement(PipelineCanvas, {
+        day: emptyDay,
+        initialExpansion: {
+          expandedStages: new Set<PipelineStageId>(['decision']),
+          expandedFanouts: new Set<string>(),
+        },
+        onNodeActivate: () => {},
+      }),
+    );
+
+    expect(withBook).toContain('data-mobile-node-id="decision"');
+    expect(withoutBook).not.toContain('data-mobile-node-id="decision"');
+  });
+
   it('renders a touch-first navigator over the complete walkthrough', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineCanvas, { day: emptyDay, onNodeActivate: () => {} }),
@@ -315,6 +347,22 @@ describe('planCanvasNodeClick', () => {
     expect(plan.activate).toBe(true);
     expect([...plan.expansion.expandedStages]).toEqual([]);
     expect(plan.focusTarget).toEqual({ kind: 'node', nodeId: 'decision' });
+  });
+
+  it('Decision without pm-rebalance does not activate or expand', () => {
+    const decision: LaidOutNode = {
+      id: 'decision',
+      kind: 'stage',
+      stageId: 'decision',
+      label: 'Decision',
+      x: 736,
+      y: 0,
+      width: 160,
+      height: 48,
+    };
+    const plan = planCanvasNodeClick(decision, emptyExpansion);
+    expect(plan.activate).toBe(false);
+    expect([...plan.expansion.expandedStages]).toEqual([]);
   });
 
   it('fan-out parents expand under the row and do not open the sidebar', () => {

@@ -306,7 +306,11 @@ export default function PipelineCanvas({
       expandedFanouts: expansion.expandedFanouts,
     };
     return layoutPipeline(day, mobileExpansion).nodes.filter(
-      (node) => node.stageId === activeStage.id && node.kind !== 'stage',
+      (node) =>
+        node.stageId === activeStage.id
+        // Stage cards live in the dock label; keep them in the list only when
+        // the stage itself is the document (Decision → pm-rebalance).
+        && (node.kind !== 'stage' || Boolean(node.documentKey)),
     );
   }, [activeStage.id, day, expansion.expandedFanouts]);
 
