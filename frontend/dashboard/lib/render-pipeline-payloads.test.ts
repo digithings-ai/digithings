@@ -356,9 +356,12 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(isDebateSummaryPayload(h6)).toBe(true);
     const md = renderDocumentMarkdownFromPayload(h6, 'deliberation/DBO');
     expect(md).toContain('# Deliberation — DBO');
-    expect(md).toContain('### PM · Round 1');
+    expect(md).toContain('**Analyst report:** `analyst/DBO`');
+    expect(md).toContain('**PM**');
+    expect(md).toContain('**Analyst**');
     expect(md).toContain('Conviction 0 is a non-call.');
-    expect(md).toContain('## Conclusion');
+    expect(md).not.toContain('### PM · Round 1');
+    expect(md).not.toContain('## Conclusion');
     expect(md).not.toContain('## Bull thesis');
     expect(md).not.toContain('## Bear thesis');
   });

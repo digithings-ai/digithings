@@ -56,7 +56,7 @@ full rewrite uses `*-full.md`.
 | H3 | `thesis-vehicle-map` |
 | H4 | `opportunity-screener` (deterministic gate; skills for docs if needed) |
 | H5 | `asset-analyst` |
-| H6 | `deliberation` |
+| H6 | `deliberation` (PM), `deliberation-analyst-response` (analyst reply; not H5 `asset-analyst`) |
 | H7 | `pm-direction` |
 
 Cross-engine loads raise `SkillNotFoundError`.

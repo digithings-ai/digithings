@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
+import { buildPipelineHref } from '@/lib/pipeline-links';
 import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
 
 // ── Legacy deliberation-transcript types ──────────────────────────────────
@@ -133,9 +134,11 @@ function stanceClass(stance: string | undefined): string {
 export default function DeliberationDocumentView({
   payload,
   fallbackMarkdown,
+  docDate,
 }: {
   payload: Record<string, unknown> | null;
   fallbackMarkdown: string;
+  docDate?: string;
 }) {
   // ── RiskDebateSummary shape (risk-debate doc) ─────────────────────────
   // Shape: { aggressive_case, conservative_case, key_tension, net_recommendation? }
@@ -324,11 +327,32 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
+        {/* H5 analyst report — first meeting artifact, not a second dump */}
+        {debateTicker ? (
+          <div data-testid="deliberation-h5-report">
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
+              Analyst report
+            </h3>
+            <p className="text-sm text-ink-soft">
+              <a
+                href={buildPipelineHref({
+                  date: docDate ?? null,
+                  stage: 'selection',
+                  node: `analyst/${debateTicker}`,
+                })}
+                className="font-mono text-accent underline-offset-2 hover:underline"
+              >
+                {debateTicker} analyst report
+              </a>
+            </p>
+          </div>
+        ) : null}
+
         {/* PM ↔ analyst chat — primary surface for H6 */}
         {transcript.length > 0 ? (
           <div data-testid="deliberation-chat">
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">
-              Deliberation
+              Meeting
             </h3>
             <ol className="space-y-3">
               {transcript.map((turn, i) => {
@@ -336,19 +360,23 @@ export default function DeliberationDocumentView({
                 return (
                   <li
                     key={i}
-                    className={` border border-hair p-4 ${
-                      isPm ? 'bg-term-bg/60' : 'bg-term-bg/30'
-                    }`}
+                    className={`flex ${isPm ? 'justify-end' : 'justify-start'}`}
                     data-role={isPm ? 'pm' : 'analyst'}
                   >
-                    <p className="mb-1.5 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
-                      <span className={isPm ? 'text-accent' : 'text-ink-soft'}>
+                    <div
+                      className={`max-w-[85%] border border-hair p-4 ${
+                        isPm ? 'bg-term-bg/60' : 'bg-term-bg/30'
+                      }`}
+                    >
+                      <p
+                        className={`mb-1.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] ${
+                          isPm ? 'text-accent' : 'text-ink-soft'
+                        }`}
+                      >
                         {roleLabel(turn.role)}
-                      </span>
-                      <span aria-hidden>·</span>
-                      <span>Round {turn.round_number ?? '?'}</span>
-                    </p>
-                    <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
+                      </p>
+                      <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
+                    </div>
                   </li>
                 );
               })}
@@ -361,15 +389,15 @@ export default function DeliberationDocumentView({
           </p>
         ) : null}
 
-        {/* Conclusion — after the chat so the meeting reads first */}
-        {conclusion && (
+        {/* Conclusion only when there is no chat (carry / empty transcript). */}
+        {conclusion && transcript.length === 0 ? (
           <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Conclusion
             </h3>
             <SafeMarkdown>{cleanMemoProse(conclusion)}</SafeMarkdown>
           </div>
-        )}
+        ) : null}
 
         {/* Distinct bull/bear theses only (never conclusion mirrors) */}
         {showThesisCards ? (
