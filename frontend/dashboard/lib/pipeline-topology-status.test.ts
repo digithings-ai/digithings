@@ -62,7 +62,7 @@ describe('pipeline topology status audit', () => {
     const day: PipelineDayData = {
       fanoutCounts: { sectors: 1 },
       fanoutKeys: { sectors: ['sector-technology'] },
-      presentKeys: new Set(['macro', 'sector-technology', 'sector-scorecard']),
+      presentKeys: new Set(['macro', 'sector-technology']),
       artifacts: [],
     };
     const bands = topologyEvidenceBands(day);
@@ -78,7 +78,7 @@ describe('pipeline topology status audit', () => {
     expect(matrix['research:macro']).toBe('persisted-artifact');
     expect(matrix['research:sectors']).toBe('parallel-dispatch');
     expect(matrix['research:alt-data']).toBe('expected-artifact-missing');
-    expect(matrix['research:scorecard']).toBe('persisted-artifact');
+    expect(matrix['research:scorecard']).toBeUndefined();
     expect(matrix.synthesis).toBe('stage-overview');
     expect(matrix['synthesis:consolidate']).toBe('expected-artifact-missing');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');

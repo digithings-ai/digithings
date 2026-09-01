@@ -1,6 +1,8 @@
-"""Phase 5 — US equities top-down, 11-sector swarm, deterministic scorecard.
+"""Phase 5 — US equities top-down and 11-sector swarm.
 
 Sector nodes share ``sector-research`` skill + ``config/sectors.yaml`` injection.
+There is no rolled-up sector-scorecard step: operators and digest/PM read the
+sector memos themselves.
 """
 
 from __future__ import annotations
@@ -16,8 +18,8 @@ from digiquant.olympus.atlas.phases._node_factory import (
     build_segment_node,
 )
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
-from digiquant.olympus.atlas.segments import Bias, DataQuality, SegmentReport, Source
-from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.state import AtlasResearchState
 
 # ─── Output models ──────────────────────────────────────────────────────────
 
@@ -39,20 +41,6 @@ class SectorReport(SegmentReport):
     sub_segment_leader: str | None = Field(default=None)
     driver_confirmation_count: int = Field(default=0, ge=0)
     conviction: Literal["high", "medium", "low"] | None = None
-
-
-class SectorScorecardEntry(SegmentReport):
-    """One scorecard row (digest-reader compatible)."""
-
-    etf: str = Field()
-    stance: Literal["overweight", "underweight", "neutral"]
-    key_driver: str = Field()
-
-
-class SectorScorecard(SegmentReport):
-    """Phase 5M — orchestrator synthesis after the 11 sector swarm."""
-
-    rows: list[SectorScorecardEntry] = Field(default_factory=list)
 
 
 # ─── Equity top-down node ───────────────────────────────────────────────────
@@ -122,58 +110,6 @@ def _sector_spec(sector: SectorConfig) -> SegmentNodeSpec:
     )
 
 
-# ─── Scorecard synthesis node ───────────────────────────────────────────────
-
-
-def _scorecard_node(state: AtlasResearchState) -> dict[str, Any]:
-    """Deterministic scorecard from fresh sector slots (no LLM)."""
-    rows: list[SectorScorecardEntry] = []
-    for sector in load_sectors():
-        slot = state.phase5_outputs.get(sector.slug)
-        if slot is None or slot.payload.source != "today":
-            continue
-        body = slot.payload.body  # type: ignore[union-attr]
-        rows.append(
-            SectorScorecardEntry(
-                segment=sector.slug,
-                date=state.run_date,
-                bias=_bias_from_body(body),
-                headline=str(body.get("headline") or ""),
-                etf=(sector.etfs[0] if sector.etfs else ""),
-                stance=_stance_from_bias(_bias_from_body(body)),
-                key_driver=(sector.key_drivers[0] if sector.key_drivers else ""),
-                # #953: propagate the quality signals from the sector report instead of
-                # dropping them — the scorecard is the artifact Hermes/PM weight on, so a
-                # sector graded data_quality="low" must not look identical to a "high" one.
-                confidence=body.get("confidence"),
-                data_quality=body.get("data_quality"),
-                material_findings=body.get("material_findings") or [],
-                sources=body.get("sources") or [],
-                notes=str(body.get("notes") or ""),
-            )
-        )
-    scorecard = SectorScorecard(
-        segment="sector-scorecard",
-        date=state.run_date,
-        bias=_aggregate_bias(rows),
-        headline=f"{len(rows)} sectors scored",
-        rows=rows,
-        # #953: roll the per-sector quality up so the scorecard envelope itself carries a
-        # confidence / data-quality / provenance signal (was hardcoded empty).
-        confidence=_aggregate_confidence(rows),
-        data_quality=_worst_data_quality(rows),
-        material_findings=[f for r in rows for f in r.material_findings][:8],
-        sources=_dedup_sources(rows),
-        notes="",
-    )
-    payload = SegmentPayload(
-        segment="sector-scorecard",
-        body=scorecard.model_dump(mode="json"),
-        as_of=state.run_date,
-    )
-    return {"phase5_outputs": {"sector-scorecard": SegmentSlot(payload=payload)}}
-
-
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
 
@@ -193,79 +129,6 @@ def _phase4_bodies(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
     return {
         slug: slot.payload.model_dump(mode="json") for slug, slot in state.phase4_outputs.items()
     }
-
-
-def _bias_from_body(body: dict[str, Any]) -> Bias:
-    raw = str(body.get("bias") or "neutral")
-    if raw in {"strong_bullish", "bullish", "neutral", "bearish", "strong_bearish", "mixed"}:
-        return raw  # type: ignore[return-value]
-    return "neutral"
-
-
-def _stance_from_bias(bias: Bias) -> Literal["overweight", "underweight", "neutral"]:
-    if bias in {"strong_bullish", "bullish"}:
-        return "overweight"
-    if bias in {"strong_bearish", "bearish"}:
-        return "underweight"
-    return "neutral"
-
-
-def _aggregate_bias(rows: list[SectorScorecardEntry]) -> Bias:
-    """Reduce 11 sector stances to one portfolio-level bias.
-
-    Thresholds (deliberate, document here so readers don't reverse-engineer):
-    - ``bullish`` when overweight sectors are more than 2× underweight (≥67% OW-tilt).
-    - ``bearish`` the symmetric case.
-    - ``mixed`` when OW and UW are nearly balanced and together cover at least
-      half the sectors — genuine tug-of-war between directional bets.
-    - ``neutral`` otherwise (mostly neutral stances, or no meaningful directional tilt).
-    - Empty input is treated as ``mixed`` (no information, don't fake a stance).
-    """
-    if not rows:
-        return "mixed"
-    ow = sum(1 for r in rows if r.stance == "overweight")
-    uw = sum(1 for r in rows if r.stance == "underweight")
-    if ow > uw * 2:
-        return "bullish"
-    if uw > ow * 2:
-        return "bearish"
-    if abs(ow - uw) <= 1 and ow + uw >= len(rows) // 2:
-        return "mixed"
-    return "neutral"
-
-
-# Worst-to-best ordering for rolling the per-sector data-quality grade up to the scorecard.
-_DATA_QUALITY_RANK: dict[str, int] = {"absent": 0, "low": 1, "medium": 2, "high": 3}
-
-
-def _aggregate_confidence(rows: list[SectorScorecardEntry]) -> float | None:
-    """Mean of the present per-sector confidences (None when no sector reported one)."""
-    vals = [r.confidence for r in rows if r.confidence is not None]
-    return round(sum(vals) / len(vals), 3) if vals else None
-
-
-def _worst_data_quality(rows: list[SectorScorecardEntry]) -> DataQuality | None:
-    """Lowest per-sector data-quality grade — the scorecard is only as trustworthy as its
-    weakest sector read (absent < low < medium < high). None when none reported one."""
-    grades = [r.data_quality for r in rows if r.data_quality is not None]
-    if not grades:
-        return None
-    return min(grades, key=lambda g: _DATA_QUALITY_RANK.get(str(g), 0))
-
-
-def _dedup_sources(rows: list[SectorScorecardEntry], *, cap: int = 20) -> list[Source]:
-    """Deduplicated union of per-sector sources (by id), capped — a provenance trail for the
-    scorecard envelope (was hardcoded empty)."""
-    seen: set[str] = set()
-    out: list[Source] = []
-    for row in rows:
-        for src in row.sources:
-            if src.id and src.id not in seen:
-                seen.add(src.id)
-                out.append(src)
-                if len(out) >= cap:
-                    return out
-    return out
 
 
 # ─── Phase assembly ─────────────────────────────────────────────────────────
@@ -301,26 +164,15 @@ def build_phase5_sectors() -> PipelinePhase:
     )
 
 
-def build_phase5_scorecard() -> PipelinePhase:
-    """Phase 5M: deterministic scorecard synthesis (no LLM)."""
-    return PipelinePhase(
-        name="phase5_scorecard",
-        nodes=[NodeSpec(name="sector-scorecard", run=_scorecard_node)],
-    )
-
-
 def build_phase5() -> list[PipelinePhase]:
-    """Return equity → sectors → scorecard sub-phases in order."""
-    return [build_phase5_equity(), build_phase5_sectors(), build_phase5_scorecard()]
+    """Return equity → sector-memo sub-phases in order."""
+    return [build_phase5_equity(), build_phase5_sectors()]
 
 
 __all__ = [
     "EquityOverviewReport",
     "SectorReport",
-    "SectorScorecard",
-    "SectorScorecardEntry",
     "build_phase5",
     "build_phase5_equity",
-    "build_phase5_scorecard",
     "build_phase5_sectors",
 ]
