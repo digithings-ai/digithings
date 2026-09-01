@@ -9,13 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases.phase5_equities import (
-    EquityOverviewReport,
-    SectorReport,
-    build_phase5,
-    build_phase5_equity,
-    build_phase5_sectors,
-)
+from digiquant.olympus.atlas.phases import phase5_equities
 from digiquant.olympus.atlas.sectors_config import load_sectors
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
@@ -71,9 +65,9 @@ def _dispatch(_model: str, messages: list[dict[str, Any]], **_: Any) -> str:
         ),
         None,
     )
-    if EquityOverviewReport.__name__ in text:
+    if phase5_equities.EquityOverviewReport.__name__ in text:
         return _equity_payload()
-    if SectorReport.__name__ in text:
+    if phase5_equities.SectorReport.__name__ in text:
         # Pull the sector slug out of PHASE_INPUTS → sector_config → slug.
         slug = "sector-unknown"
         if inputs_part is not None:
@@ -120,15 +114,16 @@ class TestSectorsYaml:
 @pytest.mark.unit
 class TestPhase5Topology:
     def test_build_phase5_is_equity_then_sectors_only(self) -> None:
-        import digiquant.olympus.atlas.phases.phase5_equities as phase5
-
-        assert [p.name for p in build_phase5()] == ["phase5_equity", "phase5_sectors"]
-        assert not hasattr(phase5, "build_phase5_scorecard")
+        assert [p.name for p in phase5_equities.build_phase5()] == [
+            "phase5_equity",
+            "phase5_sectors",
+        ]
+        assert not hasattr(phase5_equities, "build_phase5_scorecard")
 
     def test_equity_then_eleven_sector_memos_no_scorecard(self) -> None:
         compiled = build_pipeline(
             AtlasResearchState,
-            [build_phase5_equity(), build_phase5_sectors()],
+            [phase5_equities.build_phase5_equity(), phase5_equities.build_phase5_sectors()],
         )
         state = _seed_state_through_phase4()
         with patch(
@@ -146,7 +141,7 @@ class TestPhase5Topology:
         assert "sector-scorecard" not in final.phase5_outputs
 
     def test_daily_phase5_run_does_not_emit_scorecard(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, build_phase5())
+        compiled = build_pipeline(AtlasResearchState, phase5_equities.build_phase5())
         state = _seed_state_through_phase4()
         with patch(
             "digigraph.graph.research_agent.completion_text",
@@ -188,7 +183,7 @@ class TestPhase5Topology:
                     pass
             return _dispatch(_model, messages)
 
-        compiled = build_pipeline(AtlasResearchState, build_phase5())
+        compiled = build_pipeline(AtlasResearchState, phase5_equities.build_phase5())
         state = _seed_state_through_phase4()
         with patch(
             "digigraph.graph.research_agent.completion_text",
