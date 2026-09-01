@@ -7,6 +7,7 @@ import RebalanceDocumentView from './RebalanceDocumentView';
 import DeltaRequestDocumentView from './DeltaRequestDocumentView';
 import DeliberationDocumentView from './DeliberationDocumentView';
 import DigestDocumentView from './DigestDocumentView';
+import PmDirectionDocumentView from './PmDirectionDocumentView';
 import EvolutionSourcesDocumentView from './EvolutionSourcesDocumentView';
 import OpportunityScreenerDocumentView from './OpportunityScreenerDocumentView';
 import InputsDocumentView from './InputsDocumentView';
@@ -45,6 +46,14 @@ export default function LibraryDocumentBody({
       // `risk_debate` reuses DeliberationDocumentView which now renders the
       // aggressive/conservative/key-tension shape alongside the bull/bear debate.
       return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} docDate={docDate} />;
+    case 'pm_direction':
+      return (
+        <PmDirectionDocumentView
+          payload={payload}
+          fallbackMarkdown={normalizedMarkdown}
+          docDate={docDate}
+        />
+      );
     case 'analyst':
       return <AnalystDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'evolution_sources':
