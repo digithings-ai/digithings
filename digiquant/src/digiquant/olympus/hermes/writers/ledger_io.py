@@ -347,6 +347,26 @@ def _shares(*, delta_pct: float, nav: float, close: float) -> Decimal:
     return Decimal(str(raw)).quantize(_QUANTUM, rounding=ROUND_HALF_UP)
 
 
+def _order_quantity_for_move(
+    *,
+    action: DecisionAction,
+    target_pct: float,
+    prior_pct: float,
+    nav: float,
+    close: float,
+) -> Decimal:
+    """Share count that may become an ``order_intents`` row.
+
+    ``_decision`` already classifies a no-trade-band / ~zero weight move as
+    ``NO_OP``. Minting an order anyway true-ups lots by a few hundredths of a
+    share and lands on Activity as ADD/TRIM of +0.0pp (house 2026-09-01 FXI,
+    VGK, XLF). Skip the order; the approved target still records the hold.
+    """
+    if action is DecisionAction.NO_OP:
+        return Decimal(0)
+    return _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
+
+
 def _policy_version_id(state: AtlasResearchState) -> str:
     """Stable identifier for the sizing policy this commit was produced under.
 
@@ -571,7 +591,13 @@ def append_commit_chain(
         if close is None:
             unpriced.append(symbol)
             continue
-        quantity = _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
+        quantity = _order_quantity_for_move(
+            action=action,
+            target_pct=target_pct,
+            prior_pct=prior_pct,
+            nav=nav,
+            close=close,
+        )
         if quantity <= 0:
             continue
         order_rows.append(

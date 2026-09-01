@@ -17,7 +17,7 @@ Respond with a single JSON object validating against **`DocumentPatch`** (`doc_t
 - `target_document_key`: `"macro"`
 - `status`: `"updated"` when you emit ops; `"skipped"` only when nothing material changed
 - `ops`: RFC 6901 JSON Pointer paths rooted at `/` over the **prior document** shape
-  (e.g. `/growth`, `/regime_label`, `/headline`, `/portfolio_implications`)
+  (e.g. `/body`, `/internal_bias`, `/regime_label`, `/growth`, `/inflation`, `/policy`, `/risk_appetite`)
 - Each op needs a short `reason` citing the delta signal or data that changed
 
 Use **`set`** ops for scalar fields; **`append`** / **`remove`** sparingly for lists.
@@ -37,4 +37,4 @@ Same as full macro skill when provided: `get_macro_series` first; `web_grounding
 ## Quality bar
 
 - Patched body must remain a valid macro regime report (4-factor literals unchanged in meaning).
-- Prefer surgical updates over blanket `/headline` rewrites when only one factor moved.
+- Prefer surgical `/body` edits over rewriting the whole memo when only one factor moved.

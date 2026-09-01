@@ -513,7 +513,7 @@ def run_deliberation_loop(
     terms dict (or ``None``), and optional WP11.4 evidence-amendment provenance.
     """
     pm_skill = load_skill_full("deliberation")
-    analyst_skill = load_skill_full("asset-analyst")
+    analyst_skill = load_skill_full("deliberation-analyst-response")
     tools, execute_tool, _web_grounding = _h6_grounding(state, segment=f"{NODE_ID}-{ticker}")
     transcript: list[DeliberationTurn] = []
     round_number = 0
@@ -585,12 +585,14 @@ def run_deliberation_loop(
         # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
         # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
-            if pm_turn.challenge:
-                transcript.append(
-                    DeliberationTurn(
-                        role="pm", round_number=round_number, message=pm_turn.challenge
-                    )
+            close = (pm_turn.conclusion or pm_turn.challenge).strip()
+            transcript.append(
+                DeliberationTurn(
+                    role="pm",
+                    round_number=round_number,
+                    message=close or "PM converges.",
                 )
+            )
             return (
                 _deliberation_summary(
                     ticker=ticker,

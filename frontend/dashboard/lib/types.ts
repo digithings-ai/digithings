@@ -87,7 +87,10 @@ export interface Thesis {
   /** Conviction strength 0.0–1.0; drives the cyan ConvictionMeter on the thesis card. */
   confidence: number | null;
   horizon: string | null;
-  /** 'market' | 'vehicle' — splits the two-tier Theses ledger. */
+  /**
+   * 'market' | 'vehicle' — splits the two-tier Theses ledger.
+   * Null kind still counts as a vehicle when ``id`` is ``vehicle-*`` / ``veicle-*``.
+   */
   thesis_kind: string | null;
   /** "What confirms this" — structured evidence rows. */
   validation_criteria: string[];

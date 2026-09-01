@@ -112,6 +112,13 @@ const V1_SNAPSHOT = {
 describe('shape sniffers', () => {
   it('classifies the master digest payload', () => {
     expect(isMasterDigestPayload(fixtureDigest())).toBe(true);
+    expect(
+      isMasterDigestPayload({
+        segment: 'master-digest',
+        date: '2026-08-31',
+        body: '# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing.\n',
+      }),
+    ).toBe(true);
     expect(isMasterDigestPayload(BONDS_PAYLOAD)).toBe(false);
     expect(isMasterDigestPayload(V1_SNAPSHOT)).toBe(false);
   });
@@ -119,6 +126,13 @@ describe('shape sniffers', () => {
   it('classifies segment reports', () => {
     expect(isSegmentReportPayload(BONDS_PAYLOAD)).toBe(true);
     expect(isSegmentReportPayload(REBALANCE_EMPTY)).toBe(false);
+    expect(
+      isSegmentReportPayload({
+        segment: 'macro',
+        date: '2026-08-31',
+        body: '# Macro — 2026-08-31\n\nGrowth is slowing.',
+      })
+    ).toBe(true);
   });
 
   it('sniffers are standalone-correct: the master digest is not a segment report', () => {
@@ -133,15 +147,44 @@ describe('shape sniffers', () => {
 });
 
 describe('renderSegmentReportMarkdown', () => {
-  it('renders headline, bias, findings, signals, notes and sources', () => {
+  it('renders a research memo as title plus markdown body', () => {
+    const md = renderSegmentReportMarkdown({
+      segment: 'alt-sentiment-news',
+      date: '2026-08-31',
+      body: '# Sentiment — 2026-08-31\n\nRisk faded after [Powell](https://example.com/fed).',
+      sources: [{ id: 'fed', title: 'Powell', url: 'https://example.com/fed' }],
+      internal_bias: 'bearish',
+    });
+    expect(md).toContain('# Alt Sentiment News — 2026-08-31');
+    expect(md).toContain('Risk faded after [Powell](https://example.com/fed).');
+    expect(md).not.toContain('**Bias:**');
+    expect(md).not.toContain('## Signals');
+    expect(md).not.toContain('## Sources');
+    expect(md).not.toContain('internal_bias');
+  });
+
+  it('falls back to findings and notes for old SegmentReport JSON', () => {
     const md = renderSegmentReportMarkdown(BONDS_PAYLOAD);
     expect(md).toContain('# Bonds — 2026-06-12');
-    expect(md).toContain('**Bias:** neutral');
     expect(md).toContain('Curve steepens');
     expect(md).toContain('**CTAs short USTs** — Systematic funds hold short duration');
-    expect(md).toContain('**Yield Curve Shape:** steepening');
     expect(md).toContain('No spread data retrieved.');
-    expect(md).toContain('[Rates wrap](https://example.com/rates)');
+    expect(md).not.toContain('**Bias:**');
+    expect(md).not.toContain('## Signals');
+    expect(md).not.toContain('Yield Curve Shape');
+    expect(md).not.toContain('Data Quality');
+    expect(md).not.toContain('Confidence');
+  });
+
+  it('does not leak data_quality or confidence even when old rows still have them', () => {
+    const md = renderSegmentReportMarkdown({
+      ...BONDS_PAYLOAD,
+      data_quality: 'median',
+      confidence: 0.7,
+    });
+    expect(md.toLowerCase()).not.toContain('data quality');
+    expect(md.toLowerCase()).not.toContain('confidence');
+    expect(md).not.toContain('median');
   });
 
   it('omits null metric fields instead of rendering empty rows', () => {
@@ -163,11 +206,23 @@ describe('renderMasterDigestMarkdown', () => {
     expect(md).toContain('- **Risk** — VIX spike');
   });
 
-  it('renders regime, headline, narrative sections and freshness', () => {
+  it('prefers stitched markdown body and never emits Overall bias', () => {
+    const md = renderMasterDigestMarkdown({
+      segment: 'master-digest',
+      date: '2026-08-31',
+      body: '# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing / cooling.\n',
+      bias: 'bullish',
+    });
+    expect(md).toContain('# Daily Digest — 2026-08-31');
+    expect(md).toContain('Slowing / cooling');
+    expect(md).not.toContain('**Overall bias:**');
+  });
+
+  it('legacy fallback reconstructs without Overall bias', () => {
     const md = renderMasterDigestMarkdown(fixtureDigest());
     expect(md).toContain('# Daily Digest — 2026-04-27');
     expect(md).toContain('Risk-on regime confirmed');
-    expect(md).toContain('**Overall bias:** bullish');
+    expect(md).not.toContain('**Overall bias:**');
     expect(md).toContain('Tech rally extends as macro stress eases');
     expect(md).toContain('**NVDA breaks resistance**');
     expect(md).toContain('## Alt-Data Dashboard');
@@ -356,9 +411,12 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(isDebateSummaryPayload(h6)).toBe(true);
     const md = renderDocumentMarkdownFromPayload(h6, 'deliberation/DBO');
     expect(md).toContain('# Deliberation — DBO');
-    expect(md).toContain('### PM · Round 1');
+    expect(md).toContain('**Analyst report:** `analyst/DBO`');
+    expect(md).toContain('**PM**');
+    expect(md).toContain('**Analyst**');
     expect(md).toContain('Conviction 0 is a non-call.');
-    expect(md).toContain('## Conclusion');
+    expect(md).not.toContain('### PM · Round 1');
+    expect(md).not.toContain('## Conclusion');
     expect(md).not.toContain('## Bull thesis');
     expect(md).not.toContain('## Bear thesis');
   });

@@ -22,7 +22,7 @@ export function SessionCard() {
 
       <div className="mt-4 w-full max-w-[380px] rounded-none border border-hair bg-surface p-[1.2rem]">
         <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-          olympus <span className="text-ink-mute">· signed in</span>
+          digiquant <span className="text-ink-mute">· signed in</span>
         </p>
         <p className="mt-3 font-mono text-[0.78rem] text-ink">you@desk.tld</p>
         <p className="mt-1 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">

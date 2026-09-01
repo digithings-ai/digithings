@@ -14,8 +14,9 @@ describe('pipeline topology', () => {
     );
     expect(fanouts).toMatchObject({ 'alt-data': 6, sectors: 11 });
   });
-  it('sector scorecard is a research leaf (Phase-5 equities output), not a synthesis one', () => {
-    expect(stageById('research')!.subSteps.map((s) => s.id)).toContain('scorecard');
+  it('research has no sector-scorecard leaf; sector memos live under the sectors fan-out', () => {
+    expect(stageById('research')!.subSteps.map((s) => s.id)).not.toContain('scorecard');
+    expect(stageById('research')!.subSteps.map((s) => s.id)).toContain('sectors');
     expect(stageById('synthesis')!.subSteps.map((s) => s.id)).not.toContain('scorecard');
   });
   it('selection has analysts and deliberation fan-outs and a commit-free spine', () => {
@@ -25,11 +26,11 @@ describe('pipeline topology', () => {
     ]);
     expect(sel.subSteps.find((s) => s.id === 'analysts')!.fanout).toBeTruthy();
   });
-  it('state-only steps (backend publishes no document, ever) are flagged', () => {
+  it('no longer flags preflight/consolidate/thesis/screener as state-only (WP-B documents)', () => {
     const stateOnly = PIPELINE_TOPOLOGY.flatMap((s) =>
       s.subSteps.filter((sub) => sub.stateOnly).map((sub) => sub.id),
     );
-    expect(stateOnly).toEqual(['preflight', 'consolidate', 'thesis', 'screener']);
+    expect(stateOnly).toEqual([]);
   });
   it('inputs includes attention-plan glass-box leaf (#1945)', () => {
     expect(stageById('inputs')!.subSteps.map((s) => s.id)).toEqual([
@@ -39,8 +40,9 @@ describe('pipeline topology', () => {
     expect(stageById('inputs')!.subSteps.find((s) => s.id === 'attention-plan')!.conditionalArtifact)
       .toBe(true);
   });
-  it('learning stage holds the on-demand beliefs fold (#1383)', () => {
+  it('learning stage holds the daily beliefs fold (WP-I)', () => {
     expect(stageById('learning')!.subSteps.map((s) => s.id)).toEqual(['beliefs']);
+    expect(stageById('learning')!.subSteps[0]!.conditionalArtifact).toBeUndefined();
   });
 
   it('explains every stage and sub-step for the guided pipeline view', () => {
@@ -57,5 +59,9 @@ describe('pipeline topology', () => {
     expect(
       pipelineNodeExplanation('selection', 'selection:deliberation')?.description,
     ).toMatch(/challenge|debate|deliberat/i);
+  });
+
+  it('hides commit from the operator graph (ledger-only commit-run)', () => {
+    expect(stageById('decision')!.subSteps.find((s) => s.id === 'commit')?.hiddenFromGraph).toBe(true);
   });
 });

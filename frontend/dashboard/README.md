@@ -430,6 +430,12 @@ renders from the payloads:
   decision, the per-ticker bull/bear `deliberation/{ticker}` debate summaries,
   and the portfolio-level `risk-debate` (#698). Segment-specific metric fields
   render generically so new segments display without frontend changes.
+- `components/library/PmDirectionDocumentView.tsx` — dedicated H7
+  `pm-direction-memo` view (not a key/value dump): date + memo, then roster
+  sorted longs-then-flats by rank, with narrative, derived buy/hold/sell vs
+  prior, rank, and confidence percent. Hides `forecast_reference` /
+  `degradation_reason`. Registered from `LibraryDocumentBody` like
+  `DeliberationDocumentView`.
 - `lib/render-document-from-payload.ts` — routes payloads by shape first, then
   by the legacy `doc_type` / `document_key` conventions. Unknown object payloads return
   no markdown so `PayloadKeyValueView` renders labelled nested fields; it never emits a raw

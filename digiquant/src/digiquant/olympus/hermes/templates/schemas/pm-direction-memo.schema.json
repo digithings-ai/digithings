@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "PM Direction Memo",
-  "description": "H7 portfolio direction artifact \u2014 direction and conviction rank only; weights are set by H8. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs.",
+  "description": "H7 portfolio direction artifact \u2014 direction, conviction rank, and confidence in [0, 1]; weights are set by H8. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs. Rank is order, not size.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -55,6 +55,15 @@
               "string",
               "null"
             ]
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How sure the PM is of this name, in [0, 1]. Rank remains order, not size."
           },
           "forecast_reference": {
             "type": [

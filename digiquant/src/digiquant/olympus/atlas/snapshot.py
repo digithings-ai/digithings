@@ -18,7 +18,8 @@ Instead :class:`DigestPayload` mirrors the field set of
 :class:`digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot` exactly. A
 parity test (`tests/dq/atlas/test_snapshot.py::test_payload_matches_pipeline_digest`)
 imports both when the pipeline extras are installed and asserts field-name
-parity — drift fails loud rather than silently.
+parity — drift fails loud rather than silently. Historical JSON slots are
+``extra="allow"`` so old ``daily_snapshots`` rows still validate.
 
 Read path (Option A — see PR #441 follow-up)
 --------------------------------------------
@@ -48,6 +49,8 @@ from datetime import date, datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from digiquant.olympus.atlas.segments import compose_legacy_digest_body
 
 # Bump when fields are added/removed/renamed or semantics change.
 # The on-disk schema export lives at ``digiquant/docs/schemas/atlas_snapshot.v{N}.json``.
@@ -150,56 +153,51 @@ DataQuality = Literal["high", "medium", "low", "absent"]
 
 
 class DigestPayload(BaseModel):
-    """Frontend-facing copy of the Phase 7 master synthesis payload.
+    """Frontend-facing copy of the Phase 7 master briefing payload.
 
     **This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``
     on purpose — see module docstring for the import-direction rationale. The
     parity test enforces drift detection.
 
-    Layout: a :class:`SegmentReport`-shaped core (segment, date, bias,
-    headline, findings, sources, notes) plus the digest-specific narrative
-    sections defined in ARCHITECTURE.md §Phase 7.
+    Layout: markdown ``body`` plus a thin envelope. Historical JSON slots are
+    allowed extras so old ``daily_snapshots`` rows still validate.
+
+    ``actionable_summary`` / ``risk_radar`` / ``material_findings`` stay typed
+    so read-path personalization (#312) still sees ActionableItem / RiskItem /
+    Finding objects. The stitcher ``DigestSnapshot`` does not require them.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    # ── SegmentReport core ────────────────────────────────────────────────
-    segment: str = Field()
+    segment: str = Field(default="master-digest")
     date: date
-    bias: Bias
-    headline: str = Field()
-    material_findings: list[Finding] = Field(default_factory=list)
+    body: str = Field(default="")
     sources: list[Source] = Field(default_factory=list)
-    notes: str = Field(default="")
-    data_quality: DataQuality | None = Field(default=None)
-    confidence: float | None = Field(default=None)
-
-    # ── Digest-specific narrative sections ────────────────────────────────
-    market_regime_snapshot: str = Field()
-    alt_data_dashboard: str = Field()
-    institutional_summary: str = Field()
-    asset_classes_summary: str = Field()
-    us_equities_summary: str = Field()
-    thesis_tracker: str = Field(
-        default="",
-        description="Deprecated — Hermes owns thesis lifecycle; always empty on new runs.",
-    )
-    portfolio_recommendations: str = Field(
-        default="",
-        description="Deprecated — Hermes owns allocation; always empty on new runs.",
-    )
-    actionable_summary: list[ActionableItem] = Field(default_factory=list)
-    risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(default_factory=dict)
-    # Short regime token for the dashboard chip — mirrors DigestSnapshot.regime_label.
-    # Default "" so existing rows without this field validate without error.
     regime_label: str = Field(
         default="",
         description=(
             "Short regime token, e.g. 'Risk-on / Policy easing' — "
-            "NOT the full market_regime_snapshot paragraph."
+            "NOT a restatement of the regime section."
         ),
     )
+    actionable_summary: list[ActionableItem] = Field(default_factory=list)
+    risk_radar: list[RiskItem] = Field(default_factory=list)
+    material_findings: list[Finding] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compose_legacy_body(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        if str(data.get("body") or "").strip():
+            return data
+        composed = compose_legacy_digest_body(data)
+        if not composed.strip():
+            return data
+        out = dict(data)
+        out["body"] = composed
+        return out
 
 
 # ─── SnapshotEnvelope — the wire-level contract ─────────────────────────────

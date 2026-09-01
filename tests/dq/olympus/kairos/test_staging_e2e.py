@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any  # score:allow test doubles model external JSON
 
 import pytest
 from digiquant.olympus.envcompat import STAGING_FUNCTIONS_BASE, STAGING_USER_JWT, env_lookup

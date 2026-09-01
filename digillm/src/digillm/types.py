@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, TypedDict  # score:allow external JSON payload boundary
 
 
 class ToolCallFunction(TypedDict, total=False):

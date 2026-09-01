@@ -10,7 +10,7 @@ Update an **existing** `alt-sentiment-news` document; do not rewrite from scratc
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-sentiment-news"`.
-Patch paths: `/headline`, `/bias`, `/aaii_bull_bear_spread`, `/cnn_fear_greed_index`, `/retail_sentiment_stance`, `/top_catalysts`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

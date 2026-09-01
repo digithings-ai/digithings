@@ -30,11 +30,6 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace }),
 }));
 
-vi.mock('@/components/atlas-mark', () => ({
-  DashboardMark: () => createElement('span', null, 'mark'),
-  AtlasMark: () => createElement('span', null, 'mark'),
-}));
-
 vi.mock('@/lib/auth-context', () => ({
   useAuth: () => authMock,
 }));
@@ -63,19 +58,28 @@ describe('LoginScreen', () => {
     container.remove();
   });
 
-  it('renders oauth-first sign-in grammar', async () => {
+  it('renders compact mark + digiquant wordmark + icon oauth + Sign in', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen));
     });
-    expect(container.textContent).toContain('Open the desk.');
     expect(container.textContent).toContain('digiquant');
-    expect(container.textContent).toContain('Continue with Google');
-    expect(container.textContent).toContain('Continue with GitHub');
-    expect(container.textContent).toContain('Sign in with email');
+    expect(container.textContent).not.toContain('olympus');
+    expect(container.textContent).not.toContain('DigiQuant');
+    expect(container.textContent).not.toContain('Open the desk.');
+    expect(container.textContent).not.toContain('Continue with Google');
+    expect(container.querySelector('[data-testid="login-google"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="login-github"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="login-x"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="login-email-submit"]')?.textContent).toBe(
+      'Sign in',
+    );
+    expect(container.querySelector('[data-testid="login-x"]')?.getAttribute('aria-label')).toBe(
+      'X',
+    );
     expect(container.textContent).toContain('Create an account');
   });
 
-  it('starts Google OAuth from the filled CTA', async () => {
+  it('starts Google OAuth from the Google icon', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen));
     });
@@ -87,13 +91,28 @@ describe('LoginScreen', () => {
     expect(authMock.signInWithOAuth).toHaveBeenCalledWith('google');
   });
 
-  it('signup mode shows create-account copy and password strength', async () => {
+  it('starts X OAuth with provider id x', async () => {
+    await act(async () => {
+      root.render(createElement(LoginScreen));
+    });
+    const x = container.querySelector('[data-testid="login-x"]');
+    expect(x).not.toBeNull();
+    await act(async () => {
+      x!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(authMock.signInWithOAuth).toHaveBeenCalledWith('x');
+  });
+
+  it('signup mode shows Sign up and a Sign in footer', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen, { initialMode: 'signup' }));
     });
-    expect(container.textContent).toContain('From zero to the desk.');
-    expect(container.textContent).toContain('Create account with email');
-    expect(container.textContent).toContain('Already on the desk?');
+    expect(container.querySelector('[data-testid="login-email-submit"]')?.textContent).toBe(
+      'Sign up',
+    );
+    expect(container.textContent).toContain('Sign in');
+    expect(container.textContent).not.toContain('From zero to the desk.');
+    expect(container.textContent).not.toContain('Already on the desk?');
   });
 
   it('empty email submit is refused without calling supabase', async () => {
@@ -101,7 +120,7 @@ describe('LoginScreen', () => {
       root.render(createElement(LoginScreen));
     });
     const form = container.querySelector('form');
-    expect(form?.hasAttribute('novalidate')).toBe(false);
+    expect(form?.hasAttribute('novalidate')).toBe(true);
     await act(async () => {
       form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
