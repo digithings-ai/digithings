@@ -2,6 +2,8 @@
 
 Phase A: Settings/checkout probes without vendor secrets. Observer writes
 must return ``TIER_FORBIDDEN``. Checkout may still be a named config miss.
+``POST /settings/access/redeem-invite`` with a short dummy code must be
+mounted (``INVITE_INVALID`` / ``EMAIL_REQUIRED``) — 404 means live v32.
 
 Phase A2: Settings GETs (profile billing, brokers, jobs, fills, digest log).
 Exit 0 only when all five remaining hops are proven from that product state.
@@ -52,6 +54,11 @@ _LOOPBACK_MARKERS: tuple[str, ...] = ("127.0.0.1", "localhost")
 # Broker connect + overlay + paper fill are Custom+. Baseline checkout would
 # prove Stripe then leave Observer TIER_FORBIDDEN on the remaining hops.
 STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "custom", "interval": "monthly"}
+# Shorter than Deno INVITE_MIN_CODE_LENGTH (10). Handler returns INVITE_INVALID
+# without recording an attempt, so Observer probes cannot grant or burn the
+# rate-limit window. Live settings v32 has no this route (404).
+STAGING_REDEEM_INVITE_BODY: dict[str, object] = {"code": "short"}
+REDEEM_INVITE_MOUNTED_CODES: frozenset[str] = frozenset({"INVITE_INVALID", "EMAIL_REQUIRED"})
 
 
 def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
@@ -93,6 +100,7 @@ class HopExpectation(StrEnum):
     NOT_FOUND = "not_found"
     PUBLIC_URLS_OK = "public_urls_ok"
     PREFS_DIGEST_ON = "prefs_digest_on"
+    REDEEM_INVITE_MOUNTED = "redeem_invite_mounted"
 
 
 class ObserverHop(BaseModel):
@@ -160,6 +168,13 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         kind=HopExpectation.PUBLIC_URLS_OK,
     ),
     ObserverHop(
+        label="POST /settings/access/redeem-invite",
+        method="POST",
+        path="/settings/access/redeem-invite",
+        kind=HopExpectation.REDEEM_INVITE_MOUNTED,
+        body=STAGING_REDEEM_INVITE_BODY,
+    ),
+    ObserverHop(
         label="PATCH /settings/profile",
         method="PATCH",
         path="/settings/profile",
@@ -222,6 +237,9 @@ def hop_ok(
         return public_app_urls_ok(http, body or {})
     if kind is HopExpectation.PREFS_DIGEST_ON:
         return http == 200 and (body or {}).get("daily_digest") is True
+    if kind is HopExpectation.REDEEM_INVITE_MOUNTED:
+        # 404 = live v32 (route missing). 200 would mean an accidental grant.
+        return http in {400, 403} and code in REDEEM_INVITE_MOUNTED_CODES
     unhandled: HopExpectation = kind
     raise AssertionError(f"unhandled hop kind {unhandled}")
 
@@ -448,7 +466,10 @@ def run_staging_e2e(
             if not row.ok:
                 failed = True
         if failed:
-            err("Observer hops failed — Settings EF TIER_FORBIDDEN / read contract regression.")
+            err(
+                "Observer hops failed — app-urls path contract, "
+                "redeem-invite not mounted, or TIER_FORBIDDEN / read regression."
+            )
             return 3
         evidence = collect_remaining_evidence(
             http=http,
@@ -539,7 +560,9 @@ __all__ = [
     "DEFAULT_FUNCTIONS_BASE",
     "EXIT_REMAINING_HOPS_UNPROVEN",
     "OBSERVER_HOPS",
+    "REDEEM_INVITE_MOUNTED_CODES",
     "REMAINING_LIVE_HOPS",
+    "STAGING_REDEEM_INVITE_BODY",
     "HopExpectation",
     "HttpJson",
     "JwtResolution",

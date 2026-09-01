@@ -2,8 +2,10 @@
 """Agent-runnable Kairos staging E2E gate (core Supabase).
 
 Phase A: Observer Settings hops when a JWT (or email/password) is present —
-reads 200, Custom writes ``TIER_FORBIDDEN``. Then Settings product-state
-reads prove remaining hops. Does not require vendor secrets for exit 0.
+reads 200, Custom writes ``TIER_FORBIDDEN``, and
+``POST /settings/access/redeem-invite`` with a short dummy code must not 404.
+Then Settings product-state reads prove remaining hops. Does not require
+vendor secrets for exit 0.
 
 Phase B: if remaining hops are unproven, fails loudly with **named** missing
 secrets when Stripe / Mailgun / Alpaca OAuth are unset. Never paper-fakes.

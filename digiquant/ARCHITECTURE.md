@@ -3291,7 +3291,10 @@ Staging inventory also covers these names in
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
 vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
-the five live hops are named even before secrets land). After Observer hops
+the five live hops are named even before secrets land). Observer also POSTs
+`/settings/access/redeem-invite` with a short dummy code (`short`, under the
+Deno min length) and requires `INVITE_INVALID` or `EMAIL_REQUIRED` — live
+settings v32 404s that route. After Observer hops
 pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
 `/jobs`, `/fills`, and `/notifications/log`. A hop is proven only from that
 product state: `subscription_status=active` **and** `has_stripe_subscription`
