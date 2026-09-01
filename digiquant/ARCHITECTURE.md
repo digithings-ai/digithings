@@ -2029,10 +2029,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
   into peers). Missing confidence on a mixed roster fail-softs to
   `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
-  confidence on every long skip the haircut so replay does not silently shrink. **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
-  the portfolio lineage ledger commit chain (see below), and fail-soft prospective
-  forecast-registry persistence (#2663).
+  confidence on every long skip the haircut so replay does not silently shrink.
+  **H9** (`commit_run`) is the Hermes terminal: positions, nav, theses sync, brief
+  publish, `decision_log` append, the portfolio lineage ledger commit chain (see
+  below), and fail-soft prospective forecast-registry persistence (#2663).
 
 #### Risk-sizing layer (Pillar 2)
 
