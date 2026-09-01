@@ -6,6 +6,7 @@ Skips carried slots. Monthly runs omit this phase.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -15,6 +16,7 @@ from digiquant.olympus.atlas.inspectable_io import (
     publish_bias_row_document,
     publish_inputs_document,
 )
+from digiquant.olympus.atlas.segments import compose_legacy_digest_body
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Phase7DigestPayload,
@@ -73,58 +75,17 @@ def _segment_category(slug: str) -> str:
 def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> str:
     """Render a human-readable markdown string from the digest/snapshot payload.
 
-    Pure template function — no LLM, no I/O. Tolerates missing keys so it
-    works on both full and partial (carried-incomplete) snapshots.
+    Prefer the stitched ``body``. Historical JSON slots fall back to
+    :func:`compose_legacy_digest_body` (no Overall bias / fake metrics).
     """
-    lines: list[str] = []
-    headline = str(snapshot.get("headline") or "")
-    if headline:
-        lines.append(f"# {headline}")
-        lines.append("")
-
-    regime = str(snapshot.get("market_regime_snapshot") or "")
-    if regime:
-        lines.append(f"## Market Regime\n\n{regime}")
-        lines.append("")
-
-    equities = str(snapshot.get("us_equities_summary") or "")
-    if equities:
-        lines.append(f"## US Equities\n\n{equities}")
-        lines.append("")
-
-    assets = str(snapshot.get("asset_classes_summary") or "")
-    if assets:
-        lines.append(f"## Asset Classes\n\n{assets}")
-        lines.append("")
-
-    actions: list[dict[str, Any]] = list(snapshot.get("actionable_summary") or [])
-    if actions:
-        lines.append("## Actionable Items")
-        lines.append("")
-        for item in actions:
-            pri = item.get("priority", "")
-            label = item.get("label", "")
-            rationale = item.get("rationale", "")
-            lines.append(f"- **[P{pri}] {label}** — {rationale}")
-        lines.append("")
-
-    risks: list[dict[str, Any]] = list(snapshot.get("risk_radar") or [])
-    if risks:
-        lines.append("## Risk Radar")
-        lines.append("")
-        for risk in risks:
-            hours = risk.get("horizon_hours", "?")
-            label = risk.get("label", "")
-            trigger = risk.get("trigger", "")
-            lines.append(f"- **{label}** ({hours}h) — {trigger}")
-        lines.append("")
-
-    continuity = snapshot.get("continuity")
-    if continuity:
-        lines.append(f"*Note: {continuity}*")
-        lines.append("")
-
-    return "\n".join(lines)
+    data: dict[str, Any] = dict(snapshot) if isinstance(snapshot, Mapping) else dict(snapshot)
+    body = str(data.get("body") or "").strip()
+    if body:
+        continuity = data.get("continuity")
+        if continuity and str(continuity) not in body:
+            return f"{body.rstrip()}\n\n*Note: {continuity}*\n"
+        return body if body.endswith("\n") else f"{body}\n"
+    return compose_legacy_digest_body(data)
 
 
 def _is_degenerate(body: Any) -> bool:

@@ -67,18 +67,19 @@ EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
   do not invent a limit or truncate these fields."""
 
 
-# Skills that still emit structured JSON envelopes (digest until WP-E, plus
-# non-research atlas skills). RESEARCH_MEMO_RULES must not be appended here —
-# it would tell the digest stitcher to write a markdown `body` instead of
-# DigestSnapshot slots.
+# Skills that must not receive RESEARCH_MEMO_RULES (Phase 1–5 memo skeleton).
+# Digest + digest-subsection get DIGEST_BRIEFING_RULES instead.
 _NON_RESEARCH_MEMO_SKILLS = frozenset(
     {
         "digest",
+        "digest-subsection",
         "beliefs-distillation",
         "monthly-synthesis",
         "decision-reflector",
     }
 )
+
+_DIGEST_BRIEFING_SKILLS = frozenset({"digest", "digest-subsection"})
 
 
 def _is_research_memo_skill(slug: str) -> bool:
@@ -126,6 +127,19 @@ Use 2–5 topical `##` sections that fit today's evidence. Do **not** invent
 data-quality or confidence scores. Do **not** emit a Signals section. Do **not**
 print `Bias:` at the top. Optional `internal_bias` is a non-rendered token for
 digest/triage only. `sources` is grounding, not an appendix dump."""
+
+
+DIGEST_BRIEFING_RULES = """## Digest briefing (required)
+
+Write a markdown `body` — that is the operator artifact, not a JSON dump of
+bias / headline / Signals / confidence / data_quality.
+
+This is a long analyst-entry briefing. Length is allowed. Use topical `##`
+headings and inline `[title](url)` citations.
+
+Do **not** emit `**Overall bias:**`, a Signals section, data-quality grades, or
+confidence floats. Optional `regime_label` is a short chip token, not a
+rendered metric."""
 
 
 QUANTITATIVE_FINDING_RULES = """## Dating your numbers (required)
@@ -190,6 +204,8 @@ def load_skill(slug: str) -> str:
     parts = [body.strip()]
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
+    if slug in _DIGEST_BRIEFING_SKILLS:
+        parts.append(DIGEST_BRIEFING_RULES)
     parts.append(QUANTITATIVE_FINDING_RULES)
     return "\n\n".join(parts)
 
@@ -212,6 +228,8 @@ def load_skill_edit(slug: str) -> str:
     parts = [body.strip()]
     if _is_research_memo_skill(slug):
         parts.append(RESEARCH_MEMO_RULES)
+    if slug in _DIGEST_BRIEFING_SKILLS:
+        parts.append(DIGEST_BRIEFING_RULES)
     parts.extend((EDIT_SCHEMA_CONSTRAINTS, QUANTITATIVE_FINDING_RULES))
     return "\n\n".join(parts)
 

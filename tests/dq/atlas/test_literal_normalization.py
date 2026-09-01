@@ -182,12 +182,15 @@ class TestFailSoftTiers:
         assert MacroRegimeReport.model_validate(body).growth is None
 
     def test_unmappable_required_axis_is_still_rejected(self) -> None:
-        """DigestSnapshot.bias is still required; unknown values stay rejected."""
+        """SegmentReport.bias stays required; digest no longer has a required bias Literal."""
+        body = {**_minimal_body(SegmentReport), "bias": "stable"}
+        with pytest.raises(ValidationError, match="bias"):
+            SegmentReport.model_validate(body)
         from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
 
-        body = {**_minimal_body(DigestSnapshot), "bias": "stable"}
-        with pytest.raises(ValidationError, match="bias"):
-            DigestSnapshot.model_validate(body)
+        DigestSnapshot.model_validate(
+            {**_minimal_body(DigestSnapshot), "bias": "stable", "body": "# Daily Digest\n"}
+        )
 
     @pytest.mark.parametrize(
         ("model", "field", "optional"),

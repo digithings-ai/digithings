@@ -200,24 +200,27 @@ const DIGEST_NARRATIVE_SECTIONS: Array<[key: string, heading: string]> = [
 export function isMasterDigestPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
+  // Research memos also have `body` + `date`; do not snarf those as the digest.
   if (typeof p.market_regime_snapshot === 'string') return true;
   if (asObj(p.segment_freshness)) return true;
-  return s(p.segment) === 'master-digest' && typeof p.headline === 'string';
+  return s(p.segment) === 'master-digest';
 }
 
 /** Markdown for the master-digest payload (documents and `daily_snapshots.snapshot`). */
 export function renderMasterDigestMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
+  const body = s(p.body).trim();
+  if (body) {
+    return body.endsWith('\n') ? body : `${body}\n`;
+  }
+
   const out: string[] = [];
   const date = s(p.date).trim();
   out.push(`# Daily Digest${date ? ` — ${date}` : ''}`, '');
 
   const regime = s(p.market_regime_snapshot).trim();
-  const bias = s(p.bias).trim();
-  if (regime || bias) {
-    out.push('## Market regime', '');
-    if (regime) out.push(regime, '');
-    if (bias) out.push(`**Overall bias:** ${bias}`, '');
+  if (regime) {
+    out.push('## Market regime', '', regime, '');
   }
 
   const headline = s(p.headline).trim();

@@ -17,7 +17,8 @@
 
 | Slug | Role |
 |------|------|
-| `digest` | Phase 7 synthesis |
+| `digest` | Phase 7 stitcher — long markdown briefing |
+| `digest-subsection` | Phase 7 topical subsection writer (macro / alt-data / institutional / asset-classes / US equities) |
 | `monthly-synthesis` | Month-end rollup |
 | `macro` | Phase 3 macro |
 | `bonds` | 4A rates / credit |

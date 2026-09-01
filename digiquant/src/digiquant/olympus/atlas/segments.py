@@ -1,8 +1,9 @@
 """Shared segment output-model primitives.
 
 Phase 1–5 segments emit a :class:`ResearchMemo` (markdown ``body`` plus a thin
-envelope). :class:`SegmentReport` remains the digest/snapshot core until the
-digest stitcher (WP-E) lands. This file defines both.
+envelope). The daily digest is a stitched markdown briefing
+(:func:`digest_briefing_for_hermes`). :class:`SegmentReport` remains for
+historical snapshot rows. This file defines both.
 
 Kept minimal on purpose — the legacy Atlas system does not have strict
 per-segment schemas beyond the overall digest/delta contracts in
@@ -499,6 +500,95 @@ def compose_legacy_research_body(data: Mapping[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
+def compose_legacy_digest_body(data: Mapping[str, Any]) -> str:
+    """Build a long markdown briefing from historical DigestSnapshot JSON slots.
+
+    Library rows published before WP-E have ``headline`` / topical summary
+    fields and no ``body``. Never emit Overall bias, ``data_quality``, or
+    ``confidence``.
+    """
+    parts: list[str] = []
+    date_s = _string_value(data.get("date")) or ""
+    parts.append(f"# Daily Digest{f' — {date_s}' if date_s else ''}")
+    headline = _string_value(data.get("headline"))
+    if headline:
+        parts.append(f"## Headline\n\n{headline}")
+    regime = _string_value(data.get("market_regime_snapshot"))
+    if regime:
+        parts.append(f"## Market regime\n\n{regime}")
+    for key, heading in (
+        ("alt_data_dashboard", "Alt-data"),
+        ("institutional_summary", "Institutional"),
+        ("asset_classes_summary", "Asset classes"),
+        ("us_equities_summary", "US equities"),
+    ):
+        text = _string_value(data.get(key))
+        if text:
+            parts.append(f"## {heading}\n\n{text}")
+    findings = data.get("material_findings")
+    if isinstance(findings, list):
+        bullets: list[str] = []
+        for item in findings:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Finding"
+            summary = _string_value(item.get("summary")) or ""
+            bullets.append(f"- **{label}**" + (f" — {summary}" if summary else ""))
+        if bullets:
+            parts.append("## Findings\n\n" + "\n".join(bullets))
+    actions = data.get("actionable_summary")
+    if isinstance(actions, list):
+        bullets = []
+        for item in actions:
+            if not isinstance(item, Mapping):
+                continue
+            pri = item.get("priority", "")
+            label = _string_value(item.get("label")) or "Item"
+            rationale = _string_value(item.get("rationale")) or ""
+            prefix = f"**[P{pri}] {label}**" if pri != "" else f"**{label}**"
+            bullets.append(f"- {prefix}" + (f" — {rationale}" if rationale else ""))
+        if bullets:
+            parts.append("## Watchlist\n\n" + "\n".join(bullets))
+    risks = data.get("risk_radar")
+    if isinstance(risks, list):
+        bullets = []
+        for item in risks:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Risk"
+            trigger = _string_value(item.get("trigger")) or ""
+            hours = item.get("horizon_hours", item.get("horizon_hourse", ""))
+            suffix = f" _(≤{hours}h)_" if hours != "" else ""
+            bullets.append(f"- **{label}**" + (f" — {trigger}" if trigger else "") + suffix)
+        if bullets:
+            parts.append("## Risk radar\n\n" + "\n".join(bullets))
+    notes = _string_value(data.get("notes"))
+    if notes:
+        parts.append(notes)
+    continuity = _string_value(data.get("continuity"))
+    if continuity:
+        parts.append(f"*Note: {continuity}*")
+    return "\n\n".join(parts).strip() + ("\n" if parts else "")
+
+
+def digest_briefing_for_hermes(digest: Mapping[str, Any] | None) -> dict[str, str]:
+    """Thin H1/H2 envelope: ``date`` / ``body`` / ``regime_label`` only."""
+    if not isinstance(digest, Mapping) or not digest:
+        return {}
+    raw_body = str(digest.get("body") or "")
+    body = raw_body if raw_body.strip() else compose_legacy_digest_body(digest)
+    out: dict[str, str] = {}
+    date_s = digest.get("date")
+    if date_s is not None and str(date_s).strip():
+        out["date"] = str(date_s)
+    if body.strip():
+        out["body"] = body
+    regime = str(digest.get("regime_label") or "").strip()
+    if regime:
+        out["regime_label"] = regime
+    return out
+
+
 class ResearchMemo(BaseModel):
     """Thin envelope for Phase 1–5 research. The operator artifact is ``body``.
 
@@ -585,10 +675,11 @@ class ResearchMemo(BaseModel):
 
 
 class SegmentReport(BaseModel):
-    """Digest / snapshot core (bias, headline, findings).
+    """Historical digest / snapshot core (bias, headline, findings).
 
-    Phase 1–5 research uses :class:`ResearchMemo`. This shape remains on
-    ``DigestSnapshot`` until the digest stitcher (WP-E) lands.
+    Phase 1–5 research uses :class:`ResearchMemo`. New digests are markdown
+    briefings (:func:`digest_briefing_for_hermes`); this shape validates old
+    library rows.
     """
 
     segment: str = Field(

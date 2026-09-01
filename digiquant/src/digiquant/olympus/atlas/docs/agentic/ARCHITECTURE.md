@@ -277,34 +277,36 @@ directly.
 
 ---
 
-### Phase 7 — Master Synthesis (digest snapshot)
+### Phase 7 — Master Synthesis (stitched markdown briefing)
 
-> Research-only synthesis. Pull the most important signals across all phases
-> into a coherent research brief. **No portfolio positioning** — that is Hermes's
+> Research-only synthesis. Subsection agents write topical markdown; a stitcher
+> assembles one long analyst-entry briefing. **No portfolio positioning** — that is Hermes's
 > domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
-**Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
+**Canonical output:** one `digest` / `digest-delta` document whose `body` is the stitched
+markdown. Thin envelope: `date`, `regime_label`, `sources`, `segment_freshness`.
+Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into
+Supabase `daily_snapshots` and `documents`. Markdown render prefers `body`; historical
+JSON slots fall back to `compose_legacy_digest_body` (no Overall bias / fake metrics).
 
-**Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
-1. **Market Regime Snapshot** — single dominant force today; cross-asset research themes (not positioning)
-2. **Alternative Data Dashboard** — sentiment + CTA + options + politician synthesis; lead with any contrarian signal
-3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
-4. **Macro** — full regime read (from published macro segment)
-5. **Asset Classes** — bonds, commodities, forex, crypto, international
-6. **US Equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
-7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
-8. **Risk Radar** — what could break the current bias in 24–72 hours
+**Subsection roster** (capped to current digest topics — not a second per-sector fan-out):
+`macro`, `alt-data`, `institutional`, `asset-classes`, `us-equities`. Each subsection
+reads only its upstream memos plus the last **two full** digest briefing bodies
+(not the #1559 300-char slim).
 
-**Deprecated / always empty on new runs** (kept in schema for backward compat with historical rows):
-- `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
-- `portfolio_recommendations` — Hermes phases 7D–7E own allocation
+**Required narrative coverage** (topical `##` headings in the stitched `body`):
+1. **Market regime** — single dominant force today; cross-asset research themes (not positioning)
+2. **Alt-data** — sentiment + CTA + options + politician synthesis
+3. **Institutional** — ETF flow direction, notable HF signal
+4. **Asset classes** — bonds, commodities, forex, crypto, international
+5. **US equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
+6. **Watchlist / risk radar** — evidence-based items to monitor; no trade verbs
 
-**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
+H1/H2 consume `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
 
-- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` keeps identity + markdown `body` (composing legacy headline/findings when `body` is missing) plus optional `internal_bias` / `regime_label` / `sources`, and drops `data_quality` / `confidence` / leftover metric slots; a full 34-segment day assembles to ~30k tokens.
-- **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
+**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Subsection agents slim their upstream memo bodies under `_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS`. The stitcher sees subsections + two full prior briefing bodies (capped at `_DIGEST_PRIOR_BODY_MAX`, not 300 chars). `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`).
 
-**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
+**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`.
 
 ---
 

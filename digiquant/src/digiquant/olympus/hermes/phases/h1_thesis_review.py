@@ -9,6 +9,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.segments import digest_briefing_for_hermes
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, publish_document
 from digiquant.olympus.edit_mode.prior import artifact_document_key
 from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput
@@ -107,7 +108,7 @@ def _run_h1_llm(state: HermesState) -> ThesisReviewOutput:
             "doc_type": DOC_TYPE,
             "segment": NODE_ID,
             "active_theses": list(state.prior_context.active_theses),
-            "digest": state.phase7_digest or {},
+            "digest": digest_briefing_for_hermes(state.phase7_digest),
             "portfolio_performance": dict(state.prior_context.portfolio_performance),
         },
         context_keys=("digest", "digest-delta"),

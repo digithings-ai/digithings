@@ -264,24 +264,13 @@ def _segment(slug: str, headline: str = "synthetic finding") -> SegmentFixtureBo
 
 
 def _digest_body() -> DigestFixtureBody:
-    """DigestSnapshot still extends SegmentReport until WP-E."""
+    """Thin markdown digest envelope (WP-E)."""
     return {
         "segment": "master-digest",
         "date": _TODAY,
-        "bias": "neutral",
-        "headline": "synthetic regime",
-        "material_findings": [],
+        "body": "# Daily Digest — 2026-04-26\n\n## Market regime\n\nsynthetic\n",
+        "regime_label": "Synthetic / Mixed",
         "sources": [],
-        "notes": "",
-        "market_regime_snapshot": "synthetic",
-        "alt_data_dashboard": "synthetic",
-        "institutional_summary": "synthetic",
-        "asset_classes_summary": "synthetic",
-        "us_equities_summary": "synthetic",
-        "thesis_tracker": "",
-        "portfolio_recommendations": "",
-        "actionable_summary": [],
-        "risk_radar": [],
         "segment_freshness": {},
     }
 
@@ -369,6 +358,12 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "SectorReport": _segment("sector"),
     # Phase 7
     "DigestSnapshot": _digest_body(),
+    "DigestSubsection": {
+        "slug": "macro",
+        "date": _TODAY,
+        "body": "## Macro\n\nsynthetic subsection",
+        "sources": [],
+    },
     "MonthlyDigest": _digest_body(),
     # H5 unified analyst
     "AnalystPayload": {

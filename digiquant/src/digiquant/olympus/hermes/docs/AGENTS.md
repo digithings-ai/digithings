@@ -51,7 +51,7 @@ full rewrite uses `*-full.md`.
 
 | Phase | Skills |
 |-------|--------|
-| H1 | `thesis` |
+| H1 | `thesis` — consumes `digest_briefing_for_hermes` (`date` / `body` / `regime_label`) |
 | H2 | `market-thesis-exploration` |
 | H3 | `thesis-vehicle-map` |
 | H4 | `opportunity-screener` (deterministic gate; skills for docs if needed) |

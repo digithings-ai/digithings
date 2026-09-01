@@ -29,6 +29,7 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+from digiquant.olympus.atlas.testing.simulator import parse_schema_name
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -202,36 +203,38 @@ class TestOnchainBiasRow:
         compact = _canned_positioning().compact_summary()
         state.data_layer = DataLayerSnapshot(market_context={"onchain_positioning": compact})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         captured: list[dict[str, Any]] = []
 
         def fake_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            name = parse_schema_name(msgs)
             for part in msgs[1]["content"]:
                 if isinstance(part, dict) and part.get("text", "").startswith("PHASE_INPUTS"):
                     captured.append(json.loads(part["text"].split(":", 1)[1].strip()))
                     break
+            if name == "DigestSubsection":
+                return json.dumps(
+                    {
+                        "slug": "macro",
+                        "date": "2026-04-26",
+                        "body": "## Macro\n\nx",
+                        "sources": [],
+                    }
+                )
             return json.dumps(
                 {
                     "segment": "master-digest",
                     "date": "2026-04-26",
-                    "bias": "neutral",
-                    "headline": "x",
-                    "material_findings": [],
-                    "sources": [],
-                    "notes": "",
-                    "market_regime_snapshot": "x",
-                    "alt_data_dashboard": "y",
-                    "institutional_summary": "z",
-                    "asset_classes_summary": "a",
-                    "us_equities_summary": "b",
+                    "body": "# Daily Digest\n\n## Alt-data\n\non-chain divergence.\n",
                     "regime_label": "",
+                    "sources": [],
                 }
             )
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake_completion):
             compiled.invoke(state)
 
-        assert captured, "LLM must have been called"
-        bias_row = captured[0].get("bias_row", {})
+        stitcher = next(c for c in captured if "bias_row" in c)
+        bias_row = stitcher.get("bias_row", {})
         assert bias_row.get("onchain_positioning") is not None
         assert bias_row["onchain_positioning"]["top_divergent_markets"][0]["market"] == "ETH"
