@@ -9,7 +9,8 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.atlas.supabase_io import SupabaseClient, publish_document
+from digiquant.olympus.edit_mode.prior import artifact_document_key
 from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput
 from digiquant.olympus.hermes.phases.thesis_common import (
     build_thesis_document,
@@ -21,13 +22,14 @@ from digiquant.olympus.hermes.writers.thesis_io import (
     merge_review_with_invalidation_hits,
     persist_thesis_review,
 )
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.olympus.overlay.persist import hermes_document_key, skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/thesis/market-review"
 PHASE_NAME = "hermes_h1_thesis_review"
 ARTIFACT_KEY = ("thesis", "thesis-review")
+DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 DOC_TYPE = "Thesis Review"
 
 
@@ -44,6 +46,52 @@ def _invalidation_hits_for_state(state: HermesState) -> dict[str, list[str]]:
     return invalidation_hits_from_signals(
         state.prior_context.active_theses,
         triggered_criteria=signals,
+    )
+
+
+def _thesis_review_markdown(document: dict[str, Any]) -> str:
+    body = document.get("body") if isinstance(document.get("body"), dict) else document
+    date_str = str(document.get("date") or "")
+    notes = str((body or {}).get("notes") or "").strip()
+    reviewed = (body or {}).get("reviewed_theses") or []
+    lines = [f"# Thesis review {date_str}", ""]
+    if notes:
+        lines.extend([notes, ""])
+    if isinstance(reviewed, list) and reviewed:
+        lines.extend(["| Thesis | Prior | New | Evidence |", "| --- | --- | --- | --- |"])
+        for item in reviewed:
+            if not isinstance(item, dict):
+                continue
+            evidence = item.get("evidence") or []
+            if isinstance(evidence, list):
+                evidence_text = "; ".join(str(x) for x in evidence if str(x).strip())
+            else:
+                evidence_text = str(evidence)
+            lines.append(
+                f"| {item.get('thesis_id') or '—'} | {item.get('prior_status') or '—'} | "
+                f"{item.get('new_status') or '—'} | {evidence_text or '—'} |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _publish_thesis_review_document(
+    client: SupabaseClient, state: HermesState, document: dict[str, Any]
+) -> None:
+    date_str = state.run_date.isoformat()
+    workspace_id = state.config.workspace_id
+    publish_document(
+        client=client,
+        document_key=hermes_document_key(DOCUMENT_KEY, workspace_id),
+        payload=dict(document),
+        doc_type=None,
+        run_type=state.run_type,
+        title=f"Thesis review {date_str}",
+        date_str=date_str,
+        category="portfolio",
+        segment="thesis-review",
+        content_markdown=_thesis_review_markdown(document),
+        workspace_id=workspace_id,
     )
 
 
@@ -93,6 +141,14 @@ def _h1_node_factory(client: SupabaseClient | None):
                 active_theses=state.prior_context.active_theses,
                 workspace_id=state.config.workspace_id,
             )
+        if client is not None:
+            try:
+                _publish_thesis_review_document(client, state, document)
+            except Exception:
+                logger.exception(
+                    "H1: thesis-review document publish failed for %s; continuing",
+                    state.run_date,
+                )
         return {
             "phase_hermes": state.phase_hermes.model_copy(update={"thesis_review": document}),
         }

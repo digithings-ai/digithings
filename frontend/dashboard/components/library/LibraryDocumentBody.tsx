@@ -9,6 +9,8 @@ import DeliberationDocumentView from './DeliberationDocumentView';
 import DigestDocumentView from './DigestDocumentView';
 import EvolutionSourcesDocumentView from './EvolutionSourcesDocumentView';
 import OpportunityScreenerDocumentView from './OpportunityScreenerDocumentView';
+import InputsDocumentView from './InputsDocumentView';
+import BiasRowDocumentView from './BiasRowDocumentView';
 import GenericDiffDocumentView from './GenericDiffDocumentView';
 import AnalystDocumentView from './AnalystDocumentView';
 import PayloadKeyValueView from './PayloadKeyValueView';
@@ -49,6 +51,10 @@ export default function LibraryDocumentBody({
       return <EvolutionSourcesDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'opportunity_screener':
       return <OpportunityScreenerDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+    case 'inputs':
+      return <InputsDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+    case 'bias_row':
+      return <BiasRowDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'diffable':
       return (
         <GenericDiffDocumentView

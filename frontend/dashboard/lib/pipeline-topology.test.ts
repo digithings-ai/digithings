@@ -25,11 +25,11 @@ describe('pipeline topology', () => {
     ]);
     expect(sel.subSteps.find((s) => s.id === 'analysts')!.fanout).toBeTruthy();
   });
-  it('state-only steps (backend publishes no document, ever) are flagged', () => {
+  it('no longer flags preflight/consolidate/thesis/screener as state-only (WP-B documents)', () => {
     const stateOnly = PIPELINE_TOPOLOGY.flatMap((s) =>
       s.subSteps.filter((sub) => sub.stateOnly).map((sub) => sub.id),
     );
-    expect(stateOnly).toEqual(['preflight', 'consolidate', 'thesis', 'screener']);
+    expect(stateOnly).toEqual([]);
   });
   it('inputs includes attention-plan glass-box leaf (#1945)', () => {
     expect(stageById('inputs')!.subSteps.map((s) => s.id)).toEqual([

@@ -108,8 +108,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         const fanoutExpanded = expansion.expandedFanouts.has(fanoutKey);
 
         // Leaf sub-steps (no fan-out) carry a document_key when it's present
-        // today. State-only steps never resolve one — the backend runs them
-        // but publishes nothing (thesis framing, screener, consolidate, preflight).
+        // today. Remaining state-only steps never resolve one.
         const leafKey =
           sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
         const runStatus = resolveSubStepRunStatus(sub, day, bands, stage.id);

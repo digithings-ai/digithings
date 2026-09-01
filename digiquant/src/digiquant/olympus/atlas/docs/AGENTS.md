@@ -27,6 +27,7 @@ edit-mode continuity) → Hermes H1–H9 (thesis-first) → `commit_run`. Cost i
 ```
 JSON → validate → publish_document / in-graph publish_phase
 Operator close-out: python3 scripts/run_db_first.py
+Inspectable leaves (no LLM): `inputs`, `bias-row` from `olympus.atlas.inspectable_io`
 ```
 
 ### Key scripts

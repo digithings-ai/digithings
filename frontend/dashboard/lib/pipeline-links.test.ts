@@ -57,8 +57,18 @@ describe('pipeline link resolvers', () => {
   });
   it('maps sub-steps to document_keys', () => {
     expect(leafDocumentKey('attention-plan')).toBe('attention-plan');
+    expect(leafDocumentKey('preflight')).toBe('inputs');
+    expect(leafDocumentKey('consolidate')).toBe('bias-row');
+    expect(leafDocumentKey('thesis')).toBe('thesis/thesis-review');
+    expect(leafDocumentKey('screener')).toBe('opportunity-screener');
     expect(leafDocumentKey('pm-direction')).toBe('pm-direction-memo');
     expect(leafDocumentKey('analysts', 'SPY')).toBe('analyst/SPY');
     expect(leafDocumentKey('nope')).toBeNull();
+  });
+  it('maps inspectable WP-B keys to their pipeline stages', () => {
+    expect(stageForDocumentKey('inputs')).toBe('inputs');
+    expect(stageForDocumentKey('bias-row')).toBe('synthesis');
+    expect(stageForDocumentKey('thesis/thesis-review')).toBe('selection');
+    expect(stageForDocumentKey('opportunity-screener')).toBe('selection');
   });
 });

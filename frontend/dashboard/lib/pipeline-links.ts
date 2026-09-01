@@ -55,6 +55,10 @@ export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage
 export function leafDocumentKey(subStepId: string, branch?: string): string | null {
   switch (subStepId) {
     case 'attention-plan': return 'attention-plan';
+    case 'preflight': return 'inputs';
+    case 'consolidate': return 'bias-row';
+    case 'thesis': return 'thesis/thesis-review';
+    case 'screener': return 'opportunity-screener';
     case 'macro': return 'macro';
     case 'scorecard': return 'sector-scorecard';
     case 'digest': return 'digest';
@@ -71,9 +75,12 @@ export function leafDocumentKey(subStepId: string, branch?: string): string | nu
 /** Map a `document_key` to the stage that owns it (per the spec topology table). */
 export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   const k = documentKey.toLowerCase();
-  if (k === 'attention-plan') return 'inputs';
+  if (k === 'attention-plan' || k === 'inputs') return 'inputs';
+  if (k === 'bias-row') return 'synthesis';
   if ((DIGEST_DOCUMENT_KEYS as readonly string[]).includes(k)) return 'synthesis';
   if (k.startsWith('analyst/') || k.startsWith('deliberation/')) return 'selection';
+  if (k === 'thesis/thesis-review' || k.startsWith('thesis/')) return 'selection';
+  if (k === 'opportunity-screener' || k === 'opportunity-screener.json') return 'selection';
   if (k === 'pm-direction-memo' || k === 'pm-rebalance' || k === 'risk-debate') return 'selection';
   if (k.startsWith('commit-run/')) return 'decision';
   if (k === 'beliefs') return 'learning';

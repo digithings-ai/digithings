@@ -11,6 +11,10 @@ from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.inspectable_io import (
+    publish_bias_row_document,
+    publish_inputs_document,
+)
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Phase7DigestPayload,
@@ -24,6 +28,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document_delta,
 )
 from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.olympus.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
 from digiquant.olympus.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
@@ -371,6 +376,33 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             attention = None
         if attention is not None:
             artifacts.append(attention)
+
+        # WP-B: inspectable Inputs + bias-row. Fail-soft — a miss must not
+        # block segment/digest writes (same policy as attention-plan).
+        attention_key = ATTENTION_PLAN_DOCUMENT_KEY if attention is not None else None
+        try:
+            artifacts.append(
+                publish_inputs_document(
+                    client=deps.client,
+                    state=state,
+                    attention_plan_key=attention_key,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "publish: inputs document failed for %s; continuing",
+                date_str,
+            )
+        try:
+            bias_row = publish_bias_row_document(client=deps.client, state=state)
+        except Exception:
+            logger.exception(
+                "publish: bias-row document failed for %s; continuing",
+                date_str,
+            )
+            bias_row = None
+        if bias_row is not None:
+            artifacts.append(bias_row)
 
         for bag in (
             state.phase1_outputs,
