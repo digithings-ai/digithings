@@ -40,7 +40,7 @@ cannot send house mail. Missing Mailgun env logs and returns.
 
 | Step | Node | Module | Edit behavior | Output |
 |------|------|--------|---------------|--------|
-| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review` |
+| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_hermes` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
 | **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
 | **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
