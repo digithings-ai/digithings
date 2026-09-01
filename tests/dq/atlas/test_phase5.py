@@ -1,4 +1,4 @@
-"""Integration tests for Phase 5 — US equity + 11-sector swarm + scorecard."""
+"""Integration tests for Phase 5 — US equity + 11-sector swarm (sector memos)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from digiquant.olympus.atlas.phases.phase5_equities import (
     SectorReport,
     build_phase5,
     build_phase5_equity,
-    build_phase5_scorecard,
     build_phase5_sectors,
 )
 from digiquant.olympus.atlas.sectors_config import load_sectors
@@ -120,10 +119,16 @@ class TestSectorsYaml:
 
 @pytest.mark.unit
 class TestPhase5Topology:
-    def test_equity_then_eleven_sectors_then_scorecard(self) -> None:
+    def test_build_phase5_is_equity_then_sectors_only(self) -> None:
+        import digiquant.olympus.atlas.phases.phase5_equities as phase5
+
+        assert [p.name for p in build_phase5()] == ["phase5_equity", "phase5_sectors"]
+        assert not hasattr(phase5, "build_phase5_scorecard")
+
+    def test_equity_then_eleven_sector_memos_no_scorecard(self) -> None:
         compiled = build_pipeline(
             AtlasResearchState,
-            [build_phase5_equity(), build_phase5_sectors(), build_phase5_scorecard()],
+            [build_phase5_equity(), build_phase5_sectors()],
         )
         state = _seed_state_through_phase4()
         with patch(
@@ -133,15 +138,14 @@ class TestPhase5Topology:
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        # Equity slot + 11 sector slots + scorecard = 13 entries.
+        # Equity slot + 11 sector memos. No rolled-up sector-scorecard document.
         assert "equity" in final.phase5_outputs
-        sector_slugs = {
-            k for k in final.phase5_outputs if k.startswith("sector-") and k != "sector-scorecard"
-        }
+        sector_slugs = {k for k in final.phase5_outputs if k.startswith("sector-")}
         assert len(sector_slugs) == 11
-        assert "sector-scorecard" in final.phase5_outputs
+        assert "sector-technology" in sector_slugs
+        assert "sector-scorecard" not in final.phase5_outputs
 
-    def test_scorecard_aggregates_sector_biases(self) -> None:
+    def test_daily_phase5_run_does_not_emit_scorecard(self) -> None:
         compiled = build_pipeline(AtlasResearchState, build_phase5())
         state = _seed_state_through_phase4()
         with patch(
@@ -151,60 +155,13 @@ class TestPhase5Topology:
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        scorecard = final.phase5_outputs["sector-scorecard"].payload.body  # type: ignore[union-attr]
-        assert len(scorecard["rows"]) == 11
-        # All sectors returned "bullish" → scorecard aggregate should be bullish.
-        assert scorecard["bias"] == "bullish"
-        # Every row carries an ETF and a stance.
-        for row in scorecard["rows"]:
-            assert row["etf"]
-            assert row["stance"] in {"overweight", "underweight", "neutral"}
-
-    def test_scorecard_propagates_sector_quality_signals(self) -> None:
-        # #953: the scorecard must carry each sector report's confidence / data_quality /
-        # material_findings / sources instead of dropping them — a low-data sector must not
-        # look identical to a high-conviction one to the downstream PM.
-        from digiquant.olympus.atlas.phases.phase5_equities import _scorecard_node
-
-        first = load_sectors()[0]
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
-        state.phase5_outputs = {
-            first.slug: SegmentSlot(
-                payload=SegmentPayload(
-                    segment=first.slug,
-                    as_of=date(2026, 4, 26),
-                    body={
-                        "segment": first.slug,
-                        "date": "2026-04-26",
-                        "bias": "bullish",
-                        "headline": f"{first.slug} leads",
-                        "confidence": 0.65,
-                        "data_quality": "medium",
-                        "material_findings": [
-                            {
-                                "label": "ETF strong",
-                                "summary": "above 50/200 DMA",
-                                "source_ids": ["s1"],
-                            }
-                        ],
-                        "sources": [{"id": "s1", "title": "price_technicals", "url": None}],
-                        "notes": "n",
-                    },
-                )
-            )
-        }
-        out = _scorecard_node(state)
-        sc = out["phase5_outputs"]["sector-scorecard"].payload.body
-        row = sc["rows"][0]
-        assert row["confidence"] == 0.65
-        assert row["data_quality"] == "medium"
-        assert row["material_findings"][0]["label"] == "ETF strong"
-        assert row["sources"][0]["id"] == "s1"
-        # The scorecard envelope rolls the signals up too (was hardcoded empty).
-        assert sc["confidence"] == 0.65
-        assert sc["data_quality"] == "medium"
-        assert sc["sources"][0]["id"] == "s1"
-        assert sc["material_findings"]
+        assert "sector-scorecard" not in final.phase5_outputs
+        sector_slugs = {k for k in final.phase5_outputs if k.startswith("sector-")}
+        assert len(sector_slugs) == 11
+        for slug in sector_slugs:
+            body = final.phase5_outputs[slug].payload.body  # type: ignore[union-attr]
+            assert body["segment"] == slug
+            assert body["headline"]
 
     def test_sector_nodes_receive_sector_config_in_phase_inputs(self) -> None:
         """Pin the templated-skill contract: each sector call sees its own
@@ -240,55 +197,3 @@ class TestPhase5Topology:
             compiled.invoke(state)
 
         assert set(received_slugs) == {s.slug for s in load_sectors()}
-
-
-@pytest.mark.unit
-class TestAggregateBias:
-    """Boundary tests for the scorecard → portfolio-level bias reduction."""
-
-    def _row(self, stance: str):
-        from digiquant.olympus.atlas.phases.phase5_equities import SectorScorecardEntry
-
-        return SectorScorecardEntry(
-            segment="sector-x",
-            date=date(2026, 4, 26),
-            bias="neutral",
-            headline="",
-            etf="ETF",
-            stance=stance,  # type: ignore[arg-type]
-            key_driver="",
-            material_findings=[],
-            sources=[],
-            notes="",
-        )
-
-    def test_empty_is_mixed(self) -> None:
-        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
-
-        assert _aggregate_bias([]) == "mixed"
-
-    def test_all_neutral_is_neutral(self) -> None:
-        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
-
-        rows = [self._row("neutral")] * 11
-        assert _aggregate_bias(rows) == "neutral"
-
-    def test_strong_overweight_majority_is_bullish(self) -> None:
-        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
-
-        rows = [self._row("overweight")] * 7 + [self._row("underweight")] * 2
-        assert _aggregate_bias(rows) == "bullish"
-
-    def test_strong_underweight_majority_is_bearish(self) -> None:
-        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
-
-        rows = [self._row("overweight")] * 2 + [self._row("underweight")] * 7
-        assert _aggregate_bias(rows) == "bearish"
-
-    def test_tug_of_war_is_mixed(self) -> None:
-        from digiquant.olympus.atlas.phases.phase5_equities import _aggregate_bias
-
-        rows = (
-            [self._row("overweight")] * 5 + [self._row("underweight")] * 5 + [self._row("neutral")]
-        )
-        assert _aggregate_bias(rows) == "mixed"

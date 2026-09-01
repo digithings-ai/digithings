@@ -86,7 +86,6 @@ _ATLAS_COMPILED_NODES = frozenset(
         "crypto",
         "equity",
         "sector-technology",
-        "sector-scorecard",
         "consolidate",
         "master-digest",
     }
@@ -133,6 +132,8 @@ def test_atlas_graph_topology_unchanged_by_phase1() -> None:
     nodes = _graph_node_names(graph)
     assert _FORBIDDEN_PHASE1_NODES.isdisjoint(nodes)
     assert _ATLAS_COMPILED_NODES.issubset(nodes)
+    assert "sector-scorecard" not in nodes
+    assert "sector-technology" in nodes
     for forbidden in (
         "technical-analyst-AAPL",
         "pm-rebalance",
