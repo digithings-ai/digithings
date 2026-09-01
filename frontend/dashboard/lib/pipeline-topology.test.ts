@@ -14,8 +14,9 @@ describe('pipeline topology', () => {
     );
     expect(fanouts).toMatchObject({ 'alt-data': 6, sectors: 11 });
   });
-  it('sector scorecard is a research leaf (Phase-5 equities output), not a synthesis one', () => {
-    expect(stageById('research')!.subSteps.map((s) => s.id)).toContain('scorecard');
+  it('research has no sector-scorecard leaf; sector memos live under the sectors fan-out', () => {
+    expect(stageById('research')!.subSteps.map((s) => s.id)).not.toContain('scorecard');
+    expect(stageById('research')!.subSteps.map((s) => s.id)).toContain('sectors');
     expect(stageById('synthesis')!.subSteps.map((s) => s.id)).not.toContain('scorecard');
   });
   it('selection has analysts and deliberation fan-outs and a commit-free spine', () => {

@@ -62,6 +62,7 @@ describe('pipeline link resolvers', () => {
     expect(leafDocumentKey('thesis')).toBe('thesis/thesis-review');
     expect(leafDocumentKey('screener')).toBe('opportunity-screener');
     expect(leafDocumentKey('pm-direction')).toBe('pm-direction-memo');
+    expect(leafDocumentKey('scorecard')).toBeNull();
     expect(leafDocumentKey('analysts', 'SPY')).toBe('analyst/SPY');
     expect(leafDocumentKey('nope')).toBeNull();
   });

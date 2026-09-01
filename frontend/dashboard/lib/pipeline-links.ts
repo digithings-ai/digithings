@@ -60,7 +60,6 @@ export function leafDocumentKey(subStepId: string, branch?: string): string | nu
     case 'thesis': return 'thesis/thesis-review';
     case 'screener': return 'opportunity-screener';
     case 'macro': return 'macro';
-    case 'scorecard': return 'sector-scorecard';
     case 'digest': return 'digest';
     case 'pm-direction': return 'pm-direction-memo';
     case 'risk-sizing': return 'pm-rebalance';
