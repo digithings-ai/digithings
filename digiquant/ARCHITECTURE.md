@@ -2525,6 +2525,11 @@ the grants would refuse anyway.
   looking at magnitude; the position is flat and the surplus is logged as a data error.
   Reading it back is also what makes two orders on one symbol in one run chain correctly —
   the second sees the first's residual, not the pre-run book.
+- **ADD/TRIM of +0.0pp is HOLD.** Event kind still comes from residual quantity, but if the
+  approved weight and prior book round to the same 1-decimal pp, the projection writes
+  `HOLD` rather than a dust true-up. House 2026-09-01 FXI/VGK/XLF filled ~0.05–0.14 shares
+  at unchanged 5/25/20%. `OPEN`/`EXIT` are unchanged (#1743). H9 also skips `order_intents`
+  when `_decision` returns `NO_OP` (no-trade band), so those fills should not mint again.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
   row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
