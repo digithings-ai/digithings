@@ -47,7 +47,7 @@ cannot send house mail. Missing Mailgun env logs and returns.
 | **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `HermesGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
 | **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
 | **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
-| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
+| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
 **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `hermes/allocation_contracts.py`
@@ -247,8 +247,11 @@ Operator chrome (`PmDirectionDocumentView`) hides `forecast_reference` /
 `degradation_reason` and shows narrative, derived buy/hold/sell vs prior
 (rebalance prior-weight vs H8 target when that payload is at hand, else prior
 direction, else `long`/`flat`), rank, and confidence as a percent. H8 maps memo +
-feasibility constraints → sized weights; direction/rank semantics are unchanged
-in this WP (confidence-aware sizing is WP-H).
+feasibility constraints → sized weights. On the calibrated path rank is **not** a
+size input (μ/σ/reliability + 12% vol budget + 5% grid). H8 then scales each long
+by H7 `confidence` (cash-first; missing rows on a mixed roster → 0.5, never 1.0;
+pre-WP-G memos that omit confidence on every long skip the haircut). The UI
+must never imply #1 = largest weight.
 
 ---
 

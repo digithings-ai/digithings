@@ -1488,8 +1488,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   absent from that path. Missing/empty coverage falls back to characterized
   incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
-  unchanged (no optimizer / control reorder). WP8.5 locks that shell in
+  `h8_sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
+  missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
+  same order; confidence is a reduce-only haircut after vol-target so leftover
+  cash is not redistributed. WP8.5 locks that shell in
   `tests/dq/hermes/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
@@ -1749,12 +1751,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `carried_from`/`continuity` markers on the synthesis-carry path. Phase 1–5
   research validates as `ResearchMemo` (`segment`, `date`, markdown `body`,
   optional `sources` / `internal_bias` / `regime_label`; `extra="allow"` for
-  historical metric slots). `DigestSnapshot` still extends `SegmentReport`
-  (bias / headline / findings) until the digest stitcher (WP-E). The dominant
-  cause of merge fallbacks was unguarded `Literal[...]` axes, so
+  historical metric slots). The daily digest is a stitched markdown briefing
+  (`DigestSnapshot`: `date`, `body`, `regime_label`; `extra="allow"` for
+  historical bias/headline/summary slots). H1/H2 read
+  `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
   `ResearchMemo` and `SegmentReport` both run `_apply_literal_axis_normalization`:
   an unrecognized value degrades to `None` on an Optional axis and is still
-  rejected on a required one (`DigestSnapshot.bias`). A field that declares its
+  rejected on a required one. A field that declares its
   own `mode="before"` validator (`internal_bias`, `bias`, `data_quality`) keeps
   ownership of its vocabulary and is skipped by the generic pass. `internal_bias`
   / `bias` still consult `_LITERAL_SYNONYMS` after `_BIAS_SYNONYMS` (house GHA
@@ -2020,8 +2023,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Each roster row may carry a deterministic `ForecastReference` to the effective
   forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
   never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
-  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
-  ignores forecast refs and confidence for now (direction/rank unchanged). **H9** (`commit_run`) is the
+  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner. On the
+  calibrated path (`h8_sizing_input_mode=calibrated`) raw size is
+  `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. H8 then scales
+  each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
+  into peers). Missing confidence on a mixed roster fail-softs to
+  `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
+  confidence on every long skip the haircut so replay does not silently shrink. **H9** (`commit_run`) is the
   Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
   the portfolio lineage ledger commit chain (see below), and fail-soft prospective
   forecast-registry persistence (#2663).
@@ -2029,12 +2037,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 #### Risk-sizing layer (Pillar 2)
 
 Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
-narrative; **H8** deterministic code owns sizing, caps, and risk.
+narrative + confidence; **H8** deterministic code owns sizing, caps, and risk. Rank is
+order only — it is not a size input on the calibrated path.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
   conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
   raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
-  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → round-DOWN to grid → cash residual.
+  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → **PM confidence scale** (reduce-only /
+  cash-first) → round-DOWN to grid → cash residual.
   Raw-weight modes: **calibrated** (`reliability × max(0, μ) / σ_ε`, #2734),
   conviction-∝ × inverse-vol, or fractional-Kelly (incumbent fallback only). Every
   reduction is **reduce-only / cash-first**: freed weight becomes cash, never redistributed
@@ -2042,6 +2052,8 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   **asset-class bucket** ρ (`_bucket_corr`: equity↔bond ≈0, equity↔equity≈0.8; UNKNOWN class
   stays ρ=1.0 conservative) rather than full-correlation — the #934 over-cashing fix.
   `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
+  A 12% portfolio vol budget plus the 5% weight grid can pin a name near 10% without
+  rank driving size (operator 2026-08-31 gold observation; rank unused on calibrated).
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -2049,12 +2061,14 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
 - `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
-  `PMDirectionMemo` (direction + ranks), assembles `AllocationInputBundle`, and on the
-  calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
-  Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
-  empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. After the final control shell (carry / cadence / backstop /
-  grid / final caps), builds and attaches `phase_hermes.pre_trade_risk_report` via
+  `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
+  and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
+  unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
+  when omitted). Falls back to dense rank→conviction when mode is `incumbent` or
+  calibrated coverage is empty. Writes `phase_hermes.sized_book` with
+  `allocation_input_bundle_hash` + `h8_sizing_input_mode`. After the final control shell
+  (carry / cadence / backstop / grid / final caps), builds and attaches
+  `phase_hermes.pre_trade_risk_report` via
   `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
   `pre_trade_risk_report_hash` on the book; report omission is fail-soft. Per-ticker vol
   from `price_technicals` and `sector_map` buckets still feed caps/vol-target. Wired

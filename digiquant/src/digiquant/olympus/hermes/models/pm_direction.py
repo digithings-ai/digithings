@@ -3,7 +3,8 @@
 WP4.5 (#2660): each roster row may carry a typed ``ForecastReference`` bound
 deterministically from the current effective-forecast map — never from LLM IDs.
 WP-G: roster rows may also carry ``confidence`` in ``[0, 1]`` (display scale);
-rank remains ordinal order, not size. H8 sizing does not consume confidence yet.
+rank remains ordinal order, not size. H8 scales each long by ``confidence``
+(cash-first; missing → 0.5).
 """
 
 from __future__ import annotations
