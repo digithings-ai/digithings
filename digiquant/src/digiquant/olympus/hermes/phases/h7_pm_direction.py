@@ -4,7 +4,7 @@ WP4.5 (#2660): after LLM success or prior-memo fail-soft, deterministically bind
 each roster row to the current run's effective forecast (never model-supplied IDs).
 
 WP-G: roster rows may carry ``confidence`` in ``[0, 1]``. Rank remains order, not
-size. H8 does not consume confidence in this WP.
+size. H8 scales each long by that confidence (cash-first).
 
 WP5.4 (#2684): at this existing H6→H7 boundary, attach cutoff-safe shadow
 calibration artifacts into typed state for H9 persistence. Observational only —

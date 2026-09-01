@@ -1,7 +1,8 @@
 """Integration Task 1.1 — lock Phase 1 forecast/risk/cost contracts (#2713, #2719).
 
 End-to-end composition gate: Phase 1 registries attach observational artifacts
-without forking graph topology or changing incumbent H8 sized-book economics.
+without forking graph topology. H8 still books once; size follows canned H7
+confidence (simulator default 0.7 → 70% AAPL, leftover stays cash).
 """
 
 from __future__ import annotations
@@ -303,7 +304,10 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert len(run.client.store.get("positions", [])) >= 1
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1
 
-    assert sized_book_weights(hermes.sized_book) == {"AAPL": 100.0}
+    # Simulator canned H7 memo sets AAPL confidence=0.7; H8 haircuts cash-first.
+    aapl_row = next(row for row in hermes.pm_direction_memo.roster if row.ticker == "AAPL")
+    assert aapl_row.confidence == pytest.approx(0.7)
+    assert sized_book_weights(hermes.sized_book) == {"AAPL": 70.0}
 
     cutoff = final.knowledge_cutoff_at
     assert cutoff is not None
