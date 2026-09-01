@@ -26,12 +26,12 @@ const deliberationNode: LaidOutNode = {
 };
 
 describe('PipelineNodeDetail', () => {
-  it('renders empty state copy when documentKey is null', () => {
+  it('renders nothing when documentKey is null', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineNodeDetail, { documentKey: null, date: '2026-06-23', onClose: () => {} }),
     );
-    // Should have actionable empty state, not a dead end
-    expect(html).toMatch(/no document|not available|select a node/i);
+    expect(html).toBe('');
+    expect(html).not.toMatch(/pipeline guide|select a node|no document selected/i);
   });
 
   it('shows loading indicator when documentKey is provided but doc is not yet loaded', () => {
@@ -63,7 +63,7 @@ describe('PipelineNodeDetail', () => {
     expect(html).not.toContain('md:w-[372px]');
   });
 
-  it('renders pipeline guidance when a selected step has no run document', () => {
+  it('does not open a description-only sidebar when a selected step has no document', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineNodeDetail, {
         node: deliberationNode,
@@ -73,9 +73,8 @@ describe('PipelineNodeDetail', () => {
       }),
     );
 
-    expect(html).toContain('Pipeline guide');
-    expect(html).toContain('Deliberation');
-    expect(html).toMatch(/challenge|debate|deliberat/i);
-    expect(html).not.toContain('No document selected');
+    expect(html).toBe('');
+    expect(html).not.toContain('Pipeline guide');
+    expect(html).not.toContain('Stage overview');
   });
 });

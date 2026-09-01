@@ -4,6 +4,7 @@ import { PIPELINE_TOPOLOGY } from './pipeline-topology';
 import {
   auditStaticTopologyRunStatuses,
   pipelineNodeRunStatusLabel,
+  resolvePresentCommitKey,
   staticTopologyNodeIds,
   topologyEvidenceBands,
   type PipelineNodeRunStatus,
@@ -155,5 +156,15 @@ describe('pipeline topology status audit', () => {
     for (const id of staticTopologyNodeIds()) {
       expect(matrix[id], id).toBeDefined();
     }
+  });
+
+  it('commit-run keys stay ledger-internal: newest numeric run_id still resolves', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['commit-run/9999999999', 'commit-run/10000000000']),
+      artifacts: [],
+    };
+    expect(resolvePresentCommitKey(day)).toBe('commit-run/10000000000');
   });
 });

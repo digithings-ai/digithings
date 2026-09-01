@@ -170,7 +170,77 @@ export function planWalkthroughSelection(
         : subStep?.fanout && node.kind === 'substep'
           ? { kind: 'fanout', nodeId: node.id }
           : { kind: 'node', nodeId: node.id },
-    activateDetail: openDetail,
+    activateDetail: openDetail && Boolean(node.documentKey),
+  };
+}
+
+export function stageHasGraphChildren(stageId: PipelineStageId): boolean {
+  return (stageById(stageId)?.subSteps.some((sub) => !sub.hiddenFromGraph) ?? false);
+}
+
+/**
+ * Pure click plan: stages and fan-out parents expand in place.
+ * The sidebar opens only when the node has a documentKey.
+ */
+export function planCanvasNodeClick(
+  node: LaidOutNode,
+  expansion: ExpansionState,
+): {
+  expansion: ExpansionState;
+  activate: boolean;
+  focusTarget: PipelineFocusTarget;
+} {
+  const activate = Boolean(node.documentKey);
+
+  if (node.kind === 'stage') {
+    if (!stageHasGraphChildren(node.stageId)) {
+      return {
+        expansion,
+        activate,
+        focusTarget: { kind: 'node', nodeId: node.id },
+      };
+    }
+    const willExpand = !expansion.expandedStages.has(node.stageId);
+    const next = new Set(expansion.expandedStages);
+    if (next.has(node.stageId)) next.delete(node.stageId);
+    else next.add(node.stageId);
+    return {
+      expansion: { ...expansion, expandedStages: next },
+      activate,
+      focusTarget: willExpand
+        ? { kind: 'stage', stageId: node.stageId }
+        : { kind: 'node', nodeId: node.id },
+    };
+  }
+
+  if (node.kind === 'substep') {
+    const subStepId = node.id.split(':')[1];
+    const hasFanout = !!stageById(node.stageId)?.subSteps.find((s) => s.id === subStepId)?.fanout;
+    if (hasFanout) {
+      const fanoutKey = `${node.stageId}:${subStepId}`;
+      const willExpand = !expansion.expandedFanouts.has(fanoutKey);
+      const next = new Set(expansion.expandedFanouts);
+      if (next.has(fanoutKey)) next.delete(fanoutKey);
+      else next.add(fanoutKey);
+      return {
+        expansion: { ...expansion, expandedFanouts: next },
+        activate,
+        focusTarget: willExpand
+          ? { kind: 'fanout', nodeId: node.id }
+          : { kind: 'node', nodeId: node.id },
+      };
+    }
+    return {
+      expansion,
+      activate,
+      focusTarget: { kind: 'node', nodeId: node.id },
+    };
+  }
+
+  return {
+    expansion,
+    activate,
+    focusTarget: { kind: 'node', nodeId: node.id },
   };
 }
 
@@ -318,55 +388,12 @@ export default function PipelineCanvas({
       const walkthroughIndex = walkthroughNodes.findIndex((candidate) => candidate.id === node.id);
       if (walkthroughIndex >= 0) setActiveWalkthroughIndex(walkthroughIndex);
 
-      if (node.kind === 'stage') {
-        const willExpand = !expansion.expandedStages.has(node.stageId);
-        setFocusTarget(willExpand
-          ? { kind: 'stage', stageId: node.stageId }
-          : { kind: 'node', nodeId: node.id });
-        setExpansion((prev) => {
-          const next = new Set(prev.expandedStages);
-          if (next.has(node.stageId)) {
-            next.delete(node.stageId);
-          } else {
-            next.add(node.stageId);
-          }
-          return { ...prev, expandedStages: next };
-        });
-        onNodeActivate(node);
-        return;
-      }
-
-      if (node.kind === 'substep') {
-        const subStepId = node.id.split(':')[1];
-        const hasFanout = !!stageById(node.stageId)?.subSteps.find((s) => s.id === subStepId)?.fanout;
-        if (hasFanout) {
-          const fanoutKey = `${node.stageId}:${subStepId}`;
-          const willExpand = !expansion.expandedFanouts.has(fanoutKey);
-          setFocusTarget(willExpand
-            ? { kind: 'fanout', nodeId: node.id }
-            : { kind: 'node', nodeId: node.id });
-          setExpansion((prev) => {
-            const next = new Set(prev.expandedFanouts);
-            if (next.has(fanoutKey)) {
-              next.delete(fanoutKey);
-            } else {
-              next.add(fanoutKey);
-            }
-            return { ...prev, expandedFanouts: next };
-          });
-          onNodeActivate(node);
-          return;
-        }
-        setFocusTarget({ kind: 'node', nodeId: node.id });
-        onNodeActivate(node);
-        return;
-      }
-
-      // fanout-branch
-      setFocusTarget({ kind: 'node', nodeId: node.id });
-      onNodeActivate(node);
+      const plan = planCanvasNodeClick(node, expansion);
+      setFocusTarget(plan.focusTarget);
+      setExpansion(plan.expansion);
+      if (plan.activate) onNodeActivate(node);
     },
-    [expansion.expandedFanouts, expansion.expandedStages, onNodeActivate, walkthroughNodes],
+    [expansion, onNodeActivate, walkthroughNodes],
   );
 
   const selectWalkthroughNode = useCallback((
@@ -727,7 +754,7 @@ export default function PipelineCanvas({
               : undefined;
             const isFanoutParent = !!fanout;
 
-            const expandable = isStage || isFanoutParent;
+            const expandable = (isStage && stageHasGraphChildren(node.stageId)) || isFanoutParent;
             const expanded = isStage
               ? expansion.expandedStages.has(node.stageId)
               : expansion.expandedFanouts.has(`${node.stageId}:${subStepId}`);
