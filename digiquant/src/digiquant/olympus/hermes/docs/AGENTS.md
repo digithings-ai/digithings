@@ -70,10 +70,14 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 
 ## Persistence
 
-- **H1–H7 artifacts:** `documents` + optional `document_deltas` via phase writers
+- **H1–H7 artifacts:** `documents` + optional `document_deltas` via phase writers.
+  Inspectable pipeline leaves: H1 upserts `thesis/thesis-review`; H4 upserts
+  `opportunity-screener` (payload `doc_type=opportunity_screen`). Overlay prefixes
+  via `hermes_document_key`; house keys stay unprefixed.
 - **H9 terminal:** `commit_run` upserts `positions`, `nav_history`, syncs `theses` /
   `thesis_vehicles`, publishes brief, appends `decision_log`
-- **Atlas `publish_phase`:** research segments + digest only (chain terminal after Hermes)
+- **Atlas `publish_phase`:** research segments + digest, plus inspectable `inputs`
+  and `bias-row` (fail-soft; chain terminal after Hermes)
 - **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node.
   Overlay nested chain skips the fold so persist-on cannot stamp house `decision_log`.
 

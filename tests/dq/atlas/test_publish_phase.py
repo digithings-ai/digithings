@@ -75,7 +75,8 @@ class TestPublishNode:
 
         result = node(state)
 
-        # Atlas publish: segments + digest only; Hermes artifacts publish in h9/commit_run.
+        # Atlas publish: inspectable inputs (+ bias-row when present) plus
+        # segments + digest; Hermes artifacts publish in h9/commit_run.
         doc_rows = client.store["documents"]
         keys = sorted(r["document_key"] for r in doc_rows)
         assert keys == sorted(
@@ -87,6 +88,7 @@ class TestPublishNode:
                 "bonds",
                 "equity",
                 "digest",
+                "inputs",
             ]
         )
         # Idempotency: every upsert declares (workspace_id, date, document_key).

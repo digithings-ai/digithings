@@ -1689,6 +1689,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
   and `078` (category `planner`) register allow-list values. UI must not invent
   rows without a published document.
+  Inspectable I/O (pipeline operator review WP-B): `publish_phase` also fail-soft
+  publishes `document_key='inputs'` (watchlist, hashed profile identity, market-data
+  freshness, prior-context dates, attention-plan pointer) and `document_key='bias-row'`
+  (deterministic `phase6_bias_row` table) via `olympus.atlas.inspectable_io`. Hermes H1
+  publishes `thesis/thesis-review`; H4 publishes `opportunity-screener` (`doc_type`
+  `opportunity_screen`). Overlay uses `hermes_document_key` for Hermes keys; Atlas
+  inspectable keys stay unprefixed with `workspace_id` on the row.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
@@ -1810,8 +1817,10 @@ flowchart TB
 
 **Live graph** (`build_hermes_graph` → `build_hermes_phases_thesis`): Atlas A0–A4 →
 Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research artifacts
-only — Hermes terminal persist is **H9 `commit_run`** (positions, nav, theses sync,
-portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
+(`inputs`, `bias-row` when present, segments, digest) — Hermes terminal persist is
+**H9 `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
+plus per-phase inspectable documents (H1 `thesis/thesis-review`, H4 `opportunity-screener`).
+Beliefs distillation runs **on demand**
 (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
 
 #### Day-over-day continuity contract (#859)
