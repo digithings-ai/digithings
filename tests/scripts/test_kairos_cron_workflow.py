@@ -1,7 +1,7 @@
 """Kairos cron GHA spec is probe-only and stays off the house pipeline.
 
-Overlay ``usage.start`` is process-global, so overlay / kairos sync / Mailgun
-must never share ``pipeline-olympus.yml``'s Hermes chain job. The spec in
+Overlay ``usage.start`` is process-global, so overlay / kairos sync / route /
+digest / Mailgun must never share ``pipeline-olympus.yml``'s Hermes chain job. The spec in
 ``docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`` is
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
 ``hermes.chain`` on that job would be a production apply against Observer.
@@ -107,6 +107,7 @@ class TestKairosCronSpecIsProbeOnly:
         assert "digiquant.olympus.overlay --dry-run" in blob
         assert "digiquant.olympus.kairos.sync_cron --dry-run" in blob
         assert "digiquant.olympus.kairos.route_cron --dry-run" in blob
+        assert "digiquant.notify.dispatch --dry-run" in blob
         for token in FORBIDDEN_APPLY:
             assert token not in blob, token
 

@@ -1,7 +1,7 @@
 name: "Pipeline: Kairos cron check"
 
 # Fail-closed probe for overlay dispatch env, Alpaca paper sync env, route
-# kill-switch visibility, and Mailgun.
+# kill-switch visibility, Mailgun names, and digest candidate counts.
 # Separate process from pipeline-olympus.yml on purpose: overlay usage.start is
 # process-global, so overlay must never share the house Hermes chain job.
 #
@@ -84,3 +84,9 @@ jobs:
         run: |
           set -euo pipefail
           uv run --frozen --no-sync python -m digiquant.olympus.kairos.route_cron --dry-run
+
+      - name: Digest dry-run (no send, no notification_log claim)
+        if: success() || failure()
+        run: |
+          set -euo pipefail
+          uv run --frozen --no-sync python -m digiquant.notify.dispatch --dry-run
