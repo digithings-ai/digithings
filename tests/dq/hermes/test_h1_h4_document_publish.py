@@ -65,6 +65,62 @@ class TestH1PublishesThesisReviewDocument:
         reviewed = body.get("reviewed_theses") or []
         assert reviewed[0]["thesis_id"] == "geo-gold"
 
+    def test_h1_still_receives_digest_snapshot_envelope(self) -> None:
+        """WP-C: digest stays SegmentReport-shaped until WP-E so H1 does not go blind."""
+        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
+        from digiquant.olympus.hermes.phases import h1_thesis_review as h1
+
+        snapshot = DigestSnapshot.model_validate(
+            {
+                "segment": "master-digest",
+                "date": "2026-08-31",
+                "bias": "bearish",
+                "headline": "Growth slowing into a sticky inflation print.",
+                "material_findings": [
+                    {
+                        "label": "Curve",
+                        "summary": "2s10s re-steepened.",
+                        "source_ids": ["s1"],
+                    }
+                ],
+                "sources": [{"id": "s1", "title": "Treasury", "url": "https://example.com"}],
+                "market_regime_snapshot": "Slowing / cooling.",
+                "alt_data_dashboard": "CTA covering.",
+                "institutional_summary": "Modest outflows.",
+                "asset_classes_summary": "Bonds bid.",
+                "us_equities_summary": "Narrow breadth.",
+            }
+        )
+        dumped = snapshot.model_dump(mode="json")
+        assert dumped["bias"] == "bearish"
+        assert dumped["headline"]
+        assert dumped["material_findings"]
+
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=date(2026, 8, 31),
+            config=AtlasConfigBundle(watchlist=["GLD"]),
+            prior_context=PriorContext(active_theses=[]),
+        )
+        state.phase7_digest = dumped
+        captured: dict[str, object] = {}
+
+        def _capture(**kwargs: object) -> tuple[ThesisReviewOutput, None, list[object]]:
+            inputs = kwargs["phase_inputs"]  # type: ignore[index]
+            captured["digest"] = inputs["digest"]  # type: ignore[index]
+            return ThesisReviewOutput(), None, []
+
+        client = FakeSupabaseClient()
+        compiled = build_pipeline(AtlasResearchState, [build_h1_thesis_review(client=client)])
+        with patch.object(h1, "run_thesis_phase_llm", side_effect=_capture):
+            compiled.invoke(state)
+
+        digest = captured["digest"]
+        assert isinstance(digest, dict)
+        assert digest["bias"] == "bearish"
+        assert "Growth slowing" in str(digest["headline"])
+        assert digest["material_findings"]
+
 
 @pytest.mark.unit
 class TestH4PublishesOpportunityScreener:

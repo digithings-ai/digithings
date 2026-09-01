@@ -33,13 +33,13 @@ The `phase_inputs` block contains:
   hf_consensus, fed_odds, onchain_positioning). Use these as the factual backbone; do not override
   them with guesses. `onchain_positioning` is the Hyperdash smart-money-vs-rekt cohort divergence
   (overall_divergence + top divergent markets); null on a data outage.
-- `phase1` — alternative data outputs (sentiment, CTA positioning, options/derivatives, politician
-  and Fed signals). Key signals: risk-appetite proxies, systematic positioning, options skew.
-- `phase2` — institutional intelligence (ETF flows, hedge-fund intel). Key signals: net
-  flow direction, HF crowding or rotation.
-- `phase3` — macro analysis (regime classification, yield curve, central bank, inflation, geopolitics).
-  The `regime_label` field from phase3 is the authoritative short regime token.
-- `phase4` — asset classes (bonds, commodities, forex, crypto, international equities).
+- `phase1` — alternative data **memos** (markdown `body` plus optional `internal_bias` /
+  `sources`). Read the prose; do not expect `headline` / `material_findings` / `data_quality`.
+- `phase2` — institutional intelligence memos (ETF flows, hedge-fund intel).
+- `phase3` — macro memo. `regime_label` (and optional growth/inflation/policy/risk_appetite
+  tokens) is the authoritative short regime token when present; otherwise derive it from the
+  markdown body.
+- `phase4` — asset-class memos (bonds, commodities, forex, crypto, international equities).
 - `phase5` — US equities plus the 11 GICS **sector memos** (`sector-technology` …
   `sector-comms`). Those memos are the authority for sector leadership; there is
   no rolled-up `sector-scorecard`.
@@ -48,7 +48,7 @@ The `phase_inputs` block contains:
 
 ## Evidence standards
 
-- Every assertion in the narrative sections must trace to at least one upstream body field.
+- Every assertion in the narrative sections must trace to at least one upstream memo `body`.
 - If phase bodies are empty (carry run or missing segment), write "No fresh data this run."
   rather than inferring or repeating yesterday's view.
 - `material_findings` must each cite `source_ids` referencing a real entry in `sources`.

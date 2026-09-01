@@ -7,10 +7,9 @@ sector memos themselves.
 
 from __future__ import annotations
 
-from typing import Any, Literal  # score:allow untyped any — used for dict shape typing below
+from typing import Any  # score:allow untyped any — used for dict shape typing below
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
     InputsBuilder,
@@ -18,29 +17,18 @@ from digiquant.olympus.atlas.phases._node_factory import (
     build_segment_node,
 )
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import ResearchMemo
 from digiquant.olympus.atlas.state import AtlasResearchState
 
 # ─── Output models ──────────────────────────────────────────────────────────
 
 
-class EquityOverviewReport(SegmentReport):
+class EquityOverviewReport(ResearchMemo):
     """Phase 5A — top-down SPY/QQQ/IWM read."""
 
-    spy_trend: Literal["bullish", "bearish", "neutral"] | None = None
-    market_breadth: Literal["broad", "narrow", "mixed"] | None = None
-    factor_leader: (
-        Literal["value", "growth", "momentum", "quality", "small_cap", "mixed"] | None
-    ) = None
 
-
-class SectorReport(SegmentReport):
+class SectorReport(ResearchMemo):
     """Phase 5B-L — per-sector deep-dive (one LLM call per sector)."""
-
-    relative_strength_vs_spy: Literal["outperforming", "underperforming", "inline"] | None = None
-    sub_segment_leader: str | None = Field(default=None)
-    driver_confirmation_count: int = Field(default=0, ge=0)
-    conviction: Literal["high", "medium", "low"] | None = None
 
 
 # ─── Equity top-down node ───────────────────────────────────────────────────

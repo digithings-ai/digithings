@@ -131,21 +131,22 @@ def client_store_to_canned_extras(client: FakeSupabaseClient) -> dict[str, list[
 
 
 class SegmentFixtureBody(TypedDict, total=False):
-    """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
+    """Minimum-valid research memo body for simulator defaults."""
 
     segment: str
     date: str
+    body: str
+    sources: list[str]
+    internal_bias: str
     bias: str
     headline: str
     material_findings: list[str]
-    sources: list[str]
     notes: str
     growth: str
     inflation: str
     policy: str
     risk_appetite: str
     regime_label: str
-    portfolio_implications: str
 
 
 class DigestFixtureBody(SegmentFixtureBody, Phase7DigestPayload, total=False):
@@ -244,30 +245,34 @@ FixtureResponse = (
 # ──────────────────────────────────────────────────────────────────────────
 # 1. Default responses keyed by output schema name
 # ──────────────────────────────────────────────────────────────────────────
-# Phase 1-5 segment reports all extend SegmentReport, so a single
-# ``_segment`` template covers the lot; specific schemas with required
-# extra fields get their own builder below.
+# Phase 1-5 segment reports all extend ResearchMemo, so a single
+# ``_segment`` template covers the lot; MacroRegimeReport keeps optional
+# 4-factor tokens for the pipeline strip.
 
 _TODAY = "2026-04-26"
 
 
 def _segment(slug: str, headline: str = "synthetic finding") -> SegmentFixtureBody:
-    """Minimum valid SegmentReport body for a given segment slug."""
+    """Minimum valid ResearchMemo body for a given segment slug."""
     return {
         "segment": slug,
         "date": _TODAY,
-        "bias": "neutral",
-        "headline": headline,
-        "material_findings": [],
+        "body": f"# {slug}\n\n{headline}",
         "sources": [],
-        "notes": "",
+        "internal_bias": "neutral",
     }
 
 
 def _digest_body() -> DigestFixtureBody:
-    """DigestSnapshot extends SegmentReport with required summary strings."""
+    """DigestSnapshot still extends SegmentReport until WP-E."""
     return {
-        **_segment("master-digest", headline="synthetic regime"),
+        "segment": "master-digest",
+        "date": _TODAY,
+        "bias": "neutral",
+        "headline": "synthetic regime",
+        "material_findings": [],
+        "sources": [],
+        "notes": "",
         "market_regime_snapshot": "synthetic",
         "alt_data_dashboard": "synthetic",
         "institutional_summary": "synthetic",
@@ -351,7 +356,6 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "policy": "neutral",
         "risk_appetite": "mixed",
         "regime_label": "Synthetic / Mixed / Neutral / Mixed",
-        "portfolio_implications": "",
     },
     # Phase 4 — every asset class shares the SegmentReport core; phase4
     # extras are all optional.

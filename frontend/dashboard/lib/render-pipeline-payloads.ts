@@ -7,8 +7,10 @@
  * payload itself. Three shapes cover every pipeline document:
  *
  * - **Segment report** (`macro`, `bonds`, `equity`, `sector-*`, `alt-*`,
- *   `inst-*`, …): SegmentReport core (`segment`, `date`, `bias`, `headline`,
- *   `material_findings`, `sources`, `notes`) plus per-segment metric fields.
+ *   `inst-*`, …): `ResearchMemo` (`segment`, `date`, markdown `body`, optional
+ *   `sources`) or a legacy SegmentReport core (`headline`, `material_findings`,
+ *   `notes`). User-facing render is title + body; old rows fall back to
+ *   findings + notes. Bias, Signals, data_quality, and confidence are never shown.
  * - **Master digest** (`digest-delta` / `digest-baseline` documents and the
  *   `daily_snapshots.snapshot` jsonb): {@link DigestPayload} shape.
  * - **PM rebalance** (`pm-rebalance`): `{ notes, actions, recommended_portfolio }`.
@@ -185,19 +187,6 @@ export function summarizeRecommendedPortfolio(payload: unknown): RecommendedPort
 
 /* ── Master digest ───────────────────────────────────────────────────────── */
 
-/** SegmentReport-core keys handled explicitly by every renderer below. */
-const CORE_KEYS = new Set([
-  'segment',
-  'date',
-  'bias',
-  'headline',
-  'material_findings',
-  'sources',
-  'notes',
-  'doc_type',
-  'schema_version',
-]);
-
 const DIGEST_NARRATIVE_SECTIONS: Array<[key: string, heading: string]> = [
   ['us_equities_summary', 'US Equities'],
   ['asset_classes_summary', 'Asset Classes'],
@@ -351,7 +340,7 @@ export function renderRebalanceMarkdown(payload: unknown): string {
 
 /* ── Segment reports ─────────────────────────────────────────────────────── */
 
-/** True for SegmentReport-shaped payloads (every Phase 1–6 research document). */
+/** True for ResearchMemo or legacy SegmentReport-shaped payloads. */
 export function isSegmentReportPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
@@ -359,6 +348,7 @@ export function isSegmentReportPayload(payload: unknown): boolean {
   // sniffer is standalone-correct regardless of call order.
   if (isMasterDigestPayload(p)) return false;
   if (typeof p.segment !== 'string' || !p.segment) return false;
+  if (typeof p.body === 'string' && p.body.trim()) return true;
   return (
     typeof p.headline === 'string' ||
     typeof p.bias === 'string' ||
@@ -367,10 +357,9 @@ export function isSegmentReportPayload(payload: unknown): boolean {
 }
 
 /**
- * Markdown for a segment research report. Core narrative sections are rendered
- * explicitly; the segment-specific metric fields (e.g. `vix_level`,
- * `spy_trend`, `yield_curve_shape`) are rendered generically so new segments
- * display without frontend changes.
+ * Markdown for a research memo: title + body.
+ * Legacy SegmentReport rows fall back to headline + findings + notes.
+ * Never render bias, Signals leftover scalars, data_quality, or confidence.
  */
 export function renderSegmentReportMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
@@ -379,61 +368,16 @@ export function renderSegmentReportMarkdown(payload: unknown): string {
   const segment = s(p.segment).trim();
   out.push(`# ${humanize(segment || 'Research Report')}${date ? ` — ${date}` : ''}`, '');
 
-  const bias = s(p.bias).trim();
-  if (bias) out.push(`**Bias:** ${bias}`, '');
+  const body = cleanMemoProse(s(p.body).trim());
+  if (body) {
+    out.push(body, '');
+    return `${out.join('\n').trim()}\n`;
+  }
 
   const headline = s(p.headline).trim();
   if (headline) out.push(headline, '');
-
   pushFindings(out, p.material_findings);
-
-  // Generic rendering for segment-specific fields, grouped by value shape.
-  const scalarLines: string[] = [];
-  const extras = Object.entries(p)
-    .filter(([k]) => !CORE_KEYS.has(k))
-    .sort(([a], [b]) => a.localeCompare(b));
-  for (const [key, value] of extras) {
-    if (value == null) continue;
-    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      const text = s(value).trim();
-      if (text) scalarLines.push(`- **${humanize(key)}:** ${text}`);
-    }
-  }
-  if (scalarLines.length) {
-    out.push('## Signals', '', ...scalarLines, '');
-  }
-
-  for (const [key, value] of extras) {
-    if (Array.isArray(value) && value.length) {
-      const objRows = value.map(asObj).filter(Boolean) as Record<string, unknown>[];
-      out.push(`## ${humanize(key)}`, '');
-      if (objRows.length === value.length) {
-        out.push(...objectArrayTable(objRows));
-      } else {
-        for (const item of value) {
-          const text = s(item).trim();
-          if (text) out.push(`- ${text}`);
-        }
-        out.push('');
-      }
-      continue;
-    }
-    const o = asObj(value);
-    if (o && Object.keys(o).length) {
-      out.push(`## ${humanize(key)}`, '');
-      for (const [ik, iv] of Object.entries(o)) {
-        const text =
-          typeof iv === 'string' || typeof iv === 'number' || typeof iv === 'boolean'
-            ? s(iv).trim()
-            : JSON.stringify(iv);
-        if (text) out.push(`- **${humanize(ik)}:** ${text}`);
-      }
-      out.push('');
-    }
-  }
-
   pushNotes(out, p.notes);
-  pushSources(out, p.sources);
   return `${out.join('\n').trim()}\n`;
 }
 

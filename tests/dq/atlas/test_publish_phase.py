@@ -28,7 +28,7 @@ from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 
 def _slot(slug: str, **extra: Any) -> SegmentSlot:
-    body = {"segment": slug, **extra}
+    body = {"segment": slug, "body": f"# {slug}\n\nmemo", **extra}
     return SegmentSlot(payload=SegmentPayload(segment=slug, body=body, as_of=date(2026, 4, 26)))
 
 
@@ -371,8 +371,8 @@ class TestSuppressDegenerate:
     def test_absent_with_no_findings_is_suppressed(self) -> None:
         keys = self._published_keys(
             self._state_with(
-                dead=_slot("dead", data_quality="absent", material_findings=[]),
-                live=_slot("live", data_quality="high"),
+                dead=_slot("dead", body="", data_quality="absent", material_findings=[]),
+                live=_slot("live"),
             )
         )
         assert "dead" not in keys
@@ -394,7 +394,7 @@ class TestSuppressDegenerate:
 
     def test_degenerate_macro_phase3_is_suppressed(self) -> None:
         state = self._state_with()
-        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase3_output = _slot("macro", body="", data_quality="absent", material_findings=[])
         keys = self._published_keys(state)
         assert "macro" not in keys
 
@@ -402,10 +402,10 @@ class TestSuppressDegenerate:
         # A degenerate macro + degenerate phase1 leg are dropped; healthy legs across
         # phases 1/2/4/5 still publish — suppression is per-segment, not all-or-nothing.
         state = self._state_with(
-            dead=_slot("dead", data_quality="absent", material_findings=[]),
+            dead=_slot("dead", body="", data_quality="absent", material_findings=[]),
             alive=_slot("alive", data_quality="high"),
         )
-        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase3_output = _slot("macro", body="", data_quality="absent", material_findings=[])
         state.phase2_outputs = {"inst-flows": _slot("inst-flows", data_quality="medium")}
         state.phase4_outputs = {"bonds": _slot("bonds")}  # ungraded → publishes
         keys = self._published_keys(state)

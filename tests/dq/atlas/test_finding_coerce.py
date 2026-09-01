@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from digiquant.olympus.atlas.phases.phase5_equities import SectorReport
+from digiquant.olympus.atlas.segments import SegmentReport
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -31,7 +31,7 @@ def _sector(**over: object) -> dict[str, object]:
 
 class TestSummaryAliases:
     def test_text_field_fills_summary(self) -> None:
-        report = SectorReport.model_validate(
+        report = SegmentReport.model_validate(
             _sector(
                 material_findings=[
                     {
@@ -47,7 +47,7 @@ class TestSummaryAliases:
     def test_as_of_plus_unlabeled_prose_fills_summary_and_label(self) -> None:
         """Production attempt 1: pydantic showed as_of plus a long string, no summary."""
         prose = "XLRE traded between $38 and $45.36 all week."
-        report = SectorReport.model_validate(
+        report = SegmentReport.model_validate(
             _sector(material_findings=[{"as_of": "2026-08-28", "detail": prose}])
         )
         finding = report.material_findings[0]
@@ -57,12 +57,12 @@ class TestSummaryAliases:
 
     def test_as_of_only_still_rejected(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
-            SectorReport.model_validate(_sector(material_findings=[{"as_of": "2026-08-28"}]))
+            SegmentReport.model_validate(_sector(material_findings=[{"as_of": "2026-08-28"}]))
 
     def test_url_and_completion_state_are_not_promoted_to_summary(self) -> None:
         """Residual long strings that are not prose aliases must not become research."""
         with pytest.raises(ValidationError, match="summary"):
-            SectorReport.model_validate(
+            SegmentReport.model_validate(
                 _sector(
                     material_findings=[
                         {
@@ -76,7 +76,7 @@ class TestSummaryAliases:
             )
 
     def test_question_mark_cuts_derived_label(self) -> None:
-        report = SectorReport.model_validate(
+        report = SegmentReport.model_validate(
             _sector(
                 material_findings=[
                     {
@@ -96,7 +96,7 @@ class TestJsonStringItems:
             "summary": "Histograms flipped negative.",
             "as_of": "2026-08-28",
         }
-        report = SectorReport.model_validate(_sector(material_findings=[json.dumps(payload)]))
+        report = SegmentReport.model_validate(_sector(material_findings=[json.dumps(payload)]))
         assert report.material_findings[0].label == "MACD"
 
     def test_gemini_object_envelope_json_string_validates(self) -> None:
@@ -109,7 +109,7 @@ class TestJsonStringItems:
                 "as_of": {"stringValue": "2026-08-28"},
             },
         }
-        report = SectorReport.model_validate(
+        report = SegmentReport.model_validate(
             _sector(
                 material_findings=[json.dumps(envelope)],
                 sources=[
@@ -148,7 +148,7 @@ class TestJsonStringItems:
                 ["title", {"stringValue": "XLRE technicals"}],
             ],
         }
-        report = SectorReport.model_validate(
+        report = SegmentReport.model_validate(
             _sector(
                 material_findings=[json.dumps(finding_envelope)],
                 sources=[json.dumps(source_envelope)],
@@ -160,7 +160,7 @@ class TestJsonStringItems:
 
     def test_mixed_properties_list_is_not_treated_as_a_map(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
-            SectorReport.model_validate(
+            SegmentReport.model_validate(
                 _sector(
                     material_findings=[
                         {
