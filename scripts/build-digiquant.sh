@@ -3,10 +3,12 @@
 # Assembles into dist/:
 #   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
-#   2. frontend/olympus/out/       — the Olympus dashboard (basePath /olympus)
-#      → dist/olympus/
+#   2. frontend/olympus/out/       — the operator surface, built twice:
+#      basePath /olympus → dist/olympus/ (live path)
+#      OLYMPUS_BASE_PATH=/dashboard → dist/dashboard/ (Pages half of the
+#      coordinated EF cutover; do not retire /olympus here)
 # The digiquant-web export ships public/_headers (root /* security headers +
-# /olympus* CSP), so it governs both surfaces. Olympus is unchanged.
+# /olympus* and /dashboard* CSP), so it governs both surfaces.
 set -euo pipefail
 
 # Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
@@ -75,9 +77,22 @@ if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" ]; then
   export NEXT_PUBLIC_OLYMPUS_AUTH=1
 fi
 echo "NEXT_PUBLIC_OLYMPUS_AUTH=${NEXT_PUBLIC_OLYMPUS_AUTH:-<unset>}"
-npm --workspace frontend/olympus run build
+# Pin /olympus even if the caller exported OLYMPUS_BASE_PATH (Pages project
+# env, a prior local dashboard build, develop docs). Next inlines basePath
+# into the static bundle; a leak here would ship /dashboard assets under
+# dist/olympus/. Wipe .next so a leftover twin cache cannot poison this pass.
+rm -rf frontend/olympus/out frontend/olympus/.next
+OLYMPUS_BASE_PATH=/olympus npm --workspace frontend/olympus run build
 mkdir -p dist/olympus
 cp -r frontend/olympus/out/. dist/olympus/
+
+# 2b. Transitional /dashboard twin — same app, new basePath. Live EF still
+# returns /olympus URLs; do not redeploy settings EF until this path is 200.
+echo "--- building dashboard twin (basePath /dashboard) ---"
+rm -rf frontend/olympus/out frontend/olympus/.next
+OLYMPUS_BASE_PATH=/dashboard npm --workspace frontend/olympus run build
+mkdir -p dist/dashboard
+cp -r frontend/olympus/out/. dist/dashboard/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
@@ -118,9 +133,29 @@ if [ "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" != "1" ]; then
   grep -q 'settings-tab-keys' dist/olympus/settings/index.html \
     || { echo "ERROR: settings export missing Keys tab marker — BYOK surface not in export?" >&2; exit 1; }
 fi
+[ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard twin did not export" >&2; exit 1; }
+[ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported on /dashboard" >&2; exit 1; }
+[ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported on /dashboard" >&2; exit 1; }
+# Alpaca OAuth callback (K1/T3). develop's pages gate --apply pins
+# ALPACA_OAUTH_CALLBACK_PATH here. A twin that 200s /dashboard/settings/
+# but 404s this path would still strand broker connect after EF deploy.
+[ -f dist/dashboard/settings/brokers/callback/index.html ] || { echo "ERROR: dist/dashboard/settings/brokers/callback/index.html missing — Alpaca OAuth callback not exported on /dashboard" >&2; exit 1; }
+grep -q 'alpaca-oauth-callback' dist/dashboard/settings/brokers/callback/index.html \
+  || { echo "ERROR: dashboard twin Alpaca OAuth callback export missing page marker" >&2; exit 1; }
+[ -f dist/dashboard/settings/index.html ] || { echo "ERROR: dist/dashboard/settings/index.html missing — Settings route not exported on /dashboard" >&2; exit 1; }
+grep -q 'The desk, not the product' dist/dashboard/settings/index.html \
+  || { echo "ERROR: dashboard twin settings export missing Observer IA heading" >&2; exit 1; }
+grep -q 'settings-tab-notifications' dist/dashboard/settings/index.html \
+  || { echo "ERROR: dashboard twin settings export missing Notifications tab marker" >&2; exit 1; }
+grep -q 'settings-tab-billing' dist/dashboard/settings/index.html \
+  || { echo "ERROR: dashboard twin settings export missing Billing tab marker" >&2; exit 1; }
+grep -q 'settings-tab-about' dist/dashboard/settings/index.html \
+  || { echo "ERROR: dashboard twin settings export missing About tab marker" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/
 echo "--- dist/olympus/ contents ---"
 ls -la dist/olympus/ | head -10
+echo "--- dist/dashboard/ contents ---"
+ls -la dist/dashboard/ | head -10

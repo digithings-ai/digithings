@@ -64,6 +64,7 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 1. Authentication → Providers → enable **Google** and **GitHub** (D4).
 2. Authentication → URL configuration → Redirect URLs, allow:
    - `https://digiquant.io/olympus/auth/callback/`
+   - `https://digiquant.io/dashboard/auth/callback/` (Pages twin; add before EF `/dashboard` cutover)
    - `http://localhost:3000/olympus/auth/callback/` (dev)
 3. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).

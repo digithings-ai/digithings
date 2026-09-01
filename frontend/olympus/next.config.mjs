@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
-const olympusBasePath = '/olympus';
+const ALLOWED_BASE_PATHS = new Set(['/olympus', '/dashboard']);
+const olympusBasePath = process.env.OLYMPUS_BASE_PATH || '/olympus';
+if (!ALLOWED_BASE_PATHS.has(olympusBasePath)) {
+  throw new Error(
+    `OLYMPUS_BASE_PATH must be /olympus or /dashboard, got ${JSON.stringify(olympusBasePath)}`,
+  );
+}
 
 const nextConfig = {
   output: 'export',
