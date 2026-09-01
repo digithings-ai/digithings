@@ -1,5 +1,9 @@
 # Kairos + tenancy — issue pack (epic + 12 work packages)
 
+**Status (2026-09-01): DELIVERED.** Owner closed without a live E2E / house schedule.
+Live-proof follow-up: [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+See [`EPIC.md`](EPIC.md) and [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md).
+
 Ready-to-file GitHub issue bodies for the program specced in
 [`docs/superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md`](../../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md).
 Each WP file is a **self-contained executor briefing**: a cost-effective model should be able to

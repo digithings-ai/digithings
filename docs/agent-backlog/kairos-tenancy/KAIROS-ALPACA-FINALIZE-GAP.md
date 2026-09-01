@@ -1,6 +1,11 @@
 # Kairos + Alpaca finalize — gap audit (2026-08-30)
 
-**Verdict: NOT COMPLETE** — do not mark the epic complete. Code gates for
+**Superseded 2026-09-01:** owner closed the epic as delivered without live E2E.
+Live-proof follow-up is [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+The 2026-08-30 snapshot below is historical (vendor secrets / remaining hops still
+unproven; do not treat this file as an open epic).
+
+**Verdict (2026-08-30): NOT COMPLETE** — code gates for
 creator / free-teaser / FX Hub land in this turn; staging E2E and vendor secrets
 remain blocked.
 
