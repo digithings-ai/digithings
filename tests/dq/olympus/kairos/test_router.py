@@ -37,6 +37,7 @@ from digiquant.olympus.kairos.policy import (
     InconsistentOrderChainError,
     resolve_venue,
     routing_enabled,
+    routing_enabled_in,
 )
 from digiquant.olympus.kairos.router import (
     BROKER_ORDERS,
@@ -178,6 +179,12 @@ def test_routing_enabled_defaults_off() -> None:
 def test_routing_enabled_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
     assert routing_enabled() is True
+
+
+def test_routing_enabled_in_reads_mapping_not_process_env() -> None:
+    assert routing_enabled_in({}) is False
+    assert routing_enabled_in({"OLYMPUS_KAIROS_ROUTING": "1"}) is True
+    assert routing_enabled() is False
 
 
 def test_house_workspace_always_paper_internal(monkeypatch: pytest.MonkeyPatch) -> None:

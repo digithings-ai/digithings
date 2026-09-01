@@ -36,7 +36,7 @@ stay free of a fake Supabase client.
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from digiquant.brokers.connections import Broker
@@ -89,6 +89,11 @@ class ForeignWorkspaceIntentError(ValueError):
     """
 
 
+def routing_enabled_in(environ: Mapping[str, str]) -> bool:
+    """Whether ``OLYMPUS_KAIROS_ROUTING`` is on in ``environ``. Defaults off."""
+    return environ.get(_ROUTING_ENV, "").strip().lower() in _ON_VALUES
+
+
 def routing_enabled() -> bool:
     """Whether external venue routing is reachable. Defaults to **off**.
 
@@ -96,7 +101,7 @@ def routing_enabled() -> bool:
     switch off, :func:`resolve_venue` returns only ``PAPER_INTERNAL`` — the
     internal paper path is unchanged and house regression stays byte-identical.
     """
-    return os.environ.get(_ROUTING_ENV, "").strip().lower() in _ON_VALUES
+    return routing_enabled_in(os.environ)
 
 
 def is_house_or_system_workspace(workspace_id: UUID | None) -> bool:
@@ -221,5 +226,6 @@ __all__ = [
     "InconsistentOrderChainError",
     "is_house_or_system_workspace",
     "routing_enabled",
+    "routing_enabled_in",
     "resolve_venue",
 ]

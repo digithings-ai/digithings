@@ -3236,6 +3236,20 @@ Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverge
 structured report on the snapshot row + log; **never** auto-submit corrective orders
 (`SyncResult.refused_corrective_orders` is always true).
 
+**Cron CLI (`route_cron.py`, `python -m digiquant.olympus.kairos.route_cron`).**
+Overlay persist writes order intents; this is the production submit seam
+(`route_pending_orders` was library-only). Same eligibility as sync: Alpaca
+paper OAuth only; house/system never; `env=live` refused; IBKR held; Alpaca
+`api_key` held. `--check` logs `routing_enabled=true|false` and exits **2**
+when store env names are missing. `--dry-run` never unseals. `--all` /
+`--connection-id` with `OLYMPUS_KAIROS_ROUTING` off exit **3**
+(`KAIROS_ROUTING_DISABLED`) and do not call `submit_order`. Operator
+`--connection-id` errors use the ``kairos route:`` prefix (not ``kairos sync:``).
+`--dispatch` / `--apply` exit **4**. Kill switch still defaults **off**. Do not add
+`OLYMPUS_KAIROS_ROUTING` to `KAIROS_STAGING_REQUIRED_SECRETS` (that list is
+vendor EF secrets). Paper-fill remaining hop can still prove via sync of
+Alpaca UI fills without this cron.
+
 **Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
 Production entry that polls **Alpaca paper OAuth** connections only. House and
 system workspace ids are never sync targets; `env=live` is refused; inactive
