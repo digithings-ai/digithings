@@ -47,6 +47,44 @@ describe('HoldingsActivityTable', () => {
     expect(html).toContain('T01');
   });
 
+  it('hides ADD/TRIM that round to 0.0pp (house 2026-09-01 dust fills)', () => {
+    const html = renderToStaticMarkup(
+      createElement(HoldingsActivityTable, {
+        events: [
+          event(0, {
+            ticker: 'FXI',
+            date: '2026-09-01',
+            event: 'TRIM',
+            weight_pct: 5,
+            prev_weight_pct: 5,
+            weight_change_pct: 0,
+          }),
+          event(1, {
+            ticker: 'VGK',
+            date: '2026-09-01',
+            event: 'ADD',
+            weight_pct: 25.04,
+            prev_weight_pct: 25,
+            weight_change_pct: 0.04,
+          }),
+          event(2, {
+            ticker: 'GLD',
+            date: '2026-09-01',
+            event: 'TRIM',
+            weight_pct: 10,
+            prev_weight_pct: 15,
+            weight_change_pct: -5,
+          }),
+        ],
+      })
+    );
+
+    expect(html).not.toContain('FXI');
+    expect(html).not.toContain('VGK');
+    expect(html).toContain('GLD');
+    expect(html).toContain('-5.0pp');
+  });
+
   it('surfaces avg entry, fill, and realized columns for sells', () => {
     const html = renderToStaticMarkup(
       createElement(HoldingsActivityTable, {
