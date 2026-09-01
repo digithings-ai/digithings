@@ -3594,9 +3594,12 @@ hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
 `on_conflict=date` / `date,ticker`). Staging 113 does **not** lift
 `require_overlay_legacy_book_safe`. `daily_snapshots` stays `UNIQUE(date)`
 (house-only). Until 113 is applied, overlay persist-on cannot prove the
-remaining hop — Settings About and the staging harness name
-`overlay_legacy_book_unique` when `job_runs.error` is `legacy_book_unique`
-(persist-disabled still wins). Overlay publish
+remaining hop: `execute_overlay` refuses succeeded after the chain for a
+private workspace (documents-only / fail-soft H9 used to finish succeeded).
+Settings About and the staging harness name `overlay_legacy_book_unique`
+when `job_runs.error` is `legacy_book_unique` (persist-disabled still wins).
+`_safe_invoke_graph` re-raises `OverlayLegacyBookBlocked` instead of
+swallowing it. Overlay publish
 **skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
 overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
 `analyst_coverage`, and `thesis_vehicles` for a private workspace

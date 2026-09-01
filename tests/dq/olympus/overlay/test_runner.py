@@ -159,12 +159,42 @@ def test_overlay_run_writes_carry_overlay_workspace(
         credential=credential,
         vault_key=master,
     )
-    assert result.status is JobStatus.SUCCEEDED
+    assert result.status is JobStatus.FAILED
     assert seen["workspace_id"] == ws.workspace_id
     assert seen["workspace_id"] != house_workspace_id()
     assert seen["requested_version_id"] == request.profile_version_id
     assert "theme:ai" in result.published_keys
     assert "asset:spy" in result.published_keys
+
+
+def test_overlay_persist_on_documents_only_does_not_succeed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Persist=1 without 113 must not prove overlay_daily succeeded."""
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    called = {"chain": False}
+
+    def chain(**_kwargs: object) -> None:
+        called["chain"] = True
+
+    store, ws, job = _claimed()
+    credential, master = sealed_openai(ws.workspace_id)
+    result = run_overlay(
+        request=_request(workspace_id=ws.workspace_id, profile_version_id=uuid4()),
+        job=job,
+        store=store,
+        corpus=ResearchCorpusStore(),
+        byok=_OK,
+        chain=chain,
+        credential=credential,
+        vault_key=master,
+    )
+    assert called["chain"] is True
+    assert result.status is JobStatus.FAILED
+    finished = store.get_by_idempotency_key(job.idempotency_key)
+    assert finished is not None
+    assert finished.status is JobStatus.FAILED
+    assert finished.error == LEGACY_BOOK_UNIQUE_CODE
 
 
 def test_overlay_failure_does_not_touch_house_job_rows(

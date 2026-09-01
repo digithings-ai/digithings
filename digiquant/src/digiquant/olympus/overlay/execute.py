@@ -29,6 +29,7 @@ from digiquant.olympus.overlay.models import OverlayRunRequest, OverlayRunResult
 from digiquant.olympus.overlay.persist import (
     OverlayLegacyBookBlocked,
     OverlayPersistDisabled,
+    require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
 from digiquant.olympus.research_corpus import (
@@ -322,3 +323,7 @@ def _run_corpus_and_chain(
     )
     if budget is not None:
         budget.check()
+    # Documents may already have persisted. Private books stay refused until
+    # staged cutover 113 lifts this gate — the job must not finish succeeded
+    # (remaining hop overlay_daily_claimed) on a documents-only / fail-soft H9 path.
+    require_overlay_legacy_book_safe(request.workspace_id)
