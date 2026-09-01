@@ -6,17 +6,21 @@ merges. Redeploying settings / checkout / portal with ``/dashboard`` URLs while
 that path 404s would break Auth callbacks and billing returns.
 
 Default is ``--check`` (probe only). ``--apply`` deploys the three APP_URL
-functions only after every required path returns 200 on the public origin.
+functions only after every required path returns 200 on the public origin
+**and** this checkout pins ``/dashboard`` URLs and mounts
+``POST /access/redeem-invite`` (migration 112 tables are already on ``core``).
 Never weakens ``public_app_urls_ok``.
 """
 
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +33,22 @@ from digiquant.olympus.kairos.vendor_secret_files import (
 
 EXIT_PAGES_DASHBOARD_NOT_READY: int = 3
 EXIT_APPLY_FAILED: int = 4
+EXIT_CHECKOUT_STALE: int = 5
+
+_REPO_ROOT = Path(__file__).resolve().parents[5]
+_SETTINGS_HANDLERS = (
+    Path("digiquant") / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
+)
+_APP_URL_TS = Path("digiquant") / "supabase" / "functions" / "_shared" / "app-url.ts"
+_REDEEM_INVITE_RE = re.compile(r'path\s*===\s*"/access/redeem-invite"')
+_ALPACA_DASHBOARD_RE = re.compile(
+    r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/dashboard/settings/brokers/callback/"\s*;'
+)
+_SETTINGS_DASHBOARD_RE = re.compile(
+    r'export\s+const\s+SETTINGS_PATH\s*=\s*"/dashboard/settings/"\s*;'
+)
+_ALPACA_OLYMPUS_RE = re.compile(r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/')
+_SETTINGS_OLYMPUS_RE = re.compile(r'export\s+const\s+SETTINGS_PATH\s*=\s*"/olympus/')
 
 DASHBOARD_PATHS: tuple[str, ...] = (
     "/dashboard/",
@@ -124,6 +144,61 @@ def probe_pages_dashboard(
     return PagesDashboardReport(origin=base, results=tuple(results))
 
 
+def _strip_ts_comments(source: str) -> str:
+    without_block = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    stripped: list[str] = []
+    for line in without_block.splitlines():
+        if "//" in line:
+            line = line[: line.index("//")]
+        stripped.append(line)
+    return "\n".join(stripped)
+
+
+def checkout_ready_for_ef_apply(repo_root: Path) -> tuple[bool, str]:
+    """True when this tree can deploy settings after /dashboard is live.
+
+    112 invite tables are on ``core``. Live settings v32 has no redeem-invite
+    route. ``--apply`` must not deploy a checkout that still pins ``/olympus``
+    or omits ``POST /access/redeem-invite``. Comment-only mentions do not count.
+    """
+    handlers = repo_root / _SETTINGS_HANDLERS
+    app_url = repo_root / _APP_URL_TS
+    try:
+        handlers_text = _strip_ts_comments(handlers.read_text(encoding="utf-8"))
+        app_url_text = _strip_ts_comments(app_url.read_text(encoding="utf-8"))
+    except OSError:
+        return False, "pages dashboard gate: settings EF source unreadable"
+    if _REDEEM_INVITE_RE.search(handlers_text) is None:
+        return (
+            False,
+            "pages dashboard gate: checkout missing POST /access/redeem-invite — "
+            "do not deploy settings from this tree (112 tables would sit unused)",
+        )
+    if _ALPACA_DASHBOARD_RE.search(app_url_text) is None:
+        return (
+            False,
+            "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
+            "Alpaca callback — do not deploy settings from this tree",
+        )
+    if _SETTINGS_DASHBOARD_RE.search(app_url_text) is None:
+        return (
+            False,
+            "pages dashboard gate: checkout app-url.ts does not pin /dashboard "
+            "settings path — do not deploy settings from this tree",
+        )
+    if _ALPACA_OLYMPUS_RE.search(app_url_text) is not None:
+        return (
+            False,
+            "pages dashboard gate: checkout still pins /olympus Alpaca callback",
+        )
+    if _SETTINGS_OLYMPUS_RE.search(app_url_text) is not None:
+        return (
+            False,
+            "pages dashboard gate: checkout still pins /olympus settings path",
+        )
+    return True, ""
+
+
 def format_pages_dashboard_blocked(report: PagesDashboardReport) -> str:
     bits: list[str] = ["pages /dashboard not ready — do not redeploy settings EF"]
     for item in report.results:
@@ -145,6 +220,7 @@ def run_pages_dashboard_gate(
     probe: ProbeFn = probe_url,
     run: RunArgv = _run_argv,
     project_ref: str = CORE_PROJECT_REF,
+    repo_root: Path | None = None,
 ) -> int:
     report = probe_pages_dashboard(origin=origin, probe=probe)
     for item in report.results:
@@ -155,6 +231,10 @@ def run_pages_dashboard_gate(
     if not apply:
         log("pages /dashboard ready — check only (pass --apply to deploy EF)")
         return 0
+    ready, reason = checkout_ready_for_ef_apply(repo_root or _REPO_ROOT)
+    if not ready:
+        log(reason)
+        return EXIT_CHECKOUT_STALE
     try:
         for function in DASHBOARD_URL_FUNCTIONS:
             log(f"pages dashboard gate: deploy {function}")
@@ -171,7 +251,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Deploy settings/checkout/portal only if live /dashboard paths are 200",
+        help="Deploy settings/checkout/portal only if live /dashboard paths are 200 "
+        "and this checkout has redeem-invite + /dashboard app URLs",
     )
     parser.add_argument(
         "--origin",

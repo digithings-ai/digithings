@@ -19,6 +19,8 @@ Loud-fail gates (after paste):
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
 # when live /dashboard/ login/ callback/ settings/ are all 200:
 # PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
+# --apply also requires this checkout to pin /dashboard app URLs and
+# POST /access/redeem-invite (exit 5 if run from main / olympus-pinned EF source).
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
 # when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
