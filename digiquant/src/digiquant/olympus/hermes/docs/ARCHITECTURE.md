@@ -46,7 +46,7 @@ cannot send house mail. Missing Mailgun env logs and returns.
 | **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
 | **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `HermesGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
 | **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
-| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
+| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
@@ -237,13 +237,18 @@ the pipeline's whole observed lifetime.
 
 ## PMDirectionMemo (H7)
 
-H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
-`weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
-(see spec §11.2). WP4.5 (#2660) adds `ForecastReference` per roster row, bound after
-the LLM (and after fail-soft prior carry) from current effective-forecast lineage —
-never from model-supplied IDs; missing lineage is explicit degraded (null IDs +
-reason). H8 maps memo + feasibility constraints → sized weights; direction/rank
-semantics are unchanged.
+H7 emits direction + ordinal conviction rank + narrative + optional `confidence`
+in `[0, 1]` — never `target_pct`, `weight`, or `recommended_portfolio`. Schema:
+`PMDirectionMemo` / `TickerDirection` (see spec §11.2). Rank is **order, not size**.
+WP4.5 (#2660) adds `ForecastReference` per roster row, bound after the LLM (and
+after fail-soft prior carry) from current effective-forecast lineage — never from
+model-supplied IDs; missing lineage is explicit degraded (null IDs + reason).
+Operator chrome (`PmDirectionDocumentView`) hides `forecast_reference` /
+`degradation_reason` and shows narrative, derived buy/hold/sell vs prior
+(rebalance prior-weight vs H8 target when that payload is at hand, else prior
+direction, else `long`/`flat`), rank, and confidence as a percent. H8 maps memo +
+feasibility constraints → sized weights; direction/rank semantics are unchanged
+in this WP (confidence-aware sizing is WP-H).
 
 ---
 

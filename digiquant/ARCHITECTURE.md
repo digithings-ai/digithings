@@ -2015,11 +2015,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
-- **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
+- **H7** emits `PMDirectionMemo` (direction + conviction rank + optional
+  `confidence` in `[0, 1]` — no weights). Rank is order, not size.
   Each roster row may carry a deterministic `ForecastReference` to the effective
   forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
-  never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
-  ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
+  never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
+  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
+  ignores forecast refs and confidence for now (direction/rank unchanged). **H9** (`commit_run`) is the
   Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
   the portfolio lineage ledger commit chain (see below), and fail-soft prospective
   forecast-registry persistence (#2663).

@@ -421,7 +421,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "PMDirectionMemo": {
         "schema_version": "1.0",
         "date": "2026-04-26",
-        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": ""}],
+        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": "", "confidence": 0.7}],
         "memo": "synthetic direction memo",
     },
     "RebalanceDecision": {
@@ -800,6 +800,7 @@ def simulate_chat_completion(
                         "direction": "long",
                         "conviction_rank": idx + 1,
                         "narrative": "",
+                        "confidence": 0.7,
                     }
                     for idx, ticker in enumerate(roster)
                 ],

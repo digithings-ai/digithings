@@ -17,7 +17,7 @@ See [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) and
 | H3–H4 | vehicle map + screener | Roster for analyst fan-out |
 | H5 | `asset_analyst` (×N) | Unified `AnalystPayload` per ticker |
 | H6 | `deliberation` + `deliberation-analyst-response` (×N) | PM↔analyst meeting (chat transcript) |
-| H7 | `pm-direction` | `PMDirectionMemo` — direction + rank only |
+| H7 | `pm-direction` | `PMDirectionMemo` — direction + rank + confidence; no weights |
 | H8 | `risk-sizing` | Deterministic sizer (legacy 7E module) |
 | H9 | `commit_run` | Terminal: positions, nav, brief, `decision_log` |
 
