@@ -8,9 +8,15 @@ key cannot be hidden in a static bundle. The public path is `/dashboard/` only.
 
 ## App auth (T1)
 
-Product login is **Supabase Auth** with **Google + GitHub OAuth** (and email/password) over the
+Product login is **Supabase Auth** with **Google + GitHub + X OAuth** (and email/password) over the
 browser PKCE flow (`@supabase/supabase-js` only — no custom cookies or token
-storage). Routes:
+storage). The login UI is the compact `AuthCard` from `@digithings/web`: tool
+mark + **`digiquant`** wordmark beside it, then email, password, and one row of
+icon-only OAuth (`[G][GH][X]`) plus **Sign in** / **Sign up**. Provider id for X
+is `x` (OAuth 2.0; the legacy Twitter OAuth 1.0a provider stays off); visible
+label/aria is **X** (never Twitter). No olympus branding. Compact has no live
+password-strength meter (that lives on the desk specimen); signup still requires
+8+ characters in `LoginScreen`. Routes:
 
 | Path | Role |
 |------|------|
@@ -61,7 +67,8 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 
 ### Supabase dashboard (human performs)
 
-1. Authentication → Providers → enable **Google** and **GitHub** (D4).
+1. Authentication → Providers → enable **Google**, **GitHub**, and **X**
+   (provider id `x`; leave legacy **Twitter** OAuth 1.0a off).
 2. Authentication → URL configuration → Redirect URLs (Alpaca `redirect_uri` is
    exact-match; list only dashboard paths):
    - `https://digiquant.io/dashboard/auth/callback/`
@@ -144,6 +151,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 
 - [x] T1 code path: flag-gated PKCE login, `/login` + `/signup` + `/auth/callback`, AuthGate.
 - [ ] **Owner:** enable **Google** (still often Disabled on `core`) and GitHub + Redirect URLs.
+- [x] **Owner:** X OAuth 2.0 enabled on `core` (`external_x_enabled`; authorize `provider=x`). App calls `provider: 'x'`. Legacy `twitter` stays off.
 - [ ] **Owner:** Auth SMTP (Mailgun) or turn Confirm email off until SMTP delivers.
 - [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the 12x invite) on the settings
       Edge Function, apply migration **112**, share the plaintext only out of band.
