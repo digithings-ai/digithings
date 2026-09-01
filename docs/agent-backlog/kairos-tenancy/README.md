@@ -1,7 +1,7 @@
 # Kairos + tenancy — issue pack (epic + 12 work packages)
 
 **Status (2026-09-01): DELIVERED.** Owner closed without a live E2E / house schedule.
-Live-proof follow-up: [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+Live-proof follow-up: [#3391](https://github.com/digithings-ai/digithings/issues/3391).
 See [`EPIC.md`](EPIC.md) and [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md).
 
 Ready-to-file GitHub issue bodies for the program specced in
