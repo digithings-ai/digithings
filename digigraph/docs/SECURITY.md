@@ -6,6 +6,7 @@ digigraph is intended to run **loopback-first** alongside other digithings servi
 
 - **digikey (required for protected routes):** Set **`DIGIKEY_JWKS_URL`** or **`DIGIKEY_PUBLIC_KEY_PEM`**. Non-exempt routes require **`Authorization: Bearer <RS256 JWT>`** with scopes per path (e.g. `digigraph:chat` for `/v1/chat/completions`, `digigraph:workflow` for `/workflow`). Without verifier configuration, protected routes return **503** `auth_not_configured`. Legacy static **`DIGI_API_KEY`** is **not** supported on digigraph.
 - **Per-thread secrecy**: Thread IDs are not secret tokens. Anyone who can call the API can probe `GET /threads/{id}/state` when the thread API is enabled. Do not expose digigraph to untrusted networks without a gateway that binds sessions to authenticated users.
+- **digistore session boundary**: `dataset_ref` resolution (`digistore_get` / `resolve_dataset_ref`) must stay under `{run_data_dir}/{session_id}/`. Cross-session relative (`../other_sess/...`) and absolute refs are rejected. `GET /files/*` (when `DIGI_ENABLE_THREAD_API=1`) still serves any path under the run-data root — bind it behind a session-aware gateway.
 
 ## Opt-in HTTP surfaces
 
