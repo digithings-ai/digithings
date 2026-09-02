@@ -8,6 +8,8 @@ import {
   chatAccessTokenAtSend,
   uiMessageToDigiChat,
   useEmbedDigiChat,
+  setPendingForceTool,
+  takePendingForceTool,
 } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
 import {
@@ -444,9 +446,21 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
 });
 
 describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", () => {
+  beforeEach(() => {
+    takePendingForceTool("https://example.com");
+  });
+
   it("omits the header when send did not force a tool", async () => {
     const { headers } = await callPrepareSendMessagesRequest({});
     expect(headers.has("X-Digi-Force-Tool")).toBe(false);
+  });
+
+  it("isolates pending force-tool by embed host", () => {
+    setPendingForceTool("https://a.example", "digisearch");
+    setPendingForceTool("https://b.example", "digivault_search_notes");
+    expect(takePendingForceTool("https://a.example")).toBe("digisearch");
+    expect(takePendingForceTool("https://a.example")).toBeUndefined();
+    expect(takePendingForceTool("https://b.example")).toBe("digivault_search_notes");
   });
 
   it("reads the force tool at send time, then clears it", async () => {

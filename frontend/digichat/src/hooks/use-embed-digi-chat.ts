@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
@@ -48,6 +48,29 @@ export function isEmbedTrialUnlockedAtSend(
  */
 export function chatAccessTokenAtSend(resolvedHost: string): string | null {
   return readChatAccessToken(resolvedHost);
+}
+
+/**
+ * `/search` / `/docs` force-tool, written at send() and read inside
+ * prepareSendMessagesRequest. Not a React ref — `react-hooks/refs` forbids
+ * `.current` inside the useMemo that builds DefaultChatTransport, and useChat
+ * never adopts a rebuilt transport (#1339). Keyed by embedHost so two
+ * widgets on one page cannot steal each other's slash.
+ */
+const pendingForceByHost = new Map<string, string>();
+
+export function setPendingForceTool(host: string, tool?: string): void {
+  const key = host.trim();
+  if (!key) return;
+  if (tool) pendingForceByHost.set(key, tool);
+  else pendingForceByHost.delete(key);
+}
+
+export function takePendingForceTool(host: string): string | undefined {
+  const key = host.trim();
+  const tool = pendingForceByHost.get(key);
+  pendingForceByHost.delete(key);
+  return tool;
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -177,7 +200,6 @@ export function useEmbedDigiChat({
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
 } {
-  const pendingForceTool = useRef<string | undefined>(undefined);
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -215,8 +237,7 @@ export function useEmbedDigiChat({
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
           }
-          const forceTool = pendingForceTool.current;
-          pendingForceTool.current = undefined;
+          const forceTool = takePendingForceTool(embedHost);
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
           }
@@ -304,13 +325,13 @@ export function useEmbedDigiChat({
     (question: string, opts?: { forceTool?: string }) => {
       const q = question.trim();
       if (!q || busy) return;
-      pendingForceTool.current = opts?.forceTool;
+      setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: q }],
       });
     },
-    [busy, sendMessage],
+    [busy, sendMessage, embedHost],
   );
 
   const reset = useCallback(() => {
