@@ -22,7 +22,9 @@ to GitHub's commit-to-PR association for those commits.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -709,3 +711,213 @@ def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
     assert '["git", "cat-file", "-e"' in src
     assert "--is-shallow-repository" in src
     assert "pytest.fail" in src
+
+
+# ── the direct-push hatch (a commit with no source PR) ───────────────────────
+#
+# Every other hatch hangs off a pull request, so a commit pushed straight to
+# develop could carry none of them: it was refused permanently, and the only ways
+# out were advancing BASELINE_SHA (retroactively skipping unrelated history) or
+# never promoting. This hatch asks for the same artifact `reviewed:agent` asks
+# for, addressed to the commit instead of the branch — marker AND short sha, on an
+# issue or PR that itself carries the label.
+#
+# The tests that matter most are the negative ones. Marker without the sha would
+# let one review clear every direct push in the range; sha without the marker would
+# let a passing mention in unrelated prose stand in for a review; and neither means
+# anything if the label is not on the thing carrying the comment.
+
+_SHA = "d28e727cc9a3126fa2345298c2d42649fc9f9ad8"
+_SHORT = "d28e727c"
+
+
+def _fake_github(
+    candidates: list[int],
+    labels: dict[int, list[str]],
+    comments: dict[int, list[dict[str, Any]]],
+) -> Any:
+    """Stand in for the three endpoints the hatch reads: search, labels, comments."""
+
+    def fake(args: list[str]) -> Any:
+        if "search/issues" in args:
+            return {"items": [{"number": number} for number in candidates]}
+        endpoint = args[-1]
+        if endpoint.endswith("/comments"):
+            number = int(endpoint.rsplit("/", 2)[-2])
+            return comments.get(number, [])
+        number = int(endpoint.rsplit("/", 1)[-1])
+        return {"labels": [{"name": name} for name in labels.get(number, [])]}
+
+    return fake
+
+
+def _comment(body: str) -> dict[str, Any]:
+    return {
+        "body": body,
+        "user": {"login": "chrizefan"},
+        "created_at": "2026-09-02T14:00:00Z",
+        "html_url": "https://github.com/o/r/pull/3256#issuecomment-1",
+    }
+
+
+def _hatch(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    body: str,
+    labels: list[str],
+    candidates: list[int] | None = None,
+) -> dict[str, Any] | None:
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        _fake_github(
+            candidates if candidates is not None else [3256],
+            {3256: labels},
+            {3256: [_comment(body)]},
+        ),
+    )
+    return crc.direct_push_review(_SHA)
+
+
+def test_a_direct_push_is_hatched_by_a_review_quoting_its_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    found = _hatch(
+        monkeypatch,
+        body=f"{crc.AGENT_REVIEW_MARKER}\n### {_SHORT} docs: rename\nNo blocking findings.",
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found
+    assert found["actor"] == "chrizefan"
+    assert found["on"] == 3256
+    assert found["url"].endswith("issuecomment-1"), "the verdict must link the findings"
+
+
+def test_the_review_must_quote_the_sha_and_not_merely_carry_the_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Otherwise one in-session review hatches every direct push in the range."""
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\nReviewed the promotion. Looks fine.",
+            labels=[crc.AGENT_REVIEW_LABEL],
+        )
+        is None
+    )
+
+
+def test_the_review_must_carry_the_marker_and_not_merely_quote_the_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sha mentioned in unrelated prose is not a review of that commit."""
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"Rebased onto {_SHORT}, will look at it later.",
+            labels=[crc.AGENT_REVIEW_LABEL],
+        )
+        is None
+    )
+
+
+def test_the_label_has_to_be_on_the_thing_carrying_the_comment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}: reviewed",
+            labels=["risk:low", "component:root"],
+        )
+        is None
+    )
+
+
+def test_a_full_sha_in_the_comment_also_satisfies_the_short_sha_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`git log --oneline` prints 8; a reviewer pasting all 40 has still named it."""
+    found = _hatch(
+        monkeypatch,
+        body=f"{crc.AGENT_REVIEW_MARKER}\nReviewed {_SHA} — no findings.",
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found
+
+
+def test_no_candidate_mentions_the_sha_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}",
+            labels=[crc.AGENT_REVIEW_LABEL],
+            candidates=[],
+        )
+        is None
+    )
+
+
+def test_the_search_lookup_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient API failure must refuse, never hatch — as `associated_pr_number` does."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fail(_args: list[str]) -> Any:
+        raise subprocess.CalledProcessError(1, "gh api")
+
+    monkeypatch.setattr(crc, "_gh_json", fail)
+    assert crc._sha_mentioned_in(_SHORT) == []
+    assert crc._issue_labels(3256) == set()
+    assert crc.direct_push_review(_SHA) is None
+
+
+def test_search_discovery_is_never_trusted_on_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Search matches tokenized text and is eventually consistent.
+
+    So a candidate it returns is re-read: the label comes from the issue itself and
+    the sha from the comment body. A search hit alone must not hatch anything.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        _fake_github([3256], {3256: [crc.AGENT_REVIEW_LABEL]}, {3256: []}),
+    )
+    assert crc.direct_push_review(_SHA) is None
+
+
+def test_the_hatch_is_unreachable_for_a_commit_that_has_a_pull_request() -> None:
+    """The narrowness guarantee: this is not a sixth way to clear a PR.
+
+    A commit with a source PR must keep being judged by that PR's own state, so the
+    single call site has to sit behind the `number is None` guard. Pinned
+    structurally because a later refactor could hoist it out without any test that
+    exercises the PR path noticing.
+    """
+    tree = ast.parse(inspect.getsource(crc.main))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "direct_push_review"
+    ]
+    assert len(calls) == 1, "exactly one call site, inside the no-source-PR branch"
+
+    guards = [
+        node for node in ast.walk(tree) if isinstance(node, ast.If) and calls[0] in ast.walk(node)
+    ]
+    innermost = min(guards, key=lambda node: len(list(ast.walk(node))))
+    assert ast.unparse(innermost.test) == "number is None"
+
+
+def test_the_pr_verdict_never_consults_the_direct_push_hatch() -> None:
+    assert "direct_push_review" not in inspect.getsource(crc.verdict_for)
+
+
+def test_the_failure_guidance_tells_you_how_to_hatch_a_direct_push() -> None:
+    """A gate whose refusal names no remedy is how BASELINE_SHA gets advanced."""
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "it has no PR at all" in src
+    assert "no merged source pull request" in src

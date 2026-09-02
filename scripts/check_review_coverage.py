@@ -52,6 +52,10 @@ encoding that here is how the gate started blocking already-reviewed work).
 Do not use (6) to mean (5): "I read it" and "it needed no reading" are
 different claims, and collapsing them loses the only signal worth having.
 
+All six hang off a pull request, so a commit pushed **straight to a branch** can
+carry none of them — see ``direct_push_review`` for the one hatch that addresses
+the commit instead of the branch, and why it is not a seventh way to clear a PR.
+
 Commits that are exempt by nature, not by decision:
 
   * merge commits (a promotion or module-sync merge carries no new work of its
@@ -153,6 +157,11 @@ BUGBOT_CHECK = "Cursor Bugbot"
 # bare label is free to apply, whereas this hatch costs you an actual review whose
 # output anyone can read afterwards.
 AGENT_REVIEW_MARKER = "<!-- in-session-review -->"
+
+# How much of a commit sha an in-session review has to quote to hatch a commit
+# that has no source pull request. Eight is what `git log --oneline` and this
+# script's own output print, so the reviewer names the sha they were shown.
+AGENT_REVIEW_SHA_LEN = 8
 
 # `reviewed:owner` exists because of a hole the gate's own first run exposed. In a
 # single-maintainer org every PR is authored by the same account, so GitHub blocks
@@ -319,11 +328,15 @@ def _pr_review_state(number: int) -> dict:
     return state
 
 
-def agent_review_comment(number: int) -> dict | None:
-    """The most recent in-session review comment on this PR, or None.
+def agent_review_comment(number: int, naming: str | None = None) -> dict | None:
+    """The most recent in-session review comment on this PR or issue, or None.
 
     Looked up rather than trusted, because `reviewed:agent` claims a review *ran*.
     Without the comment the claim has no artifact and the gate must refuse it.
+
+    `naming` additionally requires the comment to quote that string — the short
+    sha of a commit with no source pull request. Without it, one review would
+    hatch every direct push in the range at once (see `direct_push_review`).
     """
     try:
         comments = _gh_json(["api", "--paginate", f"repos/{_repo_slug()}/issues/{number}/comments"])
@@ -331,13 +344,81 @@ def agent_review_comment(number: int) -> dict | None:
         return None
     latest = None
     for comment in comments if isinstance(comments, list) else []:
-        if AGENT_REVIEW_MARKER in (comment.get("body") or ""):
-            latest = {
-                "actor": (comment.get("user") or {}).get("login") or "unknown",
-                "at": comment.get("created_at") or "",
-                "url": comment.get("html_url") or "",
-            }
+        body = comment.get("body") or ""
+        if AGENT_REVIEW_MARKER not in body:
+            continue
+        if naming is not None and naming not in body:
+            continue
+        latest = {
+            "actor": (comment.get("user") or {}).get("login") or "unknown",
+            "at": comment.get("created_at") or "",
+            "url": comment.get("html_url") or "",
+        }
     return latest
+
+
+def _issue_labels(number: int) -> set[str]:
+    """Labels on an issue or PR. Fails closed (empty) on any API or parse error."""
+    try:
+        data = _gh_json(["api", f"repos/{_repo_slug()}/issues/{number}"])
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return set()
+    labels = data.get("labels") if isinstance(data, dict) else None
+    return {
+        label["name"] for label in labels or [] if isinstance(label, dict) and label.get("name")
+    }
+
+
+def _sha_mentioned_in(short_sha: str) -> list[int]:
+    """Issue/PR numbers whose comments quote `short_sha`.
+
+    Discovery only. Every candidate it returns is re-verified against the issue's
+    own labels and comments, so this never has to be trusted — which is what makes
+    it safe to lean on a search index that is eventually consistent and matches on
+    tokenized text. Fails closed (empty) like `associated_pr_number`.
+    """
+    query = f"repo:{_repo_slug()} {short_sha} in:comments"
+    try:
+        found = _gh_json(["api", "-X", "GET", "search/issues", "-f", f"q={query}"])
+    except (subprocess.CalledProcessError, json.JSONDecodeError):
+        return []
+    items = found.get("items") if isinstance(found, dict) else None
+    return [
+        int(item["number"])
+        for item in items or []
+        if isinstance(item, dict) and item.get("number") is not None
+    ]
+
+
+def direct_push_review(sha: str) -> dict | None:
+    """The in-session review artifact for a commit with no source PR, or None.
+
+    All six PR hatches hang off a pull request, so a commit pushed straight to
+    develop can never carry one: `resolve_pr_number` returns None and the gate
+    refuses it permanently. The only ways out were advancing `BASELINE_SHA` —
+    which retroactively skips unrelated history — or never promoting.
+
+    So this demands the same artifact the `reviewed:agent` hatch does, addressed
+    to the *commit* rather than to the branch: a comment carrying
+    `AGENT_REVIEW_MARKER` **and** the commit's short sha, on an issue or PR that
+    is itself labelled `reviewed:agent`.
+
+    Both halves are load-bearing. The marker alone would let one in-session review
+    clear every direct push in the range; the sha alone would let a passing mention
+    in unrelated prose stand in for a review.
+
+    Deliberately unreachable for a commit that HAS a source pull request — that one
+    is still judged by its own PR's state and nothing else. This is a hatch for
+    commits the gate could not otherwise judge, not a new way to clear a PR.
+    """
+    short = sha[:AGENT_REVIEW_SHA_LEN]
+    for number in _sha_mentioned_in(short):
+        if AGENT_REVIEW_LABEL not in _issue_labels(number):
+            continue
+        found = agent_review_comment(number, naming=short)
+        if found:
+            return {**found, "on": number}
+    return None
 
 
 def label_provenance(number: int, label: str) -> dict | None:
@@ -461,9 +542,25 @@ def main() -> int:
 
         number = resolve_pr_number(commit["subject"], commit["sha"], cache, invalid_numbers)
         if number is None:
+            direct = direct_push_review(commit["sha"])
+            if direct:
+                row.update(
+                    reviewed=True,
+                    why=(
+                        f"no source pull request; in-session review naming {short} on "
+                        f"#{direct['on']} by {direct['actor']} at {direct['at']} — "
+                        f"{direct['url']}"
+                    ),
+                )
+                checked.append(row)
+                continue
             row.update(
                 reviewed=False,
-                why="has no merged source pull request — pushed straight to the branch?",
+                why=(
+                    "has no merged source pull request — pushed straight to the branch? "
+                    f"Post an in-session review quoting {short} on an issue or PR "
+                    f"labelled {AGENT_REVIEW_LABEL}"
+                ),
             )
             unreviewed.append(row)
             checked.append(row)
@@ -507,6 +604,9 @@ def main() -> int:
             "actor and timestamp are recorded in the verdict\n"
             f"  • it did not warrant one    → label the PR `{SKIP_LABEL}`\n"
             "  • someone else read it      → approve the PR\n"
+            "  • it has no PR at all       → review it, then post the findings with "
+            f"`{AGENT_REVIEW_MARKER}` and the commit's {AGENT_REVIEW_SHA_LEN}-char sha "
+            f"on an issue or PR labelled `{AGENT_REVIEW_LABEL}`\n"
             "Address the findings on the same branch before merge. A large follow-up "
             "fix is a new review loop, not a reason to skip this one.\n"
             "\nThe label hatches claim different things: "
