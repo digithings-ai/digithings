@@ -712,7 +712,10 @@ owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
 `/search` and `/docs` (aliases `/digisearch` / `/digivault`) force a locate
 then synthesize — the user string is the tool argument, forwarded as
 `X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
-`/lang`, `/help`, and `/new` never leave the browser. Empty `/search` or
+`/lang`, `/help`, and `/new` never leave the browser. `/new` clears the
+client transcript, drops `sessionStorage` `X-External-Conversation` for the
+embed host, and clears any pending force-tool — so Foundry (and any adapter
+keyed off that id) actually starts a new conversation. Empty `/search` or
 `/docs` wait for an argument. Public copy is "Search the knowledge base" /
 "Find original documents". Signed-in ChatShell keeps its own `/help` `/key`
 `/model` palette.

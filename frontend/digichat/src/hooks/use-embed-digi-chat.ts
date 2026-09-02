@@ -336,7 +336,17 @@ export function useEmbedDigiChat({
 
   const reset = useCallback(() => {
     setMessages([]);
-  }, [setMessages]);
+    // /new must also drop backend conversation continuity (Foundry's
+    // X-External-Conversation) and any unused slash force-tool, not just the
+    // client transcript — otherwise "Start a new conversation" is a lie on
+    // adapters that key off the stored id.
+    setPendingForceTool(embedHost);
+    try {
+      window.sessionStorage.removeItem(conversationStorageKey(embedHost));
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, [setMessages, embedHost]);
 
   // Mid-stream: keep completed searches as running tool_call rows until
   // retrieve arrives (or the turn settles). Settling early flashes "no hits".

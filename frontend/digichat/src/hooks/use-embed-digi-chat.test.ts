@@ -482,6 +482,35 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", ()
   });
 });
 
+describe("useEmbedDigiChat reset (/new)", () => {
+  const host = "https://example.com";
+  const storageKey = `digichat_embed_conversation:${host}`;
+
+  beforeEach(() => {
+    takePendingForceTool(host);
+    window.sessionStorage.clear();
+  });
+
+  it("clears transcript, stored conversation id, and pending force-tool", () => {
+    capturedTransportConfig = undefined;
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    if (!chat) {
+      throw new Error("useEmbedDigiChat did not return a controller");
+    }
+    window.sessionStorage.setItem(storageKey, "foundry-conv-123");
+    setPendingForceTool(host, "digisearch");
+
+    chat.reset();
+
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
+    expect(takePendingForceTool(host)).toBeUndefined();
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)", () => {
   // The embed widget used to gate this header on byokRequiresModel(provider),
   // so a visitor who pasted an OpenAI key and picked a model had the model
