@@ -25,7 +25,7 @@ export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
           family census (#1421) would reject an app-local class here. */}
       <a
         href="#main"
-        className="fixed top-2 left-2 z-30 -translate-y-[200%] rounded-lg bg-[var(--accent)] px-[0.9rem] py-2 font-mono text-[0.72rem] text-[var(--on-accent)] no-underline focus-visible:translate-y-0"
+        className="fixed top-2 left-2 z-30 -translate-y-[200%] rounded-none bg-[var(--accent)] px-[0.9rem] py-2 font-mono text-[0.72rem] text-[var(--on-accent)] no-underline focus-visible:translate-y-0"
       >
         Skip to content
       </a>

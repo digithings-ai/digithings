@@ -512,3 +512,69 @@ def test_explicit_zero_usage_is_preserved() -> None:
     assert event["completion_tokens"] == 0
     assert event["cached_tokens"] == 0
     assert event["cost_usd"] == 0.0
+
+
+def _mock_chat_response(content: str = "") -> MagicMock:
+    msg = MagicMock()
+    msg.content = content
+    msg.tool_calls = None
+    choice = MagicMock()
+    choice.message = msg
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.model = "gpt-4o-mini"
+    resp.usage = None
+    return resp
+
+
+@pytest.mark.unit
+def test_empty_retry_records_per_model_counter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mocked empty-then-success completion increments usage.empty_retries (#1639)."""
+    import digigraph.llm_client  # noqa: F401 — wires digillm observer to usage.record
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(digillm_client, "_EMPTY_RETRY_MAX", 2)
+    monkeypatch.setattr(digillm_client.time, "sleep", lambda *_a, **_k: None)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_chat_response(""),
+        _mock_chat_response("healed"),
+    ]
+    usage.start()
+    with patch.object(digillm_client, "get_client_for_model", return_value=fake_client):
+        digillm_client.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+    snap = usage.snapshot()
+    assert snap["empty_retries"] == {"total": 1, "by_model": {"gpt-4o-mini": 1}}
+    assert snap["llm_calls"] == 1
+
+
+@pytest.mark.unit
+def test_empty_retry_keys_by_served_model_not_request_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenRouter auto routes must attribute empty retries to ``r.model`` (#1639)."""
+    import digigraph.llm_client  # noqa: F401 — wires digillm observer to usage.record
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(digillm_client, "_EMPTY_RETRY_MAX", 2)
+    monkeypatch.setattr(digillm_client.time, "sleep", lambda *_a, **_k: None)
+
+    empty = _mock_chat_response("")
+    empty.model = "x-ai/grok-4"
+    healed = _mock_chat_response("healed")
+    healed.model = "x-ai/grok-4"
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [empty, healed]
+    usage.start()
+    with patch.object(digillm_client, "get_client_for_model", return_value=fake_client):
+        digillm_client.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
+    snap = usage.snapshot()
+    assert snap["empty_retries"] == {"total": 1, "by_model": {"x-ai/grok-4": 1}}
+    assert "openrouter/auto" not in snap["empty_retries"]["by_model"]
+
+
+@pytest.mark.unit
+def test_empty_retries_default_zero_when_none_recorded() -> None:
+    usage.start()
+    assert usage.snapshot()["empty_retries"] == {"total": 0, "by_model": {}}

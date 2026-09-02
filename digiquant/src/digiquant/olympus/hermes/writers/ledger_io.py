@@ -29,7 +29,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -41,7 +40,8 @@ from typing import (
 from uuid import UUID, uuid4
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import HOUSE_WORKSPACE_ID, SupabaseClient
+from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.envcompat import PORTFOLIO_LEDGER, env_lookup
 from digiquant.olympus.hermes.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -56,7 +56,12 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
-from digiquant.olympus.postgrest_timeout import EXECUTE_DEADLINE_SECONDS, run_with_deadline
+from digiquant.olympus.hermes.turnover import no_trade_band_pp
+from digiquant.olympus.overlay.persist import (
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +74,7 @@ ORDER_INTENTS = "portfolio_ledger_order_intents"
 PAPER_EXECUTIONS = "portfolio_ledger_paper_executions"
 
 _PRICE_HISTORY = "price_history"
-_LEDGER_ENV = "OLYMPUS_PORTFOLIO_LEDGER"
+_LEDGER_ENV = PORTFOLIO_LEDGER
 _OFF_VALUES = frozenset({"0", "off", "false", "no", "disabled"})
 _CASH = "CASH"
 _WEIGHT_EPSILON = 1e-9
@@ -98,7 +103,7 @@ def ledger_enabled() -> bool:
     unset env var must mean **on** — otherwise a deploy that forgets to set it stops
     writing lineage while every projection still looks healthy.
     """
-    return os.environ.get(_LEDGER_ENV, "").strip().lower() not in _OFF_VALUES
+    return env_lookup(_LEDGER_ENV).strip().lower() not in _OFF_VALUES
 
 
 @dataclass(frozen=True)
@@ -111,8 +116,7 @@ class LedgerAppend:
 
 
 def _execute(query: Any) -> Any:
-    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
-    return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
+    return query.execute()
 
 
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
@@ -123,23 +127,14 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
 
-    Migration 097 made ``workspace_id`` NOT NULL with no column DEFAULT. House GHA
-    pins ``ref: main`` and this tree has no ``digiquant.olympus.tenancy`` module, so
-    this gate stamps the house UUID (same constant as documents #3278) as a string —
-    a UUID object here is ``TypeError`` on json serialization. A row that already
-    carries ``workspace_id`` keeps it (``{house, **row}``). Do not change this to
-    ``upsert``; do not import tenancy on main.
+    Raises ``ValueError`` if any row is missing ``workspace_id``.
     """
     if not rows:
         return
-    stamped: list[dict[str, Any]] = []
     for row in rows:
-        payload = {"workspace_id": HOUSE_WORKSPACE_ID, **row}
-        ws = payload.get("workspace_id")
-        if isinstance(ws, UUID):
-            payload["workspace_id"] = str(ws)
-        stamped.append(payload)
-    _execute(client.table(table).insert(stamped))
+        if not str(row.get("workspace_id") or "").strip():
+            raise ValueError(f"{table} insert refused: workspace_id is missing on a row")
+    _execute(client.table(table).insert(rows))
 
 
 def _is_cash(ticker: Any) -> bool:
@@ -150,8 +145,22 @@ def _symbol(raw: Any) -> str:
     return str(raw or "").strip().upper()
 
 
-def _rows_for_date(*, client: SupabaseClient, table: str, run_date: date) -> list[dict[str, Any]]:
-    resp = _execute(client.table(table).select("*").eq("run_date", run_date.isoformat()))
+def _rows_for_date(
+    *,
+    client: SupabaseClient,
+    table: str,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Date + workspace. Omitted ``workspace_id`` is the house, never every row."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table(table)
+        .select("*")
+        .eq("run_date", run_date.isoformat())
+        .eq("workspace_id", scoped)
+    )
+    resp = _execute(query)
     return list(resp.data or [])
 
 
@@ -276,7 +285,11 @@ def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
 
 
 def _decision(
-    *, symbol: str, prior_pct: float, target_pct: float
+    *,
+    symbol: str,
+    prior_pct: float,
+    target_pct: float,
+    preferences: Mapping[str, Any] | None = None,
 ) -> tuple[DecisionAction, DecisionReason]:
     """Classify one symbol's weight move into the closed action/reason vocabulary.
 
@@ -292,6 +305,13 @@ def _decision(
         # "conviction_reduced" and "thesis_invalidated" are all meaningless for it.
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     delta = target_pct - prior_pct
+    if (
+        preferences is not None
+        and prior_pct > 0
+        and target_pct > 0
+        and abs(delta) < no_trade_band_pp(prior_pct, dict(preferences))
+    ):
+        return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if abs(delta) < _WEIGHT_EPSILON:
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if delta > 0:
@@ -319,6 +339,26 @@ def _shares(*, delta_pct: float, nav: float, close: float) -> Decimal:
         return Decimal(0)
     raw = abs(delta_pct) / 100.0 * nav / close
     return Decimal(str(raw)).quantize(_QUANTUM, rounding=ROUND_HALF_UP)
+
+
+def _order_quantity_for_move(
+    *,
+    action: DecisionAction,
+    target_pct: float,
+    prior_pct: float,
+    nav: float,
+    close: float,
+) -> Decimal:
+    """Share count that may become an ``order_intents`` row.
+
+    ``_decision`` already classifies a no-trade-band / ~zero weight move as
+    ``NO_OP``. Minting an order anyway true-ups lots by a few hundredths of a
+    share and lands on Activity as ADD/TRIM of +0.0pp (house 2026-09-01 FXI,
+    VGK, XLF). Skip the order; the approved target still records the hold.
+    """
+    if action is DecisionAction.NO_OP:
+        return Decimal(0)
+    return _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
 
 
 def _policy_version_id(state: AtlasResearchState) -> str:
@@ -403,9 +443,20 @@ def append_commit_chain(
     h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
     adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
-    prior_commits = _rows_for_date(client=client, table=COMMITS, run_date=run_date)
-    prior_approved = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
-    prior_orders = _rows_for_date(client=client, table=ORDER_INTENTS, run_date=run_date)
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    require_overlay_persist(overlay_ws)
+    # Ledger one-root-per-run_date is still global (migration 069); overlay + house
+    # cannot both root a commit on the same date until that index is widened.
+    require_overlay_legacy_book_safe(overlay_ws)
+    prior_commits = _rows_for_date(
+        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_approved = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_orders = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=overlay_ws
+    )
 
     commit_heads = _heads(prior_commits)
     if len(commit_heads) > 1:
@@ -437,6 +488,9 @@ def append_commit_chain(
     )
 
     commit_id = uuid4()
+    ws_kw: dict[str, UUID] = {}
+    if overlay_ws:
+        ws_kw["workspace_id"] = UUID(str(overlay_ws))
     commit = PortfolioCommit(
         id=commit_id,
         run_date=run_date,
@@ -444,6 +498,7 @@ def append_commit_chain(
         supersedes_id=_id_of(commit_heads[0] if commit_heads else None),
         effective_at=effective_at,
         recorded_at=recorded_at,
+        **ws_kw,
     )
 
     intent_rows: list[dict[str, Any]] = []
@@ -463,7 +518,12 @@ def append_commit_chain(
             requested_pct=h8_requested,
             pct_adjustments=symbol_adjustments,
         )
-        action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
+        action, reason = _decision(
+            symbol=symbol,
+            prior_pct=prior_pct,
+            target_pct=target_pct,
+            preferences=state.config.preferences,
+        )
 
         intent = DecisionIntent(
             id=uuid4(),
@@ -474,6 +534,7 @@ def append_commit_chain(
             reason=reason,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         requested = RequestedTarget(
             id=uuid4(),
@@ -484,6 +545,7 @@ def append_commit_chain(
             requested_quantity=None,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         for event in symbol_adjustments:
             adjustment_rows.append(
@@ -498,6 +560,7 @@ def append_commit_chain(
                     reason=event.reason,
                     effective_at=effective_at,
                     recorded_at=recorded_at,
+                    **ws_kw,
                 ).model_dump(mode="json")
             )
         approved = ApprovedTarget(
@@ -510,6 +573,7 @@ def append_commit_chain(
             supersedes_id=_id_of(approved_heads.get(symbol)),
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         intent_rows.append(intent.model_dump(mode="json"))
         requested_rows.append(requested.model_dump(mode="json"))
@@ -521,7 +585,13 @@ def append_commit_chain(
         if close is None:
             unpriced.append(symbol)
             continue
-        quantity = _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
+        quantity = _order_quantity_for_move(
+            action=action,
+            target_pct=target_pct,
+            prior_pct=prior_pct,
+            nav=nav,
+            close=close,
+        )
         if quantity <= 0:
             continue
         order_rows.append(
@@ -535,6 +605,7 @@ def append_commit_chain(
                 supersedes_id=_id_of(order_heads.get(symbol)),
                 effective_at=effective_at,
                 recorded_at=recorded_at,
+                **ws_kw,
             ).model_dump(mode="json")
         )
 

@@ -492,6 +492,43 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
 @pytest.mark.unit
 def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
+    assert get_olympus_tier() == "cheap"
+
+
+@pytest.mark.unit
+def test_digiquant_model_tier_wins_over_olympus_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#3381: DIGIQUANT_MODEL_TIER is canonical; retired OLYMPUS_* is alias only."""
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    assert get_olympus_tier() == "quality"
+
+
+@pytest.mark.unit
+def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
+    assert get_olympus_tier() == "balanced"
+
+
+@pytest.mark.unit
+def test_olympus_model_tier_alias_when_canonical_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
+    assert get_olympus_tier() == "quality"
+
+
+@pytest.mark.unit
+def test_empty_digiquant_model_tier_ignores_olympus_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical key presence (even empty) wins — matches envcompat kill-switch semantics."""
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "")
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
     assert get_olympus_tier() == "cheap"
 
 
@@ -512,6 +549,7 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
 ) -> None:
     """#926 gate: default cheap tier pools open-weight models for edit-mode segment schemas."""
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_olympus_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
     assert model is not None

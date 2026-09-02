@@ -32,6 +32,7 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+from digiquant.olympus.atlas.testing.simulator import parse_schema_name
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -70,28 +71,18 @@ def _base_state(regime_label: str = "Risk-on / Policy easing") -> AtlasResearchS
 
 
 def _digest_json(regime_label: str = "") -> str:
-    """Build a minimal DigestSnapshot-shaped JSON the fake LLM returns."""
+    """Build a thin DigestSnapshot JSON the fake LLM returns."""
     return json.dumps(
         {
             "segment": "master-digest",
             "date": "2026-04-26",
-            "bias": "neutral",
-            "headline": "Late-cycle consolidation; policy easing priced.",
-            "material_findings": [],
-            "sources": [],
-            "notes": "",
-            "market_regime_snapshot": "Growth slowing, policy easing.",
-            "alt_data_dashboard": "CTAs neutral.",
-            "institutional_summary": "Modest inflows.",
-            "asset_classes_summary": "Bonds rallying.",
-            "us_equities_summary": "Narrow breadth.",
-            "thesis_tracker": "",
-            "portfolio_recommendations": "",
-            "actionable_summary": [],
-            "risk_radar": [],
-            "segment_freshness": {},
-            # regime_label intentionally absent (or supplied below) per test scenario.
+            "body": (
+                "# Daily Digest — 2026-04-26\n\n"
+                "## Market regime\n\nGrowth slowing, policy easing.\n"
+            ),
             "regime_label": regime_label,
+            "sources": [],
+            "segment_freshness": {},
         }
     )
 
@@ -140,7 +131,7 @@ class TestDigestSnapshotField:
 class TestRegimeLabelBackfill:
     def test_backfill_from_phase3_when_llm_emits_empty(self) -> None:
         """When LLM returns regime_label='', we backfill from phase3 body."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _base_state(regime_label="Neutral / Rate plateau")
 
         with patch(
@@ -156,7 +147,7 @@ class TestRegimeLabelBackfill:
 
     def test_llm_emitted_regime_label_preserved(self) -> None:
         """When LLM emits a non-empty regime_label, it is preserved as-is."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _base_state(regime_label="Risk-on / Policy easing")
 
         with patch(
@@ -172,7 +163,7 @@ class TestRegimeLabelBackfill:
 
     def test_backfill_falls_back_to_empty_when_phase3_absent(self) -> None:
         """No phase3 output → regime_label stays empty string (no crash)."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         state = _base_state()
         state.phase3_output = None  # no macro phase this run
 
@@ -343,7 +334,7 @@ class TestFedOddsWiring:
         }
         state.data_layer = DataLayerSnapshot(market_context={"fed_odds": fed_odds_payload})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), build_phase7()])
+        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
         captured_inputs: list[dict[str, Any]] = []
 
         def fake_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -353,13 +344,24 @@ class TestFedOddsWiring:
                     body = json.loads(part["text"].split(":", 1)[1].strip())
                     captured_inputs.append(body)
                     break
+            name = parse_schema_name(msgs)
+            if name == "DigestSubsection":
+                return json.dumps(
+                    {
+                        "slug": "macro",
+                        "date": "2026-04-26",
+                        "body": "## Macro\n\nx\n",
+                        "sources": [],
+                    }
+                )
             return _digest_json(regime_label="")
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake_completion):
             compiled.invoke(state)
 
         assert captured_inputs, "LLM must have been called"
-        bias_row = captured_inputs[0].get("bias_row", {})
+        stitcher = next(c for c in captured_inputs if "bias_row" in c)
+        bias_row = stitcher.get("bias_row", {})
         assert bias_row.get("fed_odds") is not None, (
             "fed_odds must appear in bias_row passed to Phase 7 LLM"
         )

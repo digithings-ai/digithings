@@ -50,33 +50,17 @@ Assess VIX level and potential vol-targeting de-risk.
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date COT figures to the Tuesday as-of. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# CTA and systematic positioning — {as-of date of the data}
+
+## COT summary
+Levered-fund stance by instrument vs the prior week.
+
+## Trend model
+Estimated CTA direction in equities, bonds, gold, USD.
+
+## Crowding
+Stretched positions and what would unwind them.
 ```
-### 📊 CTA & SYSTEMATIC POSITIONING
-**Net Signal**: [Overall systematic fund posture — Risk-On / Risk-Off / Neutral / Mixed]
-
-**CFTC COT Summary (as of [Tuesday date]):**
-| Instrument | Levered Funds | vs Prior Week | Extreme? | Crowding Risk |
-|------------|--------------|---------------|----------|---------------|
-| S&P 500 | [Net long/short] | [±Xk] | [Y/N] | [High/Med/Low] |
-| 10Y T-Note | [Net long/short] | [±Xk] | [Y/N] | [rating] |
-| Gold | [Net long/short] | [±Xk] | [Y/N] | [rating] |
-| WTI Crude | [Net long/short] | [±Xk] | [Y/N] | [rating] |
-| EUR/USD | [Net long/short] | [±Xk] | [Y/N] | [rating] |
-| BTC | [Net long/short] | [±Xk] | [Y/N] | [rating] |
-
-**CTA Trend Model (estimated current direction):**
-- Equities: [Long / Short / Neutral]
-- Bonds: [Long / Short / Neutral]
-- Gold: [Long / Short / Neutral]
-- USD: [Long / Short / Neutral]
-
-**Key Crowding Risks**:
-1. [Most extreme position] — if [trigger], estimated $Xbn mechanistic selling
-
-**Risk Parity Signal**: [Stable / Stress]
-**Vol-Targeting**: [Within range / Near de-risk threshold]
-
-**Implication for Portfolio**:
-[How does CTA positioning affect our positions?]
-```
-

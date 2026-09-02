@@ -64,12 +64,11 @@ from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+from digiquant.olympus.tenancy import house_workspace_id
+
 # Fixed namespace for PaperExecution's deterministic idempotency key. Any stable literal
 # UUID works here — it only needs to never change between deploys.
 _PAPER_EXECUTION_ID_NAMESPACE = UUID("f6a12e2e-8b1a-5c9d-9e4a-2b6f7a8c9d0e")
-# Migration 096/097 house seed. Same literal as ``supabase_io.HOUSE_WORKSPACE_ID``
-# (#3278). Models must not import the IO adapter.
-_HOUSE_WORKSPACE_ID = UUID("6b753576-ced9-5319-9bfa-c5d0aacd9319")
 
 Symbol: TypeAlias = Annotated[str, Field(min_length=1, max_length=20)]
 Weight: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
@@ -229,11 +228,11 @@ class PortfolioLedgerModel(BaseModel):
     order can never be rewritten in place — a correction is always a new row with its
     own supersession link, never a mutation.
 
-    Migration 097 made ``workspace_id`` NOT NULL on every portfolio-ledger table.
-    The house pipeline is the only producer on ``main`` (no ``tenancy`` module), so
-    the field defaults to the house UUID already used by documents (#3278). Without
-    this field, read-back via ``model_validate`` rejects stamped rows
-    (``extra="forbid"``) and degrades H9 cost-liquidity evidence.
+    T0 (#5-T0): ``workspace_id`` is NOT NULL on every portfolio-ledger table as of
+    migration 097. The house pipeline is the only producer today, so the field defaults
+    to :func:`house_workspace_id`; overlay / multi-workspace writers (T4) will pass an
+    explicit id. Without this field, read-back via ``model_validate`` rejects stamped
+    rows (``extra="forbid"``) and degrades H9 cost-liquidity evidence.
 
     Known limitation (accepted, LOW severity): Pydantic v2's ``model_copy(update=...)``
     bypasses both ``frozen=True`` and every ``model_validator`` — it is a shallow
@@ -251,7 +250,7 @@ class PortfolioLedgerModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    workspace_id: UUID = Field(default=_HOUSE_WORKSPACE_ID)
+    workspace_id: UUID = Field(default_factory=house_workspace_id)
 
 
 class TimedPortfolioLedgerRecord(PortfolioLedgerModel):

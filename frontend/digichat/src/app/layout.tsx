@@ -1,17 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@digithings/web";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 
 // Unified with the rest of the stack (self-hosted by next/font → CSP-safe).
-// Variables named --font-geist-* so globals.css can re-point the canon
-// --font-sans/--font-mono tokens at them (digiquant-web pattern).
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+// Utilitarian v0.1: one Geist Mono face for claim, body, and chrome.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
@@ -49,13 +44,13 @@ export default async function RootLayout({
       lang="en"
       data-theme="dark"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistMono.variable} dark h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <script dangerouslySetInnerHTML={{ __html: themeClassSyncScript }} />
       </head>
-      <body className="accent-digichat flex min-h-full flex-col bg-background font-sans text-foreground">
+      <body className="accent-digichat flex min-h-full flex-col bg-background font-mono text-foreground">
         <Providers session={session} localBootstrapEnabled={localBootstrapEnabled}>
           <div className="flex min-h-dvh w-full flex-1 flex-col">{children}</div>
         </Providers>

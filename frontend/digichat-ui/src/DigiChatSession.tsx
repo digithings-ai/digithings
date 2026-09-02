@@ -238,11 +238,11 @@ export function DigiChatSession({
         {error ? (
           <p className="dtc-error" role="alert">
             {error}
-            {showByok && !providerIsSet && showByokOnError ? (
+            {showByok && showByokOnError ? (
               <>
                 {" "}
                 <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>
-                  Add your API key
+                  {providerIsSet ? "Update your API key" : "Add your API key"}
                 </button>
               </>
             ) : null}

@@ -169,3 +169,59 @@ describe("assistant turn — settled", () => {
     expect(html).toContain("azure_ai_search");
   });
 });
+
+/**
+ * #2529 / #3131 — model-remediable refusals must reopen BYOK settings even when
+ * a key is already bound. The error-row link used to gate on `!providerIsSet`,
+ * which left visitors with no escape hatch after binding a key without a model.
+ */
+describe("error row BYOK affordance (#2529)", () => {
+  function errorHtml(opts: {
+    showByok?: boolean;
+    showByokOnError?: boolean;
+    providerIsSet?: boolean;
+  }): string {
+    const chat: DigiChatSessionProps["chat"] = {
+      messages: [],
+      busy: false,
+      error: "Your API key needs a model.",
+      send: async () => {},
+      stop: () => {},
+      providerIsSet: opts.providerIsSet ?? false,
+      openSettings: () => {},
+    };
+    return renderToStaticMarkup(
+      <DigiChatSession
+        chat={chat}
+        showIntro={false}
+        showByok={opts.showByok ?? true}
+        showByokOnError={opts.showByokOnError}
+        welcomeIntro=""
+        placeholder="Ask…"
+      />,
+    );
+  }
+
+  it("offers Update your API key when a key is already bound", () => {
+    const html = errorHtml({ providerIsSet: true, showByokOnError: true });
+    expect(html).toContain("Update your API key");
+    expect(html).not.toContain("Add your API key");
+  });
+
+  it("offers Add your API key when no key is bound yet", () => {
+    const html = errorHtml({ providerIsSet: false, showByokOnError: true });
+    expect(html).toContain("Add your API key");
+    expect(html).not.toContain("Update your API key");
+  });
+
+  it("hides the BYOK link when showByokOnError is false (infra / ungated)", () => {
+    const html = errorHtml({
+      providerIsSet: true,
+      showByok: true,
+      showByokOnError: false,
+    });
+    expect(html).toContain("Your API key needs a model.");
+    expect(html).not.toContain("Update your API key");
+    expect(html).not.toContain("Add your API key");
+  });
+});

@@ -35,11 +35,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import re
 import subprocess
 import sys
-from datetime import date as dt_date, datetime, timedelta, timezone
+from datetime import date as dt_date
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -59,6 +59,17 @@ except ImportError:
     _HAS_JSONSCHEMA = False
 
 ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _load_execute_at_open():
@@ -117,9 +128,9 @@ def _clip_rationale(text: str, max_len: int = 2000) -> str:
 
 
 def _document_payload(sb, date_iso: str, document_key: str) -> Optional[Dict[str, Any]]:
+    """House payload for ``document_key``. Overlay same-key rows must not win limit(1)."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", date_iso)
         .eq("document_key", document_key)
         .limit(1)
@@ -292,7 +303,9 @@ def _snapshot_portfolio_cash(sb, d: str) -> Optional[float]:
 
 
 def _thesis_map_for_date(sb, d: str) -> Dict[str, Optional[str]]:
-    res = sb.table("positions").select("ticker,thesis_id").eq("date", d).execute()
+    res = (
+        eq_house_workspace(sb.table("positions").select("ticker,thesis_id")).eq("date", d).execute()
+    )
     out: Dict[str, Optional[str]] = {}
     for row in getattr(res, "data", None) or []:
         if not isinstance(row, dict):
@@ -500,7 +513,9 @@ def _upsert_rebalance_document(sb, d: str, payload: Dict[str, Any], dry_run: boo
     if dry_run:
         print(f"  [dry-run] would upsert rebalance-decision.json for {d}")
         return
-    sb.table("documents").upsert(row, on_conflict="workspace_id,date,document_key").execute()
+    sb.table("documents").upsert(
+        row, on_conflict="workspace_id,date,document_key"
+    ).execute()
     print(f"  ✅ upserted rebalance-decision.json for {d}")
 
 

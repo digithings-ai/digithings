@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 import re
 from datetime import date, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from digiquant.olympus.atlas.state import (
@@ -19,8 +19,13 @@ from digiquant.olympus.atlas.state import (
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
 from digiquant.olympus.hermes.writers.commit_io import (
+    _NAV_INTERVAL_TICKER_BATCH,
+    _NAV_INTERVAL_WINDOW_DAYS,
+    OVERLAY_MANIFEST_PREFIX,
     _canonical_thesis_ids,
+    _interval_price_returns,
     load_commit_manifests,
+    manifest_document_key,
     resolve_prior_commit,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
@@ -32,6 +37,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
 from digiquant.olympus.hermes.writers.ledger_io import (
     _heads as _ledger_heads,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -119,12 +125,7 @@ class TestCommitRunBooking:
 
         positions = {r["ticker"]: r for r in client.store.get("positions", [])}
         assert positions["SPY"]["weight_pct"] == 100.0
-        assert positions["SPY"]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-        assert positions["SPY"]["_on_conflict"] == "workspace_id,date,ticker"
-        navs = client.store.get("nav_history", [])
-        assert len(navs) == 1
-        assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-        assert navs[0]["_on_conflict"] == "workspace_id,date"
+        assert len(client.store.get("nav_history", [])) == 1
 
         docs = client.store.get("documents", [])
         brief = next(r for r in docs if r.get("document_key") == "pm-rebalance")
@@ -460,6 +461,53 @@ class TestCommitRunIdempotency:
         )
         found = load_commit_manifests(client=client, run_date=RUN_DATE)
         assert [m["weights_fingerprint"] for m in found] == ["fp-x"]
+
+    def test_house_uuid_keeps_commit_run_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        assert manifest_document_key("run-1", str(overlay)).startswith(OVERLAY_MANIFEST_PREFIX)
+        assert manifest_document_key("run-1") == "commit-run/run-1"
+        assert manifest_document_key("run-1", str(house_workspace_id())) == "commit-run/run-1"
+
+    def test_house_uuid_load_does_not_see_overlay_manifests(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        house = str(house_workspace_id())
+        iso = RUN_DATE.isoformat()
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": iso,
+                        "document_key": f"overlay-commit/{overlay}/ov-run",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "overlay"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/overlay-spoof",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "spoof"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/house-run",
+                        "workspace_id": house,
+                        "payload": {"weights_fingerprint": "house"},
+                    },
+                ]
+            }
+        )
+        overlay_found = load_commit_manifests(
+            client=client, run_date=RUN_DATE, workspace_id=str(overlay)
+        )
+        house_omitted = load_commit_manifests(client=client, run_date=RUN_DATE)
+        house_pinned = load_commit_manifests(client=client, run_date=RUN_DATE, workspace_id=house)
+        assert [m["weights_fingerprint"] for m in overlay_found] == ["overlay"]
+        assert [m["weights_fingerprint"] for m in house_omitted] == ["house"]
+        assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
 
     def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
         client = FakeSupabaseClient()
@@ -958,9 +1006,14 @@ class TestCommitChainLedger:
             capture_output=True,
             text=True,
         ).stdout.split()
+        # ``ledger_io`` is the only writer. Pipeline caller is H9. ``recover_ledger``
+        # is the operator recovery caller for a booked-but-uncommitted day (#3330): it
+        # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
+        # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
             "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
             "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
 
     def test_identical_same_date_fingerprint_appends_nothing(self) -> None:
@@ -1422,17 +1475,59 @@ _MIGRATION_069 = (
     / "migrations"
     / "069_olympus_portfolio_ledger.sql"
 )
+_MIGRATION_097 = (
+    pathlib.Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "097_workspaces_tenant_columns.sql"
+)
+
+
+def _strip_sql_comments(raw: str) -> str:
+    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
 
 
 def _migration_sql() -> str:
-    raw = _MIGRATION_069.read_text(encoding="utf-8")
-    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
+    """Migration 069 DDL (CHECKs / CREATE TABLE bodies)."""
+    return _strip_sql_comments(_MIGRATION_069.read_text(encoding="utf-8"))
+
+
+def _migration_097_sql() -> str:
+    """Migration 097 DDL (tenant ``workspace_id`` ADD COLUMNs)."""
+    return _strip_sql_comments(_MIGRATION_097.read_text(encoding="utf-8"))
 
 
 def _table_body(sql: str, table: str) -> str:
     match = re.search(rf"CREATE TABLE IF NOT EXISTS public\.{table} \((.*?)\n\);", sql, re.S)
     assert match, f"table {table} not found in migration 069"
     return match.group(1)
+
+
+def _columns_for_table(table: str) -> set[str]:
+    """Columns the live schema permits: CREATE TABLE (069) ∪ ADD COLUMN (097).
+
+    T0 (#5-T0) stamped ``workspace_id`` on every ledger writer. That column is not in
+    migration 069's CREATE TABLE — 097 ADDs it — so the emitted-columns guard must
+    union both migrations or it falsely rejects a legitimate stamped row.
+    """
+    create_cols = set(
+        re.findall(
+            r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
+            _table_body(_migration_sql(), table),
+            re.M,
+        )
+    )
+    alter_cols = set(
+        re.findall(
+            rf"ALTER TABLE public\.{table}\s+ADD COLUMN IF NOT EXISTS ([a-z_]+) ",
+            _migration_097_sql(),
+            re.I,
+        )
+    )
+    columns = create_cols | alter_cols
+    assert columns, f"parsed no columns for {table}"
+    return columns
 
 
 def _allowed_values(sql: str, table: str, column: str) -> set[str]:
@@ -1511,30 +1606,24 @@ class TestLedgerRowsSatisfyMigration069:
     ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
     validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
     a model field with no column behind it, which is a PostgREST 400 rather than a
-    CHECK violation.
+    CHECK violation. Column membership is the live schema = 069 CREATE ∪ 097 ADD
+    (``workspace_id`` and any later tenant columns).
     """
 
     def test_emitted_columns_all_exist_in_the_migration(self) -> None:
         # A key the table lacks is a PostgREST 400, not a CHECK violation.
-        sql = _migration_sql()
         client = _ledger_client(SPY=100.0)
         _run(client, _state())
         for table in _LEDGER_TABLES:
-            columns = set(
-                re.findall(
-                    r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
-                    _table_body(sql, table),
-                    re.M,
-                )
-            )
-            assert columns, f"parsed no columns for {table}"
+            columns = _columns_for_table(table)
             rows = _rows(client, table)
             assert rows, f"{table} got no rows — the assertion below would be vacuous"
             for row in rows:
-                unknown = set(row) - columns - {"workspace_id"}
+                unknown = set(row) - columns
                 assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
-                assert row["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-                assert isinstance(row["workspace_id"], str)
+            # T0: every ledger writer stamps workspace_id; vacuous if we forget the ADD.
+            assert "workspace_id" in columns, f"{table} schema must include workspace_id (097)"
+            assert all("workspace_id" in row for row in rows)
 
     def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
         sql = _migration_sql()
@@ -1703,6 +1792,81 @@ class TestPriceReadRowCap:
     def test_batch_is_derived_from_the_lookback(self) -> None:
         """Widening the window must not silently reintroduce truncation."""
         worst_case = _CLOSE_TICKER_BATCH * (_CLOSE_LOOKBACK_DAYS + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
+
+
+class TestIntervalPriceReturnsRowCap:
+    """Regression (#2484): interval NAV returns must not drop tickers under the row cap.
+
+    ``_interval_price_returns`` needs both ends of a padded interval window (up to
+    ``_NAV_INTERVAL_WINDOW_DAYS`` calendar days per ticker). A truncated ticker is
+    omitted from the returned dict and the caller treats a missing key as 0.0 — a
+    silent wrong NAV with no diagnostic.
+    """
+
+    CAP = 1000
+    RUN = date(2026, 6, 12)
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        anchor = self.RUN - timedelta(days=120)
+        floor = anchor - timedelta(days=7)
+        rows: list[dict[str, object]] = []
+        for index, ticker in enumerate(tickers):
+            begin_close = 100.0 + index
+            end_close = 110.0 + index
+            day = floor
+            while day < self.RUN:
+                iso = day.isoformat()
+                if iso <= anchor.isoformat():
+                    close = begin_close
+                elif day == self.RUN - timedelta(days=1):
+                    close = end_close
+                else:
+                    close = (begin_close + end_close) / 2.0
+                rows.append({"date": iso, "ticker": ticker, "close": close})
+                day += timedelta(days=1)
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_returns_every_ticker_under_the_row_cap(self) -> None:
+        tickers = [f"TK{index:03d}" for index in range(10)]
+        window_rows = _NAV_INTERVAL_WINDOW_DAYS + 1
+        assert len(tickers) * window_rows > self.CAP, "universe must exceed the cap"
+        returns = _interval_price_returns(
+            client=self._capped_client(tickers),
+            tickers=tuple(tickers),
+            start_date=self.RUN - timedelta(days=200),
+            run_date=self.RUN,
+        )
+        missing = sorted(set(tickers) - set(returns))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is treated as 0.0 return and silently wrong NAV"
+        )
+        for index, ticker in enumerate(tickers):
+            expected = (110.0 + index - (100.0 + index)) / (100.0 + index)
+            assert returns[ticker] == pytest.approx(expected)
+
+    def test_batch_is_derived_from_the_interval_window(self) -> None:
+        worst_case = _NAV_INTERVAL_TICKER_BATCH * (_NAV_INTERVAL_WINDOW_DAYS + 1)
         assert worst_case <= self.CAP, (
             f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
         )

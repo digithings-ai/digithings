@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   DEFAULT_EMBED_TENANT_CONFIG,
   resolveEmbedClientConfigFromParams,
+  resolveEmbedHostParamOrReferer,
   toEmbedClientConfig,
 } from "./embed-client-config";
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
@@ -93,6 +94,34 @@ describe("resolveEmbedClientConfigFromParams", () => {
     withRegistry();
     const cfg = resolveEmbedClientConfigFromParams(undefined, "https://digithings.ai");
     expect(cfg.slug).toBe("digithings");
+  });
+
+  it("trims whitespace from the token param before comparison (#2006)", () => {
+    withRegistry();
+    const cfg = resolveEmbedClientConfigFromParams(
+      "datatap-dev-secret ",
+      "https://dev.datatap.stream",
+    );
+    expect(cfg.slug).toBe("datatap-dev");
+    expect(cfg.theme).toBe("light");
+  });
+});
+
+describe("resolveEmbedHostParamOrReferer", () => {
+  it("prefers explicit host over referer", () => {
+    expect(
+      resolveEmbedHostParamOrReferer("https://explicit.example", "https://parent.example/page"),
+    ).toBe("https://explicit.example");
+  });
+
+  it("falls back to referer origin when host param is absent (#2006)", () => {
+    expect(resolveEmbedHostParamOrReferer(undefined, "https://dev.datatap.stream/embed")).toBe(
+      "https://dev.datatap.stream",
+    );
+  });
+
+  it("returns undefined when both host and referer are absent", () => {
+    expect(resolveEmbedHostParamOrReferer(undefined, undefined)).toBeUndefined();
   });
 });
 

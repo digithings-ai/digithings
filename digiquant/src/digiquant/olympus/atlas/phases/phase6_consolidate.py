@@ -43,7 +43,7 @@ def _bias_of(state: AtlasResearchState, field: str, key: str) -> str:
     if slot is None or slot.payload.source != "today":
         return ""
     body = slot.payload.body  # type: ignore[union-attr]
-    return str(body.get("bias") or "")
+    return str(body.get("internal_bias") or body.get("bias") or "")
 
 
 def _macro_regime_label(state: AtlasResearchState) -> str:

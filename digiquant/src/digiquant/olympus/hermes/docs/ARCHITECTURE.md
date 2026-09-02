@@ -25,8 +25,14 @@ Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_his
 `theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
 append. Book/ledger writes stamp house `workspace_id` (migration 097) while keeping
 date-only upsert conflict targets until cutover 113. Phase 9 evolution LLM is **not**
-on the daily path; beliefs distillation is
-on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
+on the daily path; beliefs distillation is a **daily short fold** after
+publish (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG` selects
+the full rewrite). Empty-lesson days still publish a same-date `beliefs` document.
+
+House CLI close-out (`cli_main`, not `run_atlas_then_hermes`): after a non-retry
+exit, fail-soft K5 `dispatch_house_notifications_after_chain` attempts today's
+digest (`force_digest=True`). Overlay nested chain skips this so overlay jobs
+cannot send house mail. Missing Mailgun env logs and returns.
 
 ---
 
@@ -34,14 +40,14 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 
 | Step | Node | Module | Edit behavior | Output |
 |------|------|--------|---------------|--------|
-| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + review doc |
+| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_hermes` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
 | **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
-| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget** |
+| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
 | **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `HermesGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
 | **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
-| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
-| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
+| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
+| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
 **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `hermes/allocation_contracts.py`
@@ -128,6 +134,17 @@ blinded role contexts, H6 selection round floor, telemetry reconciliation)
 without planner graph nodes or enforce-mode promotion. Pipeline simulation
 (`tests/dq/atlas/test_pipeline_simulation.py`) extends the WP11.5 durable
 H5/H6 lineage round-trip with graph-level planner-node guards.
+
+### H1 review persistence
+
+H1 (`persist_thesis_review`) refreshes status/evidence on **existing market**
+theses only. It does not mint rows for LLM-invented ids, and it skips
+vehicle-shaped ids (`vehicle-{ticker}` and the live typo `veicle-{ticker}`).
+Those ghosts landed in the house register on 2026-08-31 / 2026-09-01 as
+`thesis_kind` null + price-technicals notes, then ranked as market theses
+26–28 on the olympus list. H5 owns canonical `vehicle-{ticker}` rows;
+`splitTheses` on the dashboard also routes vehicle-shaped ids out of the
+market spine even when `thesis_kind` is null.
 
 ### H2 market-thesis identity
 
@@ -231,13 +248,21 @@ the pipeline's whole observed lifetime.
 
 ## PMDirectionMemo (H7)
 
-H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
-`weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
-(see spec §11.2). WP4.5 (#2660) adds `ForecastReference` per roster row, bound after
-the LLM (and after fail-soft prior carry) from current effective-forecast lineage —
-never from model-supplied IDs; missing lineage is explicit degraded (null IDs +
-reason). H8 maps memo + feasibility constraints → sized weights; direction/rank
-semantics are unchanged.
+H7 emits direction + ordinal conviction rank + narrative + optional `confidence`
+in `[0, 1]` — never `target_pct`, `weight`, or `recommended_portfolio`. Schema:
+`PMDirectionMemo` / `TickerDirection` (see spec §11.2). Rank is **order, not size**.
+WP4.5 (#2660) adds `ForecastReference` per roster row, bound after the LLM (and
+after fail-soft prior carry) from current effective-forecast lineage — never from
+model-supplied IDs; missing lineage is explicit degraded (null IDs + reason).
+Operator chrome (`PmDirectionDocumentView`) hides `forecast_reference` /
+`degradation_reason` and shows narrative, derived buy/hold/sell vs prior
+(rebalance prior-weight vs H8 target when that payload is at hand, else prior
+direction, else `long`/`flat`), rank, and confidence as a percent. H8 maps memo +
+feasibility constraints → sized weights. On the calibrated path rank is **not** a
+size input (μ/σ/reliability + 12% vol budget + 5% grid). H8 then scales each long
+by H7 `confidence` (cash-first; missing rows on a mixed roster → 0.5, never 1.0;
+pre-WP-G memos that omit confidence on every long skip the haircut). The UI
+must never imply #1 = largest weight.
 
 ---
 
@@ -246,7 +271,15 @@ semantics are unchanged.
 Per-ticker cyclic sub-graph (not a single LLM call):
 
 - `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
-- `h6_analyst_response` — analyst responds or revises stance
+- `h6_analyst_response` — analyst answers in meeting prose (not a second H5 report)
+
+Skills: PM loads `deliberation` (`skills/deliberation/deliberation-full.md`). The
+analyst reply loads `deliberation-analyst-response`
+(`skills/deliberation/analyst-response-full.md`) — **not** H5 `asset-analyst`.
+`load_skill_full` resolves hyphenated nested slugs to a sibling `*-full.md` in
+the parent skill folder. When the PM converges, that close is always appended
+to `transcript` so the last bubble is the PM; the dashboard does not repeat a
+`## Conclusion` heading under a non-empty chat.
 
 Termination when either side sets `converged=true` after the min-rounds floor
 (default 2; infra timeouts / max-rounds cap only for early exit). On fingerprint
@@ -426,8 +459,9 @@ reason (#947); this closes the same hole in the commit manifest.
 
 Two things stay separate:
 
-- the manifest **document** remains per-run (`commit-run/{source_run_id}`), so every
-  attempt keeps its own audit artefact;
+- the manifest **document** remains per-run (`commit-run/{source_run_id}` for
+  house / house UUID; `overlay-commit/{workspace_id}/{source_run_id}` only when
+  `is_private_workspace` is true), so every attempt keeps its own audit artefact;
 - the **guard** is date-scoped: `commit_io.load_commit_manifests` returns every manifest
   for the date and `commit_io.resolve_prior_commit` picks the last writer.
 
@@ -602,10 +636,15 @@ so anything that can reach that block with an error-free state becomes an invisi
 Three holes are closed:
 
 1. **Beliefs distillation is fail-soft.** `_run_beliefs_fold` wraps both call sites (the
-   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is an
-   optional on-demand backlog fold (spec §11.1), not a run deliverable — a failure there must
+   `refresh_scope="beliefs"` escape hatch and the post-publish automatic fold). Beliefs is a
+   daily house-run deliverable (short fold; full rewrite on operator scope or backlog) —
+   a failure there must
    never kill a run that already committed a book. It records `("chain", "beliefs")` instead,
-   which degrades the run.
+   which degrades the run. Overlay nested chain **skips** the fold
+   (`skip_overlay_shared_register`): `decision_log` has no `workspace_id`, and stamping
+   `beliefs_folded_at` by id would consume house lessons. Overlay `workspace_id` is
+   seeded onto `initial_state` from the preflight config loader so a fail-soft Atlas
+   crash cannot fold as house.
 2. **A terminating crash is recorded before the row is written.** `except BaseException:
    _record_chain_error(state, "terminal", exc); raise` sits between the body and the
    `finally`. This catches SystemExit / KeyboardInterrupt / a job timeout's SIGTERM — none of

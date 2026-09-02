@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - google_account
 data_privacy_on_free: trains_on_data
-verified_at: 2026-05-03
+verified_at: 2026-08-30
 source_urls:
   - https://ai.google.dev/gemini-api/docs/rate-limits
   - https://ai.google.dev/gemini-api/docs/models
@@ -29,12 +29,13 @@ The context king of the free-tier landscape. Gemini 2.5 Flash offers the largest
 
 ## Free-Tier Models
 
-| Model ID | Context Window | Max Output | RPM | RPD | TPM | Notes |
-|---|---|---|---|---|---|---|
-| `gemini-2.5-flash` | 1,048,576 (1M) | 65,536 | 10 | 250 | 250,000 | Workhorse; vision, audio, structured output |
-| `gemini-2.5-flash-lite` | 1,048,576 (1M) | 65,536 | 15 | 1,000 | 1,000,000 | Highest free RPD; use for volume |
-| `gemini-2.5-pro` | 2,097,152 (2M) | 65,536 | 5 | 100 | 250,000 | Strongest reasoning; 2M ctx |
-| `text-embedding-004` | 2,048 | — | 1,500 | — | — | Embeddings; task-type param supported |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `gemini-2.5-flash` | 1,048,576 | 65,536 | active |
+| `gemini-2.5-flash-lite` | 1,048,576 | 65,536 | active |
+| `gemini-2.5-pro` | 2,097,152 | 65,536 | **paid-only** |
+| `text-embedding-004` | 2,048 | — | active |
+| `gemini-3-flash-preview` | 1,048,576 | 65,536 | active |
 
 ---
 
@@ -114,3 +115,4 @@ Enable billing on the linked Google Cloud project — same API key, zero extra c
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

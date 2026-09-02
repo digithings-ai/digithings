@@ -1,11 +1,12 @@
 # Settings IA + tier matrix (addendum)
 
 > **Date:** 2026-08-30  
-> **Status:** Product addendum for Olympus Settings — fills silence in the Kairos
-> tenancy spec on pipeline knobs, models, and BYOK entry. Does **not** amend locked
-> D1–D10.  
+> **Status:** Product addendum for dashboard Settings — fills silence in the Kairos
+> tenancy spec on pipeline knobs, models, and BYOK entry. **Amended same day** for
+> free-teaser + creator/ops + FX Hub product gates (supersedes the earlier
+> “baseline may connect broker” tension).  
 > **Binds to:** T3 (tabs), T4 (BYOK storage + overlay budget), T5 (entitlement matrix),
-> `ProfileConfig` (`digiquant.olympus.profile_config`).
+> migration `108_entitlement_grants_and_products.sql`, `ProfileConfig`.
 
 ## Why this exists
 
@@ -40,74 +41,77 @@ digillm contract bump). “Change models” means:
 
 A future `preferred_model` field is out of scope until schemas + overlay dispatch agree.
 
-## Tier matrix (Settings actions)
+## Tier matrix (Settings actions) — authoritative product rules
 
-Matches locked D1 / T5. Server authority = `workspaces.plan_tier` (not JWT claim alone).
+Server authority = **effective** tier:
+`max(workspaces.plan_tier, entitlement_grants.plan_floor)` via `my_access()` /
+settings EF (migration 108). JWT `app_metadata.plan_tier` alone is **not** enough
+(creator grants would miss).
 
-| Action | free (Observer teaser) | baseline (paid) | custom / enterprise | creator/ops grant |
-|--------|------------------------|-----------------|---------------------|-------------------|
-| Digest summary conclusions | ✓ teaser | ✓ | ✓ | ✓ (floor) |
-| Portfolio glimpse (names only) | ✓ teaser | full book | full book | per floor |
-| House weights / glass-box pipeline | — | ✓ | ✓ | ✓ if floor ≥ baseline |
-| Notifications GET/PATCH | ✓ (member) | ✓ | ✓ | ✓ |
-| Billing links | ✓ | ✓ | ✓ | ✓ |
-| Profile / Pipeline write | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
-| Keys (BYOK) seal/revoke | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
-| Brokers connect/revoke | omitted (no tab) — **no connections on free** | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
-| Automations / overlay runs | — | — | ✓ | ✓ if floor ≥ custom |
+| Action | free (Observer teaser) | brief | desk | studio / enterprise | creator/ops grant |
+|--------|------------------------|-------|------|---------------------|-------------------|
+| Digest summary conclusions | ✓ teaser | ✓ | ✓ | ✓ | ✓ (floor) |
+| Portfolio glimpse (names only) | ✓ teaser | full book | full book | full book | per floor |
+| House weights / NAV | — | ✓ | ✓ | ✓ | ✓ if floor ≥ brief |
+| House glass-box pipeline | — | — | ✓ | ✓ | ✓ if floor ≥ desk |
+| Notifications GET/PATCH | ✓ (member) | ✓ | ✓ | ✓ | ✓ |
+| Billing links | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Profile / Pipeline write | omitted (no tab) | omitted | omitted | ✓ | ✓ if floor ≥ studio |
+| Keys (BYOK) seal/revoke | omitted (no tab) | omitted | omitted | ✓ | ✓ if floor ≥ studio |
+| Brokers connect/revoke | omitted (no tab) — **no connections on free** | omitted | ✓ | ✓ | ✓ if floor ≥ desk |
+| Automations / overlay runs | — | — | — | ✓ | ✓ if floor ≥ studio |
 
 **UI rule:** Settings tabs the current *effective* tier cannot use are **omitted**,
-not greyed or locked. Observer (free) and Baseline see Notifications | Billing |
-About only. Custom / enterprise / creator floor see the full set. Server still
+not greyed or locked. Observer (free) and Brief see Notifications | Billing |
+About only. Desk adds Brokers. Studio / enterprise / creator floor see the full set. Server still
 returns `TIER_FORBIDDEN` if a hidden path is called directly.
 
 Deep links: in-app CTAs use `/settings#billing` (and `#notifications`, `#about`,
-plus Custom+ `#profile` / `#pipeline` / `#keys` / `#brokers`). Core Stripe
-checkout/portal returns `/olympus/settings/?tab=billing` (and `?checkout=success|cancel`).
+plus Desk `#brokers`, Studio+ `#profile` / `#pipeline` / `#keys`). Core Stripe
+checkout/portal returns `/dashboard/settings/?tab=billing` (and `?checkout=success|cancel`).
 Query wins over hash. A gated hash or `?tab=` (e.g. Observer `#profile`) is ignored.
 
-**Supersedes prior note:** baseline does **not** unlock broker connect. Free is
-teaser-only (digest conclusions + light portfolio glimpse — not enough to
-reverse-engineer the PM product). Full product for everyone else requires a
-subscription. The **creator** email (seeded `chris.stefan@proton.me`) holds
-`plan_floor=custom` so baseline pipeline + Kairos Settings writes work **without
+**Annual display:** Billing shows annual as a percent off the monthly list
+(equivalent `$ /mo` vs struck `$ /mo` plus `N% off`; `billed $N/yr`). Default
+interval is annual.
+
+**Supersedes prior note:** Brief does **not** unlock broker connect — Desk does.
+Free is teaser-only (digest conclusions + light portfolio glimpse — not enough to
+reverse-engineer the PM product). The **creator** email (seeded `chris.stefan@proton.me`) holds
+`plan_floor=studio` so overlay + Kairos Settings writes work **without
 Stripe**; paying customers still go through Checkout.
 
 ## Client products (FX Hub + future)
 
 | Product key | Visibility |
 |-------------|------------|
-| `fx_hub` | Creator + rows in `client_product_grants` (12x email allowlist — human supplies list later; empty/configurable now) |
+| `fx_hub` | Creator + `client_product_grants` + hashed invite redeem (`POST /settings/access/redeem-invite`, migration 112). 12x teammates sign in, then paste the operator-shared code. Not login-optional. |
 | *(future)* | Same table + `ClientProductGate` / nav filter |
 
 Maintain grants in Supabase (`core`) near auth. Optional later: sync from the
 twelve-x repo. Env fallbacks for UI before migration apply:
-`NEXT_PUBLIC_OLYMPUS_CREATOR_EMAILS`, `NEXT_PUBLIC_OLYMPUS_PRODUCT_GRANTS`.
-
+`NEXT_PUBLIC_DASHBOARD_CREATOR_EMAILS`, `NEXT_PUBLIC_DASHBOARD_PRODUCT_GRANTS`.
 
 ## API surface (settings Edge Function)
 
-Existing: `/profile`, `/brokers/*`, `/notifications`.
+Existing: `/profile`, `/brokers/*`, `/notifications`, `/keys/*`.
 
-Added by v0:
-
-| Method | Path | Behavior |
-|--------|------|----------|
-| `GET` | `/keys` | Fingerprint projection only |
-| `POST` | `/keys/connect` | Custom+; seal `api_key` with AAD `workspace:provider:llm` |
-| `POST` | `/keys/revoke` | Fail closed on unknown row |
+Tier writes use **effective** plan (workspace + `entitlement_grants`).
 
 `PATCH /profile` accepts `research_budget_usd` (number ≥ 0 or null). GET returns
 `watchlist`, `themes`, `research_budget_usd` from the tip payload.
 
 ## Testing without Stripe
 
-Ops/Custom tier for agent tests: set `workspaces.plan_tier` to `custom` (or
-`enterprise`) directly. Free tier proves `TIER_FORBIDDEN` on profile/keys/brokers
-writes. No Stripe webhook required for Settings v0.
+- Creator path: sign in as allowlisted email → effective custom → Settings writes 200.
+- Free path: non-allowlisted free workspace → `TIER_FORBIDDEN` on profile/keys/brokers.
+- Ops: insert into `entitlement_grants` / `client_product_grants` (service_role),
+or share a hashed FX Hub invite (`FX_HUB_INVITE_HASH` / `product_invite_codes`)
+so teammates self-enrol after login.
+- No Stripe webhook required for Settings v0 or creator unlock.
 
 ## Non-goals
 
-- Live broker env; amending D1 for baseline brokers.
+- Live broker env; amending free to include broker connect.
 - Stripe product config; Auth cutover migration 900.
-- Redefining epic complete (progress toward T3/T5 completeness only).
+- Redefining epic complete (staging E2E still needs vendor captchas/secrets).

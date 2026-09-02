@@ -133,15 +133,10 @@ class TestTheInstructionReachesTheModel:
     def test_every_sampled_skill_gets_it(self, slug: str) -> None:
         assert QUANTITATIVE_FINDING_RULES in load_skill(slug)
 
-    def test_the_rules_name_the_field_the_schema_actually_has(self) -> None:
-        """The instruction and the model are in different files; this is what ties them."""
-        assert "as_of" in QUANTITATIVE_FINDING_RULES
-        assert "as_of" in Finding.model_fields
-
-    def test_the_rules_say_the_data_date_not_the_run_date(self) -> None:
-        """The whole point. A model stamping today's date on a carried number would satisfy a
-        naive "is as_of present" check while preserving the exact defect."""
+    def test_the_rules_tell_the_model_to_date_numbers_inline(self) -> None:
+        """Memo body is markdown; dates live in the prose, not a Finding.as_of slot."""
         lowered = QUANTITATIVE_FINDING_RULES.lower()
+        assert "markdown body" in lowered
         assert "not the date of this run" in lowered or "do not write" in lowered
         assert "carry a number forward" in lowered
 

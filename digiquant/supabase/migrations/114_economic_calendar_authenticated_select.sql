@@ -16,12 +16,10 @@
 --
 -- Numbering: 114, not 113. Top-level `113_*.sql` is reserved for the staged
 -- cutover `migrations/cutover/113_drop_legacy_book_uniques.sql` (human gate;
--- on develop as tests/dq/olympus/test_cutover_113.py). Do not steal 113.
--- Live `core` already has this policy (applied out-of-band). This file is the
--- `main` ledger so `db-migrate.yml` (push to main) can stamp
--- `olympus_schema_migrations`. Develop already has this as #3338 (`db3745b7e`).
+-- tests/dq/olympus/test_cutover_113.py). 111 is reserved (see 112 header).
+-- Do not steal 111 or 113. Live `core` already has this policy (applied
+-- out-of-band); this file is the repo ledger so a fresh db reset matches.
 -- Related: Auth Pages #3231; supersedes PR #3321 (which used 113).
--- Do not apply cutover 113 or 900. Do not add 096–112 in this hotfix.
 
 DROP POLICY IF EXISTS economic_calendar_authenticated_select ON public.economic_calendar;
 CREATE POLICY economic_calendar_authenticated_select ON public.economic_calendar

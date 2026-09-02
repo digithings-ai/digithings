@@ -14,7 +14,7 @@ name: "Pipeline: Atlas metrics refresh"
 # (finalized accounting), never the 21-day lookback.
 #
 # SEVEN days a week since #1833. It was MON-SAT, but the book cron
-# (pipeline-olympus.yml, `0 12 * * *`) is daily — so a Sunday book was written and then never
+# (pipeline-olympus.yml, `17 9/10/11/12 * * *`) is daily — so a Sunday book was written and then never
 # enriched, keeping current_price / unrealized_pnl_pct / metrics_as_of NULL *permanently*
 # rather than until the next run. Measured in prod: both Sundays in the window (2026-07-26,
 # 2026-08-02) had 0 of N rows marked, while trading days had 8-11 of 9-12. The live-price

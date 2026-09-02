@@ -39,6 +39,7 @@ import os
 import sys
 from datetime import date as dt_date
 from pathlib import Path
+from typing import Any  # score:allow untyped any — duck-typed PostgREST rows
 
 try:
     from supabase import create_client
@@ -52,6 +53,18 @@ try:
     load_dotenv()
 except ImportError:
     pass
+
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _sb():
@@ -108,22 +121,28 @@ def cmd_publish(args: argparse.Namespace) -> int:
     }
 
     sb = _sb()
-    sb.table("documents").upsert(row, on_conflict="workspace_id,date,document_key").execute()
+    sb.table("documents").upsert(
+        row, on_conflict="workspace_id,date,document_key"
+    ).execute()
     print(f"published documents:{date_str}/{args.key}")
     return 0
 
 
-def cmd_list(args: argparse.Namespace) -> int:
-    sb = _sb()
+def house_research_library_rows(sb: Any, limit: int) -> list[dict[str, Any]]:
+    """House ``research/%`` index. Overlay notes must not dump as the house library."""
     res = (
-        sb.table("documents")
-        .select("date,document_key,title,doc_type,segment")
+        eq_house_workspace(sb.table("documents").select("date,document_key,title,doc_type,segment"))
         .like("document_key", "research/%")
         .order("date", desc=True)
-        .limit(args.limit)
+        .limit(limit)
         .execute()
     )
-    rows = res.data or []
+    return list(getattr(res, "data", None) or [])
+
+
+def cmd_list(args: argparse.Namespace) -> int:
+    sb = _sb()
+    rows = house_research_library_rows(sb, args.limit)
     if not rows:
         print("No research documents found.")
         return 0

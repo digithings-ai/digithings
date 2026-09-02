@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Collection, Mapping
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
@@ -19,6 +18,12 @@ from digiquant.olympus.atlas.phases._node_factory import (
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
+from digiquant.olympus.envcompat import (
+    ATTEMPT,
+    DELIBERATION_MAX_ROUNDS,
+    DELIBERATION_MIN_ROUNDS,
+    env_lookup,
+)
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
     fanout_ticker,
@@ -86,7 +91,7 @@ DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
 
 def _h6_attempt_id() -> str:
-    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
 
@@ -171,7 +176,7 @@ def _maybe_attempt_missing_fact_amendment(
 
 def deliberation_max_rounds() -> int:
     """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
-    raw = os.environ.get("ATLAS_DELIBERATION_MAX_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MAX_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
     try:
@@ -189,7 +194,7 @@ def deliberation_min_rounds() -> int:
     path (instant convergence). The caller clamps it to ``max_rounds`` so it can never
     deadlock the loop.
     """
-    raw = os.environ.get("ATLAS_DELIBERATION_MIN_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MIN_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MIN_ROUNDS
     try:
@@ -508,7 +513,7 @@ def run_deliberation_loop(
     terms dict (or ``None``), and optional WP11.4 evidence-amendment provenance.
     """
     pm_skill = load_skill_full("deliberation")
-    analyst_skill = load_skill_full("asset-analyst")
+    analyst_skill = load_skill_full("deliberation-analyst-response")
     tools, execute_tool, _web_grounding = _h6_grounding(state, segment=f"{NODE_ID}-{ticker}")
     transcript: list[DeliberationTurn] = []
     round_number = 0
@@ -580,12 +585,14 @@ def run_deliberation_loop(
         # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
         # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
-            if pm_turn.challenge:
-                transcript.append(
-                    DeliberationTurn(
-                        role="pm", round_number=round_number, message=pm_turn.challenge
-                    )
+            close = (pm_turn.conclusion or pm_turn.challenge).strip()
+            transcript.append(
+                DeliberationTurn(
+                    role="pm",
+                    round_number=round_number,
+                    message=close or "PM converges.",
                 )
+            )
             return (
                 _deliberation_summary(
                     ticker=ticker,

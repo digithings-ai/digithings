@@ -1,0 +1,16 @@
+{% extends "base.html.j2" %}
+{% block title %}Holding change — {{ ticker }}{% endblock %}
+{% block content %}
+<h1>Holding change — {{ ticker }}</h1>
+<p>Date: {{ run_date }}</p>
+<p>Change: {{ change_kind }}</p>
+{% if delta_pp is not none %}
+<p>Weight delta: {{ "%.1f"|format(delta_pp) }}pp</p>
+{% endif %}
+{% if current_weight_pct is not none %}
+<p>Current weight: {{ current_weight_pct }}%</p>
+{% endif %}
+{% if prior_weight_pct is not none %}
+<p>Prior weight: {{ prior_weight_pct }}%</p>
+{% endif %}
+{% endblock %}

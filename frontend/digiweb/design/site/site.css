@@ -34,7 +34,7 @@ body {
 img, svg { max-width: 100%; display: block; }
 a { color: inherit; text-decoration: none; }
 ::selection { background: var(--accent); color: var(--on-accent); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 0; }
 
 /* ── atmosphere ─────────────────────────────────────────────────────── */
 .grain {
@@ -64,21 +64,21 @@ a { color: inherit; text-decoration: none; }
    app's _nav.tsx as `max-[880px]:` utilities — 880px is NavShell's own
    breakpoint, where its hamburger appears. */
 .brand { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 400; letter-spacing: -0.02em; }
-.brand-mark { width: 26px; height: 26px; border-radius: 7px; }
+.brand-mark { width: 26px; height: 26px; border-radius: 0; }
 .brand-word { font-family: var(--font-mono); font-size: 1.05rem; font-weight: 400; letter-spacing: 0; }
 .brand-word b { color: var(--accent); font-weight: 400; }
 
-.theme-toggle { display: inline-grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); color: var(--ink-soft); cursor: pointer; transition: color 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease); }
+.theme-toggle { display: inline-grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--hair); border-radius: 0; background: var(--surface); color: var(--ink-soft); cursor: pointer; transition: color 0.18s var(--ease), border-color 0.18s var(--ease), transform 0.18s var(--ease); }
 .theme-toggle:hover { color: var(--ink); border-color: var(--hair-2); transform: translateY(-1px); }
 .theme-toggle svg { width: 17px; height: 17px; }
 
 /* ── buttons ────────────────────────────────────────────────────────── */
-.btn { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-sans); font-size: 0.95rem; font-weight: 500; padding: 0.72rem 1.25rem; border-radius: 10px; border: 1px solid var(--hair-2); cursor: pointer; white-space: nowrap; transition: transform 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease); }
+.btn { display: inline-flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.95rem; font-weight: 500; padding: 0.72rem 1.25rem; border-radius: 0; border: 1px solid var(--hair-2); cursor: pointer; white-space: nowrap; transition: transform 0.18s var(--ease), background 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease); }
 .btn span[aria-hidden] { transition: transform 0.18s var(--ease); }
 .btn:hover span[aria-hidden] { transform: translateX(3px); }
 .btn-sm { padding: 0.5rem 0.95rem; font-size: 0.88rem; }
-.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; box-shadow: 0 10px 30px -14px var(--accent); }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -14px var(--accent); }
+.btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 500; }
+.btn-primary:hover { transform: translateY(-2px); }
 .btn-ghost { background: transparent; color: var(--ink); }
 .btn-ghost:hover { background: var(--surface); border-color: var(--hair-2); transform: translateY(-2px); }
 
@@ -91,7 +91,7 @@ a { color: inherit; text-decoration: none; }
 .hero-title em { font-style: italic; color: var(--accent); }
 
 /* ── terminal block (always dark) ───────────────────────────────────── */
-.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
+.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
 .term-bar { display: flex; align-items: center; gap: 8px; padding: 0.7rem 0.9rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
 .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a342c; display: inline-block; }
 .term-bar i:nth-child(1) { background: #ec6a5e; } .term-bar i:nth-child(2) { background: #f4bf4f; } .term-bar i:nth-child(3) { background: #61c554; }
@@ -107,7 +107,7 @@ a { color: inherit; text-decoration: none; }
 @keyframes blink { 50% { opacity: 0; } }
 
 /* inline install/clone command chip */
-.cmdline { display: inline-flex; align-items: center; gap: 0.7rem; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 10px; padding: 0.55rem 0.65rem 0.55rem 1rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--term-ink); max-width: 100%; overflow-x: auto; }
+.cmdline { display: inline-flex; align-items: center; gap: 0.7rem; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.55rem 0.65rem 0.55rem 1rem; font-family: var(--font-mono); font-size: 0.82rem; color: var(--term-ink); max-width: 100%; overflow-x: auto; }
 .cmdline .prompt { color: var(--accent); }
 
 /* ── sections ───────────────────────────────────────────────────────── */
@@ -203,7 +203,7 @@ a { color: inherit; text-decoration: none; }
 .changelog-row__title { font-size: 0.98rem; color: var(--ink); }
 .changelog-row__title a { color: inherit; }
 .changelog-row__title a:hover { color: var(--accent); }
-.changelog-row__tag { display: inline-flex; align-items: center; margin-left: 0.6rem; padding: 0.15rem 0.5rem; border-radius: 999px; border: 1px solid var(--hair-2); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+.changelog-row__tag { display: inline-flex; align-items: center; margin-left: 0.6rem; padding: 0.15rem 0.5rem; border-radius: 0; border: 1px solid var(--hair-2); font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
 .changelog-band__footer { margin-top: 1.2rem; text-align: center; }
 .changelog-band__footer a { font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); }
 @media (min-width: 640px) {
@@ -214,15 +214,15 @@ a { color: inherit; text-decoration: none; }
    WAI-ARIA tabs pattern, keyboard-navigable (../code-sample-band.js).
    Always dark, reusing the terminal block's --term-* tokens regardless of
    page theme (matches .term). ───────────────────────────────────────────── */
-.code-sample-band { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; }
+.code-sample-band { background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; overflow: hidden; }
 /* __bar holds the tablist + copy button as siblings — the copy button must NOT
    live inside role="tablist" (a tablist owns only role="tab" children). */
 .code-sample-band__bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.5rem 0.6rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
 .code-sample-band__tabs { display: flex; align-items: center; gap: 0.25rem; }
-.code-sample-band__tab { font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-mute); background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 0.35rem 0.7rem; cursor: pointer; }
+.code-sample-band__tab { font-family: var(--font-mono); font-size: 0.8rem; color: var(--term-mute); background: transparent; border: 1px solid transparent; border-radius: 0; padding: 0.35rem 0.7rem; cursor: pointer; }
 .code-sample-band__tab[aria-selected="true"] { color: var(--term-ink); background: var(--term-bg); border-color: var(--term-hair); }
 .code-sample-band__tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.code-sample-band__copy { margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem; color: var(--term-mute); background: var(--term-fill); border: 1px solid var(--term-hair); border-radius: 7px; padding: 0.3rem 0.6rem; cursor: pointer; }
+.code-sample-band__copy { margin-left: auto; font-family: var(--font-mono); font-size: 0.7rem; color: var(--term-mute); background: var(--term-fill); border: 1px solid var(--term-hair); border-radius: 0; padding: 0.3rem 0.6rem; cursor: pointer; }
 .code-sample-band__copy:hover { color: var(--term-ink); }
 .code-sample-band__copy.is-ok { color: var(--up); }
 .code-sample-band__panel { margin: 0; padding: 1.1rem 1.2rem; font-family: var(--font-mono); font-size: clamp(0.76rem, 1.2vw, 0.86rem); line-height: 1.7; color: var(--term-ink); white-space: pre-wrap; overflow-x: auto; }

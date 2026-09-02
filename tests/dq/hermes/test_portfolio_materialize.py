@@ -17,6 +17,7 @@ from digiquant.olympus.hermes.portfolio_materialize import (
     _upsert_portfolio_metrics,
     build_materialize_node,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -67,7 +68,7 @@ class TestFreshSeed:
         assert navs[0]["date"] == "2026-06-12"
         assert navs[0]["invested_pct"] == 100.0
         assert navs[0]["_on_conflict"] == "workspace_id,date"
-        assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+        assert navs[0]["workspace_id"] == str(house_workspace_id())
 
         positions = {r["ticker"]: r for r in client.store["positions"]}
         assert positions["SPY"]["weight_pct"] == 60.0
@@ -76,8 +77,7 @@ class TestFreshSeed:
             r["_on_conflict"] == "workspace_id,date,ticker" for r in client.store["positions"]
         )
         assert all(
-            r["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
-            for r in client.store["positions"]
+            r["workspace_id"] == str(house_workspace_id()) for r in client.store["positions"]
         )
 
     def test_duplicate_tickers_coalesced(self) -> None:
@@ -192,10 +192,9 @@ class TestGuards:
         rec = [{"ticker": "SPY", "target_pct": 100}]
         _run(client, rec)
         _run(client, rec)
-        # Both runs upsert on the widened (workspace_id, date[, ticker]) keys —
-        # leftover UNIQUE(date) still blocks overlay until 113; house uses the
-        # 097 unique. The fake appends, so we just assert every write declares
-        # the idempotency key.
+        # Both runs upsert on the same (workspace_id,date,ticker)/(workspace_id,date)
+        # keys — the on_conflict contract makes the DB collapse them; the fake
+        # appends, so we just assert every write declares the idempotency key.
         assert all(r["_on_conflict"] == "workspace_id,date" for r in client.store["nav_history"])
         assert all(
             r["_on_conflict"] == "workspace_id,date,ticker" for r in client.store["positions"]
@@ -643,7 +642,7 @@ class TestPortfolioMetricsWriter:
         # Sanity: sharpe should be positive for a positive-return series
         assert row["sharpe"] > 0
         assert row["_on_conflict"] == "workspace_id,date"
-        assert row["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+        assert row["workspace_id"] == str(house_workspace_id())
 
     def test_metrics_null_when_insufficient_history(self) -> None:
         """With < 20 NAV points, risk metrics must be NULL (not 0)."""
@@ -669,7 +668,7 @@ class TestPortfolioMetricsWriter:
         # pnl_pct should still be populated (day return)
         assert row["pnl_pct"] is not None
 
-    def test_metrics_idempotent_upsert_on_date(self) -> None:
+    def test_metrics_idempotent_upsert_on_workspace_date(self) -> None:
         """Re-running on the same date produces an upsert (on_conflict='workspace_id,date')."""
         nav_rows = [
             {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 6)
@@ -679,6 +678,7 @@ class TestPortfolioMetricsWriter:
         _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
         for row in client.store["portfolio_metrics"]:
             assert row["_on_conflict"] == "workspace_id,date"
+            assert row["workspace_id"] == str(house_workspace_id())
 
     def test_materialize_node_writes_portfolio_metrics(self) -> None:
         """The materialize node should call _upsert_portfolio_metrics after nav_history."""

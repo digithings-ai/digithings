@@ -153,3 +153,59 @@ def test_run_onboard_vault_only_skips_search(tmp_path: Path) -> None:
     search.assert_not_called()
     assert result.search_docs == 0
     assert PageClass.docs  # keep import used / typing sanity
+
+
+def test_run_onboard_reused_workdir_does_not_accumulate_classified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second crawl into the same workdir must not append duplicate classified rows (#2138)."""
+    repo = tmp_path / "repo"
+    (repo / "docs").mkdir(parents=True)
+    (repo / "docs" / "GUIDE.md").write_text("# Guide\n\nBody.\n", encoding="utf-8")
+    globs_yaml = repo / "globs.yaml"
+    globs_yaml.write_text("globs:\n  - docs/GUIDE.md\n", encoding="utf-8")
+
+    manifest = OnboardManifest(
+        client="example",
+        seed_url="https://docs.example.com/",
+        allowed_hosts=("docs.example.com",),
+        max_pages=2,
+        max_depth=0,
+        static_sources=str(globs_yaml),
+        docs_path_prefixes=("/",),
+    )
+
+    def fetch_html(url: str) -> tuple[str, str, str]:
+        return (
+            url,
+            "text/html",
+            "<html><title>Seed</title><body><main>Seed page</main></body></html>",
+        )
+
+    workdir = tmp_path / "work"
+    ws = Workspace.create(workdir)
+
+    first = run_onboard(
+        manifest,
+        ws,
+        repo_root=repo,
+        fetch_html=fetch_html,
+        sinks=(),
+        dry_run=True,
+    )
+    assert first.errors == ()
+    count_after_first = sum(1 for _ in ws.iter_classified())
+    assert count_after_first >= 2  # crawl + static
+
+    second = run_onboard(
+        manifest,
+        ws,
+        repo_root=repo,
+        fetch_html=fetch_html,
+        sinks=(),
+        dry_run=True,
+    )
+    assert second.errors == ()
+    count_after_second = sum(1 for _ in ws.iter_classified())
+    assert count_after_second == count_after_first
+    assert second.docs_kept == first.docs_kept

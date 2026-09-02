@@ -52,9 +52,13 @@ export async function PUT(req: Request, ctx: RouteContext) {
 
   const { id: conversationId } = await ctx.params;
 
-  let body: { title?: string; messages?: UIMessage[] };
+  let body: { title?: string; messages?: UIMessage[]; allowTruncate?: boolean };
   try {
-    body = (await req.json()) as { title?: string; messages?: UIMessage[] };
+    body = (await req.json()) as {
+      title?: string;
+      messages?: UIMessage[];
+      allowTruncate?: boolean;
+    };
   } catch {
     return Response.json({ error: "invalid_json" }, { status: 400 });
   }
@@ -74,16 +78,27 @@ export async function PUT(req: Request, ctx: RouteContext) {
     return Response.json({ error: "tenant_not_found" }, { status: 400 });
   }
 
-  const ok = await replaceConversationMessages(db, {
+  const result = await replaceConversationMessages(db, {
     conversationId,
     tenantId,
     ownerUserSub: authCtx.ownerUserSub,
     title: typeof body.title === "string" ? body.title : undefined,
     messages,
+    allowTruncate: body.allowTruncate === true,
   });
 
-  if (!ok) {
+  if (result === "not_found") {
     return Response.json({ error: "not_found" }, { status: 404 });
+  }
+  if (result === "would_truncate") {
+    return Response.json(
+      {
+        error: "would_truncate",
+        detail:
+          "PUT would drop existing messages; re-fetch the conversation or pass allowTruncate",
+      },
+      { status: 409 }
+    );
   }
 
   return new Response(null, { status: 204 });

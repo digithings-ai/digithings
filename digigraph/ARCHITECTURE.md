@@ -237,7 +237,7 @@ real node executions rather than compiled graph nodes.
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
 | `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
-| `trading_profile` | `dict[str, Any]` | User/tenant trading profile; merged into `optimization_constraints` |
+| `trading_profile` | `dict[str, Any]` | User/tenant trading profile; its `max_drawdown_pct` is a negative fraction (e.g. `-0.15` is −15%) and is converted to a negative percent before merging into `optimization_constraints` |
 | `research_note` | `str` | Research path label (`"LLM-extracted"`, `"document-mode"`, `"error"`) |
 | `research_response` | `str` | Freeform LLM answer in document/RAG mode |
 | `rag_sources` | `list[dict]` | Aggregated digisearch citations |
@@ -734,13 +734,23 @@ The operator default is tested **un-normalized**, which is why `byok_operator_mo
 
 digichat forwards `X-BYOK-Model` from all four of its send paths (`chat-panel.tsx`, `use-embed-digi-chat.ts`, the `/api/chat` BFF, and `byok-ping.ts`) whenever the user chose a model — including for providers whose catalog entry sets `requiresModel: false`. That flag decides whether a model is *mandatory*, never whether a chosen one is forwarded; three of the four used to gate the header on it and so dropped an OpenAI user's chosen model on the floor.
 
+**`OLLAMA_MODEL` must not clobber a BYOK bare slug.** After `_apply_byok_model_override` returns the spendable model, `llm_client` still runs it through `resolve_request_model`. For registered providers that path already keeps the slug when a matching BYOK override is bound. OpenAI BYOK models are bare (`gpt-4o-mini`) because `openai` is absent from digillm's registry, so they used to fall into `resolve_effective_model`, which prefers `OLLAMA_MODEL` over the request string. With `OLLAMA_MODEL=ollama/qwen3:8b` set (common on local/free deployments), an OpenAI BYOK chat therefore called `api.openai.com` with model `ollama/qwen3:8b` on the user's key — `model_not_found` while digichat still showed BYOK active. `resolve_request_model` now returns a bare slug unchanged whenever a BYOK override is bound **for a routable provider** (`byok_provider_supported`, not mere presence — see the function's docstring for why presence alone isn't the right gate); without BYOK, `OLLAMA_MODEL` still wins (operator local routing).
+
+This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode default* (`model_modes.yaml`) is itself an Ollama slug — this repo's shipped default — hits the same `model_not_found` by a different path: with no `X-BYOK-Model` header, `_apply_byok_model_override` passes the operator default through unchanged (`byok_operator_model_routes_elsewhere` only refuses *registered*-provider defaults), so `resolve_request_model` now returns that Ollama slug unchanged too, and digillm still sends it to the BYOK provider's endpoint. Not this fix's scope; tracked as a follow-up rather than silently assumed closed.
+
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
+
+**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` emits an `("error", {"code", "message"})` queue event only when `final["error_code"]` is set (`workflow.py` — without a code, the error is surfaced as plain `content` only). Today that code is written only for `free_quota_exceeded` and `rate_limit` via `_user_facing_llm_error` in `graph/research.py`; both messages are static product copy, never exception text. digichat's stream adapter relays the SSE `message` for those codes; for `BYOK_MODEL_REMEDIABLE_CODES` it relays the code only and lets `embed-chat-error` supply trusted copy (#2536).
 
 CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 
 ### 8.3 digistore for LLM Context Reduction
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
+
+`digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
+
+**Write boundary:** `data_manipulation._helpers.write_result` (used by `data_manipulation_agent` / `data_engineer_agent`) accepts only a logical leaf `output_name` (same rules as `digistore._safe_name`). Path separators, `..`, and absolute paths fail closed. When digistore is available, size-cap / validation `ValueError`s also fail closed — they must not fall back to an unsanitized `Path` join under `{run_data_dir}/{session}/datasets/`, which previously allowed cross-session overwrites.
 
 ### 8.3.1 Two-tier context compaction (#399)
 
@@ -754,8 +764,9 @@ Long research sessions (document RAG + Atlas `run_research_agent`) accumulate to
 **Integration (pre-LLM step, not a new graph node):**
 
 - `digigraph.compaction.compact_messages` — pure orchestrator (tier 1 then tier 2)
-- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`; wraps `execute_tool` with `wrap_execute_tool_for_tier1` so digillm's in-loop transcript never receives multi-MB payloads
+- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`
 - `graph/research_agent.py` — same pre-LLM compaction for Atlas/Hermes phase calls (retries re-compact)
+- Same-turn tool results are **not** stubbed at `execute_tool` time: digillm already caps injected tool text via `DIGI_TOOL_MESSAGE_MAX_CHARS` (default 12k) while keeping a usable prefix. Stubbing before inject hid digisearch hits from the model whenever `DIGI_RUN_DATA_DIR` was set (typical project RAG).
 
 **State contract:** `WorkflowState._compaction_event` holds a lean `CompactionEvent` dict (refs, counts, token deltas). `WorkflowState.llm_messages` holds the compacted LLM view for the next turn. Originals are **not** deleted from the session workspace — resume reloads them via the event's `tier1_refs` / `tier2_evicted_ref`. Checkpointer policy is unchanged (`DIGI_CHECKPOINTER=memory|sqlite|postgres`).
 

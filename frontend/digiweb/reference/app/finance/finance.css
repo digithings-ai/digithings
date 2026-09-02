@@ -5,7 +5,7 @@
 .pc-frame {
   margin-top: 1.2rem;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 0.6rem;
   /* a definite, fluid pane height for the chart's autoSize to fill */
@@ -28,7 +28,7 @@
   list-style: none;
   counter-reset: rule;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   overflow: hidden;
 }
@@ -90,7 +90,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.12rem 0.45rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--hair);
   color: var(--ink-soft);
 }

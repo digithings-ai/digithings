@@ -52,6 +52,8 @@ _EVENTS: list["RunCallEvent"] = []
 _PROVIDER_CALLS: list[ProviderCallRecord] = []
 _PROVIDER_ATTEMPTS: list[ProviderAttemptRecord] = []
 _NODE_RUNS: list[NodeRunRecord] = []
+# Empty-completion self-heal retries (#1639) — keyed by served model slug.
+_EMPTY_RETRIES: dict[str, int] = {}
 
 _SEARCH_KINDS = {"web_search", "x_search"}
 _PHASE_MAX = 120
@@ -278,6 +280,7 @@ def start(*, run_id: str | None = None) -> None:
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
         _NODE_RUNS.clear()
+        _EMPTY_RETRIES.clear()
 
 
 def reset() -> None:
@@ -291,6 +294,7 @@ def reset() -> None:
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
         _NODE_RUNS.clear()
+        _EMPTY_RETRIES.clear()
 
 
 def active_run_id() -> str | None:
@@ -330,6 +334,10 @@ def record(
     diagnostics counters only. ``call_id`` / ``attempt_id`` soft-stamp the WP1 ledger (067).
     ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
     if not _ACTIVE:
+        return
+    if kind == "empty_retry":
+        with _LOCK:
+            _EMPTY_RETRIES[model] = _EMPTY_RETRIES.get(model, 0) + 1
         return
     context = _CALL_CONTEXT.get()
     event_kind: Literal["model_call", "search_call"] = (
@@ -656,6 +664,13 @@ def events_snapshot() -> list[dict[str, Any]]:
         return [event.model_dump(mode="json") for event in _EVENTS]
 
 
+def _empty_retries_payload() -> dict[str, Any]:
+    with _LOCK:
+        by_model = dict(sorted(_EMPTY_RETRIES.items()))
+    total = sum(by_model.values())
+    return {"total": total, "by_model": by_model}
+
+
 def snapshot() -> dict[str, Any]:
     """Aggregate the recorded calls into run-level totals + a per-kind breakdown."""
     with _LOCK:
@@ -700,5 +715,6 @@ def snapshot() -> dict[str, Any]:
         "grounding_failed": sum(1 for c in search if not c["ok"]),
         "models": sorted({c["model"] for c in calls}),
         "by_kind": by_kind,
+        "empty_retries": _empty_retries_payload(),
         "events": events_snapshot(),
     }
