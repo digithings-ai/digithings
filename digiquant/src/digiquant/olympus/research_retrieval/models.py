@@ -49,7 +49,11 @@ _TICKER_EVIDENCE_BUNDLE_ID_NS = UUID("c1a0e507-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _MISSING_FACT_REQUEST_ID_NS = UUID("c1a0e508-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _EVIDENCE_BUNDLE_AMENDMENT_ID_NS = UUID("c1a0e509-4b8d-5f2a-9c17-3d6e8f0a1b22")
 
+# Identifiers / short keys aligned with DB CHECK (length … BETWEEN 1 AND 500).
 NonEmptyStr: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
+# Free-text prose (evidence/belief/patch summaries). No max_length — silent
+# truncation and 500-char caps crashed H5 on long web_grounding (#3063).
+NonEmptyText: TypeAlias = Annotated[str, Field(min_length=1)]
 Confidence: TypeAlias = Annotated[
     Decimal, Field(ge=0, le=1, allow_inf_nan=False, max_digits=16, decimal_places=8)
 ]
@@ -259,7 +263,7 @@ class EvidenceRecord(ResearchStateModel):
     evidence_id: UUID
     source: NonEmptyStr
     authority: NonEmptyStr
-    summary: NonEmptyStr
+    summary: NonEmptyText
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
     known_at: AwareDatetime
@@ -347,7 +351,7 @@ class BeliefVersion(ResearchStateModel):
 
     belief_version_id: UUID
     belief_id: UUID
-    statement: NonEmptyStr
+    statement: NonEmptyText
     confidence: Confidence
     horizon_sessions: PositiveSessions
     status: BeliefStatus
@@ -456,7 +460,7 @@ class ExpectedEventVersion(ResearchStateModel):
 
     expected_event_version_id: UUID
     expected_event_id: UUID
-    label: NonEmptyStr
+    label: NonEmptyText
     status: ExpectedEventStatus
     event_time: AwareDatetime
     supporting_evidence_ids: tuple[UUID, ...] = Field(default_factory=tuple)
@@ -547,7 +551,7 @@ class ResearchPatch(ResearchStateModel):
     target_kind: PatchTargetKind
     target_id: NonEmptyStr
     mode: PatchMode
-    summary: NonEmptyStr
+    summary: NonEmptyText
     supersedes_patch_id: UUID | None = None
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
@@ -928,7 +932,7 @@ class MissingFactRequest(ResearchStateModel):
     base_bundle_id: UUID
     ticker: NonEmptyStr
     fact_key: NonEmptyStr
-    rationale: NonEmptyStr
+    rationale: NonEmptyText
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
     known_at: AwareDatetime

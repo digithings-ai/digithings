@@ -63,15 +63,15 @@ class ChromaBackend(DigiIndex):
         if len(embeddings) != len(chunks):
             embeddings = None
         metadatas = [
-            {"doc_id": c.doc_id, **normalize_metadata_for_chroma(c.metadata)} for c in chunks
+            {**normalize_metadata_for_chroma(c.metadata), "doc_id": c.doc_id} for c in chunks
         ]
         try:
             if embeddings:
-                self._collection.add(
+                self._collection.upsert(
                     ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
                 )
             else:
-                self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
+                self._collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
         except (OSError, RuntimeError, TypeError, ValueError):
             logger.exception(
                 "chroma index failed",

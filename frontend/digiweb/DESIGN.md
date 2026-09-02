@@ -29,17 +29,17 @@ colors:
   diff-del: "#E2929E"
 typography:
   display:
-    fontFamily: '"Instrument Serif", Georgia, serif'
+    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
     fontSize: "clamp(2rem, 5vw, 3.4rem)"
-    fontWeight: 400
+    fontWeight: 500
     lineHeight: 1.1
-    letterSpacing: "-0.02em"
+    letterSpacing: "-0.04em"
   body:
-    fontFamily: '"Geist", system-ui, -apple-system, sans-serif'
+    fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
     fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1.65
-    letterSpacing: "-0.011em"
+    lineHeight: 1.55
+    letterSpacing: "-0.015em"
   mono:
     fontFamily: '"Geist Mono", "JetBrains Mono", ui-monospace, monospace'
     fontSize: "0.8rem"
@@ -47,50 +47,50 @@ typography:
     lineHeight: normal
     letterSpacing: "0.02em"
 rounded:
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  pill: "999px"
+  sm: "0"
+  md: "0"
+  lg: "0"
+  pill: "0"
 spacing:
   control: "0.6rem"
   card: "1.2rem"
   generous: "1.6rem"
-  section: "clamp(4rem, 8vw, 7rem)"
+  section: "clamp(4.5rem, 9vw, 8rem)"
 components:
   button-primary:
-    backgroundColor: "{colors.phosphor-teal}"
-    textColor: "#06110F"
-    rounded: "{rounded.pill}"
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.bg-canvas}"
+    rounded: "0"
     padding: "0.62rem 1.3rem"
   button-ghost:
     backgroundColor: transparent
     textColor: "{colors.ink}"
-    rounded: "{rounded.pill}"
+    rounded: "0"
     padding: "0.62rem 1.3rem"
   button-danger:
     backgroundColor: transparent
     textColor: "{colors.loss}"
-    rounded: "{rounded.pill}"
+    rounded: "0"
     padding: "0.62rem 1.3rem"
   card:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
+    rounded: "0"
     padding: "{spacing.card}"
   input:
     backgroundColor: "{colors.bg-canvas}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
+    rounded: "0"
     padding: "0.55rem 0.7rem"
   chip-selected:
     backgroundColor: "{colors.phosphor-teal-weak}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.pill}"
+    rounded: "0"
     padding: "0.4rem 0.75rem"
   badge:
     backgroundColor: transparent
     textColor: "{colors.ink-mute}"
-    rounded: "{rounded.pill}"
+    rounded: "0"
     padding: "0.16rem 0.5rem"
 ---
 
@@ -100,7 +100,21 @@ components:
 
 **Creative North Star: "The Instrument Panel"**
 
-digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — black, white, and a three-step ink hierarchy — with color held in reserve as a signal, never spent as decoration. Every affordance from a button to a candlestick chart is built out of the same restrained kit: hairline borders, pill controls, one mono type voice for anything that is chrome or data, and a single serif voice reserved for the moments the product actually wants to make a human claim. The system does not perform enthusiasm; it reports state precisely and gets out of the way.
+digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — black, white, and a three-step ink hierarchy — with color held in reserve as a signal, never spent as decoration. Every affordance from a button to a candlestick chart is built out of the same restrained kit: hairline borders, zero-radius controls, one mono type voice for claim/body/chrome, and serif only as a rare editorial escape hatch. The system does not perform enthusiasm; it reports state precisely and gets out of the way.
+
+### Active blend — utilitarian terminal (v0.1 promoted)
+
+As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside Cursor / Graphite / xAI. Ledger: [`design/BLEND.md`](design/BLEND.md). Product rollout plan: [`design/ROLLOUT.md`](design/ROLLOUT.md).
+
+**Shipping in `tokens.css` + design-reference (Phase 0):**
+
+- **Radius 0** on `--r-*` / legacy `--radius-*` — no pills. Actionable vs container = **fill vs outline**.
+- **Mono everything** — `--font-display` and body default to the mono stack. Serif is an escape hatch only.
+- **Loud CTA = ink/paper rect** (reference `.btn-primary`). `--accent` = focus, live/status, chart identity — not primary marketing fill.
+- **Sparse section rhythm** via `--section-y`; dashboards may tighten locally.
+- Still reject glass, violet washes, synthwave, Inter-as-brand, and multi-accent chrome.
+
+Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, olympus `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
 
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
@@ -109,9 +123,9 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 **Key Characteristics:**
 - Monochrome-by-default livery; color is opt-in per surface and always routes through `--accent`, never a hardcoded hex.
 - Three color domains that never blend: **identity** (`--accent` / module liveries), **money** (`--up` / `--down`, fixed literals, livery-proof), and **diff** (`--rv-add` / `--rv-del`, a third pastel-only palette reserved for code review).
-- One mono voice for chrome and data (labels, buttons, tables, terminal text), one serif voice for the rare human claim (marketing headlines, markdown headings, an account holder's name) — never both competing on the same element.
-- Pill shape means "you can act on this"; rectangular 8–16px radius means "this is a container." Shape carries the same meaning everywhere in the system.
-- "One loud thing per viewport": exactly one solid-fill, accent-colored control is allowed on screen at a time. Every sibling recedes to a transparent, hairline-bordered outline.
+- **One mono voice** for claim, body, and chrome; serif is an escape hatch only (`serif-legacy` type suite in the reference).
+- **Radius 0** everywhere in chrome; actionable vs container is read by **fill vs hairline**, not pill vs rectangle. True circles (spinners, live dots, avatars) stay geometric.
+- "One loud thing per viewport": exactly one solid-fill control — **ink/paper rect**; `--accent` reserved for focus/live/identity — never primary marketing fill.
 - Flat by default; a black shadow means "this is a floating overlay," an accent glow means "this is alive right now" — the two never substitute for each other.
 
 ## Colors
@@ -119,7 +133,7 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 The palette is intentionally narrow: three neutrals for text, three surfaces for depth, one accent, and two small semantic sets (money, diff) that are deliberately fenced off from the accent system so a scoped livery can never repaint a gain, a loss, or a code change.
 
 ### Primary
-- **Phosphor Teal** (`#3DD6C4` dark / `#0C7C71` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, the single primary CTA, selected-state fills, chart identity lines, and anything reading "this is the live/default module." Spent sparingly by rule, never as a background wash. The light value was darkened from `#0E8C7F` on 2026-08-12 (WCAG 1.4.3): the lighter hex cleared only 4.14:1 for text/`--on-accent` use, under the 4.5:1 minimum. The per-module token `--accent-digiquant` deliberately stayed at the original `#0E8C7F`, since it is consumed as a *background* under a fixed dark `--on-accent`, a pairing that needs the opposite direction.
+- **Phosphor Teal** (`#3DD6C4` dark / `#0C7C71` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, selected-state fills, chart identity lines, live/status, and anything reading "this is the live/default module" — **not** the primary marketing CTA fill (that is ink/paper). Spent sparingly by rule, never as a background wash. The light value was darkened from `#0E8C7F` on 2026-08-12 (WCAG 1.4.3): the lighter hex cleared only 4.14:1 for text/`--on-accent` use, under the 4.5:1 minimum. The per-module token `--accent-digiquant` deliberately stayed at the original `#0E8C7F`, since it is consumed as a *background* under a fixed dark `--on-accent`, a pairing that needs the opposite direction.
 
 ### Secondary — Module Liveries (opt-in, one at a time)
 - **Amber Gold** — digigraph (`#E5B765`)
@@ -158,27 +172,27 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 
 ## Typography
 
-**Display Font:** Instrument Serif (with Georgia, serif fallback)
-**Body Font:** Geist (with system-ui, -apple-system, sans-serif fallback)
+**Display Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
+**Body Font:** Geist Mono (same stack — utilitarian v0.1 mono everything)
 **Label/Mono Font:** Geist Mono (with JetBrains Mono, ui-monospace, monospace fallback)
 
-**Character:** A precise, cockpit-flavored mono voice does almost everything — chrome, labels, buttons, data, tables, terminal text — while a single quiet serif appears only where the product makes a genuine human claim: a marketing headline, a markdown heading inside a streamed answer, an account holder's name. The two voices never compete inside one component.
+**Character:** One mono voice carries claim, body, and chrome. Hierarchy is size and tracking, not a second face. Serif (`serif-legacy` / Instrument Serif or Fraunces) is an escape hatch for rare editorial moments — quotes, legal names — never the default marketing H1.
 
 ### Hierarchy
-- **Display** (400, `clamp(2rem, 5vw, 3.4rem)`, 1.1 line-height, -0.02em tracking): hero claims, section titles, markdown `h1`–`h6` (all six levels flatten to this one size so a stray heading in a streamed chat answer never out-ranks the transcript's own hierarchy). Never bolded.
-- **Body** (400, ~1rem, 1.65 line-height): reading copy, capped at 65–75ch measure.
-- **Mono / Label** (400, 0.56–0.86rem depending on context, 0.08–0.14em tracking, uppercase for labels): the system's workhorse — kickers, eyebrows, button labels, form field labels, table headers, terminal transcript, tabular numerals (`font-variant-numeric: tabular-nums` wherever a digit might change).
+- **Display** (500, `clamp(2rem, 5vw, 3.4rem)`, 1.1 line-height, -0.04em tracking): hero claims, section titles, markdown `h1`–`h6` (flattened so a stray heading in chat never out-ranks the transcript). Weight stays light; never bold for emphasis.
+- **Body** (400, ~1rem, 1.55 line-height): reading copy, capped at 65–75ch measure.
+- **Mono / Label** (400, 0.56–0.86rem depending on context, 0.08–0.14em tracking, uppercase for labels): kickers (`// section`), eyebrows, button labels, form labels, table headers, terminal transcript, tabular numerals (`font-variant-numeric: tabular-nums` wherever a digit might change).
 
 ### Named Rules
-**The Normative Display Rule.** `tokens.css` sets `--font-display` to **Instrument Serif** — this is what digithings.ai, digiquant.io, digichat, and olympus actually ship. A demo override to Fraunces exists only inside the design-reference app's own `globals.css` (and as that app's "default" type-suite option among five swappable suites: plex, editorial, grotesk, terminal). Treat Fraunces as an interchangeable reference-app furnishing, never as the production default — a new surface being built for a real product should assume Instrument Serif unless a task explicitly says otherwise.
+**The Normative Display Rule.** `tokens.css` sets `--font-display` (and body) to the **Geist Mono** stack — digiweb v0.1 shipping default. Product apps that still override with Fraunces/Instrument Serif are Phase 2/3 debt (see `design/ROLLOUT.md`). Design-reference type suites keep `serif-legacy`, `plex`, `editorial`, `omarchy`, etc. for comparison only.
 
-**The Mono-First Rule.** Serif is for marketing hero display and rare human-identity moments only. Dashboards, data, and chrome are set in sans + mono — never serif — a rule stated explicitly in the project's own copy guide.
+**The Mono-First Rule.** Serif is an escape hatch only. Dashboards, data, chrome, and marketing claims default to mono.
 
 **The One Glyph, One Meaning Rule.** Five distinct prompt/marker glyphs exist across the system and are never reused across registers: `$` (process-list panes), `❯` (a diegetic OS-level CLI session), `>` (chat user turn), `▸` (chat assistant turn), `·` (chat system aside). Each glyph alone tells you which surface you're in — role in a chat transcript is read by glyph *shape*, not by color; both user and assistant markers render in the same accent.
 
 ## Layout
 
-The grid is content-container-based rather than a rigid 12-column system: a `1180px` standard wrap and a `1280px` wide wrap bound most marketing content, a responsive `clamp(1.25rem, 4vw, 3.25rem)` gutter handles horizontal insets, and section rhythm runs on two clamped steps — `clamp(4rem, 8vw, 7rem)` standard, `clamp(2.5rem, 5vw, 4rem)` tight — rather than a fixed pixel gap.
+The grid is content-container-based rather than a rigid 12-column system: a `1180px` standard wrap and a `1280px` wide wrap bound most marketing content, a responsive `clamp(1.25rem, 4vw, 3.25rem)` gutter handles horizontal insets, and section rhythm runs on two clamped steps — `clamp(4.5rem, 9vw, 8rem)` standard (sparse-leaning), `clamp(2.5rem, 5vw, 4rem)` tight — rather than a fixed pixel gap.
 
 Two structural patterns recur across every family and are load-bearing rather than decorative:
 
@@ -192,7 +206,7 @@ Responsive behavior collapses through one shared breakpoint (`760px`) for most m
 
 ## Elevation & Depth
 
-**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. Olympus states this as an explicit house rule: "FLAT — no glass morphism on content."
+**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."
 
 A soft, theme-invariant black shadow (`rgba(0,0,0,.45–.65)`, always a plain black rgba, never `color-mix`-tinted) is reserved *exclusively* for genuinely floating overlay chrome that sits above the page: the dropdown menu pane, the tooltip bubble, the typed hero terminal, the toast stack, and the command palette. These are the only surfaces in the entire system that cast a real elevation shadow.
 
@@ -209,45 +223,47 @@ Separately, an accent- or money-colored glow (a `box-shadow` built from `color-m
 
 ## Shapes
 
-Two radius families coexist by role, not by size preference: **pill** (`999px`) means "you can click or select this" — every button, badge, toggle, chip, tab, and tooltip trigger is a pill — while a **rectangular radius scale** (`8px` / `12px` / `16px`) means "this is a container" — cards, panels, dropdown panes, form fields step up through that scale as they grow from a compact control to a generous card. Device mockups (the phone frame) deliberately break from the token scale with bespoke bezel radii, because they are simulating hardware, not a UI surface.
+**Radius 0** on all UI chrome — buttons, badges, chips, tabs, cards, panels, inputs, dropdowns. Actionable vs container is read by **fill vs outline** (and density), not by pill vs rounded rect. True circles (`999px` / `50%`) remain only where geometry demands it: spinners, live dots, avatars, progress thumbs.
 
-Borders are uniformly 1px hairline; the only thicker strokes are decorative chevron corner-strokes and a slider thumb's focus ring. There is no visible border-radius scale drift between products: 8/12/16px is the one rectangular scale a new surface should reach for.
+Device mockups (phone frames) may still use bespoke bezel radii — they simulate hardware, not UI chrome.
 
-**The Shape-Carries-Meaning Rule.** Do not use a pill for a container or a rectangular radius for a clickable control — the distinction is load-bearing across the whole system, not a stylistic accident.
+Borders are uniformly 1px hairline; the only thicker strokes are decorative chevron corner-strokes / bracket docs marks and a slider thumb's focus ring.
+
+**The Shape-Carries-Meaning Rule (v0.1).** Do not reintroduce pills "for friendliness." Loud = ink/paper rectangle; quiet = hairline rectangle; structure marks (brackets) are allowed ornaments, not radius.
 
 ## Components
 
-**Instrumentation, not decoration.** Every control in the system is built from the same restrained kit: pill shape for anything actionable, hairline rectangles for containers, mono type for all chrome, and color spent only where it signals state — a selection, a focus, a gain, a loss, a live process. Nothing is styled to look busy; busyness would obscure the one thing that actually changed.
+**Instrumentation, not decoration.** Every control is built from zero-radius rects, mono type, and color spent only where it signals state — a selection, a focus, a gain, a loss, a live process. Nothing is styled to look busy.
 
 ### Buttons
-- **Shape:** pill (`border-radius: 999px`), 1px border baseline, `0.62rem 1.3rem` padding.
-- **Primary:** solid `--accent` fill, label color from `--on-accent` — livery-aware (`.accent-<module>` scopes and the page-level livery picker both pin it to a legible dark ink; only mono/atlas/hermes/kairos, whose accent already collapses to `--ink`, follow the theme's own light/dark flip). No hover treatment exists on the plain primary button; only a "magnetic," pointer-following variant gets motion feedback, framed in the codebase as "the one earned exception to the one-motion-moment law."
-- **Ghost:** transparent, hairline border, hover tints the border toward accent — the default choice for any non-primary action.
+- **Shape:** rectangle (`border-radius: 0`), 1px border baseline, `0.62rem 1.3rem` padding.
+- **Primary (loud):** solid `--ink` fill on dark (paper fill on light), label from `--bg` — **not** accent-filled. Module liveries do not recolor the primary marketing CTA. No hover treatment on the plain primary; only the "magnetic," pointer-following variant gets motion feedback ("the one earned exception to the one-motion-moment law").
+- **Ghost:** transparent, hairline border, hover tints the border toward accent — default for non-primary actions. Docs sibling may use bracket corners (agentmail) instead of a second fill.
 - **Quiet:** transparent, no border, reads as a low-emphasis text link (`ink-mute` → `ink` on hover).
 - **Danger:** transparent, loss-tinted text and border, hover fills a faint loss-tinted wash.
-- **Disabled:** `opacity: 0.4`, `cursor: not-allowed` — defined for the primary variant; other variants should get the same treatment when built (the reference implementation currently omits it for ghost/quiet/danger — don't repeat that gap).
-- **Loading:** an inline 11px two-tone spinner, killed under `prefers-reduced-motion`.
+- **Disabled:** `opacity: 0.4`, `cursor: not-allowed`.
+- **Loading:** an inline 11px two-tone spinner (`currentColor`), killed under `prefers-reduced-motion`.
 
 ### Chips / Tabs / Segmented Controls (the selection family)
-- **Style:** pill or bordered-strip, hairline border, `ink-mute`/`ink-soft` idle text.
-- **Selected state:** text promotes to `ink`, border and background both tint toward the accent via `color-mix(in srgb, var(--accent) 45–60%, var(--hair or --surface))` — a soft wash, never a hard fill, so the accent reads as "chosen" rather than "primary action."
+- **Style:** zero-radius bordered strip, hairline border, `ink-mute`/`ink-soft` idle text.
+- **Selected state:** text promotes to `ink`, border and background both tint toward the accent via `color-mix` — a soft wash, never competing with the primary CTA fill.
 - **Livery chip specifically:** carries a small glowing accent dot as its leading icon, tinted per-module via an inline `--chip` custom property.
 
 ### Cards / Containers
-- **Corner Style:** `12px` (`--r-md`) standard; `8px` for compact controls, `16px` for the largest panels.
+- **Corner Style:** `0` (`--r-sm` / `--r-md` / `--r-lg` all zero). Tonal slab = `--surface` fill + hairline.
 - **Background:** flat `--surface`, no gradient, no glass.
-- **Shadow Strategy:** none (see Elevation & Depth) — depth is the hairline border alone.
+- **Shadow Strategy:** none (see Elevation & Depth) — depth is the hairline + value step alone.
 - **Border:** 1px `--hair`, escalating to `--hair-strong` on hover where the card is interactive.
 - **Internal Padding:** `1.1–1.8rem`, roughly double the compact-control padding band.
 
 ### Inputs / Fields
-- **Style:** `8px` radius, hairline border, `--bg`-colored fill (reads as canvas cut into the surrounding surface card), mono type regardless of field type.
+- **Style:** `0` radius, hairline border, `--bg`-colored fill (canvas cut into the surrounding surface), mono type regardless of field type.
 - **Focus:** border tints toward accent (~55%) plus a 3–4px accent-tinted glow ring.
 - **Error:** the entire recipe swaps to `--down` — border, ring, and (via a wrapper class hook) the field's own text.
 - **Disabled:** `opacity: 0.5–0.55`, `not-allowed` cursor.
 
 ### Navigation
-NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and either yields off-screen past 180px of downward scroll (returning immediately on any upward scroll) or, on app-like surfaces, reveals within a top hot-zone and releases once the pointer clears it. A dropdown menu pins the bar open. Below `880px` the inline strip becomes a hamburger opening a full-height sheet, its link stack set in the display serif — the one editorial-serif moment inside otherwise-mono chrome. The wordmark's suffix (the part of "digithings" after "digi") is always the accent-colored emphasis, everywhere the brand appears.
+NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and either yields off-screen past 180px of downward scroll (returning immediately on any upward scroll) or, on app-like surfaces, reveals within a top hot-zone and releases once the pointer clears it. A dropdown menu pins the bar open. Below `880px` the inline strip becomes a hamburger opening a full-height sheet — mono link stack (no serif mobile exception). Sparse ghost nav: few links, one filled Login/Install max. The wordmark's suffix (the part of "digithings" after "digi") is always the accent-colored emphasis, everywhere the brand appears.
 
 ### Chat Transcript (signature — the terminal-style chatbot)
 - **No bubbles.** Every turn is a two-column CSS grid row (marker + body) inside one continuous scrollback pane — never a boxed message bubble.
@@ -266,7 +282,7 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 
 ### Do:
 - **Do** build under the `[data-theme]`-scoped token system (`--bg` / `--surface` / `--ink` family, `--r-sm/md/lg` = 8/12/16px) — this is the normative, currently-shipping scale.
-- **Do** treat Instrument Serif as the production display font; treat any Fraunces sighting as reference-app furniture, not a target to copy.
+- **Do** treat Geist Mono as the production display/body default; treat `serif-legacy` / Fraunces as reference-app furniture or a rare editorial escape hatch, not a target to copy onto product heroes.
 - **Do** keep money colors (`--up`/`--down`/`--warn`) fixed to their own token or literal, never `var(--accent)` — a livery switch must never repaint a P&L number.
 - **Do** give every interactive control the same focus recipe: `outline: none` plus a 2–4px `color-mix(var(--accent) or var(--down), ~50%, transparent)` box-shadow ring.
 - **Do** reserve solid, filled-accent surfaces for exactly one control per viewport; every sibling control should be a transparent, hairline-bordered outline.

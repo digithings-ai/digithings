@@ -73,9 +73,19 @@ def create_mcp_server() -> Any:
         data_path: str | None = None,
         method: str = "grid",
         n_trials: int = 50,
+        param_grid_json: str | None = None,
+        strategy_params_json: str | None = None,
     ) -> str:
-        """Run parameter optimization (grid, bayesian, or random)."""
+        """Run parameter optimization (grid, bayesian, or random).
+
+        ``strategy_name='sdca'`` / ``'btc_sdca'`` is Stage B walk-forward
+        (vs-flat-DCA). Freeze Stage A weights by passing them in
+        ``strategy_params_json`` as ``*_weight`` keys. Stage A itself is
+        ``digiquant_fit_sdca_weights``.
+        """
         symbols: list[str] = json.loads(symbols_json)
+        params = json.loads(strategy_params_json) if strategy_params_json else None
+        grid = json.loads(param_grid_json) if param_grid_json else None
         from digiquant.service import service_run_optimize
 
         result = service_run_optimize(
@@ -85,6 +95,8 @@ def create_mcp_server() -> Any:
             data_dir=data_dir,
             method=method,
             n_trials=n_trials,
+            param_grid=grid,
+            base_params=params,
         )
         return result.model_dump_json(indent=2)
 
@@ -199,6 +211,9 @@ def create_mcp_server() -> Any:
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
         ``macro_series_observations``, ``trading_calendar``. Operator-internal
         telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        Group A books (``positions``, ``nav_history``, ``position_events``,
+        ``portfolio_metrics``) default to the house ``workspace_id`` when
+        ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
         ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
         """
         from digiquant.olympus.atlas.data.queries import query_data
@@ -237,13 +252,15 @@ def create_mcp_server() -> Any:
     @mcp.tool()
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
-        start: str = "2017-01-01",
+        start: str = "2015-07-20",
         cache_dir: str | None = None,
     ) -> str:
         """Fetch daily OHLCV from Coinbase (CCXT) into the price-history cache.
 
-        ``symbols_json`` is a JSON array of CCXT symbols. Returns JSON mapping each
-        ticker to ``{bars, first, last, path}`` (or ``{error}``).
+        ``symbols_json`` is a JSON array of CCXT symbols. ``start`` defaults
+        to Coinbase BTC listing ``2015-07-20``; ETH/SOL begin at the first
+        available Coinbase daily bar. Returns JSON mapping each ticker to
+        ``{bars, first, last, path}`` (or ``{error}``).
         """
         import sys
         from pathlib import Path
@@ -284,6 +301,189 @@ def create_mcp_server() -> Any:
             except Exception as exc:  # surface per-symbol, never crash
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
+
+    @mcp.tool()
+    def digiquant_fit_btc_power_law(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        output_path: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) rather than a bespoke fetch —
+        ``refresh=True`` (default) incrementally updates the cache first via the
+        same yfinance pipeline every other price-history consumer uses, bulk-fetching
+        ``bulk_period`` of history for a ticker that isn't cached yet (default ``"max"``,
+        since the fit requires at least 730 daily observations and a short bulk window
+        would leave a cold cache short of that); ``refresh=False`` fits directly from
+        whatever is already cached (useful when network access is unavailable). Persists
+        the fit to ``output_path`` (default: ``sdca/btc_power_law_coefficients.json``,
+        replacing the synthetic placeholder shipped with #1082 — pass an explicit
+        ``output_path`` under a non-editable/read-only install where the package source
+        tree isn't writable). Returns a JSON summary
+        (``{fit_start, fit_end, fit_rows, path}``) or ``{"error": ...}``.
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                fit_btc_power_law,
+                save_coefficients,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            coefficients = fit_btc_power_law(
+                prices["date"],
+                prices["close"],
+                notes=notes
+                or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
+            )
+            path = save_coefficients(coefficients, Path(output_path) if output_path else None)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        return json.dumps(
+            {
+                "fit_start": str(coefficients.fit_start),
+                "fit_end": str(coefficients.fit_end),
+                "fit_rows": coefficients.fit_rows,
+                "path": str(path),
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def digiquant_build_sdca_risk_index(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        risk_model: str = "btc_power_law",
+        profile: str | None = None,
+        profile_json: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        indicator_weights: str = "{}",
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache.
+        ``profile`` (``btc_v1`` / ``eth_research_v1``) or ``profile_json`` applies
+        an ``SdcaAssetProfile`` (rails, oscillators, extra allowlist). Returns
+        JSON or ``{"error": ...}`` (never raises).
+        """
+        from digiquant.sdca_mcp import run_build_sdca_risk_index
+
+        return run_build_sdca_risk_index(
+            ticker=ticker,
+            cache_dir=cache_dir,
+            refresh=refresh,
+            bulk_period=bulk_period,
+            risk_model=risk_model,
+            profile=profile,
+            profile_json=profile_json,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            indicator_weights=indicator_weights,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
+
+    @mcp.tool()
+    def digiquant_fetch_bitview_series(
+        series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> str:
+        """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
+
+        JSON API only (no HTML scrape). Default catalog is the #1086 v1 subset.
+        ``nupl`` is refused (monotone of MVRV). Fail-soft + timeout. Coin Metrics
+        community CC BY-NC series are not fetched. Network is the operator opt-in
+        of invoking this tool.
+        """
+        from digiquant.sdca_mcp import run_fetch_bitview_series
+
+        return run_fetch_bitview_series(
+            series_ids_json=series_ids_json,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            start=start,
+            end=end,
+        )
+
+    @mcp.tool()
+    def digiquant_fit_sdca_weights(
+        profile: str = "btc_v1",
+        profile_json: str | None = None,
+        cache_dir: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Stage A: fit composite weights so risk overlaps cycle windows.
+
+        Not a second optimizer. Stage B is ``digiquant_run_optimize`` with
+        ``strategy_name='sdca'``; pass ``regularized_weight_params`` as
+        ``strategy_params_json``. No live-trading. Do not ``--push-supabase``.
+        """
+        from digiquant.sdca_mcp import run_fit_sdca_weights
+
+        return run_fit_sdca_weights(
+            profile=profile,
+            profile_json=profile_json,
+            cache_dir=cache_dir,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
 
     @mcp.tool()
     def digiquant_generate_slapper_tearsheet(

@@ -682,7 +682,8 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
     try:
-        from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+        from digisearch.chunking.factory import get_ingest_chunker
+        from digisearch.core.config import DigiSearchConfig
         from digisearch.ingestion.registry import ParserRegistry
 
         try:
@@ -707,7 +708,8 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         if req.metadata:
             merged = {**merged, **req.metadata}
         doc.metadata = merged
-        chunker = SegmentAwareChunker()
+        index_cfg = DigiSearchConfig.from_env().get_index_config(req.index_name)
+        chunker = get_ingest_chunker(index_config=index_cfg)
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks

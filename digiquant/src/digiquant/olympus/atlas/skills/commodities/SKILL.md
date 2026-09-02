@@ -74,22 +74,17 @@ description: Run commodities analysis as part of the daily digest. Covers energy
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Commodities — {as-of date of the data}
+
+## Energy
+WTI, Brent, natgas and the driver.
+
+## Metals
+Gold, silver, copper — real-yield and growth links dated.
+
+## Watch
+Upcoming EIA, OPEC, or central-bank gold data.
 ```
-### 🛢️ COMMODITIES
-**Bias**: [Bullish / Bearish / Neutral / Conflicted]
-
-**Energy**: [WTI: $X (±X%) | Brent: $X | NatGas: $X | Driver: ...]
-**Gold**: [$X (±X%) | Signal: safe haven / inflation hedge / real yield play]
-**Silver**: [$X | Gold/Silver ratio: X]
-**Copper**: [$X (±X%) | Growth signal: ...]
-
-**Oil Supply/Demand**: [EIA inventory + OPEC compliance + US shale signal]
-**Gold Real Yield Link**: Real yield X% → [tailwind/headwind for gold at ATH]
-**Gold/Silver Ratio**: X — [Safety bid dominant / Silver catching up]
-**CTA Positioning**: [Are speculative longs stretched in oil or gold?]
-
-**Dollar Effect**: [DXY impact on commodities]
-
-**Watch**: [Key upcoming data: EIA Wednesday, OPEC meeting, gold central bank data]
-```
-

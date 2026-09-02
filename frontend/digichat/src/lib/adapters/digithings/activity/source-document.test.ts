@@ -71,7 +71,8 @@ describe("mapRawSourceToDocument", () => {
 describe("ragToolDisplayName", () => {
   it("maps internal tool ids to digisearch/digivault labels", () => {
     expect(ragToolDisplayName("digithings_docs")).toBe("digisearch");
-    expect(ragToolDisplayName("digivault_search_notes")).toBe("digivault");
+    expect(ragToolDisplayName("digivault_search_notes")).toBe("digivault_search_notes");
+    expect(ragToolDisplayName("digivault_get_note")).toBe("digivault_get_note");
     expect(ragToolDisplayName(undefined)).toBe("digisearch");
   });
 });

@@ -66,26 +66,23 @@ def test_bias_synonym_still_normalizes() -> None:
     assert _report(bias="positive").bias == "bullish"
 
 
-class TestFlowDirectionSynonyms:
-    """#1641 — flow_direction synonyms normalize instead of failing the merge.
+def test_bias_cautious_maps_to_neutral() -> None:
+    # House GHA 33426508863: Gemini emitted bias='cautious' on SentimentNewsReport.
+    assert _report(bias="cautious").bias == "neutral"
 
-    Run 29846393424 emitted 'positive' and the edit-merge schema validation
-    hard-failed the segment (literal_error).
-    """
+
+class TestInternalBiasSynonyms:
+    """Directional token on ResearchMemo; leftover flow_direction is extra, not schema."""
 
     @pytest.mark.parametrize(
         ("raw", "expected"),
         [
-            ("positive", "inflow"),
-            ("net inflows", "inflow"),
-            ("Negative", "outflow"),
-            ("net outflow", "outflow"),
-            ("neutral", "mixed"),
-            ("balanced", "mixed"),
-            ("mixed", "mixed"),
+            ("positive", "bullish"),
+            ("Negative", "bearish"),
+            ("cautious", "neutral"),
         ],
     )
-    def test_synonyms_map_onto_literal(self, raw: str, expected: str) -> None:
+    def test_internal_bias_synonyms_map(self, raw: str, expected: str) -> None:
         from digiquant.olympus.atlas.phases.phase2_institutional import (
             InstitutionalFlowsReport,
         )
@@ -94,25 +91,23 @@ class TestFlowDirectionSynonyms:
             {
                 "segment": "inst-institutional-flows",
                 "date": date(2026, 7, 22),
-                "bias": "neutral",
-                "headline": "h",
-                "flow_direction": raw,
+                "body": "# flows\n\nmemo",
+                "internal_bias": raw,
             }
         )
-        assert report.flow_direction == expected
+        assert report.internal_bias == expected
 
-    def test_unknown_value_degrades_to_none(self) -> None:
+    def test_legacy_flow_direction_does_not_fail_validate(self) -> None:
         from digiquant.olympus.atlas.phases.phase2_institutional import (
             InstitutionalFlowsReport,
         )
 
-        report = InstitutionalFlowsReport.model_validate(
+        InstitutionalFlowsReport.model_validate(
             {
                 "segment": "inst-institutional-flows",
                 "date": date(2026, 7, 22),
-                "bias": "neutral",
-                "headline": "h",
+                "body": "# flows\n\nmemo",
                 "flow_direction": "sideways",
             }
         )
-        assert report.flow_direction is None
+        assert "flow_direction" not in InstitutionalFlowsReport.model_fields

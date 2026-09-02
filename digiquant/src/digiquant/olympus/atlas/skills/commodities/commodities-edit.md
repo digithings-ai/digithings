@@ -10,7 +10,7 @@ Update an **existing** commodities document; do not rewrite from scratch.
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"commodities"`.
-Patch paths: `/headline`, `/bias`, `/oil_trend`, `/gold_trend`, `/industrial_metals_trend`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

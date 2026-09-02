@@ -11,12 +11,12 @@ export default function FoundationsPage() {
       <header className="hero">
         <p className="kicker">{"// frontend design reference"}</p>
         <h1>
-          React <em>+ Tailwind + Motion</em> baseline.
+          Utilitarian terminal <em>baseline</em>.
         </h1>
         <p>
-          Consolidated, app-native reference surface for frontend sections before migration into
-          digithings-web, digiquant-web, and digichat. Each page in the top bar holds one family
-          of design elements.
+          Shared source for every live surface. Products import{" "}
+          <code>@digithings/web</code> and <code>@digithings/design</code> — they do not restyle
+          in parallel. Each page in the top bar is one family.
         </p>
       </header>
 

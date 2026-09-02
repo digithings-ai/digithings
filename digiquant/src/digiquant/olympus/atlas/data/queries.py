@@ -20,6 +20,7 @@ from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -466,12 +467,26 @@ MARKET_DATA_TABLES: frozenset[str] = frozenset(
     {"price_history", "price_technicals", "macro_series_observations", "trading_calendar"}
 )
 
+# Group A private books: omitted workspace_id is the house, never an unfiltered
+# date scan. Overlay same-date rows must not seed house research via query_data.
+HOUSE_BOOK_READ_TABLES: frozenset[str] = frozenset(
+    {"positions", "nav_history", "position_events", "portfolio_metrics"}
+)
+
 _MAX_QUERY_ROWS = 500
 
 # columns must be "*" or a comma-separated list of bare column names. This blocks
 # PostgREST relationship/embedding syntax (e.g. "*,decision_log(*)") that would
 # otherwise read a NON-whitelisted table through an embedded select.
 _SAFE_COLUMNS_RE = re.compile(r"^(\*|[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)*)$")
+
+
+def _eq_for_query(table: str, eq: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Stamp house ``workspace_id`` on Group A books when the caller omitted it."""
+    filters = dict(eq or {})
+    if table in HOUSE_BOOK_READ_TABLES and "workspace_id" not in filters:
+        filters["workspace_id"] = str(house_workspace_id())
+    return filters or None
 
 
 def query_data(
@@ -495,6 +510,11 @@ def query_data(
     ``allowed_tables`` (e.g. :data:`MARKET_DATA_TABLES` for blinded analyst nodes);
     it is intersected with :data:`ALLOWED_READ_TABLES`. ``limit`` is capped at
     :data:`_MAX_QUERY_ROWS` so one tool call can't pull unbounded rows.
+
+    Group A books (``positions``, ``nav_history``, ``position_events``,
+    ``portfolio_metrics``) default to the house ``workspace_id`` when ``eq``
+    omits it, so overlay same-date rows cannot seed house research. Pass
+    ``eq={"workspace_id": ...}`` to read another book.
     """
     tables = (allowed_tables & ALLOWED_READ_TABLES) if allowed_tables else ALLOWED_READ_TABLES
     if table not in tables:
@@ -509,7 +529,7 @@ def query_data(
     result = SupabaseConnector(client).select(
         table,
         safe_columns,
-        eq=eq or None,
+        eq=_eq_for_query(table, eq),
         gte=gte or None,
         lte=lte or None,
         in_=in_ or None,

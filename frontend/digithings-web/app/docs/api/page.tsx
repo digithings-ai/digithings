@@ -43,7 +43,7 @@ export default function OpenApiIndexPage() {
                 <li key={s.id}>
                   <Link
                     href={`/docs/api/${s.id}/`}
-                    className="flex flex-col gap-[0.2rem] rounded-[10px] border border-hair px-[1rem] py-[0.85rem] no-underline transition-colors duration-150 ease-brand hover:bg-accent-weak"
+                    className="flex flex-col gap-[0.2rem] rounded-none border border-hair px-[1rem] py-[0.85rem] no-underline transition-colors duration-150 ease-brand hover:bg-accent-weak"
                   >
                     <span className="font-mono text-[0.95rem] text-ink">
                       <span className="dt-d">digi</span>

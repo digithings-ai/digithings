@@ -10,7 +10,7 @@ Update an **existing** `alt-onchain-positioning` document; do not rewrite from s
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-onchain-positioning"`.
-Patch paths: `/headline`, `/bias`, `/smart_money_stance`, `/crowd_stance`, `/divergence_signal`, `/top_divergent_markets`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

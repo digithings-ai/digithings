@@ -97,7 +97,7 @@ export default function TeamPage() {
                       alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
                       width={m.avatarSize}
                       height={m.avatarSize}
-                      className="h-[112px] w-[112px] rounded-[14px] border border-hair"
+                      className="h-[112px] w-[112px] rounded-none border border-hair"
                     />
                     <div className="grid gap-[0.2rem]">
                       <h3>{m.name}</h3>

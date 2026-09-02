@@ -79,8 +79,9 @@ export function TabsReference() {
         A tab strip whose active indicator slides between labels — measured from the live tab
         geometry and animated with a CSS transition, so it survives a resize and honours
         reduced-motion. Arrow keys move between tabs; the panel below crossfades in. Three
-        dresses: an underline for content regions, a pill for a compact mode switch, and a chip
-        row for dashboard sub-navs — it may wrap, and the slider follows across rows.
+        dresses: an underline for content regions, a compact filled rect for a mode switch
+        (API: <code>pill</code>), and a chip row for dashboard sub-navs — it may wrap, and the
+        slider follows across rows.
       </p>
 
       <div className="mt-[1.4rem]">
@@ -110,7 +111,7 @@ export function TabsReference() {
                 ].map((s) => (
                   <div
                     key={s.k}
-                    className="flex flex-col gap-[0.25rem] rounded-[9px] border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
+                    className="flex flex-col gap-[0.25rem] rounded-none border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
                   >
                     <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
                       {s.k}

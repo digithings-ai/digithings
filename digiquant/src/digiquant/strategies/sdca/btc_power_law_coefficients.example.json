@@ -1,0 +1,45 @@
+{
+  "genesis": "2009-01-03",
+  "mu": 8.12790095587703,
+  "fit_start": "2014-06-26",
+  "fit_end": "2022-09-11",
+  "fit_rows": 3000,
+  "notes": "SYNTHETIC placeholder -- fit against a generated power-law-shaped series, NOT real BTC history. Network access to price data and the reference artifact is blocked in the environment this was built in (#1082). Replace by running the digiquant_fit_btc_power_law MCP tool once BTC daily history is available.",
+  "quantiles": {
+    "q01": {
+      "c": 3.2947839075597276,
+      "a": 2.217251682450517,
+      "b": 0.7976839449209769
+    },
+    "q10": {
+      "c": 3.542774317332929,
+      "a": 2.212016941182751,
+      "b": 0.5750665738595122
+    },
+    "q25": {
+      "c": 3.6903525958282057,
+      "a": 2.209233851761562,
+      "b": 0.4280066483666736
+    },
+    "q50": {
+      "c": 3.848627830324095,
+      "a": 2.209010419435693,
+      "b": 0.3644969222983808
+    },
+    "q75": {
+      "c": 3.983249263288275,
+      "a": 2.2486787588943553,
+      "b": 0.4585069461572696
+    },
+    "q95": {
+      "c": 4.197810051016271,
+      "a": 2.2125475307452422,
+      "b": 0.4412500874610754
+    },
+    "q99": {
+      "c": 4.358957742372001,
+      "a": 2.262227781133677,
+      "b": 0.3273958213622566
+    }
+  }
+}

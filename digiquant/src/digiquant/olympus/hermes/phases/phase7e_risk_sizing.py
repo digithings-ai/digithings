@@ -1,15 +1,19 @@
 """Phase 7E / H8 — deterministic risk-sizing enforcement (#726, Pillar 2).
 
-H7 ``PMDirectionMemo`` supplies direction (long|flat) and conviction ranks only.
-This phase maps those inputs plus H5/H6 analyst context into deterministic,
-risk-managed weights via :func:`~digiquant.olympus.hermes.sizing.size_portfolio` —
-the sole weight owner on the thesis-first path (ADR-0020).
+H7 ``PMDirectionMemo`` supplies direction (long|flat), conviction ranks (order only),
+and optional ``confidence`` ∈ [0, 1]. This phase maps those inputs plus H5/H6 analyst
+context into deterministic, risk-managed weights via
+:func:`~digiquant.olympus.hermes.sizing.size_portfolio` — the sole weight owner on the
+thesis-first path (ADR-0020).
 
 **WP8.4 (#2734):** on the memo path, when ``h8_sizing_input_mode=calibrated`` (default)
 and a validated ``AllocationInputBundle`` is present, raw weights come from calibrated
 forecasts (reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly are
 not used on that path. Missing bundle falls back to the characterized incumbent path
 (versioned; never an unversioned hybrid). Downstream controls are unchanged.
+
+**WP-H:** each long's sized weight is then scaled by H7 ``confidence`` (cash-first).
+Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
 
 **H8 inside Hermes graph (PR 4c):** output lands in ``phase_hermes.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
@@ -60,7 +64,11 @@ from digiquant.olympus.hermes.sizing_events import (
     SizingAdjustmentType,
     validate_sizing_lineage,
 )
-from digiquant.olympus.hermes.turnover import apply_rebalancing_cadence
+from digiquant.olympus.hermes.turnover import (
+    apply_rebalancing_cadence,
+    clamp_no_trade_band,
+    no_trade_band_pp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +79,8 @@ _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 H8_SIZING_INPUT_MODE_CALIBRATED = "calibrated"
 H8_SIZING_INPUT_MODE_INCUMBENT = "incumbent"
+# Fail-soft when H7 omits ``confidence``: conservative half-size, never treat as 1.0.
+H8_MISSING_CONFIDENCE_DEFAULT = 0.5
 _H8_SIZING_INPUT_MODES = frozenset(
     {H8_SIZING_INPUT_MODE_CALIBRATED, H8_SIZING_INPUT_MODE_INCUMBENT}
 )
@@ -107,6 +117,34 @@ def resolve_h8_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
     if mode not in _H8_SIZING_INPUT_MODES:
         return H8_SIZING_INPUT_MODE_CALIBRATED
     return mode
+
+
+def pm_confidence_scale(confidence: float | None) -> float:
+    """Map H7 confidence to an H8 size multiplier in [0, 1].
+
+    Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
+    an omitted field as full size (1.0).
+    """
+    if confidence is None:
+        return H8_MISSING_CONFIDENCE_DEFAULT
+    return max(0.0, min(1.0, float(confidence)))
+
+
+def confidence_scales_from_memo(memo: PMDirectionMemo) -> dict[str, float] | None:
+    """Per-long H7 confidence multipliers. Flats are omitted (H8 does not size them).
+
+    When **every** long omits ``confidence`` (pre-WP-G memos), return ``None`` so H8
+    does not silently haircut the book. When any long has a value, omitted rows use
+    :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
+    """
+    longs = [
+        entry for entry in memo.roster if entry.direction == "long" and not _is_cash(entry.ticker)
+    ]
+    if not longs:
+        return None
+    if all(entry.confidence is None for entry in longs):
+        return None
+    return {entry.ticker: pm_confidence_scale(entry.confidence) for entry in longs}
 
 
 def calibrated_scores_from_bundle(
@@ -325,18 +363,26 @@ def _load_ticker_risk(
     }
 
 
-def _verb(current: float | None, target: float) -> str:
+def _verb(
+    current: float | None,
+    target: float,
+    *,
+    preferences: Mapping[str, Any] | None = None,
+) -> str:
     """Rebalance verb from current → target weight. Unknown current ⇒ treat as 0."""
     cur = current or 0.0
     if cur <= 0 < target:
         return "new"
     if target <= 0 < cur:
         return "exit"
-    if target > cur + 1e-9:
+    if preferences is not None and cur > 0 and target > 0:
+        if abs(target - cur) < no_trade_band_pp(cur, dict(preferences)):
+            return "hold"
+    elif abs(target - cur) <= 1e-9:
+        return "hold"
+    if target > cur:
         return "add"
-    if target < cur - 1e-9:
-        return "trim"
-    return "hold"
+    return "trim"
 
 
 def _selection_rationale_by_ticker(
@@ -402,6 +448,7 @@ def _rebuild_actions(
     sized: dict[str, float],
     current_weights: dict[str, float] | None = None,
     selection_rationale_by_ticker: dict[str, str] | None = None,
+    preferences: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -414,6 +461,8 @@ def _rebuild_actions(
     """
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
+    live = current_weights or {}
+    pref = dict(preferences or {})
     for action in original_actions:
         if not isinstance(action, dict):
             continue
@@ -426,8 +475,11 @@ def _rebuild_actions(
             new_target = round(sized[ticker], 4)
             row["target_pct"] = new_target
             current = _opt_float(action.get("current_pct"))
-            if current is not None:  # recompute verb only when we know the live weight
-                row["action"] = _verb(current, new_target)
+            if current is None:
+                current = _opt_float(live.get(ticker))
+            if current is not None:
+                row["current_pct"] = round(current, 4)
+                row["action"] = _verb(current, new_target, preferences=pref or None)
         elif ticker in pm_targets:
             base = str(action.get("rationale") or "").strip()
             row["action"] = "exit"
@@ -440,21 +492,22 @@ def _rebuild_actions(
     # path (original_actions is empty there), so every booked day misreported held
     # rebalances as "new" (#1676). Classify against the live drifted weight instead:
     # add / trim / hold for existing positions, "new" only for genuinely new names.
-    live = current_weights or {}
     for ticker, target in sized.items():
         if ticker not in seen:
-            verb = _verb(_opt_float(live.get(ticker)), target)
-            out.append(
-                {
-                    "ticker": ticker,
-                    "action": verb,
-                    "target_pct": round(target, 4),
-                    "rationale": _published_action_rationale(
-                        ticker,
-                        selection_rationale_by_ticker,
-                    ),
-                }
-            )
+            current = _opt_float(live.get(ticker))
+            verb = _verb(current, target, preferences=pref or None)
+            row: dict[str, Any] = {
+                "ticker": ticker,
+                "action": verb,
+                "target_pct": round(target, 4),
+                "rationale": _published_action_rationale(
+                    ticker,
+                    selection_rationale_by_ticker,
+                ),
+            }
+            if current is not None:
+                row["current_pct"] = round(current, 4)
+            out.append(row)
     return out
 
 
@@ -632,13 +685,12 @@ def _lineage_materiality_pct(preferences: Mapping[str, Any]) -> float:
     (most permissive) per-ticker band actually in play this run.
     """
     threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)
-    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0
     current_weights = preferences.get("current_weights") or {}
     widest_current = max(
         (_opt_float(v) or 0.0 for v in current_weights.values()),
         default=0.0,
     )
-    return max(threshold, rel_band * widest_current)
+    return no_trade_band_pp(widest_current, dict(preferences)) if widest_current > 0 else threshold
 
 
 def _validate_h8_lineage(
@@ -716,6 +768,7 @@ def _build_sized_book(
             deps.client,
             state.run_date,
             config=BreakerConfig.from_preferences(state.config.preferences),
+            workspace_id=getattr(state.config, "workspace_id", None),
         )
         breaker_scale = breaker.scale
         breaker_note = f" Drawdown breaker: {breaker.reason}." if breaker.scale < 1.0 else ""
@@ -847,6 +900,7 @@ def _build_sized_book(
                 ", ".join(unchallenged),
             )
         risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
+        confidence_scales = confidence_scales_from_memo(memo_obj) if memo_obj is not None else None
         result = size_portfolio(
             convictions=convictions,
             stances=stances,
@@ -855,6 +909,7 @@ def _build_sized_book(
             caps=caps,
             breaker_scale=breaker_scale,
             calibrated_scores=calibrated_scores,
+            confidence_scales=confidence_scales,
         )
     except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
@@ -898,6 +953,14 @@ def _build_sized_book(
     )
     sized = _apply_held_continuity_backstop(sized, state, events=events)
     sized = _cap_total_invested(sized, events=events)
+    drifted_current = {
+        str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+    }
+    sized = clamp_no_trade_band(
+        sized,
+        current_weights=drifted_current,
+        preferences=dict(state.config.preferences),
+    )
     mode_note = f" sizing_input_mode={sizing_mode_label}."
     bundle_note = ""
     bundle_hash: str | None = None
@@ -914,6 +977,7 @@ def _build_sized_book(
             sized,
             current_weights,
             selection_rationale_by_ticker=selection_rationale_by_ticker,
+            preferences=dict(state.config.preferences),
         ),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}"
@@ -1313,6 +1377,7 @@ def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
 
 
 __all__ = [
+    "H8_MISSING_CONFIDENCE_DEFAULT",
     "H8_SIZING_INPUT_MODE_CALIBRATED",
     "H8_SIZING_INPUT_MODE_INCUMBENT",
     "RiskSizingDeps",
@@ -1320,5 +1385,7 @@ __all__ = [
     "build_risk_sizing_node",
     "build_risk_sizing_phase",
     "calibrated_scores_from_bundle",
+    "confidence_scales_from_memo",
+    "pm_confidence_scale",
     "resolve_h8_sizing_input_mode",
 ]

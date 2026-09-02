@@ -492,6 +492,7 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
 @pytest.mark.unit
 def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_olympus_tier() == "cheap"
 
 
@@ -512,6 +513,7 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
 ) -> None:
     """#926 gate: default cheap tier pools open-weight models for edit-mode segment schemas."""
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     assert get_olympus_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
     assert model is not None

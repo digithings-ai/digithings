@@ -260,7 +260,17 @@ it("maps digigraph_error code to embed-chat-error payload", () => {
   });
 });
 
-it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async () => {
+it("drops upstream message for BYOK remediable digigraph_error codes", () => {
+  const sensitive = "Provider openai is not supported for your X-BYOK-Provider header.";
+  const payload = digigraphErrorToEmbedPayload({
+    code: "byok_default_model_provider_mismatch",
+    message: sensitive,
+  });
+  expect(JSON.parse(payload)).toEqual({ error: "byok_default_model_provider_mismatch" });
+  expect(payload).not.toContain("openai");
+});
+
+it("relays free_quota_exceeded message on the SSE digigraph_error path", async () => {
   const quotaMessage =
     "Free-tier model quota is exhausted. Add your own API key (BYOK) to continue.";
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -313,6 +323,48 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
       errorCode: embedErr?.code,
     }),
   ).toBe(true);
+});
+
+it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async () => {
+  const sensitive =
+    "Provider openai is not supported for your X-BYOK-Provider header.";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_error: {
+                  code: "byok_default_model_provider_mismatch",
+                  message: sensitive,
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("byok_default_model_provider_mismatch");
+  expect(body).not.toContain("openai");
+  const errorText = errorTextFrom(body);
+  expect(errorText).toBeTruthy();
+  expect(JSON.parse(errorText!)).toEqual({
+    error: "byok_default_model_provider_mismatch",
+  });
 });
 
 it("strips Open WebUI tool dumps from streamed answer text", async () => {
@@ -548,6 +600,25 @@ it("relays an allowlisted BYOK refusal code out of a 400 body", async () => {
       errorCode: parsed?.code,
     }),
   ).toBe(true);
+});
+
+it("relays byok_model_provider_mismatch out of a nested 400 body (#2524)", async () => {
+  const { body } = await streamFor400(
+    JSON.stringify({
+      error: {
+        code: "byok_model_provider_mismatch",
+        message: "Model openai/gpt-4o-mini does not match provider openai.",
+        request_id: "req-3",
+        service: "digigraph",
+      },
+    }),
+  );
+
+  expect(body).toContain("byok_model_provider_mismatch");
+  const errorText = errorTextFrom(body);
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe("byok_model_provider_mismatch");
+  expect(formatEmbedChatError(new Error(errorText!))).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);
 });
 
 // Only the code crosses the boundary. digigraph's message for this refusal

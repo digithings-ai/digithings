@@ -32,9 +32,14 @@ Never commit `.env`. Use `.env.example` as the template and keep real keys out o
 | Mistral La Plateforme | [mistral.md](mistral.md) | Codestral, Pixtral, Mistral Large |
 | SambaNova | [sambanova.md](sambanova.md) | Fast Llama 3.3/4 inference |
 | Nvidia NIM | [nvidia_nim.md](nvidia_nim.md) | Nemotron + eval catalog |
-| GitHub Models | [github_models.md](github_models.md) | GPT-5 / Claude for **eval only** |
 | Ollama Cloud | [ollama_cloud.md](ollama_cloud.md) | gpt-oss, DeepSeek V3.2, Kimi |
 | Hugging Face | [huggingface.md](huggingface.md) | Model discovery + router |
+
+### Retired (do not configure)
+
+| Provider | Guide | Notes |
+|---|---|---|
+| GitHub Models | [github_models.md](github_models.md) | **Retired 2026-07-30** — playground, catalog, inference API, BYOK all shut down (#1589) |
 
 ### Paid only (no meaningful free tier)
 

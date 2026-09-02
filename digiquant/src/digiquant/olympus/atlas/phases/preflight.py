@@ -9,13 +9,13 @@ converting legacy conviction scores inside ``decision_log``.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date
 from typing import (  # score:allow untyped any — used for heterogeneous node-update dict shape
     Any,
     Callable,
 )
+from uuid import UUID
 
 import yaml
 
@@ -52,8 +52,11 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.olympus.overlay.runner import pin_seam_config
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
@@ -128,7 +131,7 @@ def _market_context_tickers() -> list[str]:
 def _refresh_on_demand_enabled() -> bool:
     """``ATLAS_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
     default; the CI pre-baseline step is the primary freshness mechanism)."""
-    return os.environ.get("ATLAS_REFRESH_ON_DEMAND", "").strip().lower() in (
+    return env_lookup(REFRESH_ON_DEMAND).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -229,7 +232,9 @@ def _data_layer_snapshot(
         market_context["onchain_positioning"] = onchain.compact_summary()
         try:
             upsert_onchain_cohort_positioning(
-                client=deps.client, rows=onchain.to_rows(run_date.isoformat())
+                client=deps.client,
+                rows=onchain.to_rows(run_date.isoformat()),
+                workspace_id=config.workspace_id,
             )
         except Exception as exc:  # persistence is best-effort; a missing table
             # (pre-migration window) or any postgrest/network error must never block the run.
@@ -351,14 +356,12 @@ def _hydrate_config(
     run_date: date,
 ) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
-    from uuid import UUID
-
     from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
     from digiquant.olympus.atlas.graph import _atlas_config_root
     from digiquant.olympus.profile_config import pin_profile_config_for_preflight
 
     try:
-        prior_book = load_prior_book(client, run_date)
+        prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)
     except _SUPABASE_READ_ERRORS:
         prior_book = []
 
@@ -401,6 +404,10 @@ def _hydrate_config(
             "research_budget_usd": str(pinned.research_budget_usd),
         }
 
+    seam = pin_seam_config(
+        requested_version_id=requested_version,
+        workspace_id=UUID(str(config.workspace_id)) if config.workspace_id else None,
+    )
     hydrated = AtlasConfigBundle(
         watchlist=watchlist,
         investment_profile=investment_profile,
@@ -409,6 +416,7 @@ def _hydrate_config(
         macro_series=list(config.macro_series),
         profile_config_version_id=str(pinned.version_id),
         profile_config=pinned.model_dump(mode="json"),
+        workspace_id=seam.workspace_id,
     )
     return hydrated, prior_book
 
@@ -417,7 +425,7 @@ def _resolve_research_state_attempt_id(deps: PreflightDeps) -> str:
     """Outer-retry attempt string for ResearchStatePin.attempt_id."""
     if deps.research_state_attempt_id is not None and deps.research_state_attempt_id.strip():
         return deps.research_state_attempt_id.strip()
-    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    raw = env_lookup(ATTEMPT).strip()
     if raw:
         return raw
     return "1"
@@ -589,7 +597,9 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             active_theses = []
         try:
-            portfolio_performance = load_portfolio_performance_snapshot(deps.client, state.run_date)
+            portfolio_performance = load_portfolio_performance_snapshot(
+                deps.client, state.run_date, workspace_id=config.workspace_id
+            )
         except _SUPABASE_READ_ERRORS:
             portfolio_performance = {}
 
@@ -665,10 +675,17 @@ def build_preflight_reflect_node(
     """Return the Phase B reflect node bound to ``deps``."""
 
     def reflect(state: AtlasResearchState) -> dict[str, Any]:
+        if skip_overlay_shared_register(state.config.workspace_id):
+            logger.info(
+                "overlay skip shared register decision_log / forecast outcomes "
+                "(house-only leftover uniques)"
+            )
+            return {}
         resolve_pending(
             client=deps.client,
             run_date=state.run_date,
             reflector=deps.reflector,
+            workspace_id=state.config.workspace_id,
         )
         # WP5.2 — typed forecast outcomes beside decision_log reflection.
         try:

@@ -5,37 +5,30 @@ from __future__ import annotations
 from typing import Any, Literal  # score:allow untyped any — used for dict shape typing below
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
     scalar_slot_write_adapter,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import ResearchMemo
 from digiquant.olympus.atlas.state import AtlasResearchState
 
-# Per ARCHITECTURE.md §Phase 3: 4-factor model.
+# Per ARCHITECTURE.md §Phase 3: 4-factor model. Optional machine tokens for the
+# pipeline strip / phase-6; the operator artifact is markdown ``body``.
 GrowthFactor = Literal["expanding", "slowing", "contracting"]
 InflationFactor = Literal["hot", "cooling", "cold"]
 PolicyFactor = Literal["tightening", "neutral", "easing"]
 RiskAppetiteFactor = Literal["risk_on", "mixed", "risk_off"]
 
 
-class MacroRegimeReport(SegmentReport):
-    """Phase 3 — 4-factor macro regime."""
+class MacroRegimeReport(ResearchMemo):
+    """Phase 3 — 4-factor macro regime (markdown body + optional chip tokens)."""
 
-    growth: GrowthFactor
-    inflation: InflationFactor
-    policy: PolicyFactor
-    risk_appetite: RiskAppetiteFactor
-    regime_label: str = Field(
-        description="Short compound label, e.g. 'Slowing / Inflation Sticky / Policy Tightening / Risk-Off'",
-    )
-    portfolio_implications: str = Field(
-        default="",
-        description="1–3 sentence read on what the regime means for positioning.",
-    )
+    growth: GrowthFactor | None = None
+    inflation: InflationFactor | None = None
+    policy: PolicyFactor | None = None
+    risk_appetite: RiskAppetiteFactor | None = None
 
 
 _SPEC = SegmentNodeSpec(

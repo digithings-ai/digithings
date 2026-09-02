@@ -48,6 +48,7 @@ digisearch:
 digigraph:
   - digigraph/**
   - tests/dg/**
+  - tests/contracts/**
   - .github/workflows/test-digigraph.yml
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
   # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
@@ -86,19 +87,19 @@ digichat:
   - package-lock.json
   - .github/workflows/test-digichat.yml
 
-olympus:
-  - frontend/olympus/**
-  # Olympus is the third consumer of @digithings/web: it declares the dep, imports
+dashboard:
+  - frontend/dashboard/**
+  # Dashboard is the third consumer of @digithings/web: it declares the dep, imports
   # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
-  # editing only frontend/digiweb/web/** runs no olympus lint, tests or static-export
-  # check while measurably changing what olympus ships — the `.chat-md h5` selector
-  # added in #1948 lands in olympus's built stylesheet. Not digichat-ui: olympus does
-  # not consume it.
+  # editing only frontend/digiweb/web/** runs no dashboard lint, tests or static-export
+  # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
+  # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
+  # dashboard does not consume it.
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
   - package.json
   - package-lock.json
-  - .github/workflows/test-olympus.yml
+  - .github/workflows/test-dashboard.yml
 
 web:
   - frontend/digithings-web/**
@@ -108,10 +109,14 @@ web:
   - frontend/digichat-ui/**
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
+  # Derived brand kit (avatars, OG cards, social headers). --check runs in
+  # test-web.yml after npm ci (Geist + sharp). A header-only edit must redden
+  # this lane, not merge as an untested PNG.
+  - frontend/digiweb/brand/**
   # The design reference is the canonical surface every other frontend copies patterns
   # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
   # entry nothing built, linted or type-checked it: the only `run build` calls in
-  # .github/workflows are test-digichat.yml and test-olympus.yml. ~137 commits in the
+  # .github/workflows are test-digichat.yml and test-dashboard.yml. ~137 commits in the
   # month after it was scaffolded (2026-07-06), none of which could fail on a broken
   # import or a bad type — in the one app whose defects propagate by being copied.
   #

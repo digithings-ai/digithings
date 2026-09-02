@@ -149,7 +149,7 @@
                 "type": "null"
               }
             ],
-            "description": "Max drawdown %",
+            "description": "Max drawdown as negative percent, e.g. -15 for -15%",
             "title": "Max Drawdown Pct"
           },
           "message": {
@@ -352,7 +352,7 @@
                 "type": "null"
               }
             ],
-            "description": "Max drawdown e.g. -0.15 for -15%",
+            "description": "Max drawdown as negative percent, e.g. -15 for -15%",
             "title": "Max Drawdown Pct"
           },
           "max_trades_per_year": {

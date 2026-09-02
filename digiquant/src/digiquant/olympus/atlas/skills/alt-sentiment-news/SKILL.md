@@ -56,32 +56,21 @@ After reviewing headlines, score:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent data-quality or confidence scores, emit a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Sentiment and news — {as-of date of the data}
+
+## Narrative
+Dominant 24h story and whether it is new information or a repricing.
+
+## Headlines
+1. [Outlet](url) — implication
+2. …
+
+## Positioning color
+X/KOL, Polymarket, retail/Reddit, Google Trends — only what you actually retrieved.
+
+## Implication for today's research
+How this should color downstream segment reads.
 ```
-### 📰 SENTIMENT & NEWS INTELLIGENCE
-**Overall Sentiment**: [Bullish / Bearish / Neutral / Fearful / Euphoric]
-**Surprise Factor**: [Markets ahead of / behind fundamentals today]
-
-**Top Headlines (24h)**:
-1. [Headline] — [Implication and market reaction if any]
-2. [Headline] — [Implication]
-3. [Headline] — [Implication]
-
-**X/Twitter KOL Signals**:
-- [Handle]: [Key quote or thesis highlighted in last 24h]
-- [Handle]: [Relevant insight]
-- [Sentiment extreme]: [Any uniform bullish/bearish pile-on as contrarian signal?]
-
-**Polymarket Odds**:
-| Market | Current Odds | Change vs Prior | Implication |
-|--------|-------------|-----------------|-------------|
-| Fed cut at next FOMC | X% | ±X% | [dovish/hawkish signal] |
-| US Recession 12m | X% | ±X% | [growing/fading concern] |
-
-**Google Trends Signal**: [Key rising searches and what they indicate]
-
-**Reddit/Retail Sentiment**: [WSB direction + any specific ticker crowding]
-
-**Sentiment Implication for Today's Analysis**:
-[2-3 sentences on how today's sentiment context should color downstream segment reads.]
-```
-

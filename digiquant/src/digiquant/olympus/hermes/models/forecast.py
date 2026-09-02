@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -92,6 +93,11 @@ class ForecastTerms(ForecastModel):
     assumptions: tuple[str, ...] = Field(default_factory=tuple)
     invalidation_rules: tuple[str, ...] = Field(default_factory=tuple)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _unwrap_nested_terms_envelope(cls, value: object) -> object:
+        return unwrap_forecast_terms_payload(value)
+
     @field_validator("evidence_ids", "counter_evidence_ids", mode="before")
     @classmethod
     def _coerce_id_sequence(cls, value: object) -> object:
@@ -133,6 +139,60 @@ class ForecastTerms(ForecastModel):
             + self.base_probability * self.base_return
             + self.bull_probability * self.bull_return
         )
+
+
+_FORECAST_TERMS_REQUIRED = (
+    "horizon_sessions",
+    "half_life_sessions",
+    "bear_return",
+    "base_return",
+    "bull_return",
+    "bear_probability",
+    "base_probability",
+    "bull_probability",
+    "thesis_valid_probability",
+    "raw_uncertainty",
+)
+
+
+def unwrap_forecast_terms_payload(value: object) -> object:
+    """Unwrap LLM ``{terms: {...}}`` envelopes onto a flat ForecastTerms dict.
+
+    House GHA 33426508863: SLV/IAU H6 amendments nested economics under ``terms``
+    (extra=forbid then rejected the wrapper and reported every required field
+    missing). Economics are never invented; leftover unknown keys still fail.
+    """
+    if not isinstance(value, dict):
+        return value
+    nested = value.get("terms")
+    if not isinstance(nested, dict):
+        return value
+    missing_top = [key for key in _FORECAST_TERMS_REQUIRED if key not in value]
+    if not missing_top or not any(key in nested for key in _FORECAST_TERMS_REQUIRED):
+        return value
+    merged = dict(nested)
+    for key, item in value.items():
+        if key == "terms":
+            continue
+        merged[key] = item
+    return merged
+
+
+def fill_forecast_tenor_from_base(
+    payload: Mapping[str, object], base_terms: ForecastTerms
+) -> dict[str, object]:
+    """Copy missing horizon/half-life from the H5 base; never fill economics.
+
+    House GHA 33426508863 GLD omitted ``horizon_sessions`` / ``half_life_sessions``
+    while sending scenario probabilities. Tenor is identity of the existing
+    forecast, not new LLM economics.
+    """
+    out = dict(payload)
+    if "horizon_sessions" not in out:
+        out["horizon_sessions"] = base_terms.horizon_sessions
+    if "half_life_sessions" not in out:
+        out["half_life_sessions"] = base_terms.half_life_sessions
+    return out
 
 
 class PriceAnchor(ForecastModel):
@@ -463,9 +523,11 @@ __all__ = [
     "PriceAnchor",
     "PriceAnchorStatus",
     "RawUncertainty",
+    "fill_forecast_tenor_from_base",
     "forecast_amendment_id",
     "forecast_assessment_id",
     "forecast_terms_content_hash",
     "materialize_forecast_amendment",
     "resolve_effective_forecast",
+    "unwrap_forecast_terms_payload",
 ]

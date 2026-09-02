@@ -21,7 +21,10 @@ to it later (their current in-tree LLM modules are superseded by this package).
 
 | Module | Responsibility |
 |--------|----------------|
-| `digillm/client.py` | Provider registry + routing, client cache, retry/backoff, SHA-256 response cache, `chat_completion`, the tool-calling loop, tool-call types, and the per-request override contextvars. |
+| `digillm/types.py` | Shared TypedDict request, tool-call, tool-definition, and JSON-schema response payload shapes. |
+| `digillm/overrides.py` | Per-request proxy-key and BYOK contextvars, reset helpers, and context managers. |
+| `digillm/cache.py` | SHA-256 response-cache keying, TTL/eviction, and cache clearing. |
+| `digillm/client.py` | Compatibility import surface plus provider registry/routing, retry/backoff, completion/search, telemetry runtime, and the tool-calling loop. |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
 | `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
@@ -192,9 +195,11 @@ chat_completion(
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
   retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).
-  For an `openrouter/` model the first retry adds provider-fallback routing
-  (`extra_body.models` + `route=fallback`) from `OPENROUTER_FALLBACK_MODELS`; other
-  providers just re-ask. A persistent blank is returned unchanged (callers stay graceful).
+  For `openrouter/` models, `OPENROUTER_FALLBACK_MODELS` attaches provider-fallback
+  routing (`extra_body.models` + `route=fallback`) on the **primary** request via
+  `_with_openrouter_cost_controls`; it does **not** swap models on an empty `200`
+  (fallback routing fires on provider errors only). Empty retries re-ask the same
+  model. A persistent blank is returned unchanged (callers stay graceful).
 
 ### `chat_completion_with_tools`
 

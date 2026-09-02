@@ -24,7 +24,6 @@ import pytest
 from digiquant.olympus.atlas.decision_log import (
     DEFAULT_BENCHMARK,
     DEFAULT_HOLDING_DAYS,
-    THESIS_MAX_CHARS,
     ReflectorOutput,
     _holding_days,
     fetch_recent_lessons,
@@ -138,11 +137,10 @@ class TestPhaseAWritesPending:
         assert tickers == ["AAPL", "GOOG", "MSFT"]
 
     def test_pending_row_payload_shape(self) -> None:
-        """Verify columns + truncation of thesis to 800 chars."""
+        """Verify columns + full thesis preserved (no character-limit truncate)."""
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL",))
-        # Inject a long thesis to exercise truncation.
-        long_thesis = "A" * 900 + "B" * 100  # 1000 chars total
+        long_thesis = "A" * 900 + "B" * 100  # 1000 chars — formerly truncated to 800
         state.phase_hermes.asset_analysts["AAPL"]["thesis"] = long_thesis
 
         persist_pending(client=client, state=state)
@@ -169,9 +167,7 @@ class TestPhaseAWritesPending:
         # conviction_score=3 → conviction-derived holding_days = 8 (#953).
         assert row["holding_days"] == 8
         assert row["status"] == "pending"
-        # Truncation: 800 chars max.
-        assert len(row["thesis"]) == THESIS_MAX_CHARS
-        assert row["thesis"] == "A" * 800
+        assert row["thesis"] == long_thesis
         # Idempotency on (run_date, ticker) — migration 044 (#947).
         assert row["_on_conflict"] == "run_date,ticker"
 
@@ -718,7 +714,9 @@ class TestPreflightReflectNode:
 
         called: dict[str, int] = {"resolve": 0}
 
-        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:
+        def stub_resolve(
+            *, client: Any, run_date: Any, reflector: Any, workspace_id: Any = None
+        ) -> int:
             called["resolve"] += 1
             return 0
 

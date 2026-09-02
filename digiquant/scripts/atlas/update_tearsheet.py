@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 from digiquant.olympus.atlas import dashboard_digest as _digest  # noqa: E402
 from digiquant.olympus.performance_returns import calculate_performance_returns  # noqa: E402
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
 
 _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
@@ -601,12 +602,48 @@ def _get_supabase_client():
     return create_client(url, key)
 
 
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _document_key_from_cache_path(path: str) -> str:
+    """Logical ``documents.document_key`` from a recovery cache path (migration 009).
+
+    ``file_path`` was renamed to ``document_key`` and ``UNIQUE(date, file_path)``
+    dropped; leftover ``on_conflict=date,file_path`` 42P10s against core.
+    """
+    p = str(path or "").replace("\\", "/").lstrip("/")
+    marker = "/daily/"
+    idx = p.find(marker)
+    if idx >= 0:
+        rest = p[idx + len(marker) :]
+        slash = rest.find("/")
+        if slash >= 0 and len(rest) >= 11 and rest[4] == "-" and rest[7] == "-":
+            rest = rest[slash + 1 :]
+        if rest in ("DIGEST.md", "digest"):
+            return "digest"
+        if rest in ("DIGEST-DELTA.md", "digest-delta"):
+            return "digest-delta"
+        return rest
+    for prefix in ("weekly/", "monthly/", "deep-dives/"):
+        found = p.find(prefix)
+        if found >= 0:
+            return p[found:]
+    name = p.rsplit("/", 1)[-1]
+    if name in ("DIGEST.md", "digest"):
+        return "digest"
+    if name in ("DIGEST-DELTA.md", "digest-delta"):
+        return "digest-delta"
+    return name
+
+
 def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     """Push all data to Supabase tables. Uses upsert (ON CONFLICT DO UPDATE)."""
     if not supabase_configured():
         return
 
     sb = _get_supabase_client()
+    house = _house_id()
     print("   Supabase: pushing data...")
 
     # ---- daily_snapshots ----
@@ -672,6 +709,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             for p in positions_source:
                 position_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": p["ticker"],
                         "name": p.get("name"),
@@ -692,6 +730,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 pj = pj_lookup.get(ticker, {})
                 position_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": ticker,
                         "name": pj.get("name") or p.get("name"),
@@ -711,7 +750,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         for i in range(0, len(position_rows), 500):
             chunk = position_rows[i : i + 500]
             try:
-                sb.table("positions").upsert(chunk, on_conflict="date,ticker").execute()
+                sb.table("positions").upsert(chunk, on_conflict="workspace_id,date,ticker").execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (positions chunk {i}): {e}")
         print(f"   Supabase: {len(position_rows)} positions upserted")
@@ -771,6 +810,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
 
             event_rows.append(
                 {
+                    "workspace_id": house,
                     "date": d["date"],
                     "ticker": ticker,
                     "event": event,
@@ -788,6 +828,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 prev_p = prev_weights[ticker]
                 event_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": ticker,
                         "event": "EXIT",
@@ -804,18 +845,22 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         for i in range(0, len(event_rows), 500):
             chunk = event_rows[i : i + 500]
             try:
-                sb.table("position_events").upsert(chunk, on_conflict="date,ticker").execute()
+                sb.table("position_events").upsert(
+                    chunk, on_conflict="workspace_id,date,ticker"
+                ).execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (position_events chunk {i}): {e}")
         print(f"   Supabase: {len(event_rows)} position_events upserted")
 
     # ---- nav_history ----
     if history:
-        nav_rows = [{"date": h["date"], "nav": h["nav"]} for h in history]
+        nav_rows = [
+            {"workspace_id": house, "date": h["date"], "nav": h["nav"]} for h in history
+        ]
         for i in range(0, len(nav_rows), 500):
             chunk = nav_rows[i : i + 500]
             try:
-                sb.table("nav_history").upsert(chunk, on_conflict="date").execute()
+                sb.table("nav_history").upsert(chunk, on_conflict="workspace_id,date").execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (nav_history chunk {i}): {e}")
         print(f"   Supabase: {len(nav_rows)} nav_history rows upserted")
@@ -823,7 +868,10 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     # ---- portfolio_metrics ----
     if metrics:
         try:
-            sb.table("portfolio_metrics").upsert([metrics], on_conflict="date").execute()
+            sb.table("portfolio_metrics").upsert(
+                [{**metrics, "workspace_id": house}],
+                on_conflict="workspace_id,date",
+            ).execute()
             print(f"   Supabase: portfolio_metrics upserted for {metrics['date']}")
         except _REMOTE_UPSERT_ERRORS as e:
             print(f"   Supabase warning (portfolio_metrics): {e}")
@@ -831,6 +879,9 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     # ---- documents ----
     doc_rows = []
     for d in docs:
+        key = _document_key_from_cache_path(d.get("path", "") or "")
+        if not key:
+            continue
         doc_rows.append(
             {
                 "date": d["date"],
@@ -841,15 +892,18 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 "segment": d.get("segment"),
                 "sector": d.get("sector"),
                 "run_type": d.get("runType"),
-                "file_path": d.get("path", ""),
+                "document_key": key,
                 "content": d.get("content"),
+                "workspace_id": house,
             }
         )
     if doc_rows:
         for i in range(0, len(doc_rows), 200):
             chunk = doc_rows[i : i + 200]
             try:
-                sb.table("documents").upsert(chunk, on_conflict="date,file_path").execute()
+                sb.table("documents").upsert(
+                    chunk, on_conflict="workspace_id,date,document_key"
+                ).execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (documents chunk {i}): {e}")
         print(f"   Supabase: {len(doc_rows)} documents upserted")

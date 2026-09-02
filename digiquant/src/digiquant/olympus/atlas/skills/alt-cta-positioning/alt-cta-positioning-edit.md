@@ -10,7 +10,7 @@ Update an **existing** `alt-cta-positioning` document; do not rewrite from scrat
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-cta-positioning"`.
-Patch paths: `/headline`, `/bias`, `/systematic_stance`, `/futures_oi_trend`, `/cta_flow_bias`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

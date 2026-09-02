@@ -6,15 +6,15 @@
  * dress switch. Two dresses:
  *
  * - dress="reference" (default): the form-fields .ff-input grammar — mono
- *   0.82rem on a surface fill, 8px radius, accent focus ring; the error
+ *   0.82rem on a surface fill, 0 radius, accent focus ring; the error
  *   dress keys off the input's own aria-invalid (the specimen's
  *   .ff-field.is-error wrapper combinator, re-hung on the control) and
  *   disabled dims to the specimen's 0.55 wash.
- * - dress="chat": digichat's current dress translated exactly (h-8,
- *   10px radius, transparent fill, text-base → md:text-sm, ring focus,
+ * - dress="chat": utilitarian shape (radius 0) with digichat's enum
+ *   surface (transparent fill, text-base → md:text-sm, ring focus,
  *   input-washed disabled, destructive aria-invalid, dark input/30 fill)
- *   so digichat's wrapper can pin dress="chat" and re-export with no
- *   rendered-look change.
+ *   so digichat's wrapper can pin dress="chat" and re-export. API names
+ *   stay; radius/fill follow BLEND v0.1.
  *
  * All dress lives in styles/controls-core.css (import once app-wide).
  */

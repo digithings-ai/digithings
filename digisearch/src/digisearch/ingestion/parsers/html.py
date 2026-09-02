@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 
 from digisearch.core.models import Document
+from digisearch.core.stable_ids import stable_doc_id
 from digisearch.ingestion.base import Parser
 
 try:
@@ -44,7 +44,7 @@ class HTMLParser(Parser):
             content = soup.get_text(separator="\n", strip=True)
         else:
             content = raw
-        doc_id = str(uuid.uuid4())
+        doc_id = stable_doc_id(source=src_str, content=content)
         return Document(
             id=doc_id,
             content=content,
