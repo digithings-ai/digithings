@@ -10,7 +10,7 @@ COPY frontend/digichat/package.json frontend/digichat/
 COPY frontend/digichat-ui/package.json frontend/digichat-ui/
 COPY frontend/digiweb/design/package.json frontend/digiweb/design/
 COPY frontend/digiweb/web/package.json frontend/digiweb/web/
-COPY frontend/olympus/package.json frontend/olympus/
+COPY frontend/dashboard/package.json frontend/dashboard/
 RUN npm ci --workspace frontend/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
@@ -38,6 +38,7 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/.next/static ./frontend/digichat/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/public ./frontend/digichat/public
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/digichat/scripts/trusted-proxy-server.mjs ./frontend/digichat/scripts/trusted-proxy-server.mjs
 # Drizzle migrations: the standalone server.js chdir()s to its own directory,
 # so runMigrate() resolves process.cwd()/drizzle = frontend/digichat/drizzle.
 # Compose sets DIGICHAT_AUTO_MIGRATE=1, so the folder MUST ship in the image.
@@ -46,4 +47,4 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-CMD ["node", "frontend/digichat/server.js"]
+CMD ["node", "frontend/digichat/scripts/trusted-proxy-server.mjs"]

@@ -1,4 +1,5 @@
 issue	phase	area	kind	priority	model
+2609	Phase 4 — Atlas on digigraph	digiquant	Task	P1	sonnet
 2	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 3	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 4	Phase 2 — Hardening	digismith	Epic	P1	sonnet
@@ -242,3 +243,21 @@ issue	phase	area	kind	priority	model
 2422	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 2436	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
 2459	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+2613	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet
+2616	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet
+2863	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2870	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2877	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2844	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2892	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2902	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2908	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2918	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2922	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2926	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2930	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2934	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2938	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+3248		digichat	Research	P2	opus
+3388	validate execution/tenancy on next house pipeline run	digiquant	Task	P1	sonnet
+3391	validate execution/tenancy on next house pipeline run	digiquant	Task	P1	sonnet

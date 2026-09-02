@@ -7,7 +7,6 @@ optional ``triage_gate`` / ``state.triage`` carry-forward.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
@@ -23,6 +22,14 @@ from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
 from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
+from digiquant.olympus.atlas.research_attention import (
+    apply_segment_metric_patch,
+    artifact_target_key,
+    carry_segment_slot,
+    research_attention_enforce_path,
+    resolve_attention_plan_for_node,
+    resolve_research_attention_rollout_mode,
+)
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
@@ -54,13 +61,15 @@ from digiquant.olympus.edit_mode.content_identity import (
     prior_content_date,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
+from digiquant.olympus.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
+from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 
 
 def _data_tools_enabled() -> bool:
     """Master kill-switch for tool grounding (env ATLAS_DATA_TOOLS, default on)."""
-    return os.environ.get("ATLAS_DATA_TOOLS", "1").strip().lower() not in ("0", "false", "")
+    return env_lookup(RESEARCH_DATA_TOOLS, default="1").strip().lower() not in ("0", "false", "")
 
 
 @lru_cache(maxsize=1)
@@ -94,7 +103,7 @@ a week. Override via ``ATLAS_MACRO_STALE_DAYS``."""
 
 
 def _macro_stale_days() -> int:
-    raw = os.environ.get("ATLAS_MACRO_STALE_DAYS", "").strip()
+    raw = env_lookup(MACRO_STALE_DAYS).strip()
     if raw:
         try:
             return max(0, int(raw))
@@ -510,7 +519,7 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
     """In-place: trim fat from ``latest_segments`` payloads on delta runs (#949).
 
     On a delta run, each segment's prior payload is carried in shared_context for
-    continuity. The full body text (``notes``, detailed ``material_findings``
+    continuity. The full memo ``body`` (and leftover ``notes`` / findings) is noise
     summaries) is noise for a delta phase that only needs the prior stance + source
     provenance. This function trims the payload while *explicitly* preserving every
     source's ``id``, ``title``, and ``url`` — the provenance chain the synthesis
@@ -533,9 +542,10 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
                 for s in sources
             ]
         # Trim fat text fields that a delta node doesn't need in shared context.
-        notes = payload.get("notes")
-        if isinstance(notes, str) and len(notes) > 120:
-            payload["notes"] = notes[:120] + "..."
+        for key in ("body", "notes", "narrative"):
+            text = payload.get(key)
+            if isinstance(text, str) and len(text) > 120:
+                payload[key] = text[:120] + "..."
 
 
 def _shared_context(
@@ -859,6 +869,26 @@ def build_segment_node(
         # Non-gating: an edit→full fallback that then succeeds must still leave the run
         # `ok`, but it must stop being invisible (#1741).
         merge_fallbacks: dict[str, str] = {}
+        target_key = artifact_target_key("segment", spec.segment_slug)
+        rollout = resolve_research_attention_rollout_mode()
+        if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
+            resolve_attention_plan_for_node(state)
+        enforce_path = research_attention_enforce_path(state, target_key=target_key)
+        if enforce_path == "carry":
+            reason = _triage_reason_for_segment(state, spec.segment_slug) or "attention_carry"
+            prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
+            return write_adapter(
+                spec,
+                carry_segment_slot(state, spec.segment_slug, reason=reason, prior=prior),
+            )
+        if enforce_path == "metric_patch":
+            prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
+            if prior is not None:
+                return write_adapter(
+                    spec,
+                    apply_segment_metric_patch(state, spec.segment_slug, prior),
+                )
+            enforce_path = None
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
         else:

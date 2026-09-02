@@ -14,4 +14,14 @@ describe("@digithings/digichat-ui package surface", () => {
     // (.chat-md-mermaid*), so asserting it here pinned dead CSS in place.
     expect(css).not.toContain(".dc-mermaid");
   });
+
+  it("session chrome is zero-radius ink/paper (utilitarian-terminal v0.1)", () => {
+    const session = readFileSync(join(root, "src/styles/session.css"), "utf8");
+    const cursor = readFileSync(join(root, "src/styles/cursor.css"), "utf8");
+    expect(session).not.toMatch(/border-radius:\s*(?:[1-9]|999)/);
+    expect(cursor).not.toMatch(/border-radius:\s*999px/);
+    expect(session).toMatch(/\.dc-send\s*\{[^}]*border-radius:\s*0/s);
+    expect(session).toMatch(/\.dc-send\s*\{[^}]*background:\s*var\(--ink\)/s);
+    expect(session).toMatch(/\.dc-send\s*\{[^}]*color:\s*var\(--bg\)/s);
+  });
 });

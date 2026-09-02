@@ -86,29 +86,34 @@ sentence in `notes` so Phase 9 can evaluate the config over time.
 - If misaligned, say so and quantify — it's a setup for Phase 7 risk radar.
 
 ### 6. Output
-Emit a `SectorReport` JSON per schema. Fields:
-- `segment` — `sector_config.slug`
-- `date` — today
-- `bias` — one of: `strong_bullish`, `bullish`, `neutral`, `bearish`,
-  `strong_bearish`, `mixed`
-- `headline` — 1-sentence dominant force in this sector today
-- `material_findings` — up to 5 structured findings with source IDs
-- `sources` — every citation referenced by findings
-- `notes` — uncertainty, sector-config drift, contradictions
-- Sector-specific structured metrics defined by the output model
-  (`SectorReport`): ETF-vs-SPY relative strength category, sub-segment
-  leader, key driver confirmation count, conviction score.
+Write a markdown `body` (the operator artifact). Suggested skeleton:
+
+```markdown
+# {sector_config.name} — {as-of date of the data}
+
+## Stance vs SPY
+Relative strength in prose, dated.
+
+## Sub-segment leadership
+Who is leading or lagging inside the sector.
+
+## Drivers and catalysts
+Earnings, flows, or macro alignment — with inline [title](url) links.
+```
+
+Do **not** invent data-quality or confidence scores, emit a Signals
+section, or print `Bias:` at the top. Optional `internal_bias` is a
+non-rendered token for digest/triage.
 
 ## Materiality
 
-Skip noise. Include findings that meaningfully change the read on this
-sector relative to yesterday's snapshot. Routine drift under 1% is
-noise unless there is a catalyst; flag anything ≥1.5% on a tracked
-name, any earnings event, any sub-segment regime change.
+Skip noise. Include what meaningfully changes the read on this
+sector relative to yesterday. Routine drift under 1% is noise unless
+there is a catalyst; flag anything ≥1.5% on a tracked name, any
+earnings event, any sub-segment regime change.
 
 ## Refusal
 
-If the research context is insufficient to score the sector (e.g.,
-data layer fallback = `none` and no prior context for this sector),
-return the schema with empty `material_findings`, `bias` = `mixed`,
-and a `notes` field explaining what is missing. Do not invent numbers.
+If the research context is insufficient (e.g. data layer fallback =
+`none` and no prior for this sector), write a short memo that says
+what is missing. Do not invent numbers.

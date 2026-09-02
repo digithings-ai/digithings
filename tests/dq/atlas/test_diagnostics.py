@@ -518,6 +518,7 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert row["segments_failed"] == 1
     assert row["model"] == "x-ai/grok-4"  # derived from usage snapshot models
     assert row["breakdown"]["models"] == ["x-ai/grok-4"]
+    assert row["breakdown"]["empty_retries"] == {"total": 0, "by_model": {}}
     assert row["started_at"] == "2026-06-12T10:00:00+00:00"
     assert row["finished_at"] == "2026-06-12T10:02:03.456000+00:00"
     assert row["duration_s"] == pytest.approx(123.456)
@@ -528,6 +529,27 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert events[0]["run_date"] == "2026-06-12"
     assert events[0]["phase"] == "macro"
     assert events[0]["_on_conflict"] == "run_id,attempt,sequence"
+
+
+def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="empty-retry-run",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={
+            "llm_calls": 5,
+            "empty_retries": {"total": 3, "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1}},
+        },
+    )
+    row = client.store["atlas_run_diagnostics"][0]
+    assert row["breakdown"]["empty_retries"] == {
+        "total": 3,
+        "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1},
+    }
 
 
 def test_write_row_is_fail_soft() -> None:
@@ -613,6 +635,55 @@ def test_write_row_without_event_capture_preserves_prior_trace() -> None:
     )
 
     assert {row["sequence"] for row in client.store["olympus_run_events"]} == {1, 2}
+
+
+def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
+    """Glass-box rows stay joinable to 067 and never invent zero economics (#2763)."""
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    call_id = "11111111-1111-1111-1111-111111111111"
+    attempt_id = "22222222-2222-2222-2222-222222222222"
+    node_run_id = "33333333-3333-3333-3333-333333333333"
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="wp1-join",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={
+            "events": [
+                {
+                    "sequence": 1,
+                    "kind": "model_call",
+                    "phase": "macro",
+                    "operation": "MacroReport",
+                    "document_key": "macro",
+                    "name": "openrouter/auto",
+                    "status": "ok",
+                    "duration_ms": 10,
+                    "retry_count": 0,
+                    "prompt_tokens": None,
+                    "completion_tokens": None,
+                    "cached_tokens": None,
+                    "cost_usd": None,
+                    "sources": 0,
+                    "input_summary": "Structured model request",
+                    "output_summary": "Model response returned",
+                    "call_id": call_id,
+                    "attempt_id": attempt_id,
+                    "node_run_id": node_run_id,
+                }
+            ]
+        },
+    )
+    row = client.store["olympus_run_events"][0]
+    assert row["prompt_tokens"] is None
+    assert row["completion_tokens"] is None
+    assert row["cached_tokens"] is None
+    assert row["cost_usd"] is None
+    assert row["call_id"] == call_id
+    assert row["attempt_id"] == attempt_id
+    assert row["node_run_id"] == node_run_id
 
 
 # --------------------------------------------------------------------------- cancelled status (#814)

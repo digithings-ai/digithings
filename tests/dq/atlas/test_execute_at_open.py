@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -50,6 +51,7 @@ _book_weights = _mod._book_weights
 build_events_from_positions_book = _mod.build_events_from_positions_book
 build_events_from_digest_snapshot = _mod.build_events_from_digest_snapshot
 _hold_events_for_positions_not_in_rebalance = _mod._hold_events_for_positions_not_in_rebalance
+_event_tickers_for_date = _mod._event_tickers_for_date
 resolve_rebalance_payload_fallback = _mod.resolve_rebalance_payload_fallback
 
 
@@ -110,17 +112,25 @@ class _FakeQuery:
         Kept distinguishable from ``upsert`` on purpose: the migration-069 tables reject
         UPDATE by trigger, so an ``upsert`` reaching one of them is a production failure
         rather than a nuance, and a fake that flattened the two verbs together could not
-        show which one the code under test used.
+        show which one the code under test used. Rows are also appended onto the live
+        table list so a later select in the same client sees the write (#2589 seed).
         """
         for row in rows:
             self.inserts.append({**row, "_table": self.name})
+            self.rows.append(dict(row))
         return self
 
     def execute(self) -> Any:
         rows = list(self.rows)
+        house = str(house_workspace_id())
         for op, col, val in self._filters:
             if op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
+                rows = [
+                    r
+                    for r in rows
+                    if r.get(col) == val
+                    or (col == "workspace_id" and val == house and r.get(col) is None)
+                ]
             elif op == "neq":
                 rows = [r for r in rows if r.get(col) != val]
             elif op == "lt":
@@ -151,8 +161,9 @@ class _FakeClient:
     inserts: list[dict[str, Any]] = field(default_factory=list)
 
     def table(self, name: str) -> _FakeQuery:
+        self.tables.setdefault(name, [])
         return _FakeQuery(
-            rows=list(self.tables.get(name, [])),
+            rows=self.tables[name],
             upserts=self.upserts,
             name=name,
             inserts=self.inserts,
@@ -376,6 +387,64 @@ class TestHoldEventsPriorWeight:
         assert by_ticker["FXI"]["prev_weight_pct"] is None  # genuinely new
 
 
+class TestHouseScopedBookReads:
+    """P6: overlay rows on the same calendar date must not shape the house ledger."""
+
+    _OVERLAY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+    def test_event_tickers_ignore_overlay_rows(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "position_events": [
+                    {"date": "2026-07-31", "ticker": "UUP", "event": "HOLD"},
+                    {
+                        "date": "2026-07-31",
+                        "ticker": "EVIL",
+                        "event": "OPEN",
+                        "workspace_id": self._OVERLAY,
+                    },
+                ]
+            }
+        )
+        tickers = _event_tickers_for_date(sb, "2026-07-31")
+        assert "UUP" in tickers
+        assert "EVIL" not in tickers
+
+    def test_hold_events_ignore_overlay_positions(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "positions": [
+                    *_BOOK_0731,
+                    {
+                        "date": "2026-07-31",
+                        "ticker": "EVIL",
+                        "weight_pct": "50.0",
+                        "workspace_id": self._OVERLAY,
+                    },
+                ]
+            }
+        )
+        holds = _hold_events_for_positions_not_in_rebalance(sb, "2026-07-31", set())
+        assert "EVIL" not in {e["ticker"] for e in holds}
+
+    def test_prior_book_date_ignores_overlay_only_gap_filler(self) -> None:
+        sb = _FakeClient(
+            tables={
+                "positions": [
+                    *_BOOK_0729,
+                    {
+                        "date": "2026-07-30",
+                        "ticker": "EVIL",
+                        "weight_pct": "100.0",
+                        "workspace_id": self._OVERLAY,
+                    },
+                    *_BOOK_0731,
+                ]
+            }
+        )
+        assert _prior_book_date(sb, "2026-07-31") == "2026-07-29"
+
+
 # ─── The document-date walk must keep its calendar semantics ─────────────────
 
 
@@ -551,10 +620,20 @@ class _Ledger:
         with_commit: bool = True,
         books: list[dict[str, Any]] | None = None,
     ) -> _FakeClient:
+        position_rows = list(books if books is not None else [*_BOOK_0729, *_BOOK_0731])
+        # Opening-snapshot seed (#2589) needs NAV + marks when lots are empty but the prior
+        # book is not. Provide them so cold-start auto-ensure succeeds in fixtures that
+        # intentionally start with no lots (quiet day, all-rejected, chained fills).
+        seed_closes = [
+            {"ticker": str(row["ticker"]), "date": "2026-07-29", "close": "100"}
+            for row in _BOOK_0729
+            if str(row.get("ticker") or "").upper() not in ("", "CASH")
+        ]
         return _FakeClient(
             tables={
-                "positions": list(books if books is not None else [*_BOOK_0729, *_BOOK_0731]),
-                "price_history": list(self.prices),
+                "positions": position_rows,
+                "nav_history": [{"date": "2026-07-29", "nav": "1000000"}],
+                "price_history": list(self.prices) + seed_closes,
                 _TABLES["commits"]: (
                     [{"id": _lid("commit"), "run_date": _RUN_D}] if with_commit else []
                 ),
@@ -594,10 +673,12 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the kill switch to its default-on state for every test in this module.
 
     ``ledger_enabled`` reads the process environment and defaults to **on**, so a
-    developer with ``OLYMPUS_PORTFOLIO_LEDGER=0`` exported would otherwise see the whole
+    developer with ``DIGIQUANT_PORTFOLIO_LEDGER=0`` (or alias
+    ``OLYMPUS_PORTFOLIO_LEDGER=0``) exported would otherwise see the whole
     authoritative path silently skipped and the suite still pass.
     """
     monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
+    monkeypatch.delenv("DIGIQUANT_PORTFOLIO_LEDGER", raising=False)
 
 
 class TestOpenMarksAreDecimal:
@@ -739,6 +820,16 @@ class TestBuildEventsFromPaperFills:
             "DBO": "EXIT",  # sell all 30
         }
 
+    def test_ledger_projection_stamps_authoritative_book_source(self) -> None:
+        """#2422: ledger fills must never land unlabeled or as legacy."""
+        events, declined = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert declined == ""
+        assert events is not None
+        assert events
+        assert all(e.get("book_source") == _mod.BOOK_SOURCE_AUTHORITATIVE for e in events)
+
     def test_a_rejected_order_produces_no_event(self) -> None:
         """No declared open means no fill, and no fill means no invented event row.
 
@@ -783,6 +874,28 @@ class TestBuildEventsFromPaperFills:
         assert by_ticker["FXI"]["prev_weight_pct"] is None  # not on the 07-29 book
         assert "07-29" in by_ticker["UUP"]["reason"]
         assert "display only" in by_ticker["UUP"]["reason"]
+
+    def test_dust_fill_with_unchanged_display_weight_is_hold(self) -> None:
+        """House 2026-09-01 FXI/VGK/XLF: ~0.05–0.14 share true-ups at the same 5/25/20%.
+
+        Activity names the event from the fill, so a lot-level true-up became ADD/TRIM
+        of +0.0pp. OPEN/EXIT still come from residual quantity (#1743); only ADD/TRIM
+        whose displayed weight did not move at 1-decimal pp collapse to HOLD.
+        """
+        ledger = (
+            _Ledger()
+            .order("IJR", "add", "0.14", weight="0.05", mark="35.36")
+            .holding("IJR", "100", open_price="35.00")
+        )
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert declined == ""
+        assert events is not None
+        ijr = _events_by_ticker(events)["IJR"]
+        assert ijr["event"] == "HOLD"
+        assert ijr["weight_pct"] == pytest.approx(5.0)
+        assert ijr["prev_weight_pct"] == pytest.approx(5.0)
 
     def test_a_trim_that_closes_the_position_is_an_exit(self) -> None:
         """The #1743 class of mislabelling, from the other direction.
@@ -892,7 +1005,7 @@ class TestBuildEventsFromPaperFillsDeclines:
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
         assert events is None
-        assert "OLYMPUS_PORTFOLIO_LEDGER" in declined
+        assert "DIGIQUANT_PORTFOLIO_LEDGER" in declined
 
     def test_declines_when_a_ledger_read_raises(self) -> None:
         """Production's migration tail is 065, so the tables are not there yet.
@@ -943,6 +1056,58 @@ class TestBuildEventsFromPaperFillsDeclines:
         )
         assert events is None
         assert "ISO-8601" in declined
+
+    def test_declines_when_opening_snapshot_seed_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cold start with a held book must not reach execute if seeding cannot complete."""
+
+        def _fail(_client: Any, _book_date: Any, now: Any = None) -> tuple[bool, str]:
+            del _client, _book_date, now
+            return False, "nav_history.nav missing or non-positive for 2026-07-29"
+
+        monkeypatch.setattr(
+            "digiquant.olympus.hermes.writers.opening_snapshot.ensure_legacy_opening_snapshot",
+            _fail,
+        )
+        # Pending trim, no lots — cold-start without a successful seed.
+        ledger = _Ledger().order("XLF", "trim", "10", weight="0.15", mark="52.10")
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert events is None
+        assert "nav_history" in declined
+
+
+class TestBuildEventsOpeningSnapshotSeed:
+    """#2589: auto-seed lots so a first trim is not mislabeled EXIT."""
+
+    def test_seeded_prior_quantity_keeps_a_partial_trim_as_trim(self) -> None:
+        # No prior lots on the ledger, but the positions book holds XLF. Seed must open
+        # lots before execute measures residuals — otherwise prior=0 and TRIM→EXIT.
+        ledger = _Ledger().order("XLF", "trim", "10", weight="0.15", mark="52.10")
+        client = ledger.client(
+            books=[
+                {
+                    "date": "2026-07-29",
+                    "ticker": "XLF",
+                    "weight_pct": "10",
+                    "entry_price": "50",
+                },
+                {"date": "2026-07-29", "ticker": "CASH", "weight_pct": "90"},
+            ]
+        )
+        client.tables["nav_history"] = [{"date": "2026-07-29", "nav": "100000"}]
+        # price_history close fallback if entry_price were missing; entry_price is set.
+        client.tables.setdefault("price_history", []).append(
+            {"ticker": "XLF", "date": "2026-07-29", "close": "50"}
+        )
+
+        events, declined = _mod.build_events_from_paper_fills(client, _RUN_D, _EXEC_D, now=_NOW)
+        assert declined == ""
+        assert events is not None
+        by_ticker = _events_by_ticker(events)
+        assert by_ticker["XLF"]["event"] == "TRIM"
 
 
 class TestAnAllRejectedDayIsNotAQuietDay:
@@ -1022,7 +1187,10 @@ class TestMainPrefersTheLedger:
         recorded = {row["ticker"]: row for row in sb.upserts}
         assert recorded["FXI"]["event"] == "OPEN"
         assert recorded["DBO"]["event"] == "EXIT"
-        assert all(row["_on_conflict"] == "date,ticker" for row in sb.upserts)
+        # T0 (#5-T0): migration 097 widened UNIQUE to (workspace_id, date, ticker);
+        # the writer stamps house workspace_id and targets that composite key.
+        assert all(row["_on_conflict"] == "workspace_id,date,ticker" for row in sb.upserts)
+        assert all("workspace_id" in row for row in sb.upserts)
 
     def test_held_names_still_get_hold_continuity_rows(
         self, monkeypatch: pytest.MonkeyPatch

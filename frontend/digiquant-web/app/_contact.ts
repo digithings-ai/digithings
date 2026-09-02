@@ -3,13 +3,13 @@
 export const CONTACT_SELF_FEATURES = [
   "The full research and portfolio-construction stack — execution is not built yet",
   "MIT-licensed; clone, fork, and run it on hardware you own",
-  "Atlas research, Hermes deliberation, and the backtest pipeline",
+  "Research, portfolio construction, and the backtest pipeline",
   "Your data, your machines, your keys — nothing leaves your infra",
   "Community support on GitHub",
 ] as const;
 
 export const CONTACT_MANAGED_FEATURES = [
-  "A hosted Olympus runner, operated for you — in development",
+  "A hosted digiquant runner, operated for you — in development",
   "Onboarding and custom strategy setup",
   "Priority fixes and a say in the roadmap",
   "Optional on-prem / VPC deployment",
@@ -17,4 +17,4 @@ export const CONTACT_MANAGED_FEATURES = [
 ] as const;
 
 export const MANAGED_CONTACT_MAILTO =
-  "mailto:contact@digiquant.io?subject=Managed%20Olympus";
+  "mailto:contact@digiquant.io?subject=Managed%20digiquant";

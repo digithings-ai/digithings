@@ -14,7 +14,7 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
 Scheduled cron policy (no flags — .github/workflows/pipeline-atlas-metrics.yml):
   Processes **today (UTC)** only, and exits 3 when no positions book exists for that
   date instead of silently re-processing the previous one. Re-processing upserts
-  on_conflict='date', so it re-stamps generated_at on a row whose as_of_date never
+  on_conflict='workspace_id,date', so it re-stamps generated_at on a row whose as_of_date never
   moved: 22 of the 33 green runs between 2026-06-22 and 2026-07-31 advanced no date,
   and the 2026-06-26 row was rewritten on 2026-07-16 — twenty days later (#1746).
 
@@ -48,10 +48,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from digiquant.olympus.accounting.io import (
+    period_day_return_pct,
+    select_final_period,
+)
 from digiquant.olympus.performance_returns import (
     PerformanceReturns,
     calculate_performance_returns,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
 _METRIC_CLEAR = (
@@ -60,6 +65,14 @@ _METRIC_CLEAR = (
     "since_entry_return_pct",
     "metrics_as_of",
 )
+
+
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
 
 try:
     from supabase import create_client  # type: ignore
@@ -110,11 +123,11 @@ def _fetch_closes(sb, ticker: str, dates: List[str]) -> Dict[str, float]:
 
 
 def _max_positions_date(sb) -> Optional[date]:
-    r = sb.table("positions").select("date").order("date", desc=True).limit(1).execute()
+    r = _eq_house(sb.table("positions").select("date")).order("date", desc=True).limit(1).execute()
     data = getattr(r, "data", None) or []
     if not data:
         return None
-    return datetime.strptime(str(data[0]["date"])[:10], "%Y-%m-%d").date()
+    return date.fromisoformat(str(data[0]["date"])[:10])
 
 
 _EXIT_STALE_BOOK = 3
@@ -124,7 +137,7 @@ class StaleBookError(RuntimeError):
     """The scheduled run found no ``positions`` book for the date it targets.
 
     Raised instead of falling back to ``max(positions.date)``: ``portfolio_metrics``
-    is upserted ``on_conflict='date'``, so re-processing an older date rewrites that
+    is upserted ``on_conflict='workspace_id,date'``, so re-processing an older date rewrites that
     row's ``generated_at`` while its ``as_of_date`` never moves. The dashboard then
     serves a stale date behind a green cron (#1746).
     """
@@ -173,12 +186,13 @@ def carry_forward_positions(sb, as_of: str) -> int:
     Weights and static fields carry forward; performance fields are cleared and
     filled by ``refresh_positions_metrics``. Returns rows inserted (0 if skipped).
     """
-    probe = sb.table("positions").select("ticker").eq("date", as_of).limit(1).execute()
+    probe = (
+        _eq_house(sb.table("positions").select("ticker")).eq("date", as_of).limit(1).execute()
+    )
     if getattr(probe, "data", None):
         return 0
     snap = (
-        sb.table("positions")
-        .select("date")
+        _eq_house(sb.table("positions").select("date"))
         .lt("date", as_of)
         .order("date", desc=True)
         .limit(1)
@@ -189,7 +203,7 @@ def carry_forward_positions(sb, as_of: str) -> int:
         print(f"⚠️  carry_forward {as_of}: no prior positions snapshot")
         return 0
     prev = str(snap_data[0]["date"])[:10]
-    res = sb.table("positions").select("*").eq("date", prev).execute()
+    res = _eq_house(sb.table("positions").select("*")).eq("date", prev).execute()
     rows: List[Dict[str, Any]] = getattr(res, "data", None) or []
     if not rows:
         return 0
@@ -197,12 +211,15 @@ def carry_forward_positions(sb, as_of: str) -> int:
     for r in rows:
         row = {k: v for k, v in r.items() if k not in _POSITION_INSERT_SKIP}
         row["date"] = as_of
+        row["workspace_id"] = _house_id()
         for k in _METRIC_CLEAR:
             row[k] = None
         inserts.append(row)
     CHUNK = 500
     for i in range(0, len(inserts), CHUNK):
-        sb.table("positions").upsert(inserts[i : i + CHUNK], on_conflict="date,ticker").execute()
+        sb.table("positions").upsert(
+            inserts[i : i + CHUNK], on_conflict="workspace_id,date,ticker"
+        ).execute()
     print(f"✅ positions {as_of}: carried forward {len(inserts)} row(s) from {prev}")
     return len(inserts)
 
@@ -215,7 +232,9 @@ def _performance_returns_from_history(
     sb, as_of: str, benchmark_ticker: str = _PERFORMANCE_BENCHMARK
 ) -> PerformanceReturns:
     """Calculate the persisted cumulative return fields through ``as_of``."""
-    nav_res = sb.table("nav_history").select("date,nav").lte("date", as_of).order("date").execute()
+    nav_res = (
+        _eq_house(sb.table("nav_history").select("date,nav")).lte("date", as_of).order("date").execute()
+    )
     nav_rows = [
         row
         for row in (getattr(nav_res, "data", None) or [])
@@ -244,39 +263,50 @@ def _performance_returns_from_history(
     )
 
 
-def _sum_attribution_pnl(sb, as_of: str) -> Optional[float]:
-    """SUM of non-CASH position_attribution.contribution_pct for ``as_of``.
+def _pnl_pct_from_final_accounting(sb, as_of: str) -> Optional[float]:
+    """Day return % from a complete ``status=final`` accounting period (#2597/#2598).
 
-    Returns None when no attribution rows exist for the date (e.g. first run,
-    or the attribution script has not yet been run). Falls back to None rather
-    than silently returning 0 so callers can distinguish "no data" from "0% day".
+    Authoritative daily realized return. Never reads ``current_book_lookback`` /
+    legacy ``position_attribution`` (21-day static-book diagnostic). Falls through
+    to provisional H9 ``nav_history`` only when no final period exists — job order
+    with the lookback refresh cannot alter daily ``pnl_pct`` semantics.
+    Provisional H9 rows are never selected as final.
     """
-    res = (
-        sb.table("position_attribution")
-        .select("ticker,contribution_pct")
-        .eq("date", as_of)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    non_cash = [
-        float(r["contribution_pct"])
-        for r in rows
-        if r.get("ticker") != "CASH" and r.get("contribution_pct") is not None
-    ]
-    if not non_cash:
+    try:
+        period_date = date.fromisoformat(as_of[:10])
+        row = select_final_period(client=sb, period_date=period_date)
+    except Exception:
         return None
-    return round(sum(non_cash), 6)
+    if row is None:
+        return None
+    pct = period_day_return_pct(row)
+    if pct is None:
+        return None
+    return round(pct, 6)
+
+
+def _sum_attribution_pnl(sb, as_of: str) -> Optional[float]:
+    """Deprecated (#2598): lookback must not feed daily ``pnl_pct``.
+
+    Retained as a no-op stub so older call sites / tests importing the name fail
+    closed (always ``None``) rather than silently reintroducing the 21-day sum.
+    Realized daily contribution is ``daily_realized_attribution`` / final periods only.
+    """
+    del sb, as_of
+    return None
 
 
 def _nav_history_count(sb, as_of: str) -> int:
     """Count of nav_history rows up to and including ``as_of`` (for history-length gate)."""
-    res = sb.table("nav_history").select("date").lte("date", as_of).execute()
+    res = _eq_house(sb.table("nav_history").select("date")).lte("date", as_of).execute()
     return len(getattr(res, "data", None) or [])
 
 
 def _risk_metrics_from_nav_history(sb, as_of: str) -> dict[str, float] | None:
     """Compute Sharpe, annualized vol %, and max drawdown % from nav_history through ``as_of``."""
-    res = sb.table("nav_history").select("date,nav").lte("date", as_of).order("date").execute()
+    res = (
+        _eq_house(sb.table("nav_history").select("date,nav")).lte("date", as_of).order("date").execute()
+    )
     rows = getattr(res, "data", None) or []
     navs = [float(r["nav"]) for r in rows if r.get("nav") is not None]
     if len(navs) < _MIN_HISTORY_ROWS:
@@ -318,37 +348,46 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     tear-sheet risk metrics. Otherwise upserts with ``computed_from='refresh_script'``
     (or ``'refresh_script_insufficient_history'``
     when nav_history has < 20 rows):
-    - ``pnl_pct`` derived from SUM(position_attribution.contribution_pct) for
-      non-CASH positions on ``as_of``; falls back to nav-based day return when no
-      attribution rows exist yet (#814).  The nav fallback computes
-      ``(nav - nav_prev) / nav_prev * 100`` using the most recent prior nav_history
-      row — NOT ``nav - 100`` (which would be total-return-since-inception and wrong
-      on any day past inception).  When no prior nav row exists the fallback yields
-      None rather than a misleading value.
+    - ``pnl_pct`` prefers a complete ``status=final`` accounting period (#2597/#2598),
+      then provisional H9 nav day return (#814). Never SUM of
+      ``current_book_lookback`` / legacy ``position_attribution`` (21-day diagnostic;
+      OLY-REV-007 / Task 3.3). Job order with the lookback refresh is irrelevant.
+      The nav fallback computes ``(nav - nav_prev) / nav_prev * 100`` using the
+      most recent prior nav_history row — NOT ``nav - 100``. When no prior nav
+      row exists the fallback yields None rather than a misleading value.
     - ``sharpe`` / ``volatility`` / ``max_drawdown`` computed from nav_history when
       there are >= 20 rows; otherwise NULL.  ``alpha`` is carried from the prior row
       when history is sufficient.  ``computed_from`` is
       ``'refresh_script_insufficient_history'`` when the history gate fails.
     """
-    ex = sb.table("portfolio_metrics").select("computed_from").eq("date", as_of).limit(1).execute()
+    ex = (
+        _eq_house(sb.table("portfolio_metrics").select("computed_from"))
+        .eq("date", as_of)
+        .limit(1)
+        .execute()
+    )
     if getattr(ex, "data", None) and ex.data[0].get("computed_from") == "tearsheet":
         performance_returns = _performance_returns_from_history(sb, as_of)
-        sb.table("portfolio_metrics").update(
+        _eq_house(sb.table("portfolio_metrics").update(
             {
                 "net_return_pct": performance_returns.net_return_pct,
                 "benchmark_return_pct": performance_returns.benchmark_return_pct,
                 "relative_return_pct": performance_returns.relative_return_pct,
                 "benchmark_ticker": performance_returns.benchmark_ticker,
             }
-        ).eq("date", as_of).execute()
+        )).eq("date", as_of).execute()
         print(f"   portfolio_metrics {as_of}: backfilled returns (tearsheet row preserved)")
         return
 
-    # pnl_pct: prefer attribution-derived sum (the real per-position return #814);
-    # fall back to day-over-day nav return when attribution is missing.
-    pnl_pct = _sum_attribution_pnl(sb, as_of)
+    # pnl_pct precedence (#2597/#2598 / OLY-REV-007):
+    #   1. Finalized event-boundary accounting period (job-order independent)
+    #   2. Provisional H9 nav_history day return (continuity, never authoritative final)
+    # Never: current_book_lookback / position_attribution (21-day diagnostic).
+    pnl_pct = _pnl_pct_from_final_accounting(sb, as_of)
+    if pnl_pct is not None:
+        print(f"   portfolio_metrics {as_of}: pnl_pct from finalized accounting period")
     if pnl_pct is None:
-        nav_res = sb.table("nav_history").select("nav").eq("date", as_of).limit(1).execute()
+        nav_res = _eq_house(sb.table("nav_history").select("nav")).eq("date", as_of).limit(1).execute()
         nav_data = getattr(nav_res, "data", None) or []
         nav = float(nav_data[0]["nav"]) if nav_data else None
         # Fetch the most recent nav_history row strictly before as_of to derive a
@@ -357,8 +396,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         nav_prev: Optional[float] = None
         if nav is not None:
             prev_nav_res = (
-                sb.table("nav_history")
-                .select("nav")
+                _eq_house(sb.table("nav_history").select("nav"))
                 .lt("date", as_of)
                 .order("date", desc=True)
                 .limit(1)
@@ -369,11 +407,13 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
                 nav_prev = float(prev_nav_data[0]["nav"])
         if nav is not None and nav_prev is not None and nav_prev > 0:
             pnl_pct = round((nav - nav_prev) / nav_prev * 100.0, 4)
-            print(f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no attribution rows)")
+            print(f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no final accounting)")
         else:
             pnl_pct = None
 
-    pos_res = sb.table("positions").select("ticker,weight_pct").eq("date", as_of).execute()
+    pos_res = (
+        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", as_of).execute()
+    )
     prow = getattr(pos_res, "data", None) or []
     total_invested = 0.0
     for p in prow:
@@ -394,8 +434,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         volatility = risk_metrics["volatility"]
         max_drawdown = risk_metrics["max_drawdown"]
         prev_m = (
-            sb.table("portfolio_metrics")
-            .select("alpha")
+            _eq_house(sb.table("portfolio_metrics").select("alpha"))
             .lt("date", as_of)
             .order("date", desc=True)
             .limit(1)
@@ -411,6 +450,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     )
     row = {
         "date": as_of,
+        "workspace_id": _house_id(),
         "pnl_pct": pnl_pct,
         "sharpe": sharpe,
         "volatility": volatility,
@@ -425,7 +465,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         "as_of_date": as_of,
         "generated_at": ts,
     }
-    sb.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
+    sb.table("portfolio_metrics").upsert(row, on_conflict="workspace_id,date").execute()
     suffix = "" if has_sufficient_history else " [insufficient_history — risk metrics NULL]"
     print(f"✅ portfolio_metrics {as_of}: upserted ({computed_from}){suffix}")
 
@@ -461,7 +501,7 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
     patched = patch_positions_entries_for_date(sb, metrics_date)
     if patched:
         print(f"   entry_price filled from position_events: {patched} row(s)")
-    res = sb.table("positions").select("*").eq("date", metrics_date).execute()
+    res = _eq_house(sb.table("positions").select("*")).eq("date", metrics_date).execute()
     rows: List[Dict[str, Any]] = getattr(res, "data", None) or []
     prev_d = _prev_trading_date(sb, "SPY", metrics_date)
     if not prev_d:
@@ -547,15 +587,25 @@ def refresh_positions_metrics(sb, metrics_date: str) -> int:
                 "metrics_as_of": price_date,
                 "current_price": c_now,
             }
-        sb.table("positions").update(patch).eq("date", metrics_date).eq("ticker", t).execute()
+        (
+            _eq_house(sb.table("positions").update(patch))
+            .eq("date", metrics_date)
+            .eq("ticker", t)
+            .execute()
+        )
         updated += 1
     return updated
 
 
 def refresh_event_cumulative(sb, as_of: str) -> int:
     """Fill cumulative_return_since_event_pct for recent events with prices."""
-    cut = (datetime.strptime(as_of, "%Y-%m-%d").date() - timedelta(days=120)).isoformat()
-    res = sb.table("position_events").select("*").gte("date", cut).lte("date", as_of).execute()
+    cut = (date.fromisoformat(as_of) - timedelta(days=120)).isoformat()
+    res = (
+        _eq_house(sb.table("position_events").select("*"))
+        .gte("date", cut)
+        .lte("date", as_of)
+        .execute()
+    )
     events = getattr(res, "data", None) or []
     n = 0
     for ev in events:
@@ -568,15 +618,24 @@ def refresh_event_cumulative(sb, as_of: str) -> int:
         c1 = cmap.get(as_of)
         if c0 and c1 and c0 > 0:
             pct = (c1 - c0) / c0 * 100.0
-            sb.table("position_events").update({"cumulative_return_since_event_pct": pct}).eq(
-                "id", ev["id"]
-            ).execute()
+            (
+                _eq_house(
+                    sb.table("position_events").update({"cumulative_return_since_event_pct": pct})
+                )
+                .eq("id", ev["id"])
+                .execute()
+            )
             n += 1
     return n
 
 
 def refresh_nav_point(sb, as_of: str) -> None:
     """Append/update indexed NAV for `as_of`.
+
+    When a complete ``status=final`` accounting period exists for ``as_of`` (#2597),
+    the indexed point compounds the prior nav by that period's event-boundary return.
+    Otherwise the legacy exact-date weight × close-to-close path runs (provisional
+    H9 continuity). Public curated views still label legacy estimates until Task 3.4.
 
     On non-trading days (weekends / holidays) price_history carries forward the
     prior close, so every position's return is 0 and NAV stays flat — giving the
@@ -587,8 +646,7 @@ def refresh_nav_point(sb, as_of: str) -> None:
     """
     # Fetch the most recent NAV before as_of (needed whether trading day or not)
     nav_res = (
-        sb.table("nav_history")
-        .select("date, nav")
+        _eq_house(sb.table("nav_history").select("date, nav"))
         .lt("date", as_of)
         .order("date", desc=True)
         .limit(1)
@@ -597,14 +655,32 @@ def refresh_nav_point(sb, as_of: str) -> None:
     nav_data = getattr(nav_res, "data", None) or []
     prev_nav = float(nav_data[0]["nav"]) if nav_data else 100.0
 
+    acct_pct = _pnl_pct_from_final_accounting(sb, as_of)
+    if acct_pct is not None:
+        new_nav = prev_nav * (1.0 + acct_pct / 100.0)
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        sb.table("nav_history").upsert(
+            {
+                "workspace_id": _house_id(),
+                "date": as_of,
+                "nav": round(new_nav, 6),
+                "updated_at": ts,
+            },
+            on_conflict="workspace_id,date",
+        ).execute()
+        print(
+            f"✅ nav_history {as_of}: nav={new_nav:.4f} "
+            f"(from finalized accounting return {acct_pct}%)"
+        )
+        return
+
     # Try exact-date positions snapshot first; fall back to most recent prior snapshot.
-    pos_res = sb.table("positions").select("*").eq("date", as_of).execute()
+    pos_res = _eq_house(sb.table("positions").select("*")).eq("date", as_of).execute()
     pos_rows = getattr(pos_res, "data", None) or []
     if not pos_rows:
         # No snapshot for as_of — find the most recent one
         snap_res = (
-            sb.table("positions")
-            .select("date")
+            _eq_house(sb.table("positions").select("date"))
             .lt("date", as_of)
             .order("date", desc=True)
             .limit(1)
@@ -613,7 +689,7 @@ def refresh_nav_point(sb, as_of: str) -> None:
         snap_data = getattr(snap_res, "data", None) or []
         if snap_data:
             snap_date = str(snap_data[0]["date"])[:10]
-            all_res = sb.table("positions").select("*").eq("date", snap_date).execute()
+            all_res = _eq_house(sb.table("positions").select("*")).eq("date", snap_date).execute()
             pos_rows = getattr(all_res, "data", None) or []
 
     # Get previous day's price date (will be yesterday for every calendar day now
@@ -622,10 +698,15 @@ def refresh_nav_point(sb, as_of: str) -> None:
 
     if not prev_d or not pos_rows:
         # No price history at all or no positions anywhere — just carry forward
-        ts = datetime.utcnow().isoformat() + "Z"
+        ts = datetime.now(tz=timezone.utc).isoformat()
         sb.table("nav_history").upsert(
-            {"date": as_of, "nav": round(prev_nav, 6), "updated_at": ts},
-            on_conflict="date",
+            {
+                "workspace_id": _house_id(),
+                "date": as_of,
+                "nav": round(prev_nav, 6),
+                "updated_at": ts,
+            },
+            on_conflict="workspace_id,date",
         ).execute()
         print(f"✅ nav_history {as_of}: nav={prev_nav:.4f} (carried forward — no data)")
         return
@@ -644,12 +725,17 @@ def refresh_nav_point(sb, as_of: str) -> None:
         if p0 and p1 and p0 > 0:
             dr += w * (p1 - p0) / p0
     new_nav = prev_nav * (1.0 + dr)
-    ts = datetime.utcnow().isoformat() + "Z"
+    ts = datetime.now(tz=timezone.utc).isoformat()
     sb.table("nav_history").upsert(
-        {"date": as_of, "nav": round(new_nav, 6), "updated_at": ts},
-        on_conflict="date",
+        {
+            "workspace_id": _house_id(),
+            "date": as_of,
+            "nav": round(new_nav, 6),
+            "updated_at": ts,
+        },
+        on_conflict="workspace_id,date",
     ).execute()
-    print(f"✅ nav_history {as_of}: nav={new_nav:.4f} (prev={prev_nav:.4f})")
+    print(f"✅ nav_history {as_of}: nav={new_nav:.4f} (prev={prev_nav:.4f}; provisional path)")
 
 
 def run_one_day(sb, metrics_date: str) -> None:
@@ -702,7 +788,7 @@ def main() -> int:
 
     sb = _sb()
     if args.fill_through:
-        fill_calendar_through(sb, datetime.strptime(args.fill_through, "%Y-%m-%d").date())
+        fill_calendar_through(sb, date.fromisoformat(args.fill_through))
         return 0
     if args.date:
         run_one_day(sb, args.date)

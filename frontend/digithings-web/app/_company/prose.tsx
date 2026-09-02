@@ -1,5 +1,5 @@
 /** Shared prose atoms for the company pages (/about, /team, /security,
- *  /quality, /services, /legal/*).
+ *  /quality, /services, /legal/*, /brand).
  *
  *  These are composition helpers, not a new UI family: every one of them emits
  *  existing canon classes (.kicker, .hero-title, .section, .wrap) plus
@@ -22,7 +22,7 @@ export function Mono({ children }: { children: ReactNode }) {
   return <code className="font-mono text-[0.92em] text-ink">{children}</code>;
 }
 
-/** The standing page opener: mono kicker, serif .hero-title, one lede
+/** The standing page opener: `//` kicker, mono .hero-title, one lede
  *  paragraph. Mirrors the landing hero's shape at subpage scale (site.css
  *  documents .hero-title as the standalone detail-page title). `pb-0` on the
  *  section lets the first content section own the gap. */

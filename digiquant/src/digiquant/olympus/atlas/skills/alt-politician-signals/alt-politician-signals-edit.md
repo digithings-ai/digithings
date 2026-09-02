@@ -10,7 +10,7 @@ Update an **existing** `alt-politician-signals` document; do not rewrite from sc
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-politician-signals"`.
-Patch paths: `/headline`, `/bias`, `/notable_buys`, `/notable_sells`, `/policy_signal`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

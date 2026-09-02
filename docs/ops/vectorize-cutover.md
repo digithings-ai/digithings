@@ -137,8 +137,38 @@ numbered steps in order could flip live traffic onto an empty or partially
 synced index if the Container cold-boots in the gap between "set secrets" and
 "confirm the sync landed" (#2239 review: setting the secrets is what activates
 Vectorize on next boot, and Cloudflare Containers do sleep and cold-boot
-routinely). Query the index directly and confirm it returns non-zero hits
-first:
+routinely).
+
+### 3a. Wait for async mutation processing (#2236)
+
+Vectorize upserts are **asynchronous**. The upsert API enqueues vectors and
+returns a *mutation id* — it does not mean every vector (or its metadata) is
+queryable yet. `wrangler vectorize info` exposes `processedUpToMutation` and
+`processedUpToDatetime` precisely because there is a lag between "sync script
+finished" and "index content is current."
+
+After the apply pass in step 2, note the **`sync_completed_at`** timestamp (and
+**`last_mutation_id`**, when printed) that `scripts/vectorize_sync.py` emits on
+stderr. Then poll until processing has caught up:
+
+```bash
+npx wrangler vectorize info digithings_docs
+```
+
+Confirm **`processedUpToDatetime`** is **at or after** the sync's
+`sync_completed_at` time. If it is still earlier, wait 30–60 seconds and re-run
+`info` — do **not** treat an early query as evidence of failure.
+
+`vectorCount` from `info` often updates quickly, but **per-vector metadata can
+lag** (observed during the real cutover: counts looked right while
+`segment_label` in query matches was still stale for ~1 minute). A
+`vectorCount > 0` check alone is **not** sufficient proof that a re-sync's
+content has landed.
+
+### 3b. Query the index directly
+
+Only after 3a passes, query the index and confirm it returns non-zero hits
+with the expected metadata:
 
 ```bash
 npx wrangler vectorize info digithings_docs   # vectorCount should be > 0
@@ -153,8 +183,11 @@ vector instead of erroring, which manufactures the exact false-negative this
 step exists to catch. Confirm the corrected form actually parses to 384
 numbers before relying on it (`... | wc -w` should read `384`).
 
-An empty `matches` array, or `vectorCount: 0` from `info`, means the sync did
-not land — **stop here, do not proceed to step 4.** Repeat for `occ_help`.
+An empty `matches` array right after a sync that printed a successful upsert
+count usually means **processing has not caught up yet** — re-check 3a and
+re-query. Only treat empty/stale results as a hard failure once
+`processedUpToDatetime` is current and matches still look wrong. Repeat 3a–3b
+for `occ_help`.
 
 ## 4. Set the two secrets — only once step 3 passed for both indexes
 

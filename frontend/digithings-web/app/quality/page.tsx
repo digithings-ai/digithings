@@ -125,7 +125,7 @@ const LANES: { term: string; body: string }[] = [
     body:
       "Seventeen test workflows, most of them one per component, fired by a path filter so a change " +
       "to digikey does not wait on the quant suite. Four of the seventeen are cross-cutting instead: " +
-      "end-to-end, the scoring job, the isolated Nautilus run, and the Atlas graph spec. Adding a " +
+      "end-to-end, the scoring job, the isolated Nautilus run, and the research graph spec. Adding a " +
       "component means wiring its lane; the filter is explicit rather than inferred.",
   },
   {
@@ -199,7 +199,7 @@ const LIMITS: { term: string; body: string }[] = [
       "The score job excludes frontend/** entirely: the rubrics are Python-oriented and misfire on " +
       "JS and CSS. Presentation work is gated instead by secret scanning, the canon guard, lint, and " +
       "a production build that fails on a type error. Only two of the front ends — the chat UI and " +
-      "the Olympus dashboard — run their test suites in CI; the marketing sites and the shared " +
+      "the digiquant dashboard — run their test suites in CI; the marketing sites and the shared " +
       "component package have no CI test lane, so their tests are a local discipline. A narrower " +
       "net, honestly narrower.",
   },

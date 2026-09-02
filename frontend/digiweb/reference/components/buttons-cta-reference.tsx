@@ -44,10 +44,9 @@ export function ButtonsCtaReference() {
       <p className="kicker">{"// buttons & ctas"}</p>
       <h2 className="title">One loud thing per viewport.</h2>
       <p className="section-copy">
-        Graphite and x.ai both run a single saturated CTA against an otherwise flat surface —
-        every other control recedes to hairline outlines. The magnetic button below is the one
-        earned exception to law 05 (one motion moment): a CTA may track the cursor because it is
-        the single decision on the page.
+        Utilitarian v0.1: the loud control is a white/ink rectangle — not an accent pill. Accent is
+        reserved for focus, live state, and identity. Every sibling control recedes to a hairline
+        outline. The magnetic button below is the one earned exception to the one-motion-moment law.
       </p>
 
       <div className="btn-row">

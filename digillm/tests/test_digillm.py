@@ -450,22 +450,22 @@ def test_openrouter_usage_cost_reads_typed_extra_and_missing() -> None:
     extra_only.cost = None
     extra_only.model_extra = {"cost": 0.009}
     assert client_mod._openrouter_usage_cost(extra_only) == pytest.approx(0.009)
-    # No usage / no cost / non-numeric → 0.0 (non-OpenRouter providers report no cost).
-    assert client_mod._openrouter_usage_cost(None) == 0.0
+    # No usage / no cost / non-numeric → None (never fabricate 0 — #2763 / WP1).
+    assert client_mod._openrouter_usage_cost(None) is None
     none_cost = MagicMock(spec=["cost", "model_extra"])
     none_cost.cost = None
     none_cost.model_extra = {}
-    assert client_mod._openrouter_usage_cost(none_cost) == 0.0
+    assert client_mod._openrouter_usage_cost(none_cost) is None
     bad = MagicMock(spec=["cost", "model_extra"])
     bad.cost = "free"
     bad.model_extra = None
-    assert client_mod._openrouter_usage_cost(bad) == 0.0
-    # Non-finite / negative cost must not poison run-level aggregation → clamped to 0.0.
+    assert client_mod._openrouter_usage_cost(bad) is None
+    # Non-finite / negative cost must not poison run-level aggregation → None.
     for bad_value in (float("nan"), float("inf"), -0.5, "nan", "inf"):
         nf = MagicMock(spec=["cost", "model_extra"])
         nf.cost = bad_value
         nf.model_extra = None
-        assert client_mod._openrouter_usage_cost(nf) == 0.0
+        assert client_mod._openrouter_usage_cost(nf) is None
 
 
 def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1743,11 +1743,30 @@ def test_create_with_retry_propagates_non_transient() -> None:
         client_mod._create_with_retry(fake_client, model="m", messages=[])
 
 
+def test_optional_nonnegative_int_rejects_bool_as_unavailable() -> None:
+    """``bool`` subclasses ``int``; False must stay unavailable, never measured zero (#1989)."""
+    assert client_mod._optional_nonnegative_int(False) is None
+    assert client_mod._optional_nonnegative_int(True) is None
+    assert client_mod._optional_nonnegative_int(None) is None
+    assert client_mod._optional_nonnegative_int(-1) is None
+    assert client_mod._optional_nonnegative_int(0) == 0
+    assert client_mod._optional_nonnegative_int(3) == 3
+
+
 def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
-    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries.
+
+    We deliberately omit ``max_retries`` so the SDK default applies. Pin that default to the
+    documented figure (``DEFAULT_MAX_RETRIES``) — otherwise the canary stays green while an
+    unbounded ``openai`` resolve silently retunes how many HTTP exchanges hide under one
+    attempt record (#1989).
+    """
+    from openai._constants import DEFAULT_MAX_RETRIES
+
     made = _capture_client_kwargs(digillm.get_client)
     assert len(made) == 1
     assert "max_retries" not in made[0]
+    assert DEFAULT_MAX_RETRIES == 2
 
 
 @pytest.mark.parametrize(
@@ -2104,3 +2123,12 @@ def test_empty_retry_new_name_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) 
         or "5.0"
     )
     assert float(backoff_raw) == 8.0, "new DIGILLM_EMPTY_RETRY_BACKOFF must win over legacy name"
+
+
+def test_client_compatibility_facade_reexports_split_helpers() -> None:
+    """The historic client import path remains valid after internal modules split."""
+    from digillm import cache, overrides, types
+
+    assert client_mod.ToolDefinition is types.ToolDefinition
+    assert client_mod.byok is overrides.byok
+    assert client_mod._llm_cache_key is cache.llm_cache_key

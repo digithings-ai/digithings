@@ -40,6 +40,19 @@ except ImportError:
     _HAS_SB = False
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
@@ -61,7 +74,12 @@ def _iter_trading_days(start: dt_date, end: dt_date) -> list[str]:
 
 
 def _max_event_date(sb):
-    res = sb.table("position_events").select("date").order("date", desc=True).limit(1).execute()
+    res = (
+        eq_house_workspace(sb.table("position_events").select("date"))
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     if not rows:
         return None
@@ -135,20 +153,19 @@ def main() -> int:
     for d in days:
         print(f"\n--- {d} ---")
         if args.dry_run:
-            print(f"  [dry-run] {py} {exe_script} --date {d} --no-ledger")
+            print(f"  [dry-run] {py} {exe_script} --date {d} --require-ledger")
             print(
-                f"  [dry-run] {py} {exe_script} --date {d} --no-ledger"
+                f"  [dry-run] {py} {exe_script} --date {d} --require-ledger"
                 f" --prior-trading-day-rebalance  (if needed)"
             )
             continue
 
         # 1) Same-day rebalance_decision
-        # --no-ledger for the same reason pipeline-digiquant-prices.yml passes it (#2508): the
-        # ledger kill switch defaults on, and until lots are seeded the ledger path books EXIT
-        # for every trim and OPEN for every add into rows migration 069 makes append-only. A
-        # repair run is the worst place to discover that, so this script defers the cutover too.
+        # --require-ledger matches pipeline-digiquant-prices.yml (#2589): opening-snapshot
+        # seed + cold-start decline keep empty lots from inventing OPEN/EXIT; requiring the
+        # ledger prevents a silent prose fallback from hiding a failed handover.
         r1 = subprocess.run(
-            [py, str(exe_script), "--date", d, "--no-ledger"],
+            [py, str(exe_script), "--date", d, "--require-ledger"],
             cwd=str(script_dir),
             capture_output=True,
             text=True,
@@ -160,7 +177,14 @@ def main() -> int:
         out2 = ""
         if need_prior:
             r2 = subprocess.run(
-                [py, str(exe_script), "--date", d, "--no-ledger", "--prior-trading-day-rebalance"],
+                [
+                    py,
+                    str(exe_script),
+                    "--date",
+                    d,
+                    "--require-ledger",
+                    "--prior-trading-day-rebalance",
+                ],
                 cwd=str(script_dir),
                 capture_output=True,
                 text=True,

@@ -21,14 +21,24 @@ exception — it may scale the surviving book UP to fill an unused vol budget, b
 never past the gross / position / sector caps (#943: without an up-scale a quiet book
 drifts monotonically to cash). The pipeline:
 
-    select(conv ≥ min, stance buy/hold)
-      → raw weights (conviction-∝ × inverse-vol, OR fractional-Kelly)
+    select(conv ≥ min, stance buy/hold)  [or calibrated_scores > 0 when cut over]
+      → raw weights (calibrated μ/σ/reliability, OR conviction-∝ × inverse-vol, OR Kelly)
       → position caps (min floor / max cap; freed weight → cash)
       → sector caps (scale down any over-cap bucket; freed weight → cash)
       → correlation de-dup (drop the lower-conviction leg of a > threshold pair → cash)
       → vol-target scale (ex-ante √(wᵀΣw) → up to the budget or down if hot; capped)
       → drawdown-breaker scale (only ever reduces gross)
+      → PM confidence scale (optional; reduce-only / cash-first)
       → round DOWN to the weight grid (remainder → cash) → cash = 100 − Σ
+
+WP8.4 (#2734): when ``calibrated_scores`` is provided, raw weights come from those scores
+(approved policy: reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly
+are not used on that path. Downstream controls are unchanged.
+
+WP-H: optional ``confidence_scales`` (H7 ``confidence`` ∈ [0, 1] per long) haircut each
+name **after** vol-target / breaker and **before** the 5% grid. That is reduce-only /
+cash-first: leftover stays cash and is never renormalized into peers (vol-target must
+not absorb the haircut). Rank remains display/order only on the calibrated path.
 """
 
 from __future__ import annotations
@@ -140,6 +150,24 @@ class SizingResult:
 _ANNUALIZE = 16.0  # ≈ sqrt(252) — daily → annual vol scaling for the ATR fallback
 
 
+def calibrated_raw_score(
+    *,
+    expected_gross_return: float,
+    forecast_error_std: float,
+    reliability_weight: float,
+) -> float:
+    """Approved WP8.4 raw-score policy: reliability × max(0, μ) / σ_ε.
+
+    Negative or zero expected return contributes no long risk (no contrary short).
+    Uncertainty must be strictly positive — never invent zero uncertainty.
+    """
+    if forecast_error_std <= 0:
+        raise ValueError("forecast_error_std must be positive")
+    reliability = max(0.0, float(reliability_weight))
+    alpha = max(0.0, float(expected_gross_return))
+    return reliability * alpha / float(forecast_error_std)
+
+
 def _vol_fraction(risk: TickerRisk | None, caps: SizingCaps) -> float:
     """Annualized vol as a fraction (e.g. 0.20). Falls back atr_pct → default."""
     if risk is not None and risk.hist_vol_21 is not None and risk.hist_vol_21 > 0:
@@ -150,9 +178,24 @@ def _vol_fraction(risk: TickerRisk | None, caps: SizingCaps) -> float:
 
 
 def _select(
-    convictions: Mapping[str, float], stances: Mapping[str, str], min_conviction: float
+    convictions: Mapping[str, float],
+    stances: Mapping[str, str],
+    min_conviction: float,
+    *,
+    calibrated_scores: Mapping[str, float] | None = None,
 ) -> dict[str, float]:
-    """Tickers with effective conviction ≥ bar AND a long-side stance (buy/hold)."""
+    """Tickers entering the book.
+
+    Incumbent: effective conviction ≥ bar AND long-side stance (buy/hold).
+    Calibrated cutover: positive calibrated score AND long-side stance — conviction
+    magnitude is not used for membership.
+    """
+    if calibrated_scores is not None:
+        return {
+            ticker: float(score)
+            for ticker, score in calibrated_scores.items()
+            if float(score) > 0 and str(stances.get(ticker, "hold")).lower() in ("buy", "hold")
+        }
     return {
         ticker: float(conv)
         for ticker, conv in convictions.items()
@@ -162,22 +205,33 @@ def _select(
 
 
 def _raw_weights(
-    selected: Mapping[str, float], risk: Mapping[str, TickerRisk], caps: SizingCaps
+    selected: Mapping[str, float],
+    risk: Mapping[str, TickerRisk],
+    caps: SizingCaps,
+    *,
+    calibrated_scores: Mapping[str, float] | None = None,
 ) -> dict[str, float]:
-    """Raw fractional weights (sum 1.0) before caps. Two modes:
+    """Raw fractional weights (sum 1.0) before caps.
 
+    - Calibrated (WP8.4): w ∝ calibrated_scores (already reliability × max(0,μ) / σ_ε).
     - ``conviction_vol``: w ∝ conviction / vol (conviction-weighted, inverse-vol tilt).
     - ``kelly``: w ∝ fractional-Kelly f = kelly_fraction · edge / vol² where edge scales
-      with conviction.
+      with conviction (incumbent fallback only — absent from live calibrated path).
     """
     scores: dict[str, float] = {}
-    for ticker, conv in selected.items():
-        vol = _vol_fraction(risk.get(ticker), caps)
-        if caps.sizing_mode == "kelly":
-            edge = (conv / 5.0) * caps.kelly_annual_premium
-            scores[ticker] = max(0.0, caps.kelly_fraction * edge / (vol * vol)) if vol > 0 else 0.0
-        else:
-            scores[ticker] = (conv / vol) if vol > 0 else 0.0
+    if calibrated_scores is not None:
+        for ticker in selected:
+            scores[ticker] = max(0.0, float(calibrated_scores.get(ticker, 0.0)))
+    else:
+        for ticker, conv in selected.items():
+            vol = _vol_fraction(risk.get(ticker), caps)
+            if caps.sizing_mode == "kelly":
+                edge = (conv / 5.0) * caps.kelly_annual_premium
+                scores[ticker] = (
+                    max(0.0, caps.kelly_fraction * edge / (vol * vol)) if vol > 0 else 0.0
+                )
+            else:
+                scores[ticker] = (conv / vol) if vol > 0 else 0.0
     total = sum(scores.values())
     if total <= 0:
         # Degenerate (all-zero) → equal weight the selected set.
@@ -464,6 +518,40 @@ def _portfolio_vol(
     return (var if var > 0.0 else 0.0) ** 0.5 * 100.0
 
 
+def _apply_confidence_scales(
+    weights_pct: dict[str, float],
+    confidence_scales: Mapping[str, float] | None,
+    events: list[SizingAdjustment],
+) -> dict[str, float]:
+    """Reduce-only per-name scale from H7 confidence. Leftover stays cash.
+
+    Applied after vol-target / breaker so an unused vol budget cannot redistribute a
+    haircut into other names. A ticker omitted from ``confidence_scales`` is left
+    unchanged (callers that want the fail-soft default must fill the map).
+    """
+    if not confidence_scales:
+        return weights_pct
+    out: dict[str, float] = {}
+    for ticker, weight_pct in weights_pct.items():
+        if ticker not in confidence_scales:
+            out[ticker] = weight_pct
+            continue
+        scale = max(0.0, min(1.0, float(confidence_scales[ticker])))
+        scaled = weight_pct * scale
+        if abs(scaled - weight_pct) > 1e-9:
+            events.append(
+                SizingAdjustment(
+                    ticker=ticker,
+                    adjustment_type=SizingAdjustmentType.FINAL_GROSS_SCALE,
+                    original_pct=round(weight_pct, 4),
+                    adjusted_pct=round(scaled, 4),
+                    reason=f"PM confidence ×{scale:.2f} (cash-first; leftover stays cash)",
+                )
+            )
+        out[ticker] = scaled
+    return out
+
+
 def _round_to_grid(weights_pct: dict[str, float], increment: float) -> dict[str, float]:
     """Round each weight (%) DOWN to the ``increment`` grid (0 disables).
 
@@ -485,16 +573,24 @@ def size_portfolio(
     corr: Any | None = None,
     caps: SizingCaps | None = None,
     breaker_scale: float = 1.0,
+    calibrated_scores: Mapping[str, float] | None = None,
+    confidence_scales: Mapping[str, float] | None = None,
 ) -> SizingResult:
     """Turn per-ticker conviction + direction into final target weights (see module doc).
 
     Args:
         convictions: effective conviction per ticker (analyst + debate delta, −5..+5).
+            On the calibrated path used for corr-dedup priority only (not raw magnitude).
         stances: per-ticker stance (buy/hold/sell/watch); only buy/hold enter the book.
         risk: per-ticker :class:`TickerRisk` (vol + sector bucket).
         corr: optional long correlation frame (cols ``a``/``b``/``corr``); diagonal if None.
         caps: :class:`SizingCaps` (defaults if None).
         breaker_scale: ≤ 1.0 multiplier from the drawdown circuit breaker (raises cash).
+        calibrated_scores: optional WP8.4 scores (reliability × max(0, μ) / σ_ε). When set,
+            drives selection + raw weights; rank→conviction and Kelly premium are unused.
+        confidence_scales: optional per-ticker H7 confidence in ``[0, 1]``. Applied
+            after vol-target / breaker, cash-first (no renormalize). Omitted tickers
+            are unchanged; callers fill missing values with the documented default.
 
     Returns:
         A :class:`SizingResult` — final positions (%), cash %, ex-ante vol, applied
@@ -506,7 +602,9 @@ def size_portfolio(
     # reduce-only step below. Explanation-only — never read back into the weight math.
     events: list[SizingAdjustment] = []
 
-    selected = _select(convictions, stances, caps.min_conviction)
+    selected = _select(
+        convictions, stances, caps.min_conviction, calibrated_scores=calibrated_scores
+    )
     if not selected:
         return SizingResult(
             positions=[],
@@ -519,11 +617,17 @@ def size_portfolio(
         )
 
     notes: dict[str, list[str]] = {t: [] for t in selected}
-    raw = _raw_weights(selected, risk, caps)
+    raw = _raw_weights(selected, risk, caps, calibrated_scores=calibrated_scores)
     pre_cap_pct = {t: round(w * 100.0, 4) for t, w in raw.items()}
     raw = _apply_position_caps(raw, caps, notes, events=events)
     raw = _apply_sector_caps(raw, risk, caps, notes, events=events)
-    raw = _corr_dedup(raw, convictions, corr, caps, notes, events=events)
+    # Corr-dedup: prefer calibrated score magnitude when present; else conviction.
+    dedup_priority = (
+        {t: float(calibrated_scores.get(t, 0.0)) for t in selected}
+        if calibrated_scores is not None
+        else convictions
+    )
+    raw = _corr_dedup(raw, dedup_priority, corr, caps, notes, events=events)
 
     if not raw:
         return SizingResult(
@@ -609,6 +713,7 @@ def size_portfolio(
             )
 
     pre_round_pct = {t: w * gross_scale * 100.0 for t, w in raw.items()}
+    pre_round_pct = _apply_confidence_scales(pre_round_pct, confidence_scales, events)
     sized_pct = _round_to_grid(pre_round_pct, caps.weight_increment_pct)
     for t, snapped in sized_pct.items():
         pre_p = pre_round_pct.get(t, 0.0)
@@ -645,10 +750,17 @@ def size_portfolio(
         {p.ticker: p.target_pct / 100.0 for p in positions}, risk, corr, caps
     )
 
+    confidence_note = ""
+    if confidence_scales and any(
+        t in confidence_scales and float(confidence_scales[t]) < 1.0 - 1e-12 for t in sized_pct
+    ):
+        confidence_note = " PM confidence scaled size (cash-first)."
     explanation = (
         f"{len(positions)} holdings, {gross:g}% invested / {cash:g}% cash; "
         f"ex-ante vol ~{final_vol:.1f}% (target {caps.target_portfolio_vol:g}%); "
-        f"vol_scale={vol_scale:.2f}, breaker={breaker:.2f}, mode={caps.sizing_mode}."
+        f"vol_scale={vol_scale:.2f}, breaker={breaker:.2f}, "
+        f"mode={'calibrated' if calibrated_scores is not None else caps.sizing_mode}."
+        f"{confidence_note}"
     )
     return SizingResult(
         positions=positions,
@@ -662,4 +774,11 @@ def size_portfolio(
     )
 
 
-__all__ = ["SizedPosition", "SizingCaps", "SizingResult", "TickerRisk", "size_portfolio"]
+__all__ = [
+    "SizedPosition",
+    "SizingCaps",
+    "SizingResult",
+    "TickerRisk",
+    "calibrated_raw_score",
+    "size_portfolio",
+]

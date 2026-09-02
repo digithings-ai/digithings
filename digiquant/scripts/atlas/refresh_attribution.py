@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
-"""Standalone per-position attribution refresh (Pillar 3B, #726).
+"""Standalone current-book lookback refresh (Pillar 3B, #726 / #2598).
 
-Computes the single-benchmark attribution decomposition for one date and upserts it to
-``position_attribution``: reads the booked ``positions`` weights, each holding's trailing-
+Computes the single-benchmark trailing-window diagnostic for one date and upserts it to
+``current_book_lookback``: reads the booked ``positions`` weights, each holding's trailing-
 window return + the benchmark's return from ``price_history``, runs the pure
-:func:`digiquant.olympus.atlas.attribution.compute_position_attribution`, and writes the
+:func:`digiquant.olympus.atlas.attribution.compute_current_book_lookback`, and writes the
 rows. Decoupled from the research pipeline so it can run on its own daily cron after EOD
 prices land. Idempotent (upsert on ``(date, ticker)``).
 
-A dedicated script (vs. wedging into ``refresh_performance_metrics.py``) keeps the
-attribution path importable + unit-testable and gives it a clean cron entry, mirroring
-``resolve_decisions.py``.
+**Contract (#2598 / OLY-REV-007):** this job is diagnostic-only. It must never populate
+daily realized contribution / ``pnl_pct`` fields. Realized period contribution comes from
+finalized accounting (``daily_realized_attribution``). Metrics/lookback job order is
+irrelevant for daily semantics.
 
 Usage::
 
     python digiquant/scripts/atlas/refresh_attribution.py [--date YYYY-MM-DD] [--window-days N]
 
-Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads positions + price_history,
-writes position_attribution (migration 040 must be applied). Exit 0 = clean (no positions
-for the date is success); 1 = hard failure; 2 = bad ``--date``.
+Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads house ``positions`` +
+price_history (filters ``workspace_id`` so overlay same-date weights cannot seed
+the lookback), writes current_book_lookback (migrations 040 + 073 must be applied).
+Exit 0 = clean (no positions for the date is success); 1 = hard failure; 2 = bad ``--date``.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 _DEFAULT_WINDOW_DAYS = 21
 _BENCHMARK = "SPY"
+_LOOKBACK_TABLE = "current_book_lookback"
 
 
 def _ensure_importable() -> None:
@@ -45,9 +48,21 @@ def _ensure_importable() -> None:
             sys.path.insert(0, path)
 
 
+_ensure_importable()
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+
+
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
+
+
 def _parse_date(value: str | None) -> date:
     if value:
-        return datetime.strptime(value, "%Y-%m-%d").date()
+        return date.fromisoformat(value)
     return datetime.now(timezone.utc).date()
 
 
@@ -95,26 +110,29 @@ def refresh_attribution(
     window_days: int = _DEFAULT_WINDOW_DAYS,
     benchmark: str = _BENCHMARK,
 ) -> tuple[int, bool]:
-    """Compute + upsert attribution rows for ``as_of``. Returns (rows_written, reconciles)."""
+    """Compute + upsert lookback rows for ``as_of``. Returns (rows_written, reconciles).
+
+    Writes only to ``current_book_lookback``. Never writes daily realized contribution.
+    """
     from digiquant.olympus.atlas.attribution import (
         Holding,
-        attribution_rows_to_records,
-        compute_position_attribution,
+        compute_current_book_lookback,
+        lookback_rows_to_records,
     )
 
     date_str = as_of.isoformat()
-    start_iso = (as_of - timedelta(days=window_days)).isoformat()
+    lookback_days = max(1, window_days)
+    start_iso = (as_of - timedelta(days=lookback_days)).isoformat()
 
     pos_resp = (
-        client.table("positions")
-        .select("ticker,weight_pct,sector_bucket")
+        _eq_house(client.table("positions").select("ticker,weight_pct,sector_bucket"))
         .eq("date", date_str)
         .execute()
     )
     pos_rows = getattr(pos_resp, "data", None) or []
     if not pos_rows:
         return 0, True  # the date was never materialized → genuine no-op
-    # An all-cash day (only a CASH row) still gets a CASH attribution row: drop CASH here and
+    # An all-cash day (only a CASH row) still gets a CASH lookback row: drop CASH here and
     # let the core emit it from the cash residual (holdings=[]).
     holdings_raw = [
         row
@@ -135,31 +153,45 @@ def refresh_attribution(
         )
         for row in holdings_raw
     ]
-    result = compute_position_attribution(holdings=holdings, benchmark_return_frac=benchmark_return)
-    records = attribution_rows_to_records(result, date_str=date_str)
-    _upsert_attribution(client, records)
+    result = compute_current_book_lookback(
+        holdings=holdings, benchmark_return_frac=benchmark_return
+    )
+    records = lookback_rows_to_records(
+        result,
+        date_str=date_str,
+        window_start_date=start_iso,
+        window_end_date=date_str,
+        lookback_days=lookback_days,
+    )
+    _upsert_lookback(client, records)
     return len(records), result.reconciles
 
 
-def _upsert_attribution(client: Any, records: list[dict[str, Any]]) -> None:
-    """Bulk-upsert attribution rows in one round-trip; fall back to per-row for clients (or
-    the test fake) whose ``upsert`` only accepts a single dict."""
+def _upsert_lookback(client: Any, records: list[dict[str, Any]]) -> None:
+    """Bulk-upsert lookback rows; fall back to per-row for clients whose upsert is singular."""
     if not records:
         return
     try:
-        client.table("position_attribution").upsert(records, on_conflict="date,ticker").execute()
+        client.table(_LOOKBACK_TABLE).upsert(records, on_conflict="date,ticker").execute()
     except (TypeError, ValueError, AttributeError):
         for record in records:
-            client.table("position_attribution").upsert(record, on_conflict="date,ticker").execute()
+            client.table(_LOOKBACK_TABLE).upsert(record, on_conflict="date,ticker").execute()
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Refresh per-position attribution for a date.")
-    parser.add_argument(
-        "--date", default=None, help="Attribution date YYYY-MM-DD (default: today UTC)."
+    parser = argparse.ArgumentParser(
+        description=(
+            "Refresh current-book lookback diagnostic for a date (not realized period attribution)."
+        )
     )
     parser.add_argument(
-        "--window-days", type=int, default=_DEFAULT_WINDOW_DAYS, help="Trailing return window."
+        "--date", default=None, help="Lookback as-of date YYYY-MM-DD (default: today UTC)."
+    )
+    parser.add_argument(
+        "--window-days",
+        type=int,
+        default=_DEFAULT_WINDOW_DAYS,
+        help="Trailing return window in calendar days (diagnostic only).",
     )
     args = parser.parse_args(argv)
 
@@ -174,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         client = build_client(SupabaseConfig.from_env())
-    except Exception as exc:  # noqa: BLE001 — a config/connectivity failure is a hard error
+    except Exception as exc:
         print(f"error: Supabase client unavailable: {exc}", file=sys.stderr)
         return 1
 
@@ -182,12 +214,15 @@ def main(argv: list[str] | None = None) -> int:
         written, reconciles = refresh_attribution(
             client=client, as_of=as_of, window_days=max(1, args.window_days)
         )
-    except Exception as exc:  # noqa: BLE001 — surface a hard failure as a non-zero exit
+    except Exception as exc:
         print(f"error: refresh_attribution failed: {exc}", file=sys.stderr)
         return 1
 
     flag = "reconciles" if reconciles else "PARTIAL (some holding unpriced)"
-    print(f"refresh_attribution: wrote {written} row(s) for {as_of.isoformat()} — {flag}.")
+    print(
+        f"refresh_attribution: wrote {written} current_book_lookback row(s) "
+        f"for {as_of.isoformat()} — {flag}."
+    )
     return 0
 
 

@@ -11,18 +11,28 @@ A pre-fetched **`web_grounding`** block is provided in PHASE_INPUTS when availab
 an **OpenRouter web search read of the tracked AI-portfolio accounts' latest posts**
 (per-account holdings/changes with named tickers + a cross-account consensus + sector tilt),
 each claim cited to its X post URL. Ground every claim on this block; carry its X post URLs
-into the output's `sources`. Do **not** assert a holding that is not in the block. If
-`web_grounding` is absent or empty, return empty findings and say so in `notes`.
+into `sources`. Do **not** assert a holding that is not in the block. If
+`web_grounding` is absent or empty, say so in the markdown body.
 
 ## What to produce
 
-- **`per_account`** — for each account that posted in-window: `handle`, `model`, `picks`
-  (named tickers held/added/trimmed), `stance`, `as_of`. Mark `posted_in_window=false` for
-  accounts that were silent or hold no equities (do not infer their book).
-- **`consensus_longs`** — tickers named long by 2+ accounts.
-- **`sector_tilt`** — roll the stock picks up to sectors/themes (e.g. semis, software,
-  energy) — this is the signal the equity/sector phases consume.
-- **`divergences`** — where the models disagree.
+Write a markdown `body`. Suggested skeleton:
+
+```markdown
+# AI portfolios — {as-of date of the data}
+
+## Per-account
+Each tracked account that posted in-window: handle, model, named tickers, stance.
+Mark silent accounts; do not infer their book.
+
+## Consensus and tilt
+Tickers named long by 2+ accounts; roll picks up to sectors/themes for equity/sector phases.
+
+## Divergences
+Where the models disagree.
+```
+
+Do **not** invent scores, a Signals section, or print `Bias:` at the top.
 
 ## Discipline (this is a PROXY, not a recommendation)
 
@@ -32,5 +42,4 @@ into the output's `sources`. Do **not** assert a holding that is not in the bloc
   (e.g. @theaiportfolios, @grkportfolio, @ralliesarena) carry more than tiny/low-engagement
   ones (e.g. @theAIportfolio, @geminiportfolio). Say so when one account drives a consensus.
 - **Flag staleness**: if a pick is from an old post, lower conviction and note the date.
-- Set `bias`/`headline` to reflect the *aggregate* AI-system tilt, with `notes` capturing
-  caveats (thin coverage, divergence, stale posts).
+- State the *aggregate* AI-system tilt in the memo body, with caveats (thin coverage, divergence, stale posts).

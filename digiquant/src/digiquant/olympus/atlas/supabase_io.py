@@ -12,7 +12,8 @@ Design:
 - Every write passes its payload through ``digibase.audit.redact_mapping``
   before the audit log line is emitted — non-negotiable per CLAUDE.md.
 - Idempotency: all writes are upserts on the schema-declared unique keys
-  (``(date, document_key)`` for ``documents``; ``date`` for ``daily_snapshots``).
+  (``(workspace_id, date, document_key)`` for ``documents``; ``date`` for
+  ``daily_snapshots``).
   Retries of the same node are safe.
 """
 
@@ -23,10 +24,24 @@ import os
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
+from uuid import UUID
 
+import httpx
 from digibase.audit import redact_mapping
 
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
+from digiquant.olympus.overlay.persist import (
+    is_private_workspace,
+    require_overlay_persist,
+    skip_overlay_shared_register,
+)
+from digiquant.olympus.postgrest_timeout import (
+    CONNECT_TIMEOUT_SECONDS,
+    POOL_TIMEOUT_SECONDS,
+    READ_TIMEOUT_SECONDS,
+    WRITE_TIMEOUT_SECONDS,
+)
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +72,7 @@ class DocumentUpsertRow(TypedDict, total=False):
     document_key: str
     payload: DocumentRowPayload
     content: str | None
+    workspace_id: str
 
 
 class DailySnapshotUpsertRow(TypedDict, total=False):
@@ -169,11 +185,21 @@ def build_client(cfg: SupabaseConfig) -> SupabaseClient:
     The ``supabase`` package is an optional extra; this helper defers the
     import so unit tests (which use :class:`FakeSupabaseClient`) never need
     it installed. Production entry points (commit 9's graph compiler) call
-    this once at startup.
+    this once at startup. PostgREST uses an explicit httpx timeout (#3319).
     """
+    from supabase.lib.client_options import SyncClientOptions
+
     from supabase import create_client  # deferred — supabase is an optional dep
 
-    return create_client(cfg.url, cfg.service_key)  # type: ignore[return-value]
+    options = SyncClientOptions(
+        postgrest_client_timeout=httpx.Timeout(
+            connect=CONNECT_TIMEOUT_SECONDS,
+            read=READ_TIMEOUT_SECONDS,
+            write=WRITE_TIMEOUT_SECONDS,
+            pool=POOL_TIMEOUT_SECONDS,
+        )
+    )
+    return create_client(cfg.url, cfg.service_key, options)  # type: ignore[return-value]
 
 
 def _audit(event_type: str, payload: dict[str, Any]) -> None:
@@ -194,16 +220,14 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _json_safe(value: Any) -> Any:
-    """Recursively coerce ``date``/``datetime`` to ISO strings.
+    """Recursively coerce values the stdlib ``json`` encoder cannot handle.
 
-    The Supabase client serializes upsert bodies with the stdlib ``json``
-    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
-    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
-    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
-    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
-    in ``payload["date"]``. Coercing here, at the single write boundary,
-    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
-    once instead of relying on each one to pre-serialize its dates.
+    The Supabase client serializes upsert bodies with httpx ``json.dumps``.
+    LangGraph checkpoint rehydration yields plain dicts with raw ``date`` /
+    ``datetime`` / ``UUID`` instead of a Pydantic ``model_dump(mode="json")``.
+    House GHA ``33426508863`` retried H9 ``publish_document`` after a ledger
+    ``23502`` and died with ``TypeError: Object of type UUID is not JSON
+    serializable``. Coercing at this write boundary covers every caller.
     """
     if isinstance(value, dict):
         return {key: _json_safe(val) for key, val in value.items()}
@@ -211,6 +235,8 @@ def _json_safe(value: Any) -> Any:
         return [_json_safe(item) for item in value]
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
     return value
 
 
@@ -227,8 +253,12 @@ def publish_document(
     segment: str | None = None,
     sector: str | None = None,
     content_markdown: str | None = None,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
-    """Upsert one row into ``documents`` on ``(date, document_key)``.
+    """Upsert one row into ``documents`` on ``(workspace_id, date, document_key)``.
+
+    Omitted ``workspace_id`` stamps the house workspace. Overlay private-phase
+    writes require ``OLYMPUS_OVERLAY_PERSIST=1``.
 
     ``doc_type=None`` is the canonical signal for per-segment Phase 1-5
     documents — the schema's ``chk_documents_doc_type`` constraint allows
@@ -238,9 +268,10 @@ def publish_document(
 
     Returns a :class:`PublishedArtifact` that callers append to
     ``AtlasResearchState.published``. Idempotent — replays with the same
-    (date, document_key) either update the row or no-op depending on whether
-    the payload changed.
+    (workspace_id, date, document_key) either update the row or no-op.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
+    require_overlay_persist(scoped)
     row: DocumentUpsertRow = {
         "date": date_str,
         "title": title,
@@ -253,9 +284,12 @@ def publish_document(
         "document_key": document_key,
         "payload": payload,
         "content": content_markdown,
+        "workspace_id": scoped,
     }
     resp = (
-        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+        client.table("documents")
+        .upsert(_json_safe(row), on_conflict="workspace_id,date,document_key")
+        .execute()
     )
     row_id = _extract_row_id(resp) or document_key
     _audit(
@@ -277,6 +311,7 @@ def publish_document_delta(
     target_document_key: str,
     patch: dict[str, Any],
     run_type: str,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
     """Publish a ``document_delta`` audit row under ``document-deltas/{target}`` (§5.4)."""
     delta_key = f"document-deltas/{target_document_key}"
@@ -293,6 +328,7 @@ def publish_document_delta(
         date_str=date_str,
         category="delta",
         segment="document_delta",
+        workspace_id=workspace_id,
     )
 
 
@@ -304,6 +340,7 @@ def publish_daily_snapshot(
     run_type: str,
     baseline_date: str | None = None,
     digest_markdown: str | None = None,
+    workspace_id: str | None = None,
 ) -> PublishedArtifact:
     """Upsert one row into ``daily_snapshots`` on ``date``.
 
@@ -311,7 +348,16 @@ def publish_daily_snapshot(
     ``templates/digest-snapshot-schema.json``). Stored in the ``snapshot``
     JSONB column; the legacy column set (``bias`` fields, etc.) is populated
     by downstream readers or a follow-up schema migration — not this adapter.
+
+    This table has no ``workspace_id`` (unique on ``date``). Overlay workspaces
+    must not upsert it — that would last-writer-wins over the house Brief.
+    Omitted ``workspace_id`` is the house path.
     """
+    scoped = str(resolved_workspace_id(workspace_id))
+    if is_private_workspace(scoped):
+        raise ValueError(
+            "daily_snapshots is the house digest table; overlay workspaces must not upsert it"
+        )
     row: DailySnapshotUpsertRow = {
         "date": date_str,
         "run_type": run_type,
@@ -337,6 +383,7 @@ def upsert_onchain_cohort_positioning(
     *,
     client: SupabaseClient,
     rows: list[dict[str, Any]],
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Idempotently upsert per-(date,market) on-chain cohort positioning rows (#801).
 
@@ -344,7 +391,18 @@ def upsert_onchain_cohort_positioning(
     preflight caller can skip cleanly on a Hyperdash outage without a special case. Upserts one
     row at a time on ``(date, market)`` — the per-run market set is small (a handful) and this
     matches the single-dict upsert convention used by every other writer here.
+
+    This table has no ``workspace_id`` column (leftover ``UNIQUE(date, market)``). Overlay
+    persist-on is not a license to last-writer-win the house research row. Private workspaces
+    skip the upsert and return 0; callers that omit *workspace_id* stay on the house write
+    path. Independent of ``OLYMPUS_OVERLAY_PERSIST`` and of staged cutover 113.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register onchain_cohort_positioning "
+            "(house-only UNIQUE(date, market))"
+        )
+        return 0
     if not rows:
         return 0
     for row in rows:
@@ -363,23 +421,30 @@ def load_prior_book(
     run_date: date,
     *,
     include_risk_fields: bool = False,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Positions rows for the most recent date strictly before ``run_date``.
 
     Returns the held book coming into ``run_date`` (newest prior date only),
     or ``[]`` on the first ever run.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so house rows cannot seed a
+    private book.
     """
     columns = "date, ticker, weight_pct, entry_date"
     if include_risk_fields:
         columns += ", entry_price"
-    resp = (
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
         client.table("positions")
         .select(columns)
         .lt("date", run_date.isoformat())
+        .eq("workspace_id", scoped)
         .order("date", desc=True)
         .limit(200)
-        .execute()
     )
+    resp = query.execute()
     rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return []
@@ -410,16 +475,30 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
 
     Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
-    excerpt, not the full debate dump.
+    excerpt, not the full debate dump. Preserves WP4.4 forecast lineage IDs,
+    the effective forecast blob, and the accepted ``forecast_amendment`` dump so
+    quiet carries retain reconstructable identity for H9 registry retry (#2790).
     """
     body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
     conclusion = str(body.get("conclusion") or "").strip()
-    return {
+    slim: dict[str, Any] = {
         "net_stance": body.get("net_stance"),
         "conviction_delta": body.get("conviction_delta"),
         "converged": body.get("converged"),
         "conclusion_excerpt": conclusion[:400],
     }
+    for key in (
+        "base_forecast_id",
+        "amendment_id",
+        "effective_forecast_id",
+        "amendment_outcome",
+        "forecast_degradation",
+        "effective_forecast",
+        "forecast_amendment",
+    ):
+        if body.get(key) is not None:
+            slim[key] = body[key]
+    return slim
 
 
 def load_prior_analyst_summaries(
@@ -428,11 +507,15 @@ def load_prior_analyst_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
 
     Returns ``{ticker: {date, document_key, conviction_score, stance, thesis_excerpt}}``.
     Empty when ``tickers`` is empty or no prior analyst docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private analyst rows cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -440,9 +523,11 @@ def load_prior_analyst_summaries(
         return {}
     keys = [f"analyst/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -472,12 +557,16 @@ def load_prior_deliberation_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    workspace_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
     Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
     document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
     Empty when ``tickers`` is empty or no prior deliberation docs exist.
+
+    Omitted ``workspace_id`` is the house — overlay private deliberation cannot
+    seed house continuity.
     """
     from datetime import timedelta
 
@@ -485,9 +574,11 @@ def load_prior_deliberation_summaries(
         return {}
     keys = [f"deliberation/{t}" for t in tickers]
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, payload")
+        .eq("workspace_id", scoped)
         .in_("document_key", list(keys))
         .gte("date", floor)
         .lt("date", run_date.isoformat())
@@ -576,11 +667,19 @@ def load_active_theses_rows(
 def load_portfolio_performance_snapshot(
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a later private NAV cannot
+    become the house PM snapshot.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     nav_resp = (
         client.table("nav_history")
         .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -594,6 +693,7 @@ def load_portfolio_performance_snapshot(
     metrics_resp = (
         client.table("portfolio_metrics")
         .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("workspace_id", scoped)
         .eq("date", nav_date)
         .limit(1)
         .execute()
@@ -631,6 +731,7 @@ def load_prior_context(
     snapshot_lookback: int = 2,
     documents_lookback_days: int = 30,
     documents_row_cap: int = 500,
+    workspace_id: str | None = None,
 ) -> PriorContext:
     """Query recent ``daily_snapshots`` + latest-per-segment ``documents``.
 
@@ -648,6 +749,13 @@ def load_prior_context(
       on extreme churn days; any key whose latest write predates the floor
       is treated as absent, which is the same behavior the sub-graph gets
       on a fresh tenant.
+
+    ``documents`` are house-scoped when ``workspace_id`` is omitted so overlay
+    private (and overlay-copied corpus) rows cannot seed house preflight.
+    ``load_prior_context``, ``load_prior_analyst_summaries``,
+    ``load_prior_deliberation_summaries``, ``load_latest_beliefs_document``, and
+    ``query_institutional_absence_streak`` all pin house. ``daily_snapshots``
+    stays date-only (house-only ``UNIQUE(date)``; overlay publish skips it).
     """
     from datetime import timedelta
 
@@ -666,9 +774,11 @@ def load_prior_context(
     # missing segment the same regardless of whether it never existed or
     # simply hasn't been refreshed recently.
     floor = (run_date - timedelta(days=documents_lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     docs_resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -724,6 +834,15 @@ def query_price_technicals_freshness(
     return latest, len(tickers)
 
 
+_PRICE_DELTA_ROW_BUDGET = 900
+_DEFAULT_PRICE_LOOKBACK_DAYS = 14
+
+
+def _price_delta_ticker_batch(lookback_days: int) -> int:
+    """Tickers per ``price_history`` request so a full lookback window fits under the cap."""
+    return max(1, _PRICE_DELTA_ROW_BUDGET // (lookback_days + 1))
+
+
 def query_price_deltas(
     *,
     client: SupabaseClient,
@@ -750,8 +869,9 @@ def query_price_deltas(
     The query is bounded:
     - ``in_(tickers)`` filters server-side, so we never pull rows for
       tickers we don't track.
-    - ``lookback_days`` floors the date range to a small window so the
-      response stays tiny even with weeks of Atlas history.
+    - ``lookback_days`` floors the date range to a small window; requests are
+      batched by ticker so a full window for every ticker fits under PostgREST's
+      row cap.
     """
     from datetime import timedelta
 
@@ -759,15 +879,19 @@ def query_price_deltas(
         return {}
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, ticker, close")
-        .in_("ticker", list(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
-    rows: list[PriceHistoryRow] = list(getattr(resp, "data", None) or [])
+    ordered = sorted(tickers)
+    batch = _price_delta_ticker_batch(lookback_days)
+    rows: list[PriceHistoryRow] = []
+    for start in range(0, len(ordered), batch):
+        resp = (
+            client.table("price_history")
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + batch])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        rows.extend(list(getattr(resp, "data", None) or []))
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this
@@ -1081,11 +1205,14 @@ def load_latest_beliefs_document(
     *,
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Latest ``beliefs`` document strictly before ``run_date`` for PM context."""
+    """Latest house ``beliefs`` document strictly before ``run_date`` for PM context."""
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key, doc_type, payload")
+        .eq("workspace_id", scoped)
         .eq("document_key", "beliefs")
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
@@ -1102,6 +1229,7 @@ def query_institutional_absence_streak(
     run_date: date,
     lookback_days: int = 30,
     document_key_prefix: str = "inst-",
+    workspace_id: str | None = None,
 ) -> int:
     """Count consecutive recent run-dates with **no** institutional document published.
 
@@ -1125,13 +1253,18 @@ def query_institutional_absence_streak(
     skipped institutional ingest do. Returns ``0`` when the most recent run did
     publish an ``inst-*`` document (breaker stays open) and ``0`` on an empty
     window (first-ever / fresh tenant — never trip the breaker without evidence).
+
+    Omitted ``workspace_id`` is the house — overlay ``inst-*`` rows cannot clear
+    or extend the house absence streak.
     """
     from datetime import timedelta
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("documents")
         .select("date, document_key")
+        .eq("workspace_id", scoped)
         .gte("date", floor)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)

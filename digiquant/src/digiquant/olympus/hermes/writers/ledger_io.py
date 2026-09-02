@@ -1,9 +1,10 @@
-"""H9 authoritative commit chain — append-only portfolio lineage (#2418).
+"""H9 authoritative commit chain — append-only portfolio lineage (#2418, #2768).
 
 H9 is the *only* writer of the migration-069 lineage tables. One call to
 :func:`append_commit_chain` appends a whole commit: one ``portfolio_ledger_commits``
-row, one decision intent / requested target / approved target per symbol, and one
-order intent per symbol whose weight actually moved.
+row, one decision intent / requested target / approved target per symbol, zero or
+more ``target_adjustments`` for H8 pct-unit deltas (#2768), and one order intent
+per symbol whose weight actually moved.
 
 Three properties shape every line below.
 
@@ -17,9 +18,10 @@ chain *root*, not the current head: attempt 1's row keeps its NULL forever. The 
 is the row nobody supersedes (:func:`_heads`).
 
 **Only three tables chain.** ``commits``, ``approved_targets`` and ``order_intents``
-carry ``supersedes_id``. ``decision_intents`` and ``requested_targets`` do not — they
-are per-commit children, so a changed recommit appends *fresh* intent and requested
-rows beneath the new commit rather than superseding the old ones.
+carry ``supersedes_id``. ``decision_intents``, ``requested_targets``, and
+``target_adjustments`` do not — they are per-commit children, so a changed recommit
+appends *fresh* intent / requested / adjustment rows beneath the new commit rather
+than superseding the old ones.
 """
 
 from __future__ import annotations
@@ -27,7 +29,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -38,6 +41,7 @@ from uuid import UUID, uuid4
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.envcompat import PORTFOLIO_LEDGER, env_lookup
 from digiquant.olympus.hermes.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -47,20 +51,31 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     OrderIntentStatus,
     PortfolioCommit,
     RequestedTarget,
+    TargetAdjustment,
+    TargetAdjustmentType,
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment
+from digiquant.olympus.hermes.turnover import no_trade_band_pp
+from digiquant.olympus.overlay.persist import (
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.olympus.postgrest_timeout import EXECUTE_DEADLINE_SECONDS, run_with_deadline
+from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
 COMMITS = "portfolio_ledger_commits"
 DECISION_INTENTS = "portfolio_ledger_decision_intents"
 REQUESTED_TARGETS = "portfolio_ledger_requested_targets"
+TARGET_ADJUSTMENTS = "portfolio_ledger_target_adjustments"
 APPROVED_TARGETS = "portfolio_ledger_approved_targets"
 ORDER_INTENTS = "portfolio_ledger_order_intents"
 PAPER_EXECUTIONS = "portfolio_ledger_paper_executions"
 
 _PRICE_HISTORY = "price_history"
-_LEDGER_ENV = "OLYMPUS_PORTFOLIO_LEDGER"
+_LEDGER_ENV = PORTFOLIO_LEDGER
 _OFF_VALUES = frozenset({"0", "off", "false", "no", "disabled"})
 _CASH = "CASH"
 _WEIGHT_EPSILON = 1e-9
@@ -89,7 +104,7 @@ def ledger_enabled() -> bool:
     unset env var must mean **on** — otherwise a deploy that forgets to set it stops
     writing lineage while every projection still looks healthy.
     """
-    return os.environ.get(_LEDGER_ENV, "").strip().lower() not in _OFF_VALUES
+    return env_lookup(_LEDGER_ENV).strip().lower() not in _OFF_VALUES
 
 
 @dataclass(frozen=True)
@@ -101,6 +116,11 @@ class LedgerAppend:
     unpriced_symbols: list[str]
 
 
+def _execute(query: Any) -> Any:
+    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
+    return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
+
+
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
     """The single INSERT gate for every ledger table.
 
@@ -108,10 +128,19 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     resolvable global is what lets a test simulate a mid-chain failure, and keeping
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
+
+    T0 (#5-T0): ``workspace_id`` is NOT NULL as of migration 097 with no column
+    DEFAULT (every writer reaching these tables is expected to stamp it explicitly —
+    see migration 097's header). H9 is single-tenant today, so this one gate stamps
+    the house workspace on every row that does not already carry one, which covers
+    every caller (``append_commit_chain`` here, plus ``opening_snapshot`` and
+    ``execution_io`` which both route through this same function).
     """
     if not rows:
         return
-    client.table(table).insert(rows).execute()
+    house_id = str(house_workspace_id())
+    stamped = [{"workspace_id": house_id, **row} for row in rows]
+    _execute(client.table(table).insert(stamped))
 
 
 def _is_cash(ticker: Any) -> bool:
@@ -122,8 +151,22 @@ def _symbol(raw: Any) -> str:
     return str(raw or "").strip().upper()
 
 
-def _rows_for_date(*, client: SupabaseClient, table: str, run_date: date) -> list[dict[str, Any]]:
-    resp = client.table(table).select("*").eq("run_date", run_date.isoformat()).execute()
+def _rows_for_date(
+    *,
+    client: SupabaseClient,
+    table: str,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Date + workspace. Omitted ``workspace_id`` is the house, never every row."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table(table)
+        .select("*")
+        .eq("run_date", run_date.isoformat())
+        .eq("workspace_id", scoped)
+    )
+    resp = _execute(query)
     return list(resp.data or [])
 
 
@@ -164,13 +207,12 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
     ordered = sorted(tickers)
     latest: dict[str, tuple[str, float]] = {}
     for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
-        resp = (
+        resp = _execute(
             client.table(_PRICE_HISTORY)
             .select("date, ticker, close")
             .in_("ticker", ordered[start : start + _CLOSE_TICKER_BATCH])
             .gte("date", floor)
             .lt("date", run_date.isoformat())
-            .execute()
         )
         for row in resp.data or []:
             ticker = _symbol(row.get("ticker"))
@@ -213,11 +255,8 @@ def _frozen_symbols(*, client: SupabaseClient, order_rows: list[dict[str, Any]])
         return frozen
     # ``paper_executions`` carries no ``run_date`` column — it is reachable only
     # through the order intents it references, so filter on those ids alone.
-    resp = (
-        client.table(PAPER_EXECUTIONS)
-        .select("order_intent_id")
-        .in_("order_intent_id", order_ids)
-        .execute()
+    resp = _execute(
+        client.table(PAPER_EXECUTIONS).select("order_intent_id").in_("order_intent_id", order_ids)
     )
     filled = {str(r.get("order_intent_id")) for r in resp.data or []}
     frozen.update(
@@ -252,7 +291,11 @@ def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
 
 
 def _decision(
-    *, symbol: str, prior_pct: float, target_pct: float
+    *,
+    symbol: str,
+    prior_pct: float,
+    target_pct: float,
+    preferences: Mapping[str, Any] | None = None,
 ) -> tuple[DecisionAction, DecisionReason]:
     """Classify one symbol's weight move into the closed action/reason vocabulary.
 
@@ -268,6 +311,13 @@ def _decision(
         # "conviction_reduced" and "thesis_invalidated" are all meaningless for it.
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     delta = target_pct - prior_pct
+    if (
+        preferences is not None
+        and prior_pct > 0
+        and target_pct > 0
+        and abs(delta) < no_trade_band_pp(prior_pct, dict(preferences))
+    ):
+        return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if abs(delta) < _WEIGHT_EPSILON:
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if delta > 0:
@@ -297,6 +347,26 @@ def _shares(*, delta_pct: float, nav: float, close: float) -> Decimal:
     return Decimal(str(raw)).quantize(_QUANTUM, rounding=ROUND_HALF_UP)
 
 
+def _order_quantity_for_move(
+    *,
+    action: DecisionAction,
+    target_pct: float,
+    prior_pct: float,
+    nav: float,
+    close: float,
+) -> Decimal:
+    """Share count that may become an ``order_intents`` row.
+
+    ``_decision`` already classifies a no-trade-band / ~zero weight move as
+    ``NO_OP``. Minting an order anyway true-ups lots by a few hundredths of a
+    share and lands on Activity as ADD/TRIM of +0.0pp (house 2026-09-01 FXI,
+    VGK, XLF). Skip the order; the approved target still records the hold.
+    """
+    if action is DecisionAction.NO_OP:
+        return Decimal(0)
+    return _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
+
+
 def _policy_version_id(state: AtlasResearchState) -> str:
     """Stable identifier for the sizing policy this commit was produced under.
 
@@ -309,6 +379,39 @@ def _policy_version_id(state: AtlasResearchState) -> str:
     return f"{_POLICY_PREFIX}/{caps.sizing_mode}/{digest}"
 
 
+def _request_pct_for_symbol(
+    *,
+    symbol: str,
+    target_pct: float,
+    requested_pct: Mapping[str, float],
+    pct_adjustments: Sequence[SizingAdjustment],
+) -> float:
+    """Pre-cap weight percent for ``symbol``, falling back to the approved target.
+
+    Preference order: explicit H8 ``requested_pct`` map; else the first pct-unit
+    adjustment's ``original_pct`` (chain start); else the approved target (no delta).
+    """
+    if symbol in requested_pct:
+        return float(requested_pct[symbol])
+    if pct_adjustments:
+        return float(pct_adjustments[0].original_pct)
+    return float(target_pct)
+
+
+def _pct_adjustments_by_symbol(
+    adjustments: Sequence[SizingAdjustment],
+) -> dict[str, list[SizingAdjustment]]:
+    """Group weight-percent adjustments; skip conviction-unit events."""
+    by_symbol: dict[str, list[SizingAdjustment]] = defaultdict(list)
+    for adjustment in adjustments:
+        if adjustment.unit != "pct":
+            continue
+        if _is_cash(adjustment.ticker):
+            continue
+        by_symbol[_symbol(adjustment.ticker)].append(adjustment)
+    return by_symbol
+
+
 def append_commit_chain(
     *,
     client: SupabaseClient,
@@ -316,14 +419,20 @@ def append_commit_chain(
     weights: dict[str, float],
     cash_pct: float,
     nav: float,
+    adjustments: Sequence[SizingAdjustment] | None = None,
+    requested_pct: Mapping[str, float] | None = None,
 ) -> LedgerAppend | None:
     """Append one authoritative commit and its lineage. Returns ``None`` when disabled.
 
     ``weights`` and ``cash_pct`` are H8's final book in percent; ``nav`` is the NAV
-    ``commit_io.book_portfolio`` computed from the same prior-book snapshot. Callers
-    must invoke this **before** persisting the commit manifest: a raise here has to
-    leave no manifest behind, so the next attempt re-commits instead of reporting a
-    false no-op.
+    ``commit_io.book_portfolio`` computed from the same prior-book snapshot.
+    ``adjustments`` / ``requested_pct`` come from the sized book (#2768): when a
+    pre-cap request differs from the approved weight, ``requested_weight`` stores
+    the request and matching ``TargetAdjustment`` rows explain the delta.
+
+    Callers must invoke this **before** persisting the commit manifest: a raise here
+    has to leave no manifest behind, so the next attempt re-commits instead of
+    reporting a false no-op.
     """
     if not ledger_enabled():
         logger.info(
@@ -336,10 +445,24 @@ def append_commit_chain(
     date_str = run_date.isoformat()
     effective_at = datetime.combine(run_date, time(0, 0), tzinfo=UTC)
     recorded_at = datetime.now(UTC)
+    h8_adjustments = list(adjustments or ())
+    h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
+    adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
-    prior_commits = _rows_for_date(client=client, table=COMMITS, run_date=run_date)
-    prior_approved = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
-    prior_orders = _rows_for_date(client=client, table=ORDER_INTENTS, run_date=run_date)
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    require_overlay_persist(overlay_ws)
+    # Ledger one-root-per-run_date is still global (migration 069); overlay + house
+    # cannot both root a commit on the same date until that index is widened.
+    require_overlay_legacy_book_safe(overlay_ws)
+    prior_commits = _rows_for_date(
+        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_approved = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_orders = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=overlay_ws
+    )
 
     commit_heads = _heads(prior_commits)
     if len(commit_heads) > 1:
@@ -356,11 +479,14 @@ def append_commit_chain(
     prior = _prior_weights(state)
 
     # A symbol earns a row if the new book names it, if the prior book still holds it
-    # (so an exit is recorded rather than implied by absence), or if it has an open
-    # approved target to supersede. Frozen symbols are excluded outright.
+    # (so an exit is recorded rather than implied by absence), if H8 requested it
+    # (even when caps drove it to zero), or if it has an open approved target to
+    # supersede. Frozen symbols are excluded outright.
     symbols = set(targets)
     symbols |= {s for s, pct in prior.items() if abs(pct) > _WEIGHT_EPSILON}
     symbols |= set(approved_heads)
+    symbols |= set(h8_requested)
+    symbols |= set(adjustments_by_symbol)
     symbols -= frozen
 
     closes = _last_closes(
@@ -368,6 +494,9 @@ def append_commit_chain(
     )
 
     commit_id = uuid4()
+    ws_kw: dict[str, UUID] = {}
+    if overlay_ws:
+        ws_kw["workspace_id"] = UUID(str(overlay_ws))
     commit = PortfolioCommit(
         id=commit_id,
         run_date=run_date,
@@ -375,10 +504,12 @@ def append_commit_chain(
         supersedes_id=_id_of(commit_heads[0] if commit_heads else None),
         effective_at=effective_at,
         recorded_at=recorded_at,
+        **ws_kw,
     )
 
     intent_rows: list[dict[str, Any]] = []
     requested_rows: list[dict[str, Any]] = []
+    adjustment_rows: list[dict[str, Any]] = []
     approved_rows: list[dict[str, Any]] = []
     order_rows: list[dict[str, Any]] = []
     unpriced: list[str] = []
@@ -386,7 +517,19 @@ def append_commit_chain(
     for symbol in sorted(symbols):
         target_pct = targets.get(symbol, 0.0)
         prior_pct = prior.get(symbol, 0.0)
-        action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
+        symbol_adjustments = adjustments_by_symbol.get(symbol, [])
+        request_pct = _request_pct_for_symbol(
+            symbol=symbol,
+            target_pct=target_pct,
+            requested_pct=h8_requested,
+            pct_adjustments=symbol_adjustments,
+        )
+        action, reason = _decision(
+            symbol=symbol,
+            prior_pct=prior_pct,
+            target_pct=target_pct,
+            preferences=state.config.preferences,
+        )
 
         intent = DecisionIntent(
             id=uuid4(),
@@ -397,21 +540,35 @@ def append_commit_chain(
             reason=reason,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
-        # H8 publishes no pre-adjustment weights, so the requested weight equals the
-        # approved one for now — a named Phase-0 limitation, not an assertion that no
-        # adjustment happened. ``requested_quantity`` stays NULL to satisfy the
-        # schema's weight-XOR-quantity check.
         requested = RequestedTarget(
             id=uuid4(),
             decision_intent_id=intent.id,
             run_date=run_date,
             symbol=symbol,
-            requested_weight=_weight(target_pct),
+            requested_weight=_weight(request_pct),
             requested_quantity=None,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
+        for event in symbol_adjustments:
+            adjustment_rows.append(
+                TargetAdjustment(
+                    id=uuid4(),
+                    requested_target_id=requested.id,
+                    run_date=run_date,
+                    symbol=symbol,
+                    adjustment_type=TargetAdjustmentType(event.adjustment_type.value),
+                    original_value=_weight(event.original_pct),
+                    adjusted_value=_weight(event.adjusted_pct),
+                    reason=event.reason,
+                    effective_at=effective_at,
+                    recorded_at=recorded_at,
+                    **ws_kw,
+                ).model_dump(mode="json")
+            )
         approved = ApprovedTarget(
             id=uuid4(),
             requested_target_id=requested.id,
@@ -422,6 +579,7 @@ def append_commit_chain(
             supersedes_id=_id_of(approved_heads.get(symbol)),
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         intent_rows.append(intent.model_dump(mode="json"))
         requested_rows.append(requested.model_dump(mode="json"))
@@ -433,7 +591,13 @@ def append_commit_chain(
         if close is None:
             unpriced.append(symbol)
             continue
-        quantity = _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
+        quantity = _order_quantity_for_move(
+            action=action,
+            target_pct=target_pct,
+            prior_pct=prior_pct,
+            nav=nav,
+            close=close,
+        )
         if quantity <= 0:
             continue
         order_rows.append(
@@ -447,6 +611,7 @@ def append_commit_chain(
                 supersedes_id=_id_of(order_heads.get(symbol)),
                 effective_at=effective_at,
                 recorded_at=recorded_at,
+                **ws_kw,
             ).model_dump(mode="json")
         )
 
@@ -455,6 +620,7 @@ def append_commit_chain(
     _insert(client=client, table=COMMITS, rows=[commit.model_dump(mode="json")])
     _insert(client=client, table=DECISION_INTENTS, rows=intent_rows)
     _insert(client=client, table=REQUESTED_TARGETS, rows=requested_rows)
+    _insert(client=client, table=TARGET_ADJUSTMENTS, rows=adjustment_rows)
     _insert(client=client, table=APPROVED_TARGETS, rows=approved_rows)
     _insert(client=client, table=ORDER_INTENTS, rows=order_rows)
 
@@ -465,10 +631,11 @@ def append_commit_chain(
             ", ".join(unpriced),
         )
     logger.info(
-        "ledger_io: commit %s for %s — %d intents, %d orders, frozen=%s",
+        "ledger_io: commit %s for %s — %d intents, %d adjustments, %d orders, frozen=%s",
         commit_id,
         date_str,
         len(intent_rows),
+        len(adjustment_rows),
         len(order_rows),
         ",".join(sorted(frozen)) or "none",
     )

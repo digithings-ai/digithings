@@ -12,7 +12,7 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 ## Design
 
-digichat follows the **digithings.ai** marketing palette (see `website/style.css`): near-black page background (`#0a0a0a`), elevated panels (`#121212`), borders (`#2a2a2a`), primary text (`#e6e6e6`), secondary/muted (`#a3a3a3`). Typography uses **Inter**. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is the same QR mark as the landing site (`website/assets/qrw.svg`), vendored as [`digichat/src/app/icon.svg`](digichat/src/app/icon.svg) with a `#0a0a0a` rounded background; refresh the favicon or duplicate from `qrw.svg` if the brand asset changes.
+digichat follows the **digithings.ai** marketing palette from **digiweb** tokens / `frontend/digithings-web` (the deleted `frontend/website/` landing is not a source of truth): near-black page background, elevated panels, borders, primary/muted text. The **starfield** and hero animation from the public site are intentionally **not** used in the app chrome so the chat stays readable and calm. The **browser tab icon** is vendored as [`digichat/src/app/icon.svg`](digichat/src/app/icon.svg); refresh from the shared brand asset if it changes.
 
 ## Features
 
@@ -237,4 +237,4 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Legacy static UI
 
-The `website/digichat/` zero-dependency demo was removed. Use **`frontend/digichat/`** for all production deployments.
+The old `frontend/website/` landing and `website/digichat/` zero-dependency demo were removed. Marketing chat is **`frontend/digithings-web` `/chat`**; digichat itself lives in **`frontend/digichat/`**.

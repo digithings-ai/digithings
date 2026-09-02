@@ -92,7 +92,7 @@ export function StatCounter({
 }) {
   return (
     <div
-      className={`stat-counter grid ${COLS[columns]} overflow-hidden rounded-[12px] border border-hair bg-surface max-[720px]:grid-cols-2${
+      className={`stat-counter grid ${COLS[columns]} overflow-hidden rounded-none border border-hair bg-surface max-[720px]:grid-cols-2${
         className ? ` ${className}` : ""
       }`}
     >

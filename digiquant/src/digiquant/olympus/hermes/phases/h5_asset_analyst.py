@@ -27,6 +27,8 @@ from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.analyst_io import upsert_analyst_coverage
 from digiquant.olympus.hermes.writers.thesis_io import upsert_vehicle_thesis_from_analyst
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +55,47 @@ def _roster_entry_map(state: HermesState) -> dict[str, dict[str, Any]]:
     }
 
 
-def _h5_node_factory(ticker: str, client: SupabaseClient | None):
+def _h5_node_factory(
+    ticker: str,
+    client: SupabaseClient | None,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+):
     def _node(state: HermesState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
             return {}
         roster = _roster_entry_map(state)
         entry = roster.get(ticker.upper(), {"ticker": ticker, "roster_reason": "other"})
-        payload, document, errors = run_asset_analyst_llm(
+        payload, _document, errors, evidence_bundle = run_asset_analyst_llm(
             state=state,
             ticker=ticker,
             roster_entry=entry,
             phase_slug=f"{NODE_ID}-{ticker}",
+            evidence_bundle_store=evidence_bundle_store,
+            research_state_store=research_state_store,
         )
+        hermes_update = PhaseHermesState()
+        if evidence_bundle is not None:
+            hermes_update = PhaseHermesState(
+                ticker_evidence_bundles={
+                    ticker.upper(): evidence_bundle.model_dump(mode="json"),
+                }
+            )
         if payload is None:
-            return {}
+            # Provider failure: still surface the pre-provider base bundle (WP11.2).
+            if evidence_bundle is None:
+                return {}
+            if errors:
+                logger.warning(
+                    "H5 %s failed after evidence publish (%d errors); bundle retained",
+                    ticker,
+                    len(errors),
+                )
+            return {"phase_hermes": hermes_update}
         if errors:
             logger.warning("H5 %s completed with %d recoverable errors", ticker, len(errors))
         doc_key = artifact_document_key(analyst_artifact_key(ticker))
-        if client is not None:
+        if client is not None and not skip_overlay_shared_register(state.config.workspace_id):
             upsert_analyst_coverage(
                 client,
                 run_date=state.run_date,
@@ -79,6 +104,7 @@ def _h5_node_factory(ticker: str, client: SupabaseClient | None):
                 thesis_ids=[entry["linked_market_thesis_id"]]
                 if entry.get("linked_market_thesis_id")
                 else None,
+                workspace_id=state.config.workspace_id,
             )
             if _should_backfill_vehicle_thesis(entry):
                 upsert_vehicle_thesis_from_analyst(
@@ -86,9 +112,14 @@ def _h5_node_factory(ticker: str, client: SupabaseClient | None):
                     run_date=state.run_date,
                     ticker=ticker,
                     analyst_payload=payload.model_dump(mode="json"),
+                    workspace_id=state.config.workspace_id,
                 )
         analysts = {ticker: payload.model_dump(mode="json")}
-        return {"phase_hermes": PhaseHermesState(asset_analysts=analysts)}
+        return {
+            "phase_hermes": hermes_update.model_copy(
+                update={"asset_analysts": analysts},
+            )
+        }
 
     return _node
 
@@ -98,6 +129,8 @@ def build_h5_asset_analyst(
     *,
     held: Collection[str] = (),
     client: SupabaseClient | None = None,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> PipelinePhase:
     capped = capped_tickers(tickers, held=held)
     if not capped:
@@ -112,13 +145,21 @@ def build_h5_asset_analyst(
     return PipelinePhase(
         name=PHASE_NAME,
         nodes=[
-            NodeSpec(name=f"{NODE_ID}-{ticker}", run=_h5_node_factory(ticker, client))
+            NodeSpec(
+                name=f"{NODE_ID}-{ticker}",
+                run=_h5_node_factory(ticker, client, evidence_bundle_store, research_state_store),
+            )
             for ticker in capped
         ],
     )
 
 
-def build_h5_from_state(client: SupabaseClient | None = None) -> FanOutPhase:
+def build_h5_from_state(
+    client: SupabaseClient | None = None,
+    *,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> FanOutPhase:
     """Runtime roster fan-out — one parallel ``Send`` worker per H4 ``focus_roster`` ticker.
 
     The roster is computed at run time by H4 (so it can't be a compile-time per-ticker phase);
@@ -131,7 +172,7 @@ def build_h5_from_state(client: SupabaseClient | None = None) -> FanOutPhase:
         ticker = state.hermes_fanout_ticker
         if not ticker:
             return {}
-        return _h5_node_factory(ticker, client)(state)
+        return _h5_node_factory(ticker, client, evidence_bundle_store, research_state_store)(state)
 
     return FanOutPhase(
         name=PHASE_NAME,

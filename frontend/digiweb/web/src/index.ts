@@ -11,7 +11,15 @@ export {
 } from "./motion/scrolly";
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
-export { GitHubGlyph } from "./components/icons";
+export { GitHubGlyph, GoogleGlyph, XGlyph } from "./components/icons";
+export {
+  AuthCard,
+  passwordStrength,
+  type AuthCardLayout,
+  type AuthCardMode,
+  type AuthCardProps,
+  type AuthOAuthProvider,
+} from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
   Nav,
@@ -278,6 +286,9 @@ export {
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
+  AllocationStepChart,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -294,6 +305,8 @@ export {
   TearsheetCardKpi,
   LiveBadge,
   LOOKBACK_OPTIONS,
+  MIN_VIEW,
+  clampView,
   viewWindowForPreset,
   viewWindowLastYear,
   matchLookbackPreset,
@@ -308,9 +321,31 @@ export {
   toneClass,
   dailyReturnsFromEquity,
   annualizedVolPct,
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  dayReturnAnchorNav,
+  derivePriceAsOfDate,
+  inceptionSignAgreesWithBase100,
+  informationRatioFromDaily,
+  olsBeta,
+  overlappingDailyReturns,
+  relativeMetricsFromReturnSeries,
+  sinceInceptionPctFromNav,
+  MIN_OVERLAP_DAYS,
   TEARSHEET_DEMO,
+  RISK_BANDS,
+  riskBandLabel,
+  dcaRateCopy,
+  type RiskBand,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
+  type AllocationStepChartProps,
+  type AllocationFillMarker,
+  type OverlayTone,
+  type ChartLegendKind,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
@@ -332,6 +367,11 @@ export {
   type TearsheetOhlcBar,
   type TearsheetTrade,
   type TradeReturnBar,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
@@ -344,7 +384,12 @@ export {
   type CommandPaletteGroup,
   type CommandPaletteItem,
 } from "./components/command-palette";
-export { OlympusMark, Wordmark, type OlympusMarkProps, type WordmarkProps } from "./components/symbols/marks";
+export {
+  DigiquantMark,
+  Wordmark,
+  type DigiquantMarkProps,
+  type WordmarkProps,
+} from "./components/symbols/marks";
 // Terminal identity — the `digi` + block-cursor lockup and the hairline display
 // cut. Supersedes `Wordmark` for new work; `Wordmark`/`Colophon` stay for the
 // surfaces already using them.

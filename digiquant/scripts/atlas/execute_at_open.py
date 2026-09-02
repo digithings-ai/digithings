@@ -25,6 +25,29 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _ensure_importable() -> None:
+    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+        path = str(_REPO_ROOT / rel)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+# Bootstrap before importing digiquant packages — this file is also a standalone script.
+_ensure_importable()
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+
+
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
+
 
 def _sb():
     if not _HAS_SB:
@@ -102,8 +125,7 @@ def _prior_book_date(sb, execution_date: str) -> Optional[str]:
     except (TypeError, ValueError):
         return None
     res = (
-        sb.table("positions")
-        .select("date")
+        _eq_house(sb.table("positions").select("date"))
         .lt("date", execution_date)
         .neq("ticker", "CASH")
         .order("date", desc=True)
@@ -121,7 +143,9 @@ def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
     """Non-CASH ``TICKER -> weight_pct`` for one `positions` date ({} when absent)."""
     if not book_date:
         return {}
-    res = sb.table("positions").select("ticker,weight_pct").eq("date", book_date).execute()
+    res = (
+        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
+    )
     out: Dict[str, float] = {}
     for row in getattr(res, "data", None) or []:
         if not isinstance(row, dict):
@@ -134,6 +158,21 @@ def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
         except (TypeError, ValueError):
             continue
     return out
+
+
+# Desk Activity shows weight deltas at 1 decimal pp. A fill that does not move that
+# display is a lot true-up, not a position change (house 2026-09-01 FXI/VGK/XLF).
+_DESK_PP_DECIMALS = 1
+
+
+def _desk_weight_unchanged(weight_pct: Optional[float], prev_weight_pct: Optional[float]) -> bool:
+    """True when both weights exist and round to a 0.0pp move at desk precision."""
+    if weight_pct is None or prev_weight_pct is None:
+        return False
+    delta = float(weight_pct) - float(prev_weight_pct)
+    if not (delta == delta):  # NaN
+        return False
+    return round(delta, _DESK_PP_DECIMALS) == 0.0
 
 
 def _parse_pct(value: Any) -> Optional[float]:
@@ -164,8 +203,7 @@ def _fetch_open(sb, ticker: str, d: str) -> Optional[float]:
 def _rebalance_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, Any]]:
     """Load rebalance_decision for a given documents.date (fast path + fallback scan)."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", rebalance_date)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -178,8 +216,7 @@ def _rebalance_payload_for_date(sb, rebalance_date: str) -> Optional[Dict[str, A
             return p
 
     res2 = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", rebalance_date)
         .order("document_key", desc=True)
         .execute()
@@ -197,7 +234,9 @@ def _rebalance_table_nonempty(payload: Dict[str, Any]) -> bool:
     return isinstance(table, list) and len(table) > 0
 
 
-def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+def resolve_rebalance_payload_fallback(
+    sb, execution_d: str
+) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
     """
     When no rebalance_decision row exists for documents.date == execution day, find the PM
     artifact used for that session: walk backward along prior trading days (Fri decision → Mon
@@ -206,7 +245,11 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
     d = execution_d
     for _ in range(25):
         p = _rebalance_payload_for_date(sb, d)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return d, p
         pd = _prior_trading_date(d)
         if not pd or pd == d:
@@ -229,13 +272,19 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
         seen.add(ad)
         ds = ad.isoformat()
         p = _rebalance_payload_for_date(sb, ds)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return ds, p
     return None, None
 
 
 def _event_tickers_for_date(sb, execution_date: str) -> Set[str]:
-    res = sb.table("position_events").select("ticker").eq("date", execution_date).execute()
+    res = (
+        _eq_house(sb.table("position_events").select("ticker")).eq("date", execution_date).execute()
+    )
     out: Set[str] = set()
     for r in getattr(res, "data", None) or []:
         if isinstance(r, dict) and r.get("ticker"):
@@ -247,8 +296,7 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
     if not prior_date:
         return None
     res = (
-        sb.table("positions")
-        .select("weight_pct")
+        _eq_house(sb.table("positions").select("weight_pct"))
         .eq("date", prior_date)
         .eq("ticker", ticker)
         .limit(1)
@@ -258,6 +306,31 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
     if not rows:
         return None
     return _parse_pct(rows[0].get("weight_pct"))
+
+
+# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
+# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
+BOOK_SOURCE_LEGACY = "legacy"
+BOOK_SOURCE_AUTHORITATIVE = "authoritative"
+
+
+def _with_book_source(events: List[Dict[str, Any]], book_source: str) -> List[Dict[str, Any]]:
+    """Return shallow copies stamped with ``book_source`` (never mutates inputs).
+
+    T0 (#5-T0): also stamps ``workspace_id`` here, the single choke point every
+    ``position_events`` upsert in this script passes through. The column is NOT NULL
+    as of migration 097 (with a house-workspace column DEFAULT as a legacy-writer
+    safety net); this script is patched to pass it explicitly like every other writer
+    this WP touches, rather than relying on the fallback.
+    """
+    house_id = str(house_workspace_id())
+    out: List[Dict[str, Any]] = []
+    for event in events:
+        row = dict(event)
+        row["book_source"] = book_source
+        row["workspace_id"] = house_id
+        out.append(row)
+    return out
 
 
 def _hold_events_for_positions_not_in_rebalance(
@@ -270,8 +343,7 @@ def _hold_events_for_positions_not_in_rebalance(
     position_events for this date (so we do not overwrite OPEN/TRIM/etc.).
     """
     res = (
-        sb.table("positions")
-        .select("ticker,weight_pct,thesis_id,rationale")
+        _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id,rationale"))
         .eq("date", execution_date)
         .execute()
     )
@@ -334,16 +406,6 @@ def _hold_events_for_positions_not_in_rebalance(
 # that makes a silent fallback fatal once that is true.
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-
-def _ensure_importable() -> None:
-    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
-    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
-        path = str(_REPO_ROOT / rel)
-        if path not in sys.path:
-            sys.path.insert(0, path)
-
 
 def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     """Declared opens for `tickers` on `d`, in one batched read, as `Decimal`.
@@ -396,6 +458,43 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     return marks
 
 
+def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
+    """Kairos venue-dispatch seam (K4).
+
+    House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
+    existing ``build_events_from_paper_fills`` path and its outputs stay
+    byte-identical. External venues are reachable only when
+    ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``) is on
+    *and* a workspace with an active paper ``broker_connections`` row is
+    supplied — that path is wired by the execution router, not by mutating
+    the paper-fill writer.
+
+    Invalid / empty ``DIGIQUANT_EXECUTION_WORKSPACE_ID`` values warn and fall back to
+    ``None`` (house) rather than crashing the open job.
+
+    Returns the venue's string value (``ExecutionVenue`` value) so this script
+    does not need a top-level digiquant import at module load time.
+    """
+    _ensure_importable()
+    from uuid import UUID
+
+    from digiquant.olympus.kairos.policy import resolve_venue
+
+    resolved: Optional[UUID] = None
+    raw = (workspace_id or "").strip()
+    if raw:
+        try:
+            resolved = UUID(raw)
+        except ValueError:
+            print(
+                f"⚠️  DIGIQUANT_EXECUTION_WORKSPACE_ID={raw!r} is not a valid UUID; "
+                f"treating as house (paper_internal).",
+                file=sys.stderr,
+            )
+            resolved = None
+    return resolve_venue(resolved).value
+
+
 def build_events_from_paper_fills(
     sb,
     run_d: str,
@@ -429,6 +528,10 @@ def build_events_from_paper_fills(
     """
     _ensure_importable()
     try:
+        from digiquant.olympus.hermes.models.position_event import (
+            PositionEventKind,
+            PositionEventRow,
+        )
         from digiquant.olympus.hermes.writers.execution_io import (
             approved_weights,
             execute_pending_orders,
@@ -436,11 +539,16 @@ def build_events_from_paper_fills(
             pending_symbols,
         )
         from digiquant.olympus.hermes.writers.ledger_io import ledger_enabled
+        from digiquant.olympus.hermes.writers.opening_snapshot import (
+            COLD_START_DECLINE,
+            cold_start_requires_seed,
+            ensure_legacy_opening_snapshot,
+        )
     except ImportError as exc:
         return None, f"the digiquant package is not importable from this script ({exc})"
 
     if not ledger_enabled():
-        return None, "the OLYMPUS_PORTFOLIO_LEDGER kill switch is off"
+        return None, "the DIGIQUANT_PORTFOLIO_LEDGER kill switch is off"
 
     # Parsed here, inside the decline contract, rather than at the first use below. This
     # function's promise to its caller is `(None, reason)` on every way the ledger can
@@ -464,6 +572,28 @@ def build_events_from_paper_fills(
 
     if not authoritative:
         return None, f"no portfolio_ledger_commits row for run_date={run_d}"
+
+    # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
+    # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
+    # if still cold after, decline so --require-ledger exits 3 instead of mislabeling.
+    prior_book_d = _prior_book_date(sb, execution_d)
+    prior_book_date = None
+    if prior_book_d:
+        try:
+            prior_book_date = dt_date.fromisoformat(prior_book_d)
+        except ValueError:
+            prior_book_date = None
+    try:
+        if prior_book_date is not None and cold_start_requires_seed(
+            client=sb, book_date=prior_book_date
+        ):
+            ok, seed_reason = ensure_legacy_opening_snapshot(sb, prior_book_date, now=stamp)
+            if not ok:
+                return None, seed_reason
+            if cold_start_requires_seed(client=sb, book_date=prior_book_date):
+                return None, COLD_START_DECLINE
+    except Exception as exc:
+        return None, f"a portfolio-ledger cold-start probe failed ({exc})"
 
     result = execute_pending_orders(
         client=sb,
@@ -496,7 +626,6 @@ def build_events_from_paper_fills(
             f"{len(result.rejections)} order(s) — this was not a quiet day."
         )
 
-    prior_book_d = _prior_book_date(sb, execution_d)
     prior_weights = _book_weights(sb, prior_book_d)
 
     events: List[Dict[str, Any]] = []
@@ -506,9 +635,9 @@ def build_events_from_paper_fills(
         # is an EXIT and a sell to anything else is a TRIM. No weight diff and no epsilon
         # threshold is involved — that ladder is what made EXIT unreachable in #1743.
         if fill.is_sell:
-            event = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
+            event_kind: PositionEventKind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
         else:
-            event = "OPEN" if fill.prior_quantity <= 0 else "ADD"
+            event_kind = "OPEN" if fill.prior_quantity <= 0 else "ADD"
 
         weight = approved.get(fill.symbol)
         # approved_weight is a 0..1 fraction; position_events.weight_pct is in percent.
@@ -517,27 +646,32 @@ def build_events_from_paper_fills(
         # and 0.29 comes out 28.999999999999996. Writing those into a numeric column would
         # make ordinary weights look like rounding artefacts.
         weight_pct = float(weight * 100) if weight is not None else None
-        events.append(
-            {
-                "date": execution_d,
-                "ticker": fill.symbol,
-                "event": event,
-                "weight_pct": weight_pct,
-                # Display-only, and not from the ledger: migration 069 records no NAV, so
-                # the prior weight cannot be derived from the lots. It is read from the
-                # last committed `positions` book purely so the UI can show a delta, and
-                # the reason string below says so rather than implying the ledger holds it.
-                "prev_weight_pct": prior_weights.get(fill.symbol),
-                "price": float(fill.price),
-                "reason": (
-                    f"{event} — filled {fill.quantity} share(s) at {fill.price} from order "
-                    f"intent {fill.order_intent_id} (portfolio ledger paper execution "
-                    f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
-                    f"from the {prior_book_d or 'unavailable'} positions book, for display only."
-                ),
-                "thesis_id": None,
-            }
+        prev_weight_pct = prior_weights.get(fill.symbol)
+        # Lot-level true-ups (0.05–0.14 shares) keep the displayed weight the same and
+        # must not land as ADD/TRIM of +0.0pp. OPEN/EXIT still follow residual quantity.
+        if event_kind in ("ADD", "TRIM") and _desk_weight_unchanged(weight_pct, prev_weight_pct):
+            event_kind = "HOLD"
+        row = PositionEventRow(
+            date=execution_d,
+            ticker=fill.symbol,
+            event=event_kind,
+            weight_pct=weight_pct,
+            # Display-only, and not from the ledger: migration 069 records no NAV, so
+            # the prior weight cannot be derived from the lots. It is read from the
+            # last committed `positions` book purely so the UI can show a delta, and
+            # the reason string below says so rather than implying the ledger holds it.
+            prev_weight_pct=prev_weight_pct,
+            price=float(fill.price),
+            reason=(
+                f"{event_kind} — filled {fill.quantity} share(s) at {fill.price} from order "
+                f"intent {fill.order_intent_id} (portfolio ledger paper execution "
+                f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
+                f"from the {prior_book_d or 'unavailable'} positions book, for display only."
+            ),
+            thesis_id=None,
+            book_source=BOOK_SOURCE_AUTHORITATIVE,
         )
+        events.append(row.to_postgrest_row())
     return events, ""
 
 
@@ -623,7 +757,11 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     (:func:`_prior_book_date`) — the last date that actually has `positions` rows, which is
     not necessarily the prior weekday.
     """
-    res = sb.table("positions").select("ticker,weight_pct,thesis_id").eq("date", execution_d).execute()
+    res = (
+        _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id"))
+        .eq("date", execution_d)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     targets: Dict[str, float] = {}
     thesis: Dict[str, Optional[str]] = {}
@@ -680,9 +818,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     return out if out else None
 
 
-def _record_ledger_events(
-    sb, d: str, rebalance_d: str, ledger_events: List[Dict[str, Any]]
-) -> int:
+def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict[str, Any]]) -> int:
     """Write the ledger-projected events plus HOLD continuity, and report what happened.
 
     `ledger_events` may legitimately be empty — the ledger spoke and nothing traded. The
@@ -693,7 +829,9 @@ def _record_ledger_events(
     holds = _hold_events_for_positions_not_in_rebalance(
         sb, d, filled | _event_tickers_for_date(sb, d)
     )
-    events = ledger_events + holds
+    # Ledger path owns the day: fills already carry authoritative; HOLD continuity under
+    # ledger authority is stamped the same so Activity cannot mix unlabeled rows (#2422).
+    events = _with_book_source(ledger_events + holds, BOOK_SOURCE_AUTHORITATIVE)
     if not events:
         print(
             f"✅ portfolio ledger is authoritative for run_date={rebalance_d} and booked no "
@@ -702,7 +840,7 @@ def _record_ledger_events(
         return 0
 
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     # No null-price hint here on purpose: a ledger row's price *is* the fill price, so it
     # cannot be missing. Only the HOLD rows read price_history, hence the narrower count.
@@ -725,7 +863,11 @@ def main() -> int:
         "Execution prices use price_history.open for --date (execution day). "
         "HOLD rows keep the ledger continuous on no-trade days."
     )
-    ap.add_argument("--date", default=dt_date.today().isoformat(), help="Execution session date YYYY-MM-DD (opens from this day)")
+    ap.add_argument(
+        "--date",
+        default=dt_date.today().isoformat(),
+        help="Execution session date YYYY-MM-DD (opens from this day)",
+    )
     ap.add_argument(
         "--rebalance-date",
         default=None,
@@ -776,7 +918,10 @@ def main() -> int:
         return 0
 
     if args.prior_trading_day_rebalance and args.rebalance_date:
-        print("error: use only one of --prior-trading-day-rebalance or --rebalance-date", file=sys.stderr)
+        print(
+            "error: use only one of --prior-trading-day-rebalance or --rebalance-date",
+            file=sys.stderr,
+        )
         return 2
 
     rebalance_d = args.rebalance_date
@@ -793,6 +938,20 @@ def main() -> int:
         return 2
 
     sb = _sb()
+
+    # Execution venue-dispatch seam. House path: workspace_id is unset →
+    # paper_internal → existing ledger paper fills, unchanged. External routing
+    # is env-gated inside resolve_venue; this script does not submit to brokers.
+    from digiquant.olympus.envcompat import EXECUTION_WORKSPACE_ID, env_lookup
+
+    venue = resolve_execution_venue_for_run(env_lookup(EXECUTION_WORKSPACE_ID) or None)
+    if venue != "paper_internal":
+        print(
+            f"error: execute_at_open external venue {venue!r} requires the Kairos "
+            f"router (route_pending_orders); this script keeps the paper_internal path only",
+            file=sys.stderr,
+        )
+        return 4
 
     # Authoritative first. The prose paths below run only when the ledger declines.
     ledger_events: Optional[List[Dict[str, Any]]] = None
@@ -833,8 +992,11 @@ def main() -> int:
             if not digest_events:
                 digest_events = build_events_from_positions_book(sb, d)
             if digest_events:
+                digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
-                    sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+                    sb.table("position_events").upsert(
+                        e, on_conflict="workspace_id,date,ticker"
+                    ).execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
                 if null_px:
                     print(
@@ -848,13 +1010,18 @@ def main() -> int:
                     f"({trade_n} trade-related, {hold_n} HOLD) — no rebalance_decision.json for this date."
                 )
                 return 0
-        print(f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        print(
+            f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only."
+        )
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -871,12 +1038,15 @@ def main() -> int:
     table = body.get("rebalance_table") if isinstance(body, dict) else None
     if not isinstance(table, list) or not table:
         print("rebalance_decision has no rebalance_table; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -970,9 +1140,10 @@ def main() -> int:
             f"({', '.join(e['ticker'] for e in gap_holds)})"
         )
 
-    # Upsert by date,ticker (current schema)
+    # Upsert by date,ticker (current schema). Prose path is permanently legacy (#2422).
+    events = _with_book_source(events, BOOK_SOURCE_LEGACY)
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     null_px = sum(1 for e in events if e.get("price") is None)
     if null_px:
@@ -992,4 +1163,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

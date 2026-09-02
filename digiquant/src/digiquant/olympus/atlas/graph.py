@@ -18,7 +18,7 @@ skip is resolved in-node via ``resolve_edit_mode`` (not separate graphs).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Callable  # score:allow untyped any — used for LangGraph node shape
 from uuid import UUID
 
@@ -46,6 +46,7 @@ from digiquant.olympus.atlas.state import (
     RefreshScope,
     RunType,
 )
+from digiquant.olympus.temporal import capture_knowledge_cutoff_at, require_utc_datetime
 
 
 @dataclass(frozen=True)
@@ -146,7 +147,7 @@ def build_atlas_graph(
             build_phase4(),
             *build_phase5(),
             build_phase6(),
-            build_phase7(),
+            *build_phase7(),
         ]
     )
     if deps.publish is not None:
@@ -172,12 +173,26 @@ def initial_state(
     atlas_input: AtlasInput,
     config: AtlasConfigBundle | None = None,
     run_id: UUID | None = None,
+    *,
+    knowledge_cutoff_at: datetime | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> AtlasResearchState:
     """Build an ``AtlasResearchState`` from ``AtlasInput``.
 
     Separated from ``build_atlas_graph`` so tests and digiclaw can
     construct states without touching the graph compiler.
+
+    Pins ``knowledge_cutoff_at`` (UTC) **before** constructing state so
+    registry readers share one temporal boundary for the whole run (#2628).
+    Pass ``knowledge_cutoff_at`` / ``clock`` only in tests; production always
+    captures wall-clock UTC at call time. Resume paths keep the checkpointed
+    cutoff — callers must not re-pin when invoking ``None`` against a thread.
     """
+    cutoff = (
+        require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
+        if knowledge_cutoff_at is not None
+        else capture_knowledge_cutoff_at(now=clock)
+    )
     extra: dict[str, Any] = {}
     if run_id is not None:
         extra["run_id"] = run_id
@@ -187,6 +202,7 @@ def initial_state(
         refresh_scope=atlas_input.refresh_scope,
         run_date=atlas_input.run_date,
         baseline_date=atlas_input.baseline_date,
+        knowledge_cutoff_at=cutoff,
         config=config or AtlasConfigBundle(watchlist=list(atlas_input.watchlist)),
         custom_prompt=atlas_input.custom_prompt or None,
         **extra,

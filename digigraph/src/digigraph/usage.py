@@ -52,6 +52,8 @@ _EVENTS: list["RunCallEvent"] = []
 _PROVIDER_CALLS: list[ProviderCallRecord] = []
 _PROVIDER_ATTEMPTS: list[ProviderAttemptRecord] = []
 _NODE_RUNS: list[NodeRunRecord] = []
+# Empty-completion self-heal retries (#1639) — keyed by served model slug.
+_EMPTY_RETRIES: dict[str, int] = {}
 
 _SEARCH_KINDS = {"web_search", "x_search"}
 _PHASE_MAX = 120
@@ -101,13 +103,18 @@ class RunCallEvent(BaseModel):
     status: Literal["ok", "error"]
     duration_ms: int | None = Field(default=None, ge=0)
     retry_count: int = Field(default=0, ge=0)
-    prompt_tokens: int = Field(default=0, ge=0)
-    completion_tokens: int = Field(default=0, ge=0)
-    cached_tokens: int = Field(default=0, ge=0)
-    cost_usd: float = Field(default=0.0, ge=0)
+    # Missing usage stays None — never fabricate 0 (#2763 / WP1 invariant 4).
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    cached_tokens: int | None = Field(default=None, ge=0)
+    cost_usd: float | None = Field(default=None, ge=0)
     sources: int = Field(default=0, ge=0)
     input_summary: str = Field(max_length=_SUMMARY_MAX)
     output_summary: str = Field(max_length=_SUMMARY_MAX)
+    # Soft stamps to WP1 ledger (067); economics authority remains provider attempts.
+    call_id: UUID | None = None
+    attempt_id: UUID | None = None
+    node_run_id: UUID | None = None
 
 
 _CALL_CONTEXT: ContextVar[CallContext] = ContextVar(
@@ -138,6 +145,25 @@ _LOGICAL_CALL_CONTEXT: ContextVar[LogicalCallContext | None] = ContextVar(
 
 def _bounded(value: str | None, limit: int) -> str | None:
     return value[:limit] if value is not None else None
+
+
+def _optional_nonnegative_int(value: int | None) -> int | None:
+    """Preserve None; coerce present values without inventing zero for missing usage."""
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_nonnegative_float(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _optional_uuid(value: UUID | str | None) -> UUID | None:
+    if value is None:
+        return None
+    return value if isinstance(value, UUID) else UUID(str(value))
 
 
 @contextmanager
@@ -254,6 +280,7 @@ def start(*, run_id: str | None = None) -> None:
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
         _NODE_RUNS.clear()
+        _EMPTY_RETRIES.clear()
 
 
 def reset() -> None:
@@ -267,6 +294,7 @@ def reset() -> None:
         _PROVIDER_CALLS.clear()
         _PROVIDER_ATTEMPTS.clear()
         _NODE_RUNS.clear()
+        _EMPTY_RETRIES.clear()
 
 
 def active_run_id() -> str | None:
@@ -283,14 +311,17 @@ def record(
     *,
     kind: str,
     model: str,
-    prompt_tokens: int = 0,
-    completion_tokens: int = 0,
-    cached_tokens: int = 0,
-    cost: float = 0.0,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cached_tokens: int | None = None,
+    cost: float | None = None,
     sources: int = 0,
     ok: bool = True,
     duration_ms: int | None = None,
     retry_count: int = 0,
+    call_id: UUID | str | None = None,
+    attempt_id: UUID | str | None = None,
+    node_run_id: UUID | str | None = None,
     **_ignored: Any,
 ) -> None:
     """Record one LLM/search call. No-op unless capture is active.
@@ -298,10 +329,15 @@ def record(
     ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
     ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
     repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
-    USD charged for the call (OpenRouter ``usage.cost``, always present on its responses; 0.0 for
-    providers that don't report it) — summed into run-level spend for accurate cost telemetry.
+    USD charged when the provider reports it; ``None`` when unknown (never fabricate 0 on the
+    glass-box event path — WP1 / #2763). Aggregate run totals still treat missing as 0 for
+    diagnostics counters only. ``call_id`` / ``attempt_id`` soft-stamp the WP1 ledger (067).
     ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
     if not _ACTIVE:
+        return
+    if kind == "empty_retry":
+        with _LOCK:
+            _EMPTY_RETRIES[model] = _EMPTY_RETRIES.get(model, 0) + 1
         return
     context = _CALL_CONTEXT.get()
     event_kind: Literal["model_call", "search_call"] = (
@@ -314,15 +350,23 @@ def record(
         if ok
         else "Model call failed"
     )
+    prompt = _optional_nonnegative_int(prompt_tokens)
+    completion = _optional_nonnegative_int(completion_tokens)
+    cached = _optional_nonnegative_int(cached_tokens)
+    cost_usd = _optional_nonnegative_float(cost)
+    stamped_call = _optional_uuid(call_id)
+    stamped_attempt = _optional_uuid(attempt_id)
+    stamped_node = _optional_uuid(node_run_id if node_run_id is not None else context.node_run_id)
     with _LOCK:
+        # Aggregate counters: missing usage contributes 0 to run totals (diagnostics only).
         _CALLS.append(
             {
                 "kind": kind,
                 "model": model,
-                "prompt_tokens": int(prompt_tokens or 0),
-                "completion_tokens": int(completion_tokens or 0),
-                "cached_tokens": int(cached_tokens or 0),
-                "cost": float(cost or 0.0),
+                "prompt_tokens": int(prompt or 0),
+                "completion_tokens": int(completion or 0),
+                "cached_tokens": int(cached or 0),
+                "cost": float(cost_usd or 0.0),
                 "sources": int(sources or 0),
                 "ok": bool(ok),
             }
@@ -338,10 +382,10 @@ def record(
                 status="ok" if ok else "error",
                 duration_ms=duration_ms,
                 retry_count=retry_count,
-                prompt_tokens=int(prompt_tokens or 0),
-                completion_tokens=int(completion_tokens or 0),
-                cached_tokens=int(cached_tokens or 0),
-                cost_usd=float(cost or 0.0),
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                cached_tokens=cached,
+                cost_usd=cost_usd,
                 sources=int(sources or 0),
                 input_summary=(
                     "Grounding search request"
@@ -349,6 +393,9 @@ def record(
                     else "Structured model request"
                 ),
                 output_summary=output_summary,
+                call_id=stamped_call,
+                attempt_id=stamped_attempt,
+                node_run_id=stamped_node,
             )
         )
 
@@ -606,6 +653,7 @@ def record_tool_call(
                 retry_count=retry_count,
                 input_summary=_bounded(_tool_input_summary(arguments), _SUMMARY_MAX) or "",
                 output_summary=_bounded(_tool_output_summary(result, ok), _SUMMARY_MAX) or "",
+                node_run_id=context.node_run_id,
             )
         )
 
@@ -614,6 +662,13 @@ def events_snapshot() -> list[dict[str, Any]]:
     """Return an ordered, body-free copy of the current run's call events."""
     with _LOCK:
         return [event.model_dump(mode="json") for event in _EVENTS]
+
+
+def _empty_retries_payload() -> dict[str, Any]:
+    with _LOCK:
+        by_model = dict(sorted(_EMPTY_RETRIES.items()))
+    total = sum(by_model.values())
+    return {"total": total, "by_model": by_model}
 
 
 def snapshot() -> dict[str, Any]:
@@ -660,5 +715,6 @@ def snapshot() -> dict[str, Any]:
         "grounding_failed": sum(1 for c in search if not c["ok"]),
         "models": sorted({c["model"] for c in calls}),
         "by_kind": by_kind,
+        "empty_retries": _empty_retries_payload(),
         "events": events_snapshot(),
     }

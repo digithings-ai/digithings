@@ -45,7 +45,7 @@
   .ts-meta { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
   .ts-meta-text { color: var(--ink-mute); font-size: 0.85rem; font-family: var(--font-mono); }
 
-  .ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 999px; padding: 0.22rem 0.65rem; }
+  .ts-chip { display: inline-flex; align-items: center; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.02em; color: var(--ink); border: 1px solid var(--accent-weak); background: var(--accent-weak); border-radius: 0; padding: 0.22rem 0.65rem; }
   .ts-chip-soft { color: var(--ink-soft); border-color: var(--hair); background: var(--surface); }
 }
 
@@ -71,7 +71,7 @@
 
 /* ---- panels, legends, tabs ---- */
 @layer components {
-  .ts-panel { border: 1px solid var(--hair); border-radius: 16px; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
+  .ts-panel { border: 1px solid var(--hair); border-radius: 0; background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 1.25rem 1.3rem 1.35rem; margin-bottom: 1.1rem; }
   .ts-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--hair); flex-wrap: wrap; }
   .ts-panel-chart-main { padding-bottom: 1rem; }
   .ts-panel-tools { display: inline-flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; justify-content: flex-end; }
@@ -79,14 +79,14 @@
   .ts-chart-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
   .ts-chart-legend-swatch { display: inline-block; flex-shrink: 0; }
   .ts-chart-legend-line { width: 18px; height: 0; border-top: 2px solid var(--accent); }
-  .ts-chart-legend-bar-up { width: 12px; height: 9px; background: var(--up); opacity: 0.82; border-radius: 1px; }
-  .ts-chart-legend-bar-down { width: 12px; height: 9px; background: var(--down); opacity: 0.82; border-radius: 1px; }
+  .ts-chart-legend-bar-up { width: 12px; height: 9px; background: var(--up); opacity: 0.82; border-radius: 0; }
+  .ts-chart-legend-bar-down { width: 12px; height: 9px; background: var(--down); opacity: 0.82; border-radius: 0; }
   .ts-chart-legend-marker-buy { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 10px solid var(--accent); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
   .ts-chart-legend-marker-sell { width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid var(--down); filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent)); }
   .ts-chart-legend-bar-open {
     width: 12px;
     height: 9px;
-    border-radius: 1px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--accent) 35%, var(--surface));
     border: 2px solid var(--accent);
     opacity: 0.85;
@@ -279,7 +279,7 @@
 .ts-seg-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-  border-radius: 2px;
+  border-radius: 0;
 }
 .ts-seg-static .ts-seg-btn { pointer-events: none; cursor: default; }
 .ts-seg-compact .ts-seg-btn { font-size: 0.68rem; padding: 0.2rem 0.48rem; letter-spacing: 0.02em; }
@@ -326,7 +326,7 @@
   }
   .ts-tab-pane-matrix { min-height: min(70vh, 520px); display: flex; flex-direction: column; flex: 1; }
 
-  .ts-dir { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.72rem; font-family: var(--font-mono); }
+  .ts-dir { display: inline-block; padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 0; font-size: 0.72rem; font-family: var(--font-mono); }
   .ts-dir-long { color: var(--up); }
   .ts-dir-short { color: var(--down); }
 }
