@@ -13,6 +13,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
+from digigraph.chat_prompt import last_user_turn
 from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
@@ -500,7 +501,7 @@ def _run_document_rag_path(
     )
     llm_messages = list(compaction.llm_messages)
     forced = resolve_force_tool(state.get("force_tool"))
-    force_query = str(prompt).strip()
+    force_query = last_user_turn(str(prompt))
     if forced and force_query:
         # #3418: inject the locate call with the user string as the argument.
         # Do not hint the model — it only synthesizes after the result lands.

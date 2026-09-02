@@ -118,3 +118,31 @@ def messages_to_workflow_prompt(messages: list[ChatMessage]) -> str:
         label = "User" if role == "user" else "Assistant"
         lines.append(f"{label}: {content}")
     return "\n\n".join(lines)
+
+
+def last_user_turn(prompt: str) -> str:
+    """Current user string from a workflow ``prompt``.
+
+    ``messages_to_workflow_prompt`` leaves a single user turn unlabeled and
+    labels multi-turn history as ``User:`` / ``Assistant:`` blocks. ``/search``
+    and ``/docs`` (#3418) must inject that current turn as the tool ``query``,
+    not the whole flattened transcript.
+    """
+    text = (prompt or "").strip()
+    if not text:
+        return ""
+    dialogue = text.startswith("User: ") and "\n\nAssistant: " in text
+    last_marker = text.rfind("\n\nUser: ")
+    if last_marker >= 0 and (dialogue or last_marker > 0):
+        block = text[last_marker + len("\n\nUser: ") :]
+        cut = block.find("\n\nAssistant: ")
+        if cut >= 0:
+            block = block[:cut]
+        return block.strip()
+    if dialogue:
+        block = text[len("User: ") :]
+        cut = block.find("\n\nAssistant: ")
+        if cut >= 0:
+            block = block[:cut]
+        return block.strip()
+    return text

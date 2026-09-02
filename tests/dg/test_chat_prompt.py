@@ -126,3 +126,26 @@ def test_assistant_only_turns_after_filtered_user_turn_are_not_silently_dropped(
     ]
     prompt = messages_to_workflow_prompt(messages)
     assert "reply" in prompt
+
+
+@pytest.mark.unit
+def test_last_user_turn_keeps_a_plain_single_turn() -> None:
+    from digigraph.chat_prompt import last_user_turn
+
+    assert last_user_turn("RS256 token exchange") == "RS256 token exchange"
+    assert last_user_turn("") == ""
+    assert last_user_turn("User: this is the actual query") == "User: this is the actual query"
+
+
+@pytest.mark.unit
+def test_last_user_turn_extracts_current_turn_from_flattened_history() -> None:
+    from digigraph.chat_prompt import last_user_turn, messages_to_workflow_prompt
+
+    prompt = messages_to_workflow_prompt(
+        [
+            ChatMessage(role="user", content="What is RS256?"),
+            ChatMessage(role="assistant", content="RS256 is an asymmetric signing algorithm."),
+            ChatMessage(role="user", content="RS256 token exchange"),
+        ]
+    )
+    assert last_user_turn(prompt) == "RS256 token exchange"

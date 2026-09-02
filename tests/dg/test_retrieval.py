@@ -278,6 +278,47 @@ def test_research_node_injects_force_tool_then_synthesizes_with_auto(
     assert parsed["notes_already_loaded"] is True
 
 
+def test_research_node_force_tool_uses_last_user_turn_not_flattened_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#3418: a follow-up /search must query the current user string, not the
+    User:/Assistant: transcript messages_to_workflow_prompt builds for the LLM."""
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", "You are a helpful assistant."),
+    )
+    executed: list[tuple[str, dict]] = []
+
+    def fake_execute(name: str, args: dict, _context: object) -> dict:
+        executed.append((name, args))
+        return {"content": "{}", "rag_sources": []}
+
+    monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
+    monkeypatch.setattr(
+        "digigraph.graph.research.run_tools",
+        lambda **_k: "ok",
+    )
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
+
+    from digigraph.chat_prompt import messages_to_workflow_prompt
+    from digigraph.graph.research import research_node
+    from digigraph.models import ChatMessage
+
+    prompt = messages_to_workflow_prompt(
+        [
+            ChatMessage(role="user", content="What is RS256?"),
+            ChatMessage(role="assistant", content="RS256 is an asymmetric signing algorithm."),
+            ChatMessage(role="user", content="RS256 token exchange"),
+        ]
+    )
+    research_node({"prompt": prompt, "force_tool": "digisearch"})
+    assert executed[0][0] == "digisearch"
+    assert executed[0][1] == {"query": "RS256 token exchange"}
+    assert "What is RS256" not in executed[0][1]["query"]
+    assert "Assistant:" not in executed[0][1]["query"]
+
+
 def test_research_node_force_tool_keeps_auto_even_when_require_tool_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
