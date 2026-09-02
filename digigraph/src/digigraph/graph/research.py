@@ -502,7 +502,11 @@ def _run_document_rag_path(
     llm_messages = list(compaction.llm_messages)
     forced = resolve_force_tool(state.get("force_tool"))
     force_query = last_user_turn(str(prompt))
-    if forced and force_query:
+    # Skip inject when the tenant allowlist excludes the tool. execute() would
+    # deny it anyway, but we must not emit a started tool_call / Searching…
+    # row or feed the deny blob into force_tool_messages. None = unrestricted
+    # (public embed); a set must contain the forced tool.
+    if forced and force_query and (_allowed_names is None or forced in _allowed_names):
         # #3418: inject the locate call with the user string as the argument.
         # Do not hint the model — it only synthesizes after the result lands.
         hop_args = {"query": force_query}

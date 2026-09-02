@@ -352,6 +352,78 @@ def test_research_node_force_tool_keeps_auto_even_when_require_tool_calls(
     assert captured["tool_choice"] == "auto"
 
 
+def test_research_node_skips_force_tool_when_not_in_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tenants with an allowlist must not get a fake Searching… row from
+    X-Digi-Force-Tool when the forced tool is excluded — even though execute()
+    would deny it, the inject path still emitted tool_call + deny blob."""
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", "You are a helpful assistant."),
+    )
+    executed: list[str] = []
+    stream_events: list[tuple[str, object]] = []
+
+    def fake_execute(name: str, args: dict, _context: object) -> dict:
+        executed.append(name)
+        return {"error": "tool_not_allowed", "tool": name, "message": "denied"}
+
+    def fake_run_tools(*, messages: list, **_kwargs: object) -> str:
+        return "ok"
+
+    def fake_writer(event: tuple[str, object]) -> None:
+        stream_events.append(event)
+
+    monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
+    monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
+    monkeypatch.setattr("digigraph.graph.research._safe_stream_writer", lambda: fake_writer)
+
+    from digigraph.graph.research import research_node
+
+    research_node(
+        {
+            "prompt": "RS256 token exchange",
+            "force_tool": "digisearch",
+            "allowed_tool_names": ["visualization_agent"],
+        }
+    )
+    assert executed == []
+    assert not any(kind == "tool_call" for kind, _ in stream_events)
+
+
+def test_research_node_force_tool_injects_when_allowlisted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGISEARCH_URL", "http://digisearch:8002")
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", "You are a helpful assistant."),
+    )
+    executed: list[str] = []
+
+    def fake_execute(name: str, args: dict, _context: object) -> dict:
+        executed.append(name)
+        return {"content": "{}", "rag_sources": []}
+
+    monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
+    monkeypatch.setattr("digigraph.graph.research.run_tools", lambda **_k: "ok")
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
+
+    from digigraph.graph.research import research_node
+
+    research_node(
+        {
+            "prompt": "RS256",
+            "force_tool": "digisearch",
+            "allowed_tool_names": ["digisearch", "digivault_get_note"],
+        }
+    )
+    assert executed[0] == "digisearch"
+
+
 def test_research_node_auto_loads_notes_on_model_driven_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
