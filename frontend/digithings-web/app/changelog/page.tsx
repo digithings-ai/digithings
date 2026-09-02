@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 import releases from "../../../digiweb/design/releases.json";
@@ -64,7 +64,7 @@ export default function ChangelogPage() {
           </div>
         </section>
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

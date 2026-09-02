@@ -314,7 +314,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live still requires merging the halt-fixed stack to `main` and `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from that tree — agents do not push.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). The Charts **Indicators** tab is SDCA-only (`showsIndicatorsTab` / public type `sdca`) — L/S P/L books never get that tab, even if a payload carried unused series. Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live is `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from a tree whose `settings.json` includes `btc_sdca` (real Nautilus backtest; no hand-inserted metrics). Nightly `pipeline-digiquant-tearsheets.yml` now stages `M2SL.csv` / `DTWEXBGS.csv` beside the Coinbase cache (#3453) so those composite weights are not silently dropped. The job still checks out `main` (#1626) — a family is unpublished until its settings entry is on main. Agents do not push.
 
 Regenerate only when calibrations are available from **one** of:
 
@@ -327,11 +327,13 @@ Without real calibrations, `SlapperStrategy` falls back to `calibrations.example
 
 ```bash
 python digiquant/scripts/fetch_coinbase.py --through-yesterday
+python digiquant/scripts/export_sdca_macro.py
 python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase --signal-delay-days 3
 # No git commit — the DB is the delivery; the site reads strategy_tearsheets live.
+# One-shot BTC-SDCA only: add --strategy btc_sdca (skips Slapper calibrations).
 ```
 
-`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is the same three steps: fetch → generate `--push-supabase --signal-delay-days 3`, no repo write.
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is fetch Coinbase → stage SDCA macro CSVs → generate `--push-supabase --signal-delay-days 3`, no repo write. Targets are every `settings.json` strategy (L/S Slappers + `btc_sdca`). Push upserts the public `strategies` catalog row first — `strategy_tearsheets.strategy_id` FKs that table, and SDCA was never inserted by the Slapper-only calibrations sync.
 
 **One-time upload** (after optimizing in TradingView):
 
@@ -2517,22 +2519,18 @@ the grants would refuse anyway.
   its mark, so both are an exact `0` — `FillCosts` records that rather than leaving the
   columns NULL, and `slippage` is signed (`(price − mark) × quantity`) so a real broker
   adapter later fills the same fields without a schema change.
-- **The event name comes from the lots, not from the action label.** `DecisionAction` has no
-  "open": a buy is `add`. So `Fill` carries `prior_quantity` and `residual_quantity`, both
-  measured, and the projection names the event from them — `OPEN` when the prior live total
-  is 0 else `ADD`, `EXIT` when the residual is 0 else `TRIM`. There is no epsilon ladder;
-  that ladder is what made `EXIT` unreachable in #1743 (31 OPEN rows in one day, zero EXITs).
+- **The event name is the prior→target delta, with lot residual as OPEN/EXIT
+  reconciliation.** `DecisionAction` has no "open": a buy is `add`. `Fill` still
+  carries `prior_quantity` and `residual_quantity` so a sell that consumes every
+  share is EXIT (#1743) and a same-run open-then-close still names EXIT. ADD vs
+  TRIM vs HOLD is the weight delta against `_prior_book_date(run_date)`, not a
+  later book join. Zero display-pp ADD/TRIM is impossible.
 - **The residual is read back, never computed.** After booking the close rows the executor
   re-reads `_live_quantity` out of the lineages it just mutated. `prior − quantity` would
   report −2 shares for a sell of 5 against 3 live ones, which reads as a *short* to anything
   looking at magnitude; the position is flat and the surplus is logged as a data error.
   Reading it back is also what makes two orders on one symbol in one run chain correctly —
   the second sees the first's residual, not the pre-run book.
-- **ADD/TRIM of +0.0pp is HOLD.** Event kind still comes from residual quantity, but if the
-  approved weight and prior book round to the same 1-decimal pp, the projection writes
-  `HOLD` rather than a dust true-up. House 2026-09-01 FXI/VGK/XLF filled ~0.05–0.14 shares
-  at unchanged 5/25/20%. `OPEN`/`EXIT` are unchanged (#1743). H9 also skips `order_intents`
-  when `_decision` returns `NO_OP` (no-trade band), so those fills should not mint again.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
   row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
@@ -2551,9 +2549,19 @@ prior trading date, `3` for `--require-ledger` when the ledger declined, `0` oth
 Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
 becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`. And
-`prev_weight_pct` is **display only**, read from the last committed `positions` book: migration
-069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
-all, and the book may be a different date than the run date.
+`prev_weight_pct` is the **pre-commit** `positions` book — `_prior_book_date(run_date)`,
+never `_prior_book_date(execution_d)`. H9 writes today's targets onto `run_date` before
+the open, so an execution-day lookback finds that already-committed new book and every
+ADD/TRIM looks like +0.0pp (house post-2026-08-27). The same prior *book date*
+sizes `OrderIntent` and HOLD continuity; the displayed pp is book-to-book (undrifted
+pre-commit weights), not the marked-to-market H8 snapshot that sized the fill.
+`position_events` must not invent a second labeling system.
+
+- **ADD/TRIM come from that prior→target delta.** Lot residual still names OPEN vs ADD
+  and EXIT vs TRIM when the approved weight is missing or when a same-run chain closes
+  a position (#1743). A 0.0pp display move cannot be ADD/TRIM (HOLD). H9 skips
+  `order_intents` when `_decision` returns `NO_OP` (no-trade band), so sub-threshold
+  trades must not exist as intents either.
 
 Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
 switch defaults *on*. After #2589 the morning job and backfill run the ledger path with
@@ -2763,7 +2771,9 @@ and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
 adds digiquant.io's public read surface to this project's single migration chain: three
 curated anon-readable views — `public_portfolio_positions`, `public_nav_history`,
 `public_price_latest` — exposing performance metrics only (never
-`rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
+`rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). The landing
+blotter uses `public_price_latest` as the mark when `positions.current_price` is
+still null (metrics cron is 22:00 UTC; the 12:00 book is unmarked until then). They pair with
 the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
 server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
 schedule) and upserts one row per ticker into `public.prices_live` (migration `063`),

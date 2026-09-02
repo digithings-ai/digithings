@@ -71,9 +71,11 @@ def main() -> int:
         logger.error("Supabase credentials missing (CORE_SUPABASE_URL + CORE_SUPABASE_SERVICE_KEY)")
         return 1
 
+    from digiquant.strategies.calibrations_loader import entry_is_slapper
+
     strat_rows = []
     for sid, cfg in strategies.items():
-        if sid not in calibrations:
+        if entry_is_slapper(cfg, settings) and sid not in calibrations:
             logger.error("calibrations.json missing key %r", sid)
             return 1
         strat_rows.append(
@@ -100,6 +102,9 @@ def main() -> int:
     upsert_strategies(client, strat_rows)
     logger.info("Upserted %d strategies rows", len(strat_rows))
     for sid in strategies:
+        if sid not in calibrations:
+            logger.info("  skip calibration (none) → %s", sid)
+            continue
         upsert_calibration(client, sid, calibrations[sid])
         logger.info("  calibration → %s", sid)
     logger.info("Done.")

@@ -66,6 +66,21 @@ describe("mapRawSourceToDocument", () => {
       snippet: "JWT exchange via digikey",
     });
   });
+
+  it("maps get_note rag_sources body onto the activity document", () => {
+    const doc = mapRawSourceToDocument({
+      doc_id: "clients/digithings/auth__p001",
+      snippet: "RS256 tokens…",
+      body: "# Auth\n\nFull note from get_note.",
+      metadata: { title: "Auth plane" },
+    });
+    expect(doc).toMatchObject({
+      title: "Auth plane",
+      path: "clients/digithings/auth__p001",
+      snippet: "RS256 tokens…",
+      body: "# Auth\n\nFull note from get_note.",
+    });
+  });
 });
 
 describe("ragToolDisplayName", () => {

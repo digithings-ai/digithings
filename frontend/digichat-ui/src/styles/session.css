@@ -167,12 +167,12 @@
   right: 0.4rem;
 }
 .dc-msg-copy {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: static;
+  display: inline-block;
+  margin-top: 0.4rem;
 }
 .dc-code-block:hover .dc-code-copy,
-.dc-msg:hover .dc-msg-copy,
+.dc-body:hover .dc-msg-copy,
 .dc-code-copy:focus-visible,
 .dc-msg-copy:focus-visible {
   opacity: 1;
@@ -193,6 +193,45 @@
   padding: 0.5rem 0.75rem 0.75rem;
   border-top: 1px solid var(--hair);
   background: transparent;
+  position: relative;
+}
+.dc-slash {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-slash-item {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  padding: 0.28rem 0;
+  cursor: pointer;
+}
+.dc-slash-item:hover,
+.dc-slash-item:focus-visible {
+  color: var(--accent);
+}
+.dc-slash-cmd {
+  font-family: var(--font-mono);
+  min-width: 5.5rem;
+}
+.dc-slash-hint {
+  color: var(--ink-mute);
+}
+.dc-slash-note pre {
+  margin: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  color: var(--ink-mute);
 }
 .dc-textarea {
   font: inherit;
@@ -523,4 +562,117 @@
 .dc-attribution a {
   color: var(--accent);
   text-decoration: underline;
+}
+
+.dc-session-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.dc-session-with-pane .dc-session-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+}
+.dc-session-main .dc-thread {
+  flex: 1;
+  min-width: 0;
+}
+
+.dc-source-cards {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.dc-source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  max-width: 16rem;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.dc-source-card:hover,
+.dc-source-card:focus-visible {
+  border-color: var(--accent);
+}
+.dc-source-card-title {
+  color: var(--accent);
+}
+.dc-source-card-path {
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dc-act-hit-open {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.dc-act-hit-open:hover,
+.dc-act-hit-open:focus-visible {
+  text-decoration: underline;
+}
+
+.dc-doc-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--hair);
+  background: var(--bg);
+}
+.dc-doc-pane-head {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-doc-pane-title {
+  flex: 1;
+  font-size: 0.82rem;
+}
+.dc-doc-pane-close {
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+}
+.dc-doc-pane-path,
+.dc-doc-pane-snippet,
+.dc-doc-pane-empty {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.74rem;
+  color: var(--ink-mute);
+}
+.dc-doc-pane-body,
+.dc-doc-pane-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0.7rem;
+}
+.dc-doc-pane-frame {
+  width: 100%;
+  border: 0;
 }

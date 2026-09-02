@@ -25,6 +25,7 @@
     "./styles/finance-tearsheet.css": "./src/styles/finance-tearsheet.css",
     "./styles/finance-tearsheet-overlay.css": "./src/styles/finance-tearsheet-overlay.css",
     "./styles/data-layout.css": "./src/styles/data-layout.css",
+    "./styles/repo-activity.css": "./src/styles/repo-activity.css",
     "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
     "./styles/command-palette.css": "./src/styles/command-palette.css",

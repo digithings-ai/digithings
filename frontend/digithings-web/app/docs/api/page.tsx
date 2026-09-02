@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../../_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { OPENAPI_SERVICES } from "@/lib/openapiCatalog";
 
@@ -72,7 +71,7 @@ export default function OpenApiIndexPage() {
           </div>
         </div>
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

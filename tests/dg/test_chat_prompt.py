@@ -65,6 +65,27 @@ def test_long_history_is_trimmed_to_token_budget(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
+def test_trim_to_single_user_turn_stays_unlabeled(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When budget trim leaves only the latest user turn, flatten unlabeled (same as the
+    single-turn fast path). A labeled ``User: …`` with no ``Assistant:`` block would make
+    ``last_user_turn`` return the role prefix as part of a ``/search`` locate query."""
+    from digigraph.chat_prompt import last_user_turn
+
+    monkeypatch.setenv("DIGI_CHAT_HISTORY_MAX_TOKENS", "30")
+    messages = [
+        ChatMessage(role="user", content="turn one is old and should get dropped " * 10),
+        ChatMessage(role="assistant", content="ack one " * 10),
+        ChatMessage(role="user", content="turn two, also old " * 10),
+        ChatMessage(role="assistant", content="ack two " * 10),
+        ChatMessage(role="user", content="most recent question"),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert prompt == "most recent question"
+    assert not prompt.startswith("User: ")
+    assert last_user_turn(prompt) == "most recent question"
+
+
+@pytest.mark.unit
 def test_non_numeric_history_max_tokens_falls_back_to_default(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -126,3 +147,26 @@ def test_assistant_only_turns_after_filtered_user_turn_are_not_silently_dropped(
     ]
     prompt = messages_to_workflow_prompt(messages)
     assert "reply" in prompt
+
+
+@pytest.mark.unit
+def test_last_user_turn_keeps_a_plain_single_turn() -> None:
+    from digigraph.chat_prompt import last_user_turn
+
+    assert last_user_turn("RS256 token exchange") == "RS256 token exchange"
+    assert last_user_turn("") == ""
+    assert last_user_turn("User: this is the actual query") == "User: this is the actual query"
+
+
+@pytest.mark.unit
+def test_last_user_turn_extracts_current_turn_from_flattened_history() -> None:
+    from digigraph.chat_prompt import last_user_turn, messages_to_workflow_prompt
+
+    prompt = messages_to_workflow_prompt(
+        [
+            ChatMessage(role="user", content="What is RS256?"),
+            ChatMessage(role="assistant", content="RS256 is an asymmetric signing algorithm."),
+            ChatMessage(role="user", content="RS256 token exchange"),
+        ]
+    )
+    assert last_user_turn(prompt) == "RS256 token exchange"

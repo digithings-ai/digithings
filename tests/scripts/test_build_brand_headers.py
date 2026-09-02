@@ -11,7 +11,10 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BRAND = REPO_ROOT / "frontend" / "digiweb" / "brand"
-PUBLIC_BRAND = REPO_ROOT / "frontend" / "digithings-web" / "public" / "brand"
+PUBLIC_BRAND = REPO_ROOT / "frontend" / "digiweb" / "reference" / "public" / "brand"
+MARKETING_PUBLIC_BRAND = REPO_ROOT / "frontend" / "digithings-web" / "public" / "brand"
+MARKETING_BRAND_PAGE = REPO_ROOT / "frontend" / "digithings-web" / "app" / "brand"
+KIT_TS = REPO_ROOT / "frontend" / "digiweb" / "reference" / "lib" / "brandKit.ts"
 
 pytestmark = pytest.mark.unit
 
@@ -131,11 +134,35 @@ def test_header_svg_is_outlined_not_text(header_mod) -> None:
 
 
 def test_brand_kit_ts_matches_og_headlines(og_headlines) -> None:
-    """The /brand page constants must track HEADLINES — --check does not read TS."""
-    kit = (REPO_ROOT / "frontend" / "digithings-web" / "lib" / "brandKit.ts").read_text(
-        encoding="utf-8"
-    )
+    """The design-reference /brand constants must track HEADLINES — --check does not read TS."""
+    kit = KIT_TS.read_text(encoding="utf-8")
     copy = og_headlines["digithings"]
     assert f'export const BRAND_WORD = "{copy["word"]}"' in kit
     assert f'export const BRAND_TAGLINE = "{copy["line"]}"' in kit
     assert f'export const BRAND_DOMAIN = "{copy["domain"]}"' in kit
+
+
+def test_kit_is_not_on_the_marketing_site() -> None:
+    """digithings.ai must not ship /brand — the kit is design-reference only."""
+    assert not (MARKETING_BRAND_PAGE / "page.tsx").exists()
+    assert not MARKETING_PUBLIC_BRAND.exists() or not any(MARKETING_PUBLIC_BRAND.rglob("*"))
+    nav = (REPO_ROOT / "frontend" / "digithings-web" / "app" / "_nav.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert 'href: "/brand"' not in nav
+    redirects = (REPO_ROOT / "frontend" / "digithings-web" / "public" / "_redirects").read_text(
+        encoding="utf-8"
+    )
+    assert "/brand" not in redirects
+
+
+def test_design_reference_ships_the_kit_page() -> None:
+    page = (
+        REPO_ROOT / "frontend" / "digiweb" / "reference" / "app" / "brand" / "page.tsx"
+    ).read_text(encoding="utf-8")
+    assert "{BRAND_TAGLINE}" in page
+    assert "design-reference" in page
+    nav_path = (
+        REPO_ROOT / "frontend" / "digiweb" / "reference" / "components" / "site-nav.tsx"
+    )
+    assert 'href: "/brand"' in nav_path.read_text(encoding="utf-8")
