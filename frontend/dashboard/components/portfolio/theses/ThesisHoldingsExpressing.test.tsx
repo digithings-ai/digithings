@@ -38,9 +38,9 @@ describe('ThesisHoldingsExpressing tier gate', () => {
     expect(html).not.toContain('NVDA');
   });
 
-  it('passthrough weights for Baseline', () => {
+  it('passthrough weights for Brief', () => {
     const html = renderToStaticMarkup(
-      createElement(ThesisHoldingsExpressing, { positions, tier: 'baseline' }),
+      createElement(ThesisHoldingsExpressing, { positions, tier: 'brief' }),
     );
     expect(html).toContain('NVDA');
     expect(html).toContain('12.5%');

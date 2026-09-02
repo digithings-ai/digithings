@@ -92,6 +92,7 @@ from digiquant.olympus.overlay.dispatch import (
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
+from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
 from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
 from digiquant.olympus.research_corpus import ResearchCorpusStore
 from digiquant.olympus.tenancy import (
@@ -132,8 +133,8 @@ _STRIPE_SUBSCRIPTION_UPDATED: dict[str, Any] = {
                 "data": [
                     {
                         "price": {
-                            "id": "price_custom_monthly",
-                            "metadata": {"plan_tier": "custom"},
+                            "id": "price_studio_monthly",
+                            "metadata": {"plan_tier": "studio"},
                         }
                     }
                 ]
@@ -404,7 +405,7 @@ def sb(custom_ws_id: UUID, free_ws_id: UUID, master_key: MasterKey) -> ChainFake
                     "slug": "custom-chain",
                     "type": WorkspaceType.USER.value,
                     "name": "Custom Chain",
-                    "plan_tier": PlanTier.CUSTOM.value,
+                    "plan_tier": PlanTier.STUDIO.value,
                     "subscription_status": SubscriptionStatus.ACTIVE.value,
                     "stripe_customer_id": "cus_chain_custom",
                     "claim_sync_pending": False,
@@ -642,7 +643,7 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     job_store = MemoryJobRunStore()
     entitlement = WorkspaceEntitlement(
         workspace_id=custom_ws_id,
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     byok_ok = ByokProbe(
@@ -690,7 +691,10 @@ def test_entitled_overlay_to_paper_fill_to_alert(
         vault_key=byok_master,
         house_job_store=MemoryJobRunStore(),  # prove isolation — never written
     )
-    assert overlay_result.status is JobStatus.SUCCEEDED
+    assert overlay_result.status is JobStatus.FAILED
+    finished = job_store.get_by_idempotency_key(dispatch.job.idempotency_key)
+    assert finished is not None
+    assert finished.error == LEGACY_BOOK_UNIQUE_CODE
     assert "theme:ai" in overlay_result.published_keys
     assert f"asset:{_SYMBOL.lower()}" in overlay_result.published_keys
     order_intent_id = order_intent_id_box["id"]
@@ -766,7 +770,7 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     mailgun = CapturingMailgun()
     cfg = _mailgun_config()
     # Tier gate vocabulary (T5 matrix): free cannot see broker_status.
-    assert can(NotifyPlanTier.CUSTOM, ArtifactClass.BROKER_STATUS) is True
+    assert can(NotifyPlanTier.STUDIO, ArtifactClass.BROKER_STATUS) is True
     assert can(NotifyPlanTier.FREE, ArtifactClass.BROKER_STATUS) is False
 
     custom_pref = next(

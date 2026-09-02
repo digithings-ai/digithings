@@ -150,7 +150,7 @@ def test_overlay_persist_disabled_after_corpus(
     store = MemoryJobRunStore()
     ws = WorkspaceEntitlement(
         workspace_id=uuid4(),
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     job = dispatch_overlay_daily(

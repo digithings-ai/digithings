@@ -3,7 +3,7 @@
  *
  * `fx_hub` and future custom dashboard products are moderated via
  * `client_product_grants`. Creator emails get a `plan_floor` in
- * `entitlement_grants` so baseline/execution works without Stripe.
+ * `entitlement_grants` so overlay/execution works without Stripe.
  */
 
 import type { PlanTier } from './entitlements';
@@ -108,11 +108,11 @@ export function resolveClientAccess(args: {
     };
   }
 
-  // Env fallback: creator emails get custom floor + fx_hub.
+  // Env fallback: creator emails get studio floor + fx_hub.
   const creators = creatorEmailsFromEnv();
   const grants = productGrantsFromEnv();
   const isCreator = email !== null && creators.includes(email);
-  const planFloor: PlanTier | null = isCreator ? 'custom' : null;
+  const planFloor: PlanTier | null = isCreator ? 'studio' : null;
   const products = email ? [...(grants.get(email) ?? [])] : [];
   if (isCreator && !canAccessProduct(products, 'fx_hub')) {
     products.push('fx_hub');
