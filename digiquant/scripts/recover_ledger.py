@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Operator CLI: recover a ledger commit from existing positions (#3330, #3426).
-
-Reads an already-booked ``positions`` / ``nav_history`` day. Does not re-run
-the LLM pipeline. When a head commit exists, matching approved weights publish
-only the missing ``commit-run`` document; a mismatch is conflict unless
-``--force-recommit``.
-
-Usage:
-  python digiquant/scripts/recover_ledger.py --date 2026-08-31
-  python digiquant/scripts/recover_ledger.py --date 2026-08-31 --apply --yes
-"""
+"""Recover a ledger commit from existing positions (#3330, #3426)."""
 
 from __future__ import annotations
 
@@ -35,7 +25,6 @@ APPLY_MAX_AGE_DAYS = 7
 
 
 def _apply_guard(run_date: date, *, apply: bool, yes: bool) -> str | None:
-    """Return an error message when ``--apply`` is refused, else ``None``."""
     if not apply or yes:
         return None
     age = (datetime.now(tz=UTC).date() - run_date).days
@@ -75,27 +64,31 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": refused, "status": "refused"}, indent=2, sort_keys=True))
         return 1
 
-    client = build_client(SupabaseConfig.from_env())
     result = recover_ledger_from_book(
-        client=client,
+        client=build_client(SupabaseConfig.from_env()),
         run_date=run_date,
         apply=args.apply,
         force_recommit=args.force_recommit,
     )
-    payload = {
-        "run_date": result.run_date.isoformat(),
-        "status": result.status,
-        "commit_id": result.commit_id,
-        "source_run_id": result.source_run_id,
-        "weights": result.weights,
-        "cash_pct": result.cash_pct,
-        "nav": result.nav,
-        "message": result.message,
-        "house_workspace_id": str(house_workspace_id()),
-        "apply": args.apply,
-        "force_recommit": args.force_recommit,
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "run_date": result.run_date.isoformat(),
+                "status": result.status,
+                "commit_id": result.commit_id,
+                "source_run_id": result.source_run_id,
+                "weights": result.weights,
+                "cash_pct": result.cash_pct,
+                "nav": result.nav,
+                "message": result.message,
+                "house_workspace_id": str(house_workspace_id()),
+                "apply": args.apply,
+                "force_recommit": args.force_recommit,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     if result.status == "no_book":
         return 2
     if result.status == "conflict":
