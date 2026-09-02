@@ -3403,8 +3403,9 @@ PRs. `gh run list` `headSha` is the default-branch **trigger** (develop), not
 the job checkout, so counting is `created_at` strictly after the later of
 #3334 (`2026-08-31T20:39Z`) and current `origin/main` committer time. Exit **0**
 only for a **schedule** success after that cutoff. `workflow_dispatch` never
-counts. Exit **3** until a counting `cron: "0 12 * * *"` (a 12:00 UTC run that
-started before fail-softs merged does not count). Exit **2** if a counting
+counts. Exit **3** until a counting `schedule` after that cutoff (crons are
+`17 9/10/11/12 * * *` — not `0 12 * * *`). A 12:00 UTC run that started
+before fail-softs merged does not count. Exit **2** if a counting
 schedule fails. The CLI refuses `--dispatch` / `--apply`.
 
 **Entry points:**
