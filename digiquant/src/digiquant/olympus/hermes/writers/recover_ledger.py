@@ -47,6 +47,12 @@ logger = logging.getLogger(__name__)
 
 _PORTFOLIO_JSON = Path(__file__).resolve().parents[2] / "atlas" / "config" / "portfolio.json"
 RecoveryStatus = Literal["dry_run", "committed", "already_committed", "no_book", "conflict"]
+# Booking skips a CASH positions row at or below this percent; the chain still
+# writes an approved CASH target. Match must not treat that skip as a conflict.
+_CASH_BOOK_THRESHOLD_PP = 0.01
+# Book stores percent at 4dp; approved stores a 1e-6 fraction. Float conversion of
+# a 4dp tick is slightly above 1e-4 (e.g. 5.07715), so tolerate past one tick.
+_APPROVED_MATCH_TOLERANCE_PP = 5e-4
 
 
 @dataclass(frozen=True)
@@ -241,7 +247,9 @@ def _approved_matches_book(
     )
     by_symbol = _head_by_symbol(_heads(approved))
     needed = {_symbol(ticker): round(float(pct), 4) for ticker, pct in weights.items()}
-    needed[_CASH] = round(float(cash_pct), 4)
+    cash = round(float(cash_pct), 4)
+    if cash > _CASH_BOOK_THRESHOLD_PP:
+        needed[_CASH] = cash
     if not needed:
         return False
     for symbol, pct in needed.items():
@@ -252,13 +260,21 @@ def _approved_matches_book(
             got = round(float(row.get("approved_weight") or 0.0) * 100.0, 4)
         except (TypeError, ValueError):
             return False
-        if abs(got - pct) > 1e-4:
+        if abs(got - pct) > _APPROVED_MATCH_TOLERANCE_PP:
             return False
-    return all(
-        abs(_coerce_pct(row.get("approved_weight"))) <= 1e-9
-        for symbol, row in by_symbol.items()
-        if symbol not in needed
-    )
+    for symbol, row in by_symbol.items():
+        if symbol in needed:
+            continue
+        if symbol == _CASH:
+            try:
+                cash_got = round(float(row.get("approved_weight") or 0.0) * 100.0, 4)
+            except (TypeError, ValueError):
+                return False
+            if cash_got <= _CASH_BOOK_THRESHOLD_PP:
+                continue
+        if abs(_coerce_pct(row.get("approved_weight"))) > 1e-9:
+            return False
+    return True
 
 
 def _chain_has_order_intents(

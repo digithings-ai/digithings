@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -234,6 +235,44 @@ class TestRecoverLedgerFromBook:
             and (row.get("payload") or {}).get("ledger_commit_id") == HEAD_COMMIT_ID
         ]
         assert committed_over_partial == []
+
+    def test_sub_threshold_cash_without_position_row_is_not_conflict(self) -> None:
+        """Booking skips CASH at <= 0.01%; the chain still writes an approved CASH target."""
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        client.canned_reads["positions"] = [
+            row
+            for row in client.canned_reads["positions"]
+            if not (row["date"] == RUN_DATE.isoformat() and row["ticker"] == "CASH")
+        ]
+        client.canned_reads["nav_history"] = [
+            {**client.canned_reads["nav_history"][0], "cash_pct": 0.0}
+        ]
+        _seed_head_commit(client)
+        _seed_approved(client, {**BOOK_WEIGHTS, "CASH": 0.005})
+        _seed_order_intents(client)
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "already_committed"
+        assert client.store.get(COMMITS, []) == []
+
+    def test_four_decimal_book_versus_approved_quantum_is_not_conflict(self) -> None:
+        """Book rounds percent to 4dp; approved quantizes the fraction to 1e-6."""
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        for row in client.canned_reads["positions"]:
+            if row["date"] == RUN_DATE.isoformat() and row["ticker"] == "EWZ":
+                row["weight_pct"] = round(5.07715, 4)
+        _seed_head_commit(client)
+        _seed_approved(client, {**BOOK_WEIGHTS, "CASH": BOOK_CASH})
+        for row in client.canned_reads[APPROVED_TARGETS]:
+            if row["symbol"] == "EWZ":
+                row["approved_weight"] = float(
+                    Decimal("0.0507715").quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
+                )
+        _seed_order_intents(client)
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "already_committed"
+        assert client.store.get(COMMITS, []) == []
 
     def test_ledger_without_manifest_mismatch_is_conflict_without_force(self) -> None:
         client = FakeSupabaseClient()
