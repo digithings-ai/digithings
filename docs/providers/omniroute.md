@@ -14,7 +14,9 @@
   if `OMNIROUTE_AUTH_PASSWORD` is empty or `CHANGEME`.
 - Secrets via env only (`.env`, never committed).
 - **Do not** enable OmniRoute cookie / MITM / web-session providers.
-- Bind loopback only (`127.0.0.1:20128`).
+- Bind loopback only (`127.0.0.1:20128`). Compose publishes
+  `127.0.0.1:20128:20128` and pins `diegosouzapw/omniroute:3.8.50` by digest
+  (not `:latest`).
 - **Do not** default any hosted marketplace, and **do not** replace OpenRouter as the house upstream.
 
 ## 1. Run OmniRoute (optional compose profile)

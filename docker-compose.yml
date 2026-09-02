@@ -316,8 +316,8 @@ services:
           exit 1
         fi
   omniroute:
-    # Pin a release tag (not :latest) so --profile omniroute is reproducible.
-    image: diegosouzapw/omniroute:3.8.50
+    # Pin a version tag + index digest, never :latest (#3432 Gate 1).
+    image: diegosouzapw/omniroute:3.8.50@sha256:085c57adf499a8aaa9f35ccde95c0df9c11bd9ecd18d6c9edbf3b68b8079ba9d
     container_name: digi-omniroute
     profiles:
       - omniroute

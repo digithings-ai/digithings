@@ -288,28 +288,33 @@ string to `chat_completion` and skip this entirely.
 
 `get_client_for_model(model)` is the single client entry point:
 
-- **LiteLLM house and BYOK path:** when `OPENAI_API_BASE` points at LiteLLM
-  (any non-empty base that is **not** the OpenRouter CLI rewrite), **every**
-  call uses `get_client()`. Registered prefixes stay on the wire as LiteLLM
-  `model_name` keys (digiquant pins are unprefixed OpenRouter slugs). There is
-  no prefix-skip: BYOK does not open a direct vendor HTTP client.
+- **House and BYOK path (LiteLLM):** when `OPENAI_API_BASE` is set **and is
+  not** `openrouter.ai`, **every** call uses `get_client()`. Registered
+  prefixes stay on the wire as LiteLLM `model_name` keys (digiquant pins are
+  unprefixed OpenRouter slugs). There is no prefix-skip: BYOK does not open a
+  direct vendor HTTP client.
 - **BYOK through LiteLLM:** `set_byok(api_key, base_url)` still binds the
-  user's token. With LiteLLM configured, that token is passed as LiteLLM
-  clientside credentials (`extra_body.api_key` / `extra_body.api_base`) so
-  LiteLLM authenticates to the vendor — or to the user's own OpenAI-compat
+  user's token. With a LiteLLM proxy configured, that token is passed as
+  LiteLLM clientside credentials (`extra_body.api_key` / `extra_body.api_base`)
+  so LiteLLM authenticates to the vendor — or to the user's own OpenAI-compat
   endpoint — while the HTTP client stays on `OPENAI_API_BASE` with the house
   proxy key. Response cache is still skipped while BYOK is active.
-- **OpenRouter rewrite / no LiteLLM:** `apply_olympus_openrouter_env()` may set
-  `OPENAI_API_BASE=https://openrouter.ai/api/v1` so unprefixed pins do not hit
-  api.openai.com. That base is **not** LiteLLM: OpenRouter ignores clientside
-  `extra_body` credentials, so BYOK uses the user Bearer against the vendor
-  URL, and leftover `gemini/` / `xai/` / `anthropic/` prefixes open vendor
-  clients (requiring the matching `*_API_KEY`). Unprefixed strings still use
-  `get_client()` against that default base.
-- **Diagnostics without a default base:** a `provider/model_id` prefix matching
-  the registry routes to a dedicated vendor client (BYOK: uncached user key;
+  `_with_byok_litellm_pass_through` is a no-op when the base is the leftover
+  OpenRouter rewrite (`openrouter.ai`).
+- **Default base vs LiteLLM:** any non-empty `OPENAI_API_BASE` is a default
+  base (prefix → `get_client()` so house `anthropic/claude-sonnet-5` does not
+  hit api.anthropic.com). LiteLLM clientside pass-through is only the
+  non-OpenRouter case. After leftover `apply_olympus_openrouter_env()`
+  (`digigraph/src/digigraph/model_config.py`) with no LiteLLM: prefixed BYOK
+  uses the user Bearer against the vendor URL; leftover `gemini/` / `xai/`
+  stay vendor clients (`GEMINI_API_KEY` / `XAI_API_KEY`).
+- **Diagnostics without a proxy:** a `provider/model_id` prefix matching the
+  registry routes to a dedicated vendor client (BYOK: uncached user key;
   otherwise cached operator key). Every other model string uses `get_client()`
-  (`OPENAI_API_BASE` / `OPENAI_API_KEY`).
+  (`OPENAI_API_BASE` / `OPENAI_API_KEY`). OpenRouter-backed house slugs
+  through LiteLLM (unprefixed `deepseek/…`, house `anthropic/…`) still get
+  `_with_openrouter_cost_controls` `extra_body` (`require_parameters` for
+  tools / json_schema). Native `gpt-4o-mini` and `ollama/*` do not.
 
 Built-in registry (`xai`, `gemini`, `openrouter`, `anthropic`): prefix parsing
 and no-LiteLLM diagnostics — not a skip around LiteLLM. Extend at
@@ -358,7 +363,7 @@ plain contextvar setters and reads them when building clients.
 | Setter | Reads in | Effect |
 |--------|----------|--------|
 | `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
-| `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` / `_create_with_retry` | Bring-your-own-key. With LiteLLM (`OPENAI_API_BASE` set and not OpenRouter), the LiteLLM client is reused and the user's key/base go in `extra_body` (clientside credentials). Without LiteLLM (including the OpenRouter rewrite), returns an **uncached** client at the user's endpoint. Always **bypasses the response cache**. |
+| `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` / `_create_with_retry` | Bring-your-own-key. With a LiteLLM proxy (`OPENAI_API_BASE` set and not `openrouter.ai`), the LiteLLM client is reused and the user's key/base go in `extra_body` (clientside credentials). Without LiteLLM, returns an **uncached** client at the user's endpoint (prefixed BYOK against the vendor URL). Always **bypasses the response cache**. |
 | `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
 | `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw **for this var only**. |
 | `set_fan_out_detach_hook(fn)` | run at the top of every *parallel* tool worker | Lets a consumer clear a logical-call var it layers on top of digillm's — necessarily holding the same mutable handle, so the copy would share it. Process-global, `None` disables, a raising hook is logged and the tool call proceeds. The hook runs inside the worker's copied context, so it must clear token-free and must not touch credentials — carrying those across is the point of the copy. |
@@ -376,12 +381,12 @@ finally:
 
 ### Precedence notes (decisions)
 
-- **No BYOK skip of LiteLLM.** When LiteLLM is configured (`OPENAI_API_BASE`
-  set and not the OpenRouter rewrite), house and BYOK share one HTTP client
-  (the proxy). Prefix matching does not open a vendor client. The user's key
-  is LiteLLM `extra_body.api_key` / `api_base`. The OpenRouter rewrite is not
-  LiteLLM — BYOK uses the user Bearer directly, and leftover vendor prefixes
-  open diagnostic clients.
+- **No BYOK skip of LiteLLM.** When `OPENAI_API_BASE` is a LiteLLM proxy (set
+  and not `openrouter.ai`), house and BYOK share one HTTP client (the proxy).
+  Prefix matching does not open a vendor client. The user's key is LiteLLM
+  `extra_body.api_key` / `api_base`. The leftover OpenRouter CLI rewrite is a
+  default base, not that proxy. House `anthropic/` stays on that default base
+  (not api.anthropic.com); leftover `gemini/` / `xai/` stay vendor clients.
 - **BYOK is `(api_key, base_url)` — provider-agnostic.** digigraph carried
   `(key, provider)` with an unfinished Anthropic-passthrough special-case. That
   provider coupling is intentionally **dropped**: a BYOK caller supplies the

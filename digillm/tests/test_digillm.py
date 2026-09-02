@@ -308,55 +308,120 @@ def test_prefixed_byok_stream_passes_user_key_through_litellm(
     assert extra["api_base"].rstrip("/") == "https://openrouter.ai/api/v1"
 
 
+_FUNCTION_TOOL = [
+    {
+        "type": "function",
+        "function": {
+            "name": "ping",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    }
+]
+
+
+def _completion_extra_body(model: str) -> dict[str, Any]:
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(
+            model,
+            [{"role": "user", "content": "hi"}],
+            tools=_FUNCTION_TOOL,
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    extra = kwargs.get("extra_body") or {}
+    assert isinstance(extra, dict)
+    return extra
+
+
+@pytest.mark.parametrize(
+    "model",
+    ["deepseek/deepseek-v4-flash", "anthropic/claude-sonnet-5"],
+)
+def test_litellm_house_openrouter_slugs_get_require_parameters(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    """LiteLLM house slugs must still send OpenRouter ``require_parameters`` for tools."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    extra = _completion_extra_body(model)
+    assert extra.get("provider", {}).get("require_parameters") is True
+
+
+@pytest.mark.parametrize("model", ["gpt-4o-mini", "ollama/qwen3:8b"])
+def test_litellm_non_openrouter_models_skip_openrouter_extras(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    extra = _completion_extra_body(model)
+    assert "require_parameters" not in (extra.get("provider") or {})
+
+
+def test_openrouter_rewrite_gemini_uses_vendor_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI OpenRouter rewrite is not LiteLLM: leftover ``gemini/`` stays a vendor client."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_API_KEY", "sk-gem")
+    made: dict[str, Any] = {}
+    with patch.object(
+        client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()
+    ):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+    assert "generativelanguage.googleapis.com" in made["base_url"]
+    assert made["api_key"] == "sk-gem"
+
+
+def test_openrouter_rewrite_house_anthropic_uses_default_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House ``anthropic/…`` must not hit api.anthropic.com when a default base is set."""
+    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
+    made: dict[str, Any] = {}
+    with patch.object(
+        client_mod, "OpenAI", side_effect=lambda **kw: made.update(kw) or MagicMock()
+    ):
+        digillm.get_client_for_model("anthropic/claude-sonnet-5")
+    assert made["api_key"] == "sk-or-house"
+    assert "openrouter.ai" in made["base_url"]
+    assert "api.anthropic.com" not in made["base_url"]
+
+
 def test_openrouter_rewrite_prefixed_byok_uses_user_bearer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """CLI OpenRouter rewrite is not LiteLLM — BYOK must not use extra_body pass-through.
 
-    ``apply_olympus_openrouter_env()`` sets ``OPENAI_API_BASE`` to OpenRouter when
-    unset; OpenRouter ignores LiteLLM clientside credential fields.
+    Leftover ``apply_olympus_openrouter_env()`` (``digigraph/src/digigraph/model_config.py``)
+    sets ``OPENAI_API_BASE`` to OpenRouter when unset; OpenRouter ignores LiteLLM
+    clientside credential fields.
     """
     monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-house-or")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-or-house")
     made: list[dict[str, Any]] = []
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
 
     def fake_openai(**kwargs: Any) -> MagicMock:
         made.append(kwargs)
-        return MagicMock()
+        return fake_client
 
     with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
         with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
             digillm.get_client_for_model("anthropic/claude-sonnet-5")
-    assert len(made) == 1
+            digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
     assert made[0]["api_key"] == "sk-ant-user"
     assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
-
-
-def test_openrouter_rewrite_prefixed_byok_completion_skips_extra_body(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-house-or")
-    fake_client = MagicMock()
-    fake_client.chat.completions.create.return_value = _mock_response("ok")
-    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
-            digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
-    _, kwargs = fake_client.chat.completions.create.call_args
-    extra = kwargs.get("extra_body") or {}
+    extra = fake_client.chat.completions.create.call_args[1].get("extra_body") or {}
+    assert extra.get("api_key") != "sk-ant-user"
     assert "api_key" not in extra
     assert "api_base" not in extra
-
-
-def test_openrouter_rewrite_gemini_requires_vendor_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without LiteLLM, leftover ``gemini/`` diagnostics open a vendor client."""
-    monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-house-or")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
-        digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
 def test_no_litellm_base_gemini_requires_vendor_key(

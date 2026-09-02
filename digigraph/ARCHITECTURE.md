@@ -876,7 +876,12 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
   through LiteLLM as request `api_key` / `api_base` (clientside credentials),
   not as a direct vendor HTTP client. Registered prefixes (`openrouter/`,
   `gemini/`, `anthropic/`, `xai/`) are leftover caller spellings and
-  no-proxy diagnostics — they do not skip `OPENAI_API_BASE`. `openrouter/auto`
+  no-proxy diagnostics — they do not skip a LiteLLM `OPENAI_API_BASE`. The
+  leftover CLI rewrite (`apply_olympus_openrouter_env` in
+  `digigraph/src/digigraph/model_config.py`) points the default base at
+  `openrouter.ai`; that is not LiteLLM, so prefixed BYOK uses the user Bearer
+  against the vendor URL and leftover `gemini/` / `xai/` stay vendor clients.
+  `openrouter/auto`
   remains the diagnostic auto-router id (preflight structured-output probe),
   not a phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs
   via `get_grounding_model()`. Optional OmniRoute is a separate overlay

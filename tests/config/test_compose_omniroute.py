@@ -40,3 +40,11 @@ def test_omniroute_profile_is_opt_in_and_guards_password_at_start() -> None:
         isinstance(item, str) and item.startswith("INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}")
         for item in env
     )
+    assert omni.get("ports") == ["127.0.0.1:20128:20128"]
+    image = str(omni.get("image") or "")
+    assert image
+    assert not image.endswith(":latest"), image
+    assert ":latest@" not in image
+    assert "@sha256:" in image or (
+        ":" in image.rsplit("/", 1)[-1] and not image.endswith(":latest")
+    )

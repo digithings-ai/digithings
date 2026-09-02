@@ -663,7 +663,7 @@ phase_models:
   master-digest: deepseek/deepseek-v4-flash
 ```
 
-Model strings with a registered `provider/` prefix (`openrouter/`, `gemini/`, `xai/`) route to the corresponding OpenAI-compatible client via digillm's provider registry (`digillm/src/digillm/client.py`); all other strings go through the legacy Ollama path.
+House traffic is caller → digillm → LiteLLM. Unprefixed OpenRouter slugs (`deepseek/…`, `anthropic/…`) are `config/litellm.yaml` `model_name` keys. Leftover `openrouter/` / `gemini/` / `xai/` prefixes are vendor-client diagnostics when no LiteLLM proxy is configured (`digillm/src/digillm/client.py`).
 
 ### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
 

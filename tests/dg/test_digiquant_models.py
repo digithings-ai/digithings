@@ -260,6 +260,23 @@ def test_apply_does_not_override_existing_openai_api_base(
 
 
 @pytest.mark.unit
+def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI rewrite is not LiteLLM: leftover ``gemini/`` still needs ``GEMINI_API_KEY``."""
+    import digillm
+
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    apply_olympus_openrouter_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+
+
+@pytest.mark.unit
 def test_apply_quality_tier_preserves_frontier_auto_router_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
