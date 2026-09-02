@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -82,6 +83,41 @@ def _mirror_writes(client: FakeSupabaseClient) -> None:
         client.canned_reads[table] = list(client.canned_reads.get(table, [])) + list(rows)
 
 
+HEAD_COMMIT_ID = "11111111-2222-3333-4444-555555555555"
+BOOK_WEIGHTS = {
+    "EWZ": 5.0771,
+    "FXI": 5.0,
+    "GLD": 9.4215,
+    "VGK": 25.0,
+    "XLF": 20.0,
+    "XLV": 14.8384,
+}
+BOOK_CASH = 20.663
+
+
+def _seed_head_commit(client: FakeSupabaseClient) -> None:
+    client.canned_reads[COMMITS] = [
+        {
+            "id": HEAD_COMMIT_ID,
+            "run_date": RUN_DATE.isoformat(),
+            "workspace_id": HOUSE,
+            "supersedes_id": None,
+        }
+    ]
+
+
+def _seed_approved(client: FakeSupabaseClient, weights: dict[str, float]) -> None:
+    client.canned_reads[APPROVED_TARGETS] = [
+        {
+            "run_date": RUN_DATE.isoformat(),
+            "symbol": ticker,
+            "approved_weight": pct / 100.0,
+            "workspace_id": HOUSE,
+        }
+        for ticker, pct in weights.items()
+    ]
+
+
 class TestRecoverLedgerFromBook:
     def test_dry_run_does_not_insert(self) -> None:
         client = FakeSupabaseClient()
@@ -142,6 +178,103 @@ class TestRecoverLedgerFromBook:
         assert second.commit_id == first.commit_id
         assert len(client.store.get(COMMITS, [])) == 1
 
+    def test_ledger_without_manifest_matching_approved_publishes_manifest_only(self) -> None:
+        """Positions + head commit + matching approved, no commit-run document (#3426)."""
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {**BOOK_WEIGHTS, "CASH": BOOK_CASH})
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "already_committed"
+        assert result.commit_id == HEAD_COMMIT_ID
+        assert client.store.get(COMMITS, []) == []
+        assert client.store.get(APPROVED_TARGETS, []) == []
+        docs = client.store.get("documents", [])
+        manifest = next(r for r in docs if str(r.get("document_key", "")).startswith("commit-run/"))
+        payload = manifest["payload"]
+        assert payload["status"] == "committed"
+        assert payload["recovery"] == "append_from_existing_book"
+        assert payload["ledger_commit_id"] == HEAD_COMMIT_ID
+        assert payload["weights"]["VGK"] == 25.0
+        assert payload["supersedes"] == []
+
+    def test_ledger_without_manifest_mismatch_is_conflict_without_force(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {"VGK": 99.0, "CASH": 1.0})
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "conflict"
+        assert result.commit_id == HEAD_COMMIT_ID
+        assert client.store.get(COMMITS, []) == []
+        assert client.store.get(APPROVED_TARGETS, []) == []
+        assert client.store.get("documents", []) == []
+
+    def test_force_recommit_appends_when_approved_mismatch(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {"VGK": 99.0, "CASH": 1.0})
+        result = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
+        assert result.status == "committed"
+        assert result.commit_id != HEAD_COMMIT_ID
+        assert len(client.store.get(COMMITS, [])) == 1
+        payload = next(
+            r["payload"]
+            for r in client.store.get("documents", [])
+            if str(r.get("document_key", "")).startswith("commit-run/")
+        )
+        assert payload["ledger_commit_id"] == result.commit_id
+        assert payload["supersedes"] == []
+
+    def test_force_recommit_supersedes_prior_manifest_fingerprints(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        prior_fp = "prior-manifest-fingerprint-not-the-book"
+        client.store["documents"] = [
+            {
+                "date": RUN_DATE.isoformat(),
+                "document_key": "commit-run/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "workspace_id": HOUSE,
+                "payload": {
+                    "status": "committed",
+                    "commit_seq": 1,
+                    "weights_fingerprint": prior_fp,
+                    "ledger_commit_id": HEAD_COMMIT_ID,
+                    "source_run_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                },
+            }
+        ]
+        result = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
+        assert result.status == "committed"
+        written = next(
+            r["payload"]
+            for r in client.store.get("documents", [])
+            if r["payload"].get("ledger_commit_id") == result.commit_id
+        )
+        assert written["supersedes"] == [prior_fp]
+        assert written["supersedes"] != [weights_fingerprint(BOOK_WEIGHTS)]
+
+    def test_cli_lives_under_scripts_not_installable_src(self) -> None:
+        src = Path("digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py").read_text()
+        assert "argparse" not in src
+        assert Path("digiquant/scripts/recover_ledger.py").is_file()
+
+    def test_cli_apply_stale_date_requires_yes(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "recover_ledger_cli", Path("digiquant/scripts/recover_ledger.py")
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rc = mod.main(["--date", "2020-01-01", "--apply"])
+        assert rc != 0
+
     def test_partial_commit_without_approved_still_appends(self) -> None:
         client = FakeSupabaseClient()
         _seed_booked_day(client)
@@ -154,16 +287,11 @@ class TestRecoverLedgerFromBook:
             }
         ]
         result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
-        assert result.status == "committed"
-        assert result.commit_id != "11111111-2222-3333-4444-555555555555"
-        assert len(client.store.get(COMMITS, [])) == 1
-        assert client.store.get(APPROVED_TARGETS, [])
-        docs = client.store.get("documents", [])
-        payload = next(
-            r["payload"] for r in docs if str(r.get("document_key", "")).startswith("commit-run/")
-        )
-        assert payload["ledger_commit_id"] == result.commit_id
-        assert payload["status"] == "committed"
+        assert result.status == "conflict"
+        assert result.commit_id == "11111111-2222-3333-4444-555555555555"
+        assert client.store.get(COMMITS, []) == []
+        assert client.store.get(APPROVED_TARGETS, []) == []
+        assert client.store.get("documents", []) == []
 
     def test_fingerprint_mismatch_is_conflict(self) -> None:
         client = FakeSupabaseClient()
@@ -271,11 +399,9 @@ class TestRecoverLedgerFromBook:
             }
         ]
         result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
-        assert result.status == "committed"
-        assert result.commit_id not in {
-            "11111111-2222-3333-4444-555555555555",
-            "22222222-3333-4444-5555-666666666666",
-        }
+        assert result.status == "already_committed"
+        assert result.commit_id == "22222222-3333-4444-5555-666666666666"
+        assert client.store.get(COMMITS, []) == []
         payload = next(
             r["payload"]
             for r in client.store.get("documents", [])
@@ -338,7 +464,9 @@ class TestRecoverLedgerFromBook:
                 },
             }
         ]
-        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        result = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
         assert result.status == "committed"
         written = next(
             r["payload"]

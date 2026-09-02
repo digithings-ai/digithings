@@ -1,16 +1,15 @@
-"""Recover an H9 ledger commit from an already-booked positions row (#3330).
+"""Recover a ledger commit from an already-booked positions row (#3330, #3426).
 
-Use when ``book_portfolio`` wrote ``positions`` / ``nav_history`` but
-``append_commit_chain`` died before the insert (e.g. ``23502`` missing
-``workspace_id`` on main). Reads the decided book; does not re-size or call an LLM.
+Use when booking wrote ``positions`` / ``nav_history`` but the commit-run
+document insert died. Reads the decided book; does not re-size or call an LLM.
+When a head commit already exists, does not append again: matching approved
+weights publish only the missing manifest; otherwise ``conflict`` unless
+``force_recommit``.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 import logging
-import sys
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -21,8 +20,6 @@ from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_stati
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
-    SupabaseConfig,
-    build_client,
     load_prior_book,
     prior_book_current_weights,
     publish_document,
@@ -35,18 +32,21 @@ from digiquant.olympus.hermes.writers.commit_io import (
     weights_fingerprint,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
+    _CASH,
     APPROVED_TARGETS,
     COMMITS,
     LedgerAppend,
+    _execute,
+    _head_by_symbol,
     _heads,
     _rows_for_date,
+    _symbol,
     append_commit_chain,
 )
-from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
-_CASH = "CASH"
 _PORTFOLIO_JSON = Path(__file__).resolve().parents[2] / "atlas" / "config" / "portfolio.json"
 RecoveryStatus = Literal["dry_run", "committed", "already_committed", "no_book", "conflict"]
 
@@ -72,22 +72,17 @@ def _coerce_pct(value: object) -> float:
         return 0.0
 
 
-def _symbol(raw: object) -> str:
-    return str(raw or "").strip().upper()
-
-
 def _load_book(
     *, client: SupabaseClient, run_date: date, workspace_id: str | None
 ) -> tuple[dict[str, float], float, float]:
     """Non-cash weights (percent), cash_pct, nav from the already-booked day."""
     date_str = run_date.isoformat()
     scoped = str(resolved_workspace_id(workspace_id))
-    pos_resp = (
+    pos_resp = _execute(
         client.table("positions")
         .select("ticker, weight_pct")
         .eq("date", date_str)
         .eq("workspace_id", scoped)
-        .execute()
     )
     weights: dict[str, float] = {}
     cash_pct = 0.0
@@ -101,12 +96,11 @@ def _load_book(
             continue
         if pct > 0:
             weights[ticker] = pct
-    nav_resp = (
+    nav_resp = _execute(
         client.table("nav_history")
         .select("nav, cash_pct")
         .eq("date", date_str)
         .eq("workspace_id", scoped)
-        .execute()
     )
     nav_rows = list(nav_resp.data or [])
     nav = _coerce_pct(nav_rows[0].get("nav")) if nav_rows else 0.0
@@ -118,7 +112,7 @@ def _load_book(
 def _prior_current_weights(
     *, client: SupabaseClient, run_date: date, workspace_id: str | None
 ) -> dict[str, float]:
-    """Mark-to-market prior book — the same baseline H9 preflight feeds the ledger."""
+    """Mark-to-market prior book — the same baseline preflight feeds the ledger."""
     prior = load_prior_book(client, run_date, workspace_id=workspace_id)
     current = prior_book_current_weights(list(prior))
     held = tuple(ticker for ticker in current if _symbol(ticker) != _CASH)
@@ -127,8 +121,8 @@ def _prior_current_weights(
 
 
 def _decision_log_rows(*, client: SupabaseClient, run_date: date) -> int:
-    resp = (
-        client.table("decision_log").select("ticker").eq("run_date", run_date.isoformat()).execute()
+    resp = _execute(
+        client.table("decision_log").select("ticker").eq("run_date", run_date.isoformat())
     )
     return len(list(resp.data or []))
 
@@ -210,19 +204,110 @@ def _publish_manifest(
     )
 
 
-def _approved_covers_book(
+def _prior_manifest_fingerprints(manifests: list[dict[str, object]]) -> list[str]:
+    return [str(m.get("weights_fingerprint")) for m in manifests if m.get("weights_fingerprint")]
+
+
+def _approved_matches_book(
     *,
     client: SupabaseClient,
     run_date: date,
     workspace_id: str | None,
     weights: dict[str, float],
+    cash_pct: float,
 ) -> bool:
     approved = _rows_for_date(
         client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=workspace_id
     )
-    symbols = {_symbol(row.get("symbol")) for row in approved}
-    needed = {_symbol(ticker) for ticker in weights} | {_CASH}
-    return bool(needed) and needed <= symbols
+    by_symbol = _head_by_symbol(_heads(approved))
+    needed = {_symbol(ticker): round(float(pct), 4) for ticker, pct in weights.items()}
+    needed[_CASH] = round(float(cash_pct), 4)
+    if not needed:
+        return False
+    for symbol, pct in needed.items():
+        row = by_symbol.get(symbol)
+        if row is None:
+            return False
+        try:
+            got = round(float(row.get("approved_weight") or 0.0) * 100.0, 4)
+        except (TypeError, ValueError):
+            return False
+        if abs(got - pct) > 1e-4:
+            return False
+    for symbol, row in by_symbol.items():
+        if symbol in needed:
+            continue
+        try:
+            extra = float(row.get("approved_weight") or 0.0)
+        except (TypeError, ValueError):
+            extra = 0.0
+        if abs(extra) > 1e-9:
+            return False
+    return True
+
+
+def _outcome(
+    *,
+    run_date: date,
+    status: RecoveryStatus,
+    commit_id: str | None,
+    source_run_id: str | None,
+    weights: dict[str, float],
+    cash_pct: float,
+    nav: float,
+    message: str,
+) -> LedgerRecovery:
+    return LedgerRecovery(
+        run_date=run_date,
+        status=status,
+        commit_id=commit_id,
+        source_run_id=source_run_id,
+        weights=weights,
+        cash_pct=cash_pct,
+        nav=nav,
+        message=message,
+    )
+
+
+def _publish_missing_manifest(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    overlay: str | None,
+    head_id: str,
+    manifests: list[dict[str, object]],
+    next_seq: int,
+    weights: dict[str, float],
+    cash_pct: float,
+    nav: float,
+) -> str:
+    """Write the commit-run document for an existing head. Returns ``source_run_id``."""
+    source_run_id = uuid4()
+    state = _recovery_state(
+        run_date=run_date,
+        source_run_id=source_run_id,
+        current_weights=_prior_current_weights(
+            client=client, run_date=run_date, workspace_id=overlay
+        ),
+        workspace_id=overlay,
+    )
+    ledger = LedgerAppend(commit_id=head_id, frozen_symbols=[], unpriced_symbols=[])
+    n_decisions = _decision_log_rows(client=client, run_date=run_date)
+    _publish_manifest(
+        client=client,
+        state=state,
+        manifest=_manifest(
+            source_run_id=str(source_run_id),
+            weights=weights,
+            cash_pct=cash_pct,
+            nav=nav,
+            ledger=ledger,
+            decision_log_rows=n_decisions,
+            commit_seq=next_seq,
+            supersedes=_prior_manifest_fingerprints(manifests),
+        ),
+    )
+    return str(source_run_id)
 
 
 def recover_ledger_from_book(
@@ -231,15 +316,19 @@ def recover_ledger_from_book(
     run_date: date,
     apply: bool = False,
     workspace_id: str | None = None,
+    force_recommit: bool = False,
 ) -> LedgerRecovery:
     """Append one house ledger commit from the already-booked ``positions`` row.
 
-    Does not call ``book_portfolio`` or H8. ``apply=False`` is a read-only dry run.
+    Does not call ``book_portfolio``. ``apply=False`` is a read-only dry run.
+    When a head commit exists, matching approved weights are ``already_committed``
+    (publishing a missing commit-run document only). A mismatch is ``conflict``
+    unless ``force_recommit``.
     """
     overlay = workspace_id
     weights, cash_pct, nav = _load_book(client=client, run_date=run_date, workspace_id=overlay)
     if not weights and cash_pct <= 0:
-        return LedgerRecovery(
+        return _outcome(
             run_date=run_date,
             status="no_book",
             commit_id=None,
@@ -255,15 +344,21 @@ def recover_ledger_from_book(
     prior_commits = _rows_for_date(
         client=client, table=COMMITS, run_date=run_date, workspace_id=overlay
     )
-    head_ids = {str(row.get("id")) for row in _heads(prior_commits) if row.get("id")}
-    chain_complete = _approved_covers_book(
-        client=client, run_date=run_date, workspace_id=overlay, weights=weights
+    commit_heads = _heads(prior_commits)
+    head_ids = {str(row.get("id")) for row in commit_heads if row.get("id")}
+    approved_match = _approved_matches_book(
+        client=client,
+        run_date=run_date,
+        workspace_id=overlay,
+        weights=weights,
+        cash_pct=cash_pct,
     )
     book_fp = weights_fingerprint(weights)
     latest_id = str((latest or {}).get("ledger_commit_id") or "") or None
     latest_source = str((latest or {}).get("source_run_id") or "") or None
+
     if latest is None and manifests:
-        return LedgerRecovery(
+        return _outcome(
             run_date=run_date,
             status="conflict",
             commit_id=latest_id,
@@ -273,39 +368,102 @@ def recover_ledger_from_book(
             nav=nav,
             message=f"ambiguous commit_seq for {run_date.isoformat()}; will not guess the head",
         )
-    if latest is not None and latest.get("status") == "committed":
-        manifest_fp = str(latest.get("weights_fingerprint") or "")
-        if manifest_fp != book_fp:
-            logger.warning(
-                "recover_ledger: fingerprint mismatch for %s (commit=%s)",
-                run_date.isoformat(),
-                latest_id,
-            )
-            return LedgerRecovery(
+
+    if not force_recommit:
+        if latest is not None and latest.get("status") == "committed":
+            manifest_fp = str(latest.get("weights_fingerprint") or "")
+            if manifest_fp != book_fp:
+                logger.warning(
+                    "recover_ledger: fingerprint mismatch for %s (commit=%s)",
+                    run_date.isoformat(),
+                    latest_id,
+                )
+                return _outcome(
+                    run_date=run_date,
+                    status="conflict",
+                    commit_id=latest_id,
+                    source_run_id=latest_source,
+                    weights=weights,
+                    cash_pct=cash_pct,
+                    nav=nav,
+                    message=(
+                        f"committed manifest fingerprint does not match booked positions "
+                        f"for {run_date.isoformat()}"
+                    ),
+                )
+            if latest_id and latest_id in head_ids and approved_match:
+                return _outcome(
+                    run_date=run_date,
+                    status="already_committed",
+                    commit_id=latest_id,
+                    source_run_id=latest_source,
+                    weights=weights,
+                    cash_pct=cash_pct,
+                    nav=nav,
+                    message=(
+                        f"ledger commit {latest_id} already present for {run_date.isoformat()}"
+                    ),
+                )
+        if len(commit_heads) > 1:
+            return _outcome(
                 run_date=run_date,
                 status="conflict",
-                commit_id=latest_id,
+                commit_id=None,
+                source_run_id=None,
+                weights=weights,
+                cash_pct=cash_pct,
+                nav=nav,
+                message=(
+                    f"forked commit chain for {run_date.isoformat()}; "
+                    "will not append without --force-recommit"
+                ),
+            )
+        if commit_heads:
+            head_id = str(commit_heads[0].get("id") or "") or None
+            if approved_match and head_id:
+                source_run_id = latest_source
+                if apply:
+                    has_head_manifest = any(
+                        str(m.get("ledger_commit_id") or "") == head_id for m in manifests
+                    )
+                    if not has_head_manifest:
+                        source_run_id = _publish_missing_manifest(
+                            client=client,
+                            run_date=run_date,
+                            overlay=overlay,
+                            head_id=head_id,
+                            manifests=manifests,
+                            next_seq=next_seq,
+                            weights=weights,
+                            cash_pct=cash_pct,
+                            nav=nav,
+                        )
+                present = f"ledger commit {head_id} already present for {run_date.isoformat()}"
+                return _outcome(
+                    run_date=run_date,
+                    status="already_committed",
+                    commit_id=head_id,
+                    source_run_id=source_run_id,
+                    weights=weights,
+                    cash_pct=cash_pct,
+                    nav=nav,
+                    message=(
+                        f"{present}; published missing commit-run manifest" if apply else present
+                    ),
+                )
+            return _outcome(
+                run_date=run_date,
+                status="conflict",
+                commit_id=head_id,
                 source_run_id=latest_source,
                 weights=weights,
                 cash_pct=cash_pct,
                 nav=nav,
                 message=(
-                    f"committed manifest fingerprint does not match booked positions "
-                    f"for {run_date.isoformat()}"
+                    f"head commit exists for {run_date.isoformat()} but approved weights "
+                    "do not match the book; pass --force-recommit to append"
                 ),
             )
-        if latest_id and latest_id in head_ids and chain_complete:
-            return LedgerRecovery(
-                run_date=run_date,
-                status="already_committed",
-                commit_id=latest_id,
-                source_run_id=latest_source,
-                weights=weights,
-                cash_pct=cash_pct,
-                nav=nav,
-                message=(f"ledger commit {latest_id} already present for {run_date.isoformat()}"),
-            )
-    superseded = [book_fp] if latest is not None else []
 
     source_run_id = uuid4()
     state = _recovery_state(
@@ -317,7 +475,7 @@ def recover_ledger_from_book(
         workspace_id=overlay,
     )
     if not apply:
-        return LedgerRecovery(
+        return _outcome(
             run_date=run_date,
             status="dry_run",
             commit_id=None,
@@ -339,7 +497,7 @@ def recover_ledger_from_book(
         nav=nav,
     )
     if appended is None:
-        return LedgerRecovery(
+        return _outcome(
             run_date=run_date,
             status="no_book",
             commit_id=None,
@@ -363,10 +521,10 @@ def recover_ledger_from_book(
             ledger=ledger,
             decision_log_rows=n_decisions,
             commit_seq=next_seq,
-            supersedes=superseded,
+            supersedes=_prior_manifest_fingerprints(manifests),
         ),
     )
-    return LedgerRecovery(
+    return _outcome(
         run_date=run_date,
         status="committed",
         commit_id=ledger.commit_id,
@@ -376,43 +534,3 @@ def recover_ledger_from_book(
         nav=nav,
         message=f"committed {ledger.commit_id} for {run_date.isoformat()}",
     )
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Append H9 ledger commit from existing positions (no LLM)."
-    )
-    parser.add_argument("--date", required=True, help="Run date YYYY-MM-DD")
-    parser.add_argument(
-        "--apply",
-        action="store_true",
-        help="Write the ledger + commit-run document. Default is dry-run.",
-    )
-    args = parser.parse_args(argv)
-    run_date = date.fromisoformat(args.date)
-
-    client = build_client(SupabaseConfig.from_env())
-    result = recover_ledger_from_book(client=client, run_date=run_date, apply=args.apply)
-    payload = {
-        "run_date": result.run_date.isoformat(),
-        "status": result.status,
-        "commit_id": result.commit_id,
-        "source_run_id": result.source_run_id,
-        "weights": result.weights,
-        "cash_pct": result.cash_pct,
-        "nav": result.nav,
-        "message": result.message,
-        "house_workspace_id": str(house_workspace_id()),
-        "apply": args.apply,
-    }
-    print(json.dumps(payload, indent=2, sort_keys=True))
-    if result.status == "no_book":
-        return 2
-    if result.status == "conflict":
-        return 3
-    return 0
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    sys.exit(main())
