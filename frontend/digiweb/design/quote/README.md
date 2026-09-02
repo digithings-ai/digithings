@@ -1,9 +1,9 @@
 # Quote template
 
 A one-page quote / statement of work, companion to [`../invoice/`](../invoice/) and
-sharing its monochrome house style (Geist / Geist Mono / Instrument Serif,
-hairline rules, tabular figures, no colour, no logo mark). Self-contained single
-`index.html` — no build step.
+sharing its utilitarian house style (Geist Mono for claim, body, and chrome,
+hairline rules, zero radius, no glass, tabular figures, no colour, no logo mark).
+Self-contained single `index.html` — no build step.
 
 Unlike the invoice, scope items here **do** carry prices: the client is deciding
 what to buy, so they need to see what each piece costs. Items can be marked

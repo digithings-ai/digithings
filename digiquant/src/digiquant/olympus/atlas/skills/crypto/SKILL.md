@@ -91,29 +91,17 @@ For each alt in watchlist:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Crypto — {as-of date of the data}
+
+## BTC and ETH
+Price, key levels, dominance — dated.
+
+## Flows and structure
+ETF flows, funding, stablecoin supply if retrieved.
+
+## Macro correlation
+Risk-asset vs store-of-value read for today's research.
 ```
-### 🪙 CRYPTO
-**Bias**: [Bullish / Bearish / Neutral / Conflicted]
-
-**BTC**: [$price | 24h: X% | Key level: ...]
-**ETH**: [$price | 24h: X% | ETH/BTC: ...]
-
-**Market Structure**: [Dominance, market cap, phase]
-
-**Sentiment**: [Funding: ... | OI: ... | Fear & Greed: X — only if pulled on demand]
-
-**Watchlist Alts**: [Notable moves + catalyst if any]
-
-**Macro Correlation**: [Correlated / Decorrelated + implication]
-
-**BTC ETF Flows**: IBIT: ±$Xm | FBTC: ±$Xm | Net: [accumulation/distribution]
-
-**Stablecoin Signal**: Total supply $X | [Growing/Shrinking] → [dry powder / deployed]
-
-**BTC/NASDAQ Correlation**: X.XX (90d) — [Correlated risk asset / Decorrelated SoV]
-
-**Active Narratives**: [Top 1-2 themes]
-
-**Watch**: [Key level or event to track]
-```
-

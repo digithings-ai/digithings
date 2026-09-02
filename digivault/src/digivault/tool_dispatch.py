@@ -193,6 +193,26 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
         assert result.data is not None
         return _json.dumps(result.data)
 
+    def _mcp_search_tag_result(result: ToolDispatchResult) -> str:
+        """Preserve pre-#3041 MCP contract: JSON array of {name, title, rel_path}.
+
+        Orchestrator dispatch keeps ``{"notes": [...]}`` (full note dumps) via
+        :func:`dispatch_vault_tool`; only the MCP surface projects the slim array.
+        """
+        if not result.ok:
+            return f"[digivault error: {result.error}]"
+        notes = (result.data or {}).get("notes") or []
+        slim = [
+            {
+                "name": n.get("name"),
+                "title": n.get("title"),
+                "rel_path": n.get("rel_path"),
+            }
+            for n in notes
+            if isinstance(n, Mapping)
+        ]
+        return _json.dumps(slim)
+
     @mcp.tool(name=TOOL_VAULT_SEARCH_TAG)
     def digivault_search_tag(tag: str) -> str:
         """Find vault notes carrying a given tag (without '#'). Use to locate docs by topic."""
@@ -200,7 +220,9 @@ def register_mcp_tools(mcp: Any, open_vault: Callable[[], Vault]) -> frozenset[s
             vault = open_vault()
         except VaultError as e:
             return f"[digivault error: {e}]"
-        return _mcp_result(dispatch_vault_tool(TOOL_VAULT_SEARCH_TAG, {"tag": tag}, vault))
+        return _mcp_search_tag_result(
+            dispatch_vault_tool(TOOL_VAULT_SEARCH_TAG, {"tag": tag}, vault)
+        )
 
     @mcp.tool(name=TOOL_VAULT_BACKLINKS)
     def digivault_backlinks(name: str) -> str:

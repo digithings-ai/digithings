@@ -97,7 +97,7 @@ export function RepoActivity() {
                   <wbr/> is the only break opportunity, so it breaks after the org
                   slash instead of mid-word — and stays on one line where it fits.
                   The copied payload is REPO_CLONE and is unaffected by the split. */}
-              <div className="mt-[0.9rem] flex items-start gap-[0.6rem] rounded-[9px] border border-hair px-[0.75rem] py-[0.6rem]">
+              <div className="mt-[0.9rem] flex items-start gap-[0.6rem] rounded-none border border-hair px-[0.75rem] py-[0.6rem]">
                 <code className="min-w-0 flex-1 font-mono text-[0.74rem] leading-[1.5] text-ink-soft">
                   {cloneHead}
                   <wbr />

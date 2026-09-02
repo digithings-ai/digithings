@@ -33,20 +33,9 @@ from digiquant.olympus.atlas.phases import (
     phase5_equities,
     phase7_synthesis,
 )
-from digiquant.olympus.atlas.phases.phase1_altdata import (
-    CtaPositioningReport,
-    OptionsDerivativesReport,
-    SentimentNewsReport,
-)
-from digiquant.olympus.atlas.phases.phase2_institutional import InstitutionalFlowsReport
+from digiquant.olympus.atlas.phases.phase1_altdata import SentimentNewsReport
 from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport
-from digiquant.olympus.atlas.phases.phase4_assetclass import (
-    BondsReport,
-    CryptoReport,
-    ForexReport,
-    InternationalReport,
-)
-from digiquant.olympus.atlas.phases.phase5_equities import EquityOverviewReport, SectorReport
+from digiquant.olympus.atlas.phases.phase5_equities import SectorReport
 from digiquant.olympus.atlas.segments import SegmentReport
 from pydantic import BaseModel, ValidationError
 
@@ -68,6 +57,7 @@ def _core(**extra: Any) -> dict[str, Any]:
     return {
         "segment": "test-segment",
         "date": "2026-07-31",
+        "body": "# test\n\nmemo",
         "bias": "neutral",
         "headline": "h",
         **extra,
@@ -121,17 +111,22 @@ def _minimal_body(model: type[BaseModel]) -> dict[str, Any]:
     return body
 
 
-def _segment_report_models() -> list[type[SegmentReport]]:
-    seen: dict[str, type[SegmentReport]] = {}
+def _segment_report_models() -> list[type[BaseModel]]:
+    from digiquant.olympus.atlas.segments import ResearchMemo, SegmentReport
+
+    seen: dict[str, type[BaseModel]] = {}
     for module in _PHASE_MODULES:
         for _, obj in inspect.getmembers(module, inspect.isclass):
-            if issubclass(obj, SegmentReport) and obj is not SegmentReport:
-                seen[f"{obj.__module__}.{obj.__name__}"] = obj
+            if not issubclass(obj, (ResearchMemo, SegmentReport)):
+                continue
+            if obj in (ResearchMemo, SegmentReport):
+                continue
+            seen[f"{obj.__module__}.{obj.__name__}"] = obj
     return [seen[key] for key in sorted(seen)]
 
 
-def _literal_field_cases() -> list[tuple[type[SegmentReport], str, bool]]:
-    cases: list[tuple[type[SegmentReport], str, bool]] = []
+def _literal_field_cases() -> list[tuple[type[BaseModel], str, bool]]:
+    cases: list[tuple[type[BaseModel], str, bool]] = []
     for model in _segment_report_models():
         for name, field in model.model_fields.items():
             spec = _literal_members(field.annotation)
@@ -144,35 +139,21 @@ _LITERAL_FIELD_CASES = _literal_field_cases()
 
 
 class TestObservedProductionOffenders:
-    """Every ``literal_error`` seen in the DB history or the 07-30/07-31 run logs."""
+    """Synonyms that used to hard-fail research envelopes now land on internal_bias / macro chips."""
 
     @pytest.mark.parametrize(
         ("model", "field", "raw", "expected"),
         [
-            # run 30636503352 (07-31) and 30548840632 (07-30), all silently regenerated.
-            (SentimentNewsReport, "retail_sentiment_stance", "neutral", "mixed"),
-            (CryptoReport, "funding_rate_bias", "neutral", "balanced"),
-            (CtaPositioningReport, "cta_flow_bias", "buying", "adding"),
-            (SectorReport, "conviction", "moderate", "medium"),
-            # atlas_run_diagnostics 07-20 (sector-energy + sector-materials).
-            (SectorReport, "relative_strength_vs_spy", "neutral", "inline"),
-            # atlas_run_diagnostics 06-30 / 07-03 / 07-04 — a REQUIRED axis.
             (MacroRegimeReport, "risk_appetite", "neutral", "mixed"),
-            # atlas_run_diagnostics 07-07 (run 28873813620).
-            (InternationalReport, "europe_stance", "cautious", "neutral"),
-            # Same 'neutral' synonym landing on four more axes that exclude it.
-            (BondsReport, "yield_curve_shape", "neutral", "normal"),
-            (ForexReport, "dxy_trend", "neutral", "range"),
-            (OptionsDerivativesReport, "vix_term_structure", "neutral", "flat"),
-            (EquityOverviewReport, "factor_leader", "neutral", "mixed"),
-            (SentimentNewsReport, "retail_sentiment_stance", "fear", "risk_off"),
-            (SentimentNewsReport, "retail_sentiment_stance", "bearish", "risk_off"),
-            (SentimentNewsReport, "retail_sentiment_stance", "downbeat", "risk_off"),
+            (MacroRegimeReport, "growth", "growing", "expanding"),
+            (SentimentNewsReport, "internal_bias", "cautious", "neutral"),
+            (SentimentNewsReport, "internal_bias", "positive", "bullish"),
+            (SectorReport, "internal_bias", "very_positive", "strong_bullish"),
         ],
     )
     def test_synonym_resolves_onto_the_fields_own_literal(
         self,
-        model: type[SegmentReport],
+        model: type[BaseModel],
         field: str,
         raw: str,
         expected: str,
@@ -180,32 +161,36 @@ class TestObservedProductionOffenders:
         report = model.model_validate({**_minimal_body(model), field: raw})
         assert getattr(report, field) == expected
 
-    @pytest.mark.parametrize("raw", ["Neutral", " neutral ", "RISK-ON", "risk on"])
-    def test_case_space_and_hyphen_variants_resolve(self, raw: str) -> None:
-        body = {**_minimal_body(SentimentNewsReport), "retail_sentiment_stance": raw}
-        stance = SentimentNewsReport.model_validate(body).retail_sentiment_stance
-        assert stance == ("mixed" if raw.strip().lower() == "neutral" else "risk_on")
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("Neutral", "neutral"),
+            (" cautious ", "neutral"),
+            ("RISK-ON", "bullish"),
+            ("risk on", "bullish"),
+        ],
+    )
+    def test_case_space_and_hyphen_variants_resolve(self, raw: str, expected: str) -> None:
+        body = {**_minimal_body(SentimentNewsReport), "internal_bias": raw}
+        assert SentimentNewsReport.model_validate(body).internal_bias == expected
 
 
 class TestFailSoftTiers:
     def test_unmappable_optional_axis_degrades_to_none(self) -> None:
-        """'improving' breadth is a trend, not a state — no member is honest, so None.
-
-        Before #1741 this raised and triggered an invisible full-mode regeneration.
-        """
-        body = {**_minimal_body(EquityOverviewReport), "market_breadth": "improving"}
-        assert EquityOverviewReport.model_validate(body).market_breadth is None
+        """'stable' growth is not expanding|slowing|contracting — optional chip → None."""
+        body = {**_minimal_body(MacroRegimeReport), "growth": "stable"}
+        assert MacroRegimeReport.model_validate(body).growth is None
 
     def test_unmappable_required_axis_is_still_rejected(self) -> None:
-        """``growth`` is expanding|slowing|contracting — no non-directional member.
+        """SegmentReport.bias stays required; digest no longer has a required bias Literal."""
+        body = {**_minimal_body(SegmentReport), "bias": "stable"}
+        with pytest.raises(ValidationError, match="bias"):
+            SegmentReport.model_validate(body)
+        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
 
-        Mapping 'stable' onto any of them would invent a macro call that Phases 4–7 then
-        consume as fact, so the honest outcome is a loud failure. This is the one place
-        #1741 deliberately does not fail soft.
-        """
-        body = {**_minimal_body(MacroRegimeReport), "growth": "stable"}
-        with pytest.raises(ValidationError, match="growth"):
-            MacroRegimeReport.model_validate(body)
+        DigestSnapshot.model_validate(
+            {**_minimal_body(DigestSnapshot), "bias": "stable", "body": "# Daily Digest\n"}
+        )
 
     @pytest.mark.parametrize(
         ("model", "field", "optional"),
@@ -234,40 +219,44 @@ class TestFailSoftTiers:
 class TestDedicatedValidatorsKeepOwnership:
     """A field with its own ``mode='before'`` validator must not be pre-empted."""
 
+    def test_internal_bias_synonyms_survive(self) -> None:
+        body = {**_minimal_body(SectorReport), "internal_bias": "very_positive"}
+        assert SectorReport.model_validate(body).internal_bias == "strong_bullish"
+
     @pytest.mark.parametrize(
         ("raw", "expected"),
-        [("net inflows", "inflow"), ("net outflow", "outflow"), ("positive", "inflow")],
+        [
+            ("cautious", "neutral"),
+            (" Cautious ", "neutral"),
+            ("risk_on", "bullish"),
+            ("RISK-ON", "bullish"),
+        ],
     )
-    def test_flow_direction_multiword_synonyms_survive(self, raw: str, expected: str) -> None:
-        body = {**_minimal_body(InstitutionalFlowsReport), "flow_direction": raw}
-        assert InstitutionalFlowsReport.model_validate(body).flow_direction == expected
+    def test_internal_bias_consults_generic_synonym_table(self, raw: str, expected: str) -> None:
+        body = {**_minimal_body(SentimentNewsReport), "internal_bias": raw}
+        assert SentimentNewsReport.model_validate(body).internal_bias == expected
 
-    def test_bias_synonyms_survive(self) -> None:
-        body = {**_minimal_body(SectorReport), "bias": "very_positive"}
-        assert SectorReport.model_validate(body).bias == "strong_bullish"
-
-    def test_unknown_bias_is_still_rejected(self) -> None:
-        body = {**_minimal_body(SectorReport), "bias": _NOT_A_MEMBER}
-        with pytest.raises(ValidationError, match="bias"):
-            SectorReport.model_validate(body)
+    def test_unknown_internal_bias_degrades_to_none(self) -> None:
+        body = {**_minimal_body(SectorReport), "internal_bias": _NOT_A_MEMBER}
+        assert SectorReport.model_validate(body).internal_bias is None
 
 
 class TestNoIncidentalChanges:
     def test_already_canonical_values_are_untouched(self) -> None:
         body = {
-            **_minimal_body(SectorReport),
-            "relative_strength_vs_spy": "outperforming",
-            "conviction": "high",
+            **_minimal_body(MacroRegimeReport),
+            "growth": "expanding",
+            "risk_appetite": "risk_on",
         }
-        report = SectorReport.model_validate(body)
-        assert report.relative_strength_vs_spy == "outperforming"
-        assert report.conviction == "high"
+        report = MacroRegimeReport.model_validate(body)
+        assert report.growth == "expanding"
+        assert report.risk_appetite == "risk_on"
 
     def test_non_mapping_input_passes_through(self) -> None:
         original = MacroRegimeReport.model_validate(_minimal_body(MacroRegimeReport))
         assert MacroRegimeReport.model_validate(original) == original
 
     def test_non_string_value_is_not_coerced(self) -> None:
-        body = {**_minimal_body(SectorReport), "conviction": 7}
-        with pytest.raises(ValidationError, match="conviction"):
-            SectorReport.model_validate(body)
+        body = {**_minimal_body(MacroRegimeReport), "growth": 7}
+        with pytest.raises(ValidationError, match="growth"):
+            MacroRegimeReport.model_validate(body)

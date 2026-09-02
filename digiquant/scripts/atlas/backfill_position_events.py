@@ -40,6 +40,19 @@ except ImportError:
     _HAS_SB = False
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
@@ -61,7 +74,12 @@ def _iter_trading_days(start: dt_date, end: dt_date) -> list[str]:
 
 
 def _max_event_date(sb):
-    res = sb.table("position_events").select("date").order("date", desc=True).limit(1).execute()
+    res = (
+        eq_house_workspace(sb.table("position_events").select("date"))
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     if not rows:
         return None

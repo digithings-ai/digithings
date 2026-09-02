@@ -45,7 +45,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hair));
-  border-radius: 999px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   font-family: var(--font-mono);
   font-size: 0.78rem;

@@ -10,7 +10,7 @@ Update an **existing** `alt-ai-portfolios` document; do not rewrite from scratch
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-ai-portfolios"`.
-Patch paths: `/headline`, `/bias`, `/per_account`, `/consensus_longs`, `/sector_tilt`, `/divergences`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import os
+from digiquant.olympus.envcompat import STALE_FULL_DAYS, env_lookup
 
 OLYMPUS_STALE_FULL_DAYS_ENV = "OLYMPUS_STALE_FULL_DAYS"
 _DEFAULT_STALE_FULL_DAYS = 7
@@ -10,7 +10,7 @@ _DEFAULT_STALE_FULL_DAYS = 7
 
 def stale_full_days() -> int:
     """Return max prior gap (calendar days) before forcing ``full`` rewrite."""
-    raw = os.environ.get(OLYMPUS_STALE_FULL_DAYS_ENV, "").strip()
+    raw = env_lookup(STALE_FULL_DAYS).strip()
     if not raw:
         return _DEFAULT_STALE_FULL_DAYS
     try:

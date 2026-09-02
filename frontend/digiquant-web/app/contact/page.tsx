@@ -14,7 +14,7 @@ import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 export const metadata: Metadata = {
   title: "Contact — digiquant",
   description:
-    "Self-host the full open-core stack for free, or have Olympus managed for you. What's included in each.",
+    "Self-host the full open-core stack for free, or have digiquant managed for you. What's included in each.",
 };
 
 export default function ContactPage() {
@@ -33,7 +33,7 @@ export default function ContactPage() {
                 </h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   digiquant is open core. Self-manage the whole stack at no cost, or let us
-                  manage Olympus for you. Same engine either way — the difference is who keeps
+                  manage it for you. Same engine either way — the difference is who keeps
                   it running.
                 </p>
               </div>

@@ -22,6 +22,7 @@ import {
 
 const PAGES = [
   { href: "/", label: "Foundations" },
+  { href: "/iterate", label: "Iterate" },
   { href: "/controls", label: "Controls" },
   { href: "/layout-patterns", label: "Layout" },
   { href: "/typography", label: "Typography" },

@@ -33,7 +33,7 @@ The library ships modules under `digibase/src/digibase/`, including the optional
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 | `cors.py` | Shared CORS helper for FastAPI services | Yes |
 | `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
-| `connectors/supabase.py` | Supabase upsert + filtered-select connector (requires `digibase[supabase]`) | Yes |
+| `connectors/supabase.py` | Supabase upsert, filtered-select, and guarded filtered-delete connector (requires `digibase[supabase]`) | Yes |
 | `util.py` | Small shared utilities | Yes |
 
 The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.

@@ -59,7 +59,7 @@ from unittest.mock import patch
 # unit-test suite. Importing from a tests module is unusual, but the
 # fake is the same shape every test in the project already depends on
 # and duplicating it here would be drift-prone.
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
@@ -131,21 +131,22 @@ def client_store_to_canned_extras(client: FakeSupabaseClient) -> dict[str, list[
 
 
 class SegmentFixtureBody(TypedDict, total=False):
-    """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
+    """Minimum-valid research memo body for simulator defaults."""
 
     segment: str
     date: str
+    body: str
+    sources: list[str]
+    internal_bias: str
     bias: str
     headline: str
     material_findings: list[str]
-    sources: list[str]
     notes: str
     growth: str
     inflation: str
     policy: str
     risk_appetite: str
     regime_label: str
-    portfolio_implications: str
 
 
 class DigestFixtureBody(SegmentFixtureBody, Phase7DigestPayload, total=False):
@@ -244,39 +245,32 @@ FixtureResponse = (
 # ──────────────────────────────────────────────────────────────────────────
 # 1. Default responses keyed by output schema name
 # ──────────────────────────────────────────────────────────────────────────
-# Phase 1-5 segment reports all extend SegmentReport, so a single
-# ``_segment`` template covers the lot; specific schemas with required
-# extra fields get their own builder below.
+# Phase 1-5 segment reports all extend ResearchMemo, so a single
+# ``_segment`` template covers the lot; MacroRegimeReport keeps optional
+# 4-factor tokens for the pipeline strip.
 
 _TODAY = "2026-04-26"
 
 
 def _segment(slug: str, headline: str = "synthetic finding") -> SegmentFixtureBody:
-    """Minimum valid SegmentReport body for a given segment slug."""
+    """Minimum valid ResearchMemo body for a given segment slug."""
     return {
         "segment": slug,
         "date": _TODAY,
-        "bias": "neutral",
-        "headline": headline,
-        "material_findings": [],
+        "body": f"# {slug}\n\n{headline}",
         "sources": [],
-        "notes": "",
+        "internal_bias": "neutral",
     }
 
 
 def _digest_body() -> DigestFixtureBody:
-    """DigestSnapshot extends SegmentReport with required summary strings."""
+    """Thin markdown digest envelope (WP-E)."""
     return {
-        **_segment("master-digest", headline="synthetic regime"),
-        "market_regime_snapshot": "synthetic",
-        "alt_data_dashboard": "synthetic",
-        "institutional_summary": "synthetic",
-        "asset_classes_summary": "synthetic",
-        "us_equities_summary": "synthetic",
-        "thesis_tracker": "",
-        "portfolio_recommendations": "",
-        "actionable_summary": [],
-        "risk_radar": [],
+        "segment": "master-digest",
+        "date": _TODAY,
+        "body": "# Daily Digest — 2026-04-26\n\n## Market regime\n\nsynthetic\n",
+        "regime_label": "Synthetic / Mixed",
+        "sources": [],
         "segment_freshness": {},
     }
 
@@ -351,7 +345,6 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "policy": "neutral",
         "risk_appetite": "mixed",
         "regime_label": "Synthetic / Mixed / Neutral / Mixed",
-        "portfolio_implications": "",
     },
     # Phase 4 — every asset class shares the SegmentReport core; phase4
     # extras are all optional.
@@ -365,6 +358,12 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "SectorReport": _segment("sector"),
     # Phase 7
     "DigestSnapshot": _digest_body(),
+    "DigestSubsection": {
+        "slug": "macro",
+        "date": _TODAY,
+        "body": "## Macro\n\nsynthetic subsection",
+        "sources": [],
+    },
     "MonthlyDigest": _digest_body(),
     # H5 unified analyst
     "AnalystPayload": {
@@ -417,7 +416,15 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "PMDirectionMemo": {
         "schema_version": "1.0",
         "date": "2026-04-26",
-        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": ""}],
+        "roster": [
+            {
+                "ticker": "AAPL",
+                "direction": "long",
+                "conviction_rank": 1,
+                "narrative": "",
+                "confidence": 0.7,
+            }
+        ],
         "memo": "synthetic direction memo",
     },
     "RebalanceDecision": {
@@ -796,6 +803,7 @@ def simulate_chat_completion(
                         "direction": "long",
                         "conviction_rank": idx + 1,
                         "narrative": "",
+                        "confidence": 0.7,
                     }
                     for idx, ticker in enumerate(roster)
                 ],

@@ -66,12 +66,26 @@ def test_add_batches_at_batch_size() -> None:
 
 
 @pytest.mark.unit
-def test_add_skips_chunks_without_embeddings() -> None:
+def test_add_embeds_chunks_without_embeddings() -> None:
     post = _RecordingPost()
-    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
-    plain = Chunk(id="c9", content="x", doc_id="d", embedding=None, metadata={})
+    embedded: list[str] = []
+
+    class _StubProvider:
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            embedded.extend(texts)
+            return [[0.1, 0.2, 0.3] for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 3
+
+    backend = VectorizeBackend(
+        "i", account_id="a", api_token="t", http_post=post, embedding_provider=_StubProvider()
+    )
+    plain = Chunk(id="c9", content="needs embedding", doc_id="d", embedding=None, metadata={})
     backend.add([plain])
-    assert post.calls == []
+    assert embedded == ["needs embedding"]
+    assert len(post.calls) == 1
 
 
 @pytest.mark.unit

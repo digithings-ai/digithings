@@ -10,7 +10,7 @@ free_tier_type: credit-based
 access_requirements:
   - email
 data_privacy_on_free: no_training
-verified_at: 2026-05-03
+verified_at: 2026-08-30
 source_urls:
   - https://docs.fireworks.ai/api-reference/rate-limiting
   - https://fireworks.ai/pricing
@@ -28,14 +28,10 @@ Fireworks AI specialises in fast open-weight model inference with a focus on age
 
 ## Free-Tier Models ($1 credit)
 
-| Model ID | Context Window | Max Output | $/1M in | $/1M out | Notes |
-|---|---|---|---|---|---|
-| `accounts/fireworks/models/llama-v3p3-70b-instruct` | 131,072 | 8,192 | $0.90 | $0.90 | Llama 3.3 70B |
-| `accounts/fireworks/models/deepseek-r1` | 163,840 | 16,384 | $3.00 | $8.00 | DeepSeek R1 (Western-hosted) |
-| `accounts/fireworks/models/deepseek-v3` | 163,840 | 8,192 | $0.90 | $0.90 | DeepSeek V3 (Western-hosted) |
-| `accounts/fireworks/models/kimi-k2-instruct` | 262,144 | 16,384 | (verify) | (verify) | Kimi K2.5; 256k context |
-| `accounts/fireworks/models/qwen2p5-72b-instruct` | 131,072 | 8,192 | $0.90 | $0.90 | Qwen 2.5 72B |
-| `accounts/fireworks/models/firefunction-v2` | 32,768 | 4,096 | $0.90 | $0.90 | Best free-tier tool-calling |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `accounts/fireworks/models/llama-v3p3-70b-instruct` | 131,072 | 8,192 | active |
+| `accounts/fireworks/models/deepseek-r1` | 163,840 | 16,384 | active |
 
 ---
 
@@ -107,3 +103,4 @@ Add credit — no monthly minimum. Llama 70B: $0.90/$0.90 per 1M. DeepSeek V3: $
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

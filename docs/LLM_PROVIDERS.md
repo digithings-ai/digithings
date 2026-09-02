@@ -1,6 +1,6 @@
 # LLM Provider Catalog — Free Tiers, Cheap APIs, Local Options
 
-*Reference snapshot: July 2026. Pricing and quotas change frequently — treat numbers as directional and verify against each provider's console before committing to production use. Items marked (uncertain) could not be confirmed at time of writing.*
+*Reference snapshot: August 2026. Pricing and quotas change frequently — treat numbers as directional and verify against each provider's console before committing to production use. Items marked (uncertain) could not be confirmed at time of writing.*
 
 ## Why this document exists
 
@@ -20,7 +20,7 @@ digithings routes all LLM traffic through `config/litellm.yaml`. Each provider b
 model_list:
   - model_name: free-fast
     litellm_params:
-      model: groq/llama-3.3-70b-versatile
+      model: groq/openai/gpt-oss-120b
       api_key: os.environ/GROQ_API_KEY
   - model_name: free-fast  # fallback on same alias
     litellm_params:
@@ -38,7 +38,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 |---|---|
 | Claude Pro / Max | Bound to claude.ai + Claude Code CLI. Anthropic API billed separately. |
 | ChatGPT Plus | Bound to chatgpt.com. OpenAI API billed separately. |
-| GitHub Copilot | Editor-bound. Unofficial proxies violate ToS. See GitHub Models (below) for the legit free API. |
+| GitHub Copilot | Editor-bound. Unofficial proxies violate ToS. GitHub Models (the former free inference API) retired 2026-07-30 — use Groq / Gemini / Cerebras for free eval instead. |
 | Cursor Pro | Cursor editor only. |
 
 ---
@@ -57,28 +57,29 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 2. Groq
 
 - **URL:** https://console.groq.com
-- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, ~12,000 TPM on `llama-3.3-70b-versatile` (varies by model).
-- **Best free models:** `llama-3.3-70b-versatile`, `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`. Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was **deprecated from the free/developer tier 2026-06-17** — migrate to `gpt-oss-120b` or `qwen3.6-27b`.
-- **Paid:** Llama 3.3 70B ~$0.59 / $0.79; gpt-oss-120b ~$0.15 / $0.60 (prompt caching $0.075/1M); Llama 4 Scout ~$0.11 / $0.34 (paid-only now).
-- **LiteLLM:** `groq/llama-3.3-70b-versatile`. Env: `GROQ_API_KEY`.
-- **Selling point:** 500–1500 tok/s inference. Use exponential backoff for bursts. Groq entered a non-exclusive inference-tech licensing deal + acquihire with Nvidia (announced May 2026); GroqCloud continues operating independently — no observed effect on free-tier limits/pricing so far.
+- **⚠️ `llama-3.3-70b-versatile` hit its hard cutover in August 2026** and now 404s on the free/developer tier (Groq announced this 2026-06-17). **Do not route new traffic to it** — migrate to `openai/gpt-oss-120b` or `qwen/qwen3.6-27b`.
+- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, TPM varies by model (gpt-oss-120b/qwen3.6-27b TPM not yet independently reconfirmed post-migration).
+- **Best free models:** `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`. Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was also **deprecated from the free/developer tier 2026-06-17**.
+- **Paid:** gpt-oss-120b ~$0.15 / $0.60 (prompt caching $0.075/1M); Llama 4 Scout ~$0.11 / $0.34 (paid-only now); `llama-3.3-70b-versatile` ~$0.59 / $0.79 remains listed on the pricing page for enterprise committed-spend contracts only.
+- **LiteLLM:** `groq/openai/gpt-oss-120b`. Env: `GROQ_API_KEY`.
+- **Selling point:** 500–1500 tok/s inference. Use exponential backoff for bursts. Groq entered a non-exclusive inference-tech licensing deal + acquihire with Nvidia (announced May 2026); GroqCloud continues operating independently — no observed effect on free-tier limits/pricing beyond the llama-3.3-70b-versatile/llama-4-scout deprecations above.
 
 ### 3. Cerebras
 
 - **URL:** https://cloud.cerebras.ai
-- **Free tier (unconfirmed this cycle — sources conflict):** Cerebras's current docs describe a "Free Trial" of 5 RPM / 30K TPM / 1M TPD on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b`, requiring a verified payment method for $5 in credits (30-day expiry) — a departure from the previously-documented no-CC 30 RPM tier. `llama-3.3-70b` no longer appears on Cerebras's free-tier page at all (404s on probe). Treat quota numbers here as directional pending a direct signup-flow check.
-- **Best free models:** `gpt-oss-120b` (~3000 tok/s). `llama-3.3-70b`/`llama-4-scout`/`qwen-3-32b`/`qwen3-235b` are no longer confirmed on the free tier as of 2026-07-19. >2000 tok/s — fastest on market.
-- **LiteLLM:** `cerebras/llama-3.3-70b`. Env: `CEREBRAS_API_KEY`.
-- **Gotcha:** Context often clipped below native (8K–32K) on free. Model roster and CC requirement are in flux — re-verify before depending on this provider.
+- **Free tier (unconfirmed this cycle — sources conflict):** official docs cite 5 RPM / 30K TPM / 1M TPD on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b`; third-party trackers still cite an older 30 RPM / 60–100K TPM / 8K-ctx-cap figure. `llama-3.3-70b`, `llama-4-scout`, `qwen-3-32b`, and `qwen3-235b` are **confirmed deprecated for free tier** — absent from official docs and 404ing on probe for two consecutive review cycles now (2026-07-19 and 2026-08-30).
+- **Best free models:** `gpt-oss-120b` (~3000 tok/s), `zai-glm-4.7`, `gemma-4-31b`. >2000 tok/s — fastest on market.
+- **LiteLLM:** `cerebras/gpt-oss-120b`. Env: `CEREBRAS_API_KEY`.
+- **Gotcha:** Context often clipped below native (8K) on free. Model roster and CC requirement are in flux — re-verify before depending on this provider.
 
 ### 4. OpenRouter
 
 - **URL:** https://openrouter.ai
 - **Free tier:** Routes `:free` variants. 20 RPM; 50 RPD with <$10 balance, 1000 RPD after.
-- **Best `:free` models:** `openai/gpt-oss-20b:free` (dogfood pin as of 2026-08-10; tools+answer verified), `google/gemma-4-31b-it:free` / `google/gemma-4-26b-a4b-it:free`. **`deepseek/deepseek-chat-v3:free` is gone (404).** `qwen/qwen3-coder:free` and older Llama/Gemini free slugs rotate off the catalog — verify before relying on them. Roster rotates.
+- **Best `:free` models:** `openai/gpt-oss-20b:free` (dogfood pin as of 2026-08-10; tools+answer verified), `google/gemma-4-31b-it:free` / `google/gemma-4-26b-a4b-it:free`, `qwen/qwen3-coder:free`. **`deepseek/deepseek-chat-v3:free` is gone (404).** **`meta-llama/llama-3.3-70b-instruct:free` is confirmed gone as of 2026-08-30** — probe returns 404 pointing at the paid slug instead; migrate any remaining references to `gpt-oss-20b:free` or `qwen3-coder:free`. Roster rotates — verify before relying on any specific slug.
 - **Paid:** Aggregator markup ~0–5% over upstream. BYO-key supported (5% surcharge).
 - **LiteLLM:** `openrouter/openai/gpt-oss-20b:free`. Env: `OPENROUTER_API_KEY`.
-- **Gotcha:** `:free` routes can be slow / queue-prone, and individual models are retired with little notice (see llama-3.3-70b-instruct:free above). Providers may log prompts — check each model card.
+- **Gotcha:** `:free` routes can be slow / queue-prone, and individual models are retired with little notice (llama-3.3-70b-instruct:free went from "sunsetting" banner to fully removed within six weeks). Providers may log prompts — check each model card.
 
 ### 5. Cloudflare Workers AI
 
@@ -108,20 +109,18 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 8. Nvidia NIM (build.nvidia.com)
 
 - **URL:** https://build.nvidia.com
+- **⚠️ `meta/llama-3.3-70b-instruct` reached end-of-life 2026-08-26** and now returns 410 Gone — no official replacement/redirect was published. Use one of the other free models below instead.
 - **Free tier:** 1,000 credits on signup; 5,000 more with Developer Program. Credits don't refill. 40 RPM practical ceiling.
-- **Best models:** Nemotron 3 Ultra (550B MoE, 1M ctx), Llama Nemotron 70B (reasoning), Llama 3.3/4, DeepSeek R1, NVIDIA embeddings.
+- **Best models:** Nemotron 3 Ultra (550B MoE, 1M ctx), Llama Nemotron 70B (reasoning), DeepSeek R1, NVIDIA embeddings.
 - **LiteLLM:** `nvidia_nim/<model>`. Env: `NVIDIA_NIM_API_KEY`.
 - **Best use:** Evaluating models before choosing a long-term host.
 - **Gotcha:** Free tier has **chronic latency/overload under load** — community reports of multi-minute timeouts, not a one-off outage. Expect to need long timeouts and retries.
 
-### 9. GitHub Models
+### 9. GitHub Models — RETIRED
 
 - **URL:** https://github.com/marketplace/models
-- **⚠️ RETIRING 2026-07-30.** GitHub announced full retirement of the platform (playground, model catalog, inference API, BYOK) for everyone, including existing customers. Already blocked for new customers/orgs since 2026-06-16, with brownouts on 2026-07-16 and 2026-07-23. **Do not build new dependencies on this provider** — migrate to Microsoft Foundry or GitHub Copilot, or another provider in this catalog.
-- **Free tier (moot after 2026-07-30):** Free for GitHub users. Rate-limited by Copilot tier: Free ~50 RPD low-tier, 10 RPD high-tier. Context often capped (8K in / 4K out on free). Access requires a token with the `models:read` permission explicitly granted — the default Actions `GITHUB_TOKEN` does **not** carry this scope automatically.
-- **Best models:** GPT-5 family, Claude subset, Llama, Mistral, Phi, Cohere, DeepSeek.
-- **LiteLLM:** `github/gpt-4.1`. Env: `GITHUB_TOKEN` (PAT, with `models:read`).
-- **Gotcha:** **ToS restricts free tier to evaluation — not production.** With the full retirement 11 days out (as of this snapshot), plan removal rather than a production upgrade.
+- **⚠️ FULLY RETIRED 2026-07-30, confirmed dead 2026-08-30.** The platform (playground, model catalog, inference API, BYOK) is shut down for everyone, including existing customers — a probe against it now returns a generic connection error rather than an auth error, consistent with the endpoint being torn down entirely. **This provider no longer works. Do not reference it in new config.** Migrate to Microsoft Foundry, GitHub Copilot, or another provider in this catalog.
+- **Historical note:** was free for GitHub users, rate-limited by Copilot tier (Free ~50 RPD low-tier, 10 RPD high-tier), catalog included GPT-5 family, Claude subset, Llama, Mistral, Phi, Cohere, DeepSeek. Retained here only so old references to `github/gpt-4.1` / `GITHUB_TOKEN` are recognized as dead, not for reuse.
 
 ### 10. Ollama Cloud
 
@@ -152,7 +151,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 | Provider | Model | Input $/1M | Output $/1M |
 |---|---|---|---|
 | DeepSeek direct | `deepseek-v4-flash` (replaces V3) | $0.07–0.14 (cache-miss figure unconfirmed) | $0.28 |
-| DeepSeek direct | `deepseek-v4-pro` (replaces R1) | $0.435 | $0.87 |
+| DeepSeek direct | `deepseek-v4-pro` (replaces R1) | $0.66 off-peak / $1.32 peak (01:00-04:00, 06:00-10:00 UTC) | $1.98 off-peak / $3.96 peak |
 | Gemini | Flash-Lite | $0.10 | $0.40 |
 | Gemini | Flash | $0.30 | $2.50 |
 | OpenAI | GPT-4.1-mini | $0.40 | $1.60 |
@@ -170,6 +169,8 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 **Rule of thumb:** $5 topped up on DeepSeek or Gemini lasts weeks of dev testing. Batch APIs (OpenAI, Anthropic) and off-peak discounts (DeepSeek) halve effective cost.
 
 **Note (2026-07-19):** Together AI's $25 no-CC signup credit has been discontinued — a $5 minimum prepaid purchase with a payment method is now required, so it no longer belongs in a "cheap/free" comparison without that caveat.
+
+**Note (2026-08-30):** DeepSeek replaced `deepseek-v4-pro`'s flat $0.435/$0.87 rate with peak/off-peak billing effective 2026-08-16 — off-peak is still ~1.5x the old rate, peak is a 3x increase. Schedule cost-sensitive batch work outside 01:00-04:00 and 06:00-10:00 UTC.
 
 **DeepSeek caveat:** direct platform is hosted in China — prompts subject to local data law. For Western-jurisdiction hosting of the same weights, use Fireworks, Together, or DeepInfra.
 

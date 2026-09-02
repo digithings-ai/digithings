@@ -14,6 +14,7 @@ executes the unified Atlas+Hermes pipeline via
 | --- | --- | --- | --- |
 | `pipeline-olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
 | `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
+| Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
 | `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff | 15 min |
 | `ci.yml` → `actionlint` job | `push` / `pull_request` touching `.github/workflows/**` | `actionlint` over **every** workflow | 5 min |
 
@@ -31,7 +32,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 | --- | --- | --- |
 | `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/olympus_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
-| `OLYMPUS_BELIEFS_BACKLOG` | `20` | Auto-trigger beliefs distillation when unresolved `decision_log` rows exceed threshold |
+| `OLYMPUS_BELIEFS_BACKLOG` | `20` | Additional trigger for a **full** beliefs rewrite when unfolded `decision_log` rows exceed the threshold. House runs already publish a **daily short fold**. |
 | `ATLAS_MAX_ANALYSTS` | `30` (`.github/olympus-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI

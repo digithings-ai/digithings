@@ -131,7 +131,7 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   padding: 0.1rem 0.35rem;
-  border-radius: 5px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
@@ -231,7 +231,7 @@
   margin: 0.8rem 0;
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--hair);
-  border-radius: 9px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   overflow-x: auto;
 }
@@ -251,7 +251,7 @@
 .chat-md-code {
   margin: 0.8rem 0;
   border: 1px solid var(--hair);
-  border-radius: 9px;
+  border-radius: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
@@ -335,7 +335,7 @@
 .chat-md-mermaid {
   margin: 0.8rem 0;
   border: 1px solid var(--hair);
-  border-radius: 9px;
+  border-radius: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
 }

@@ -22,6 +22,7 @@ from digiquant.olympus.hermes.writers.opening_snapshot import (
     cold_start_requires_seed,
     ensure_legacy_opening_snapshot,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -90,8 +91,16 @@ class _Query:
             return out
 
         rows = list(self._store.get(self._name, []))
+        house = str(house_workspace_id())
         for op, col, value in self._filters:
-            if op == "eq":
+            if op == "eq" and col == "workspace_id":
+                # TEST-FAKE courtesy: legacy house fixtures omit workspace_id.
+                rows = [
+                    r
+                    for r in rows
+                    if str(r.get(col)) == str(value) or (r.get(col) is None and str(value) == house)
+                ]
+            elif op == "eq":
                 rows = [r for r in rows if str(r.get(col)) == str(value)]
         if self._limit is not None:
             rows = rows[: self._limit]

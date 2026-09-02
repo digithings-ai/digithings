@@ -16,7 +16,7 @@ relevance:
 **Role:** Quant engine · NautilusTrader · **Tier:** core
 
 ## Overview
-Atlas runs scheduled research and Hermes turns it into signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.
+Scheduled research turns into portfolio signals; backtests run on a real NautilusTrader engine with Optuna driving the parameter search.
 
 Every run writes an append-only audit trail and a tearsheet. No broker adapter ships wired — the IB, Alpaca, and QuantConnect adapters are declared stubs, so reaching a live venue is your own deliberate integration.
 

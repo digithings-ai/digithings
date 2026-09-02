@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
@@ -16,6 +15,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 )
 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.envcompat import RETRIEVAL_MANIFEST_MODE, env_lookup
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
 from digiquant.olympus.research_retrieval.cache import ResearchCache
 from digiquant.olympus.research_retrieval.context import ContextCapsule, ContextManifest
@@ -106,7 +106,7 @@ RESEARCH_TOOLS: list[dict[str, Any]] = [
 
 def resolve_retrieval_manifest_mode() -> RetrievalManifestMode:
     """Read ``OLYMPUS_RETRIEVAL_MANIFEST_MODE``; unknown values → shadow."""
-    raw = os.environ.get(OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV, "shadow").strip().lower()
+    raw = env_lookup(RETRIEVAL_MANIFEST_MODE, default="shadow").strip().lower()
     try:
         return RetrievalManifestMode(raw)
     except ValueError:

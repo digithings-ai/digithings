@@ -13,12 +13,14 @@ from datetime import date
 import pytest
 from digiquant.olympus.atlas.data.queries import (
     ALLOWED_READ_TABLES,
+    HOUSE_BOOK_READ_TABLES,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
     query_data,
 )
 from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+from digiquant.olympus.tenancy import house_workspace_id
 
 
 class _FakeTable:
@@ -247,6 +249,67 @@ class TestQueryData:
         )
         out = query_data(client=client, table="price_history", columns="date, close")
         assert out["row_count"] == 1
+
+    def test_group_a_tables_are_positions_nav_events_metrics(self) -> None:
+        assert HOUSE_BOOK_READ_TABLES == frozenset(
+            {"positions", "nav_history", "position_events", "portfolio_metrics"}
+        )
+        assert "theses" not in HOUSE_BOOK_READ_TABLES
+        assert "price_history" not in HOUSE_BOOK_READ_TABLES
+
+    @pytest.mark.parametrize("table", sorted(HOUSE_BOOK_READ_TABLES))
+    def test_group_a_date_only_returns_house_not_overlay(self, table: str) -> None:
+        # Overlay listed first so dropping the house stamp returns OVERLAY.
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        client = _FakeClient(
+            {
+                table: [
+                    {"ticker": "OVERLAY", "date": "2026-06-15", "workspace_id": overlay},
+                    {"ticker": "HOUSE", "date": "2026-06-15", "workspace_id": house},
+                ]
+            }
+        )
+        out = query_data(client=client, table=table, eq={"date": "2026-06-15"})
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "HOUSE"
+        assert out["rows"][0]["workspace_id"] == house
+
+    def test_explicit_overlay_workspace_id_still_returns_overlay(self) -> None:
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        client = _FakeClient(
+            {
+                "positions": [
+                    {"ticker": "OVERLAY", "date": "2026-06-15", "workspace_id": overlay},
+                    {"ticker": "HOUSE", "date": "2026-06-15", "workspace_id": house},
+                ]
+            }
+        )
+        out = query_data(
+            client=client,
+            table="positions",
+            eq={"date": "2026-06-15", "workspace_id": overlay},
+        )
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "OVERLAY"
+
+    def test_price_history_does_not_inject_workspace_id(self) -> None:
+        # Rows without workspace_id would vanish if the house stamp leaked here.
+        client = _FakeClient(
+            {"price_history": [{"ticker": "SPY", "date": "2026-06-15", "close": 1.0}]}
+        )
+        out = query_data(client=client, table="price_history", eq={"date": "2026-06-15"})
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "SPY"
+
+    def test_theses_does_not_inject_workspace_id(self) -> None:
+        client = _FakeClient(
+            {"theses": [{"ticker": "THEME", "date": "2026-06-15", "thesis_id": "t1"}]}
+        )
+        out = query_data(client=client, table="theses", eq={"date": "2026-06-15"})
+        assert out["row_count"] == 1
+        assert out["rows"][0]["ticker"] == "THEME"
 
 
 @pytest.mark.unit

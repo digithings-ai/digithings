@@ -75,7 +75,7 @@ its own task PR, satisfied by any one of:
 
 Full rationale — why reviewing the promotion diff itself is the wrong moment, and why this
 is deliberately *not* a required `Cursor Bugbot` check on `main` — is in
-[`CLAUDE.md` § Review coverage](../CLAUDE.md#review-coverage-the-gate-before-production).
+[`AGENTS.md` § Review coverage](../AGENTS.md#review-coverage-the-gate-before-production).
 
 **Why not a live reviewer-request instead?** [#1612](https://github.com/digithings-ai/digithings/issues/1612)
 proposed auto-requesting a non-author reviewer on every promotion PR to work around

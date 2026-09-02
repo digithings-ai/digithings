@@ -34,6 +34,9 @@
   --accent-atlas:      #6fbf94;
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
+  --accent-research:   var(--accent-atlas);
+  --accent-portfolio:  var(--accent-hermes);
+  --accent-execution:  var(--accent-kairos);
   --accent-digisearch: #5aa3c4;
   --accent-digichat:   #e2708a; /* ruled 2026-07-06: digichat splits off digiquant's shared cyan —
                                    now a standalone consumer chat surface, it earns its own voice.
@@ -54,6 +57,9 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
+  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
+     under :root[data-theme] so Inter is not the live body default. Override
+     --font-sans locally for a sans/serif escape hatch; --font-family follows. */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
 
@@ -78,9 +84,11 @@
   --space-9: 8rem;
 
   /* --- Radius ---------------------------------------------------------- */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Utilitarian v0.1 (2026-08-30): zero corners. True circles (spinners,
+     live dots) may still use 999px locally — that is geometry, not chrome. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 
   /* --- Motion ---------------------------------------------------------- */
   --transition-speed: 0.8s;
@@ -121,6 +129,9 @@
 .accent-atlas      { --accent: var(--accent-atlas); }
 .accent-hermes     { --accent: var(--accent-hermes); }
 .accent-kairos     { --accent: var(--accent-kairos); }
+.accent-research   { --accent: var(--accent-research); }
+.accent-portfolio  { --accent: var(--accent-portfolio); }
+.accent-execution  { --accent: var(--accent-execution); }
 .accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
@@ -294,24 +305,33 @@
   --accent-atlas: var(--ink);
   --accent-hermes: var(--ink);
   --accent-kairos: var(--ink);
+  --accent-research: var(--ink);
+  --accent-portfolio: var(--ink);
+  --accent-execution: var(--ink);
 
-  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
+     Serif/sans escape hatches set --font-display / --font-sans locally.
+     Legacy --font-family follows --font-sans so themed consumers of
+     components.css / app-shell-terminal do not fall through to Inter. */
+  --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Instrument Serif", Georgia, serif;
+  --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-family: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   --wrap: 1180px;
   --wrap-wide: 1280px;
   --product-frame-w: 800px;
   --gutter: clamp(1.25rem, 4vw, 3.25rem);
 
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Graphite-inspired section rhythm + reveal motion (EVOLUTION.md §5). */
-  --section-y: clamp(4rem, 8vw, 7rem);
+  /* Sparse-leaning marketing rhythm (agentmail); dashboards may tighten locally. */
+  --section-y: clamp(4.5rem, 9vw, 8rem);
   --section-y-tight: clamp(2.5rem, 5vw, 4rem);
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-reveal: 0.6s;
