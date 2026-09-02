@@ -5,7 +5,7 @@ import { join, relative } from 'node:path';
 /**
  * Thesis detail routing canon (#1760).
  *
- * Olympus ships with `output: 'export'` (`next.config.mjs`), so a `[thesisId]`
+ * dashboard ships with `output: 'export'` (`next.config.mjs`), so a `[thesisId]`
  * dynamic segment can only serve the ids `generateStaticParams` enumerated at
  * build time — every thesis the daily pipeline creates after a deploy hard-404s.
  * Production carried five dead links on 2026-08-01 for exactly this reason.

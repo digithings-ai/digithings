@@ -90,7 +90,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (Flash-Lite), `medium` (Flash), `best` (Pro) |
 | Single-shot 100k | Yes — up to 1M tokens without chunking |
 | Privacy safe | **No** — free tier trains on data; use paid for confidential research |
-| Atlas/Hermes role | Initial large-context ingestion pass before routing to reasoning model |
+| research/portfolio role | Initial large-context ingestion pass before routing to reasoning model |
 
 ---
 

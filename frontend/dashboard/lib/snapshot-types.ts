@@ -1,10 +1,10 @@
 /**
  * Hand-written TypeScript mirror of `SnapshotEnvelope` in
- * `digiquant/src/digiquant/atlas/snapshot.py` (schema v1).
+ * `digiquant/src/digiquant/research/snapshot.py` (schema v1).
  *
- * Source of truth: `digiquant/docs/schemas/atlas_snapshot.v1.json`. When the
+ * Source of truth: `digiquant/docs/schemas/research_snapshot.v1.json`. When the
  * Pydantic model bumps `SCHEMA_VERSION`, regenerate the JSON schema and
- * update this file in lockstep — the Atlas pipeline writes the envelope
+ * update this file in lockstep — the research pipeline writes the envelope
  * shape into `daily_snapshots.snapshot` and the frontend reads it back.
  *
  * Why hand-written vs json-schema-to-typescript? The field set is small
@@ -14,7 +14,7 @@
  */
 export const SNAPSHOT_SCHEMA_VERSION = 1 as const;
 
-/** Bias vocabulary mirrored from `digiquant_atlas.segments.Bias`. */
+/** Bias vocabulary mirrored from `digiquant.research.segments.Bias`. */
 export type SnapshotBias =
   | 'strong_bullish'
   | 'bullish'
@@ -53,14 +53,14 @@ export interface RiskItem {
   trigger: string;
 }
 
-/** One material finding. Mirrors digiquant_atlas.segments.Finding. */
+/** One material finding. Mirrors digiquant.research.segments.Finding. */
 export interface SnapshotFinding {
   label: string;
   summary: string;
   source_ids?: string[];
 }
 
-/** One cited source. Mirrors digiquant_atlas.segments.Source. */
+/** One cited source. Mirrors digiquant.research.segments.Source. */
 export interface SnapshotSource {
   id: string;
   title?: string | null;
@@ -69,7 +69,7 @@ export interface SnapshotSource {
 
 /**
  * Frontend-facing copy of the Phase 7 master briefing.
- * Mirrors `digiquant.atlas.snapshot.DigestPayload`.
+ * Mirrors `digiquant.research.snapshot.DigestPayload`.
  */
 export interface DigestPayload {
   segment?: string;
@@ -103,7 +103,7 @@ export interface DigestPayload {
 
 /**
  * Frontend-consumable wrapper around a `daily_snapshots` row.
- * Mirrors `digiquant.atlas.snapshot.SnapshotEnvelope`.
+ * Mirrors `digiquant.research.snapshot.SnapshotEnvelope`.
  */
 export interface SnapshotEnvelope {
   schema_version: number;

@@ -193,7 +193,7 @@ export function TabsReference() {
         <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
       </div>
 
-      {/* chip — the dashboard sub-nav dress (olympus subpage tab bars). The note
+      {/* chip — the dashboard sub-nav dress (dashboard subpage tab bars). The note
           below is not a tabpanel, so linkPanels={false} keeps aria-controls off
           the tabs rather than emitting dangling references. */}
       <div className="mt-8 max-w-[26rem]">

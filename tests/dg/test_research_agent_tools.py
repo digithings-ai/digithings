@@ -176,7 +176,7 @@ class TestEnforcedToolFreeRetry:
     @pytest.mark.unit
     def test_provider_error_on_the_enforced_retry_reraises_the_original_parse_error(self) -> None:
         """Never-worse-than-today: the enforced retry's own failure must not become a NEW
-        failure class for the Atlas/Hermes fail-soft handlers keyed on the parse error."""
+        failure class for the research/portfolio fail-soft handlers keyed on the parse error."""
         with (
             patch.object(research_agent, "run_tools", return_value="prose, no json"),
             patch.object(

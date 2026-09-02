@@ -62,8 +62,8 @@ background:
   light-theme override lives under `html.light .qn-blueprint-bg` in
   `globals.css` (the design tokens are dark-only).
 - `.accent-digiquant` — sets `--accent` to the muted emerald used across
-  digiquant.io. Individual routes may nest `.accent-atlas` to shift to the
-  research-job green (`--accent-atlas`) where appropriate.
+  digiquant.io. Individual routes may nest `.accent-research` to shift to the
+  research-job green (`--accent-research`) where appropriate.
 - `.qn-metric` — tabular, mono, right-aligned numeric cells. Applied to the
   server-metrics strip; extend to additional metric sites as needed.
 - `.qn-up` / `.qn-down` — directional P&L text, re-pointed in `globals.css` to
@@ -87,7 +87,7 @@ Track B ProfileConfig DB lands; they are not editable Settings.
 **Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
 **Ledger** (position-event activity) · Attribution. Legacy `/portfolio/period`
 redirects to Tearsheet (#3060). Accounting tip views (`public_accounting_period_status`)
-remain available to Tearsheet/Ledger; raw `olympus_accounting_*` bases stay
+remain available to Tearsheet/Ledger; raw `dashboard_accounting_*` bases stay
 service_role-only (#2652).
 
 Shared workspace gutters use `SUBPAGE_MAX` from
@@ -355,7 +355,7 @@ reasoning workflow without replacing their domain interactions:
   run status, All artifacts lists every persisted `document_key`, and Call trace lists
   ordered model/search/tool operations from `olympus_run_event_trace`. Soft-stamped
   `call_id` / `attempt_id` / `node_run_id` (#2763) join each row to WP1
-  `olympus_provider_*` (067 is economics authority; the public view still omits
+  `dashboard_provider_*` (067 is economics authority; the public view still omits
   tokens/cost). Every known
   representative-run key is classified as a topology leaf, fan-out branch, or
   ledger-only discovery path (`lib/pipeline-document-discoverability.ts`) so deep
@@ -402,8 +402,8 @@ values.
 
 The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip
 (`components/overview/daily-snapshot-panel.tsx`). The envelope shape mirrors
-`digiquant.olympus.atlas.snapshot.SnapshotEnvelope` from
-[`atlas_snapshot.v1.json`](../../../digiquant/docs/schemas/atlas_snapshot.v1.json):
+`digiquant.research.snapshot.SnapshotEnvelope` from
+[`research_snapshot.v1.json`](../../../digiquant/docs/schemas/research_snapshot.v1.json):
 
 - `lib/snapshot-types.ts` — TypeScript mirror of the Pydantic model.
 - `lib/snapshot-fetch.ts` — `fetchLatestSnapshot()` reads the freshest
@@ -446,7 +446,7 @@ renders from the payloads:
   `risk_radar`, narrative summaries) when the legacy columns are null.
 
 `positions` and `nav_history` are written by the pipeline itself — Phase 9D
-(`hermes/portfolio_materialize.py`, #700) materializes the PM's daily decision
+(`portfolio/portfolio_materialize.py`, #700) materializes the PM's daily decision
 into the paper book: target weights → `positions` (+ a CASH residual row), and
 a base-100 normalized NAV index → `nav_history` (chained from the prior book's
 realized return). So the portfolio + performance panels populate from the first

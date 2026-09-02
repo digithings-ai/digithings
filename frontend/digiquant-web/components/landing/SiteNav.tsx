@@ -14,7 +14,7 @@
  */
 import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
-import { DigiquantMark } from "./OlympusMark";
+import { DigiquantMark } from "./DashboardMark";
 
 export function SiteNav() {
   return (

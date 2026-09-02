@@ -1,5 +1,5 @@
 /**
- * Browser CORS for Olympus → core Edge Functions (Settings + billing).
+ * Browser CORS for dashboard → core Edge Functions (Settings + billing).
  *
  * digiquant.io is a static Pages origin; Settings/Billing call
  * `*.supabase.co/functions/v1/*` with Authorization, which triggers an

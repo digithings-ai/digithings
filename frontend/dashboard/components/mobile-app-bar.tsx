@@ -1,7 +1,7 @@
 'use client';
 
 import { Menu, Search, X } from 'lucide-react';
-import { DashboardMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/dashboard-mark';
 import { useAppShell } from '@/components/app-shell-context';
 
 /**

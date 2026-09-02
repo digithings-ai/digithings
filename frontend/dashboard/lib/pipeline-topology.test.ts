@@ -7,7 +7,7 @@ describe('pipeline topology', () => {
       'inputs', 'research', 'synthesis', 'selection', 'decision', 'learning',
     ]);
   });
-  it('research carries the documented fan-outs (11 sectors per atlas/config/sectors.yaml)', () => {
+  it('research carries the documented fan-outs (11 sectors per research/config/sectors.yaml)', () => {
     const research = stageById('research')!;
     const fanouts = Object.fromEntries(
       research.subSteps.filter((s) => s.fanout).map((s) => [s.id, s.fanout!.defaultCount]),

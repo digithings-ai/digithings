@@ -258,7 +258,7 @@ def dispatch_workspace(
                         workspace_name=workspace_name,
                     )
                     text, html = _render_daily_digest(content)
-                    subject = f"Olympus daily digest — {run_date.isoformat()}"
+                    subject = f"dashboard daily digest — {run_date.isoformat()}"
                     try:
                         _send_message(client, email, subject, text, html)
                     except MailgunTransportError as exc:
@@ -334,10 +334,10 @@ def dispatch_notifications(
     **Cron** (`python -m digiquant.notify.dispatch`): passes ``hour_utc=now.hour`` so
     daily digests respect ``notification_prefs.digest_hour_utc``.
 
-    **Post-run** (`run_db_first.py` close-out and house ``hermes.chain`` CLI):
+    **Post-run** (`run_db_first.py` close-out and house ``portfolio.chain`` CLI):
     passes ``force_digest=True`` so today's digest always attempts send regardless
     of hour; dedupe prevents double-send if cron already delivered. Overlay
-    nested ``run_atlas_then_hermes`` does not call this.
+    nested ``run_research_then_portfolio`` does not call this.
     """
     try:
         _dispatch_notifications_inner(

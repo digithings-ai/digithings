@@ -236,14 +236,14 @@ export interface ServerPortfolioMetrics {
 }
 
 /**
- * A single Atlas run's health + optional economics. The public dashboard reads
+ * A single research run's health + optional economics. The public dashboard reads
  * from the anon-safe `atlas_run_health` view (status, segment counts, timing);
  * spend telemetry fields are null unless a BFF with service-role access is wired.
  */
-export interface AtlasRunDiagnostics {
+export interface ResearchRunDiagnostics {
   run_id: string;
   /**
-   * Outer-retry attempt within one workflow run, 1-based (#1762). `pipeline-olympus.yml`
+   * Outer-retry attempt within one workflow run, 1-based (#1762). `pipeline-digiquant.yml`
    * retries the chain up to 3 times inside ONE job, so `run_id` is identical across attempts
    * and used to be the whole key — the last attempt's row overwrote the earlier ones, which
    * is why `groupRunEpisodes` saw one row per date and reported `attempts: 1` for dates that
@@ -405,17 +405,17 @@ export interface PipelineObservabilityBundle {
   pm_allocation_memo: Record<string, unknown> | null;
   deliberation_session_index: Record<string, unknown> | null;
   /**
-   * Per-ticker bull/bear `DebateSummary` docs. Carries both the Hermes pipeline
+   * Per-ticker bull/bear `DebateSummary` docs. Carries both the portfolio pipeline
    * shape (`deliberation/{ticker}`, has `net_stance`) and any operator-flow
    * `deliberation-transcript/{date}/{ticker}` docs; consumers filter by shape.
    */
   deliberation_transcripts: PipelineTickerDoc[];
   asset_recommendations: PipelineTickerDoc[];
-  /** Hermes `risk-debate` doc (aggressive/conservative/key_tension), or null. */
+  /** portfolio `risk-debate` doc (aggressive/conservative/key_tension), or null. */
   risk_debate: Record<string, unknown> | null;
-  /** Hermes `pm-rebalance` decision doc (actions carry per-ticker rationale), or null. */
+  /** portfolio `pm-rebalance` decision doc (actions carry per-ticker rationale), or null. */
   pm_rebalance: Record<string, unknown> | null;
-  /** Hermes H7 `pm-direction-memo` (roster[].narrative = PM thesis), or null. */
+  /** portfolio H7 `pm-direction-memo` (roster[].narrative = PM thesis), or null. */
   pm_direction_memo: Record<string, unknown> | null;
 }
 
@@ -488,7 +488,7 @@ export interface PerformanceMetrics {
 /**
  * The H5 unified analyst output (`documents.payload` where
  * `document_key = 'analyst/{TICKER}'`), mirrored from the backend Pydantic model
- * `digiquant/.../hermes/models/analyst.py:AnalystPayload`. `conviction_score` is
+ * `digiquant/.../portfolio/models/analyst.py:AnalystPayload`. `conviction_score` is
  * SIGNED (ge=-5 le=5) — render with `SignedConvictionBadge`, never clamp or feed
  * it into the unsigned `ConvictionMeter`. `price_targets` is a free-form
  * label→number dict (keys vary call to call — "primary/support/secondary",
@@ -516,7 +516,7 @@ export interface AnalystPayload {
   evidence: AnalystEvidence | null;
 }
 
-/** #1672 evidence assessment — mirrors hermes/models/analyst.py:EvidenceAssessment. */
+/** #1672 evidence assessment — mirrors portfolio/models/analyst.py:EvidenceAssessment. */
 export interface AnalystEvidence {
   independent_confirming_signals: number | null;
   contradicting_signals: number | null;

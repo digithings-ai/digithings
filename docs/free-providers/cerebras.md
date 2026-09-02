@@ -88,7 +88,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (secondary to Groq; use for burst volume) |
 | Single-shot 100k | **No** — free tier caps at 8k; chunk into 7k segments |
 | Privacy safe | Yes |
-| Atlas/Hermes role | Fast parallel extraction on chunked earnings/filing text |
+| research/portfolio role | Fast parallel extraction on chunked earnings/filing text |
 
 **Chunking strategy for 100k payloads:**
 

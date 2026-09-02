@@ -20,7 +20,7 @@ export interface DocumentDiscovery {
 }
 
 /**
- * Representative Atlas + Hermes run keys: topology leaves, one sample per
+ * Representative research + portfolio run keys: topology leaves, one sample per
  * fan-out family, and known ledger-only siblings (deltas, risk-debate).
  * Absence of a key on a real day is fine; classification must still succeed.
  */

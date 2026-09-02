@@ -41,7 +41,7 @@ export const DB_EXEMPT_PREFIXES = [
   '/system', // legacy redirect → /pipeline
   '/settings',
   // twelve-x reads its own research feed (isTwelveXConfigured), not the main
-  // Olympus backend — the shell's DB gate must not swallow it (#1664).
+  // dashboard backend — the shell's DB gate must not swallow it (#1664).
   '/twelve-x',
   '/architecture',
   '/library',

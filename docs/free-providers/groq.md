@@ -84,7 +84,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (primary anchor) |
 | Single-shot 100k | Yes — 128k context, but TPM (6k) limits throughput at large payloads |
 | Privacy safe | Yes — no training on free data |
-| Atlas/Hermes role | Fast extraction pass; structured JSON generation on chunked inputs |
+| research/portfolio role | Fast extraction pass; structured JSON generation on chunked inputs |
 
 ---
 

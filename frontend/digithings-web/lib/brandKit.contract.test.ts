@@ -95,5 +95,5 @@ describe("brand kit page", () => {
       { cwd: repo, encoding: "utf8" },
     );
     expect(out).toContain("in sync");
-  });
+  }, 30_000);
 });

@@ -1,6 +1,6 @@
 /* Account surfaces consumed from the digiweb account family (login, signup,
    session, settings). Token-only; class prefix `.acct-`. Button dress is the
-   reference `.btn-*` grammar (reference/app/globals.css) — olympus does not
+   reference `.btn-*` grammar (reference/app/globals.css) — dashboard does not
    load that sheet. */
 
 .acct-login-shell {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { groupRunEpisodes } from './run-episodes';
-import type { AtlasRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics } from './types';
 
-function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
+function diag(o: Partial<ResearchRunDiagnostics>): ResearchRunDiagnostics {
   return {
     run_id: 'r', attempt: null, run_type: 'baseline', run_date: '2026-06-23', model: null, status: 'ok',
     started_at: null, finished_at: null, duration_s: null, llm_calls: null,
@@ -18,7 +18,7 @@ describe('groupRunEpisodes', () => {
     const rows = [
       diag({ run_id: 'ok', status: 'ok', created_at: '2026-06-23T16:43:00Z' }),
       diag({ run_id: 'fail', status: 'failed', created_at: '2026-06-23T16:34:00Z',
-        error_summary: 'chain/hermes: ON CONFLICT' }),
+        error_summary: 'chain/portfolio: ON CONFLICT' }),
     ];
     const eps = groupRunEpisodes(rows);
     expect(eps).toHaveLength(1);

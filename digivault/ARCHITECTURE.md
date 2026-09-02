@@ -57,8 +57,8 @@ vault = Vault("docs/vision")
 vault.list_notes()              # -> list[Note] (with backlinks)
 vault.backlinks("digigraph")    # -> tuple[str, ...]
 vault.search_by_tag("module")   # -> list[Note]
-vault.create_note("kairos", frontmatter={"title": "Kairos"}, body="see [[digiquant]]")
-vault.rename("atlas", "atlas-research")   # rewrites every inbound [[atlas]]
+vault.create_note("execution", frontmatter={"title": "execution"}, body="see [[digiquant]]")
+vault.rename("research", "research-research")   # rewrites every inbound [[research]]
 report = vault.lint()           # -> LintReport(ok, note_count, issues)
 ```
 

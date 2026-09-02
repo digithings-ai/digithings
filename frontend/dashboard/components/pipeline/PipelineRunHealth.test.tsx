@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/observability-queries', () => ({
-  fetchAtlasRunDiagnostics: vi.fn(() => Promise.resolve([])),
+  fetchResearchRunDiagnostics: vi.fn(() => Promise.resolve([])),
 }));
 
 import PipelineRunHealth from './PipelineRunHealth';

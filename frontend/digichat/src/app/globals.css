@@ -43,7 +43,7 @@
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
    (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -196,7 +196,7 @@
      tokens.css:56 names JetBrains Mono / Fira Code / Space Mono — none of which
      is loaded anywhere (no @font-face in frontend, no next/font import), so the
      app-shell chrome and .dc-term-* fell through to the OS default mono while
-     the <pre> blocks beside them got Geist Mono. Same fix as olympus:101. */
+     the <pre> blocks beside them got Geist Mono. Same fix as dashboard:101. */
   --font-family-mono: var(--font-mono);
 }
 

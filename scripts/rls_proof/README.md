@@ -1,6 +1,6 @@
 # RLS isolation proof harness (vanilla PostgreSQL)
 
-Program-level acceptance for the Kairos + tenancy epic:
+Program-level acceptance for the execution + tenancy epic:
 
 - user A cannot read user B's private rows on any tenant table
 - anon reads zero private rows post-cutover

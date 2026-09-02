@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Agent-runnable proof that the scheduled house GHA committed after main hotfixes.
 
-Lists ``pipeline-olympus.yml`` runs. A **schedule** success strictly after
+Lists ``pipeline-digiquant.yml`` runs. A **schedule** success strictly after
 #3334 (2026-08-31T20:39Z) on a ``main`` that is **not** still ``3601f72df``
 is EPIC house-pipeline acceptance. Never ``workflow_dispatch``.
 
@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.kairos.house_pipeline_proof import main  # noqa: E402
+from digiquant.execution.house_pipeline_proof import main  # noqa: E402
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))

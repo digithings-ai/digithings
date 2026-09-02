@@ -1,0 +1,689 @@
+"""Overlay must not last-writer-win house theses / analyst / vehicle / decision_log / onchain.
+
+Those tables have no ``workspace_id`` column. Overlay persist-on is not a
+license to upsert them. Overlay must not fold house ``decision_log`` lessons
+into beliefs either — ``beliefs_folded_at`` is a shared-register stamp.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from unittest.mock import patch
+from uuid import uuid4
+
+import pytest
+from digiquant.dashboard.learning.beliefs_distillation import distill_beliefs
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.chain import ChainDeps, _run_beliefs_fold
+from digiquant.portfolio.graph import PortfolioGraphDeps
+from digiquant.portfolio.models.thesis import (
+    ThesisReviewOutput,
+    ThesisStatusUpdate,
+    ThesisVehicleMapOutput,
+    ThesisVehicleMapping,
+)
+from digiquant.portfolio.portfolio_materialize import MaterializeDeps, build_materialize_node
+from digiquant.portfolio.writers.analyst_io import upsert_analyst_coverage
+from digiquant.portfolio.writers.thesis_io import (
+    persist_thesis_review,
+    persist_thesis_vehicle_map,
+    upsert_thesis_row,
+    upsert_thesis_vehicles,
+)
+from digiquant.research.decision_log import (
+    ReflectorOutput,
+    persist_pending,
+    resolve_pending,
+)
+from digiquant.research.graph import ResearchGraphDeps, ResearchInput
+from digiquant.research.phases.preflight import (
+    PreflightDeps,
+    PreflightReflectDeps,
+    build_preflight_node,
+    build_preflight_reflect_node,
+)
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
+from digiquant.research.supabase_io import upsert_onchain_cohort_positioning
+
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+
+pytestmark = pytest.mark.unit
+
+_RUN = date(2026, 8, 30)
+
+
+def test_skip_overlay_shared_register_private_only() -> None:
+    overlay = uuid4()
+    assert skip_overlay_shared_register(overlay) is True
+    assert skip_overlay_shared_register(None) is False
+    assert skip_overlay_shared_register(house_workspace_id()) is False
+
+
+def test_overlay_persist_on_does_not_write_theses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    upsert_thesis_row(
+        overlay_client,
+        run_date=_RUN,
+        thesis_id="ai-capex",
+        name="AI capex",
+        status="ACTIVE",
+        workspace_id=overlay,
+    )
+    assert overlay_client.store.get("theses", []) == []
+
+    house_client = FakeSupabaseClient()
+    upsert_thesis_row(
+        house_client,
+        run_date=_RUN,
+        thesis_id="ai-capex",
+        name="AI capex",
+        status="ACTIVE",
+        workspace_id=house_workspace_id(),
+    )
+    omitted = FakeSupabaseClient()
+    upsert_thesis_row(
+        omitted,
+        run_date=_RUN,
+        thesis_id="ai-capex",
+        name="AI capex",
+        status="ACTIVE",
+    )
+    assert [r["thesis_id"] for r in house_client.store["theses"]] == ["ai-capex"]
+    assert [r["thesis_id"] for r in omitted.store["theses"]] == ["ai-capex"]
+
+
+def test_overlay_persist_on_does_not_write_analyst_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    upsert_analyst_coverage(
+        overlay_client,
+        run_date=_RUN,
+        ticker="NVDA",
+        document_key="analyst/nvda",
+        workspace_id=overlay,
+    )
+    assert overlay_client.store.get("analyst_coverage", []) == []
+
+    house_client = FakeSupabaseClient()
+    upsert_analyst_coverage(
+        house_client,
+        run_date=_RUN,
+        ticker="NVDA",
+        document_key="analyst/nvda",
+        workspace_id=house_workspace_id(),
+    )
+    assert [r["ticker"] for r in house_client.store["analyst_coverage"]] == ["NVDA"]
+
+
+def test_overlay_persist_on_does_not_write_thesis_vehicles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    written = upsert_thesis_vehicles(
+        overlay_client,
+        run_date=_RUN,
+        thesis_id="ai-capex",
+        tickers=["NVDA"],
+        workspace_id=overlay,
+    )
+    assert written == 0
+    assert overlay_client.store.get("thesis_vehicles", []) == []
+    assert overlay_client.store.get("theses", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_written = upsert_thesis_vehicles(
+        house_client,
+        run_date=_RUN,
+        thesis_id="ai-capex",
+        tickers=["NVDA"],
+        workspace_id=house_workspace_id(),
+    )
+    assert house_written == 1
+    assert [r["ticker"] for r in house_client.store["thesis_vehicles"]] == ["NVDA"]
+
+
+def test_overlay_persist_thesis_review_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    review = ThesisReviewOutput(
+        reviewed_theses=[
+            ThesisStatusUpdate(thesis_id="ai-capex", new_status="MONITORING"),
+        ]
+    )
+    overlay_client = FakeSupabaseClient()
+    count = persist_thesis_review(
+        overlay_client,
+        run_date=_RUN,
+        review=review,
+        active_theses=[{"thesis_id": "ai-capex", "name": "AI capex", "status": "ACTIVE"}],
+        workspace_id=overlay,
+    )
+    assert count == 0
+    assert overlay_client.store.get("theses", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_count = persist_thesis_review(
+        house_client,
+        run_date=_RUN,
+        review=review,
+        active_theses=[{"thesis_id": "ai-capex", "name": "AI capex", "status": "ACTIVE"}],
+        workspace_id=house_workspace_id(),
+    )
+    assert house_count == 1
+    assert house_client.store["theses"][0]["status"] == "MONITORING"
+
+
+def test_overlay_persist_vehicle_map_returns_zero(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    vehicle_map = ThesisVehicleMapOutput(
+        mappings=[
+            ThesisVehicleMapping(thesis_id="ai-capex", candidate_tickers=["NVDA"]),
+        ]
+    )
+    overlay_client = FakeSupabaseClient()
+    count = persist_thesis_vehicle_map(
+        overlay_client,
+        run_date=_RUN,
+        vehicle_map=vehicle_map,
+        workspace_id=overlay,
+    )
+    assert count == 0
+    assert overlay_client.store.get("thesis_vehicles", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_count = persist_thesis_vehicle_map(
+        house_client,
+        run_date=_RUN,
+        vehicle_map=vehicle_map,
+        workspace_id=house_workspace_id(),
+    )
+    assert house_count == 1
+    assert house_client.store["thesis_vehicles"][0]["ticker"] == "NVDA"
+
+
+def test_overlay_materialize_skips_theses_register(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    overlay_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
+    )
+    overlay_state.phase7d_rebalance = {
+        "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100}],
+        "actions": [],
+        "notes": "overlay",
+    }
+    build_materialize_node(MaterializeDeps(client=overlay_client))(overlay_state)
+    assert overlay_client.store.get("theses", []) == []
+    assert overlay_client.store.get("thesis_vehicles", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
+    )
+    house_state.phase7d_rebalance = {
+        "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100}],
+        "actions": [],
+        "notes": "house",
+    }
+    build_materialize_node(MaterializeDeps(client=house_client))(house_state)
+    assert [r["thesis_id"] for r in house_client.store["theses"]] == ["spy"]
+
+
+def _analyst_state(*, workspace_id: str | None) -> ResearchState:
+    state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=workspace_id),
+    )
+    state.phase_portfolio = PhasePortfolioState(
+        asset_analysts={
+            "SPY": {
+                "ticker": "SPY",
+                "conviction_score": 3,
+                "stance": "buy",
+                "thesis": "overlay must not smash house",
+                "risks": "",
+                "sources": [],
+            }
+        }
+    )
+    return state
+
+
+def test_overlay_persist_on_does_not_write_decision_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_client = FakeSupabaseClient()
+    overlay_count = persist_pending(
+        client=overlay_client,
+        state=_analyst_state(workspace_id=str(overlay)),
+    )
+    assert overlay_count == 0
+    assert overlay_client.store.get("decision_log", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_count = persist_pending(
+        client=house_client,
+        state=_analyst_state(workspace_id=str(house_workspace_id())),
+    )
+    omitted = FakeSupabaseClient()
+    omitted_count = persist_pending(client=omitted, state=_analyst_state(workspace_id=None))
+    assert house_count == 1
+    assert omitted_count == 1
+    assert [r["ticker"] for r in house_client.store["decision_log"]] == ["SPY"]
+    assert [r["ticker"] for r in omitted.store["decision_log"]] == ["SPY"]
+
+
+def test_overlay_resolve_pending_does_not_stamp_house_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    pending = {
+        "id": "row-house",
+        "run_id": "house-run",
+        "run_date": "2026-08-20",
+        "ticker": "SPY",
+        "stance": "buy",
+        "conviction": 3,
+        "thesis": "t",
+        "benchmark": "SPY",
+        "holding_days": 1,
+        "status": "pending",
+    }
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": [pending]})
+    overlay_client.store["decision_log"] = [dict(pending)]
+    called: list[object] = []
+
+    def reflector(_inputs: dict[str, object]) -> ReflectorOutput:
+        called.append(_inputs)
+        raise AssertionError("overlay must not invoke the house reflector")
+
+    resolved = resolve_pending(
+        client=overlay_client,
+        run_date=_RUN,
+        reflector=reflector,
+        workspace_id=str(overlay),
+    )
+    assert resolved == 0
+    assert called == []
+    assert overlay_client.store["decision_log"][0]["status"] == "pending"
+
+
+def test_overlay_preflight_reflect_skips_decision_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    calls: list[str] = []
+
+    def fake_resolve_pending(**_kwargs: object) -> int:
+        calls.append("decision_log")
+        return 0
+
+    monkeypatch.setattr(
+        "digiquant.research.phases.preflight.resolve_pending",
+        fake_resolve_pending,
+    )
+    node = build_preflight_reflect_node(PreflightReflectDeps(client=FakeSupabaseClient()))
+    overlay_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
+    )
+    assert node(overlay_state) == {}
+    assert calls == []
+
+    house_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
+    )
+    assert node(house_state) == {}
+    assert calls == ["decision_log"]
+
+
+def test_overlay_persist_on_does_not_write_onchain_cohort_positioning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    row = {"date": "2026-08-30", "market": "ETH", "divergence": -0.8}
+    overlay_client = FakeSupabaseClient()
+    overlay_written = upsert_onchain_cohort_positioning(
+        client=overlay_client,
+        rows=[row],
+        workspace_id=overlay,
+    )
+    assert overlay_written == 0
+    assert overlay_client.store.get("onchain_cohort_positioning", []) == []
+
+    house_client = FakeSupabaseClient()
+    house_written = upsert_onchain_cohort_positioning(
+        client=house_client,
+        rows=[row],
+        workspace_id=house_workspace_id(),
+    )
+    omitted = FakeSupabaseClient()
+    omitted_written = upsert_onchain_cohort_positioning(client=omitted, rows=[row])
+    assert house_written == 1
+    assert omitted_written == 1
+    assert [r["market"] for r in house_client.store["onchain_cohort_positioning"]] == ["ETH"]
+    assert [r["market"] for r in omitted.store["onchain_cohort_positioning"]] == ["ETH"]
+
+
+def test_overlay_preflight_injects_onchain_without_persisting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import patch
+
+    from digiquant.data.onchain.hyperdash import cohort_summary_to_positioning
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    summary = {
+        "timestamp": "2026-08-30T00:00:00Z",
+        "totalTraders": 999,
+        "pnlCohorts": [
+            {
+                "id": "extremely_profitable",
+                "longNotional": 1_000_000,
+                "shortNotional": 4_000_000,
+                "topMarkets": [
+                    {"ticker": "ETH", "longNotional": 100_000, "shortNotional": 900_000}
+                ],
+            },
+            {
+                "id": "rekt",
+                "longNotional": 5_000_000,
+                "shortNotional": 1_000_000,
+                "topMarkets": [
+                    {"ticker": "ETH", "longNotional": 900_000, "shortNotional": 100_000}
+                ],
+            },
+        ],
+    }
+    overlay_client = FakeSupabaseClient(
+        canned_reads={
+            "daily_snapshots": [],
+            "documents": [],
+            "price_technicals": [{"date": "2026-08-30", "ticker": "SPY"}],
+            "macro_series_observations": [],
+        }
+    )
+    deps = PreflightDeps(
+        client=overlay_client,
+        config_loader=lambda: ResearchConfigBundle(workspace_id=str(overlay)),
+    )
+    node = build_preflight_node(deps)
+    overlay_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
+    )
+    with patch(
+        "digiquant.research.phases.preflight.get_onchain_cohort_positioning",
+        lambda: cohort_summary_to_positioning(summary),
+    ):
+        out = node(overlay_state)
+    assert "onchain_positioning" in out["data_layer"].market_context
+    assert overlay_client.store.get("onchain_cohort_positioning", []) == []
+
+
+def _beliefs_chain_deps(client: FakeSupabaseClient) -> ChainDeps:
+    return ChainDeps(
+        research=ResearchGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=None),  # type: ignore[arg-type]
+        ),
+        portfolio=PortfolioGraphDeps(),
+    )
+
+
+def _resolved_lesson(*, row_id: str) -> dict[str, object]:
+    return {
+        "id": row_id,
+        "run_id": "house-run",
+        "run_date": "2026-08-20",
+        "ticker": "SPY",
+        "stance": "buy",
+        "conviction": 3,
+        "thesis": "t",
+        "benchmark": "SPY",
+        "holding_days": 5,
+        "status": "resolved",
+        "reflection": "house lesson",
+    }
+
+
+def test_overlay_beliefs_fold_does_not_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
+    )
+    with patch(
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
+        side_effect=AssertionError("overlay must not fold house decision_log"),
+    ):
+        _run_beliefs_fold(
+            overlay_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            ResearchInput(run_date=_RUN),
+        )
+    assert overlay_state.errors == []
+
+    house_calls: list[str] = []
+
+    def house_fold(**_kwargs: object) -> bool:
+        house_calls.append("beliefs")
+        return False
+
+    house_state = ResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
+    )
+    with patch(
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
+        house_fold,
+    ):
+        _run_beliefs_fold(
+            house_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            ResearchInput(run_date=_RUN),
+        )
+    omitted_state = ResearchState(run_type="delta", run_date=_RUN)
+    with patch(
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
+        house_fold,
+    ):
+        _run_beliefs_fold(
+            omitted_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            ResearchInput(run_date=_RUN),
+        )
+    assert house_calls == ["beliefs", "beliefs"]
+
+
+def test_overlay_distill_beliefs_does_not_stamp_house_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.dashboard.learning import beliefs_distillation as mod
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id="house-1")]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+    written = distill_beliefs(
+        client=overlay_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+        workspace_id=overlay,
+    )
+    assert written is False
+    assert overlay_client.store.get("documents", []) == []
+    assert overlay_client.store["decision_log"][0].get("beliefs_folded_at") is None
+
+    house_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    house_client.store["decision_log"] = [dict(r) for r in rows]
+    monkeypatch.setattr(
+        mod,
+        "_run_beliefs_llm",
+        lambda **_kw: mod.BeliefsBlob(
+            schema_version="1.0",
+            date=_RUN,
+            body="House beliefs body.",
+        ),
+    )
+    house_written = distill_beliefs(
+        client=house_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+        workspace_id=house_workspace_id(),
+    )
+    omitted_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    omitted_client.store["decision_log"] = [dict(r) for r in rows]
+    omitted_written = distill_beliefs(
+        client=omitted_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+    )
+    assert house_written is True
+    assert omitted_written is True
+    assert house_client.store["decision_log"][0].get("beliefs_folded_at") is not None
+    assert omitted_client.store["decision_log"][0].get("beliefs_folded_at") is not None
+
+
+def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Overlay identity must be on initial state, not only after preflight.
+
+    ``_safe_invoke_graph`` returns the pre-research state when research raises.
+    That state used to have ``workspace_id=None``, so beliefs fold took the
+    house path and stamped ``beliefs_folded_at`` on every unfolded row.
+    """
+    from digiquant.dashboard.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import run_research_then_portfolio
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+
+    class _BoomResearchGraph:
+        def invoke(self, *_a: object, **_k: object) -> object:
+            raise RuntimeError("research exploded before preflight")
+
+    deps = ChainDeps(
+        research=ResearchGraphDeps(
+            preflight=PreflightDeps(
+                client=overlay_client,
+                config_loader=lambda: ResearchConfigBundle(workspace_id=str(overlay)),
+            ),
+        ),
+        portfolio=PortfolioGraphDeps(),
+    )
+    with patch(
+        "digiquant.portfolio.chain.build_research_graph",
+        return_value=_BoomResearchGraph(),
+    ):
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=_RUN),
+            deps=deps,
+            manage_usage=False,
+        )
+    assert all(r.get("beliefs_folded_at") is None for r in overlay_client.store["decision_log"])
+    assert overlay_client.store.get("documents", []) == []
+
+
+def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.dashboard.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import DiagnosticsDeps, run_research_then_portfolio
+
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+
+    def boom_loader() -> ResearchConfigBundle:
+        raise RuntimeError("loader exploded")
+
+    written: dict[str, object] = {}
+
+    def _capture(_client: object, *, state: ResearchState, **_kwargs: object) -> None:
+        written["errors"] = [(e.phase, e.node) for e in state.errors]
+        return None
+
+    deps = ChainDeps(
+        research=ResearchGraphDeps(
+            preflight=PreflightDeps(client=overlay_client, config_loader=boom_loader),
+        ),
+        portfolio=PortfolioGraphDeps(),
+        diagnostics=DiagnosticsDeps(client=object(), run_id="r1"),
+    )
+    with (
+        patch("digiquant.research.diagnostics.write_row", _capture),
+        pytest.raises(RuntimeError, match="loader exploded"),
+    ):
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=_RUN),
+            deps=deps,
+            manage_usage=True,
+        )
+    assert written["errors"] == [("chain", "terminal")]
+    assert all(r.get("beliefs_folded_at") is None for r in overlay_client.store["decision_log"])
+    assert overlay_client.store.get("documents", []) == []

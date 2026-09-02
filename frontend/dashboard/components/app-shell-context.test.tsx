@@ -35,7 +35,7 @@ describe('AppShellProvider sidebar storage', () => {
     localStorage.clear();
   });
 
-  it('reads the dashboard key and does not write the retired atlas key', () => {
+  it('reads the dashboard key and does not write the retired research key', () => {
     localStorage.setItem('dashboard-sidebar-collapsed', '1');
     let collapsed = false;
     let toggle = () => {};
@@ -58,11 +58,11 @@ describe('AppShellProvider sidebar storage', () => {
       toggle();
     });
     expect(localStorage.getItem('dashboard-sidebar-collapsed')).toBe('0');
-    expect(localStorage.getItem('atlas-sidebar-collapsed')).toBeNull();
+    expect(localStorage.getItem('research-sidebar-collapsed')).toBeNull();
   });
 
-  it('falls back to the pre-rebrand atlas key, then migrates on toggle', () => {
-    localStorage.setItem('atlas-sidebar-collapsed', '1');
+  it('falls back to the pre-rebrand research key, then migrates on toggle', () => {
+    localStorage.setItem('research-sidebar-collapsed', '1');
     let collapsed = false;
     let toggle = () => {};
     act(() => {
@@ -84,6 +84,6 @@ describe('AppShellProvider sidebar storage', () => {
       toggle();
     });
     expect(localStorage.getItem('dashboard-sidebar-collapsed')).toBe('0');
-    expect(localStorage.getItem('atlas-sidebar-collapsed')).toBeNull();
+    expect(localStorage.getItem('research-sidebar-collapsed')).toBeNull();
   });
 });

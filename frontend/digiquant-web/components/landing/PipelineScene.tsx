@@ -3,8 +3,8 @@
  * Scroll-pinned digiquant research pipeline (ported from v7).
  *
  * One continuous, lerp-smoothed horizontal track of the REAL research phases:
- *   research  — atlas/phases/* (preflight → … → publish, 10 phases)
- *   portfolio — hermes/phases/* (h1 thesis review → … → h9 commit, 9 phases)
+ *   research  — research/phases/* (preflight → … → publish, 10 phases)
+ *   portfolio — portfolio/phases/* (h1 thesis review → … → h9 commit, 9 phases)
  *   execution — marked "In development" for live venues
  * The track stays put and pans continuously; only the engine heading crossfades
  * as scroll progress (`gp`) crosses each engine's dwell window. The rAF loop is
@@ -13,11 +13,11 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
-import { DigiquantMark } from "./OlympusMark";
+import { DigiquantMark } from "./DashboardMark";
 
 type Phase = [id: string, name: string, detail: string];
 
-// Research phases (digiquant/src/digiquant/olympus/atlas/phases/*).
+// Research phases (digiquant/src/digiquant/research/phases/*).
 const RESEARCH: Phase[] = [
   ["00", "Preflight", "config + data-layer check"],
   ["01", "Triage", "what changed since last run"],
@@ -31,7 +31,7 @@ const RESEARCH: Phase[] = [
   ["09", "Publish", "to the thesis store"],
 ];
 
-// Portfolio / deliberation phases (digiquant/src/digiquant/olympus/hermes/phases/*).
+// Portfolio / deliberation phases (digiquant/src/digiquant/portfolio/phases/*).
 const PORTFOLIO: Phase[] = [
   ["h1", "Thesis review", "inherit & re-score"],
   ["h2", "Market thesis", "exploration"],
@@ -44,8 +44,8 @@ const PORTFOLIO: Phase[] = [
   ["h9", "Commit run", "persist & evolve"],
 ];
 
-// The chips below render the REAL phase-folder names (atlas/phases/,
-// hermes/phases/), not a display count — the h7 → h7e → h9 sequence has no h8
+// The chips below render the REAL phase-folder names (research/phases/,
+// portfolio/phases/), not a display count — the h7 → h7e → h9 sequence has no h8
 // because that number was never assigned a phase, not because one is
 // missing. Surfaced as a title so a visitor unfamiliar with the codebase
 // does not read the gap as a typo or broken enumeration (full-UI-suite
@@ -326,4 +326,4 @@ export function PipelineScene() {
 }
 
 /** @deprecated Use PipelineScene. One-release alias (ADR-0026 wave 3). */
-export const OlympusScene = PipelineScene;
+export const DashboardScene = PipelineScene;

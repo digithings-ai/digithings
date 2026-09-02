@@ -25,7 +25,7 @@ vi.mock('@/lib/observability-queries', async () => {
   return {
     ...actual,
     fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
-    fetchOlympusTearsheet: vi.fn(() => Promise.resolve(sample)),
+    fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
   };
 });
 

@@ -24,7 +24,7 @@
 @import "@digithings/web/styles/finance-tearsheet-overlay.css";
 /* finance-composites family (#1461/#1462 live surfaces): the seamless
    StockTicker tape (.tk-*) that the homepage live-market row wears, plus the
-   PerformanceDashboard hairline grammar (.pdash-*) the Olympus live-portfolio
+   PerformanceDashboard hairline grammar (.pdash-*) the dashboard live-portfolio
    panel composes. Single-class defaults self-layer into @layer components;
    imported plainly per the sheet's own cascade contract. */
 @import "@digithings/web/styles/finance-composites.css";
@@ -331,7 +331,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   .dqpipe-rail { left: 4px !important; right: auto !important; }
 }
 
-/* ---- OLYMPUS: scroll-pinned hedge-fund-in-a-box track ---- */
+/* ---- DASHBOARD: scroll-pinned hedge-fund-in-a-box track ---- */
 .dq-desk { background: var(--bg); }
 
 /* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
@@ -354,7 +354,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-scrolly { position: relative; height: 480vh; background: var(--bg); }
 .dqp-pin { position: sticky; top: 0; height: 100svh; display: flex; align-items: center; overflow: hidden; border-top: 1px solid var(--hair); }
 .dqp-pin .wrap { width: 100%; position: relative; z-index: 1; }
-/* kinetic 3D Olympus mark behind the scene — opacity + scale driven by scroll
+/* kinetic 3D dashboard mark behind the scene — opacity + scale driven by scroll
    progress in PipelineScene (rotateX gives the laid-back 3D read). */
 .dqp-logo-bg { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; pointer-events: none; color: var(--accent); opacity: 0; transform: perspective(900px) rotateX(20deg) scale(0.82); transform-origin: 50% 55%; }
 .dqp-logo-bg .dq-mark { width: min(74vw, 640px); height: auto; filter: drop-shadow(0 24px 70px color-mix(in srgb, var(--accent) 45%, transparent)); }
@@ -703,7 +703,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    subsystem's livery blooming from below, an honest epithet, and fine print
    that is a real path or a real function. The poster wears the standard
    accent-<module> scope (tokens.css), and consumes var(--accent) only —
-   atlas · hermes · kairos are backend langgraphs whose accents resolve to
+   research · portfolio · execution are backend langgraphs whose accents resolve to
    ink under [data-theme] (ruling 2026-07-08), so these posters bloom as a
    deliberate ink tint rising into the hairline panel; the digiquant phosphor
    stays reserved for the terminal moments below (cmdline, init codeblock).

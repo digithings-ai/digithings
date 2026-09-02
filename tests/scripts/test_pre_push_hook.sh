@@ -52,8 +52,8 @@ git config user.name "pre-push-test"
 # never as the actual remote, or fixture setup would push to GitHub.
 # Seed develop so merge-base and remote tracking ref exist.
 git checkout -q -b develop
-mkdir -p digiquant/src/digiquant/olympus
-echo 'seed' > digiquant/src/digiquant/olympus/README.md
+mkdir -p digiquant/src/digiquant/dashboard
+echo 'seed' > digiquant/src/digiquant/dashboard/README.md
 git add -A
 git commit -q -m "seed develop"
 # Bare has no default branch yet — push and set HEAD.
@@ -124,7 +124,7 @@ make_safe_tip() {
   local branch="task/2483-safe-tmp"
   cd "$FIXTURE"
   git checkout -q -B "$branch" develop
-  echo "safe-$RANDOM" > digiquant/src/digiquant/olympus/note.txt
+  echo "safe-$RANDOM" > digiquant/src/digiquant/dashboard/note.txt
   git add -A
   git commit -q -m "chore: non-sensitive change"
   local tip

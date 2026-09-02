@@ -79,7 +79,7 @@ function opinion(
     category: 'macro',
     currencies: [],
     mentions: 1,
-    brokers: ['Atlas Macro'],
+    brokers: ['research Macro'],
     citations: [],
     as_of: '2026-06-22T00:00:00Z',
     ...partial,

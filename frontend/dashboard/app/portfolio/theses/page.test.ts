@@ -25,7 +25,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => search,
 }));
 
-vi.mock('@/components/AtlasLoader', () => ({ default: () => null }));
+vi.mock('@/components/DashboardLoader', () => ({ default: () => null }));
 vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
 
 // The detail view reads the dashboard context and a pile of chart libraries;

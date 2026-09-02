@@ -2,8 +2,8 @@
  * Honest runtime status for every static PIPELINE_TOPOLOGY node (#2631 / #1945).
  *
  * Never paint active/success chrome for a stage or sub-step the run did not
- * reach. Atlas (inputs→synthesis), Hermes (selection→decision), and Learning
- * are separate bands: research artifacts do not imply Hermes ran.
+ * reach. research (inputs→synthesis), portfolio (selection→decision), and Learning
+ * are separate bands: research artifacts do not imply portfolio ran.
  */
 
 import type { PipelineDayData } from './pipeline-graph-data';
@@ -27,14 +27,14 @@ export function pipelineNodeRunStatusLabel(status: PipelineNodeRunStatus): strin
   return 'Parallel dispatch';
 }
 
-const ATLAS_STAGES = new Set<PipelineStageId>(['inputs', 'research', 'synthesis']);
-const HERMES_STAGES = new Set<PipelineStageId>(['selection', 'decision']);
+const RESEARCH_STAGES = new Set<PipelineStageId>(['inputs', 'research', 'synthesis']);
+const PORTFOLIO_STAGES = new Set<PipelineStageId>(['selection', 'decision']);
 
-export type TopologyBand = 'atlas' | 'hermes' | 'learning';
+export type TopologyBand = 'research' | 'portfolio' | 'learning';
 
 export function topologyBand(stageId: PipelineStageId): TopologyBand {
-  if (ATLAS_STAGES.has(stageId)) return 'atlas';
-  if (HERMES_STAGES.has(stageId)) return 'hermes';
+  if (RESEARCH_STAGES.has(stageId)) return 'research';
+  if (PORTFOLIO_STAGES.has(stageId)) return 'portfolio';
   return 'learning';
 }
 
@@ -77,10 +77,10 @@ function stageLocalEvidence(stage: StageDef, day: PipelineDayData): boolean {
 
 export interface TopologyEvidenceBands {
   runRecorded: boolean;
-  /** Snapshot-only day: Atlas-only reach; Hermes/Learning stay not-run. */
+  /** Snapshot-only day: research-only reach; portfolio/Learning stay not-run. */
   emptyRecordedRun: boolean;
-  atlas: boolean;
-  hermes: boolean;
+  research: boolean;
+  portfolio: boolean;
   learning: boolean;
 }
 
@@ -89,43 +89,43 @@ export function topologyEvidenceBands(day: PipelineDayData): TopologyEvidenceBan
   const runRecorded = day.runRecorded ?? day.presentKeys.size > 0;
   const emptyRecordedRun = runRecorded && day.presentKeys.size === 0;
 
-  let atlas = false;
-  let hermes = false;
+  let research = false;
+  let portfolio = false;
   let learning = false;
 
   for (const key of day.presentKeys) {
     const stage = stageForDocumentKey(key);
     if (!stage) continue;
     const band = topologyBand(stage);
-    if (band === 'atlas') atlas = true;
-    else if (band === 'hermes') hermes = true;
+    if (band === 'research') research = true;
+    else if (band === 'portfolio') portfolio = true;
     else learning = true;
   }
 
   // Later bands imply earlier graph work completed.
   if (learning) {
-    hermes = true;
-    atlas = true;
-  } else if (hermes) {
-    atlas = true;
+    portfolio = true;
+    research = true;
+  } else if (portfolio) {
+    research = true;
   }
 
-  // Snapshot-only day (run recorded, zero documents): Atlas entry is the only
-  // honest reach signal. Do not paint Hermes/Learning as "expected missing".
+  // Snapshot-only day (run recorded, zero documents): research entry is the only
+  // honest reach signal. Do not paint portfolio/Learning as "expected missing".
   if (emptyRecordedRun) {
-    atlas = true;
+    research = true;
   }
 
-  return { runRecorded, emptyRecordedRun, atlas, hermes, learning };
+  return { runRecorded, emptyRecordedRun, research, portfolio, learning };
 }
 
 export function bandReached(bands: TopologyEvidenceBands, stageId: PipelineStageId): boolean {
   if (!bands.runRecorded) return false;
   const band = topologyBand(stageId);
-  if (band === 'atlas') return bands.atlas;
-  if (band === 'hermes') return bands.hermes;
-  // WP-I: house chain folds beliefs after Hermes terminal on every run.
-  return bands.learning || bands.hermes;
+  if (band === 'research') return bands.research;
+  if (band === 'portfolio') return bands.portfolio;
+  // WP-I: house chain folds beliefs after portfolio terminal on every run.
+  return bands.learning || bands.portfolio;
 }
 
 export function resolveSubStepRunStatus(
@@ -145,7 +145,7 @@ export function resolveSubStepRunStatus(
     const fanoutKeys = day.fanoutKeys[sub.fanout.id] ?? [];
     if (fanoutKeys.length > 0) return 'parallel-dispatch';
     if (!reached) return 'not-run';
-    // Variable-width Hermes fan-outs may honestly dispatch zero branches.
+    // Variable-width portfolio fan-outs may honestly dispatch zero branches.
     if (sub.fanout.defaultCount === 0) return 'parallel-dispatch';
     return 'expected-artifact-missing';
   }
@@ -166,7 +166,7 @@ export function resolveStageRunStatus(
   // Stage overview is active chrome only when this stage has local evidence
   // or an honest in-band sub-step status — never blanket every stage.
   if (stageLocalEvidence(stage, day)) return 'stage-overview';
-  if (stage.id === 'inputs' && bands.atlas) return 'stage-overview';
+  if (stage.id === 'inputs' && bands.research) return 'stage-overview';
   if (
     bandReached(bands, stage.id)
     && stage.subSteps.some(

@@ -5,7 +5,7 @@
  * @digithings/web finance-charts scaffold (#1450 batch E; the app-local
  * #1420 copy was promoted there verbatim). The lifecycle hook, the data
  * adapters and the crosshair-tooltip plumbing are the package's; what stays
- * olympus-local is the ChartColors binding — every color still flows from
+ * dashboard-local is the ChartColors binding — every color still flows from
  * lib/chart-colors.ts (the single sanctioned color source, #1402), so charts
  * re-skin with the theme exactly like the DOM does.
  *
@@ -27,7 +27,7 @@ import {
 } from '@digithings/web';
 import { getChartColors, useChartColors, type ChartColors } from '@/lib/chart-colors';
 
-/* Package plumbing re-exported under the olympus API. ChartTipShell's utility
+/* Package plumbing re-exported under the dashboard API. ChartTipShell's utility
    classes are generated via the `@source` line in app/globals.css. */
 export {
   ChartTipShell,
@@ -55,7 +55,7 @@ export function themedChartOptions(
   });
 }
 
-/** The package scaffold result bound to olympus's ChartColors. */
+/** The package scaffold result bound to dashboard's ChartColors. */
 export type UseLightweightChartResult = LwScaffoldResult<ChartColors>;
 
 /**

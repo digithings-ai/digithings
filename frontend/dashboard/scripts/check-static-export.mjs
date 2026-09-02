@@ -52,7 +52,7 @@ const artifactCounts = await Promise.all(artifactRoots.map(scan));
 const artifactCount = artifactCounts.reduce((total, count) => total + count, 0);
 
 if (artifactCount === 0) {
-  console.error("No Olympus route artifacts found. Run the production build first.");
+  console.error("No dashboard route artifacts found. Run the production build first.");
   process.exitCode = 1;
 } else if (matches.length > 0) {
   console.error(`Static export contains the SUBPAGE_MAX client proxy:\n${matches.join("\n")}`);

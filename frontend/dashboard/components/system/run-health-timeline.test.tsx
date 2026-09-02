@@ -2,9 +2,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RunHealthTimeline } from './run-health-timeline';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 
-function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
+function diag(o: Partial<ResearchRunDiagnostics>): ResearchRunDiagnostics {
   return {
     run_id: 'r',
     run_type: 'baseline',

@@ -44,10 +44,10 @@ prices = [
     # them to dicts at the boundary so the rest of the pipeline stays Polars-only.
     "exchange_calendars>=4.5",
 ]
-# Atlas research pipeline runtime. The atlas sub-package also imports
+# Research pipeline runtime. The research sub-package also imports
 # `digigraph` (workspace-local, not on PyPI) — install via
 # scripts/install-workspace.sh or `pip install -e ./digigraph` first.
-atlas = [
+research = [
     "PyYAML>=6",
     "jsonschema>=4.21",
     "python-dotenv>=1",
@@ -59,7 +59,7 @@ optimize = ["optuna>=3.0"]
 # Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
 m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
-# Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
+# Pulls in research runtime deps too, so `pytest tests/dq/research/` works whenever
 # digigraph is also on the path (via install-workspace.sh or editable install).
 # Test/lint tooling (pytest, ruff, ...) lives in [dependency-groups] below, not
 # here -- a uv dependency-group syncs by default with plain `uv sync`, while an
@@ -68,7 +68,7 @@ all = ["digiquant[nautilus]"]
 # pytest out of digiquant's venv, and `uv run pytest` fell through to whatever
 # `pytest` happened to be on PATH instead -- see the digillm/CallPurpose
 # shadowing investigation for the same failure mode in digigraph.
-dev = ["digiquant[atlas]", "digiquant[indicators]", "digiquant[m2]"]
+dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
 mcp = ["mcp>=1.2,<2"]
@@ -99,10 +99,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Skills, templates, config, and docs live alongside the engine packages
-# (digiquant.olympus.atlas, digiquant.olympus.hermes) so they ship inside the wheel —
+# (digiquant.research, digiquant.portfolio) so they ship inside the wheel —
 # pip-installs are self-contained, no path-walking outside the package.
 # See issue #486 for the consolidation rationale.
-"digiquant.olympus.atlas" = [
+"digiquant.research" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "config/**/*.yaml",
@@ -112,12 +112,12 @@ where = ["src"]
     "config/**/*.example",
     "docs/**/*.md",
 ]
-"digiquant.olympus.hermes" = [
+"digiquant.portfolio" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "docs/**/*.md",
 ]
-"digiquant.olympus.replay" = [
+"digiquant.dashboard.replay" = [
     "shadow_criteria/**/*.json",
 ]
 "digiquant.notify" = [
@@ -127,10 +127,10 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Atlas legacy scripts (pandas/yfinance, migrated from apps/digiquant-atlas/scripts/
+# research legacy scripts (pandas/yfinance, migrated from digiquant/src/digiquant/research/scripts/
 # in #316) opt out of the strict Polars-only lint rules. They are not actively
-# maintained — slated for further trim in subsequent atlas-engine cleanup.
-extend-exclude = ["scripts/atlas"]
+# maintained — slated for further trim in subsequent research-engine cleanup.
+extend-exclude = ["scripts/research"]
 
 [tool.ruff.format]
 # Markdown is not source — see the root ruff.toml and #1705. This component config

@@ -1,6 +1,6 @@
 """Pin wave 3: the dashboard workspace lives at frontend/dashboard.
 
-ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.olympus
+ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.dashboard
 and CSS .oly-* are unchanged. /olympus/ has no source twin; Pages redirects it.
 """
 

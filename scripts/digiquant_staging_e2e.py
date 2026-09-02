@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.kairos.staging_e2e import run_staging_e2e  # noqa: E402
+from digiquant.execution.staging_e2e import run_staging_e2e  # noqa: E402
 
 
 def _http_json(

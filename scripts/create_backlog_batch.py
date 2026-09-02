@@ -140,19 +140,19 @@ Enterprise client onboarding (e.g. a company using Microsoft) requires employees
         title="[Epic] digiclaw — OpenClaw integration and autonomous agent scheduling",
         body="""\
 ## Goal
-Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the Atlas daily cycle running automatically without manual execution.
+Build out digiclaw from its current heartbeat/audit MVP into the always-on agent orchestration layer: OpenClaw runtime integration, agent definition schema, cron/continuous scheduling, and the research daily cycle running automatically without manual execution.
 
 ## Sub-tasks (in digiclaw project board)
 - [ ] OpenClaw runtime integration
 - [ ] Agent definition schema and registry
 - [ ] Cron and continuous scheduling
-- [ ] Atlas daily cycle automation — digiclaw scheduled job
+- [ ] research daily cycle automation — digiclaw scheduled job
 - [ ] Strategy performance monitor agent
 - [ ] ADDM — Adaptive Drift Detection Monitor (rewrite from stub)
 - [ ] digiclaw dashboard — agent status and audit log viewer
 
 ## Acceptance Criteria
-- [ ] Atlas daily delta, weekly full-gen, and monthly rollup run automatically on schedule
+- [ ] research daily delta, weekly full-gen, and monthly rollup run automatically on schedule
 - [ ] A new agent can be defined in a YAML file and scheduled without code changes
 - [ ] Audit log captures every autonomous action with timestamp and outcome
 - [ ] `docs/vision/digiclaw.md` reflects implementation state
@@ -170,7 +170,7 @@ Build out digiclaw from its current heartbeat/audit MVP into the always-on agent
         title="[Epic] digithings.ai and digiquant.io — live website demos",
         body="""\
 ## Goal
-Deploy two embedded digichat instances — one on digithings.ai (platform overview, digithings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into Kairos). Both showcase BYOK model selection and the digithings modularity story.
+Deploy two embedded digichat instances — one on digithings.ai (platform overview, digithings docs indexed, 3-question free tier) and one on digiquant.io (investment profiling entry flow, paywall into execution). Both showcase BYOK model selection and the digithings modularity story.
 
 ## Sub-tasks (in digichat and digisearch project boards)
 - [ ] digithings-guide index — digithings docs indexed and live
@@ -194,16 +194,16 @@ Deploy two embedded digichat instances — one on digithings.ai (platform overvi
         component="digiquant", type="feat", risk="high", priority="critical", complexity="XL",
         model="opus", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:XL", "priority:critical", "stage:ideation"],
-        title="[FEATURE] Migrate Atlas research cycles to digigraph sub-graphs",
+        title="[FEATURE] Migrate research cycles to digigraph sub-graphs",
         body="""\
 ## Goal
-Rebuild Atlas from manual instruction files and scripts into a deterministic digigraph sub-graph execution graph. The result: a reliable, scheduled Atlas pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
+Rebuild research from manual instruction files and scripts into a deterministic digigraph sub-graph execution graph. The result: a reliable, scheduled research pipeline with parallel research layer execution (data → sector → macro), batched API calls, Pydantic structured outputs at every node, and prompt caching to minimise cost.
 
 ## From scratch
-YES — current Atlas is ad-hoc scripts requiring manual execution and backfilling. A full digigraph implementation is needed, not a refactor.
+YES — current research is ad-hoc scripts requiring manual execution and backfilling. A full digigraph implementation is needed, not a refactor.
 
 ## Acceptance Criteria
-- [ ] Atlas sub-graph runs without manual intervention when triggered
+- [ ] research sub-graph runs without manual intervention when triggered
 - [ ] Research executes in parallel across data, sector, and macro layers
 - [ ] All LLM calls use structured outputs (Pydantic v2 models)
 - [ ] Prompt caching enabled on all repeated-context calls
@@ -212,15 +212,15 @@ YES — current Atlas is ad-hoc scripts requiring manual execution and backfilli
 - [ ] `digiquant/ARCHITECTURE.md` and `digigraph/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/atlas/__init__.py`
-- `digigraph/src/digigraph/graph/atlas/research.py`
-- `digigraph/src/digigraph/graph/atlas/models.py`
-- `digigraph/src/digigraph/graph/atlas/prompts.py`
+- `digigraph/src/digigraph/graph/research/__init__.py`
+- `digigraph/src/digigraph/graph/research/research.py`
+- `digigraph/src/digigraph/graph/research/models.py`
+- `digigraph/src/digigraph/graph/research/prompts.py`
 
 ## Dependencies
-None — this is the foundation for Hermes, Kairos, and digiclaw Atlas runner.
+None — this is the foundation for portfolio, execution, and digiclaw research runner.
 
-## Parallelizable: NO — blocks Hermes (#8), Atlas runner (#47)
+## Parallelizable: NO — blocks portfolio (#8), research runner (#47)
 ## Model: opus — complex orchestration, parallel sub-graph design
 """,
     ),
@@ -229,10 +229,10 @@ None — this is the foundation for Hermes, Kairos, and digiclaw Atlas runner.
         component="digiquant", type="feat", risk="med", priority="high", complexity="M",
         model="sonnet", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:M", "priority:high"],
-        title="[FEATURE] Atlas delta update system — line-level document patching",
+        title="[FEATURE] research delta update system — line-level document patching",
         body="""\
 ## Goal
-Implement the delta update system for Atlas research documents: rather than regenerating entire documents daily, agents produce line-level edit instructions (append/replace/delete at specific locations). This minimises token spend while keeping the research library current.
+Implement the delta update system for research documents: rather than regenerating entire documents daily, agents produce line-level edit instructions (append/replace/delete at specific locations). This minimises token spend while keeping the research library current.
 
 ## From scratch
 YES — new capability, no existing implementation.
@@ -245,11 +245,11 @@ YES — new capability, no existing implementation.
 - [ ] Unit tests for delta application edge cases (insert, replace, delete, append)
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/atlas/delta.py`
-- `tests/dg/test_atlas_delta.py`
+- `digigraph/src/digigraph/graph/research/delta.py`
+- `tests/dg/test_research_delta.py`
 
-## Dependencies: Atlas sub-graphs (#6)
-## Parallelizable: NO — part of Atlas migration sequence
+## Dependencies: research sub-graphs (#6)
+## Parallelizable: NO — part of research migration sequence
 ## Model: sonnet
 """,
     ),
@@ -258,16 +258,16 @@ YES — new capability, no existing implementation.
         component="digiquant", type="feat", risk="high", priority="critical", complexity="XL",
         model="opus", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:XL", "priority:critical"],
-        title="[FEATURE] Hermes portfolio deliberation pipeline",
+        title="[FEATURE] portfolio deliberation pipeline",
         body="""\
 ## Goal
-Build the Hermes deliberation pipeline as digigraph sub-graphs: a multi-agent system that takes Atlas research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
+Build the portfolio deliberation pipeline as digigraph sub-graphs: a multi-agent system that takes research, constructs investment theses, maps them to acceptable assets (filtered by user profile), runs parallel analyst agents per asset (bull/bear/headwinds/tailwinds), deliberates with a portfolio manager agent, and produces a final portfolio weight output.
 
 ## From scratch
-YES — Hermes does not exist yet. Full build.
+YES — portfolio does not exist yet. Full build.
 
 ## Acceptance Criteria
-- [ ] Thesis layer: Atlas research → structured investment theses with validity requirements and exit triggers
+- [ ] Thesis layer: research → structured investment theses with validity requirements and exit triggers
 - [ ] Asset mapping: thesis → acceptable assets filtered by user investment profile (Pydantic v2)
 - [ ] Analyst agents: parallel execution, one per asset, structured recommendation output
 - [ ] Portfolio manager: sequential deliberation with each analyst, aware of full portfolio state
@@ -278,15 +278,15 @@ YES — Hermes does not exist yet. Full build.
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/hermes/__init__.py`
-- `digigraph/src/digigraph/graph/hermes/thesis.py`
-- `digigraph/src/digigraph/graph/hermes/analyst.py`
-- `digigraph/src/digigraph/graph/hermes/portfolio_manager.py`
-- `digigraph/src/digigraph/graph/hermes/models.py`
+- `digigraph/src/digigraph/graph/portfolio/__init__.py`
+- `digigraph/src/digigraph/graph/portfolio/thesis.py`
+- `digigraph/src/digigraph/graph/portfolio/analyst.py`
+- `digigraph/src/digigraph/graph/portfolio/portfolio_manager.py`
+- `digigraph/src/digigraph/graph/portfolio/models.py`
 - `digiquant/src/digiquant/portfolio_math.py`
 
-## Dependencies: Atlas sub-graphs (#6)
-## Parallelizable: NO — depends on Atlas
+## Dependencies: research sub-graphs (#6)
+## Parallelizable: NO — depends on research
 ## Model: opus — multi-agent orchestration, financial logic
 """,
     ),
@@ -295,17 +295,17 @@ YES — Hermes does not exist yet. Full build.
         component="digiquant", type="feat", risk="med", priority="high", complexity="L",
         model="sonnet", milestone="Phase 2 — Strategy Development Loop",
         labels_extra=["type:feature", "complexity:L", "priority:high"],
-        title="[FEATURE] Kairos strategy exploration digichat interface",
+        title="[FEATURE] execution strategy exploration digichat interface",
         body="""\
 ## Goal
-Build the Kairos product-mode interface: a digichat experience where a user describes a trading idea and Kairos researches (tapping Atlas research + Hermes recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
+Build the execution product-mode interface: a digichat experience where a user describes a trading idea and execution researches (tapping research + portfolio recommendations), derives candidate strategies, sends them through VectorBT sweep rounds, refines with NautilusTrader, and presents results. Multi-strategy parallel research rounds at scale.
 
 ## From scratch
-YES — the product interface does not exist. Current Kairos is developer-facing CLI/scripts only.
+YES — the product interface does not exist. Current execution is developer-facing CLI/scripts only.
 
 ## Acceptance Criteria
 - [ ] User can describe a strategy idea in natural language via digichat
-- [ ] Kairos sub-graph retrieves relevant Atlas research and Hermes recommendations
+- [ ] execution sub-graph retrieves relevant research and portfolio recommendations
 - [ ] VectorBT runs parameter sweep (multiple variations in parallel)
 - [ ] Top candidates passed to NautilusTrader for final backtest validation
 - [ ] Results (metrics, equity curve link) returned to digichat
@@ -313,12 +313,12 @@ YES — the product interface does not exist. Current Kairos is developer-facing
 - [ ] `digiquant/ARCHITECTURE.md` updated
 
 ## Files affected (new)
-- `digigraph/src/digigraph/graph/kairos/__init__.py`
-- `digigraph/src/digigraph/graph/kairos/research.py`
-- `digigraph/src/digigraph/graph/kairos/sweep.py`
-- `digichat/src/components/kairos/` (frontend components)
+- `digigraph/src/digigraph/graph/execution/__init__.py`
+- `digigraph/src/digigraph/graph/execution/research.py`
+- `digigraph/src/digigraph/graph/execution/sweep.py`
+- `digichat/src/components/execution/` (frontend components)
 
-## Dependencies: Atlas migration (#6), VectorBT integration (#13)
+## Dependencies: research migration (#6), VectorBT integration (#13)
 ## Parallelizable: PARTIAL — backend sub-graph and frontend can run in parallel after spec
 ## Model: sonnet
 """,
@@ -358,7 +358,7 @@ Integrate OpenBB SDK as the data aggregation layer beneath digistore. OpenBB uni
         title="[FEATURE] Live strategy deployment — Alpaca and QuantConnect connectors",
         body="""\
 ## Goal
-Build deployment connectors that take a validated Kairos strategy (passed NautilusTrader backtest + Alpaca paper trading) and deploy it to live execution on Alpaca or QuantConnect. Includes mandatory paper → live gate with human approval.
+Build deployment connectors that take a validated execution strategy (passed NautilusTrader backtest + Alpaca paper trading) and deploy it to live execution on Alpaca or QuantConnect. Includes mandatory paper → live gate with human approval.
 
 ## Non-negotiables
 - Human approval gate REQUIRED before any live deployment — non-bypassable
@@ -378,7 +378,7 @@ Build deployment connectors that take a validated Kairos strategy (passed Nautil
 - `digiquant/src/digiquant/deployment/quantconnect.py`
 - `digiquant/src/digiquant/deployment/base.py`
 
-## Dependencies: None — independent of Atlas/Hermes
+## Dependencies: None — independent of research/portfolio
 ## Parallelizable: YES
 ## Model: opus — live trading code, human gate required
 """,
@@ -391,7 +391,7 @@ Build deployment connectors that take a validated Kairos strategy (passed Nautil
         title="[INFRA] VectorBT integration for fast strategy ideation sweeps",
         body="""\
 ## Goal
-Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. VectorBT is 10-100x faster for parameter sweeps — use it for exploring many strategy variations quickly during Kairos research rounds. NautilusTrader remains for final validation and live execution.
+Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. VectorBT is 10-100x faster for parameter sweeps — use it for exploring many strategy variations quickly during execution research rounds. NautilusTrader remains for final validation and live execution.
 
 ## Acceptance Criteria
 - [ ] VectorBT installed in `digiquant/` dev dependencies
@@ -418,12 +418,12 @@ Add VectorBT as the fast strategy ideation layer alongside NautilusTrader. Vecto
         title="[FEATURE] digiquant.io investment profiling entry flow",
         body="""\
 ## Goal
-Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to digistore, and shows what Atlas/Hermes could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with Kairos."
+Build the digiquant.io free-tier entry experience: a structured investment profiling chat that collects user preferences (risk tolerance, time horizon, asset classes, investment goals), saves the profile to digistore, and shows what research/portfolio could produce for their profile. Paywall trigger: "Ready to build your first strategy? Start with execution."
 
 ## Acceptance Criteria
 - [ ] Investment profiling sub-graph collects profile via structured digichat conversation
 - [ ] User profile saved to digistore (Supabase) as `InvestmentProfile` Pydantic model
-- [ ] Sample Atlas research summary shown relevant to their stated interests
+- [ ] Sample research summary shown relevant to their stated interests
 - [ ] Paywall trigger rendered at end of free flow
 - [ ] Free tier: no API key required (cheap model, limited tokens)
 - [ ] Profile persists across sessions for returning users
@@ -432,7 +432,7 @@ Build the digiquant.io free-tier entry experience: a structured investment profi
 - `digigraph/src/digigraph/graph/subgraphs/investment_profiling.py` (new)
 - `digichat/src/components/profiling/` (new)
 
-## Dependencies: Hermes (#8)
+## Dependencies: portfolio (#8)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
@@ -499,7 +499,7 @@ Build a proprietary digigraph sub-graph that takes an investment thesis, selecte
 - `tests/dg/test_investor_doc.py`
 
 ## Dependencies: None — independent sub-graph
-## Parallelizable: YES — independent of Atlas/Hermes
+## Parallelizable: YES — independent of research/portfolio
 ## Model: sonnet
 """,
     ),
@@ -511,7 +511,7 @@ Build a proprietary digigraph sub-graph that takes an investment thesis, selecte
         title="[FEATURE] Scholarly article synthesis sub-graph",
         body="""\
 ## Goal
-Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the digistore research library. Feeds the Atlas knowledge base with academic-quality content.
+Build a sub-graph that ingests scholarly articles (PDFs or URLs), extracts key findings, and synthesises them into a structured research note saved to the digistore research library. Feeds the research knowledge base with academic-quality content.
 
 ## Acceptance Criteria
 - [ ] Sub-graph accepts: list of article URLs or file paths
@@ -566,7 +566,7 @@ Build a fast, cheap exploration agent sub-graph that exhaustively searches a dig
         title="[FEATURE] Graphiti graph memory integration",
         body="""\
 ## Goal
-Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for digigraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for Atlas (remembering past research conclusions) and Hermes (tracking thesis evolution).
+Integrate Graphiti (temporal knowledge graph) as an optional persistent memory backend for digigraph. Enables cross-session knowledge accumulation — agents remember what they learned, who said what, and how the world has changed over time. Particularly valuable for research (remembering past research conclusions) and portfolio (tracking thesis evolution).
 
 ## Acceptance Criteria
 - [ ] Graphiti installed as optional dependency (`digigraph[memory]`)
@@ -726,19 +726,19 @@ Add JWT-based access control to digisearch: the JWT issued by digikey contains w
         component="digisearch", type="feat", risk="low", priority="high", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:integration", "complexity:M", "priority:high"],
-        title="[INTEGRATION] digiquant research library indexing — Atlas documents",
+        title="[INTEGRATION] digiquant research library indexing — research documents",
         body="""\
 ## Goal
-Configure digisearch to index finalized Atlas research documents from digistore, enabling the Kairos exploration agent and digichat to semantically search the research library.
+Configure digisearch to index finalized research documents from digistore, enabling the execution exploration agent and digichat to semantically search the research library.
 
 ## Acceptance Criteria
-- [ ] Atlas finalised documents trigger digisearch re-index via digistore event
+- [ ] research finalised documents trigger digisearch re-index via digistore event
 - [ ] Research library searchable via `search_strategies()` MCP tool
 - [ ] Correct metadata filtering: query by date, doc_type, sector, asset_class
-- [ ] Integration test: finalize an Atlas doc → verify searchable in digisearch
+- [ ] Integration test: finalize an research doc → verify searchable in digisearch
 - [ ] `digiquant/ARCHITECTURE.md` updated (digisearch integration section)
 
-## Dependencies: Atlas migration (#6), digistore (#57), Selective indexing (#24)
+## Dependencies: research migration (#6), digistore (#57), Selective indexing (#24)
 ## Parallelizable: NO
 ## Model: sonnet
 """,
@@ -1275,23 +1275,23 @@ Build the scheduling layer for digiclaw: agents can be scheduled on a cron expre
         component="digiclaw", type="feat", risk="med", priority="critical", complexity="M",
         model="sonnet", milestone=None,
         labels_extra=["type:feature", "complexity:M", "priority:critical"],
-        title="[FEATURE] Atlas daily cycle automation — digiclaw scheduled job",
+        title="[FEATURE] research daily cycle automation — digiclaw scheduled job",
         body="""\
 ## Goal
-Define and deploy the Atlas daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual Atlas execution entirely.
+Define and deploy the research daily cycle as a digiclaw scheduled job: delta updates at 06:00 UTC daily, full regeneration weekly (configurable), monthly rollup on the 1st. Eliminates manual research execution entirely.
 
 ## Acceptance Criteria
-- [ ] `digiclaw/agents/atlas_daily.yaml` agent definition with correct schedule
-- [ ] Agent triggers the Atlas digigraph sub-graph via MCP/API call
+- [ ] `digiclaw/agents/research_daily.yaml` agent definition with correct schedule
+- [ ] Agent triggers the research digigraph sub-graph via MCP/API call
 - [ ] Run result (success/failure, documents updated, token cost) written to audit log
 - [ ] Alert triggered (via digismith or webhook) if run fails 2x consecutively
-- [ ] Integration test: trigger agent manually, verify Atlas sub-graph runs
+- [ ] Integration test: trigger agent manually, verify research sub-graph runs
 
 ## Files affected (new)
-- `digiclaw/agents/atlas_daily.yaml`
-- `digiclaw/src/digiclaw/jobs/atlas_daily.py`
+- `digiclaw/agents/research_daily.yaml`
+- `digiclaw/src/digiclaw/jobs/research_daily.py`
 
-## Dependencies: Scheduler (#46) + Atlas digigraph migration (#6)
+## Dependencies: Scheduler (#46) + research digigraph migration (#6)
 ## Parallelizable: NO
 ## Model: sonnet
 """,

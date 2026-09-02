@@ -11,7 +11,7 @@ import { usePlanTier } from '@/lib/use-entitlement';
 
 /**
  * Ledger inspectability — position-event activity already anon-readable.
- * Does not claim access to private portfolio_ledger_* / olympus_accounting_* tables.
+ * Does not claim access to private portfolio_ledger_* / dashboard_accounting_* tables.
  *
  * Tier: `house_weights_nav` (Baseline+). Fail-closed: LockedSurface renders
  * before loading/error chrome so Observer never waits on the book payload.

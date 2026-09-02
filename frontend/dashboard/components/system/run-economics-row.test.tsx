@@ -2,9 +2,9 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { formatDuration, RunEconomicsRow } from './run-economics-row';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 
-function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
+function diag(o: Partial<ResearchRunDiagnostics>): ResearchRunDiagnostics {
   return {
     run_id: 'r', run_type: 'baseline', run_date: '2026-06-23', model: null, status: 'ok',
     started_at: null, finished_at: null, duration_s: null, llm_calls: 163,

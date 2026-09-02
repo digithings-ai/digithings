@@ -6,7 +6,7 @@
  * never apply in production — #674).
  */
 
-export const OLYMPUS_CSP = [
+export const DASHBOARD_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
@@ -19,8 +19,8 @@ export const OLYMPUS_CSP = [
   "object-src 'none'",
 ].join("; ");
 
-export const OLYMPUS_SECURITY_HEADERS = [
-  { key: "Content-Security-Policy", value: OLYMPUS_CSP },
+export const DASHBOARD_SECURITY_HEADERS = [
+  { key: "Content-Security-Policy", value: DASHBOARD_CSP },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

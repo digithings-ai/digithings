@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import DigiquantLoader from '@/components/AtlasLoader';
+import DigiquantLoader from '@/components/DashboardLoader';
 import { buildPipelineHref, stageForDocumentKey } from '@/lib/pipeline-links';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
 

@@ -1,10 +1,10 @@
 /**
- * Live read of the latest Atlas daily snapshot from Supabase.
+ * Live read of the latest research daily snapshot from Supabase.
  *
  * Reads the freshest `daily_snapshots` row, validates the `snapshot` jsonb
  * payload conforms to the {@link DigestPayload} shape, and assembles a typed
  * {@link SnapshotEnvelope} that mirrors the Pydantic model exported by the
- * Atlas pipeline (see `digiquant/src/digiquant/atlas/snapshot.py`).
+ * research pipeline (see `digiquant/src/digiquant/research/snapshot.py`).
  *
  * Empty-state rule: returns `{ kind: 'empty' }` when the freshest row is older
  * than yesterday (today's UTC date or yesterday's UTC date). A 5-day-old row

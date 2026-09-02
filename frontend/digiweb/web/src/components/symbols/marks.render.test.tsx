@@ -20,10 +20,10 @@ describe("DigiquantMark", () => {
 
   it("retargets stroke classes for the dashboard loader grammar", () => {
     const html = renderToStaticMarkup(
-      <DigiquantMark size={56} className="atlas-loader-mark" strokeClassPrefix="atlas-loader-stroke" />
+      <DigiquantMark size={56} className="research-loader-mark" strokeClassPrefix="research-loader-stroke" />
     );
-    for (const n of [1, 2, 3, 4]) expect(html).toContain(`atlas-loader-stroke-${n}`);
-    expect(html).toContain("atlas-loader-mark");
+    for (const n of [1, 2, 3, 4]) expect(html).toContain(`research-loader-stroke-${n}`);
+    expect(html).toContain("research-loader-mark");
     expect(html).toContain('width="56"');
   });
 

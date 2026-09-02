@@ -179,7 +179,7 @@ def test_the_realtime_topic_is_per_hook_instance_not_a_shared_constant() -> None
     """A shared topic string kills the equity lane for the WHOLE page, silently.
 
     TWO `useLivePrices` instances mount on the landing page: `LiveTickerRow` directly, and
-    `OlympusPortfolioPanel` via `useLivePortfolio`. They share one singleton Supabase client,
+    `DashboardPortfolioPanel` via `useLivePortfolio`. They share one singleton Supabase client,
     and `RealtimeClient.channel()` DEDUPES BY TOPIC (realtime-js 2.104.0,
     RealtimeClient.js:305-316) — the second call returns the FIRST channel instead of creating
     another. Both instances then `.on()` that one channel, but only the first `.subscribe()`

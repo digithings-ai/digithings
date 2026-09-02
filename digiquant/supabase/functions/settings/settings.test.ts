@@ -1367,7 +1367,7 @@ Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
     "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
-    pinnedAlpacaRedirectUri("https://app.example/olympus"),
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
     "https://app.example/dashboard/settings/brokers/callback/",
   );
 });

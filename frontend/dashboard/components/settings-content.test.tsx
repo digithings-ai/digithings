@@ -18,7 +18,7 @@ vi.mock('@/components/theme-provider', () => ({
     theme: mocks.theme,
     setTheme: mocks.setTheme,
   }),
-  useAtlasTheme: () => ({
+  useDashboardTheme: () => ({
     theme: mocks.theme,
     setTheme: mocks.setTheme,
   }),

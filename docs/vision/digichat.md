@@ -24,7 +24,7 @@ digichat reads the user's JWT on login and shows only what they're authorized to
 Examples:
 - digiquant:read → digiquant tools available as chat connections
 - index:research → Research library digisearch index available
-- subgraph:atlas → research sub-graph accessible (scope id unchanged until the path wave)
+- subgraph:research → research sub-graph accessible (scope id unchanged until the path wave)
 - tier:free → 3 questions, public index only, no proprietary sub-graphs
 
 **Two live deployments:**
