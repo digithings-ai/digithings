@@ -32,6 +32,7 @@ def test_omniroute_profile_is_opt_in_and_guards_password_at_start() -> None:
     guard = services["omniroute-auth-guard"]
     assert omni.get("profiles") == ["omniroute"]
     assert guard.get("profiles") == ["omniroute"]
+    assert omni.get("ports") == ["127.0.0.1:20128:20128"]
     depends = omni.get("depends_on") or {}
     assert "omniroute-auth-guard" in depends
     env = omni.get("environment") or []
