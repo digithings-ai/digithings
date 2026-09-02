@@ -426,11 +426,12 @@ def maybe_truncate_tool_payload(
     msg_id: str | None = None,
     workspace: Path | None = None,
 ) -> tuple[str, str | None]:
-    """Tier-1 truncate a single tool payload for inject-time wrapping.
+    """Tier-1 truncate a single tool payload for *prior-turn* message lists.
 
-    Used by :func:`wrap_execute_tool_for_tier1` so large results are offloaded
-    *before* digillm appends them to its local transcript (digigraph-scoped;
-    digillm's own char cap still applies afterward).
+    Prefer :func:`apply_tier1_truncation` on an accumulated transcript. Do **not**
+    call this on same-turn ``execute_tool`` results before digillm injects them —
+    the model cannot read workspace stubs mid-turn (use digillm's
+    ``DIGI_TOOL_MESSAGE_MAX_CHARS`` cap instead).
     """
     cfg = config or compaction_config_from_env()
     if not cfg.enabled or not content:
@@ -457,7 +458,18 @@ def wrap_execute_tool_for_tier1(
     workspace: Path | None = None,
     refs_out: list[str] | None = None,
 ) -> Any:
-    """Wrap an ``execute_tool(name, args)`` so large string/dict ``content`` is tier-1 truncated."""
+    """Offload large tool payloads for resume — **without** stubbing model-visible content.
+
+    Historical mistake: this wrapper used to replace ``content`` with a workspace
+    stub before digillm appended it to the in-loop transcript. With
+    ``DIGI_RUN_DATA_DIR`` set (project RAG), typical digisearch JSON exceeds the
+    2 KB tier-1 floor, so the model only saw stubs and could not answer from
+    search hits. digillm already truncates injected tool text via
+    ``DIGI_TOOL_MESSAGE_MAX_CHARS`` (default 12k) while keeping a usable prefix.
+
+    Research paths no longer call this. It remains for callers that want a
+    workspace sidecar copy; the returned payload is unchanged.
+    """
     cfg = config or compaction_config_from_env()
     if not cfg.enabled:
         return execute_tool
@@ -468,29 +480,29 @@ def wrap_execute_tool_for_tier1(
             raw = result.get("content", "")
             if not isinstance(raw, str):
                 raw = str(raw)
-            stub, ref = maybe_truncate_tool_payload(
-                raw,
-                config=cfg,
-                session_id=session_id,
-                msg_id=f"{name}_{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            if ref and refs_out is not None:
-                refs_out.append(ref)
-            if stub is not raw:
-                return {**result, "content": stub}
+            threshold_bytes = max(1, cfg.tier1_truncation_kb) * 1024
+            if (
+                raw
+                and not raw.startswith("[truncated — full result in workspace/")
+                and len(raw.encode("utf-8")) > threshold_bytes
+            ):
+                mid = f"{name}_{uuid.uuid4().hex[:8]}"
+                ref = offload_tool_result(session_id, mid, raw, workspace=workspace)
+                if ref and refs_out is not None:
+                    refs_out.append(ref)
             return result
         if isinstance(result, str):
-            stub, ref = maybe_truncate_tool_payload(
-                result,
-                config=cfg,
-                session_id=session_id,
-                msg_id=f"{name}_{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            if ref and refs_out is not None:
-                refs_out.append(ref)
-            return stub
+            threshold_bytes = max(1, cfg.tier1_truncation_kb) * 1024
+            if (
+                result
+                and not result.startswith("[truncated — full result in workspace/")
+                and len(result.encode("utf-8")) > threshold_bytes
+            ):
+                mid = f"{name}_{uuid.uuid4().hex[:8]}"
+                ref = offload_tool_result(session_id, mid, result, workspace=workspace)
+                if ref and refs_out is not None:
+                    refs_out.append(ref)
+            return result
         return result
 
     return _wrapped
