@@ -11,7 +11,14 @@ export {
 } from "./motion/scrolly";
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
-export { GitHubGlyph, GoogleGlyph, XGlyph } from "./components/icons";
+export { GitHubGlyph, GoogleGlyph, LinkedInGlyph, XGlyph } from "./components/icons";
+export {
+  SocialRow,
+  DIGITHINGS_SOCIALS,
+  type SocialRowProps,
+  type SocialProfile,
+  type SocialNetwork,
+} from "./components/SocialRow";
 export {
   AuthCard,
   passwordStrength,

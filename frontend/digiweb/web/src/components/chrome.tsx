@@ -55,7 +55,18 @@ export function Nav({ brand, links, mark }: { brand: ReactNode; links: NavLink[]
   );
 }
 
-export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
+export function Footer({
+  links,
+  meta,
+  profiles,
+}: {
+  links: NavLink[];
+  meta: string;
+  /** Quiet company-profile row (typically <SocialRow/>). Optional so existing
+   *  call sites stay a utility-link strip; socials are a dedicated primitive,
+   *  not a fake Connect column. */
+  profiles?: ReactNode;
+}) {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
@@ -65,6 +76,7 @@ export function Footer({ links, meta }: { links: NavLink[]; meta: string }) {
               rel={l.external ? "noopener noreferrer" : undefined}>{l.label}</a>
           ))}
         </nav>
+        {profiles}
         <p className="footer-meta">{meta}</p>
       </div>
     </footer>
