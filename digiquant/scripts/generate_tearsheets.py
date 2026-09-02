@@ -97,6 +97,31 @@ def strategy_type_of(settings: dict, strategy: str) -> str:
     return str(entry.get("strategy_type") or default or "slapper")
 
 
+def catalog_row_from_settings(settings: dict, strategy: str) -> dict:
+    """Public ``strategies`` registry row. Required FK parent of ``strategy_tearsheets``.
+
+    Slapper rows were uploaded once via ``sync_strategy_calibrations.py``. SDCA has
+    no private calibrations, so that script never inserted ``btc_sdca`` and the
+    nightly upsert 409'd (#3453). Push must ensure this row first.
+    """
+    entry = settings["strategies"][strategy]
+    defaults = settings.get("defaults", {})
+    return {
+        "id": strategy,
+        "symbol": entry["symbol"],
+        "label": entry.get("label", strategy),
+        "engine": "nautilus",
+        "config": {
+            "kind": entry.get("kind", "long_short"),
+            "strategy_type": strategy_type_of(settings, strategy),
+            "trade_start": defaults.get("trade_start"),
+            "initial_capital": defaults.get("initial_capital"),
+            "size_pct_equity": defaults.get("size_pct_equity"),
+        },
+        "enabled": True,
+    }
+
+
 def materialize_sdca_risk_index(
     ohlcv: pl.DataFrame,
     output_path: Path,
@@ -1090,12 +1115,15 @@ def _push_tearsheet_to_supabase(
     (service-role write) for any relational consumer.
     """
     from digiquant.data.store.client import build_digiquant_client
-    from digiquant.data.store.strategies import upsert_signal, upsert_tearsheet
+    from digiquant.data.store.strategies import upsert_signal, upsert_strategies, upsert_tearsheet
 
     client = build_digiquant_client()
     if client is None:
         logger.warning("Supabase push skipped — credentials missing")
         return
+
+    settings = load_settings()
+    upsert_strategies(client, [catalog_row_from_settings(settings, strategy)])
 
     payload = td.model_dump(mode="json")
     payload["current_signal"] = current_signal

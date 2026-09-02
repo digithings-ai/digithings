@@ -78,6 +78,21 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     assert sdca["preset"] != "balanced"
 
 
+def test_catalog_row_from_settings_registers_btc_sdca() -> None:
+    settings = gts.load_settings()
+    row = gts.catalog_row_from_settings(settings, "btc_sdca")
+    assert row["id"] == "btc_sdca"
+    assert row["symbol"] == "BTC-USD"
+    assert row["label"] == "BTC-SDCA"
+    assert row["engine"] == "nautilus"
+    assert row["enabled"] is True
+    assert row["config"]["kind"] == "dca"
+    assert row["config"]["strategy_type"] == "sdca"
+    slapper = gts.catalog_row_from_settings(settings, "btc_slapper")
+    assert slapper["config"]["kind"] == "long_short"
+    assert slapper["config"]["strategy_type"] == "slapper"
+
+
 def test_richer_composite_sidecar_matches_settings() -> None:
     sidecar = json.loads(
         (

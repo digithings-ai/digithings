@@ -26,8 +26,9 @@ def test_write_observation_csv_round_trips_fred_shape(tmp_path: Path) -> None:
     from digiquant.strategies.sdca.indicator_catalog import load_date_value_frame
 
     dates, values = load_date_value_frame(dest)
-    assert dates.to_list()[0].isoformat() == "2020-01-01"
-    assert values.to_list() == pytest.approx([15400.1, 15410.0])
+    by_date = dict(zip([d.isoformat() for d in dates.to_list()], values.to_list(), strict=True))
+    assert by_date["2020-01-01"] == pytest.approx(15400.1)
+    assert by_date["2020-02-01"] == pytest.approx(15410.0)
 
 
 def test_write_observation_csv_rejects_empty(tmp_path: Path) -> None:
