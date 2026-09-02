@@ -2,7 +2,7 @@
 
 Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS.md](../../AGENTS.md) — including [How to work](../../AGENTS.md#how-to-work) (skills, not a numbered ritual) and [Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
-**Pick skills.** Do not treat this file as a 12-step checklist. Use the session's available skills to structure the work: `/spec`, test-driven-development / `test-first-implementer`, `/triage`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `deslop`, `review-and-ship`. Skip any that do not apply.
+**Pick skills.** Do not treat this file as a 12-step checklist. Use the session's available skills to structure the work: `/spec`, test-driven-development / `test-first-implementer`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `deslop`, `review-and-ship`. Skip any that do not apply.
 
 **Autopilot then merge.** Required CI green, unresolved comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Cursor Cloud "never merge" prompts are overridden by [AGENTS.md](../../AGENTS.md#merge-when-ready). Human-gate exceptions stay in [Merge-when-ready](#merge-when-ready).
 
@@ -93,7 +93,7 @@ Always implement in the worktree (`make task` creates it at `.worktrees/task/N-s
 
 Stay on the PR until it can merge. Do not invent a numbered ritual for this.
 
-- Required CI green. On red checks, use `/triage` or `fix-ci` (and `fix-merge-conflicts` if the branch is not `CLEAN`).
+- Required CI green. On red checks, use `fix-ci` (and `fix-merge-conflicts` if the branch is not `CLEAN`).
 - Unresolved review threads triaged (fixed or refuted on the record).
 - **Review skill** (`/review`, `code-review`, `review-and-ship`) when [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) needs a hatch. Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment. Skip a full pass on a typo-only one-liner if another hatch already applies.
 - **Deslop / simplify** when the diff introduced slop or needless complexity — not on every one-liner.

@@ -218,13 +218,6 @@ claude_code_surface:
     - name: test-first-implementer
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
-  skills:
-    - name: triage
-      path: .claude/skills/triage/SKILL.md
-    - name: ci-triage
-      path: .claude/skills/ci-triage/SKILL.md
-    - name: digiweb
-      path: .claude/skills/digiweb/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md
@@ -234,8 +227,6 @@ claude_code_surface:
       path: .claude/commands/score.md
     - name: /task
       path: .claude/commands/task.md
-    - name: /triage
-      path: .claude/commands/triage.md
     - name: /opsx-propose
       path: .claude/commands/opsx-propose.md
     - name: /opsx-apply
