@@ -13,7 +13,8 @@ import { redeemInvite, SettingsHttpError } from '@/lib/settings-api';
  * Presentation only — data plane must still deny via RLS / dedicated project keys.
  *
  * After login, a hashed invite (settings EF) can INSERT `client_product_grants`
- * for the caller's email. The invite is not a login-optional passphrase.
+ * for the caller's email. Invite URLs (`?invite=`) auto-redeem via AuthGate;
+ * this paste form stays as fallback. The invite is not a login-optional passphrase.
  */
 export function ClientProductGate({
   productKey,
