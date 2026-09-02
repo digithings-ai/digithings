@@ -9,6 +9,7 @@ import pytest
 from digigraph.orchestration.registry import ToolContext
 from digigraph.trace_events import (
     MAX_RAG_SOURCE_BODY_CHARS,
+    merge_rag_sources_accumulator,
     rag_sources_from_results,
 )
 
@@ -97,3 +98,14 @@ def test_get_note_handler_rag_sources_carry_body() -> None:
     # LLM payload still carries body_markdown; the trace item uses ``body``.
     payload = json.loads(out["content"])
     assert payload["body_markdown"] == "# Hi\n\nFull note body for the pane."
+
+
+def test_merge_rag_sources_overlays_get_note_body_on_locate_hit() -> None:
+    acc = [{"doc_id": "clients/x/p001", "snippet": "# Hi…"}]
+    merge_rag_sources_accumulator(
+        acc,
+        [{"doc_id": "clients/x/p001", "body": "# Hi\n\nFull note for DocumentPane."}],
+    )
+    assert acc[0]["body"] == "# Hi\n\nFull note for DocumentPane."
+    assert acc[0]["snippet"] == "# Hi…"
+    assert len(acc) == 1

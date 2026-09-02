@@ -100,11 +100,18 @@ def rag_sources_from_results(
 def merge_rag_sources_accumulator(
     acc: list[dict[str, Any]], new_items: list[dict[str, Any]] | None
 ) -> None:
-    """Append *new_items* to *acc*, de-duplicating by source_id then doc_id."""
+    """Append *new_items* to *acc*, de-duplicating by source_id then doc_id.
+
+    A later get_note row with the same key overlays ``body`` onto a snippet-only
+    locate hit so DocumentPane is not stuck on the 400-char excerpt (#3419).
+    WorkflowState callers strip ``body`` before merge so checkpoints stay lean.
+    """
     if not new_items:
         return
     seen = {
-        x.get("source_id") or x.get("doc_id") for x in acc if x.get("source_id") or x.get("doc_id")
+        str(x.get("source_id") or x.get("doc_id"))
+        for x in acc
+        if isinstance(x, dict) and (x.get("source_id") or x.get("doc_id"))
     }
     for item in new_items:
         if not isinstance(item, dict):
@@ -115,6 +122,17 @@ def merge_rag_sources_accumulator(
             continue
         ks = str(key)
         if ks in seen:
+            new_body = item.get("body")
+            if isinstance(new_body, str) and new_body.strip():
+                for existing in acc:
+                    if not isinstance(existing, dict):
+                        continue
+                    ek = existing.get("source_id") or existing.get("doc_id")
+                    if ek is None or str(ek) != ks:
+                        continue
+                    if not existing.get("body"):
+                        existing["body"] = new_body
+                    break
             continue
         seen.add(ks)
         acc.append(item)
