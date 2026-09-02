@@ -1,5 +1,6 @@
 import "./account.css";
 
+import { AuthCardProposals } from "@/components/account/auth-card-proposals";
 import { LoginCard } from "@/components/account/login-card";
 import { PaymentBand } from "@/components/account/payment-band";
 import { ProfileCard } from "@/components/account/profile-card";
@@ -16,12 +17,13 @@ export default function AccountPage() {
           Account surfaces, <em>end to end.</em>
         </h1>
         <p>
-          Login, sign-up, session/logout, payment, settings, and profile templates — the
-          transactional pages every product surface eventually needs. Olympus OAuth and
-          tier-hidden settings tabs live here first.
+          Login, sign-up, session, payment, settings, and profile templates — the
+          transactional pages every product surface eventually needs. Sign-in cards in
+          three layouts, then the rest of the account family.
         </p>
       </header>
 
+      <AuthCardProposals />
       <LoginCard />
       <SignupCard />
       <SessionCard />

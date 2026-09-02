@@ -45,7 +45,17 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+`AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
+`./styles/account-auth.css`) is the promoted sign-in / create-account card.
+Layouts `compact`, `icons-first`, and `desk` share one form: email + password,
+Google / GitHub / X (Supabase OAuth 2.0 provider id `x`, visible label X), primary submit
+Sign in / Sign up, footer Create an account / Sign in. Compact places the
+`digiquant` wordmark beside the mark. Desk may keep a product kicker, a sign-up
+strength meter, and sign-in Forgot password. Specimens live on the reference
+account page (`AuthCardProposals`) as a layout catalog. The dashboard login
+screen imports compact `AuthCard` (`frontend/dashboard/components/login-screen.tsx`).
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own
