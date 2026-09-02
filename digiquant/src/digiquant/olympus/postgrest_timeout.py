@@ -1,9 +1,4 @@
-"""Bounded httpx timeouts for PostgREST I/O (#3319, #3426).
-
-``build_client`` applies these as ``httpx.Timeout``. Ledger ``_insert`` does
-not wrap ``execute()`` in a thread deadline — abandoning the worker while an
-INSERT may still complete forks the append-only chain.
-"""
+"""httpx timeout constants applied by ``build_client``."""
 
 from __future__ import annotations
 

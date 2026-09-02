@@ -213,8 +213,7 @@ jobs:
 
       - name: Run Olympus research pipeline
         id: run
-        # Bound under the job's 240m cap so a hung attempt fails this step
-        # (artifacts / outcome report still run) instead of cancelling the job (#3426).
+        # Under the job's 240m cap so a hung run fails this step, not the job.
         timeout-minutes: 210
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}

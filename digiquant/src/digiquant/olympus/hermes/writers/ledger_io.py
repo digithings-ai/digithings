@@ -116,7 +116,6 @@ class LedgerAppend:
 
 
 def _execute(query: Any) -> Any:
-    """Run PostgREST ``execute()``. Timeouts come from ``build_client`` httpx."""
     return query.execute()
 
 
@@ -128,9 +127,7 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
 
-    ``workspace_id`` is NOT NULL (migration 097, no column DEFAULT). Callers that
-    go through ledger models still get a house default on the model; this gate
-    must not silently house-stamp a raw dict (including broker / execution rows).
+    Raises ``ValueError`` if any row is missing ``workspace_id``.
     """
     if not rows:
         return

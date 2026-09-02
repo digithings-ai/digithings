@@ -1,4 +1,4 @@
-"""PostgREST I/O is bounded by httpx on ``build_client``, not a thread deadline (#3426)."""
+"""httpx timeouts on ``build_client``; ledger inserts do not abandon a worker."""
 
 from __future__ import annotations
 
@@ -20,30 +20,20 @@ from digiquant.olympus.postgrest_timeout import (
 
 pytestmark = pytest.mark.unit
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-olympus.yml"
+_WORKFLOW = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "pipeline-olympus.yml"
 
 
-def test_httpx_timeout_constants_are_minutes_not_hours() -> None:
+def test_httpx_timeout_constants() -> None:
     assert CONNECT_TIMEOUT_SECONDS == 10.0
     assert READ_TIMEOUT_SECONDS == 60.0
     assert WRITE_TIMEOUT_SECONDS == 30.0
     assert POOL_TIMEOUT_SECONDS == 10.0
-    assert READ_TIMEOUT_SECONDS < 5 * 60
 
 
-def test_timeout_module_has_no_abandon_deadline() -> None:
-    import digiquant.olympus.postgrest_timeout as timeout_mod
-
-    assert not hasattr(timeout_mod, "run_with_deadline")
-    assert not hasattr(timeout_mod, "EXECUTE_DEADLINE_SECONDS")
-
-
-def test_execute_does_not_wrap_inserts_in_a_thread_deadline() -> None:
-    src = inspect.getsource(ledger_io._execute)
-    assert "run_with_deadline" not in src
-    insert_src = inspect.getsource(ledger_io._insert)
-    assert "run_with_deadline" not in insert_src
+def test_execute_and_insert_do_not_abandon_a_worker() -> None:
+    combined = inspect.getsource(ledger_io._execute) + inspect.getsource(ledger_io._insert)
+    assert "run_with_deadline" not in combined
+    assert "Thread(" not in combined
 
 
 def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -72,11 +62,11 @@ def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_research_pipeline_run_step_has_timeout_minutes() -> None:
-    doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    doc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
     job = doc["jobs"]["run"]
     assert job["timeout-minutes"] == 240
     steps = [s for s in job["steps"] if isinstance(s, dict) and s.get("id") == "run"]
-    assert len(steps) == 1, "expected the research pipeline run step (id: run)"
+    assert len(steps) == 1
     step_timeout = steps[0].get("timeout-minutes")
-    assert step_timeout is not None, "run step needs timeout-minutes under the 240m job cap"
+    assert step_timeout is not None
     assert int(step_timeout) < 240
