@@ -46,6 +46,7 @@ describe("ContactMailto contracts", () => {
       "../app/team/page.tsx",
       "../app/services/page.tsx",
       "../app/legal/privacy/page.tsx",
+      "../app/brand/page.tsx",
     ];
     for (const rel of pages) {
       const path = fileURLToPath(new URL(rel, import.meta.url));

@@ -212,6 +212,12 @@ Manifest icons use one contrast-safe default because installed icons are cached
 by the operating system and the manifest standard has no live colour-scheme
 selector; changing those assets requires removing and reinstalling the shortcut.
 
+Off-repo uploads (GitHub, X, LinkedIn, slides, mail) are generated under
+`frontend/digiweb/brand/` — avatars from the favicon tile, OG cards and social
+headers from outlined Geist Mono + `HEADLINES` in `build-og.py`. Headers are a
+**compact stack**, not a cropped 1200×630 card. `build-header.py --check` keeps
+the served copies on digithings.ai/brand in sync. See `frontend/digiweb/brand/README.md`.
+
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the
 surfaces already using them still do.
