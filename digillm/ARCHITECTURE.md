@@ -288,17 +288,23 @@ string to `chat_completion` and skip this entirely.
 
 `get_client_for_model(model)` is the single client entry point:
 
-- **House path:** when `OPENAI_API_BASE` is set (LiteLLM), every non-BYOK call
-  uses `get_client()`. Registered prefixes stay on the wire as LiteLLM
-  `model_name` keys (DigiQuant pins are unprefixed OpenRouter slugs).
-- **BYOK:** when a BYOK override's `base_url` matches a registered provider,
-  an uncached client is built with the user's key.
+- **House and BYOK path:** when `OPENAI_API_BASE` is set (LiteLLM), **every**
+  call uses `get_client()`. Registered prefixes stay on the wire as LiteLLM
+  `model_name` keys (digiquant pins are unprefixed OpenRouter slugs). There is
+  no prefix-skip: BYOK does not open a direct vendor HTTP client.
+- **BYOK through LiteLLM:** `set_byok(api_key, base_url)` still binds the
+  user's token. With a proxy configured, that token is passed as LiteLLM
+  clientside credentials (`extra_body.api_key` / `extra_body.api_base`) so
+  LiteLLM authenticates to the vendor — or to the user's own OpenAI-compat
+  endpoint — while the HTTP client stays on `OPENAI_API_BASE` with the house
+  proxy key. Response cache is still skipped while BYOK is active.
 - **Diagnostics without a proxy:** a `provider/model_id` prefix matching the
-  registry routes to a dedicated, **cached** vendor client. Every other model
-  string uses `get_client()` (`OPENAI_API_BASE` / `OPENAI_API_KEY`).
+  registry routes to a dedicated vendor client (BYOK: uncached user key;
+  otherwise cached operator key). Every other model string uses `get_client()`
+  (`OPENAI_API_BASE` / `OPENAI_API_KEY`).
 
-Built-in registry (`xai`, `gemini`, `openrouter`, `anthropic`): BYOK and
-diagnostics only — not a skip around LiteLLM for house traffic. Extend at
+Built-in registry (`xai`, `gemini`, `openrouter`, `anthropic`): prefix parsing
+and no-proxy diagnostics — not a skip around LiteLLM. Extend at
 runtime via `register_provider(prefix, base_url, api_key_env)`.
 
 A missing required provider key raises `RuntimeError` (no silent fallback), so
@@ -344,7 +350,7 @@ plain contextvar setters and reads them when building clients.
 | Setter | Reads in | Effect |
 |--------|----------|--------|
 | `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
-| `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` default path | Bring-your-own-key. Returns an **uncached** client (user creds must not accumulate in process memory) and **bypasses the response cache**. |
+| `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` / `_create_with_retry` | Bring-your-own-key. With `OPENAI_API_BASE` set, the LiteLLM client is reused and the user's key/base go in `extra_body` (clientside credentials). Without a proxy, returns an **uncached** client at the user's endpoint. Always **bypasses the response cache**. |
 | `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
 | `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw **for this var only**. |
 | `set_fan_out_detach_hook(fn)` | run at the top of every *parallel* tool worker | Lets a consumer clear a logical-call var it layers on top of digillm's — necessarily holding the same mutable handle, so the copy would share it. Process-global, `None` disables, a raising hook is logged and the tool call proceeds. The hook runs inside the worker's copied context, so it must clear token-free and must not touch credentials — carrying those across is the point of the copy. |
@@ -362,9 +368,9 @@ finally:
 
 ### Precedence notes (decisions)
 
-- **Provider prefix wins over BYOK on routing.** `get_client_for_model` checks
-  the prefix first; BYOK/proxy overrides only affect the *default* (non-prefixed)
-  client path. This mirrors digigraph's behavior.
+- **No BYOK skip of LiteLLM.** When `OPENAI_API_BASE` is set, house and BYOK
+  share one HTTP client (the proxy). Prefix matching does not open a vendor
+  client. The user's key is LiteLLM `extra_body.api_key` / `api_base`.
 - **BYOK is `(api_key, base_url)` — provider-agnostic.** digigraph carried
   `(key, provider)` with an unfinished Anthropic-passthrough special-case. That
   provider coupling is intentionally **dropped**: a BYOK caller supplies the

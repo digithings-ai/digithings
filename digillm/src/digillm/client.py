@@ -121,8 +121,11 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # Maps a ``provider/`` model prefix to its OpenAI-compatible base_url + the env
 # var holding its API key. House traffic does **not** use this table: when
 # ``OPENAI_API_BASE`` is set (LiteLLM), prefixes stay on the wire as model ids.
-# The registry is for BYOK (user key + matching base_url) and for diagnostics
-# when no proxy is configured. Do not default callers onto a hosted marketplace.
+# BYOK does **not** skip the proxy: the user's key/base go in ``extra_body``
+# (LiteLLM clientside credentials) so the path is always caller → digillm →
+# LiteLLM → vendor or the user's own OpenAI-compat endpoint. The registry is
+# diagnostics-only when no proxy is configured. Do not default callers onto a
+# hosted marketplace.
 
 _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
     "xai": {
@@ -278,15 +281,16 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
-    When a BYOK override is active, returns an *uncached* client pointed at the
-    BYOK ``base_url`` with the BYOK key — user credentials must never accumulate
-    in process memory. Otherwise returns a client cached by
-    ``(api_key, base_url)`` so the httpx connection pool is reused; the cache key
-    embeds both env-derived values so the client is recreated automatically when
-    either changes (e.g. in tests).
+    When ``OPENAI_API_BASE`` is set, this is always the LiteLLM (or configured
+    proxy) client — house key as Bearer, BYOK keys passed per-request via
+    :func:`_with_byok_litellm_pass_through`. Without a proxy, a BYOK override
+    still returns an *uncached* client pointed at the user's ``base_url``.
+    Otherwise returns a client cached by ``(api_key, base_url)`` so the httpx
+    connection pool is reused; the cache key embeds both env-derived values so
+    the client is recreated automatically when either changes (e.g. in tests).
     """
     byok_override = _byok_override.get()
-    if byok_override:
+    if byok_override and not _house_proxy_configured():
         api_key, base_url = byok_override
         return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
 
@@ -315,25 +319,38 @@ def _api_base_is_openrouter() -> bool:
     return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
 
 
-def _byok_matches_registered_provider(provider: str | None) -> bool:
-    if provider is None:
-        return False
-    byok_override = _byok_override.get()
-    if not byok_override:
-        return False
-    _api_key, base_url = byok_override
-    cfg = _EXTERNAL_PROVIDERS.get(provider)
-    return bool(cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"))
-
-
 def _use_house_proxy_client(model: str) -> bool:
-    """Route a registered prefix through the default proxy unless BYOK matches it."""
+    """True when a registered prefix should stay on ``OPENAI_API_BASE`` (LiteLLM).
+
+    Includes BYOK: there is no prefix-skip. The user's token is passed through
+    LiteLLM, not used as a direct vendor client.
+    """
     provider, _ = _parse_provider_prefix(model)
     if provider is None:
         return False
-    if _byok_matches_registered_provider(provider):
-        return False
     return _house_proxy_configured()
+
+
+def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Attach LiteLLM clientside credentials when BYOK is bound on the proxy path.
+
+    HTTP still authenticates to LiteLLM with the house proxy key. ``extra_body``
+    ``api_key`` / ``api_base`` are LiteLLM's request-level pass-through so the
+    proxy uses the user's token against that vendor or the user's own
+    OpenAI-compat endpoint. No-op without a proxy or without BYOK.
+    """
+    if not _house_proxy_configured():
+        return kwargs
+    byok_override = _byok_override.get()
+    if not byok_override:
+        return kwargs
+    api_key, base_url = byok_override
+    merged = dict(kwargs)
+    extra = dict(merged.get("extra_body") or {})
+    extra["api_key"] = api_key
+    extra["api_base"] = base_url.rstrip("/")
+    merged["extra_body"] = extra
+    return merged
 
 
 def _effective_model_id(model: str) -> str:
@@ -354,31 +371,28 @@ def _cost_controls_provider(parsed_provider: str | None) -> str | None:
 def get_client_for_model(model: str) -> OpenAI:
     """Return the OpenAI client for ``model`` (the single public client entry point).
 
-    House path: when ``OPENAI_API_BASE`` is set, every non-BYOK call uses
-    :func:`get_client` (LiteLLM / the configured proxy). Registered prefixes
-    (``xai/``, ``gemini/``, ``openrouter/``, ``anthropic/``) are then LiteLLM
-    ``model_name`` keys, not a skip around the proxy.
-
-    BYOK: when a BYOK override's ``base_url`` matches the registered provider,
-    returns an *uncached* client with the user's key (never cached).
+    When ``OPENAI_API_BASE`` is set, every call — house and BYOK — uses
+    :func:`get_client` (LiteLLM). Registered prefixes are LiteLLM ``model_name``
+    keys, not a skip around the proxy. BYOK keys ride ``extra_body``.
 
     Diagnostics without a proxy: a ``provider/model_id`` prefix matching a
-    registered provider yields a dedicated, cached vendor client. Every other
-    model string uses :func:`get_client`.
+    registered provider yields a dedicated vendor client (BYOK: uncached user
+    key; otherwise cached operator key). Every other model string uses
+    :func:`get_client`.
 
     Raises:
         RuntimeError: when a registered provider's API key env var is unset
             **and** no house proxy is configured.
     """
     provider, _ = _parse_provider_prefix(model)
+    if provider is None or _house_proxy_configured():
+        return get_client()
     byok_override = _byok_override.get()
-    if provider is not None and byok_override:
+    if byok_override:
         api_key, base_url = byok_override
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
-    if provider is None or _house_proxy_configured():
-        return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
     if not api_key:
@@ -967,6 +981,7 @@ def _create_with_retry(
     with _logical_attempt_scope() as scope:
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
+        kwargs = _with_byok_litellm_pass_through(kwargs)
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
@@ -1524,7 +1539,7 @@ def openrouter_web_search(
 
     House Digicon/digiquant grounding pins are unprefixed ``:online`` / ``perplexity/*``
     slugs sent through LiteLLM (``OPENAI_API_BASE``). Leftover ``openrouter/``
-    prefixes still work for BYOK/diagnostics when ``OPENROUTER_API_KEY`` is set.
+    prefixes still work for diagnostics when ``OPENROUTER_API_KEY`` is set.
 
     ``:online`` models and native-search providers (``perplexity/*``) use built-in
     web search via a plain completion — this is the digiquant grounding path

@@ -871,11 +871,15 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Model routing:** callers must pass a concrete model string. Digicon/digiquant
   phase pins in `config/digiquant_models.yaml` are **unprefixed** OpenRouter
   slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
-  service → digillm → LiteLLM. Registered prefixes (`openrouter/`, `gemini/`,
-  `anthropic/`, `xai/`) are BYOK/diagnostics only. `openrouter/auto` remains
-  the diagnostic auto-router id (preflight structured-output probe), not a
-  phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs via
-  `get_grounding_model()`. Optional OmniRoute is a separate overlay
+  always caller → digillm → LiteLLM → vendor (or the user's OpenAI-compat
+  endpoint). House keys and BYOK keys both stay on that path: BYOK is passed
+  through LiteLLM as request `api_key` / `api_base` (clientside credentials),
+  not as a direct vendor HTTP client. Registered prefixes (`openrouter/`,
+  `gemini/`, `anthropic/`, `xai/`) are leftover caller spellings and
+  no-proxy diagnostics — they do not skip `OPENAI_API_BASE`. `openrouter/auto`
+  remains the diagnostic auto-router id (preflight structured-output probe),
+  not a phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs
+  via `get_grounding_model()`. Optional OmniRoute is a separate overlay
   (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
   default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).

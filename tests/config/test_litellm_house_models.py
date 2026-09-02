@@ -54,6 +54,23 @@ def test_litellm_yaml_parses_and_lists_house_slugs() -> None:
     assert not missing, f"house pins missing from config/litellm.yaml model_list: {missing}"
 
 
+def test_litellm_yaml_allows_byok_clientside_credentials() -> None:
+    """BYOK keys pass through LiteLLM via extra_body api_key / api_base."""
+    data = yaml.safe_load((CONFIG / "litellm.yaml").read_text(encoding="utf-8"))
+    model_list = data["model_list"]
+    missing: list[str] = []
+    for entry in model_list:
+        name = entry["model_name"]
+        params = entry["litellm_params"]
+        allowed = params.get("configurable_clientside_auth_params") or []
+        if not {"api_key", "api_base"} <= set(allowed):
+            missing.append(name)
+    assert not missing, (
+        "config/litellm.yaml models missing configurable_clientside_auth_params "
+        f"[api_key, api_base]: {missing}"
+    )
+
+
 def test_house_pins_are_unprefixed() -> None:
     """Registered vendor prefixes must not appear on house pins (they skip LiteLLM)."""
     for slug in _olympus_house_slugs():
