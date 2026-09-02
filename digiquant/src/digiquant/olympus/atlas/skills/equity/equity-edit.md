@@ -14,7 +14,7 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 - `target_document_key`: `"equity"`
 - `prior_date` / `date` from PHASE_INPUTS
 - `status`: `updated` with ops, or `skipped` with `skip_reason` when nothing material changed
-- `ops`: RFC 6901 paths over the prior body (`/headline`, `/bias`, `/spy_trend`, `/market_breadth`, `/factor_leader`, `/material_findings`, …)
+- `ops`: RFC 6901 paths over the prior memo (`/body`, `/internal_bias`, `/sources`, …)
 
 ## Inputs
 
@@ -26,4 +26,4 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 
 - Patch only fields affected by fresh macro, alt-data, or asset-class signals.
 - Use data tools for SPY/QQQ/IWM technicals before patching trend/breadth fields.
-- Keep `SegmentReport` literals valid (`bias`, `spy_trend`, `market_breadth`, `factor_leader`).
+- Keep the markdown `body` coherent; optional `internal_bias` is a non-rendered token.

@@ -30,13 +30,15 @@ _RUN = date(2026, 8, 30)
 
 def _ws(
     *,
-    tier: PlanTier = PlanTier.CUSTOM,
+    tier: PlanTier = PlanTier.STUDIO,
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    plan_floor: PlanTier | None = None,
 ) -> WorkspaceEntitlement:
     return WorkspaceEntitlement(
         workspace_id=uuid4(),
         plan_tier=tier,
         subscription_status=status,
+        plan_floor=plan_floor,
     )
 
 
@@ -52,10 +54,11 @@ def _missing_byok() -> ByokProbe:
     ("tier", "status"),
     (
         (PlanTier.FREE, SubscriptionStatus.ACTIVE),
-        (PlanTier.BASELINE, SubscriptionStatus.ACTIVE),
-        (PlanTier.CUSTOM, SubscriptionStatus.NONE),
-        (PlanTier.CUSTOM, SubscriptionStatus.PAST_DUE),
-        (PlanTier.CUSTOM, SubscriptionStatus.CANCELED),
+        (PlanTier.BRIEF, SubscriptionStatus.ACTIVE),
+        (PlanTier.DESK, SubscriptionStatus.ACTIVE),
+        (PlanTier.STUDIO, SubscriptionStatus.NONE),
+        (PlanTier.STUDIO, SubscriptionStatus.PAST_DUE),
+        (PlanTier.STUDIO, SubscriptionStatus.CANCELED),
         (PlanTier.ENTERPRISE, SubscriptionStatus.PAST_DUE),
     ),
 )
@@ -85,8 +88,42 @@ def test_missing_byok_skips_no_credentials() -> None:
     assert result.job.error == OverlaySkipReason.NO_CREDENTIALS.value
 
 
-def test_entitled_custom_and_enterprise_claim() -> None:
-    for tier in (PlanTier.CUSTOM, PlanTier.ENTERPRISE):
+def test_creator_plan_floor_studio_without_stripe_claims() -> None:
+    """D1: entitlement_grants.plan_floor=studio unlocks Kairos overlay without Stripe."""
+    store = MemoryJobRunStore()
+    result = dispatch_overlay_daily(
+        store=store,
+        workspace=_ws(
+            tier=PlanTier.FREE,
+            status=SubscriptionStatus.NONE,
+            plan_floor=PlanTier.STUDIO,
+        ),
+        run_date=_RUN,
+        byok=_ok_byok(),
+    )
+    assert result.claimed is True
+    assert result.skip_reason is None
+    assert result.job.status is JobStatus.RUNNING
+
+
+def test_desk_plan_floor_without_stripe_skips_overlay() -> None:
+    store = MemoryJobRunStore()
+    result = dispatch_overlay_daily(
+        store=store,
+        workspace=_ws(
+            tier=PlanTier.FREE,
+            status=SubscriptionStatus.NONE,
+            plan_floor=PlanTier.DESK,
+        ),
+        run_date=_RUN,
+        byok=_ok_byok(),
+    )
+    assert result.claimed is False
+    assert result.skip_reason is OverlaySkipReason.NOT_ENTITLED
+
+
+def test_entitled_studio_and_enterprise_claim() -> None:
+    for tier in (PlanTier.STUDIO, PlanTier.ENTERPRISE):
         store = MemoryJobRunStore()
         result = dispatch_overlay_daily(
             store=store, workspace=_ws(tier=tier), run_date=_RUN, byok=_ok_byok()

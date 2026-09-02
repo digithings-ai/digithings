@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 import re
 from datetime import date, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from digiquant.olympus.atlas.state import (
@@ -21,9 +21,11 @@ from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_c
 from digiquant.olympus.hermes.writers.commit_io import (
     _NAV_INTERVAL_TICKER_BATCH,
     _NAV_INTERVAL_WINDOW_DAYS,
+    OVERLAY_MANIFEST_PREFIX,
     _canonical_thesis_ids,
     _interval_price_returns,
     load_commit_manifests,
+    manifest_document_key,
     resolve_prior_commit,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
@@ -35,6 +37,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
 from digiquant.olympus.hermes.writers.ledger_io import (
     _heads as _ledger_heads,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -458,6 +461,53 @@ class TestCommitRunIdempotency:
         )
         found = load_commit_manifests(client=client, run_date=RUN_DATE)
         assert [m["weights_fingerprint"] for m in found] == ["fp-x"]
+
+    def test_house_uuid_keeps_commit_run_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        assert manifest_document_key("run-1", str(overlay)).startswith(OVERLAY_MANIFEST_PREFIX)
+        assert manifest_document_key("run-1") == "commit-run/run-1"
+        assert manifest_document_key("run-1", str(house_workspace_id())) == "commit-run/run-1"
+
+    def test_house_uuid_load_does_not_see_overlay_manifests(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        house = str(house_workspace_id())
+        iso = RUN_DATE.isoformat()
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": iso,
+                        "document_key": f"overlay-commit/{overlay}/ov-run",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "overlay"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/overlay-spoof",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "spoof"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/house-run",
+                        "workspace_id": house,
+                        "payload": {"weights_fingerprint": "house"},
+                    },
+                ]
+            }
+        )
+        overlay_found = load_commit_manifests(
+            client=client, run_date=RUN_DATE, workspace_id=str(overlay)
+        )
+        house_omitted = load_commit_manifests(client=client, run_date=RUN_DATE)
+        house_pinned = load_commit_manifests(client=client, run_date=RUN_DATE, workspace_id=house)
+        assert [m["weights_fingerprint"] for m in overlay_found] == ["overlay"]
+        assert [m["weights_fingerprint"] for m in house_omitted] == ["house"]
+        assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
 
     def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
         client = FakeSupabaseClient()
@@ -956,9 +1006,14 @@ class TestCommitChainLedger:
             capture_output=True,
             text=True,
         ).stdout.split()
+        # ``ledger_io`` is the only writer. Pipeline caller is H9. ``recover_ledger``
+        # is the operator recovery caller for a booked-but-uncommitted day (#3330): it
+        # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
+        # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
             "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
             "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
 
     def test_identical_same_date_fingerprint_appends_nothing(self) -> None:

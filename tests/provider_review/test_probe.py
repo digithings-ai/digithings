@@ -81,11 +81,12 @@ def test_run_probes_writes_json(tmp_path):
 
 
 @pytest.mark.unit
-def test_providers_dict_has_nine_entries():
-    """PROVIDERS covers exactly the 9 probeable providers."""
-    assert len(PROVIDERS) == 9
+def test_providers_dict_has_eight_entries():
+    """PROVIDERS covers exactly the 8 still-probeable providers (github_models retired #1589)."""
+    assert len(PROVIDERS) == 8
     expected = {
         "gemini", "groq", "cerebras", "mistral", "nvidia_nim",
-        "ollama_cloud", "openrouter", "deepseek", "github_models",
+        "ollama_cloud", "openrouter", "deepseek",
     }
     assert set(PROVIDERS.keys()) == expected
+    assert "github_models" not in PROVIDERS

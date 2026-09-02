@@ -109,26 +109,17 @@ For each equity in the user's watchlist:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date index levels inline. Do **not** invent scores, a Signals section, or print `Bias:` at the top. Sector detail lives in the sector memos.
+
+```markdown
+# US equities — {as-of date of the data}
+
+## Indices
+SPY, QQQ, IWM — price, change, key levels.
+
+## Breadth and factors
+A/D, 52-week highs/lows, factor leadership.
+
+## Session catalysts
+Earnings, notable movers, what to watch next.
 ```
-### 📈 EQUITIES
-**Bias**: [Bullish / Bearish / Neutral / Conflicted]
-
-**Index Levels**: [SPY, QQQ, IWM — price, % change, key level notes]
-
-**Sector Rotation**: [Leading: ... | Lagging: ... | Implication: ...]
-
-**Watchlist Movers**: [Notable moves with brief reason]
-
-**Earnings Today**: [Key names + reaction if available]
-
-**Technical Read**: [Trend, VIX, breadth summary]
-
-**Market Breadth**: A/D: [X:X] | 52W H/L: [X/X] | % above 200D: X% | [Healthy/Narrow/Deteriorating]
-
-**Factor Read**: [Leading: Value/Growth/Momentum/Quality | Lagging: which] | [Risk-on or defensive rotation?]
-
-**Watch**: [1-2 things to monitor in next 24-48h]
-
-**Note**: Full sector-by-sector analysis in sector sub-agent outputs. International in international.md.
-```
-

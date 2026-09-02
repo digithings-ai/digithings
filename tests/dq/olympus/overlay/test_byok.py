@@ -72,7 +72,7 @@ def test_missing_user_key_skips_and_does_not_bind_house_key(
         store=store,
         workspace=WorkspaceEntitlement(
             workspace_id=uuid4(),
-            plan_tier=PlanTier.CUSTOM,
+            plan_tier=PlanTier.STUDIO,
             subscription_status=SubscriptionStatus.ACTIVE,
         ),
         run_date=date(2026, 8, 30),
@@ -174,7 +174,7 @@ def test_invoke_chain_credential_none_refuses_never_calls_chain(
     store = MemoryJobRunStore()
     workspace = WorkspaceEntitlement(
         workspace_id=uuid4(),
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     job = dispatch_overlay_daily(

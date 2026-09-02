@@ -132,6 +132,25 @@ class TestForecastTermsValidation:
         with pytest.raises((TypeError, ValidationError)):
             terms.bear_return = Decimal("-0.01")  # type: ignore[misc]
 
+    def test_nested_terms_envelope_unwraps(self) -> None:
+        """House GHA 33426508863 IAU: `{terms: <ForecastTerms>}` extra-forbid miss."""
+        inner = _terms().model_dump(mode="json")
+        terms = ForecastTerms.model_validate({"terms": inner})
+        assert terms.horizon_sessions == 21
+        assert terms.base_probability == Decimal("0.50")
+
+    def test_nested_terms_overlay_preserves_top_level_economics(self) -> None:
+        inner = _terms().model_dump(mode="json")
+        terms = ForecastTerms.model_validate({"terms": inner, "thesis_valid_probability": "0.40"})
+        assert terms.thesis_valid_probability == Decimal("0.40")
+
+    def test_missing_tenor_is_not_invented_on_the_model(self) -> None:
+        body = _terms().model_dump(mode="json")
+        del body["horizon_sessions"]
+        del body["half_life_sessions"]
+        with pytest.raises(ValidationError, match="horizon_sessions"):
+            ForecastTerms.model_validate(body)
+
 
 class TestForecastAssessmentIdentity:
     def test_uuid5_identity_is_deterministic(self) -> None:

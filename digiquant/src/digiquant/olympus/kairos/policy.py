@@ -10,9 +10,11 @@ venue is resolved from:
    ``house_workspace_id()`` / ``system_workspace_id()`` UUIDs → always
    :attr:`~digiquant.brokers.contracts.ExecutionVenue.PAPER_INTERNAL`,
    hard-coded, not configurable. Those identities can never route externally.
-2. **Kill switch** ``OLYMPUS_KAIROS_ROUTING`` (default **off** / absent) → only
+2. **Kill switch** ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``;
+   default **off** / absent) → only
    ``PAPER_INTERNAL`` is reachable regardless of connections. Polarity is the
-   inverse of ``OLYMPUS_PORTFOLIO_LEDGER`` (ledger defaults on; routing defaults
+   inverse of ``DIGIQUANT_PORTFOLIO_LEDGER`` (alias ``OLYMPUS_PORTFOLIO_LEDGER``;
+   ledger defaults on; routing defaults
    off) because external submit is a human-gated surface.
 3. **Active paper connection** (kill switch on) → the matching paper venue
    (``alpaca`` → ``ALPACA_PAPER``, ``ibkr`` → ``IBKR_PAPER``). Exactly one active
@@ -36,14 +38,15 @@ stay free of a fake Supabase client.
 from __future__ import annotations
 
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from uuid import UUID
 
 from digiquant.brokers.connections import Broker
 from digiquant.brokers.contracts import ExecutionVenue, LiveVenueNotAuthorizedError
+from digiquant.olympus.envcompat import EXECUTION_ROUTING, env_lookup
 from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
 
-_ROUTING_ENV = "OLYMPUS_KAIROS_ROUTING"
+_ROUTING_ENV = EXECUTION_ROUTING
 # Opt-in (default off). Mirror the *shape* of ledger_io's env parse, not its polarity.
 _ON_VALUES = frozenset({"1", "on", "true", "yes", "enabled"})
 
@@ -89,6 +92,11 @@ class ForeignWorkspaceIntentError(ValueError):
     """
 
 
+def routing_enabled_in(environ: Mapping[str, str]) -> bool:
+    """Whether execution routing is on in ``environ``. Defaults off."""
+    return env_lookup(_ROUTING_ENV, environ=environ).strip().lower() in _ON_VALUES
+
+
 def routing_enabled() -> bool:
     """Whether external venue routing is reachable. Defaults to **off**.
 
@@ -96,7 +104,7 @@ def routing_enabled() -> bool:
     switch off, :func:`resolve_venue` returns only ``PAPER_INTERNAL`` — the
     internal paper path is unchanged and house regression stays byte-identical.
     """
-    return os.environ.get(_ROUTING_ENV, "").strip().lower() in _ON_VALUES
+    return routing_enabled_in(os.environ)
 
 
 def is_house_or_system_workspace(workspace_id: UUID | None) -> bool:
@@ -221,5 +229,6 @@ __all__ = [
     "InconsistentOrderChainError",
     "is_house_or_system_workspace",
     "routing_enabled",
+    "routing_enabled_in",
     "resolve_venue",
 ]

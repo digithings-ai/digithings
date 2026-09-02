@@ -27,7 +27,7 @@ Two public domains, plus a developer-tooling product line.
 
 ### `digiquant.io` — financial AI hub
 - **digiquant product** — algorithmic strategy generation, backtesting, optimization, broker connections, deployment.
-- **Olympus** — the human-facing dashboard (`frontend/olympus`) for digiquant's finance sub-graph trio. Atlas now lives inside `digiquant` as `digiquant.olympus` (see ADR-0014, ADR-0015); the three sub-graphs are:
+- **Olympus** — the human-facing dashboard (`frontend/dashboard`) for digiquant's finance sub-graph trio. Atlas now lives inside `digiquant` as `digiquant.olympus` (see ADR-0014, ADR-0015); the three sub-graphs are:
   - **Atlas** — high-level fundamental/research engine; runs daily batch research, structured outputs, DB-persisted.
   - **Hermes** — portfolio deliberation (bull/bear theses, risk debate) with a **human approval gate** before any execution.
   - **Kairos** — chat-based strategy development; a quant researcher's interactive strategy workbench inside digichat.
@@ -86,7 +86,7 @@ See **ADR-0001: digithings Project Spec** for the formal definition and **ADR-00
                                   └─────────────────────┘
 
     digiquant.io ────▶  digiquant product UI
-       Olympus    ────▶  Atlas + Hermes + Kairos dashboard (frontend/olympus)
+       Olympus    ────▶  Atlas + Hermes + Kairos dashboard (frontend/dashboard)
                           └─▶ digigraph ──▶ digisearch / digiquant (execution, human-gated)
 
     projects/client-pilot ──▶  digigraph + digisearch (no digiquant)

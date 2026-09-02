@@ -138,7 +138,7 @@
 .deck-alert-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 0;
   flex-shrink: 0;
   background: var(--ink-mute);
 }
@@ -182,7 +182,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--surface);
   color: var(--ink-soft);
   font-size: 1.1rem;
@@ -247,7 +247,7 @@
   scroll-snap-align: start;
   flex: 0 0 16.5rem;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 1.1rem;
   user-select: none;
@@ -263,7 +263,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 0.15rem 0.45rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--hair);
   color: var(--ink-mute);
 }
@@ -318,7 +318,7 @@
   --rg-label-w: 11rem;
   min-width: 620px;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 0.9rem 1rem 1rem;
   font-family: var(--font-mono);
@@ -364,7 +364,7 @@
 
 .rg-bar {
   height: 1.5rem;
-  border-radius: 6px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--accent) 22%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
   display: flex;
@@ -424,7 +424,7 @@
 /* ── conviction vocabulary ───────────────────────────────────────────────────────── */
 /* RECORDED-FROM-OLYMPUS, pending a promotion ruling (#1577) — no
    @digithings/web export exists yet, so conviction-reference.tsx owns static
-   markup class-for-class from frontend/olympus/components/shared/
+   markup class-for-class from frontend/dashboard/components/shared/
    conviction-meter.tsx + signed-conviction-badge.tsx. The pip/badge dress
    itself stays inline utilities (bg-accent / bg-hair / text-up / text-down)
    to mirror the olympus source exactly; the cvx-* classes below are
@@ -439,7 +439,7 @@
 
 .cvx-scale {
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 1rem 1.2rem;
 }
@@ -490,7 +490,7 @@
   display: grid;
   gap: 1rem;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   padding: 1.1rem 1.2rem;
 }
@@ -507,7 +507,7 @@
   justify-content: center;
   width: 1.6rem;
   height: 1.6rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--hair));
   color: var(--accent);
   font-family: var(--font-mono);

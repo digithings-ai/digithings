@@ -833,14 +833,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / positions / own
+-- user_a_studio / positions / own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.positions WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -854,7 +854,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'positions', 'own', '1', p.actual,
+SELECT 'user_a_studio', 'positions', 'own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -870,14 +870,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / positions / peer_b
+-- user_a_studio / positions / peer_b
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.positions WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -891,7 +891,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'positions', 'peer_b', '0', p.actual,
+SELECT 'user_a_studio', 'positions', 'peer_b', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -907,14 +907,15 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / positions / house
+-- user_a_studio / positions / house
+-- Post-cutover (900 A2): 109 house-teaser UUID is gone; non-members see 0.
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.positions WHERE workspace_id = ''6b753576-ced9-5319-9bfa-c5d0aacd9319''' INTO n;
@@ -928,7 +929,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'positions', 'house', '0', p.actual,
+SELECT 'user_a_studio', 'positions', 'house', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -944,14 +945,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / position_events / own
+-- user_a_studio / position_events / own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.position_events WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -965,7 +966,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'position_events', 'own', '1', p.actual,
+SELECT 'user_a_studio', 'position_events', 'own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -981,14 +982,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / position_events / peer_b
+-- user_a_studio / position_events / peer_b
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.position_events WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1002,7 +1003,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'position_events', 'peer_b', '0', p.actual,
+SELECT 'user_a_studio', 'position_events', 'peer_b', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1018,14 +1019,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / nav_history / own
+-- user_a_studio / nav_history / own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.nav_history WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1039,7 +1040,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'nav_history', 'own', '1', p.actual,
+SELECT 'user_a_studio', 'nav_history', 'own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1055,14 +1056,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / nav_history / peer_b
+-- user_a_studio / nav_history / peer_b
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.nav_history WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1076,7 +1077,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'nav_history', 'peer_b', '0', p.actual,
+SELECT 'user_a_studio', 'nav_history', 'peer_b', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1092,14 +1093,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / portfolio_metrics / own
+-- user_a_studio / portfolio_metrics / own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_metrics WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1113,7 +1114,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'portfolio_metrics', 'own', '1', p.actual,
+SELECT 'user_a_studio', 'portfolio_metrics', 'own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1129,14 +1130,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / portfolio_metrics / peer_b
+-- user_a_studio / portfolio_metrics / peer_b
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_metrics WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1150,7 +1151,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'portfolio_metrics', 'peer_b', '0', p.actual,
+SELECT 'user_a_studio', 'portfolio_metrics', 'peer_b', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1166,14 +1167,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / portfolio_ledger / commits_own
+-- user_a_studio / portfolio_ledger / commits_own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_ledger_commits WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1187,7 +1188,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'portfolio_ledger', 'commits_own', '1', p.actual,
+SELECT 'user_a_studio', 'portfolio_ledger', 'commits_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1203,14 +1204,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / portfolio_ledger / commits_peer
+-- user_a_studio / portfolio_ledger / commits_peer
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_ledger_commits WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1224,7 +1225,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'portfolio_ledger', 'commits_peer', '0', p.actual,
+SELECT 'user_a_studio', 'portfolio_ledger', 'commits_peer', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1240,14 +1241,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / olympus_accounting / periods_own
+-- user_a_studio / olympus_accounting / periods_own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.olympus_accounting_periods WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1261,7 +1262,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'olympus_accounting', 'periods_own', '1', p.actual,
+SELECT 'user_a_studio', 'olympus_accounting', 'periods_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1277,14 +1278,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / olympus_accounting / periods_peer
+-- user_a_studio / olympus_accounting / periods_peer
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.olympus_accounting_periods WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1298,7 +1299,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'olympus_accounting', 'periods_peer', '0', p.actual,
+SELECT 'user_a_studio', 'olympus_accounting', 'periods_peer', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1314,14 +1315,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / olympus_profile_config / overlay_own
+-- user_a_studio / olympus_profile_config / overlay_own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.olympus_profile_config WHERE id = ''aa000020-0020-4020-8020-000000000020''' INTO n;
@@ -1335,7 +1336,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'olympus_profile_config', 'overlay_own', '1', p.actual,
+SELECT 'user_a_studio', 'olympus_profile_config', 'overlay_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1351,14 +1352,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / documents / overlay_own
+-- user_a_studio / documents / overlay_own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.documents WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1372,7 +1373,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'documents', 'overlay_own', '1', p.actual,
+SELECT 'user_a_studio', 'documents', 'overlay_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1388,14 +1389,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / documents / overlay_peer
+-- user_a_studio / documents / overlay_peer
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.documents WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1409,7 +1410,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'documents', 'overlay_peer', '0', p.actual,
+SELECT 'user_a_studio', 'documents', 'overlay_peer', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1425,14 +1426,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / documents / house_pm_rebalance_tier
+-- user_a_studio / documents / house_pm_rebalance_tier
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.documents WHERE document_key = ''pm-rebalance''' INTO n;
@@ -1446,7 +1447,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'documents', 'house_pm_rebalance_tier', '1', p.actual,
+SELECT 'user_a_studio', 'documents', 'house_pm_rebalance_tier', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1462,14 +1463,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / broker_connections / no_client_grant
+-- user_a_studio / broker_connections / no_client_grant
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.broker_connections' INTO n;
@@ -1483,7 +1484,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'broker_connections', 'no_client_grant', '0|permission_denied', p.actual,
+SELECT 'user_a_studio', 'broker_connections', 'no_client_grant', '0|permission_denied', p.actual,
   CASE
     WHEN '0|permission_denied' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0|permission_denied' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1499,14 +1500,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / notification_prefs / no_client_grant
+-- user_a_studio / notification_prefs / no_client_grant
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.notification_prefs' INTO n;
@@ -1520,7 +1521,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'notification_prefs', 'no_client_grant', '0|permission_denied', p.actual,
+SELECT 'user_a_studio', 'notification_prefs', 'no_client_grant', '0|permission_denied', p.actual,
   CASE
     WHEN '0|permission_denied' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0|permission_denied' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1536,14 +1537,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / daily_snapshots / base_revoked
+-- user_a_studio / daily_snapshots / base_revoked
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.daily_snapshots' INTO n;
@@ -1557,7 +1558,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'daily_snapshots', 'base_revoked', '0|permission_denied', p.actual,
+SELECT 'user_a_studio', 'daily_snapshots', 'base_revoked', '0|permission_denied', p.actual,
   CASE
     WHEN '0|permission_denied' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0|permission_denied' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1573,14 +1574,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_custom / views / public_portfolio_positions
+-- user_a_studio / views / public_portfolio_positions
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.public_portfolio_positions' INTO n;
@@ -1594,7 +1595,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_custom', 'views', 'public_portfolio_positions', '0|permission_denied', p.actual,
+SELECT 'user_a_studio', 'views', 'public_portfolio_positions', '0|permission_denied', p.actual,
   CASE
     WHEN '0|permission_denied' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0|permission_denied' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1610,14 +1611,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / positions / own
+-- user_b_desk / positions / own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.positions WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1631,7 +1632,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'positions', 'own', '1', p.actual,
+SELECT 'user_b_desk', 'positions', 'own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1647,14 +1648,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / positions / peer_a
+-- user_b_desk / positions / peer_a
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.positions WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1668,7 +1669,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'positions', 'peer_a', '0', p.actual,
+SELECT 'user_b_desk', 'positions', 'peer_a', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1684,14 +1685,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / portfolio_ledger / commits_own
+-- user_b_desk / portfolio_ledger / commits_own
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_ledger_commits WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''' INTO n;
@@ -1705,7 +1706,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'portfolio_ledger', 'commits_own', '1', p.actual,
+SELECT 'user_b_desk', 'portfolio_ledger', 'commits_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1721,14 +1722,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / portfolio_ledger / commits_peer
+-- user_b_desk / portfolio_ledger / commits_peer
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.portfolio_ledger_commits WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1742,7 +1743,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'portfolio_ledger', 'commits_peer', '0', p.actual,
+SELECT 'user_b_desk', 'portfolio_ledger', 'commits_peer', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1758,14 +1759,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / documents / house_pm_rebalance_tier
+-- user_b_desk / documents / house_pm_rebalance_tier
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.documents WHERE document_key = ''pm-rebalance''' INTO n;
@@ -1779,7 +1780,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'documents', 'house_pm_rebalance_tier', '1', p.actual,
+SELECT 'user_b_desk', 'documents', 'house_pm_rebalance_tier', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1795,14 +1796,14 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_b_baseline / documents / overlay_peer_a
+-- user_b_desk / documents / overlay_peer_a
 TRUNCATE _probe;
 DO $$
 DECLARE
   n bigint;
   a text;
 BEGIN
-  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"baseline"}}', false);
+  PERFORM set_config('request.jwt.claims', '{"sub":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","role":"authenticated","app_metadata":{"plan_tier":"desk"}}', false);
   EXECUTE 'SET ROLE authenticated';
   BEGIN
     EXECUTE 'SELECT count(*) FROM public.documents WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''' INTO n;
@@ -1816,7 +1817,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_b_baseline', 'documents', 'overlay_peer_a', '0', p.actual,
+SELECT 'user_b_desk', 'documents', 'overlay_peer_a', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')

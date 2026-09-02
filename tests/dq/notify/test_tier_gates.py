@@ -80,7 +80,7 @@ def test_observer_skips_holding_and_execution_alerts() -> None:
     assert client.sent == []
 
 
-def test_baseline_gets_holding_change_not_execution() -> None:
+def test_brief_gets_holding_change_not_execution() -> None:
     sb = FakeSupabase(
         tables={
             "notification_prefs": [
@@ -93,7 +93,7 @@ def test_baseline_gets_holding_change_not_execution() -> None:
                     "digest_hour_utc": 12,
                 }
             ],
-            "workspaces": [{"id": "w1", "plan_tier": PlanTier.BASELINE.value, "name": "House"}],
+            "workspaces": [{"id": "w1", "plan_tier": PlanTier.BRIEF.value, "name": "House"}],
             "positions": [
                 {"workspace_id": "w1", "date": "2026-08-29", "ticker": "SPY", "weight_pct": 10.0},
                 {"workspace_id": "w1", "date": "2026-08-30", "ticker": "SPY", "weight_pct": 15.0},
@@ -127,7 +127,7 @@ def test_baseline_gets_holding_change_not_execution() -> None:
     assert "Holding change" in client.sent[0]
 
 
-def test_custom_gets_execution_alerts() -> None:
+def test_desk_gets_execution_alerts() -> None:
     sb = FakeSupabase(
         tables={
             "notification_prefs": [
@@ -140,7 +140,7 @@ def test_custom_gets_execution_alerts() -> None:
                     "digest_hour_utc": 12,
                 }
             ],
-            "workspaces": [{"id": "w1", "plan_tier": PlanTier.CUSTOM.value, "name": "House"}],
+            "workspaces": [{"id": "w1", "plan_tier": PlanTier.DESK.value, "name": "House"}],
             "broker_executions": [
                 {
                     "id": "fill-1",

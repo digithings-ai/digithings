@@ -13,8 +13,8 @@ same window — both computed look-ahead-safely from ``price_history``) and this
 This is a *decision-sequence* tear sheet (each decision = one trade), not a daily
 overlapping-portfolio NAV simulation — the honest, well-defined quantity given the
 decision-level data. Metric formulas mirror the frontend's TypeScript: Sharpe/Sortino/vol
-from frontend/olympus/lib/portfolio-risk-metrics.ts, max-drawdown + information ratio from
-frontend/olympus/components/portfolio/advanced-stats-panel.tsx (ported to Python; the pandas
+from frontend/dashboard/lib/portfolio-risk-metrics.ts, max-drawdown + information ratio from
+frontend/dashboard/components/portfolio/advanced-stats-panel.tsx (ported to Python; the pandas
 ``tearsheet.py`` is intentionally NOT imported).
 """
 

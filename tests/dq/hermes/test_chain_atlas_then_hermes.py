@@ -368,3 +368,24 @@ class TestChainKnowledgeCutoff:
                 )
 
         assert require_knowledge_cutoff_at(final) == pinned
+
+
+@pytest.mark.unit
+def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
+    """House fail-soft must not swallow overlay leftover-UNIQUE refuse.
+
+    Overlay H9 ``book_portfolio`` raises ``OverlayLegacyBookBlocked``. If the
+    chain records-and-continues, ``execute_overlay`` finishes succeeded and
+    the remaining hop lights without cutover 113.
+    """
+    from digiquant.olympus.atlas.state import AtlasResearchState
+    from digiquant.olympus.hermes.chain import _safe_invoke_graph
+    from digiquant.olympus.overlay.persist import OverlayLegacyBookBlocked
+
+    class _Boom:
+        def invoke(self, *_args: object, **_kwargs: object) -> None:
+            raise OverlayLegacyBookBlocked()
+
+    state = AtlasResearchState(run_type="delta", run_date=date(2026, 8, 30))
+    with pytest.raises(OverlayLegacyBookBlocked):
+        _safe_invoke_graph(_Boom(), state, None, None, "hermes")

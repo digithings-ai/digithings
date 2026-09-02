@@ -19,13 +19,22 @@ import {
   jsonError,
   jsonOk,
 } from "../_shared/supabase-admin.ts";
+import { corsPreflight } from "../_shared/cors.ts";
+import { settingsBillingReturnUrl } from "../_shared/app-url.ts";
 import { createClient } from "@supabase/supabase-js";
-import { loadPriceTierEnv, type PlanTier } from "../_shared/tiers.ts";
+import {
+  loadPriceTierEnv,
+  pickPriceId,
+  priceEnvKey,
+  type PaidTier,
+} from "../_shared/tiers.ts";
 
 type Interval = "monthly" | "annual";
-type PaidTier = Extract<PlanTier, "baseline" | "custom">;
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflight();
+  }
   if (req.method !== "POST") {
     return jsonError(405, "METHOD_NOT_ALLOWED", "POST only");
   }
@@ -59,8 +68,8 @@ Deno.serve(async (req) => {
 
   const tier = body.tier as PaidTier | undefined;
   const interval = (body.interval ?? "monthly") as Interval;
-  if (tier !== "baseline" && tier !== "custom") {
-    return jsonError(400, "INVALID_TIER", "tier must be baseline or custom");
+  if (tier !== "brief" && tier !== "desk" && tier !== "studio") {
+    return jsonError(400, "INVALID_TIER", "tier must be brief, desk, or studio");
   }
   if (interval !== "monthly" && interval !== "annual") {
     return jsonError(400, "INVALID_INTERVAL", "interval must be monthly or annual");
@@ -69,7 +78,12 @@ Deno.serve(async (req) => {
   const prices = loadPriceTierEnv();
   const priceId = pickPriceId(tier, interval, prices);
   if (!priceId) {
-    return jsonError(500, "PRICE_NOT_CONFIGURED", "Price id not configured");
+    const envName = priceEnvKey(tier, interval);
+    return jsonError(
+      500,
+      "PRICE_NOT_CONFIGURED",
+      `${envName} is not set on Edge Function secrets`,
+    );
   }
 
   let admin;
@@ -86,7 +100,10 @@ Deno.serve(async (req) => {
   );
   if (!authz.ok) return authz.response;
 
-  const appUrl = (Deno.env.get("NEXT_PUBLIC_APP_URL") ?? "").replace(/\/$/, "");
+  const appUrl = (Deno.env.get("NEXT_PUBLIC_APP_URL") ?? Deno.env.get("APP_URL") ?? "").replace(
+    /\/$/,
+    "",
+  );
   if (!appUrl) {
     return jsonError(500, "APP_URL_NOT_CONFIGURED", "App URL not configured");
   }
@@ -98,8 +115,8 @@ Deno.serve(async (req) => {
       customerEmail: user.email,
       priceId,
       workspaceId: authz.workspace.id,
-      successUrl: `${appUrl}/settings/billing?checkout=success`,
-      cancelUrl: `${appUrl}/settings/billing?checkout=cancel`,
+      successUrl: settingsBillingReturnUrl(appUrl, "success"),
+      cancelUrl: settingsBillingReturnUrl(appUrl, "cancel"),
     });
     return jsonOk({ id: session.id, url: session.url });
   } catch (err) {
@@ -110,14 +127,3 @@ Deno.serve(async (req) => {
     return jsonError(502, "STRIPE_UPSTREAM", "Unable to create checkout session");
   }
 });
-
-function pickPriceId(
-  tier: PaidTier,
-  interval: Interval,
-  prices: ReturnType<typeof loadPriceTierEnv>,
-): string {
-  if (tier === "baseline") {
-    return interval === "monthly" ? prices.baselineMonthly : prices.baselineAnnual;
-  }
-  return interval === "monthly" ? prices.customMonthly : prices.customAnnual;
-}

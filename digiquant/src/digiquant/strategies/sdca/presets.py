@@ -1,11 +1,12 @@
-"""Public, hand-authored SDCA curve personalities (#1081).
+"""Public SDCA curve personalities (#1081, authored as shapes since #3169).
 
 Presets are public config, not tuned/optimized values — they document a
 personality (conservative <-> aggressive; long-only vs. distribution) for
-``SdcaStrategyConfig.curve_nodes``/``long_only``. This is deliberately
-separate from the private, per-symbol calibration system in
-``calibrations.py`` (Slapper), which tunes indicator parameters rather than
-choosing a strategy personality.
+``SdcaStrategyConfig.curve_nodes``/``long_only``. Since #3169 they are stored
+as ``SdcaCurveShape`` parameters; ``curve_nodes`` are generated at load so
+``list_presets()``/``load_preset()`` keep returning an ``SdcaPreset`` with a
+21-node tuple. This is deliberately separate from the private, per-symbol
+calibration system in ``calibrations.py`` (Slapper).
 """
 
 from __future__ import annotations
@@ -16,18 +17,25 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, TypeAdapter, field_validator, model_validator
 
 from digiquant.strategies.sdca.curve import RISK_NODES
+from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 
 _PRESETS_PATH = Path(__file__).parent / "presets.json"
 
 
 class SdcaPreset(BaseModel):
-    """One hand-authored SDCA curve personality, validated at load time."""
+    """One SDCA curve personality, validated at load time.
+
+    ``curve_nodes`` is the 21-node runtime tuple ``AccumDistCurve`` consumes.
+    When loaded from ``presets.json``, nodes are generated from ``shape``.
+    Direct construction may still pass nodes without a shape (unit tests).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     curve_nodes: tuple[float, ...]
     long_only: bool
     description: str
+    shape: SdcaCurveShape | None = None
 
     @field_validator("curve_nodes")
     @classmethod
@@ -43,13 +51,32 @@ class SdcaPreset(BaseModel):
         return self
 
 
-_PRESET_MAP_ADAPTER = TypeAdapter(dict[str, SdcaPreset])
+class _RawPresetFileEntry(BaseModel):
+    """On-disk preset: shape parameters plus personality metadata."""
+
+    model_config = ConfigDict(frozen=True)
+
+    description: str
+    long_only: bool
+    shape: SdcaCurveShape
+
+
+_PRESET_FILE_ADAPTER = TypeAdapter(dict[str, _RawPresetFileEntry])
 
 
 def _load_all() -> dict[str, SdcaPreset]:
     with _PRESETS_PATH.open() as f:
         raw = json.load(f)
-    return _PRESET_MAP_ADAPTER.validate_python(raw)
+    entries = _PRESET_FILE_ADAPTER.validate_python(raw)
+    return {
+        name: SdcaPreset(
+            curve_nodes=entry.shape.to_nodes(),
+            long_only=entry.long_only,
+            description=entry.description,
+            shape=entry.shape,
+        )
+        for name, entry in entries.items()
+    }
 
 
 def list_presets() -> list[str]:

@@ -13,9 +13,14 @@
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
 
-This file synthesizes three external north stars — [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md) — with our current
-implementation and sets **evolution paths** per surface. "Current implementation"
+This file synthesizes external north stars — [Graphite](references/graphite.com.md),
+[Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
+utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
+[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+**evolution paths** per surface. Active blend lock + preference ledger:
+[`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
+
+"Current implementation"
 is two layers: `tokens.css` + `site/site.css` (shared CSS foundation — brand,
 buttons, terminal block, sections, and the CSS-only primitives built here in
 Phase B) consumed directly by the v7 landings (`frontend/digithings-web`,
@@ -46,20 +51,26 @@ we build next.
 
 ---
 
-## 1. The three references in one sentence each
+## 1. The references in one sentence each
 
 | Reference | Essence | Risk if copied literally |
 |-----------|---------|--------------------------|
 | **Graphite** | Motion-forward scroll storytelling with real product UI in dark frames | Page fatigue; orange/zinc is not our brand |
 | **Cursor** | Light, scannable bento layout; product screenshots; literal CTAs | Loses our terminal/quant identity; too generic SaaS |
 | **xAI** | Brutalist dark infrastructure; mono display; capability demos; no decoration | Too austere for digiquant storytelling; dark-only |
+| **Herdr** | Diegetic multi-pane terminal hero; ink/paper dual ground; sharp chrome | Zero-radius + lavender spot as a second brand |
+| **AgentMail** | Sparse dark API hero; white CTA; live code/inbox proof | Inter-as-display; announcement-bar chrome |
+| **Omarchy** | Mono-everything utilitarian; terminal colour punctuation; playful product shot | Synthwave / pixel decoration; multi-CTA icon grids |
 
-**Our blend:**
+**Our blend (2026-08, iterating):**
 
-> **Cursor’s page map and section discipline.**  
-> **Graphite’s one scroll story and motion craft.**  
-> **xAI’s mono infrastructure voice on dashboards and API surfaces.**  
-> **Our existing atmosphere** (mesh, grain, module accents, open-core honesty).
+> **Instrument Panel tokens and colour domains.**  
+> **Herdr’s diegetic terminal proof and sharp chrome option.**  
+> **AgentMail’s sparse split hero and white/ink loud CTA.**  
+> **Omarchy’s mono confidence (not its nostalgia).**  
+> **Cursor’s section discipline · xAI’s restraint · Graphite motion only when earned.**
+
+Pick concrete treatments on `/iterate` before locking into `DESIGN.md` / `tokens.css`.
 
 ---
 
@@ -158,7 +169,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Minimize marketing wrapper; chat surface **is** the pitch (Cursor model).
 
-### Olympus (`frontend/olympus/`)
+### Olympus (`frontend/dashboard/`)
 
 **Mode:** Professional dashboard — **creativity stops here**
 
@@ -171,7 +182,7 @@ API / docs pages      ○          ◐        ●
 
 **Evolution path:** Flatten `glass-card` → `surface` + hairline; mono uppercase labels for metrics; align with `quant-native` utilities.
 
-### twelve-x (`frontend/olympus/components/twelve-x/`)
+### twelve-x (`frontend/dashboard/components/twelve-x/`)
 
 **Mode:** Data-dense FX research utility
 
@@ -311,7 +322,7 @@ Add to `tokens.css` when implementing primitives:
 
 ### Phase D — Dashboard flattening
 
-- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
+- [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/dashboard/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [x] twelve-x xAI utility polish (#1217) — **audit: already there**. Section/table headers use `uppercase tracking-wider` mono-style labels (`ConsensusDataTable`, `IntelligenceTab`, `MoversStrip`); metrics use `font-mono tabular-nums`; chips/panels are flat (`.glass-card` = flat panel, per #1216); `MoversStrip` is already a real-data headline FX metric strip. No mesh/serif/scrolly. Forcing the shared `StatCounter` over the working `MoversStrip` would be churn — left as-is.
 - [x] digichat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
 
@@ -357,7 +368,7 @@ From user iteration log + reference analysis:
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
 | `frontend/digithings-web/components/landing/` | digithings landing components |
 | `frontend/digiquant-web/components/landing/` | digiquant landing components |
-| `frontend/olympus/components/twelve-x/` | twelve-x research UI |
+| `frontend/dashboard/components/twelve-x/` | twelve-x research UI |
 
 ---
 

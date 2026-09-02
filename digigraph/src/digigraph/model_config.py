@@ -466,7 +466,10 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
 
 def get_olympus_tier() -> str:
     """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``olympus_models.yaml`` default."""
-    raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
+    if "DIGIQUANT_MODEL_TIER" in os.environ:
+        raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
+    else:
+        raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
     if raw in _VALID_OLYMPUS_TIERS:
         return raw
     return _load_olympus_models().default_tier or "cheap"
@@ -569,7 +572,11 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return an OpenRouter model for web-search grounding pre-passes."""
+    """Return a web-search-capable OpenRouter model for Olympus grounding pre-passes.
+
+    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — Olympus must
+    not ground via the digillm Exa toolkit branch.
+    """
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
         return None

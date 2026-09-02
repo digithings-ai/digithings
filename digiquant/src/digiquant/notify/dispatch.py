@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
+import sys
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +15,7 @@ from typing import (  # score:allow untyped any — Supabase / Jinja render Prot
 )
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+from pydantic import BaseModel, ConfigDict
 
 from digiquant.data.store.client import build_digiquant_client
 from digiquant.notify.digest import DigestContent, build_digest_content
@@ -25,17 +29,72 @@ from digiquant.notify.events import (
 from digiquant.notify.mailgun import (
     MailgunClientProtocol,
     MailgunConfig,
+    MailgunNotConfiguredError,
     MailgunTransportError,
     build_mailgun_client,
+    format_mailgun_not_configured,
+    missing_mailgun_env_names,
 )
 
 logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+NOTIFY_STORE_NOT_CONFIGURED = "NOTIFY_STORE_NOT_CONFIGURED"
 
 
 class SupabaseReader(Protocol):
     def table(self, name: str) -> Any: ...
+
+
+class DigestDryRunPlan(BaseModel):
+    """Sanitized digest dispatch preview — counts only, no emails."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    considered: int
+    digest_on: int
+    skipped_prefs_off: int
+    skipped_no_email: int
+    mailgun_configured: bool
+
+
+def plan_digest_dispatch(
+    prefs: Sequence[Mapping[str, Any]],
+    *,
+    mailgun_configured: bool,
+    workspace_id: str | None = None,
+) -> DigestDryRunPlan:
+    """Classify prefs the same way ``dispatch_workspace`` gates digest send."""
+    rows = list(prefs)
+    if workspace_id:
+        rows = [pref for pref in rows if str(pref.get("workspace_id") or "") == workspace_id]
+    digest_on = 0
+    skipped_prefs_off = 0
+    skipped_no_email = 0
+    for pref in rows:
+        email = str(pref.get("email") or "").strip()
+        if not email:
+            skipped_no_email += 1
+            continue
+        if not pref.get("daily_digest"):
+            skipped_prefs_off += 1
+            continue
+        digest_on += 1
+    return DigestDryRunPlan(
+        considered=len(rows),
+        digest_on=digest_on,
+        skipped_prefs_off=skipped_prefs_off,
+        skipped_no_email=skipped_no_email,
+        mailgun_configured=mailgun_configured,
+    )
+
+
+def format_digest_dry_run(plan: DigestDryRunPlan) -> str:
+    return (
+        f"notify dry-run considered={plan.considered} digest_on={plan.digest_on} "
+        f"skipped_prefs_off={plan.skipped_prefs_off} skipped_no_email={plan.skipped_no_email} "
+        f"mailgun_configured={int(plan.mailgun_configured)}"
+    )
 
 
 @lru_cache(maxsize=1)
@@ -219,7 +278,7 @@ def dispatch_workspace(
                 except MailgunTransportError as exc:
                     logger.warning("notify: holding-change send failed: %s", exc)
 
-    if pref.get("execution_alerts") and can(tier, ArtifactClass.PRIVATE_BOOK):
+    if pref.get("execution_alerts") and can(tier, ArtifactClass.BROKER_STATUS):
         for event in detect_execution_alerts(sb, workspace_id, run_date, mailgun_config):
             if _is_suppressed(client, email):
                 break
@@ -275,9 +334,10 @@ def dispatch_notifications(
     **Cron** (`python -m digiquant.notify.dispatch`): passes ``hour_utc=now.hour`` so
     daily digests respect ``notification_prefs.digest_hour_utc``.
 
-    **Post-run** (`run_db_first.py` close-out): passes ``force_digest=True`` so today's
-    digest always attempts send regardless of hour; dedupe prevents double-send if cron
-    already delivered.
+    **Post-run** (`run_db_first.py` close-out and house ``hermes.chain`` CLI):
+    passes ``force_digest=True`` so today's digest always attempts send regardless
+    of hour; dedupe prevents double-send if cron already delivered. Overlay
+    nested ``run_atlas_then_hermes`` does not call this.
     """
     try:
         _dispatch_notifications_inner(
@@ -314,13 +374,27 @@ def _dispatch_notifications_inner(
     if sb is None:
         logger.warning("notify: supabase credentials missing — skip dispatch")
         return
+    missing = missing_mailgun_env_names()
+    if missing:
+        # Named code in logs so ops/agents never confuse silent skip with success.
+        logger.warning(
+            "notify: %s — skip dispatch (fail-soft for cron/post-run)",
+            format_mailgun_not_configured(missing),
+        )
+        return
     mailgun_config = MailgunConfig.from_env()
     if mailgun_config is None:
-        logger.warning("notify: mailgun env incomplete — skip dispatch")
+        logger.warning(
+            "notify: %s — skip dispatch",
+            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+        )
         return
     client = build_mailgun_client()
     if client is None:
-        logger.warning("notify: mailgun client unavailable — skip dispatch")
+        logger.warning(
+            "notify: %s — client unavailable, skip dispatch",
+            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+        )
         return
 
     effective_date = run_date or datetime.now(UTC).date()
@@ -337,11 +411,103 @@ def _dispatch_notifications_inner(
     )
 
 
-def main() -> None:
-    """CLI entry: ``python -m digiquant.notify.dispatch`` (cron hour-gate path)."""
+def _run_digest_dry_run(
+    *,
+    workspace_id: str | None,
+    prefs: Sequence[Mapping[str, Any]] | None,
+    mailgun_configured: bool | None,
+    log: Callable[[str], None] | None,
+) -> int:
+    """Print digest candidate counts. Never sends or claims slots."""
+    out = log or print
+    configured = (
+        not bool(missing_mailgun_env_names()) if mailgun_configured is None else mailgun_configured
+    )
+    loaded: Sequence[Mapping[str, Any]]
+    if prefs is None:
+        sb = build_digiquant_client()
+        if sb is None:
+            print(NOTIFY_STORE_NOT_CONFIGURED, file=sys.stderr)
+            return 2
+        loaded = _load_prefs(sb)
+    else:
+        loaded = prefs
+    plan = plan_digest_dispatch(
+        loaded,
+        mailgun_configured=configured,
+        workspace_id=workspace_id,
+    )
+    out(format_digest_dry_run(plan))
+    return 0
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    prefs: Sequence[Mapping[str, Any]] | None = None,
+    mailgun_configured: bool | None = None,
+    log: Callable[[str], None] | None = None,
+) -> int:
+    """CLI entry: ``python -m digiquant.notify.dispatch``.
+
+    Default (cron): hour-gated dispatch; Mailgun gaps are fail-soft inside
+    :func:`dispatch_notifications`.
+
+    ``--require-mailgun`` / ``--check``: loud-fail with exit **2** and code
+    ``MAILGUN_NOT_CONFIGURED`` listing missing env *names* (no values). Use for
+    staging probes and agent gates — never silent green when vendor keys empty.
+
+    ``--dry-run``: load prefs and print candidate counts (no send, no
+    ``notification_log`` claim). Mailgun absence is reported as
+    ``mailgun_configured=0`` rather than skipping the count. ``--workspace-id``
+    filters the plan. Missing store env exits **2** with
+    ``NOTIFY_STORE_NOT_CONFIGURED``.
+    """
+    parser = argparse.ArgumentParser(prog="digiquant.notify.dispatch")
+    parser.add_argument(
+        "--require-mailgun",
+        "--check",
+        dest="require_mailgun",
+        action="store_true",
+        help="Exit 2 with MAILGUN_NOT_CONFIGURED when Mailgun env incomplete",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print digest candidate counts; do not send or claim slots",
+    )
+    parser.add_argument(
+        "--workspace-id",
+        default=None,
+        help="Limit --dry-run to one workspace id",
+    )
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
+
+    if args.require_mailgun:
+        missing = missing_mailgun_env_names()
+        if missing:
+            print(format_mailgun_not_configured(missing), file=sys.stderr)
+            return 2
+        try:
+            MailgunConfig.require_from_env()
+        except MailgunNotConfiguredError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print("notify: Mailgun env present (names only check; send not attempted)")
+        return 0
+
+    if args.dry_run:
+        return _run_digest_dry_run(
+            workspace_id=args.workspace_id,
+            prefs=prefs,
+            mailgun_configured=mailgun_configured,
+            log=log,
+        )
+
     dispatch_notifications(hour_utc=datetime.now(UTC).hour)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

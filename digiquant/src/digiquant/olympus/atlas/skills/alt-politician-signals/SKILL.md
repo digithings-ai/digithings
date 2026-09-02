@@ -43,26 +43,17 @@ Flag actions impacting portfolio sectors (energy, healthcare, financials, crypto
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Politician and official signals — {as-of date of the data}
+
+## Congressional trades
+Who bought or sold what, with filing links.
+
+## Fed, Treasury, and policy
+Powell, Treasury, regulatory or trade-policy items.
+
+## Implication
+What official activity implies for today's research — not a portfolio instruction.
 ```
-### 🏛️ POLITICIAN & OFFICIAL SIGNALS
-
-**Congressional Stock Trades (Last 7 Days):**
-| Member | Party | Buy/Sell | Ticker | Amount | Committee | Signal |
-|--------|-------|----------|--------|--------|-----------|--------|
-| [Name] | [R/D] | BUY | [XXX] | [$X-Xk] | [Finance] | [comment] |
-
-**Net Congressional Positioning:**
-- Net buyers: [sectors/tickers]
-- Net sellers: [sectors/tickers]
-
-**Fed & Treasury Signals:**
-- Powell: [statement + read]
-- Treasury: [signal]
-
-**Geopolitical / Trade / Regulatory**:
-- [Item]: [what changed]
-
-**Implication for Portfolio:**
-[2-3 sentences: what do official signals imply?]
-```
-

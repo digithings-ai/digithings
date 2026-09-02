@@ -59,4 +59,12 @@ def compute_composite_risk(indicators: list[IndicatorWeight]) -> pl.DataFrame:
     return df.select(composite_z, risk)
 
 
-__all__ = ["IndicatorWeight", "compute_composite_risk"]
+Z_TO_RISK_SCALE = 50.0 / 3.0
+
+
+def z_to_risk(z: float) -> float:
+    """Map a clipped z in ``[-3, 3]`` onto the 0–100 composite-risk scale."""
+    return 50.0 - float(z) * Z_TO_RISK_SCALE
+
+
+__all__ = ["IndicatorWeight", "Z_TO_RISK_SCALE", "compute_composite_risk", "z_to_risk"]

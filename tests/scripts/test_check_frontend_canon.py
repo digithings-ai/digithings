@@ -212,9 +212,9 @@ def test_main_end_to_end(mod, tmp_path, monkeypatch, capsys) -> None:
 
     # Letter-bearing hexes: pure-digit ``#123456`` reads as an issue ref, not a
     # color, so the allowlist contrast would be vacuous without a letter.
-    allow_ts = "frontend/olympus/lib/chart-colors.ts"
+    allow_ts = "frontend/dashboard/lib/chart-colors.ts"
     _write(tmp_path / allow_ts, 'export const up = "#12ab56";\n')  # allowlisted home
-    other_ts = "frontend/olympus/lib/other.ts"
+    other_ts = "frontend/dashboard/lib/other.ts"
     _write(tmp_path / other_ts, 'export const x = "#65cd21";\n')  # NOT allowlisted
 
     census_css = "frontend/digichat-ui/styles.css"

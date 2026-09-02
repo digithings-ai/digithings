@@ -1,0 +1,70 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+/**
+ * Node-environment test (no jsdom), mirroring components/legacy-spa-redirect.test.tsx:
+ * we run the page's data-load effect synchronously by stubbing React's `useEffect`
+ * to invoke its callback immediately, and stub `useState` so the resolved tearsheet
+ * is committed before render. We then render PerformancePage to a string and assert
+ * the loaded PerformanceTearsheetView (H1 "Performance") appears — the loading→loaded
+ * transition, exercised the same way app/system/page.test.ts asserts its page chrome.
+ */
+import { buildPerformanceTearsheet } from '@/lib/observability-queries';
+
+const sample = buildPerformanceTearsheet({
+  nav: [{ date: '2026-06-23', nav: 99.32, cash_pct: 25, invested_pct: 75 }],
+  positions: [],
+  metrics: null,
+  attribution: [],
+});
+
+vi.mock('@/lib/observability-queries', async () => {
+  const actual =
+    await vi.importActual<typeof import('@/lib/observability-queries')>(
+      '@/lib/observability-queries'
+    );
+  return {
+    ...actual,
+    fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
+    fetchOlympusTearsheet: vi.fn(() => Promise.resolve(sample)),
+  };
+});
+
+vi.mock('@/components/observability/AttributionTab', () => ({ default: () => null }));
+vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
+vi.mock('@/lib/use-entitlement', () => ({
+  useCan: () => true,
+  usePlanTier: () => 'enterprise',
+}));
+
+vi.mock('react', async () => {
+  const actual = await vi.importActual<typeof import('react')>('react');
+  // The page declares useState in source order: [data, setData] then [error, setError].
+  // Seed the FIRST useState with the resolved tearsheet (loaded state) and leave the
+  // SECOND (error) at its initial null, so the first render is the loaded view.
+  let call = 0;
+  return {
+    ...actual,
+    useEffect: (fn: () => void) => fn(),
+    useState: <T,>(init: T) => {
+      const isFirst = call === 0;
+      call += 1;
+      return [isFirst ? (sample as unknown as T) : init, vi.fn()] as [T, (v: T) => void];
+    },
+  };
+});
+
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createElement } from 'react';
+import PerformancePage from './page';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('/portfolio/performance route', () => {
+  it('renders the persisted Performance view once data loads', () => {
+    const html = renderToStaticMarkup(createElement(PerformancePage));
+    expect(html).toContain('Performance');
+    expect(html).toContain('Download performance tear sheet as PDF');
+  });
+});

@@ -1,8 +1,10 @@
 ---
 name: beliefs-distillation
 description: >
-  Distill recent resolved decision lessons and active theses into one durable beliefs
-  document for the Portfolio Manager. Single cheap-tier call; on-demand only (§11.1).
+  Distill resolved decision lessons and active theses into one durable beliefs
+  document for the Portfolio Manager. Cheap-tier call used for the operator
+  full rewrite (``refresh_scope=beliefs``) and for backlog catch-up above
+  ``OLYMPUS_BELIEFS_BACKLOG``. Daily house runs use ``beliefs-distillation-daily``.
 ---
 
 # Beliefs Distillation

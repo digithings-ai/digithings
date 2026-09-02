@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-01
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -79,6 +79,7 @@ digiquant owns the ordered quant workflow internally via a LangGraph `StateGraph
 | `ema`, `s`, `mean_reversion_tech`, `momentum_tech` | `ema_cross` |
 | `mean_reversion_stat_arb` | `bollinger_mr` |
 | `momentum_energy` | `rsi_momentum` |
+| `btc_sdca` | `sdca` (param specs / walk-forward optimize). Registry canonical remains `btc_sdca`; `sdca` is a registry alias. |
 
 **3 optimization engines** in `optimize.py` and `optimize_bayesian.py`:
 
@@ -111,11 +112,11 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `graph/pipeline.py` | LangGraph pipeline: validate → backtest → optimize → export |
 | `nautilus_runner.py` | NautilusTrader engine wiring, Polars↔pandas boundary |
 | `backtest.py` | `run_backtest()` entrypoint, optional result caching |
-| `optimize.py` | Grid/random optimization, `ProcessPoolExecutor` parallelism |
+| `optimize.py` | Grid/random optimization, `ProcessPoolExecutor` parallelism; SDCA dispatches to walk-forward (`sdca` / `btc_sdca`) |
 | `optimize_bayesian.py` | Optuna Bayesian optimization |
 | `export.py` | Artifact writing with path confinement |
 | `strategies/registry.py` | Strategy registration and lookup |
-| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference |
+| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference. `sdca` holds the six shape params plus `valuation_weight` / `m2_weight` / `rs_eth_weight` / `dxy_weight`; `btc_sdca` aliases to it. |
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
@@ -128,7 +129,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
 | `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
-| `cli.py` | `digiquant backtest | optimize | export` CLI |
+| `cli/` | `digiquant backtest | optimize | export | strategy | prices | policy-replay` CLI |
 
 ---
 
@@ -166,7 +167,7 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
-| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (11 tools: 6 digiquant + 5 olympus policy-replay) |
+| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (16 tools: 11 digiquant + 5 olympus policy-replay) |
 | `POST` | `/v1/orchestrator_invoke` | `digiquant:backtest` + `digiquant:optimize` | Dispatch named tool by `tool` field in request body |
 
 #### Olympus policy replay endpoints (#3011 / WP16.9)
@@ -203,16 +204,20 @@ Implemented as per-IP sliding window using an in-memory `deque` behind a `thread
 
 ### MCP Tools
 
-The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `streamable-http` transport. Stdio transport is available via `--stdio` for Claude Desktop. All tools delegate to `service.py`.
+The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `streamable-http` transport. Stdio transport is available via `--stdio` for Claude Desktop. Pipeline tools delegate to `service.py`; SDCA data/fit tools delegate to `sdca_mcp.py` (same JSON as FastMCP).
 
 | Tool Name | Description |
 |---|---|
 | `digiquant_list_strategies` | Returns JSON array of registered strategies |
 | `digiquant_run_backtest` | Runs Nautilus backtest; `symbols_json` is a JSON array string |
-| `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random) |
+| `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random). `strategy_name=sdca` is Stage B walk-forward (vs-flat-DCA). Freeze Stage A weights via `strategy_params` `*_weight` keys |
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
-| `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
+| `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. |
+| `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
+| `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
+| `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused (monotone of MVRV). Fail-soft + timeout. Hosted bitview.space is optional / no SLA. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
+| `digiquant_fit_sdca_weights` | Stage A cycle-window weight fit for an `SdcaAssetProfile` (`btc_v1` / `eth_research_v1` / `profile_json`), then `regularize_weights`. Not a second optimizer: Stage B is `digiquant_run_optimize` with `strategy_name=sdca` and frozen `*_weight` keys in `strategy_params`. Returns `{weights, regularized_weights, regularized_weight_params, score, ...}` or `{"error": ...}` |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 | `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
@@ -227,6 +232,20 @@ promote/activate/set-live/rollback-live tool on any surface.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
+### CLI (`python -m digiquant` / `digiquant`)
+
+Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or olympus for policy-replay). Pipeline commands call the same functions as HTTP/MCP via `service.py` where applicable.
+
+| Command | Implementation | Notes |
+|---|---|---|
+| `backtest` / `optimize` / `export` | `cli/__init__.py` | Direct `run_*` entrypoints (same as HTTP handlers) |
+| `strategy list` | `cli/strategy.py` → `service_list_strategies` | JSON; twin of MCP `digiquant_list_strategies` / `GET /strategies` (#160) |
+| `strategy search <query>` | `cli/strategy.py` | Case-insensitive filter on name, aliases, description |
+| `prices …` | `cli/prices.py` | OHLCV / technicals / macro cron surface |
+| `policy-replay …` | `olympus/replay/cli.py` | Read-only governance summaries |
+
+Still open from #160 AC: dedicated `indicator list` / `indicator compute` (closest today: `prices compute-technicals`; MCP indicator tools tracked in #152).
+
 #### Slapper tearsheet pipeline
 
 The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
@@ -237,10 +256,55 @@ The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to
 
 Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
 
+**Strategy families (#3170).** Each settings entry may set `"strategy_type": "slapper" | "sdca"` (default `slapper`, so existing Slapper entries are unchanged). `btc_sdca` entries carry an `sdca` block (`preset`, `risk_model`, `long_only`, `initial_cash`, `indicator_weights`). Published `btc_sdca` is a **composite valuation index** (power law 1.0 + M2 0.5 + DXY 0.5 + weekly log-MACD 0.5 + weekly/monthly RSI 0.25; SMA band and BTC/ETH RS stay 0) with preset `btc_optimized` and `long_only: false` (sells enabled). Walk-forward `beats_flat_dca_oos` remains false — do not claim an OOS beat from the Stage 1 `curve_simulator` sidecar. For `strategy_type == "sdca"`, `run_and_write()` calls `materialize_sdca_risk_index()` on the **already signal-delayed** OHLCV frame, writes a temp `risk_path` parquet, and injects it (plus preset `curve_nodes`) through `get_strategy` overrides. The calibrations gate is skipped; tearsheet notes record the coefficients fit window and the preset. `get_strategy` / `run_nautilus` pass `trade_size` only when the config class declares it. SDCA's Nautilus venue is a **spot cash book** (`CurrencyPair` + `AccountType.CASH`); Slapper keeps the margin perpetual. The risk index is built on the full delayed cache; engine bars start at `trade_start` so lump/flat share that window. Real Coinbase coefficients are committed (#3173). `--push-supabase` is an **operator** step after a real Nautilus generate; agent environments do not push. This is the public strategy library (3-day signal delay), **not** broker live-trading.
+
 **Tearsheet schema 1.1** (`tearsheet_data.SCHEMA_VERSION`) adds two back-compatible fields the renderer can opt into:
 
 - `ohlc_bars: list[OHLCBar]` (`{t,o,h,l,c}`) — full-history candlesticks for the price chart. Note this spans the **entire** price series, while `equity_curve`/`trades` are scoped to the `trade_start` window — the renderer must not assume a shared x-axis. Defaults to `[]`; absent on 1.0 fixtures and on adapter paths with no bars.
 - Per-trade signal type carried in `TradeRecord.entry_label` on the Nautilus path. `SlapperStrategy` records each entry's signal family in a metadata-only side-channel (`_signal_log`, keyed by `(entry_date, direction)`) — pure metadata, never fed back into a trade decision. `generate_tearsheets._entry_label` joins it onto round-trip trades and maps to the Pine display taxonomy (`MR Long`/`Trend Long`/`MR&T Long`/`Reversal Long` + Short variants), matching `scripts/validation/pine_backtest.py`. A join miss falls back to `""`.
+
+**Tearsheet schema 1.3** (`tearsheet_data.SCHEMA_VERSION`, #3171) adds an optional
+`dca: TearsheetDcaBreakdown | None` block for `kind == "dca"` books. Every existing
+Slapper payload omits it and still validates. The block carries `vs_lump_pct`,
+`vs_flat_dca_pct` (equal daily spend over the same window — the number that
+isolates the signal from DCA's own averaging), `avg_cost_basis`,
+`final_cost_basis_vs_price`, `capital_deployed_pct` / `capital_deployed_peak_pct`,
+`units_accumulated`, and `buy_days` / `sell_days` / `no_trade_days` /
+`avg_risk` / `avg_rate`. **Every `_pct` field in this block is a true percent
+(×100)** — the same convention as `TearsheetData.net_profit_pct` and
+`SdcaBacktestReport.vs_lump_pct`, and *not* the raw-fraction convention of
+`SdcaBacktestReport.dca_max_drawdown_pct` (#2552 / #2549). For a DCA book,
+`win_rate_pct`, `profit_factor`, `long`, and `short` are JSON `null` (not `0`)
+so a renderer can tell "not applicable" from zero. Published numbers come from
+Nautilus fills + mark-to-market equity (`sdca/dca_metrics.py`);
+`SdcaBacktestReport` remains CI-only. The CI harness adds a `flat_dca_value`
+column and matching report fields so tests can assert parity. Index extras
+mirror `vs_lump_pct` / `vs_flat_dca_pct` / `capital_deployed_pct` for the
+library card (#3172). Publish also copies #3168 diagnostic columns onto the
+payload as optional series so the #3172 charts do not degrade: `rails`
+(`{t,low,median,high}`), `risk_curve`, `cost_basis_curve`,
+`capital_deployed_curve`, `lump_equity_curve`, `flat_dca_equity_curve`.
+**Do not plot `capital_deployed_curve` as allocation** — it is
+`(initial_cash - cash) / initial_cash × 100` and goes **negative after
+sells**. Diagnostic charts use `allocated_pct_curve` =
+`100 * units * price / (cash + units * price)` plus `fill_markers`
+(`book_frac = |trade_usd| / portfolio` that day, from actual fills, not
+curve-rate-sign `buy_days`/`sell_days`), `indicator_curves` (0–100 risk
+scale per member; user-facing name for `valuation` is **power law**),
+`indicator_weights`, and `curve_knees` (published `btc_optimized` buy
+knee 25 / sell knee 70). The DCA block also carries `allocated_pct`
+(final MTM allocated %, never negative) and `fill_buy_days` /
+`fill_sell_days` (actual fills). Public UI KPIs show **MTM allocated**,
+not capital deployed. `beats_flat_dca_oos` is copied from
+`btc_optimized_provenance.json` onto the payload (currently **false**) —
+full-sample Nautilus `vs_flat_dca_pct` is **not** this flag. Older 1.3
+payloads omit those keys; the renderer reconstructs allocation and fill
+dots from equity + capital_deployed + OHLC and treats a missing OOS flag
+as "do not claim an OOS win". `current_signal` for a DCA book is today's
+**risk, band, and remaining-book daily rate** (not long/short).
+`strategy_signals.position` stays `long`/`flat` only because that table
+is CHECK-constrained; the tearsheet UI reads `risk`/`band`/`daily_rate_pct`.
+Slapper dumps omit these keys.
 
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
@@ -248,7 +312,7 @@ Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
 
-**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs); the public env (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) must be set in the Cloudflare Pages build for the client to light up.
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs **plus `btc_sdca`**); `dynamicParams: false` 404s any other id. Homepage `StrategySuite` lists the same four. Public names are **asset then type**: `btc_sdca` is **BTC-SDCA**; the Slapper books are **BTC L/S**, **ETH L/S**, **SOL L/S** (Slapper `enable_short` + net-short + BTC reversal flip — a long/short book, not RS). The library filters by public type (All / SDCA / L/S; RS is reserved on the enum). Public KPIs: total return, max drawdown, vs buy-and-hold (lump), MTM allocated. **vs-flat DCA is not a public comparable** (`flat_dca_mark_to_market` spends remaining cash equally each day and is fully deployed by the last bar; keep the number on the payload). Honesty (`beats_flat_dca_oos` false, backtest only, 3-day delay) lives in notes, not title chips. The primary chart is allocation + sized buy/sell fills, plus today's remaining-book signal. Operator go-live still requires merging the halt-fixed stack to `main` and `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase` from that tree — agents do not push.
 
 Regenerate only when calibrations are available from **one** of:
 
@@ -304,7 +368,7 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
 | `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | From `get_performance_stats_pnls()` or returns series fallback |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `status` | `str` | `ok` | `partial` | `error` |
@@ -317,7 +381,7 @@ Applied as a hard filter before scoring candidates. Any trial that fails these c
 | Field | Type | Meaning |
 |---|---|---|
 | `min_trades` | `int | None` | Minimum trade count |
-| `max_drawdown_pct` | `float | None` | e.g. `-0.15` for −15% |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%); compared directly with `BacktestResult.max_drawdown_pct` |
 | `min_sharpe` | `float | None` | Minimum Sharpe ratio |
 | `min_return_pct` | `float | None` | Minimum total return |
 | `max_trades_per_year` | `float | None` | Activity cap |
@@ -430,7 +494,7 @@ digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One e
 - `default_params`: default values merged with caller overrides
 - `description`: human-readable summary
 
-`get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`.
+`get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`. `trade_size` is applied only when the config class declares that field (`config_declares_field`, #3170).
 
 ### SDCA Engine (#1080, #1081)
 
@@ -445,9 +509,12 @@ path**, unlike every other entry in the strategy table above.
 depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
 `SdcaStrategy`, following the same precompute-then-drive pattern as
 `m2_liquidity.py`: a Polars DataFrame and a `RiskModel` cannot live in a frozen
-`StrategyConfig` (msgspec struct), so the caller runs `compute_composite_risk()`
-and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
-a parquet, and passes its path in as `risk_path`. `on_start()` loads that
+`StrategyConfig` (msgspec struct), so the caller runs
+`sdca/risk_index.py::build_risk_index()` (#3168) upstream (rails →
+`valuation_z_score()` → `compute_composite_risk()`), writes the two-column
+`date`/`risk` parquet with `write_risk_index()`, and passes its path in as
+`risk_path`. The MCP tool `digiquant_build_sdca_risk_index` is that upstream
+for cached price history; a notebook is no longer required. `on_start()` loads that
 parquet into a `date -> risk` map (validating the `date`/`risk` columns are
 present, rejecting duplicate dates, casting a `pl.Datetime` `date` column
 to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
@@ -460,13 +527,29 @@ a `TypeError` inside `AccumDistCurve.value_at_risk()`, and NaN/±inf pass
 is kept as an explicit no-data day. `on_bar()` looks up the day's risk,
 converts it to a trade rate via `AccumDistCurve.value_at_risk()`, and sizes
 the trade via the shared `sdca/backtest.py::size_trade()` helper — both
-`run_backtest()` and `on_bar()` call this one function, so live/backtest and
-the standalone parity harness never diverge. `long_only=True` clamps the rate
+`run_backtest()` and `on_bar()` call this one function, so the Nautilus
+**backtest** and the standalone parity harness never diverge. This wrapper
+is not wired to broker live-trading; do not enable that path. **The rate is
+a percent of the remaining book, never of initial cash or of the original
+position:** `buy_usd = remaining_cash * rate / 100` and
+`sell_units = remaining_holdings * |rate| / 100`, each clamped so a buy
+cannot exceed cash and a sell cannot exceed units held (#2552). Two
+consecutive 50% days therefore leave 25% of the prior remaining cash (or
+holdings), not zero. When remaining-book size falls below the instrument
+`size_increment`, `on_bar()` skips the order instead of letting Nautilus
+`make_qty` raise (dust after a cheap window). SDCA is **not** a long/short book. Pin:
+`tests/dq/strategies/sdca/test_remaining_pct.py`. `long_only=True` clamps the rate
 to `>= 0` regardless of the curve's own sign, as a safety override independent
 of which curve is configured. `on_bar()` skips sizing a new order while a
 prior one is still open (`_order_pending`, cleared on
 fill-complete/canceled/rejected/expired/denied), so two bars can never size
-off the same unreserved cash/asset_units. Shadow `_cash`/`_asset_units` are
+off the same unreserved cash/asset_units. Fill-complete also fires when the
+leftover is below `size_increment` (quantization dust must not freeze the
+book). A pending flag whose bar date is in the past is canceled so a later
+distribute day can still sell. Buys size from quote-precision-floored cash so a
+sub-tick remainder cannot overdraft 2-decimal venue cash — Nautilus otherwise
+halts the whole backtest (`AccountBalanceNegative`); that is why the published
+book never reached 2025. Shadow `_cash`/`_asset_units` are
 updated from real `OrderFilled` events (`on_order_filled()`), not the
 pre-submission estimate, so they track Nautilus's actual quantity-quantized
 execution state rather than drifting from it; a fill's `commission` is also
@@ -474,24 +557,42 @@ deducted from `_cash` when denominated in the instrument's quote currency —
 a fee paid in a different currency (e.g. the base asset) is left untouched
 rather than misapplied, since this shadow accounting has no conversion rate
 for it.
-Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
-`risk_path` has no sensible static default (it's produced by a specific
-upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated
-directly by the caller; the registry is for discovery only.
+Like `m2_liquidity`, **SDCA's `risk_path` has no static default** — it is
+produced from a specific `RiskModel` run on a specific OHLCV window. As of
+#3170 `btc_sdca` *is* registered, with `risk_path` omitted from
+`default_params` and injected at publish time via `get_strategy(..., **overrides)`
+after `generate_tearsheets.materialize_sdca_risk_index()` writes a parquet from
+the already-`apply_signal_delay()`-truncated frame (so the index cannot leak
+bars beyond the published window, #1462). Nautilus then sees **only bars from
+`trade_start`** on a **spot `CurrencyPair` + `AccountType.CASH`** venue (not
+the Slapper margin perpetual): remaining quote is spent, remaining base is
+held. `on_stop()` cancels open orders but does **not** `close_all_positions`
+— flattening would invent a round-trip that is not the DCA product. Fill
+replay seeds any pre-window fills onto the opening book, then walks the
+published calendar. Round-trip `trades_from_positions` is skipped for SDCA
+(an open spot book leaves pandas NA on `ts_closed`). `m2_liquidity` stays unregistered;
+`trade_size` is only passed into configs that declare it
+(`registry.config_declares_field`).
 
-`strategies/sdca/presets.py` (backed by `presets.json`) ships named,
-hand-authored `curve_nodes`/`long_only` personalities as public config —
-`conservative_hold`, `balanced`, `aggressive_accumulate` (long-only,
-increasingly aggressive accumulation) and `accumulate_and_distribute` (signed
-curve, the BTC-reference `DEFAULT_BTC_NODES` shape). These are documented
-personalities, not optimized/backtested-and-selected parameters — `list_presets()`
-returns the available names and `load_preset(name)` returns an `SdcaPreset`
-(frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`). To add a
-preset: append an entry to `presets.json` with a 21-element `curve_nodes` array
-(matches `RISK_NODES`), `long_only`, and a `description`; `SdcaPreset` validates
-both the node count and, if `long_only` is `true`, that every node is `>= 0` at
-load time (`field_validator`/`model_validator`), not just in
-`tests/dq/strategies/sdca/test_presets.py`.
+`strategies/sdca/presets.py` (backed by `presets.json`) ships named
+personalities as public config — `conservative_hold`, `balanced`,
+`aggressive_accumulate` (long-only, increasingly aggressive accumulation) and
+`accumulate_and_distribute` (signed curve). Since #3169 these are authored as
+`SdcaCurveShape` parameters (dead zone + two knees + curvatures), not 21 free
+nodes; `load_preset(name)` still returns an `SdcaPreset` whose `curve_nodes`
+are generated at load so `AccumDistCurve` / `SdcaStrategyConfig` stay unchanged.
+These are documented personalities, not optimized parameters — except
+`btc_optimized` (#3174), which is the walk-forward winner plus a provenance
+sidecar (`btc_optimized_provenance.json`). Published `btc_sdca` uses this
+distribute curve (`sell_max_rate=3`, `long_only: false`) after a full extra
+catalog search that kept **no** extras on in-sample vs-flat-DCA (valuation
+rails only — not `balanced` long-only). OOS
+`beats_flat_dca_oos` remains false — not a digiquant.io OOS claim. To add a preset:
+append a `shape` object plus `long_only` and `description` to `presets.json`;
+`SdcaPreset` validates node count (always 21 after generation) and, if
+`long_only` is `true`, that every node is `>= 0` at load time. The four
+personalities cannot reproduce the old plateau-then-decay node lists (curvature
+≥ 1 has no flat region at the extreme) — see #3169.
 
 **This module is a CI-only parity harness, not a second backtest engine.**
 `digiquant/AGENTS.md` is explicit that NautilusTrader is the sole backtest and
@@ -507,26 +608,108 @@ users or dashboards as an actual backtest result. **`nautilus_strategy.py`
 rather than reimplementing them** — that is what keeps this module and the
 real Nautilus backtest from silently
 diverging into two sources of truth for the same allocation decision.
-`compute_composite_risk()`/`valuation_z_score()` are the caller's
-responsibility to invoke upstream of `SdcaStrategy` (to build the `risk_path`
+`build_risk_index()` / `write_risk_index()` (`sdca/risk_index.py`, #3168)
+are the caller's upstream of `SdcaStrategy` (to build the `risk_path`
 parquet), the same way `m2_liquidity`'s own signal computation happens outside
-its `Strategy` class.
+its `Strategy` class. The MCP tool `digiquant_build_sdca_risk_index` is that
+upstream for cached price history.
 
 | File | Role |
 |---|---|
 | `sdca/valuation.py` | `valuation_z_score(price, low, median, high)` — log-space position of price within the `RiskModel` rails, in `[-3, 3]` (cheap = +3, rich = −3). The default/primary indicator. Validates finite, positive rails with `low < median < high` on rows where all four inputs are present; a row with any null input passes through as null. |
 | `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
-| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
-| `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
-| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. |
-| `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). |
-| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
+| `sdca/providers.py` | String selector `btc_power_law` \| `generic_valuation` \| `rolling_z` → `resolve_sdca_risk_model()` (#3175). |
+| `sdca/quantile_rails.py` | Shared QuantReg + rearrangement + span-widen helpers used by generic valuation. |
+| `sdca/generic_valuation.py` | Per-asset log-price trend rails from the first cached bar (not BTC genesis). Short history widens the corridor. `max_fit_rows` (optional) evenly subsamples QuantReg across the **full** span — rails/scores still cover every input date. Never a 900-day prefix (that ended Coinbase BTC in January 2018). If `log_quadratic` IRLS does not converge (observed on decade-scale ETH), retry `log_linear` on the same window and record it in `notes`. |
+| `sdca/rolling_z.py` | Short-series fallback: causal rolling log-price mean ± z·std as rails. |
+| `sdca/asset_profile.py` | `SdcaAssetProfile` — per-asset `symbol`, `risk_model`, `SdcaOscillatorSpec`, `cycle_windows`, extra-indicator allowlist, `signal_delay_days` (default 0; publish delay stays in `generate_tearsheets`). Factories: `btc_v1()`, `eth_research_v1()` (research-only, not in `settings.json`). `daily_closes_from_cache` / `technicals_from_ohlcv` are the shared OHLCV path (full cache, no 900-day cap). `union_date_range` is the overlay x-axis helper — union of spans, not an inner join that would clip BTC to ETH. |
+| `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, committed as of #3173) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
+| `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
+| `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly/monthly resample + SMA-band z. Completed ISO weeks / calendar months only; `join_asof(..., strategy="backward")`. Weekly RSI uses a **dead zone + cap** (mid-cycle 30–80 is near 0; RSI 85 is max-sell). Weekly MACD is **log-MACD** with a sloped top cap, not 52-week histogram z. `mtf_rsi_z` blends weekly+monthly into the `weekly_rsi` extra. |
+| `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
+| `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
+| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
+| `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
+| `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. |
+| `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
+| `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
+| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
+| `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (% of remaining cash on buys, % of remaining holdings on sells). `value_at_risk()` interpolates and clamps risk to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
+| `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
+| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. `size_trade()` is the remaining-book sizer (`buy_usd = cash * rate/100`, `sell_units = holdings * |rate|/100`). Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
+| `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. Overlays include `allocated_pct_curve` (MTM % in the asset, never `capital_deployed`) and `fill_markers` (`|trade_usd|/portfolio`). |
+| `sdca/chart_series.py` | Allocation %, fill-dot sizing, power-law display names, knee lookup, reconstruction from 1.3 payloads that lack the new overlay keys. Does not emit a cash-% series (inverse of allocated). |
+| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
+| `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Registered as `btc_sdca` (#3170) with `risk_path` omitted from `default_params`. `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. Not wired to broker live-trading. |
+| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. `btc_optimized` (#3174) is the walk-forward slot. |
+| `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). Extra-z is a full-calendar causal precompute sliced per window (no OOS refit, no leakage). |
+| `sdca/optimize.py` | Search loop, sensitivity, `persist_btc_optimized()`, `OptimizeResult` mapping. Injected `SdcaTrialEvaluator` — never `SdcaBacktestReport`. Random/bayesian search extra-indicator weights in `[0, 1]` (composite already normalizes). Auto-grid holds extras at 0. Sibling files `M2SL.csv` / `ETH-USD.csv` / `DTWEXBGS.csv` next to the BTC CSV enable those extras. |
+| `sdca/curve_optimize.py` | Remaining-book **curve** search on a **frozen** composite (does not re-search extras). The persisted `btc_optimized` shape was searched on power law + M2 + DXY, then applied to the published richer index (those plus weekly log-MACD + RSI). Objective is `total_return_pct` (buy-and-hold is the public comparable; vs-flat is logged only). Gates: not long-only, has sells including 2025, remaining-book identity, buys in the cheap band, sells in the rich band. `beats_flat_dca_oos` is always false here (in-sample). CLI: `digiquant sdca-optimize-curve`. Persist `btc_optimized` only with `--persist-preset` **and** a beat on return **and** concentration. Never `--push-supabase`. |
+| `sdca/nautilus_evaluator.py` | Production fitness: Nautilus fills → `dca_metrics`. pandas only at the BarDataWrangler boundary. |
+| `charts/sdca.py` | matplotlib diagnostic figures (equity vs hold, index+knees, indicator multiples, allocation step + fill dots). Allocation draws MTM allocated % only — not a cash line. Optional `matplotlib` extra. |
+| `sdca/btc_optimized_provenance.json` | Fit window, folds, objective, OOS vs-flat-DCA, sensitivity. Honest even when OOS is negative. |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
 day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
 uses `pl.sum_horizontal(..., ignore_nulls=False)` so there is never a partial
-blend. `run_backtest` treats a null-risk day as a no-trade day: state (cash,
-holdings) carries forward unchanged, but the day is still marked to market.
+blend. Weight `0` means the indicator is **not enabled**, so a missing M2/DXY/ETH
+row cannot null a valuation-only day. `run_backtest` treats a null-risk day as a
+no-trade day: state (cash, holdings) carries forward unchanged, but the day is
+still marked to market.
+
+**Composite formula (BTC charts default to a single rail).**
+
+```
+composite_z = clip( Σ_i (z_i · w_i) / Σ_i w_i , -3, 3 )
+risk        = 50 − composite_z × 50/3
+```
+
+`z_i` are daily series in `[-3, 3]` (cheap = +3, rich = −3). Published
+`btc_sdca.sdca.indicator_weights` is a composite (power law 1.0, M2 0.5, DXY 0.5, weekly log-MACD 0.5, weekly/monthly RSI 0.25) after re-specifying oscillator transforms. SMA band / BTC/ETH RS stay 0. The catalog / `SdcaCompositeWeights` model default remains valuation-only until a caller enables extras. Weekly log-MACD is no longer a 52-week histogram z. `beats_flat_dca_oos` stays false.
+**sma_band sign:** close below the 90-day SMA (in rolling-σ units) is cheap
+(+z); above is rich (−z). Raw realized vol is unsigned and is not used.
+**Alpha** vs the power-law median is omitted (collinear with `valuation_z`);
+alpha vs a slow SMA is Mayer-like and also omitted.
+The MCP tool `digiquant_build_sdca_risk_index` and `build_risk_index()` use
+that default unless callers pass extras. Walk-forward (`method=random` /
+explicit `param_grid`) searches the extra weights; auto-grid does not, so a
+default optimize run still matches the power-law-only chart.
+
+**Two-stage fit.** Stage A for published BTC (`weight_search.optimize_stage_a_by_backtest`) grids every extra that has a z-series (`m2` / `rs_eth` / `dxy` / `weekly_rsi` / `weekly_macd` / `sma_band`) and keeps weights that raise in-sample `vs_flat_dca_pct` on a frozen distribute curve. Cycle-window overlap (`stage_a.optimize_stage_a_weights` / `digiquant_fit_sdca_weights`) remains a diagnostic, not the keep/drop rule. `stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays generic technicals only. Stage B
+is `digiquant_run_optimize` with `strategy_name=sdca` (existing walk-forward
+curve optimize, `vs_flat_dca_pct`, floors/caps, IS-only rails). Freeze Stage A
+weights by passing `regularized_weight_params` as `strategy_params` `*_weight`
+keys. After the aggressive fit, `regularize.py` rounds weights to tenths and
+shrinks max rates (rounded to one decimal); both variants are persisted. Equal
+Stage A scores prefer fewer extras. The aggressive fit will overfit — that is
+expected. Do not publish a second asset until that backtest looks comfortable.
+There is no separate SDCA app or second optimizer product.
+
+**How to add an asset.** The reusable core is technicals + composite +
+two-stage weight/curve fit + regularize. Extra series per asset is manual
+research; do not scrape put/call or paid on-chain here.
+
+1. Cache daily OHLCV for the ticker via `history_cache.py` (same causal
+   ISO-week / as-of rules as BTC). `daily_closes_from_cache` is the shared
+   loader — full history, never a 900-day prefix. Overlay BTC+ETH with
+   `union_date_range` (shared xlim); do not inner-join to the shorter asset.
+2. Pick a rail provider: `btc_power_law` (BTC only), `generic_valuation`
+   (log-price trend from the first bar), or `rolling_z` (short history).
+3. Pin `SdcaCycleWindows` from that asset's documented peaks/troughs
+   (±45d). Calibrate `SdcaOscillatorSpec` windows to its cycle (long-term,
+   or medium-term if it persistently trends up).
+4. Allowlist extras: generic technicals (`weekly_rsi` / `weekly_macd` /
+   `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; later
+   on-chain SOPR/MVRV as #1086, equity put/call). Do not enable BTC plugins
+   on a second asset.
+5. Run Stage A (backtest keep/drop of extras, cycle overlap as diagnostic) → Stage B (walk-forward curve) → regularize.
+   Trust the composite as a top/bottom indicator only when that historical
+   backtest looks comfortable.
+6. Only then consider a `settings.json` entry. `eth_research_v1()` is
+   research-only — not published, no `--push-supabase`, no live-trading.
+   Public `signal_delay_days` stays on the tearsheet publish path (#1462);
+   the profile default is 0.
 
 **Backtest state is a sequential Python loop, not a vectorized Polars
 expression** — `cash`/`asset_units` are running balances that each day's buy/sell
@@ -543,13 +726,15 @@ Per-day export frame columns (`asset_units` rather than the issue's literal
 negative = sold), `cash`, `asset_units`, `net_deployed` (`initial_cash - cash`),
 `portfolio_value` (`cash + asset_units * price`), `buy_hold_value` (the
 lump-sum benchmark: all
-`initial_cash` deployed at day-0 price, marked to market thereafter).
-`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, and four fields whose shared
-`_pct` suffix spans **two unit systems**: `total_return_pct` and `vs_lump_pct` are
-true percents (×100 at `backtest.py:162,164`, so `-15.0` means −15%), while
-`dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative *fractions*
-(`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100). The drawdown
-pair is therefore **not** interchangeable with `BacktestResult.max_drawdown_pct`,
+`initial_cash` deployed at day-0 price, marked to market thereafter),
+`flat_dca_value` (equal remaining-cash spend each day, #3171).
+`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, `vs_flat_dca_usd`, and
+fields whose shared `_pct` suffix spans **two unit systems**: `total_return_pct`,
+`vs_lump_pct`, and `vs_flat_dca_pct` are true percents (×100, so `-15.0` means
+−15%), while `dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative
+*fractions* (`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100).
+The drawdown pair is therefore **not** interchangeable with
+`BacktestResult.max_drawdown_pct`,
 which is a negative percent — check each field's own docstring before comparing them. Also
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).
@@ -558,10 +743,24 @@ non-null days only).
 
 The dispatch in `run_optimize()`:
 
-1. If `param_grid` is provided explicitly, skip method inference and run that grid directly
-2. If `method == "bayesian"`, delegate to `run_optimize_bayesian()` (Optuna)
-3. If `method == "random"`, call `sample_random_params()` then `_run_trials_parallel()`
-4. Otherwise (grid default), call `infer_param_grid()` then `_run_trials_parallel()`
+1. If the resolved strategy name is `sdca` (alias `btc_sdca`), run
+   `run_sdca_walk_forward()` with the Nautilus evaluator. The slapper
+   Sharpe/return path is not used. Objective is **maximize
+   `vs_flat_dca_pct`** subject to `capital_deployed_pct >= 10` and
+   `max_drawdown_pct <= 50` (magnitudes, ×100). `vs_lump_pct` is reported
+   never optimized — maximizing it collapses to lump-sum on an uptrend.
+   Auto-grid holds `buy_curvature`/`sell_curvature` and extra-indicator
+   weights at defaults (valuation=1, extras=0; 2-point grid on the remaining
+   shape params). `method=random`/`bayesian` samples shape plus all extra
+   weights, including
+   `m2_weight` / `rs_eth_weight` / `dxy_weight` /
+   `weekly_rsi_weight` / `weekly_macd_weight` / `sma_band_weight` in `[0, 1]`
+   (the composite already normalizes by `Σ w`). Rails are refit per fold on
+   the IS window only. Extra-z is causal on the full calendar, then sliced.
+2. If `param_grid` is provided explicitly, skip method inference and run that grid directly
+3. If `method == "bayesian"`, delegate to `run_optimize_bayesian()` (Optuna)
+4. If `method == "random"`, call `sample_random_params()` then `_run_trials_parallel()`
+5. Otherwise (grid default), call `infer_param_grid()` then `_run_trials_parallel()`
 
 `infer_param_grid()` reads from `STRATEGY_PARAM_SPECS` in `strategy_specs.py`, which can be extended at runtime via a YAML file pointed to by `DIGIQUANT_STRATEGY_SPECS_PATH`. A hard cap of `MAX_GRID_SIZE = 10_000` prevents combinatorial explosion.
 
@@ -694,7 +893,7 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ### Orchestrator Tools Contract with digigraph
 
-digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 11 tools (6 digiquant pipeline + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "<name>", "arguments": {...}}` (digiquant_* or olympus_*).
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 16 tools (11 digiquant + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "<name>", "arguments": {...}}` (digiquant_* or olympus_*).
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
@@ -1192,6 +1391,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   serializer includes assessment; legacy priors without typed forecast force
   full; skip preserves identity; partial nested forecast edits are rejected).
   H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
+  LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
+  unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
+  from the H5 base tenor (GLD in the same run). Scenario economics are never filled
+  from the base; invalid probability sums still reject.
+  Out-of-range H6 `conviction_delta` (live `-3` on `DeliberationAnalystTurn`) clamps
+  to `[-2, 2]` at the model boundary so the debate is kept.
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
@@ -1283,8 +1488,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   absent from that path. Missing/empty coverage falls back to characterized
   incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
-  unchanged (no optimizer / control reorder). WP8.5 locks that shell in
+  `h8_sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
+  missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
+  same order; confidence is a reduce-only haircut after vol-target so leftover
+  cash is not redistributed. WP8.5 locks that shell in
   `tests/dq/hermes/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
@@ -1484,11 +1691,22 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
   and `078` (category `planner`) register allow-list values. UI must not invent
   rows without a published document.
+  Inspectable I/O (pipeline operator review WP-B): `publish_phase` also fail-soft
+  publishes `document_key='inputs'` (watchlist, hashed profile identity, market-data
+  freshness, prior-context dates, attention-plan pointer) and `document_key='bias-row'`
+  (deterministic `phase6_bias_row` table) via `olympus.atlas.inspectable_io`. Hermes H1
+  publishes `thesis/thesis-review`; H4 publishes `opportunity-screener` (`doc_type`
+  `opportunity_screen`). Overlay uses `hermes_document_key` for Hermes keys; Atlas
+  inspectable keys stay unprefixed with `workspace_id` on the row.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
-  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
-  and a segment whose patch cannot merge falls back to full-mode regeneration
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
+  LLM `PatchOp.op='add'` (RFC 6902's name for that write) maps onto `set` so a
+  hedge like house GHA 33426508863 `ops.6.op='add'` does not force a full-mode
+  regeneration. Digest `RiskItem` maps the live typo `horizon_hourse` onto
+  `horizon_hours` (same run; otherwise the edit merge fell back to full). A segment
+  whose patch cannot merge falls back to full-mode regeneration
   instead of carrying + degrading the run (#1641). That fallback is **counted, not
   silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
   `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
@@ -1530,14 +1748,21 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
     components.
 
   Scoped to segments. The digest's equivalent freeze was fixed by #1559's
-  `carried_from`/`continuity` markers on the synthesis-carry path. The dominant cause was unguarded `Literal[...]` axes, so
-  `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
-  subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
-  `None` on an Optional axis and is still rejected on a required one (`growth` /
-  `inflation` have no non-directional member, so coercing them would invent a macro
-  call that Phases 4–7 consume as fact). A field that declares its own
-  `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
-  ownership of its vocabulary and is skipped by the generic pass.
+  `carried_from`/`continuity` markers on the synthesis-carry path. Phase 1–5
+  research validates as `ResearchMemo` (`segment`, `date`, markdown `body`,
+  optional `sources` / `internal_bias` / `regime_label`; `extra="allow"` for
+  historical metric slots). The daily digest is a stitched markdown briefing
+  (`DigestSnapshot`: `date`, `body`, `regime_label`; `extra="allow"` for
+  historical bias/headline/summary slots). H1/H2 read
+  `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
+  `ResearchMemo` and `SegmentReport` both run `_apply_literal_axis_normalization`:
+  an unrecognized value degrades to `None` on an Optional axis and is still
+  rejected on a required one. A field that declares its
+  own `mode="before"` validator (`internal_bias`, `bias`, `data_quality`) keeps
+  ownership of its vocabulary and is skipped by the generic pass. `internal_bias`
+  / `bias` still consult `_LITERAL_SYNONYMS` after `_BIAS_SYNONYMS` (house GHA
+  33426508863 `cautious` → `neutral`); unknown `internal_bias` degrades to
+  `None`, unknown required `bias` stays rejected.
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
@@ -1599,15 +1824,24 @@ flowchart TB
 
 **Live graph** (`build_hermes_graph` → `build_hermes_phases_thesis`): Atlas A0–A4 →
 Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research artifacts
-only — Hermes terminal persist is **H9 `commit_run`** (positions, nav, theses sync,
-portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
-(`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
+(`inputs`, `bias-row` when present, segments, digest) — Hermes terminal persist is
+**H9 `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
+plus per-phase inspectable documents (H1 `thesis/thesis-review`, H4 `opportunity-screener`).
+Beliefs distillation runs **daily** as a short fold after the house chain
+(`today's unfolded lessons` + prior beliefs body). ``refresh_scope=beliefs`` is the
+full rewrite; an unfolded backlog above ``OLYMPUS_BELIEFS_BACKLOG`` is an additional
+full-fold catch-up. Empty-lesson days still publish a same-date `beliefs` document
+that carries the prior body.
 
 #### Day-over-day continuity contract (#859)
 
 Supabase is the system of record. Preflight loads **pointers and slim summaries**;
 phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
-multi-day document dumps into every prompt.
+multi-day document dumps into every prompt. Group A books (`positions`,
+`nav_history`, `position_events`, `portfolio_metrics`) default to the house
+`workspace_id` when `eq` omits it, so overlay same-date rows cannot seed house
+research agents or `digiquant_query_data`. Pass `eq.workspace_id` to read
+another book. Market-data tables and `theses` are not injected.
 
 ```mermaid
 flowchart LR
@@ -1702,7 +1936,7 @@ the two percent writers could not satisfy: both are gated on `nav_history` reach
 `_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
 PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
 non-increasing. New writers of these columns must emit percent; readers may take the stored
-value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+value directly (`frontend/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
 `annVolPct` / `maxDrawdownPct` unchanged).
 
 Known wart, deliberately not changed here: `computed_from` carries
@@ -1757,7 +1991,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   from prior published rows, so a required field would raise on all ~660 existing rows and #1641
   would convert each into a full regeneration, and #1740 showed a strict constraint on an
   informational field discards the whole patch. It makes a quoted figure auditable; it cannot
-  tell whether the figure is real.
+  tell whether the figure is real. House GHA 33426508863 `sector-real-estate` then showed a
+  second failure class: missing `summary` (prose under `text`/`detail`) and Gemini JSON-string
+  Object envelopes whose `properties`/`fields` maps arrive as JSON objects *or* lists of
+  `[key, {stringValue}]` pairs (`}]],"type":"Object"` in the live ValidationError).
+  `Finding`/`Source` coerce those shapes before validate so the node does
+  not carry the sector baseline; summary/label fill only from explicit prose aliases
+  (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
+  with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
@@ -1777,24 +2018,33 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
-- **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
+- **H7** emits `PMDirectionMemo` (direction + conviction rank + optional
+  `confidence` in `[0, 1]` — no weights). Rank is order, not size.
   Each roster row may carry a deterministic `ForecastReference` to the effective
   forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
-  never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
-  ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
-  the portfolio lineage ledger commit chain (see below), and fail-soft prospective
-  forecast-registry persistence (#2663).
+  never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
+  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner. On the
+  calibrated path (`h8_sizing_input_mode=calibrated`) raw size is
+  `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. H8 then scales
+  each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
+  into peers). Missing confidence on a mixed roster fail-softs to
+  `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
+  confidence on every long skip the haircut so replay does not silently shrink.
+  **H9** (`commit_run`) is the Hermes terminal: positions, nav, theses sync, brief
+  publish, `decision_log` append, the portfolio lineage ledger commit chain (see
+  below), and fail-soft prospective forecast-registry persistence (#2663).
 
 #### Risk-sizing layer (Pillar 2)
 
 Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
-narrative; **H8** deterministic code owns sizing, caps, and risk.
+narrative + confidence; **H8** deterministic code owns sizing, caps, and risk. Rank is
+order only — it is not a size input on the calibrated path.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
   conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
   raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
-  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → round-DOWN to grid → cash residual.
+  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → **PM confidence scale** (reduce-only /
+  cash-first) → round-DOWN to grid → cash residual.
   Raw-weight modes: **calibrated** (`reliability × max(0, μ) / σ_ε`, #2734),
   conviction-∝ × inverse-vol, or fractional-Kelly (incumbent fallback only). Every
   reduction is **reduce-only / cash-first**: freed weight becomes cash, never redistributed
@@ -1802,6 +2052,8 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   **asset-class bucket** ρ (`_bucket_corr`: equity↔bond ≈0, equity↔equity≈0.8; UNKNOWN class
   stays ρ=1.0 conservative) rather than full-correlation — the #934 over-cashing fix.
   `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
+  A 12% portfolio vol budget plus the 5% weight grid can pin a name near 10% without
+  rank driving size (operator 2026-08-31 gold observation; rank unused on calibrated).
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -1809,12 +2061,14 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
 - `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
-  `PMDirectionMemo` (direction + ranks), assembles `AllocationInputBundle`, and on the
-  calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
-  Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
-  empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. After the final control shell (carry / cadence / backstop /
-  grid / final caps), builds and attaches `phase_hermes.pre_trade_risk_report` via
+  `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
+  and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
+  unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
+  when omitted). Falls back to dense rank→conviction when mode is `incumbent` or
+  calibrated coverage is empty. Writes `phase_hermes.sized_book` with
+  `allocation_input_bundle_hash` + `h8_sizing_input_mode`. After the final control shell
+  (carry / cadence / backstop / grid / final caps), builds and attaches
+  `phase_hermes.pre_trade_risk_report` via
   `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
   `pre_trade_risk_report_hash` on the book; report omission is fail-soft. Per-ticker vol
   from `price_technicals` and `sector_map` buckets still feed caps/vol-target. Wired
@@ -1920,9 +2174,9 @@ assuming it is always present.
   - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
     flush is counted and reported as incomplete coverage, never submitted. This is a reachable
     path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
-    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
-    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
-    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    outside any graph node, so LLM-backed provider calls are orphaned when the fold
+    calls the model (daily short fold with new lessons, or a full rewrite). Empty-lesson
+    days carry the prior body with no LLM call. And a run with no `DiagnosticsDeps` has
     no run identifier at all, so no node runs and no logical calls are produced *at the source*.
     A flush can therefore carry attributed and orphaned records together, which is why
     eligibility is decided per record rather than per flush.
@@ -2021,8 +2275,17 @@ assuming it is always present.
 Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
 Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
 portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
-see below). `preflight_reflect` resolves due `decision_log` rows daily;
-beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
+see below). **PostgREST timeout (#3319):** `build_client` sets
+`httpx.Timeout(connect=10, read=60, write=30, pool=10)` on the Supabase client.
+`append_commit_chain` additionally wraps every `execute()` (including the
+`price_history` read in `_last_closes`) with a 70s daemon-thread deadline
+(`digiquant.olympus.postgrest_timeout`). A hung call raises `PostgrestTimeoutError`
+so the outer pipeline retry can fire; it must not sit until the GitHub Actions
+240-minute job cancel. The worker is daemon so process exit is not joined to the
+hung call (`ThreadPoolExecutor` workers would reintroduce the stall). No client-level retries on this path (disconnect retries
+are a separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
+beliefs distillation publishes a same-date document on every house run (short fold;
+full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
@@ -2131,11 +2394,26 @@ not a row the approval chains through.
 #### H9 appends the commit chain (#2418)
 
 `digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py` is the only writer into these
-tables, called from exactly one place: `phases/h9_commit_run.py`, after `persist_decision_log`
+tables. The pipeline caller is `phases/h9_commit_run.py`, after `persist_decision_log`
 and **before `save_commit_manifest`**. That ordering is load-bearing — the manifest is what the
 next attempt reads to decide "already committed", so a partial chain must leave no manifest
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
 failed append as a clean no-op and leave the lineage silently one commit short.
+
+When `book_portfolio` already wrote `positions` / `nav_history` but the chain insert
+died (cron on `main` omitting `workspace_id` → `23502`, #3330), recover without an LLM
+rerun: `python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD`
+(dry-run) then `--apply`. That path (`hermes/writers/recover_ledger.py`) reads the booked
+weights and calls `append_commit_chain` + a `commit-run/{run_id}` manifest tagged
+`recovery=append_from_existing_book`. It does not call H8 or rewrite positions. It is an
+operator recovery *caller* of the same writer, not a second implementation.
+`test_h9_is_the_only_ledger_writer` allowlists that file explicitly. Idempotent only when
+a committed manifest fingerprint matches the booked weights **and** approved-target rows
+cover that book; a fingerprint mismatch is `conflict` (nonzero exit); a commit row without
+children falls through to `append_commit_chain` (supersede), never a false-finalized
+manifest. The matching commit must also be the current ledger `_heads()` tip;
+`resolve_prior_commit` orders manifests by `commit_seq` (ambiguous seq → `conflict`).
+Recovery manifests carry the next `commit_seq` and `supersedes` fingerprints.
 
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
@@ -2189,7 +2467,8 @@ untouched. The polarity is deliberately the inverse of `OLYMPUS_POSITION_RISK_FI
 a dark schema needs opting into, a live writer needs an escape hatch.
 
 - **Tests**: `tests/dq/hermes/test_commit_run.py::TestCommitChainLedger` — every final ticker
-  plus cash appears; inserts are never upserts; H9 is the only ledger writer; an identical
+  plus cash appears; inserts are never upserts; `ledger_io` is the only ledger writer
+  (pipeline caller H9, operator recovery caller `recover_ledger`); an identical
   same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
   existing fill freezes the symbol; orphan pruning still converges with the ledger on; a partial
   failure does not masquerade as committed; and the kill switch writes no rows.
@@ -2246,6 +2525,11 @@ the grants would refuse anyway.
   looking at magnitude; the position is flat and the surplus is logged as a data error.
   Reading it back is also what makes two orders on one symbol in one run chain correctly —
   the second sees the first's residual, not the pre-run book.
+- **ADD/TRIM of +0.0pp is HOLD.** Event kind still comes from residual quantity, but if the
+  approved weight and prior book round to the same 1-decimal pp, the projection writes
+  `HOLD` rather than a dust true-up. House 2026-09-01 FXI/VGK/XLF filled ~0.05–0.14 shares
+  at unchanged 5/25/20%. `OPEN`/`EXIT` are unchanged (#1743). H9 also skips `order_intents`
+  when `_decision` returns `NO_OP` (no-trade band), so those fills should not mint again.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
   row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
@@ -2373,7 +2657,9 @@ that metrics/attribution job order cannot alter meaning.
   deprecated compatibility VIEW over that table (delete after readers migrate).
   `daily_realized_attribution` is a `security_invoker` VIEW over the finalized accounting
   tip only (`service_role` SELECT; public twin `public_daily_realized_attribution`). Writers:
-  `refresh_attribution.py` → `current_book_lookback`; accounting finalizer → periods/
+  `refresh_attribution.py` → `current_book_lookback` (house `workspace_id` on
+  the `positions` read so overlay same-date weights cannot seed the house
+  lookback); accounting finalizer → periods/
   contributions. Pure core: `compute_current_book_lookback` in `atlas/attribution.py`.
 - **Schema**: migration `072_olympus_period_accounting.sql` —
   `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
@@ -2427,10 +2713,13 @@ graduates onto its own project.
 `macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
 cross-project price copy is therefore **superseded**. `#1066` adds a shared
 `economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
-incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
-ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
-twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
-`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+incl. `event_datetime_utc` + the impact CHECK + unique `external_id`; additive
+`economic_calendar_authenticated_select` in `114` so signed-in JWT users can
+SELECT the same public calendar as anon — do not number this `113`, which is
+the staged cutover under `migrations/cutover/`): the twelve-x
+ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the dashboard
+twelve-x **events tab reads it via the main dashboard client** (`getUpcomingEvents` in
+`frontend/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
@@ -2655,7 +2944,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -2688,7 +2977,7 @@ detectable and is the only way a future collision would be visible.
   `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
-- `frontend/olympus/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+- `frontend/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
   `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
   `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
@@ -2751,6 +3040,13 @@ exchanges with a venue, replacing the previous ad hoc positional `submit_order(s
 side, quantity, order_type)` call. This work package is **contracts and typing only**: no
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
+
+Operator env names live in `digiquant.olympus.envcompat`. Canonical names are
+`DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
+Retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` names remain readable so live empty
+kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
+enable it without an explicit human decision. `pipeline-olympus.yml` still
+exports `OLYMPUS_ATTEMPT`; readers accept `DIGIQUANT_ATTEMPT` first.
 
 ### Vocabulary and models
 
@@ -2946,7 +3242,7 @@ append-only (D10). The internal `paper_internal` path is unchanged.
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
 `house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
 (hard-coded; those identities can never route externally). Kill switch
-`OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of `OLYMPUS_PORTFOLIO_LEDGER`):
+`DIGIQUANT_EXECUTION_ROUTING` (alias `OLYMPUS_KAIROS_ROUTING`) defaults **off** (inverse polarity of `DIGIQUANT_PORTFOLIO_LEDGER` / alias `OLYMPUS_PORTFOLIO_LEDGER`):
 off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
 workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
 `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
@@ -2985,8 +3281,40 @@ Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverge
 structured report on the snapshot row + log; **never** auto-submit corrective orders
 (`SyncResult.refused_corrective_orders` is always true).
 
+**Cron CLI (`route_cron.py`, `python -m digiquant.olympus.kairos.route_cron`).**
+Overlay persist writes order intents; this is the production submit seam
+(`route_pending_orders` was library-only). Same eligibility as sync: Alpaca
+paper OAuth only; house/system never; `env=live` refused; IBKR held; Alpaca
+`api_key` held. `--check` logs `routing_enabled=true|false` and exits **2**
+when store env names are missing. `--dry-run` never unseals. `--all` /
+`--connection-id` with `DIGIQUANT_EXECUTION_ROUTING` off exit **3**
+(`KAIROS_ROUTING_DISABLED`) and do not call `submit_order`. Operator
+`--connection-id` errors use the ``kairos route:`` prefix (not ``kairos sync:``).
+`--dispatch` / `--apply` exit **4**. Kill switch still defaults **off**. Do not add
+`DIGIQUANT_EXECUTION_ROUTING` to `KAIROS_STAGING_REQUIRED_SECRETS` (that list is
+vendor EF secrets). Paper-fill remaining hop can still prove via sync of
+Alpaca UI fills without this cron.
+
+**Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
+Production entry that polls **Alpaca paper OAuth** connections only. House and
+system workspace ids are never sync targets; `env=live` is refused; inactive
+rows are dropped. IBKR paper is counted then held
+(`ibkr_requires_brokerage_session`) — cron does not open a brokerage session.
+Alpaca `auth_kind=api_key` is counted then held
+(`alpaca_api_key_does_not_prove_oauth_hop`) — `--all` must not poll that row,
+and `--connection-id` on it exits **3** with `ALPACA_API_KEY_SYNC_HELD`.
+`--check` exits **2** with `KAIROS_SYNC_NOT_CONFIGURED` listing missing store
+env *names*. `--dry-run` prints candidate counts (`ibkr_held`,
+`alpaca_api_key_held`) and does not unseal. Apply requires `--connection-id`
+or `--all` (refuses implicit broker polls). Apply without an injected callback
+also requires `DIGIQUANT_VAULT_MASTER_KEY` (names only on failure). Credentials
+are unsealed only inside `open_credential` for Alpaca OAuth adapter
+construction — `api_key` payloads are never polled. Do not run `--all` against
+Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
+requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
+
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
+invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
 
@@ -2994,25 +3322,109 @@ invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 
 K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
 Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
-`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+`frontend/dashboard/lib/entitlements.ts` artifact-class matrix).
 
 **Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
 `NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
 
-**Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
-dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
-suppression checked **before** claim (skipped sends do not burn dedupe slots); tier gates
-on digest sections and event types (`house_weights_nav` for holding-change,
-`private_book` for execution alerts); templates carry unsubscribe link, no broker
-ids/tokens/keys.
+**Behavior:** fail-soft for cron/post-run — Mailgun/network errors log a warning and
+return; missing Mailgun env logs `MAILGUN_NOT_CONFIGURED` with named keys and skips
+(never silent as success in agent probes). Dedupe via `notification_log` insert-first
+PK `(workspace_id, event_key, sent_date)`; suppression checked **before** claim
+(skipped sends do not burn dedupe slots); tier gates on digest sections and event
+types (`house_weights_nav` for holding-change, `private_book` for execution alerts);
+templates carry unsubscribe link, no broker ids/tokens/keys.
+
+**Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
+`--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
+when vendor keys are empty. `--dry-run` loads `notification_prefs` and prints
+candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
+`skipped_no_email`, `mailgun_configured`) without sending or claiming
+`notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
+skip of the count. `--workspace-id` filters the plan. Missing store env exits
+**2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
+`python scripts/digiquant_cron_check.py` (overlay `--check` + execution sync `--check` +
+route `--check` + Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing
+which probes failed. Route `--check` logs `routing_enabled=true|false` and
+never calls `submit_order`. The copy-paste GHA spec also runs
+``python -m digiquant.notify.dispatch --dry-run`` (no send, no
+``notification_log`` claim).
+Staging inventory also covers these names in
+`digiquant.olympus.kairos.staging_secrets`. `scripts/digiquant_staging_e2e.py` runs
+Observer Settings hops first (when `DIGIQUANT_STAGING_USER_JWT` or email/password
+is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
+vendor secrets are missing (and prints `DIGIQUANT_STAGING_E2E_REMAINING_HOPS` so
+the five live hops are named even before secrets land). Observer also POSTs
+`/settings/access/redeem-invite` with a short dummy code (`short`, under the
+Deno min length) and requires `INVITE_INVALID` or `EMAIL_REQUIRED` — live
+settings v32 404s that route. After Observer hops
+pass **or fail**, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
+`/jobs`, `/fills`, and `/notifications/log` so remaining hops are named on
+exit **3** (live app-urls `/olympus` vs `/dashboard` plus redeem-invite 404
+must not hide product-state blockers). Observer-hop failure still exits **3**.
+A hop is proven only from that
+product state: `subscription_status=active` **and** `has_stripe_subscription`
+**and** `plan_tier` in `{studio, enterprise}` (boolean Stripe id only; house is
+seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
+Brief or Desk Stripe also must not — overlay stays
+`TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
+Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
+(not `running` / `skipped` / `persist_disabled` / `not_entitled`). Persist-on
+that finishes `failed` with `error=legacy_book_unique` names
+`overlay_legacy_book_unique` (staged cutover 113 not applied) instead of the
+generic `overlay_not_succeeded`; a fill
+fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
+do not prove the hop); a `digest:`
+log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
+**and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
+off; Observer PATCH `/settings/notifications` is not Studio-gated).
+Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
+are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
+``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
+human-owned gate is named. Exit **0** only when all five remaining hops are
+proven. Exit **2** when hops are unproven **and** named vendor secrets are
+missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
+Phase C (and the Observer checkout hop) POST `tier=studio` — Brief/Desk would
+leave overlay `TIER_FORBIDDEN` after Stripe lands.
+Recipient for staging digests can be an Agentmail inbox once Mailgun is
+configured.
+
+**House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
+`pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
+on `develop` `207dd0a68`; fail-close while `main` is `3601f72df`
+[#3383](https://github.com/digithings-ai/digithings/pull/3383) `6785c44d4`).
+Exit **5** while `origin/main` is still UUID-hotfix `3601f72df` — merge
+fail-softs #3343 → #3348 → #3351 → #3354 before the next cron or checkout
+`ref: main` still misses those writers (the CLI does not list runs in that
+case). On exit 5 it also prints `failsofts=` mergeability from `gh pr view`
+(`#3343 OPEN MERGEABLE CLEAN` … `stack ready (do not merge from authoring
+agent)`). That line is status only — the authoring agent must not merge those
+PRs. `gh run list` `headSha` is the default-branch **trigger** (develop), not
+the job checkout, so counting is `created_at` strictly after the later of
+#3334 (`2026-08-31T20:39Z`) and current `origin/main` committer time. Exit **0**
+only for a **schedule** success after that cutoff. `workflow_dispatch` never
+counts. Exit **3** until a counting `schedule` after that cutoff (crons are
+`17 9/10/11/12 * * *` — not `0 12 * * *`). A 12:00 UTC run that started
+before fail-softs merged does not count. Exit **2** if a counting
+schedule fails. The CLI refuses `--dispatch` / `--apply`.
 
 **Entry points:**
 
 | Caller | Function | Digest hour gate |
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| House CLI `python -m digiquant.olympus.hermes.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
+| Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
+| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
+
+House GHA (`pipeline-olympus.yml`) does not yet pass `MAILGUN_API_KEY` /
+`MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
+`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` on a
+`chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
+close-out is fail-soft skip.
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 
@@ -3021,18 +3433,41 @@ Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
 webhook Edge Functions under `digiquant/supabase/functions/` (not Next.js route handlers).
 This is distinct from ADR-0004's digikey metered API seat flow — here entitlements ride
-Supabase Auth JWT `app_metadata.plan_tier` (`free | baseline | custom | enterprise` per
-spec D1) and denormalized `workspaces` billing columns for RLS.
+Supabase Auth JWT `app_metadata.plan_tier` (`free | brief | desk | studio | enterprise`)
+and denormalized `workspaces` billing columns for RLS.
 
 | Function | Auth | Role |
 |----------|------|------|
 | `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
-| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env |
-| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id` |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env; success/cancel → `{APP_URL}/dashboard/settings/?tab=billing&checkout=…` (`_shared/app-url.ts`) |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id`; return `{APP_URL}/dashboard/settings/?tab=billing` |
+
+`APP_URL` / `NEXT_PUBLIC_APP_URL` is the **site origin** (`https://digiquant.io`).
+Helpers strip a trailing `/dashboard` (and a leftover `/olympus`) so a mistaken path does not double the basePath.
+Loopback origins (`127.0.0.1`) break Alpaca `redirect_uri` and Stripe return URLs;
+`GET /settings/app-urls` is the Observer probe. It also returns the public
+Alpaca OAuth client id (never the secret) so Brokers connect can start as soon
+as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab from
+`?tab=billing` / `?checkout=success|cancel`.
+
+**Pages `/dashboard` cutover.** `scripts/digiquant_pages_dashboard_gate.py` probes
+live Pages. `--apply` deploys `settings` / `create-checkout-session` /
+`customer-portal` only when `/dashboard` login / auth callback / settings /
+Alpaca brokers callback are 200, this
+checkout mounts `POST /access/redeem-invite` and pins `/dashboard` in
+`_shared/app-url.ts`, **and** the live ESZIP for each of those three functions
+(`GET https://api.supabase.com/v1/projects/{ref}/functions/{slug}/body`)
+contains those executable markers (line and block comments do not count).
+Settings also requires `method === "POST" && path === "/access/redeem-invite"`.
+Live v32 is `/olympus` on settings, checkout, and portal — `--apply` must not
+report success while any of those bundles is still stale. Exit 3 while Pages
+404s; exit 5 if checkout source is stale; exit 6 if a live bundle is still
+stale. Never weakens `public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN`
+for the post-deploy ESZIP proof (never logged).
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
-Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
-`STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
+Price → tier map keys off `STRIPE_PRICE_BRIEF_{MONTHLY,ANNUAL}` /
+`STRIPE_PRICE_DESK_{MONTHLY,ANNUAL}` / `STRIPE_PRICE_STUDIO_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
 `digiquant/supabase/functions/README.md`). Paid claims only while status maps to
 `active`/`past_due` (trialing→active); deleted/incomplete force `plan_tier=free`.
 Ordering is atomic via `workspaces.last_stripe_event_created` CAS (migration 101).
@@ -3042,6 +3477,20 @@ every applied event; failures set `workspaces.claim_sync_pending` (migration 100
 still return 200 after marking applied. HTTP errors use stable JSON codes (401/403/…);
 never stack traces or keys.
 
+**Settings entitlement (T3).** `settings` Edge Function tier gates
+(`PATCH /profile`, `POST /brokers/connect`) read **`workspaces.plan_tier` only** —
+never the JWT claim. Preferring a stale elevated `app_metadata.plan_tier` after
+cancel (when claim sync failed) would fail-open and still seal broker credentials
+or append overlay profiles on a `free` workspace.
+
+**FX Hub invite (12x).** `POST /functions/v1/settings/access/redeem-invite`
+requires a session JWT. The Edge Function hashes the submitted code and
+compares it to `FX_HUB_INVITE_HASH` (Supabase secret, never `NEXT_PUBLIC_*`)
+and/or `product_invite_codes` (migration 112). A match INSERTs
+`client_product_grants (email, product_key='fx_hub')` and appends
+`product_invite_redemptions` for the operator. This is not a login-optional
+passphrase — the static export still bakes the anon key.
+
 Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.
@@ -3049,21 +3498,104 @@ checkout→active→cancel, and claim-sync failure. CI Deno wiring is a document
 ## Overlay runs
 
 T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
-Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
+Studio/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
 `run_type` fork, no planner changes).
 
-**Dispatch (`dispatch.py`).** Entitlement is `plan_tier ∈ {custom, enterprise}` AND
-`subscription_status = active` AND BYOK present-and-unsealable. Misses write a
+**Dispatch (`dispatch.py`).** Entitlement is paid Studio/Enterprise
+(`plan_tier ∈ {studio, enterprise}` AND `subscription_status = active`) **or**
+D1 `entitlement_grants.plan_floor ∈ {studio, enterprise}` (creator/ops without
+Stripe), **and** BYOK present-and-unsealable. Misses write a
 `job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
 never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim
 is insert-first + skip-locked (first claimer wins). Production persistence is
 `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`);
 `MemoryJobRunStore` is the test seam. Overlay failures never write house job rows.
 
-**Omitted `workspace_id` means the house.** Readers and writers that leave the
-argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
-`_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
-mean "every row".
+**Cron CLI (`cron.py`, `python -m digiquant.olympus.overlay`).** Production
+entry that writes `job_runs` via `SupabaseJobRunStore`. House and system
+workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
+`--check` exits **2** with `OVERLAY_STORE_NOT_CONFIGURED` listing missing env
+*names* (`SUPABASE_URL` / `CORE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` /
+`CORE_SUPABASE_SERVICE_KEY`). `--dry-run` prints candidate counts
+(`considered`, `targets`, `billing_active`, `byok_present`) and writes nothing.
+`byok_present` counts active `workspace_provider_credentials` rows among
+billing-entitled targets (presence only; no unseal). Apply requires
+`--workspace-id` or `--all` (refuses implicit writes).
+`--all` against a free workspace inserts a visible `skipped`/`not_entitled`
+row; it does not invoke the graph. Dispatch-only claims leave the row
+`running`. `--execute` runs claimed jobs through the **one** Olympus graph
+(`overlay/graph_invoke.py` → `run_atlas_then_hermes(..., manage_usage=False)`
+so overlay's `overlay_usage_scope` owns WP1 capture). `chain=None` is
+refused (`OverlayExecuteRequiresChain` / `chain_required`) because
+`execute_overlay(chain=None)` would mark `succeeded` without a book. A
+missing overlay `olympus_profile_config` pin fails closed
+(`profile_pin_missing`) — the house default is never used. A graph or runner
+exception fails that claimed row (`job_runs.error` = structured code or
+exception type name, never the payload) and continues the batch. Persist-off
+finishes `persist_disabled`, which the staging harness does **not** treat
+as proven (hop requires `succeeded` only). `--execute` apply also requires
+`DIGIQUANT_VAULT_MASTER_KEY` and `DIGIQUANT_OVERLAY_PERSIST=1` (documents-safe
+after migration 110; positions/NAV/ledger still blocked by legacy single-tenant
+UNIQUEs until P6 — see Persist flag; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either
+is missing) so a
+production cron cannot finish `persist_disabled` and look like a hop. Do not run
+`--all` / `--execute --all` against Observer until Stripe + BYOK land;
+skipped rows are not a remaining-hop proof. The cron module does
+not import `byok`/`digillm` (digiquant-only CI). Production apply passes
+`byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
+
+**Scheduled probe (separate process).** Overlay must never share
+`pipeline-olympus.yml`'s Hermes chain job (`usage.start` is process-global).
+The fail-closed GHA spec is
+`docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
+(`15 12 * * *`, `make digiquant-cron-check` / overlay `--dry-run` / sync
+`--dry-run`). `cursor/*` cannot write `.github/workflows/`; the installed
+job still runs `scripts/kairos_cron_check.py` (wrapper) until a `chore/` or
+`feat/` hop copies a renamed spec. Missing
+`CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
+must never pass `--execute`, `--all`, or invoke `hermes.chain`.
+
+**Omitted `workspace_id` means the house.** Scannable developer guide:
+[`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md). Readers and
+writers that leave the argument off (`load_prior_book`,
+`load_portfolio_performance_snapshot`, `_prior_nav`, `_recent_navs` /
+`breaker_scale_from_nav_history`, `opening_snapshot` Group A reads,
+`_prune_orphan_positions`, `_rows_for_date`, `_pending_order_heads`,
+`refresh_attribution.py` positions, and `finalize_period_accounting.py` Group A
+nav/positions) filter **and** stamp `house_workspace_id()`. They never mean
+"every row". House atlas ops readers (`repair_supabase_portfolio_data`,
+`seed_ledger_opening_snapshot`, `backfill_position_events`,
+`ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
+`validate_db_first` Group A checks and house ``documents`` presence
+(`_has_research_*` / `house_digest_on_date`), `backfill_export_state` positions
+and documents export, `backfill_pm_rebalance_and_activity` thesis map,
+`backfill_position_event_reasons` house event pages and document payload
+lookups, `materialize_snapshot.house_digest_documents` (digest sync must not
+copy overlay ``DIGEST.md`` into house ``daily_snapshots.digest_markdown``),
+`fold_document_deltas` house delta/base payloads (overlay deltas must not
+publish into the house book), `validate_pipeline_step.fetch_document_rows`,
+`backfill_pm_rebalance_and_activity` document payload lookups,
+`pipeline_review_to_github` / `pipeline_meta_review` house pipeline-review
+docs (overlay reviews must not file GitHub issues),
+`format_deliberation_transcripts_chat` house transcripts (overlay rows must
+not be rewritten by id), `normalize_supabase_documents.fetch_all_documents`
+(overlay rows must not be rewritten by id), `fetch_research_library` house
+research notes, `verify_supabase_canonical` house leftover ``outputs/`` keys,
+`publish_research.house_research_library_rows` (overlay notes must not dump as
+the house library), `backfill_research_state` house inventory pages (overlay
+rows must not seed the in-memory research-state store),
+`audit_activity_coverage_api` Group A max-dates) pin via
+`eq_house_workspace()`
+(omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
+stamps house `workspace_id` on those same Group A tables when `eq` omits it
+(`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). House preflight
+`load_prior_context` / analyst and deliberation continuity / beliefs /
+institutional-absence documents also pin house so overlay private docs cannot
+seed the house graph. The dashboard Group A readers (`frontend/dashboard/lib/queries.ts`, `observability-queries.ts`)
+go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
+member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
+`public_accounting_nav_history` (security definer; house-only until a later
+view rewrite).
 
 **Test-fake vs PostgREST `eq` (workspace_id).** The in-memory `_FakeQuery` in
 `tests/dq/atlas/test_supabase_io.py` treats a missing `workspace_id` column as
@@ -3079,8 +3611,13 @@ at the preflight seam — the pin loader is unchanged) → publish-if-missing in
 shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
 A write-time assertion rejects any corpus key containing the workspace or user id.
 House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
-Overlay commit manifests use `overlay-commit/{workspace_id}/…`; H7/H8 document
-keys use `overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
+Overlay commit manifests use `overlay-commit/{workspace_id}/…` **only** when
+`is_private_workspace(workspace_id)` is true. House UUID and omitted
+`workspace_id` keep `commit-run/{run_id}` — a truthy house id must not flip the
+prefix (same rule as `hermes_document_key`). `load_commit_manifests` pins
+`documents.workspace_id` on the PostgREST path so an overlay same-date row
+cannot satisfy a house `commit-run/%` like. H7/H8 document keys use
+`overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
 `pm-rebalance`, `analyst/…`, `deliberation/…`) so they cannot collide with house
 keys after the documents unique is `(workspace_id, date, document_key)`.
 
@@ -3088,12 +3625,61 @@ keys after the documents unique is `(workspace_id, date, document_key)`.
 (backfilled house). The legacy `UNIQUE(date, document_key)` is **replaced** by
 `UNIQUE(workspace_id, date, document_key)` — keeping both would still collide
 overlay+house same-key rows. Authenticated own-workspace SELECT is added for
-non-house/non-system rows; **`anon_read` is not touched** (T1-train rule).
+non-house/non-system rows; **migration 110** narrows ``anon_read`` on
+workspace-scoped private books to house (documents: house+system) so overlay
+rows cannot leak to anon. Cutover 900 still DROPs those policies.
 
-**Persist flag.** Overlay private-phase writes (`documents` / `positions` /
-`nav_history` / ledger) require `OLYMPUS_OVERLAY_PERSIST=1` (default off).
-Production may enable that flag **only after** the T1-train anon-policy drop
-ships. With the flag off, research/corpus phases still run; private-phase
+**Persist flag.** Overlay private-phase **document** writes require
+`DIGIQUANT_OVERLAY_PERSIST=1` (default off). Production may enable that flag
+**after migration 110** is applied on the target (anon house-only on private
+books) so overlay `documents` rows do not leak through `anon_read`. Overlay
+**positions / nav_history / portfolio_metrics / ledger** writes remain refused
+(`legacy_book_unique`) while migration 097's legacy `UNIQUE(date)` /
+`UNIQUE(date, ticker)` / `PRIMARY KEY (date)` and ledger
+`uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
+keys — H9 `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
+now upsert the widened `(workspace_id, …)` targets, as do the remaining house
+ops scripts (`update_tearsheet` Group A plus documents
+`on_conflict=workspace_id,date,document_key`, `sync_positions_from_rebalance`,
+`materialize_snapshot` positions, `backfill_execution_prices`,
+`reconcile_position_events_from_positions`). Overlay private books still refuse
+(`legacy_book_unique`) until staged cutover **113**
+(`digiquant/supabase/migrations/cutover/113_drop_legacy_book_uniques.sql`) is
+**applied** on `core`. That file DROPs the 097 leftover keys and widens 069
+one-root indexes to `(workspace_id, run_date[, symbol])`. It is **not**
+auto-applied (`db-migrate.yml` `-maxdepth 1`). Do not copy it to top-level
+until `main`'s house GHA writers are on the widened conflict (documents
+hotfix #3278; `origin/main` `commit_io` / `portfolio_materialize` still
+`on_conflict=date` / `date,ticker`). Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. `daily_snapshots` stays `UNIQUE(date)`
+(house-only). Until 113 is applied, overlay persist-on cannot prove the
+remaining hop: `execute_overlay` refuses succeeded after the chain for a
+private workspace (documents-only / fail-soft H9 used to finish succeeded).
+Settings About and the staging harness name `overlay_legacy_book_unique`
+when `job_runs.error` is `legacy_book_unique` (persist-disabled still wins).
+`_safe_invoke_graph` re-raises `OverlayLegacyBookBlocked` instead of
+swallowing it. Overlay publish
+**skips** `daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
+overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
+`analyst_coverage`, and `thesis_vehicles` for a private workspace
+(`skip_overlay_shared_register`): those tables have no `workspace_id` column
+and leftover `UNIQUE(date, …)` keys, so persist-on would last-writer-win the
+house corpus. Overlay `preflight_reflect` / `persist_pending` likewise **skip**
+`decision_log` (`UNIQUE(run_date, ticker)` — resolving would stamp house
+reflections by id). Overlay Atlas preflight **skips** the
+`onchain_cohort_positioning` upsert (`UNIQUE(date, market)`) the same way; the
+compact summary still lands in in-memory `market_context` for that overlay run.
+Overlay `run_atlas_then_hermes` **skips** `_run_beliefs_fold` for a private
+workspace — distillation reads every unfolded house `decision_log` row and
+stamps `beliefs_folded_at` by id, and the chain still reaches that fold after
+a fail-soft H9 `legacy_book_unique`. Overlay identity is seeded onto
+`initial_state` from the preflight `config_loader` before graph invoke, so an
+Atlas crash that returns last-good state cannot fold as house
+(`workspace_id=None`). Staged cutover 113 does not change that.
+Private overlay remains
+H7–H9 book only (T4). Cutover 900 is still required before dropping
+the house teaser for anon / free JWTs; it is not the persist precondition.
+With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.
 
 **Budget (`budget.py`).** At overlay start the runner calls
@@ -3117,6 +3703,19 @@ A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
 
+**BYOK seal CLI (`byok_seal.py`, `scripts/digiquant_seal_byok.py`).** Resume path when
+a real user LLM key lands and Settings Keys is not yet on production Pages.
+Default `--check` requires gitignored `.local/secrets/digithings-byok.env`
+(`BYOK_PROVIDER` + `BYOK_API_KEY`, names only in logs). `--apply` seals with
+the K3 vault (AAD `workspace_id:provider:llm`), verifies unseal, and inserts
+one active `workspace_provider_credentials` row (unique-conflict = revoke then
+insert, same as the settings Edge Function). House/system and non-entitled
+workspaces (Observer free without `plan_floor`) are refused. Do not seal a
+placeholder or a house process-env key. Overlay `--execute` still requires
+`present_and_unsealable` plus `DIGIQUANT_OVERLAY_PERSIST=1` after migration 110
+(documents only; book/ledger stay `legacy_book_unique` until staged cutover 113
+is applied on the target).
+
 **Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
 for `None` / house / system UUIDs. Overlay tenant routing threads
 `workspace_id` into `_pending_order_heads` after those gates.
@@ -3128,8 +3727,14 @@ the private book / NAV (`commit_io`), and the ledger chain (`ledger_io` models
 receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
-house paper fills are the `execute_at_open` job (date-scoped, house stamp);
-external venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
+house paper fills are the `execute_at_open` job (date-scoped, house stamp on
+writes; Group A reads filter `workspace_id` so an overlay same-date row cannot
+shape HOLD/EXIT). The house GHA chain (`hermes.chain`) Group A reads
+(`commit_io._prior_nav`, `portfolio_materialize._prior_nav`,
+`load_portfolio_performance_snapshot`, `breaker_scale_from_nav_history`,
+`opening_snapshot` positions/NAV) likewise filter `workspace_id` so overlay
+NAV/positions cannot compound the house index, trip the breaker, or seed lots.
+External venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
 `PAPER_INTERNAL`, live-env raise before submit; then overlay `workspace_id` is
 threaded into `_pending_order_heads` / `_directions_by_order`; missing ledger
 `workspace_id` → `ForeignWorkspaceIntentError`). Omitted `workspace_id` on those

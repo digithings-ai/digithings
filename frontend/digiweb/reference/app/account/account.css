@@ -21,7 +21,7 @@
   color: var(--ink);
   background: var(--bg);
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.55rem 0.7rem;
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
 }
@@ -99,7 +99,7 @@
 
 .acct-strength-seg {
   height: 3px;
-  border-radius: 2px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
   transition: background 0.25s var(--ease);
 }
@@ -136,7 +136,7 @@
 .acct-pay-form {
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 1.2rem;
 }
 
@@ -199,7 +199,7 @@
   position: relative;
   width: 36px;
   height: 20px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--hair);
   background: transparent;
   padding: 0;
@@ -213,7 +213,7 @@
   left: 2px;
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--ink-mute);
   transition: transform 0.2s var(--ease), background 0.2s var(--ease);
 }
@@ -231,7 +231,7 @@
 .acct-segment {
   display: inline-flex;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -268,7 +268,7 @@
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 0.45rem 1.9rem 0.45rem 0.7rem;
   cursor: pointer;
   transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -283,6 +283,36 @@
   pointer-events: none;
   font-size: 0.7rem;
   color: var(--ink-mute);
+}
+
+.acct-setting-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem 0;
+}
+
+.acct-setting-tab {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  padding: 0.38rem 0.7rem;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  color: var(--ink-mute);
+}
+
+.acct-setting-tab-on {
+  background: var(--accent-weak);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--hair));
+}
+
+.acct-setting-tab-note {
+  margin: 0.55rem 1.1rem 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  max-width: 52ch;
 }
 
 .acct-danger {

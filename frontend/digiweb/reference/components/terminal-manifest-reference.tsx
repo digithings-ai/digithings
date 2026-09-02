@@ -26,7 +26,7 @@ const ROWS: TerminalManifestRow[] = [
     status: "online",
     blurb: "quant engine · backtest to live",
     detail:
-      "the quant engine — backtest, optimize, and paper-trade on one\nrail.\n\nAtlas watches the portfolio; Hermes narrates the market.\n\nstack   NautilusTrader  ·  Polars",
+      "the quant engine — backtest, optimize, and paper-trade on one\nrail.\n\nResearch watches the book; portfolio narrates the market.\n\nstack   NautilusTrader  ·  Polars",
   },
   {
     id: "digisearch",
@@ -90,7 +90,7 @@ export function TerminalManifestReference() {
       </p>
 
       <div className="mt-[1.2rem] max-w-[980px]">
-        <p className="mb-[0.6rem] inline-block rounded-full border border-hair px-[0.5rem] py-[0.16rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+        <p className="mb-[0.6rem] inline-block rounded-none border border-hair px-[0.5rem] py-[0.16rem] font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
           Example data · not live
         </p>
         <TerminalManifest
@@ -103,7 +103,7 @@ export function TerminalManifestReference() {
           footer={
             <button
               type="button"
-              className="mt-auto cursor-pointer self-end rounded-[7px] border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
+              className="mt-auto cursor-pointer self-end rounded-none border border-hair bg-transparent px-[0.6rem] py-[0.3rem] font-mono text-[0.78rem] text-ink-soft transition-colors hover:bg-accent-weak hover:text-ink"
             >
               ask <span className="text-ink">digi</span>
               <span className="text-accent">chat</span> →

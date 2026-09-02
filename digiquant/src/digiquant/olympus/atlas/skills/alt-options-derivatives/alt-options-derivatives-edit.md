@@ -10,7 +10,7 @@ Update an **existing** `alt-options-derivatives` document; do not rewrite from s
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"alt-options-derivatives"`.
-Patch paths: `/headline`, `/bias`, `/vix_level`, `/vix_term_structure`, `/dealer_gamma`, `/put_call_ratio`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 
