@@ -1366,6 +1366,7 @@ prices = [
     { name = "yfinance" },
 ]
 visualization = [
+    { name = "matplotlib" },
     { name = "plotly" },
 ]
 
@@ -1397,6 +1398,7 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", marker = "extra == 'atlas'", specifier = ">=4.21" },
     { name = "langgraph", specifier = ">=0.2" },
+    { name = "matplotlib", marker = "extra == 'visualization'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = ">=1.190,<2" },
     { name = "numpy", marker = "extra == 'indicators'", specifier = ">=1.26" },
