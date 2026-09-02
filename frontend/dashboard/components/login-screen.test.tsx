@@ -79,6 +79,15 @@ describe('LoginScreen', () => {
     expect(container.textContent).toContain('Create an account');
   });
 
+  it('does not show an invite code field on the OAuth / email card', async () => {
+    await act(async () => {
+      root.render(createElement(LoginScreen));
+    });
+    expect(container.querySelector('[data-testid="client-product-invite-input"]')).toBeNull();
+    expect(container.querySelector('input[name="invite"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/invite code/i);
+  });
+
   it('starts Google OAuth from the Google icon', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen));
