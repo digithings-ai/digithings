@@ -2,7 +2,7 @@
 
 Concise developer guide for **workspace-scoped private books**. Dense inventory
 lives in [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md)
-(overlay / tenancy sections) and the [execution-tenancy epic](../agent-backlog/execution-tenancy/EPIC.md).
+(overlay / tenancy sections) and the [execution-tenancy epic](../agent-backlog/kairos-tenancy/EPIC.md).
 
 ## Intent
 
@@ -100,4 +100,4 @@ script is house-owned).
 - Schema / RLS notes: `digiquant/supabase/SCHEMA.md` (migrations 096–113)
 - Settings / APP_URL paths: `digiquant/supabase/functions/_shared/app-url.ts`
   (`APP_URL` = site origin only; paths append `/dashboard/...`)
-- Epic status: [`docs/agent-backlog/execution-tenancy/EPIC.md`](../agent-backlog/execution-tenancy/EPIC.md)
+- Epic status: [`docs/agent-backlog/kairos-tenancy/EPIC.md`](../agent-backlog/kairos-tenancy/EPIC.md)

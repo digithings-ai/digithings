@@ -2,8 +2,8 @@
 
 > Sibling of [`digiquant/src/digiquant/research/docs/AGENTS.md`](../../research/docs/AGENTS.md).
 > research owns research (A0–A4); portfolio owns thesis-aware portfolio loop (H1–H9).
-> Boundary: [ADR-0015](../../../../../../docs/adr/0015-research-vs-portfolio.md) · Spec §9–§11:
-> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Spec §9–§11:
+> [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 
 ## What portfolio does
 
