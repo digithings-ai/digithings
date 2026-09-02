@@ -67,7 +67,8 @@ export function getSupabaseClient(): SupabaseClient<Database> | null {
 
 export const isSupabaseConfigured = (): boolean => Boolean(supabase);
 
-export type OAuthProvider = 'google' | 'github';
+/** Supabase OAuth 2.0 provider id. X is `x` (legacy Twitter OAuth 1.0a is off). UI copy is X. */
+export type OAuthProvider = 'google' | 'github' | 'x';
 
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {

@@ -1,9 +1,9 @@
 """Shared segment output-model primitives.
 
-Every phase 1–5 segment produces a structured report; the shape has a common
-core (segment, date, bias, headline, findings, sources, notes) plus
-segment-specific extensions. Those extensions live with their phase modules;
-this file defines the reusable core.
+Phase 1–5 segments emit a :class:`ResearchMemo` (markdown ``body`` plus a thin
+envelope). The daily digest is a stitched markdown briefing
+(:func:`digest_briefing_for_hermes`). :class:`SegmentReport` remains for
+historical snapshot rows. This file defines both.
 
 Kept minimal on purpose — the legacy Atlas system does not have strict
 per-segment schemas beyond the overall digest/delta contracts in
@@ -28,7 +28,7 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,35 @@ def _literal_fields(model: type[BaseModel]) -> dict[str, tuple[frozenset[str], b
                 cached[name] = spec
         _LITERAL_FIELDS_CACHE[model] = cached
     return cached
+
+
+def _apply_literal_axis_normalization(cls: type[BaseModel], data: object) -> object:
+    """Map LLM synonyms onto ``Literal[...]`` fields; optional axes fail-soft to None."""
+    if not isinstance(data, Mapping):
+        return data
+    fields = _literal_fields(cls)
+    if not fields:
+        return data
+    patched: dict[str, Any] | None = None
+    for name, (members, optional) in fields.items():
+        raw = data.get(name)
+        if not isinstance(raw, str) or raw in members:
+            continue
+        canonical = canonical_literal(raw, members)
+        if canonical is None and not optional:
+            logger.warning(
+                "%s.%s: no synonym for %r on a required axis %s — rejecting",
+                cls.__name__,
+                name,
+                raw,
+                sorted(members),
+            )
+            continue
+        if patched is None:
+            patched = dict(data)
+        patched[name] = canonical
+        logger.info("%s.%s: normalized %r → %r", cls.__name__, name, raw, canonical)
+    return data if patched is None else patched
 
 
 def _literal_token(value: str) -> str:
@@ -442,13 +471,215 @@ class Source(BaseModel):
         return _coerce_source_record(data)
 
 
-class SegmentReport(BaseModel):
-    """Common shape for Phase 1–5 segment reports.
+def compose_legacy_research_body(data: Mapping[str, Any]) -> str:
+    """Build a readable markdown body from a historical SegmentReport row.
 
-    Phase-specific sub-classes add structured metrics (sentiment scores,
-    flow direction, yield curve shape, etc.). Phase 7 synthesis reads only
-    the fields here when assembling the master digest, so downstream
-    consumers never depend on segment-specific extensions.
+    Library rows published before WP-C have ``headline`` / ``material_findings``
+    / ``notes`` and no ``body``. Edit-merge re-validates the prior through the
+    live output model, so a missing ``body`` must not hard-fail.
+    """
+    parts: list[str] = []
+    headline = data.get("headline")
+    if isinstance(headline, str) and headline.strip():
+        parts.append(headline.strip())
+    findings = data.get("material_findings")
+    if isinstance(findings, list):
+        bullets: list[str] = []
+        for item in findings:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Finding"
+            summary = _string_value(item.get("summary")) or ""
+            line = f"- **{label}**" + (f" — {summary}" if summary else "")
+            bullets.append(line)
+        if bullets:
+            parts.append("\n".join(bullets))
+    notes = data.get("notes")
+    if isinstance(notes, str) and notes.strip():
+        parts.append(notes.strip())
+    return "\n\n".join(parts)
+
+
+def compose_legacy_digest_body(data: Mapping[str, Any]) -> str:
+    """Build a long markdown briefing from historical DigestSnapshot JSON slots.
+
+    Library rows published before WP-E have ``headline`` / topical summary
+    fields and no ``body``. Never emit Overall bias, ``data_quality``, or
+    ``confidence``.
+    """
+    parts: list[str] = []
+    date_s = _string_value(data.get("date")) or ""
+    parts.append(f"# Daily Digest{f' — {date_s}' if date_s else ''}")
+    headline = _string_value(data.get("headline"))
+    if headline:
+        parts.append(f"## Headline\n\n{headline}")
+    regime = _string_value(data.get("market_regime_snapshot"))
+    if regime:
+        parts.append(f"## Market regime\n\n{regime}")
+    for key, heading in (
+        ("alt_data_dashboard", "Alt-data"),
+        ("institutional_summary", "Institutional"),
+        ("asset_classes_summary", "Asset classes"),
+        ("us_equities_summary", "US equities"),
+    ):
+        text = _string_value(data.get(key))
+        if text:
+            parts.append(f"## {heading}\n\n{text}")
+    findings = data.get("material_findings")
+    if isinstance(findings, list):
+        bullets: list[str] = []
+        for item in findings:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Finding"
+            summary = _string_value(item.get("summary")) or ""
+            bullets.append(f"- **{label}**" + (f" — {summary}" if summary else ""))
+        if bullets:
+            parts.append("## Findings\n\n" + "\n".join(bullets))
+    actions = data.get("actionable_summary")
+    if isinstance(actions, list):
+        bullets = []
+        for item in actions:
+            if not isinstance(item, Mapping):
+                continue
+            pri = item.get("priority", "")
+            label = _string_value(item.get("label")) or "Item"
+            rationale = _string_value(item.get("rationale")) or ""
+            prefix = f"**[P{pri}] {label}**" if pri != "" else f"**{label}**"
+            bullets.append(f"- {prefix}" + (f" — {rationale}" if rationale else ""))
+        if bullets:
+            parts.append("## Watchlist\n\n" + "\n".join(bullets))
+    risks = data.get("risk_radar")
+    if isinstance(risks, list):
+        bullets = []
+        for item in risks:
+            if not isinstance(item, Mapping):
+                continue
+            label = _string_value(item.get("label")) or "Risk"
+            trigger = _string_value(item.get("trigger")) or ""
+            hours = item.get("horizon_hours", item.get("horizon_hourse", ""))
+            suffix = f" _(≤{hours}h)_" if hours != "" else ""
+            bullets.append(f"- **{label}**" + (f" — {trigger}" if trigger else "") + suffix)
+        if bullets:
+            parts.append("## Risk radar\n\n" + "\n".join(bullets))
+    notes = _string_value(data.get("notes"))
+    if notes:
+        parts.append(notes)
+    continuity = _string_value(data.get("continuity"))
+    if continuity:
+        parts.append(f"*Note: {continuity}*")
+    return "\n\n".join(parts).strip() + ("\n" if parts else "")
+
+
+def digest_briefing_for_hermes(digest: Mapping[str, Any] | None) -> dict[str, str]:
+    """Thin H1/H2 envelope: ``date`` / ``body`` / ``regime_label`` only."""
+    if not isinstance(digest, Mapping) or not digest:
+        return {}
+    raw_body = str(digest.get("body") or "")
+    body = raw_body if raw_body.strip() else compose_legacy_digest_body(digest)
+    out: dict[str, str] = {}
+    date_s = digest.get("date")
+    if date_s is not None and str(date_s).strip():
+        out["date"] = str(date_s)
+    if body.strip():
+        out["body"] = body
+    regime = str(digest.get("regime_label") or "").strip()
+    if regime:
+        out["regime_label"] = regime
+    return out
+
+
+class ResearchMemo(BaseModel):
+    """Thin envelope for Phase 1–5 research. The operator artifact is ``body``.
+
+    ``internal_bias`` is a non-rendered directional token for digest/triage/
+    phase-6. ``sources`` is grounding for downstream synthesis, not a rendered
+    appendix. Historical metric fields (``yield_curve_shape``, …) are allowed
+    extras so old library rows still validate.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    segment: str = Field(
+        description="Stable segment slug, e.g. 'alt-sentiment-news', 'macro'.",
+    )
+    date: _date
+    body: str = Field(
+        default="",
+        description=(
+            "Markdown memo with inline [title](url) citations. Variable depth is "
+            "allowed. Do not invent data-quality or confidence scores."
+        ),
+    )
+    sources: list[Source] = Field(
+        default_factory=list,
+        description="Optional grounding sources for digest/H1 — not a user appendix.",
+    )
+    internal_bias: Bias | None = Field(
+        default=None,
+        description=(
+            "Non-rendered directional token for digest/triage/phase-6. Never print "
+            "as 'Bias: mixed' in the operator memo."
+        ),
+    )
+    regime_label: str = Field(
+        default="",
+        description="Optional short regime token (macro) for the pipeline strip.",
+    )
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def _parse_json_list_items(cls, v: object) -> object:
+        if not isinstance(v, list):
+            return v
+        return [_parse_json_object(item) for item in v]
+
+    @field_validator("internal_bias", mode="before")
+    @classmethod
+    def _normalize_internal_bias(cls, v: object) -> object:
+        if v is None or not isinstance(v, str):
+            return v
+        token = _literal_token(v)
+        if token in _BIAS_MEMBERS:
+            return token
+        mapped = _BIAS_SYNONYMS.get(token)
+        if mapped in _BIAS_MEMBERS:
+            return mapped
+        canonical = canonical_literal(v, _BIAS_MEMBERS)
+        return canonical
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compose_legacy_body(cls, data: object) -> object:
+        if not isinstance(data, Mapping):
+            return data
+        if str(data.get("body") or "").strip():
+            return data
+        composed = compose_legacy_research_body(data)
+        if not composed and data.get("internal_bias") is not None:
+            return data
+        if not composed and not data.get("headline") and not data.get("material_findings"):
+            return data
+        out = dict(data)
+        if composed:
+            out["body"] = composed
+        if out.get("internal_bias") is None and out.get("bias") is not None:
+            out["internal_bias"] = out["bias"]
+        return out
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_literal_axes(cls, data: object) -> object:
+        """Map LLM synonyms onto Literal chip fields of ResearchMemo subclasses."""
+        return _apply_literal_axis_normalization(cls, data)
+
+
+class SegmentReport(BaseModel):
+    """Historical digest / snapshot core (bias, headline, findings).
+
+    Phase 1–5 research uses :class:`ResearchMemo`. New digests are markdown
+    briefings (:func:`digest_briefing_for_hermes`); this shape validates old
+    library rows.
     """
 
     segment: str = Field(
@@ -509,49 +740,21 @@ class SegmentReport(BaseModel):
     def _normalize_literal_axes(cls, data: object) -> object:
         """Map LLM synonyms onto every ``Literal[...]`` field of *any* subclass (#1741).
 
-        ``cls`` is the concrete subclass here, so one validator on the base covers all
-        30 Literal axes across the six phase modules — including the ones that had no
-        validator at all and therefore hard-failed ``model_validate`` on values like
-        ``relative_strength_vs_spy='neutral'`` or ``risk_appetite='neutral'``.
+        ``cls`` is the concrete subclass here, so one validator on the base covers
+        Literal axes on digest/snapshot models. Phase 1–5 memos use the same helper
+        on :class:`ResearchMemo`.
 
         Fields that declare their own ``mode="before"`` validator (``bias``,
-        ``data_quality``, ``flow_direction``) are skipped outright — see
+        ``data_quality``, ``internal_bias``) are skipped outright — see
         ``_fields_with_own_before_validator``.
 
         Two fail-soft tiers, deliberately different:
         * **Optional** axis with no exact synonym → ``None``. Informational field;
           an unparseable value must never fail a merge (the #1641 contract).
         * **Required** axis with no exact synonym → the raw value is left untouched
-          so Pydantic still rejects it. ``growth`` (expanding|slowing|contracting)
-          and ``inflation`` (hot|cooling|cold) have no non-directional member, so a
-          "total" mapping would have to invent a macro call that Phases 4–7 then
-          consume as fact. A loud failure is the honest outcome.
+          so Pydantic still rejects it. Digest ``bias`` stays required.
         """
-        if not isinstance(data, Mapping):
-            return data
-        fields = _literal_fields(cls)
-        if not fields:
-            return data
-        patched: dict[str, Any] | None = None
-        for name, (members, optional) in fields.items():
-            raw = data.get(name)
-            if not isinstance(raw, str) or raw in members:
-                continue
-            canonical = canonical_literal(raw, members)
-            if canonical is None and not optional:
-                logger.warning(
-                    "%s.%s: no synonym for %r on a required axis %s — rejecting",
-                    cls.__name__,
-                    name,
-                    raw,
-                    sorted(members),
-                )
-                continue
-            if patched is None:
-                patched = dict(data)
-            patched[name] = canonical
-            logger.info("%s.%s: normalized %r → %r", cls.__name__, name, raw, canonical)
-        return data if patched is None else patched
+        return _apply_literal_axis_normalization(cls, data)
 
     @field_validator("bias", mode="before")
     @classmethod

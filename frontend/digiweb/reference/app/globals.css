@@ -22,6 +22,7 @@
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/web/styles/command-palette.css";
+@import "@digithings/web/styles/account-auth.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
@@ -44,6 +45,8 @@
 @source "../../web/src/components/effects-chrome";
 @source "../../web/src/components/command-palette";
 @source "../../web/src/components/symbols";
+@source "../../web/src/components/account";
+@source "../../web/src/components/icons.tsx";
 /* The terminal loaders' specimen markup now lives in the package too. */
 @source "../../web/src/components/terminal";
 

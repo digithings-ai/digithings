@@ -6,11 +6,17 @@ Skips carried slots. Monthly runs omit this phase.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.inspectable_io import (
+    publish_bias_row_document,
+    publish_inputs_document,
+)
+from digiquant.olympus.atlas.segments import compose_legacy_digest_body
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Phase7DigestPayload,
@@ -24,6 +30,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document_delta,
 )
 from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.olympus.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
 from digiquant.olympus.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
@@ -68,68 +75,35 @@ def _segment_category(slug: str) -> str:
 def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> str:
     """Render a human-readable markdown string from the digest/snapshot payload.
 
-    Pure template function — no LLM, no I/O. Tolerates missing keys so it
-    works on both full and partial (carried-incomplete) snapshots.
+    Prefer the stitched ``body``. Historical JSON slots fall back to
+    :func:`compose_legacy_digest_body` (no Overall bias / fake metrics).
     """
-    lines: list[str] = []
-    headline = str(snapshot.get("headline") or "")
-    if headline:
-        lines.append(f"# {headline}")
-        lines.append("")
-
-    regime = str(snapshot.get("market_regime_snapshot") or "")
-    if regime:
-        lines.append(f"## Market Regime\n\n{regime}")
-        lines.append("")
-
-    equities = str(snapshot.get("us_equities_summary") or "")
-    if equities:
-        lines.append(f"## US Equities\n\n{equities}")
-        lines.append("")
-
-    assets = str(snapshot.get("asset_classes_summary") or "")
-    if assets:
-        lines.append(f"## Asset Classes\n\n{assets}")
-        lines.append("")
-
-    actions: list[dict[str, Any]] = list(snapshot.get("actionable_summary") or [])
-    if actions:
-        lines.append("## Actionable Items")
-        lines.append("")
-        for item in actions:
-            pri = item.get("priority", "")
-            label = item.get("label", "")
-            rationale = item.get("rationale", "")
-            lines.append(f"- **[P{pri}] {label}** — {rationale}")
-        lines.append("")
-
-    risks: list[dict[str, Any]] = list(snapshot.get("risk_radar") or [])
-    if risks:
-        lines.append("## Risk Radar")
-        lines.append("")
-        for risk in risks:
-            hours = risk.get("horizon_hours", "?")
-            label = risk.get("label", "")
-            trigger = risk.get("trigger", "")
-            lines.append(f"- **{label}** ({hours}h) — {trigger}")
-        lines.append("")
-
-    continuity = snapshot.get("continuity")
-    if continuity:
-        lines.append(f"*Note: {continuity}*")
-        lines.append("")
-
-    return "\n".join(lines)
+    data: dict[str, Any] = dict(snapshot) if isinstance(snapshot, Mapping) else dict(snapshot)
+    body = str(data.get("body") or "").strip()
+    if body:
+        continuity = data.get("continuity")
+        if continuity and str(continuity) not in body:
+            return f"{body.rstrip()}\n\n*Note: {continuity}*\n"
+        return body if body.endswith("\n") else f"{body}\n"
+    return compose_legacy_digest_body(data)
 
 
 def _is_degenerate(body: Any) -> bool:
-    """A content-free segment: the analyst graded the evidence ``data_quality == "absent"``
-    AND produced no material findings (Pillar 1E). Publishing it would surface a
-    confident-looking empty document, so it is suppressed. A segment with findings — or one
-    graded high/medium/low (or ungraded ``None``) — always publishes."""
+    """A content-free segment is suppressed rather than published empty.
+
+    New memos: empty ``body`` and no leftover findings/headline.
+    Legacy: ``data_quality == "absent"`` and no material findings (Pillar 1E).
+    """
     if not isinstance(body, dict):
         return False
-    return body.get("data_quality") == "absent" and not (body.get("material_findings") or [])
+    md = str(body.get("body") or "").strip()
+    if md:
+        return False
+    findings = body.get("material_findings") or []
+    headline = str(body.get("headline") or "").strip()
+    if body.get("data_quality") == "absent" and not findings:
+        return True
+    return not findings and not headline
 
 
 def _log_suppressed(slug: str, body: dict[str, Any]) -> None:
@@ -371,6 +345,33 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             attention = None
         if attention is not None:
             artifacts.append(attention)
+
+        # WP-B: inspectable Inputs + bias-row. Fail-soft — a miss must not
+        # block segment/digest writes (same policy as attention-plan).
+        attention_key = ATTENTION_PLAN_DOCUMENT_KEY if attention is not None else None
+        try:
+            artifacts.append(
+                publish_inputs_document(
+                    client=deps.client,
+                    state=state,
+                    attention_plan_key=attention_key,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "publish: inputs document failed for %s; continuing",
+                date_str,
+            )
+        try:
+            bias_row = publish_bias_row_document(client=deps.client, state=state)
+        except Exception:
+            logger.exception(
+                "publish: bias-row document failed for %s; continuing",
+                date_str,
+            )
+            bias_row = None
+        if bias_row is not None:
+            artifacts.append(bias_row)
 
         for bag in (
             state.phase1_outputs,

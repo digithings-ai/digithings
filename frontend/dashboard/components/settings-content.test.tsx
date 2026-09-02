@@ -78,14 +78,14 @@ describe('SettingsContent', () => {
     expect(render()).not.toContain('fin-blue');
   });
 
-  it('page variant omits Custom+ workspace gates for Observer; shows them for Custom', () => {
+  it('page variant omits Studio overlay gates for Observer; shows them for Studio', () => {
     const observer = render({ variant: 'page', tier: 'free' });
     expect(observer).toContain('settings-billing-anchor');
     expect(observer).toContain('id="billing"');
     expect(observer).not.toContain('locked-surface');
     expect(observer).not.toContain('tier-unlocked-note');
 
-    const unlocked = render({ variant: 'page', tier: 'custom' });
+    const unlocked = render({ variant: 'page', tier: 'studio' });
     expect(unlocked).toContain('tier-unlocked-note');
     expect(unlocked).not.toContain('locked-surface');
   });

@@ -7,11 +7,11 @@
  * (`DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also requires
  * ``daily_digest`` on; dispatch skips prefs that are off. Paper fills do not
  * prove the hop unless an Alpaca paper OAuth connection is also present.
- * Baseline Stripe does not prove checkout — broker connect and overlay stay
- * Custom-gated. Persist-disabled overlay names ``overlay_persist_disabled``;
- * a failed overlay with ``error=legacy_book_unique`` names
- * ``overlay_legacy_book_unique`` (cutover 113 not applied). Unproven hops show
- * a closed-vocabulary blocker code, never Stripe ids.
+ * Brief or Desk Stripe does not prove checkout — overlay stays Studio-gated.
+ * Persist-disabled overlay names ``overlay_persist_disabled``; a failed overlay
+ * with ``error=legacy_book_unique`` names ``overlay_legacy_book_unique``
+ * (cutover 113 not applied). Unproven hops show a closed-vocabulary blocker
+ * code, never Stripe ids.
  */
 
 export const REMAINING_LIVE_HOPS = [
@@ -25,10 +25,10 @@ export const REMAINING_LIVE_HOPS = [
 export type RemainingLiveHop = (typeof REMAINING_LIVE_HOPS)[number];
 
 export const OVERLAY_RUN_STATUSES = new Set(['succeeded']);
-export const STRIPE_CHECKOUT_TIERS = new Set(['custom', 'enterprise']);
+export const STRIPE_CHECKOUT_TIERS = new Set(['studio', 'enterprise']);
 
 export const REMAINING_HOP_BLOCKER_CODES = [
-  'plan_tier_not_custom',
+  'plan_tier_not_studio',
   'missing_stripe_ids',
   'subscription_not_active',
   'alpaca_api_key_not_oauth',
@@ -111,7 +111,7 @@ export function remainingHopBlockers(evidence: RemainingHopEvidence): RemainingH
   const blockers: RemainingHopBlockers = {};
   if (!proven.browser_stripe_checkout) {
     if (!STRIPE_CHECKOUT_TIERS.has(evidence.plan_tier ?? '')) {
-      blockers.browser_stripe_checkout = 'plan_tier_not_custom';
+      blockers.browser_stripe_checkout = 'plan_tier_not_studio';
     } else if (evidence.has_stripe_subscription !== true) {
       blockers.browser_stripe_checkout = 'missing_stripe_ids';
     } else {
@@ -161,7 +161,7 @@ export const REMAINING_HOP_LABELS: Record<RemainingLiveHop, string> = {
 };
 
 export const REMAINING_HOP_BLOCKER_LABELS: Record<RemainingHopBlockerCode, string> = {
-  plan_tier_not_custom: 'Custom Stripe checkout required',
+  plan_tier_not_studio: 'Studio Stripe checkout required',
   missing_stripe_ids: 'no Stripe subscription ids',
   subscription_not_active: 'subscription not active',
   alpaca_api_key_not_oauth: 'api_key paper does not prove OAuth',

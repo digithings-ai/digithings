@@ -10,8 +10,9 @@ import {
 
 const TIER_LABEL: Record<PlanTier, string> = {
   free: 'Observer',
-  baseline: 'Baseline',
-  custom: 'Custom',
+  brief: 'Brief',
+  desk: 'Desk',
+  studio: 'Studio',
   enterprise: 'Enterprise',
 };
 
@@ -19,16 +20,16 @@ const VALUE_PROP: Record<ArtifactClass, string> = {
   research: 'Research and corpus identity are included on every plan.',
   narrative: 'Portfolio deliberation narrative is included on every plan.',
   digest_summary:
-    'Digest conclusions are included on the free plan as a teaser. Full glass-box detail unlocks on Baseline.',
+    'Digest conclusions are included on the free plan as a teaser. Full glass-box detail unlocks on Desk.',
   portfolio_teaser:
     'A light portfolio glimpse is included on the free plan. Weights, NAV, and connections unlock on paid tiers.',
   house_weights_nav:
-    'House weights, NAV, tearsheet, ledger, and attribution unlock on Baseline.',
+    'House weights, NAV, tearsheet, ledger, and attribution unlock on Brief.',
   glassbox_economics:
-    'Pipeline attempt and spend economics unlock on Baseline.',
-  private_book: 'Your private book unlocks on Custom.',
-  broker_status: 'Broker connection status unlocks on Custom.',
-  overlay_profile: 'Overlay profile controls unlock on Custom.',
+    'Pipeline attempt and spend economics unlock on Desk.',
+  private_book: 'Your private book unlocks on Studio.',
+  broker_status: 'Broker connection status unlocks on Desk.',
+  overlay_profile: 'Overlay profile controls unlock on Studio.',
 };
 
 export interface LockedSurfaceProps {

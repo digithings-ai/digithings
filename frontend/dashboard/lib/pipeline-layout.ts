@@ -1,5 +1,5 @@
 import { PIPELINE_TOPOLOGY } from './pipeline-topology';
-import type { PipelineStageId } from './pipeline-topology';
+import type { PipelineStageId, StageDef } from './pipeline-topology';
 import type { PipelineDayData } from './pipeline-graph-data';
 import {
   bandReached,
@@ -59,69 +59,56 @@ function branchLabel(fanoutId: string, documentKey: string): string {
   return documentKey;
 }
 
+/** Decision collapses onto the booked book; commit-run stays ledger-only. */
+function resolveStageDocumentKey(stage: StageDef, day: PipelineDayData): string | undefined {
+  if (stage.id === 'decision' && day.presentKeys.has('pm-rebalance')) {
+    return 'pm-rebalance';
+  }
+  return undefined;
+}
+
 export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState): PipelineLayout {
   const nodes: LaidOutNode[] = [];
   const connectors: Connector[] = [];
   let cursorX = 0;
   let maxY = NODE_H;
   const bands = topologyEvidenceBands(day);
+  let prevStageId: string | null = null;
 
   for (const stage of PIPELINE_TOPOLOGY) {
     const stageExpanded = expansion.expandedStages.has(stage.id);
     const stageNodeId = stage.id;
     const stageStatus = resolveStageRunStatus(stage, day, bands);
+    const stageX = cursorX;
 
-    if (!stageExpanded) {
-      nodes.push({
-        id: stageNodeId,
-        kind: 'stage',
-        stageId: stage.id,
-        label: stage.label,
-        x: cursorX,
-        y: BASE_Y,
-        width: NODE_W,
-        height: NODE_H,
-        runStatus: stageStatus,
-      });
-      if (nodes.length > 1) {
-        connectors.push({ fromId: nodes[nodes.length - 2].id, toId: stageNodeId });
-      }
-      cursorX += NODE_W + GAP_X;
-    } else {
-      // Stage is expanded: emit sub-steps inline
-      const stageStartX = cursorX;
-      let prevId: string | null = null;
+    const stageDocKey = resolveStageDocumentKey(stage, day);
+    nodes.push({
+      id: stageNodeId,
+      kind: 'stage',
+      stageId: stage.id,
+      label: stage.label,
+      x: stageX,
+      y: BASE_Y,
+      width: NODE_W,
+      height: NODE_H,
+      documentKey: stageDocKey,
+      runStatus: stageDocKey ? 'persisted-artifact' : stageStatus,
+    });
+    if (prevStageId) connectors.push({ fromId: prevStageId, toId: stageNodeId });
+    prevStageId = stageNodeId;
 
-      // Stage header node
-      nodes.push({
-        id: stageNodeId,
-        kind: 'stage',
-        stageId: stage.id,
-        label: stage.label,
-        x: cursorX,
-        y: BASE_Y,
-        width: NODE_W,
-        height: NODE_H,
-        runStatus: stageStatus,
-      });
-      if (nodes.length > 1) {
-        const prevStageNode = nodes.find(
-          (n) => n.kind === 'stage' && n.stageId !== stage.id && n.x < stageStartX,
-        );
-        if (prevStageNode) connectors.push({ fromId: prevStageNode.id, toId: stageNodeId });
-      }
-      prevId = stageNodeId;
-      cursorX += NODE_W + GAP_X;
+    let stackY = BASE_Y + NODE_H + GAP_Y;
+    let prevId: string = stageNodeId;
+    const visibleSubs = stage.subSteps.filter((sub) => !sub.hiddenFromGraph);
 
-      for (const sub of stage.subSteps) {
+    if (stageExpanded) {
+      for (const sub of visibleSubs) {
         const subId = `${stage.id}:${sub.id}`;
         const fanoutKey = `${stage.id}:${sub.id}`;
         const fanoutExpanded = expansion.expandedFanouts.has(fanoutKey);
-        const subX = cursorX;
 
         // Leaf sub-steps (no fan-out) carry a document_key when it's present
-        // today. State-only steps never resolve one — the backend runs them
-        // but publishes nothing (thesis framing, screener, consolidate, preflight).
+        // today. Remaining state-only steps never resolve one.
         const leafKey =
           sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
         const runStatus = resolveSubStepRunStatus(sub, day, bands, stage.id);
@@ -131,71 +118,68 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
           kind: 'substep',
           stageId: stage.id,
           label: sub.label,
-          x: subX,
-          y: BASE_Y,
+          x: stageX,
+          y: stackY,
           width: NODE_W,
           height: NODE_H,
           documentKey: leafKey,
           stateOnly: sub.stateOnly,
           runStatus,
         });
-        // Sequential connectors inside an expanded stage are "active" (the
-        // expanded stage's own internal flow), so they read in cyan on top.
-        if (prevId) connectors.push({ fromId: prevId, toId: subId, active: true });
+        connectors.push({ fromId: prevId, toId: subId, active: true });
         prevId = subId;
-        cursorX += NODE_W + GAP_X;
+        stackY += NODE_H + GAP_Y;
 
         if (sub.fanout && fanoutExpanded) {
           const keys = day.fanoutKeys[sub.fanout.id] ?? [];
           if (keys.length > 0) {
-            // Emit one branch per real document_key, clickable.
             keys.forEach((documentKey, i) => {
               const branchId = `${stage.id}:${sub.id}:${i}`;
-              const branchY = BASE_Y + (i + 1) * (NODE_H + GAP_Y);
               nodes.push({
                 id: branchId,
                 kind: 'fanout-branch',
                 stageId: stage.id,
                 label: branchLabel(sub.fanout!.id, documentKey),
-                x: subX,
-                y: branchY,
+                x: stageX,
+                y: stackY,
                 width: NODE_W,
                 height: NODE_H,
                 documentKey,
                 runStatus: 'persisted-artifact',
               });
-              // Fan-out branch connectors flow out of an expanded fan-out.
-              connectors.push({ fromId: subId, toId: branchId, active: true });
-              if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;
+              connectors.push({ fromId: prevId, toId: branchId, active: true });
+              prevId = branchId;
+              stackY += NODE_H + GAP_Y;
             });
           } else {
-            // No-data fallback: index-emit placeholder branches with NO documentKey
-            // (renders the shape but is not clickable) so nothing regresses.
             const count = day.fanoutCounts[sub.fanout.id] ?? sub.fanout.defaultCount;
             const branchStatus: PipelineNodeRunStatus = bandReached(bands, stage.id)
               ? 'expected-artifact-missing'
               : 'not-run';
             for (let i = 0; i < count; i++) {
               const branchId = `${stage.id}:${sub.id}:${i}`;
-              const branchY = BASE_Y + (i + 1) * (NODE_H + GAP_Y);
               nodes.push({
                 id: branchId,
                 kind: 'fanout-branch',
                 stageId: stage.id,
                 label: `${sub.label} ${i + 1}`,
-                x: subX,
-                y: branchY,
+                x: stageX,
+                y: stackY,
                 width: NODE_W,
                 height: NODE_H,
                 runStatus: branchStatus,
               });
-              connectors.push({ fromId: subId, toId: branchId, active: true });
-              if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;
+              connectors.push({ fromId: prevId, toId: branchId, active: true });
+              prevId = branchId;
+              stackY += NODE_H + GAP_Y;
             }
           }
         }
       }
     }
+
+    if (stackY - GAP_Y > maxY) maxY = stackY - GAP_Y;
+    cursorX += NODE_W + GAP_X;
   }
 
   if (BASE_Y + NODE_H > maxY) maxY = BASE_Y + NODE_H;

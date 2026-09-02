@@ -24,12 +24,12 @@ import { settingsBillingReturnUrl } from "../_shared/app-url.ts";
 import { createClient } from "@supabase/supabase-js";
 import {
   loadPriceTierEnv,
+  pickPriceId,
   priceEnvKey,
-  type PlanTier,
+  type PaidTier,
 } from "../_shared/tiers.ts";
 
 type Interval = "monthly" | "annual";
-type PaidTier = Extract<PlanTier, "baseline" | "custom">;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -68,8 +68,8 @@ Deno.serve(async (req) => {
 
   const tier = body.tier as PaidTier | undefined;
   const interval = (body.interval ?? "monthly") as Interval;
-  if (tier !== "baseline" && tier !== "custom") {
-    return jsonError(400, "INVALID_TIER", "tier must be baseline or custom");
+  if (tier !== "brief" && tier !== "desk" && tier !== "studio") {
+    return jsonError(400, "INVALID_TIER", "tier must be brief, desk, or studio");
   }
   if (interval !== "monthly" && interval !== "annual") {
     return jsonError(400, "INVALID_INTERVAL", "interval must be monthly or annual");
@@ -127,14 +127,3 @@ Deno.serve(async (req) => {
     return jsonError(502, "STRIPE_UPSTREAM", "Unable to create checkout session");
   }
 });
-
-function pickPriceId(
-  tier: PaidTier,
-  interval: Interval,
-  prices: ReturnType<typeof loadPriceTierEnv>,
-): string {
-  if (tier === "baseline") {
-    return interval === "monthly" ? prices.baselineMonthly : prices.baselineAnnual;
-  }
-  return interval === "monthly" ? prices.customMonthly : prices.customAnnual;
-}

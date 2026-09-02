@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # score:allow lazy module attribute boundary
 
 from digiquant.brokers.base import BrokerAdapter
 from digiquant.brokers.contracts import (

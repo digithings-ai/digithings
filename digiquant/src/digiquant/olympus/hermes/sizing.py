@@ -28,11 +28,17 @@ drifts monotonically to cash). The pipeline:
       → correlation de-dup (drop the lower-conviction leg of a > threshold pair → cash)
       → vol-target scale (ex-ante √(wᵀΣw) → up to the budget or down if hot; capped)
       → drawdown-breaker scale (only ever reduces gross)
+      → PM confidence scale (optional; reduce-only / cash-first)
       → round DOWN to the weight grid (remainder → cash) → cash = 100 − Σ
 
 WP8.4 (#2734): when ``calibrated_scores`` is provided, raw weights come from those scores
 (approved policy: reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly
 are not used on that path. Downstream controls are unchanged.
+
+WP-H: optional ``confidence_scales`` (H7 ``confidence`` ∈ [0, 1] per long) haircut each
+name **after** vol-target / breaker and **before** the 5% grid. That is reduce-only /
+cash-first: leftover stays cash and is never renormalized into peers (vol-target must
+not absorb the haircut). Rank remains display/order only on the calibrated path.
 """
 
 from __future__ import annotations
@@ -512,6 +518,40 @@ def _portfolio_vol(
     return (var if var > 0.0 else 0.0) ** 0.5 * 100.0
 
 
+def _apply_confidence_scales(
+    weights_pct: dict[str, float],
+    confidence_scales: Mapping[str, float] | None,
+    events: list[SizingAdjustment],
+) -> dict[str, float]:
+    """Reduce-only per-name scale from H7 confidence. Leftover stays cash.
+
+    Applied after vol-target / breaker so an unused vol budget cannot redistribute a
+    haircut into other names. A ticker omitted from ``confidence_scales`` is left
+    unchanged (callers that want the fail-soft default must fill the map).
+    """
+    if not confidence_scales:
+        return weights_pct
+    out: dict[str, float] = {}
+    for ticker, weight_pct in weights_pct.items():
+        if ticker not in confidence_scales:
+            out[ticker] = weight_pct
+            continue
+        scale = max(0.0, min(1.0, float(confidence_scales[ticker])))
+        scaled = weight_pct * scale
+        if abs(scaled - weight_pct) > 1e-9:
+            events.append(
+                SizingAdjustment(
+                    ticker=ticker,
+                    adjustment_type=SizingAdjustmentType.FINAL_GROSS_SCALE,
+                    original_pct=round(weight_pct, 4),
+                    adjusted_pct=round(scaled, 4),
+                    reason=f"PM confidence ×{scale:.2f} (cash-first; leftover stays cash)",
+                )
+            )
+        out[ticker] = scaled
+    return out
+
+
 def _round_to_grid(weights_pct: dict[str, float], increment: float) -> dict[str, float]:
     """Round each weight (%) DOWN to the ``increment`` grid (0 disables).
 
@@ -534,6 +574,7 @@ def size_portfolio(
     caps: SizingCaps | None = None,
     breaker_scale: float = 1.0,
     calibrated_scores: Mapping[str, float] | None = None,
+    confidence_scales: Mapping[str, float] | None = None,
 ) -> SizingResult:
     """Turn per-ticker conviction + direction into final target weights (see module doc).
 
@@ -547,6 +588,9 @@ def size_portfolio(
         breaker_scale: ≤ 1.0 multiplier from the drawdown circuit breaker (raises cash).
         calibrated_scores: optional WP8.4 scores (reliability × max(0, μ) / σ_ε). When set,
             drives selection + raw weights; rank→conviction and Kelly premium are unused.
+        confidence_scales: optional per-ticker H7 confidence in ``[0, 1]``. Applied
+            after vol-target / breaker, cash-first (no renormalize). Omitted tickers
+            are unchanged; callers fill missing values with the documented default.
 
     Returns:
         A :class:`SizingResult` — final positions (%), cash %, ex-ante vol, applied
@@ -669,6 +713,7 @@ def size_portfolio(
             )
 
     pre_round_pct = {t: w * gross_scale * 100.0 for t, w in raw.items()}
+    pre_round_pct = _apply_confidence_scales(pre_round_pct, confidence_scales, events)
     sized_pct = _round_to_grid(pre_round_pct, caps.weight_increment_pct)
     for t, snapped in sized_pct.items():
         pre_p = pre_round_pct.get(t, 0.0)
@@ -705,11 +750,17 @@ def size_portfolio(
         {p.ticker: p.target_pct / 100.0 for p in positions}, risk, corr, caps
     )
 
+    confidence_note = ""
+    if confidence_scales and any(
+        t in confidence_scales and float(confidence_scales[t]) < 1.0 - 1e-12 for t in sized_pct
+    ):
+        confidence_note = " PM confidence scaled size (cash-first)."
     explanation = (
         f"{len(positions)} holdings, {gross:g}% invested / {cash:g}% cash; "
         f"ex-ante vol ~{final_vol:.1f}% (target {caps.target_portfolio_vol:g}%); "
         f"vol_scale={vol_scale:.2f}, breaker={breaker:.2f}, "
         f"mode={'calibrated' if calibrated_scores is not None else caps.sizing_mode}."
+        f"{confidence_note}"
     )
     return SizingResult(
         positions=positions,

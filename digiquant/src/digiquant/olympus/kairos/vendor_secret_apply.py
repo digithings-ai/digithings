@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import subprocess
+import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from digiquant.olympus.kairos.vendor_secret_files import (
     inspect_vendor_secret_files,
     load_vendor_secret_environ,
     secrets_set_argv,
+    vendor_secrets_dir,
+    write_vendor_secret_env_file,
 )
 
 EXIT_APPLY_FAILED: int = 3
@@ -50,14 +53,26 @@ def run_vendor_secret_apply(
         return 0
     environ = load_vendor_secret_environ(repo_root)
     log("vendor secret apply: setting core EF secret names (values not logged)")
+    env_file: Path | None = None
     try:
-        run(secrets_set_argv(environ))
+        with tempfile.NamedTemporaryFile(
+            dir=vendor_secrets_dir(repo_root),
+            prefix=".vendor-secret-apply-",
+            suffix=".env",
+            delete=False,
+        ) as handle:
+            env_file = Path(handle.name)
+        write_vendor_secret_env_file(environ, env_file)
+        run(secrets_set_argv(env_file))
         for function in BILLING_FUNCTIONS:
             log(f"vendor secret apply: deploy {function}")
             run(function_deploy_argv(function))
     except (OSError, subprocess.CalledProcessError):
         log("vendor secret apply failed (supabase output not echoed)")
         return EXIT_APPLY_FAILED
+    finally:
+        if env_file is not None:
+            env_file.unlink(missing_ok=True)
     log("vendor secret apply: done")
     return 0
 

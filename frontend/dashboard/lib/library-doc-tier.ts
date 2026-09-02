@@ -12,6 +12,7 @@ const PORTFOLIO_KEYS = new Set(
     'deliberation.json',
     'deliberation-transcript.json',
     'opportunity-screener.json',
+    'opportunity-screener',
   ].map((k) => k.toLowerCase())
 );
 
@@ -32,6 +33,7 @@ export function getDocLibraryTier(d: Pick<Doc, 'path' | 'segment' | 'type'>): Do
   if (
     p.startsWith('market-thesis-exploration/') ||
     p.startsWith('thesis-vehicle-map/') ||
+    p.startsWith('thesis/') ||
     p.startsWith('opportunity-screen/') ||
     p.startsWith('pm-allocation-memo/') ||
     p.startsWith('deliberation-transcript-index/') ||

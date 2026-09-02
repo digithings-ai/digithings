@@ -10,7 +10,7 @@ Update an **existing** crypto document; do not rewrite from scratch.
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"crypto"`.
-Patch paths: `/headline`, `/bias`, `/btc_trend`, `/btc_dominance`, `/funding_rate_bias`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

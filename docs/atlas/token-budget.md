@@ -101,9 +101,9 @@ Each segment reconciles macro context with asset-class technicals and produces a
 ### Phase 5 — Equities + sectors `[tier: research]`
 
 **Model:** Gemini `gemini-2.5-flash` (via `defaults[DIGI_LLM_MODE]`)  
-**Segments:** 1 equity top-down + 11 sector nodes (parallel) + 1 scorecard (deterministic, no LLM)
+**Segments:** 1 equity top-down + 11 sector memo nodes (parallel)
 
-Each segment reads upstream macro and asset-class context, requiring coherent multi-document analysis. The sector scorecard synthesises all 11 sector slots deterministically — no additional LLM call.
+Each segment reads upstream macro and asset-class context, requiring coherent multi-document analysis. Operators and digest/PM pick sector leadership from those memos — there is no deterministic scorecard rollup.
 
 **Token budget:**
 - Equity top-down: ~2,500 in + ~700 out = 3,200

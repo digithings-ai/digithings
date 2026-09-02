@@ -121,8 +121,8 @@ export function RemainingHopStatus({
       <p className="acct-settings-kicker text-ink-mute">Remaining hops</p>
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
-        a Stripe subscription boolean does not prove checkout. Baseline Stripe does not prove
-        checkout — broker connect and overlay need Custom. Digest log without inbox
+        a Stripe subscription boolean does not prove checkout. Brief or Desk Stripe does not prove
+        checkout — overlay needs Studio. Digest log without inbox
         confirmation, or with <span className="font-mono">daily_digest</span> off, does not prove
         received. Alpaca <span className="font-mono">api_key</span> paper fills do not prove the
         OAuth or fill hops.

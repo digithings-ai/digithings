@@ -4,6 +4,7 @@ import { PIPELINE_TOPOLOGY } from './pipeline-topology';
 import {
   auditStaticTopologyRunStatuses,
   pipelineNodeRunStatusLabel,
+  resolvePresentCommitKey,
   staticTopologyNodeIds,
   topologyEvidenceBands,
   type PipelineNodeRunStatus,
@@ -61,7 +62,7 @@ describe('pipeline topology status audit', () => {
     const day: PipelineDayData = {
       fanoutCounts: { sectors: 1 },
       fanoutKeys: { sectors: ['sector-technology'] },
-      presentKeys: new Set(['macro', 'sector-technology', 'sector-scorecard']),
+      presentKeys: new Set(['macro', 'sector-technology']),
       artifacts: [],
     };
     const bands = topologyEvidenceBands(day);
@@ -71,15 +72,15 @@ describe('pipeline topology status audit', () => {
 
     const matrix = auditStaticTopologyRunStatuses(day);
     expect(matrix.inputs).toBe('stage-overview');
-    expect(matrix['inputs:preflight']).toBe('state-only');
+    expect(matrix['inputs:preflight']).toBe('expected-artifact-missing');
     expect(matrix['inputs:attention-plan']).toBe('not-run');
     expect(matrix.research).toBe('stage-overview');
     expect(matrix['research:macro']).toBe('persisted-artifact');
     expect(matrix['research:sectors']).toBe('parallel-dispatch');
     expect(matrix['research:alt-data']).toBe('expected-artifact-missing');
-    expect(matrix['research:scorecard']).toBe('persisted-artifact');
+    expect(matrix['research:scorecard']).toBeUndefined();
     expect(matrix.synthesis).toBe('stage-overview');
-    expect(matrix['synthesis:consolidate']).toBe('state-only');
+    expect(matrix['synthesis:consolidate']).toBe('expected-artifact-missing');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');
     expect(matrix.selection).toBe('not-run');
     expect(matrix['selection:thesis']).toBe('not-run');
@@ -94,7 +95,7 @@ describe('pipeline topology status audit', () => {
     }
   });
 
-  it('Hermes commit implies Atlas+Hermes reached; Learning stays dark without beliefs', () => {
+  it('Hermes commit implies Learning should have published a same-date beliefs doc (WP-I)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {
@@ -118,13 +119,13 @@ describe('pipeline topology status audit', () => {
     expect(matrix.synthesis).toBe('stage-overview');
     expect(matrix['synthesis:digest']).toBe('persisted-artifact');
     expect(matrix.selection).toBe('stage-overview');
-    expect(matrix['selection:thesis']).toBe('state-only');
+    expect(matrix['selection:thesis']).toBe('expected-artifact-missing');
     expect(matrix['selection:analysts']).toBe('parallel-dispatch');
     expect(matrix['selection:pm-direction']).toBe('persisted-artifact');
     expect(matrix.decision).toBe('stage-overview');
     expect(matrix['decision:commit']).toBe('persisted-artifact');
-    expect(matrix.learning).toBe('not-run');
-    expect(matrix['learning:beliefs']).toBe('not-run');
+    expect(matrix.learning).toBe('stage-overview');
+    expect(matrix['learning:beliefs']).toBe('expected-artifact-missing');
   });
 
   it('recorded run with zero documents: Atlas-only reach; Hermes/Learning stay not-run', () => {
@@ -136,9 +137,9 @@ describe('pipeline topology status audit', () => {
     expect(bands.learning).toBe(false);
 
     const matrix = auditStaticTopologyRunStatuses(day);
-    expect(matrix['inputs:preflight']).toBe('state-only');
+    expect(matrix['inputs:preflight']).toBe('expected-artifact-missing');
     expect(matrix['inputs:attention-plan']).toBe('not-run');
-    expect(matrix['synthesis:consolidate']).toBe('state-only');
+    expect(matrix['synthesis:consolidate']).toBe('expected-artifact-missing');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');
     expect(matrix.selection).toBe('not-run');
     expect(matrix['selection:analysts']).toBe('not-run');
@@ -155,5 +156,15 @@ describe('pipeline topology status audit', () => {
     for (const id of staticTopologyNodeIds()) {
       expect(matrix[id], id).toBeDefined();
     }
+  });
+
+  it('commit-run keys stay ledger-internal: newest numeric run_id still resolves', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['commit-run/9999999999', 'commit-run/10000000000']),
+      artifacts: [],
+    };
+    expect(resolvePresentCommitKey(day)).toBe('commit-run/10000000000');
   });
 });

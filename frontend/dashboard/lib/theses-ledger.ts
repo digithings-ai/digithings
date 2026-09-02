@@ -1,12 +1,21 @@
 import { thesisIdEquals } from './thesis-id';
 import type { Thesis } from './types';
 
-/** Two-tier split: explicit 'vehicle' kind → vehicle; everything else → market. */
+/** ``vehicle-{ticker}`` plus the live typo ``veicle-{ticker}`` (missing 'h'). */
+const VEHICLE_SHAPED_ID = /^veh?icle-/i;
+
+/** Vehicle-kind rows, or ids that are vehicles regardless of a null ``thesis_kind``. */
+export function isVehicleThesis(thesis: Pick<Thesis, 'id' | 'thesis_kind'>): boolean {
+  if ((thesis.thesis_kind ?? '').toLowerCase() === 'vehicle') return true;
+  return VEHICLE_SHAPED_ID.test(thesis.id ?? '');
+}
+
+/** Two-tier split: vehicle kind / vehicle-shaped id → vehicle; everything else → market. */
 export function splitTheses(theses: Thesis[]): { market: Thesis[]; vehicle: Thesis[] } {
   const market: Thesis[] = [];
   const vehicle: Thesis[] = [];
   for (const t of theses) {
-    if ((t.thesis_kind ?? '').toLowerCase() === 'vehicle') vehicle.push(t);
+    if (isVehicleThesis(t)) vehicle.push(t);
     else market.push(t);
   }
   return { market, vehicle };
