@@ -26,7 +26,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]
@@ -42,6 +42,10 @@ def _ensure_src_path() -> None:
     src = root / "digiquant" / "src"
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
+
+
+_ensure_src_path()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _sb():
@@ -65,16 +69,16 @@ def _load_sources_from_json(path: Path) -> list[Any]:
     return [LegacySourceDocument.model_validate(item) for item in raw]
 
 
-def _load_sources_from_supabase(*, page_size: int = 1000) -> list[Any]:
+def _load_sources_from_supabase(*, page_size: int = 1000, client: Any | None = None) -> list[Any]:
+    """House ``documents`` pages. Overlay rows must not seed the house inventory."""
     from digiquant.olympus.research_retrieval.legacy_backfill import LegacySourceDocument
 
-    client = _sb()
+    sb = client if client is not None else _sb()
     sources: list[LegacySourceDocument] = []
     offset = 0
     while True:
         resp = (
-            client.table("documents")
-            .select("date,document_key,payload")
+            eq_house_workspace(sb.table("documents").select("date,document_key,payload"))
             .order("date")
             .order("document_key")
             .range(offset, offset + page_size - 1)

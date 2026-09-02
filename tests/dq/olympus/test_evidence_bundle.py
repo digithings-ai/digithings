@@ -305,3 +305,45 @@ def test_h5_evidence_fact_rejects_blank_summary() -> None:
             effective_as_of=_TS,
             known_at=_TS,
         )
+
+
+def test_facts_from_phase_inputs_preserves_long_web_grounding_summary() -> None:
+    """Long web_grounding prose must pass without max_length/truncate (#3063)."""
+    from digiquant.olympus.research_retrieval.evidence_bundle import (
+        H5EvidenceFact,
+        facts_from_phase_inputs,
+    )
+
+    long_summary = (
+        "Here are the key findings from overnight macro desks. " * 20
+        + "https://dailymarket.report/"
+    )
+    assert len(long_summary) > 500
+
+    facts, missing = facts_from_phase_inputs(
+        ticker="SPY",
+        phase_inputs={
+            "web_grounding": {
+                "summary": long_summary,
+                "sources": ["https://dailymarket.report/"],
+                "as_of": "2026-08-27",
+            },
+            "price_deltas": {"SPY": -0.004},
+        },
+        knowledge_cutoff_at=_TS,
+    )
+    web_facts = [f for f in facts if f.authority == "web_grounding"]
+    assert len(web_facts) == 1
+    assert web_facts[0].summary == long_summary.strip()
+    assert len(web_facts[0].summary) == len(long_summary.strip())
+    assert missing == ()
+
+    direct = H5EvidenceFact(
+        source="https://example.com",
+        authority="web_grounding",
+        summary=long_summary,
+        event_time=_TS,
+        effective_as_of=_TS,
+        known_at=_TS,
+    )
+    assert direct.summary == long_summary.strip()

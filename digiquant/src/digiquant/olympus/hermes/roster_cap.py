@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Collection, Sequence
+
+from digiquant.olympus.envcompat import MAX_ANALYSTS, env_lookup
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ def configured_max_analysts() -> int:
     H4 node's static baseline can never disagree — before #1767 three call sites
     parsed it independently.
     """
-    raw = os.environ.get("ATLAS_MAX_ANALYSTS", "0") or "0"
+    raw = env_lookup(MAX_ANALYSTS, default="0") or "0"
     try:
         return int(raw)
     except ValueError:

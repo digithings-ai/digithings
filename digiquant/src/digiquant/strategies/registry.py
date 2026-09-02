@@ -49,6 +49,30 @@ def _resolve_name(strategy_name: str) -> str:
     return _ALIASES.get(strategy_name, strategy_name)
 
 
+def _config_fields(config_cls: type) -> frozenset[str]:
+    """Declared field names on a Nautilus ``StrategyConfig`` (msgspec struct)."""
+    fields = getattr(config_cls, "__struct_fields__", None)
+    if fields:
+        return frozenset(fields)
+    return frozenset(getattr(config_cls, "__annotations__", {}))
+
+
+def config_declares_field(strategy_name: str, field: str) -> bool:
+    """True when the registered config class has ``field`` (e.g. ``trade_size``).
+
+    Publish-path injection (#3170) must not pass ``trade_size`` into configs
+    that do not declare it (``SdcaStrategyConfig``, and ``M2LiquidityConfig``
+    when it is registered). Inspect the class, never a strategy-name allowlist.
+    """
+    canonical = _resolve_name(strategy_name)
+    spec = _REGISTRY.get(canonical)
+    if spec is None:
+        raise ValueError(
+            f"Unknown strategy: {strategy_name}. Registered: {list(_REGISTRY.keys())}."
+        )
+    return field in _config_fields(spec.config_cls)
+
+
 def get_strategy(
     strategy_name: str,
     instrument_id: Any,
@@ -70,7 +94,7 @@ def get_strategy(
     params = {**spec.default_params, **overrides}
     params["instrument_id"] = instrument_id
     params["bar_type"] = bar_type
-    if trade_size is not None:
+    if trade_size is not None and "trade_size" in _config_fields(spec.config_cls):
         params["trade_size"] = trade_size
     config = spec.config_cls(**params)
     strategy = spec.strategy_cls(config=config)
@@ -86,10 +110,12 @@ def list_strategies() -> list[dict[str, Any]]:
             continue
         seen.add(name)
         aliases = [a for a, c in _ALIASES.items() if c == name]
-        result.append({
-            "name": name,
-            "aliases": aliases,
-            "description": spec.description[:200] if spec.description else "",
-            "default_params": spec.default_params,
-        })
+        result.append(
+            {
+                "name": name,
+                "aliases": aliases,
+                "description": spec.description[:200] if spec.description else "",
+                "default_params": spec.default_params,
+            }
+        )
     return result

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from datetime import date
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
+from uuid import UUID
 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.thesis import (
@@ -17,12 +19,26 @@ from digiquant.olympus.hermes.models.thesis import (
     ThesisStatusUpdate,
     ThesisVehicleMapOutput,
 )
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
 _VALID_THESIS_STATUSES = frozenset(
     {"ACTIVE", "MONITORING", "CHALLENGED", "CLOSED", "INVALIDATED", "PAUSED", "NEW"}
 )
+# ``vehicle-{ticker}`` plus the live typo ``veicle-{ticker}`` (missing 'h').
+_VEHICLE_SHAPED_ID = re.compile(r"^veh?icle-(.+)$", re.IGNORECASE)
+
+
+def vehicle_shaped_ticker(thesis_id: str | None) -> str | None:
+    """Ticker if ``thesis_id`` is a vehicle row id (or the ``veicle-`` misspelling)."""
+    if not thesis_id:
+        return None
+    match = _VEHICLE_SHAPED_ID.fullmatch(str(thesis_id).strip())
+    if match is None:
+        return None
+    ticker = match.group(1).strip()
+    return ticker.lower() if ticker else None
 
 
 def normalize_thesis_status(raw: str | None) -> str:
@@ -98,8 +114,12 @@ def upsert_thesis_row(
     horizon: str | None = None,
     thesis_kind: str | None = None,
     linked_market_thesis_id: str | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> None:
     """Upsert one ``theses`` row for ``(date, thesis_id)``."""
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return
     row: dict[str, Any] = {
         "date": run_date.isoformat(),
         "thesis_id": thesis_id,
@@ -182,6 +202,7 @@ def upsert_thesis_vehicles(
     tickers: list[str],
     rationale: str = "",
     source_exploration_key: str | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Upsert ``thesis_vehicles`` rows for one thesis mapping.
 
@@ -189,6 +210,12 @@ def upsert_thesis_vehicles(
     ``vehicle-{ticker}`` thesis rows so the frontend two-tier hierarchy shows
     real linkage instead of the 'Unlinked expressions' fallback (#1047).
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register thesis_vehicles "
+            "(house-only UNIQUE(date, thesis_id, ticker))"
+        )
+        return 0
     date_str = run_date.isoformat()
     written = 0
     for rank, ticker in enumerate(tickers, start=1):
@@ -230,12 +257,28 @@ def persist_thesis_review(
     run_date: date,
     review: ThesisReviewOutput,
     active_theses: list[dict[str, Any]],
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Write status updates from H1 onto ``theses`` rows."""
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return 0
     prior_by_id = {str(r.get("thesis_id")): r for r in active_theses}
     count = 0
     for update in review.reviewed_theses:
-        prior_row = prior_by_id.get(update.thesis_id, {})
+        if vehicle_shaped_ticker(update.thesis_id) is not None:
+            logger.info(
+                "H1 skip vehicle-shaped thesis_id %s (H5 owns vehicle rows)",
+                update.thesis_id,
+            )
+            continue
+        prior_row = prior_by_id.get(update.thesis_id)
+        if not prior_row:
+            logger.info(
+                "H1 skip unknown thesis_id %s (does not mint market rows)",
+                update.thesis_id,
+            )
+            continue
         name = str(prior_row.get("name") or update.thesis_id)
         invalidation = str(prior_row.get("invalidation") or "")
         notes = "; ".join(update.evidence) if update.evidence else str(prior_row.get("notes") or "")
@@ -255,6 +298,7 @@ def persist_thesis_review(
             horizon=prior_row.get("horizon"),
             thesis_kind=prior_row.get("thesis_kind"),
             linked_market_thesis_id=prior_row.get("linked_market_thesis_id"),
+            workspace_id=workspace_id,
         )
         count += 1
     return count
@@ -284,6 +328,9 @@ def validate_market_thesis_proposals(
     proposed_ids: set[str] = set()
 
     for proposal in proposals:
+        if vehicle_shaped_ticker(proposal.thesis_id) is not None:
+            errors.append(f"{proposal.thesis_id}: vehicle-shaped id cannot be a market thesis")
+            continue
         if proposal.thesis_id in proposed_ids:
             errors.append(f"{proposal.thesis_id}: thesis_id is already proposed in this run")
             continue
@@ -343,8 +390,12 @@ def persist_market_thesis_exploration(
     run_date: date,
     exploration: MarketThesisExplorationOutput,
     status_by_id: Mapping[str, str] | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Insert/refresh market theses from H2 proposals."""
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return 0
     count = 0
     for proposal in exploration.theses:
         invalidation = "; ".join(proposal.invalidation_criteria)
@@ -364,6 +415,7 @@ def persist_market_thesis_exploration(
             invalidation_criteria=proposal.invalidation_criteria,
             horizon=proposal.horizon,
             thesis_kind="market",
+            workspace_id=workspace_id,
         )
         count += 1
     return count
@@ -375,8 +427,15 @@ def persist_thesis_vehicle_map(
     run_date: date,
     vehicle_map: ThesisVehicleMapOutput,
     source_exploration_key: str = "market-thesis-exploration",
+    workspace_id: UUID | str | None = None,
 ) -> int:
     """Upsert H3 vehicle mappings."""
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register thesis_vehicles "
+            "(house-only UNIQUE(date, thesis_id, ticker))"
+        )
+        return 0
     total = 0
     for mapping in vehicle_map.mappings:
         total += upsert_thesis_vehicles(
@@ -386,6 +445,7 @@ def persist_thesis_vehicle_map(
             tickers=list(mapping.candidate_tickers),
             rationale=mapping.rationale,
             source_exploration_key=source_exploration_key,
+            workspace_id=workspace_id,
         )
     return total
 
@@ -420,6 +480,7 @@ def upsert_vehicle_thesis_from_analyst(
     ticker: str,
     analyst_payload: dict[str, Any],
     linked_market_thesis_id: str | None = None,
+    workspace_id: UUID | str | None = None,
 ) -> None:
     """Create/update a vehicle-local thesis row when H5 covers an unlinked ticker.
 
@@ -430,6 +491,9 @@ def upsert_vehicle_thesis_from_analyst(
     reliable ``thesis_vehicles`` map instead — self-healing, since H5 rewrites a
     fresh vehicle row each run.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return
     thesis_id = f"vehicle-{ticker.lower()}"
     link = linked_market_thesis_id
     if link is None or link == thesis_id:
@@ -442,8 +506,9 @@ def upsert_vehicle_thesis_from_analyst(
         name=f"{ticker} vehicle thesis",
         status="ACTIVE",
         vehicle=ticker,
-        invalidation=invalidation[:500] if invalidation else None,
-        notes=str(analyst_payload.get("thesis") or "")[:2000] or None,
+        invalidation=invalidation or None,
+        notes=str(analyst_payload.get("thesis") or "") or None,
         thesis_kind="vehicle",
         linked_market_thesis_id=link,
+        workspace_id=workspace_id,
     )

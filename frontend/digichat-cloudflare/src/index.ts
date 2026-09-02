@@ -29,6 +29,7 @@ export class DigiChatContainer extends Container {
       env.DIGICHAT_EMBED_HOSTS ??
       "digithings.ai,www.digithings.ai,occ.digithings.ai",
     DIGICHAT_AUTO_MIGRATE: env.DIGICHAT_AUTO_MIGRATE ?? "0",
+    DIGICHAT_TRUSTED_PROXIES: env.DIGICHAT_TRUSTED_PROXIES ?? "",
     // Profile A: digisearch lives loopback in digithings-stack; only probe digigraph.
     DIGICHAT_ENABLED_SERVICES: env.DIGICHAT_ENABLED_SERVICES ?? "digigraph",
     AUTH_SECRET: env.AUTH_SECRET ?? "",
@@ -45,6 +46,7 @@ export interface Env {
   DIGICHAT_REQUIRE_ROOT_AUTH?: string;
   DIGICHAT_EMBED_HOSTS?: string;
   DIGICHAT_AUTO_MIGRATE?: string;
+  DIGICHAT_TRUSTED_PROXIES?: string;
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;

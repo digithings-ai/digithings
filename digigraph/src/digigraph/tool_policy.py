@@ -76,3 +76,14 @@ def state_list_from_frozen(names: frozenset[str] | None) -> list[str] | None:
     if names is None:
         return None
     return sorted(names)
+
+
+def frozen_from_state_list(names: list[str] | None) -> frozenset[str] | None:
+    """Deserialize allowlist from :class:`WorkflowState`.
+
+    ``None`` means unrestricted; ``[]`` means deny-all. Must not use a falsy
+    check — ``frozenset([]) if [] else None`` wrongly yields ``None``.
+    """
+    if names is None:
+        return None
+    return frozenset(names)

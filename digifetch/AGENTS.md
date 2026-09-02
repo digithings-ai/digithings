@@ -31,9 +31,8 @@ In this order, before writing any code:
 
 1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — module map, public API, the
    extracted-vs-site-specific boundary, and design decisions
-2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
-3. [`../CLAUDE.md`](../CLAUDE.md) — scoring gate and human-gate triggers
-4. The single consumer's real scrapers (read-only requirements source):
+2. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules (scoring gate, human-gate triggers)
+3. The single consumer's real scrapers (read-only requirements source):
    `twelve-x/nodes/scrape.py`, `twelve-x/fx_calendar/scraper.py`
 
 ---
@@ -73,7 +72,7 @@ Beyond root `AGENTS.md`:
 - **httpx, not requests.** The fetch seam uses `httpx`. Do not `import requests`
   (the scorer flags it, and it breaks the async-capable convention).
 - **No new hard dependencies** without a human gate (network-capable deps are a
-  human-review trigger per CLAUDE.md). The hard-dep set is `pydantic` + `httpx`.
+  human-review trigger per AGENTS.md). The hard-dep set is `pydantic` + `httpx`.
 - **No sibling-package hard dep.** Do not add `digibase` (or any monorepo
   sibling) to `dependencies` — it is not on PyPI and would break flat installs.
   Mirror small constants locally instead (see `DEFAULT_TIMEOUT`).

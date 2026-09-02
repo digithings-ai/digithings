@@ -17,6 +17,9 @@
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
+  AllocationStepChart,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -24,21 +27,31 @@ export {
   ChartLegend,
   ChartResetButton,
   LOOKBACK_OPTIONS,
+  MIN_VIEW,
+  clampView,
   viewWindowForPreset,
   viewWindowLastYear,
   matchLookbackPreset,
   viewsNear,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
+  type AllocationStepChartProps,
+  type AllocationFillMarker,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
   type TradeReturnChartProps,
   type ChartScale,
   type ChartTone,
+  type OverlayTone,
+  type ChartLegendKind,
   type ViewWindow,
   type LookbackPreset,
 } from "./charts";
+export { RISK_BANDS, riskBandLabel, dcaRateCopy, type RiskBand } from "./risk-bands";
 export { ReturnsMatrix, type ReturnsPeriod, type MatrixMetric } from "./ReturnsMatrix";
 export { KpiStrip, Kpi, type KpiStripProps, type KpiProps } from "./KpiStrip";
 export {
@@ -65,4 +78,22 @@ export {
 } from "./types";
 export { fmtCompact, fmtPct, fmtMoney, fmtNum, toneClass } from "./format";
 export { dailyReturnsFromEquity, annualizedVolPct } from "./stats";
+export {
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  dayReturnAnchorNav,
+  derivePriceAsOfDate,
+  inceptionSignAgreesWithBase100,
+  informationRatioFromDaily,
+  olsBeta,
+  overlappingDailyReturns,
+  relativeMetricsFromReturnSeries,
+  sinceInceptionPctFromNav,
+  MIN_OVERLAP_DAYS,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
+} from "./live-performance-kpis";
 export { TEARSHEET_DEMO } from "./demo-data";

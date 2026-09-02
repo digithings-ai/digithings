@@ -2,9 +2,13 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { isEmbedChatRequest, resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
-import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { OPENROUTER_API_BASE } from "@/lib/byok-openrouter";
 import { bucketOpenRouterModels, type OpenRouterCatalogEntry } from "@/lib/openrouter-catalog";
+import {
+  readOpenRouterCatalogCache,
+  writeOpenRouterCatalogCache,
+} from "@/lib/openrouter-catalog-cache";
 
 export const maxDuration = 15;
 
@@ -21,9 +25,22 @@ export const maxDuration = 15;
  * 2x case — four bytes across two code units.) */
 const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB
 
-function jsonResponse(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+function jsonResponse(body: unknown, status: number, extraHeaders?: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", ...extraHeaders },
+  });
 }
+
+function rateLimitResponse(message: string, retryAfterSec: number): Response {
+  return jsonResponse(
+    { error: "rate_limited", message },
+    429,
+    { "retry-after": String(retryAfterSec) },
+  );
+}
+
+const UPSTREAM_UNAVAILABLE = "Model catalog is temporarily unavailable. Try again shortly.";
 
 /**
  * GET /api/byok/models — live OpenRouter model catalog for the BYOK picker's tier
@@ -45,9 +62,9 @@ export async function GET(req: Request): Promise<Response> {
     if (embedCtx instanceof Response) return embedCtx;
     const ipRate = checkEmbedIpRateLimit(req);
     if (!ipRate.allowed) {
-      return jsonResponse(
-        { error: "rate_limited", message: "Too many requests from this address. Try again shortly." },
-        429,
+      return rateLimitResponse(
+        "Too many requests from this address. Try again shortly.",
+        ipRate.retryAfterSec,
       );
     }
     rateKey = `byok-models:embed:${embedCtx.tenantSlug}`;
@@ -57,7 +74,7 @@ export async function GET(req: Request): Promise<Response> {
 
   const rate = checkBffRateLimit(rateKey);
   if (!rate.allowed) {
-    return jsonResponse({ error: "rate_limited", message: "Too many requests. Try again shortly." }, 429);
+    return rateLimitResponse("Too many requests. Try again shortly.", rate.retryAfterSec);
   }
 
   const provider = (new URL(req.url).searchParams.get("provider") || "").trim().toLowerCase();
@@ -69,6 +86,11 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   try {
+    const cached = readOpenRouterCatalogCache();
+    if (cached) {
+      return jsonResponse({ ok: true, ...cached }, 200);
+    }
+
     const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/models`, { method: "GET" });
     if (!resp.ok) {
       return jsonResponse({ error: "upstream_error", message: `OpenRouter returned HTTP ${resp.status}` }, 502);
@@ -92,8 +114,10 @@ export async function GET(req: Request): Promise<Response> {
       return jsonResponse({ error: "malformed_response" }, 502);
     }
     const buckets = bucketOpenRouterModels(data as OpenRouterCatalogEntry[]);
+    writeOpenRouterCatalogCache(buckets);
     return jsonResponse({ ok: true, ...buckets }, 200);
   } catch (e) {
-    return jsonResponse({ ok: false, error: abortOrMessage(e) }, 502);
+    console.error("[byok/models] upstream fetch failed:", e);
+    return jsonResponse({ ok: false, error: "upstream_unavailable", message: UPSTREAM_UNAVAILABLE }, 502);
   }
 }

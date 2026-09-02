@@ -126,7 +126,7 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 5px;
+  border-radius: 0;
   padding: 0.05rem 0.3rem;
 }
 .dc-code-block {
@@ -137,7 +137,7 @@
   margin: 0;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 9px;
+  border-radius: 0;
   padding: 0.7rem 0.8rem;
   overflow-x: auto;
 }
@@ -155,7 +155,7 @@
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0.12rem 0.4rem;
   cursor: pointer;
   opacity: 0;
@@ -225,24 +225,30 @@
 .dc-stop {
   font: inherit;
   align-self: stretch;
-  color: var(--accent);
-  background: transparent;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   padding: 0.3rem 0.65rem;
-  transition: background 0.18s var(--ease, ease);
+  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
 }
 .dc-send {
   font-size: 1rem;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 .dc-stop {
   font-size: 0.8rem;
   color: var(--ink-soft);
+  background: transparent;
 }
-.dc-send:hover:not(:disabled),
+.dc-send:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
 .dc-stop:hover {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 .dc-send:disabled {
   opacity: 0.4;
@@ -410,7 +416,7 @@
   margin: 0.2rem 0 0 1.6rem;
   padding: 0.45rem 0.65rem;
   border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--down) 8%, transparent);
   font-size: 0.74rem;
   color: var(--ink-soft);
@@ -454,7 +460,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -473,7 +479,7 @@
   margin-top: 0.25rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--bg-term, transparent);
   color: var(--text-primary);
   font-family: var(--font-family-mono);

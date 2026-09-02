@@ -91,7 +91,27 @@ export function resolveEmbedClientConfigFromParams(
   const registered = resolveEmbedTenantByHost(host);
   if (!registered) return DEFAULT_EMBED_TENANT_CONFIG;
   if (isFirstPartyEmbedHost(host)) return toEmbedClientConfig(registered);
-  return token && token === registered.token
+  const trimmedToken = token?.trim();
+  return trimmedToken && trimmedToken === registered.token
     ? toEmbedClientConfig(registered)
     : DEFAULT_EMBED_TENANT_CONFIG;
+}
+
+/**
+ * Resolve the embed host for server render: explicit `?host=` first, else the
+ * request referer origin — mirrors `resolveEmbedHost()` on the client (#2006).
+ */
+export function resolveEmbedHostParamOrReferer(
+  host: string | undefined,
+  referer: string | null | undefined,
+): string | undefined {
+  const explicit = host?.trim();
+  if (explicit) return explicit;
+  const ref = referer?.trim();
+  if (!ref) return undefined;
+  try {
+    return new URL(ref).origin;
+  } catch {
+    return undefined;
+  }
 }

@@ -15,10 +15,15 @@ import tempfile
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, TypeAlias
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Annotated,
+    Any,
+    TypeAlias,
+)
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from digiquant.olympus.envcompat import SHADOW_ARTIFACT_DIR, SHADOW_ARTIFACT_MODE, env_lookup
 from digiquant.olympus.hermes.allocation_contracts import (
     AllocationInputBundle,
     BookWeightsView,
@@ -64,8 +69,8 @@ _FORBIDDEN_PAYLOAD_KEY_FRAGMENTS: frozenset[str] = frozenset(
     }
 )
 
-_SHADOW_ARTIFACT_MODE_ENV = "OLYMPUS_SHADOW_ARTIFACT_MODE"
-_SHADOW_ARTIFACT_DIR_ENV = "OLYMPUS_SHADOW_ARTIFACT_DIR"
+_SHADOW_ARTIFACT_MODE_ENV = SHADOW_ARTIFACT_MODE
+_SHADOW_ARTIFACT_DIR_ENV = SHADOW_ARTIFACT_DIR
 _DEFAULT_ARTIFACT_DIR = "artifacts"
 
 
@@ -151,7 +156,11 @@ class ShadowAllocationArtifact(ShadowContractModel):
 
 def resolve_shadow_artifact_mode() -> ShadowArtifactMode:
     """Read ``OLYMPUS_SHADOW_ARTIFACT_MODE``; unknown values fall back to export."""
-    raw = os.environ.get(_SHADOW_ARTIFACT_MODE_ENV, ShadowArtifactMode.EXPORT.value).strip().lower()
+    raw = (
+        env_lookup(_SHADOW_ARTIFACT_MODE_ENV, default=ShadowArtifactMode.EXPORT.value)
+        .strip()
+        .lower()
+    )
     try:
         return ShadowArtifactMode(raw)
     except ValueError:
@@ -165,7 +174,7 @@ def resolve_shadow_artifact_mode() -> ShadowArtifactMode:
 
 def resolve_shadow_artifact_dir() -> Path:
     """Directory for shadow JSON files (default ``artifacts/``)."""
-    raw = os.environ.get(_SHADOW_ARTIFACT_DIR_ENV, _DEFAULT_ARTIFACT_DIR).strip()
+    raw = env_lookup(_SHADOW_ARTIFACT_DIR_ENV, default=_DEFAULT_ARTIFACT_DIR).strip()
     return Path(raw or _DEFAULT_ARTIFACT_DIR)
 
 

@@ -1,0 +1,41 @@
+# Atlas research sandbox — paper book / research only (#396).
+# Baked at image build time; agents must not pip-install at runtime.
+#
+# Pins: match digiquant floor where present (polars>=1.0, statsmodels>=0.14,
+# numpy>=1.26, yfinance>=0.2). Otherwise current stable wheels compatible with
+# pandas 2.x (alphalens-reloaded / pyfolio-reloaded require pandas<3; vectorbt
+# 1.1 requires pandas>=3 — stay on vectorbt 1.0.0).
+
+# Core numerics / utils (pandas 2.x for reloaded tearsheet stack)
+numpy>=1.26,<3
+scipy>=1.11
+pandas>=2.2.2,<3
+polars>=1.0
+openpyxl>=3.1
+matplotlib>=3.8
+
+# Technical analysis
+pandas-ta-classic>=0.3.78
+TA-Lib>=0.7.0
+# vectorbt 1.0 templates still reference plotly's scattermapbox (removed in 6+)
+vectorbt==1.0.0
+plotly>=5.18,<6
+
+# Portfolio optimisation
+skfolio>=0.7
+pyportfolioopt>=1.5
+riskfolio-lib>=6.0
+cvxpy>=1.5
+
+# Risk / statistics
+empyrical-reloaded>=0.5
+pyfolio-reloaded>=0.9
+arch>=7.0
+statsmodels>=0.14
+
+# Factor analysis
+alphalens-reloaded>=0.4
+
+# Data (free defaults)
+yfinance>=0.2
+pandas-datareader>=0.10

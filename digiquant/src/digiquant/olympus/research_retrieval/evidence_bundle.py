@@ -8,17 +8,18 @@ selection (WP11.3+). Reuses WP11.1 / WP12 identity helpers only.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from typing import Annotated, TypeAlias
 from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
+from digiquant.olympus.envcompat import EVIDENCE_BUNDLE_WRITER, env_lookup
 from digiquant.olympus.hermes.models.forecast import ForecastTerms
 from digiquant.olympus.research_retrieval.models import (
     EvidenceRecord,
     NonEmptyStr,
+    NonEmptyText,
     TickerEvidenceBundle,
     TypedProvenance,
     evidence_content_hash,
@@ -30,6 +31,8 @@ from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 
 OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV = "OLYMPUS_EVIDENCE_BUNDLE_WRITER"
 _H5_BASE_SOURCE = "h5:base"
+# source / authority columns are CHECK (length BETWEEN 1 AND 500) in WP11/WP12 stores.
+_SOURCE_MAX_LEN = 500
 
 # Keys that must never become evidence authorities (H5 blinding / anti-leak).
 _PORTFOLIO_LEAK_AUTHORITIES = frozenset(
@@ -53,7 +56,7 @@ class H5EvidenceFact(BaseModel):
 
     source: NonEmptyStr
     authority: NonEmptyStr
-    summary: NonEmptyStr
+    summary: NonEmptyText
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
     known_at: AwareDatetime
@@ -99,7 +102,7 @@ class H5EvidenceBundleBuild(BaseModel):
 
 def evidence_bundle_writer_enabled() -> bool:
     """Durable store append is on unless explicitly disabled for rollback."""
-    raw = os.environ.get(OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV, "on").strip().lower()
+    raw = env_lookup(EVIDENCE_BUNDLE_WRITER, default="on").strip().lower()
     return raw not in {"off", "0", "false", "no"}
 
 
@@ -146,7 +149,7 @@ def facts_from_phase_inputs(
         for src in source_list:
             facts.append(
                 H5EvidenceFact(
-                    source=src[:500],
+                    source=src[:_SOURCE_MAX_LEN],
                     authority="web_grounding",
                     summary=summary,
                     event_time=event_time,
@@ -196,7 +199,7 @@ def facts_from_phase_inputs(
                 H5EvidenceFact(
                     source="phase6_bias_row",
                     authority="bias_row",
-                    summary=str(safe)[:500],
+                    summary=str(safe),
                     event_time=cutoff,
                     effective_as_of=cutoff,
                     known_at=cutoff,

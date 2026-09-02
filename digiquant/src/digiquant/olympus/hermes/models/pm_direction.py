@@ -2,12 +2,19 @@
 
 WP4.5 (#2660): each roster row may carry a typed ``ForecastReference`` bound
 deterministically from the current effective-forecast map — never from LLM IDs.
+WP-G: roster rows may also carry ``confidence`` in ``[0, 1]`` (display scale);
+rank remains ordinal order, not size. H8 scales each long by ``confidence``
+(cash-first; missing → 0.5).
 """
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal, Mapping
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Any,
+    Literal,
+    Mapping,
+)
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -45,14 +52,20 @@ class ForecastReference(BaseModel):
 
 
 class TickerDirection(BaseModel):
-    """Per-ticker direction and ordinal conviction — no weights."""
+    """Per-ticker direction, ordinal rank, and confidence — no weights."""
 
     model_config = ConfigDict(extra="forbid")
 
     ticker: str = Field()
     direction: Literal["long", "flat"]
     conviction_rank: int = Field(ge=1, description="Ordinal rank across roster; 1 = highest")
-    narrative: str | None = Field(default=None, max_length=2000)
+    narrative: str | None = None
+    confidence: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description="How sure the PM is of this name, in [0, 1]; rank remains order, not size.",
+    )
     forecast_reference: ForecastReference | None = Field(
         default=None,
         description=(
@@ -77,7 +90,7 @@ class PMDirectionMemo(BaseModel):
     schema_version: str = "1.0"
     date: date
     roster: list[TickerDirection] = Field(default_factory=list)
-    memo: str | None = Field(default=None, max_length=8000)
+    memo: str | None = None
 
 
 def _parse_uuid(raw: object) -> UUID | None:
@@ -158,7 +171,7 @@ def bind_forecast_references(
 
     Overwrites any model-supplied or prior-memo references. Missing lineage yields
     an explicit degraded reference (null IDs + reason) — never fabricated UUIDs.
-    Direction and conviction_rank are preserved unchanged.
+    Direction, conviction_rank, narrative, and confidence are preserved unchanged.
     """
     roster: list[TickerDirection] = []
     for row in memo.roster:

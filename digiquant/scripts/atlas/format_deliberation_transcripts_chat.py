@@ -25,10 +25,11 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional  # score:allow untyped any — duck-typed PostgREST rows
 
 try:
     from supabase import create_client  # type: ignore
@@ -43,6 +44,18 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
 
 def _sb():
     url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
@@ -50,6 +63,20 @@ def _sb():
     if not url or not key:
         raise SystemExit("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
+
+
+def house_deliberation_transcripts(sb: Any, start: str, end: str) -> list[dict[str, Any]]:
+    """House deliberation transcripts in [start, end]. Overlay rows must not be rewritten."""
+    res = (
+        eq_house_workspace(
+            sb.table("documents").select("id,date,document_key,content,payload")
+        )
+        .gte("date", start)
+        .lte("date", end)
+        .ilike("document_key", "deliberation-transcript/%")
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
 
 
 _RE_HEADER = re.compile(r"^#\s*Deliberation Transcript\s+—\s*(?P<ticker>[A-Z0-9._-]+)\s*\|\s*(?P<date>\d{4}-\d{2}-\d{2})\s*$")
@@ -323,17 +350,8 @@ def main() -> int:
     start = args.start
     end = args.end
 
-    # Pull keys + minimal payload for ticker/date and existing content.
-    rows = (
-        sb.table("documents")
-        .select("id,date,document_key,content,payload")
-        .gte("date", start)
-        .lte("date", end)
-        .ilike("document_key", "deliberation-transcript/%")
-        .execute()
-        .data
-        or []
-    )
+    # House only — overlay deliberation content must not be rewritten by id.
+    rows = house_deliberation_transcripts(sb, start, end)
 
     changed = 0
     for r in rows:

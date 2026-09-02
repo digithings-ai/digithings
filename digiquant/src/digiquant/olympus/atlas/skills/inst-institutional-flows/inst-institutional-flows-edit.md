@@ -10,7 +10,7 @@ Update an **existing** `inst-institutional-flows` document; do not rewrite from 
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"inst-institutional-flows"`.
-Patch paths: `/headline`, `/bias`, `/flow_direction`, `/largest_sector_inflow`, `/largest_sector_outflow`, `/notable_filings`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

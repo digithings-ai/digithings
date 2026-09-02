@@ -46,32 +46,17 @@ Weekly fund flow scan if available.
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Cite flow sources with [title](url). Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Institutional flows — {as-of date of the data}
+
+## ETF flows
+Net direction and the largest in/out names.
+
+## Rotation and filings
+Sector rotation, dark-pool/block notes, 13D/13G if retrieved.
+
+## Implication
+What the flow tape implies for today's research.
 ```
-### 🏦 INSTITUTIONAL FLOWS INTELLIGENCE
-**Net Institutional Direction**: [Risk-On / Risk-Off / Neutral / Rotating]
-
-**Top ETF Flows Today:**
-| ETF | Category | Flow ($M) | vs Avg | Signal |
-|-----|----------|-----------|--------|--------|
-| IBIT | BTC Spot | +$XXXm | [above/below avg] | BTC accumulation |
-
-**Notable Sector Rotation via Flows:**
-- Into: [sectors]
-- Out of: [sectors]
-
-**Dark Pool / Block Trades:**
-- [notes]
-
-**Short Interest Update:**
-- [notes]
-
-**SEC 13D/13G Filings (Last 7 Days):**
-- [notes]
-
-**Fund Flow Macro Signal:**
-- Money market level: $X trillion | [Rising/Falling]
-
-**Implication for Portfolio:**
-[2-3 sentences]
-```
-

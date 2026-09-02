@@ -36,6 +36,56 @@ def _deliberation_rounds_count(rounds: Any) -> int:
     return max((n for n in numbers if isinstance(n, int)), default=0)
 
 
+def _is_pm_analyst_transcript(rounds: Any) -> bool:
+    """True when ``rounds`` is an H6 PM↔analyst chat (role + message), not bull/bear args."""
+    if not isinstance(rounds, list) or not rounds:
+        return False
+    first = next((r for r in rounds if isinstance(r, dict)), None)
+    if first is None:
+        return False
+    role = first.get("role")
+    message = first.get("message")
+    return role in ("pm", "analyst") and isinstance(message, str) and bool(message.strip())
+
+
+def _shaped_theses(
+    summary: dict[str, Any],
+    *,
+    rounds: Any,
+    unchallenged: bool,
+) -> tuple[str, str]:
+    """Bull/bear fields for the published document.
+
+    H6 ``DeliberationSummary`` has no real bull/bear theses — only a PM↔analyst
+    ``transcript``. Falling both sides back to ``conclusion`` produced two identical
+    cards in the UI and hid the real debate. When a chat transcript is present and
+    no explicit theses were supplied, leave both empty so consumers render the chat.
+    Carry paths without a transcript keep the legacy conclusion fallback (#1742).
+    """
+    conclusion = summary.get("conclusion", "") or ""
+    explicit_bull = summary.get("bull_thesis") or ""
+    explicit_bear = summary.get("bear_thesis") or ""
+    chat = _is_pm_analyst_transcript(rounds)
+
+    if explicit_bull:
+        bull = str(explicit_bull)
+    elif chat:
+        bull = ""
+    else:
+        bull = str(conclusion)
+
+    if unchallenged:
+        bear = ""
+    elif explicit_bear:
+        bear = str(explicit_bear)
+    elif chat:
+        bear = ""
+    else:
+        bear = str(conclusion)
+
+    return bull, bear
+
+
 def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
     """Per-ticker deliberation summaries (H6) — PM-compatible debate shape.
 
@@ -49,6 +99,11 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
     crashed deliberation, and a crash carry publishes **no** ``bear_thesis``: falling both
     sides back to the same ``conclusion`` produced two byte-identical theses and made a
     debate that never happened look two-sided (#1742).
+
+    H6 chat turns are published under both ``transcript`` (canonical) and ``rounds``
+    (legacy alias used by ``rounds_count`` / older consumers). When the transcript is a
+    real PM↔analyst exchange, ``bull_thesis`` / ``bear_thesis`` are left empty unless the
+    summary already carried distinct theses — the UI renders the chat, not mirrored cards.
     """
     out: dict[str, dict[str, Any]] = {}
     for ticker, summary in state.phase_hermes.deliberation_summaries.items():
@@ -56,18 +111,22 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
             continue
         rounds = summary.get("transcript", summary.get("rounds", []))
         unchallenged = is_unchallenged_carry(summary)
+        bull_thesis, bear_thesis = _shaped_theses(summary, rounds=rounds, unchallenged=unchallenged)
+        chat = _is_pm_analyst_transcript(rounds)
         out[ticker] = {
             "ticker": ticker,
             "converged": summary.get("converged", True),
             "conclusion": summary.get("conclusion", ""),
+            # Canonical chat key + legacy alias (same list when H6 ran a debate).
+            "transcript": list(rounds)
+            if chat
+            else (
+                list(summary["transcript"]) if isinstance(summary.get("transcript"), list) else []
+            ),
             "rounds": rounds,
             "rounds_count": _deliberation_rounds_count(rounds),
-            "bull_thesis": summary.get("bull_thesis") or summary.get("conclusion", ""),
-            "bear_thesis": (
-                ""
-                if unchallenged
-                else (summary.get("bear_thesis") or summary.get("conclusion", ""))
-            ),
+            "bull_thesis": bull_thesis,
+            "bear_thesis": bear_thesis,
             "bear_case": summary.get("bear_case") or summary.get("bear_thesis"),
             "net_stance": summary.get("net_stance", "neutral"),
             "conviction_delta": summary.get("conviction_delta", 0),

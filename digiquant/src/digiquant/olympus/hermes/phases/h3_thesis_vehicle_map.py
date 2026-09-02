@@ -17,6 +17,7 @@ from digiquant.olympus.hermes.phases.thesis_common import (
 )
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.thesis_io import persist_thesis_vehicle_map
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +64,16 @@ def _h3_node_factory(client: SupabaseClient | None):
             body=vehicle_map.model_dump(mode="json"),
             meta={"source_exploration_key": "market-thesis-exploration"},
         )
-        if client is not None and vehicle_map.mappings:
+        if (
+            client is not None
+            and vehicle_map.mappings
+            and not skip_overlay_shared_register(state.config.workspace_id)
+        ):
             persist_thesis_vehicle_map(
                 client,
                 run_date=state.run_date,
                 vehicle_map=vehicle_map,
+                workspace_id=state.config.workspace_id,
             )
         return {
             "phase_hermes": state.phase_hermes.model_copy(update={"thesis_vehicle_map": document}),

@@ -32,6 +32,21 @@ def _digest_payload_kwargs() -> dict:
     return {
         "segment": "master-digest",
         "date": date(2026, 4, 20),
+        "body": (
+            "# Daily Digest — 2026-04-20\n\n"
+            "## Headline\n\n"
+            "Markets digest mixed Fed signals; risk-on intact in tech\n\n"
+            "## Market regime\n\n"
+            "Risk-on; growth leadership reasserting.\n"
+        ),
+        "regime_label": "",
+        "sources": [
+            {"id": "src-1", "title": "WSJ Markets Live", "url": "https://wsj.com/x"},
+        ],
+        "segment_freshness": {
+            "macro": {"source": "today", "as_of": "2026-04-20"},
+        },
+        # Historical extras — still accepted on the read path.
         "bias": "neutral",
         "headline": "Markets digest mixed Fed signals; risk-on intact in tech",
         "material_findings": [
@@ -41,17 +56,11 @@ def _digest_payload_kwargs() -> dict:
                 "source_ids": ["src-1"],
             }
         ],
-        "sources": [
-            {"id": "src-1", "title": "WSJ Markets Live", "url": "https://wsj.com/x"},
-        ],
-        "notes": "Volume light into Fed week.",
         "market_regime_snapshot": "Risk-on; growth leadership reasserting.",
         "alt_data_dashboard": "Card-spend trends accelerating in services.",
         "institutional_summary": "Net inflows into US equity ETFs.",
         "asset_classes_summary": "Equities up; bonds flat; commodities mixed.",
         "us_equities_summary": "Tech +1.8%, energy -0.4%; breadth fair.",
-        "thesis_tracker": "Long-tech thesis intact.",
-        "portfolio_recommendations": "Hold growth; trim defensives 2pp.",
         "actionable_summary": [
             {
                 "priority": 1,
@@ -66,9 +75,6 @@ def _digest_payload_kwargs() -> dict:
                 "trigger": "5y5y reprices >10bps wider.",
             }
         ],
-        "segment_freshness": {
-            "macro": {"source": "today", "as_of": "2026-04-20"},
-        },
     }
 
 
@@ -107,11 +113,11 @@ class TestSnapshotEnvelope:
         with pytest.raises(ValidationError):
             SnapshotEnvelope(**bad)
 
-    def test_extra_field_rejected_inside_digest(self) -> None:
+    def test_historical_extras_allowed_inside_digest(self) -> None:
         bad = _envelope_kwargs()
-        bad["digest"]["unexpected_inner"] = "nope"
-        with pytest.raises(ValidationError):
-            SnapshotEnvelope(**bad)
+        bad["digest"]["unexpected_inner"] = "ok"
+        env = SnapshotEnvelope(**bad)
+        assert env.digest.body.startswith("# Daily Digest")
 
     def test_delta_run_with_baseline_date(self) -> None:
         env = SnapshotEnvelope(
@@ -149,7 +155,7 @@ class TestSnapshotEnvelope:
         assert env.baseline_date is None
         # `updated_at` wins over `created_at` per the helper's contract.
         assert env.published_at == datetime(2026, 4, 20, 12, 30, 0, tzinfo=timezone.utc)
-        assert env.digest.headline.startswith("Markets digest")
+        assert env.digest.body.startswith("# Daily Digest")
 
     def test_from_supabase_row_falls_back_to_created_at(self) -> None:
         row = {
@@ -202,15 +208,21 @@ class TestParityWithPipelineDigest:
         return DigestSnapshot
 
     def test_payload_matches_pipeline_digest(self) -> None:
-        """Field-name parity between DigestPayload and DigestSnapshot."""
+        """Stitcher fields are a subset of the read-path DigestPayload.
+
+        DigestPayload keeps typed historical list slots for personalization;
+        DigestSnapshot (LLM output) does not require them.
+        """
         DigestSnapshot = self._digest_snapshot_class()
         local_fields = set(DigestPayload.model_fields)
         upstream_fields = set(DigestSnapshot.model_fields)
-        assert local_fields == upstream_fields, (
-            "DigestPayload (digiquant.olympus.atlas.snapshot) drifted from "
-            "DigestSnapshot (digiquant.olympus.atlas.phases.phase7_synthesis). "
-            f"Only-local: {local_fields - upstream_fields}; "
-            f"only-upstream: {upstream_fields - local_fields}"
+        historical_read_slots = {"actionable_summary", "risk_radar", "material_findings"}
+        assert upstream_fields <= local_fields, (
+            f"DigestPayload is missing stitcher fields {upstream_fields - local_fields}"
+        )
+        assert local_fields - upstream_fields <= historical_read_slots, (
+            "DigestPayload grew unexpected fields "
+            f"{local_fields - upstream_fields - historical_read_slots}"
         )
 
     def test_data_quality_enum_parity(self) -> None:
@@ -231,7 +243,7 @@ class TestParityWithPipelineDigest:
 
         assert set(LocalActionableItem.model_fields) == set(UpstreamItem.model_fields)
         # Touch the upstream digest class so the import is exercised.
-        assert "actionable_summary" in DigestSnapshot.model_fields
+        assert "actionable_summary" not in DigestSnapshot.model_fields
 
     def test_risk_item_field_parity(self) -> None:
         self._digest_snapshot_class()  # gate skip on availability

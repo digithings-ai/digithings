@@ -89,12 +89,12 @@ export function DocsLayoutReference() {
         <code>var(--method-*)</code> custom props — each hue mixed 20% toward the theme&apos;s ink,
         so one rule stays legible on both themes.
       </p>
-      <p className="mt-[0.9rem] inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+      <p className="mt-[0.9rem] inline-block rounded-none border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
         Example data · not live
       </p>
 
       <div
-        className="mt-[1.4rem] rounded-[14px] border border-hair bg-surface/40 py-[clamp(1.2rem,3vw,2rem)]"
+        className="mt-[1.4rem] rounded-none border border-hair bg-surface/40 py-[clamp(1.2rem,3vw,2rem)]"
         style={{ "--docs-nav-h": "var(--nav-h)" } as CSSProperties}
       >
         <DocsLayout

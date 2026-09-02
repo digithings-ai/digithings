@@ -4,6 +4,7 @@ from digiquant.olympus.learning.beliefs_distillation import (
     BeliefsDistillationDeps,
     build_beliefs_distillation_phase,
     distill_beliefs,
+    resolve_beliefs_fold_mode,
     run_beliefs_distillation_if_triggered,
     should_distill_beliefs,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "build_component_attribution_report",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
+    "resolve_beliefs_fold_mode",
     "run_beliefs_distillation_if_triggered",
     "should_distill_beliefs",
 ]

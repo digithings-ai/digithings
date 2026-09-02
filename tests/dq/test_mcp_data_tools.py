@@ -45,3 +45,15 @@ def test_query_data_inherits_in_process_allowlist():
         assert table in ALLOWED_READ_TABLES
     for blocked in ("decision_log", "atlas_run_diagnostics", "documents"):
         assert blocked not in ALLOWED_READ_TABLES
+
+
+@pytest.mark.unit
+def test_query_data_tool_documents_house_default():
+    server = create_mcp_server()
+    if hasattr(server, "list_tools_sync"):
+        tools = server.list_tools_sync()
+    else:
+        tools = server._tool_manager.list_tools()
+    qd = next(t for t in tools if t.name == "digiquant_query_data")
+    assert "house" in qd.description
+    assert "workspace_id" in qd.description
