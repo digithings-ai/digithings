@@ -85,13 +85,13 @@ export interface LivePosition {
   weightPct: number;
   entryPrice: number | null;
   entryDate: string | null;
-  /** Daily-close mark from the snapshot (`metrics_as_of`). */
+  /** Daily-close mark: snapshot `current_price`, else a seed/live quote price. */
   currentPrice: number | null;
   dayChangePct: number | null;
   unrealizedPnlPct: number | null;
   sinceEntryReturnPct: number | null;
   metricsAsOf: string | null;
-  /** Live mark when a real (non-stale) quote exists, else `currentPrice`. */
+  /** Live tick when `!stale`, else the mark (`currentPrice`). */
   livePrice: number | null;
   /** `true` only when `livePrice` came from a live tick (`!quote.stale`). */
   isLive: boolean;
