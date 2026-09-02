@@ -153,32 +153,49 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 - [ ] **Owner:** enable **Google** (still often Disabled on `core`) and GitHub + Redirect URLs.
 - [x] **Owner:** X OAuth 2.0 enabled on `core` (`external_x_enabled`; authorize `provider=x`). App calls `provider: 'x'`. Legacy `twitter` stays off.
 - [ ] **Owner:** Auth SMTP (Mailgun) or turn Confirm email off until SMTP delivers.
-- [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the 12x invite) on the settings
-      Edge Function, apply migration **112**, share the plaintext only out of band.
+- [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the FX Hub invite) on the settings
+      Edge Function, apply migration **112**, share the invite URL (or plaintext) out of band.
 - [ ] **Owner:** staging Access overlay retained; production Access removed at
   cutover with `NEXT_PUBLIC_DASHBOARD_AUTH=1` + anon-policy drop.
 - [ ] **Do not share an ungated production URL** while anon `USING (true)` still
   applies and Access is not on that host.
 
-## FX Hub (12x) — invite after login
+## FX Hub — invite link after login
 
 Identity for FX Hub is the same Supabase Auth session as the rest of the dashboard.
-The healthy medium is **short login (Google/GitHub)** plus a **rotatable hashed
+The healthy medium is **short login (Google/GitHub/email)** plus a **rotatable hashed
 invite** that writes the caller's email into `client_product_grants`. That is
-preferable to the operator pasting every 12x address, and it is preferable to a
+preferable to the operator inserting every analyst address, and it is preferable to a
 login-optional shared secret (which cannot hide the anon key).
+
+Share one reusable desk URL on the dashboard origin:
+
+`https://digiquant.io/dashboard?invite=<code>`
+
+Unsigned visitors stash the token in `sessionStorage` (tab-scoped). After Google,
+GitHub, or email signup/login **in that same tab**, the app POSTs that code to
+settings `POST /access/redeem-invite` (SHA-256 compare against `FX_HUB_INVITE_HASH`
+and/or `product_invite_codes`) and grants `fx_hub` for the **signed-in email**.
+No session / no email → no grant. Do not put a code field on the OAuth card. The
+FX Hub locked surface still has a paste-code form as fallback if someone forgets
+the link, or if confirm-email opens a **new** tab (stash does not follow). Rate
+limit stays 8 attempts / hour. Rotate the code if the URL leaks. Ops can still
+`INSERT` emails into `client_product_grants`. Sign-out drops the stash so a later
+session on the same tab cannot inherit it.
 
 Operator steps:
 
 1. Generate a high-entropy code (≥10 chars). Do not commit it.
 2. `python -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())" '<code>'`
 3. `supabase secrets set FX_HUB_INVITE_HASH=<hex>` and redeploy `settings`.
-   Optional: `INSERT INTO product_invite_codes (product_key, code_hash, label) VALUES ('fx_hub', '<hex>', '12x')`.
-4. Share the plaintext with the 12x team out of band. They sign in, open FX Hub,
-   paste the code. `product_invite_redemptions` is the admin ledger (who
-   registered). Mailgun digest is a separate secret; until it exists the
-   notification is the table row + `notification_log` event `fx_hub_invite_redeemed`.
+   Optional: `INSERT INTO product_invite_codes (product_key, code_hash, label) VALUES ('fx_hub', '<hex>', 'desk')`.
+4. Share the invite URL (or the plaintext) out of band. Analysts open the link,
+   create an account, and land granted. Paste-code remains on the locked FX Hub
+   surface. `product_invite_redemptions` is the admin ledger (who registered).
+   Mailgun digest is a separate secret; until it exists the notification is the
+   table row + `notification_log` event `fx_hub_invite_redeemed`.
 
-Cloudflare Access on **`/dashboard/twelve-x*`** remains a human Zero Trust
-option if the team should never see the rest of the dashboard — it is not encoded here.
+Cloudflare Access on FX Hub remains a human Zero Trust option if the team should
+never see the rest of the dashboard — it is not encoded here.
+Do not flip production Access or auth flags as part of the invite-link change.
 
