@@ -9,8 +9,12 @@ Sign convention matches ``valuation_z``: cheap / buy = +z, rich / sell = −z,
 clipped to ``[-3, 3]``.
 
 ``weekly_rsi`` is a **dead-zone** map (mid-cycle 30–80 → z≈0, RSI 85 is
-max-sell) blended with monthly RSI (``mtf_rsi_z``). Do not affine-map
-``(50−RSI)/50`` — that pegs a bull at the floor. ``weekly_macd`` is weekly
+max-sell) fed into an **agreement-scaled confluence** of weekly (long-term)
+and daily (medium-term) RSI (``rsi_confluence_z``): a weighted blend of the
+two dead-zone z-scores, amplified when the timeframes agree in sign and
+damped toward 0 when they conflict. ``mtf_rsi_z`` (weekly/monthly blend)
+stays as a diagnostic. Do not affine-map ``(50−RSI)/50`` — that pegs a bull
+at the floor. ``weekly_macd`` is weekly
 **log-MACD** (``log10(EMA12)−log10(EMA26)``) with a sloped diminishing top
 cap, not 52-week histogram z (that renormalizes a persistent trend to
 neutral). ``SdcaCompositeWeights`` still defaults both to 0; published
@@ -30,6 +34,10 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _RSI_LENGTH = 14
+_RSI_DAILY_LENGTH = 14
+_RSI_CONFLUENCE_WEEKLY_WEIGHT = 0.5
+_RSI_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_RSI_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 _MACD_FAST = 12
 _MACD_SLOW = 26
 _MACD_SIGNAL = 9
@@ -59,12 +67,15 @@ class SdcaOscillatorSpec(BaseModel):
     Calibrate to that asset's cycle (long-term, or medium-term if it
     persistently trends up). These are generic technicals — they are not
     BTC-only. Defaults match the original weekly RSI(14) / MACD(12,26,9) /
-    90-day SMA-band used on BTC.
+    90-day SMA-band used on BTC. ``rsi_length`` is the long-term weekly leg
+    of the RSI confluence (``rsi_confluence_z``); ``daily_rsi_length`` is
+    its medium-term daily leg.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     rsi_length: int = Field(_RSI_LENGTH, ge=2)
+    daily_rsi_length: int = Field(_RSI_DAILY_LENGTH, ge=2)
     macd_fast: int = Field(_MACD_FAST, ge=2)
     macd_slow: int = Field(_MACD_SLOW, ge=3)
     macd_signal: int = Field(_MACD_SIGNAL, ge=2)
@@ -263,6 +274,100 @@ def mtf_rsi_z(
     return pl.Series("weekly_rsi", blended, dtype=pl.Float64)
 
 
+def daily_rsi_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_DAILY_LENGTH,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Daily Wilder RSI (medium-term) → dead-zone z. No as-of broadcast needed.
+
+    Wilder's smoothing is already causal on the daily series, unlike the
+    weekly/monthly legs which aggregate first and then join-asof onto daily
+    dates.
+    """
+    if dates.len() != close.len():
+        raise ValueError("dates and close must be the same length")
+    rsi = _wilder_rsi(close, length=length)
+    return rsi_deadzone_z(
+        rsi,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    ).alias("daily_rsi")
+
+
+def rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    weekly_length: int = _RSI_LENGTH,
+    daily_length: int = _RSI_DAILY_LENGTH,
+    weekly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Weekly (long-term) + daily (medium-term) RSI, amplified on agreement.
+
+    A ``weekly_weight``/``1 - weekly_weight`` blend of the two dead-zone
+    z-scores is the anchor. When both legs share sign, the blend is scaled
+    up toward ``1 + agreement_boost`` (more so the closer their magnitudes
+    are — full agreement, not just same-sign noise). When they disagree in
+    sign, the blend is damped to ``disagreement_damp`` of its value — the
+    timeframes are fighting, so the sub-score should say less, not more.
+    Either leg sitting at the dead-zone (z == 0) passes the other through
+    unscaled: a silent timeframe is not a disagreement. Result stays
+    clipped to ``[-3, 3]``.
+    """
+    weekly = weekly_rsi_z(
+        dates,
+        close,
+        length=weekly_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    daily = daily_rsi_z(
+        dates,
+        close,
+        length=daily_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    daily_weight = 1.0 - weekly_weight
+    blended: list[float | None] = []
+    for w, d in zip(weekly.to_list(), daily.to_list(), strict=True):
+        if w is None and d is None:
+            blended.append(None)
+        elif d is None:
+            blended.append(w)
+        elif w is None:
+            blended.append(d)
+        else:
+            base = weekly_weight * float(w) + daily_weight * float(d)
+            if w == 0.0 or d == 0.0:
+                multiplier = 1.0
+            elif (w > 0) == (d > 0):
+                agreement_frac = min(abs(w), abs(d)) / max(abs(w), abs(d))
+                multiplier = 1.0 + agreement_boost * agreement_frac
+            else:
+                multiplier = disagreement_damp
+            blended.append(max(-3.0, min(3.0, base * multiplier)))
+    return pl.Series("weekly_rsi", blended, dtype=pl.Float64)
+
+
 def lmacd_top_cap(day: date) -> float:
     years = day.year - _LMACD_TOP_ANCHOR_YEAR + (day.timetuple().tm_yday - 1) / 365.25
     raw = _LMACD_TOP_ANCHOR - _LMACD_TOP_DECAY_PER_YEAR * max(years, 0.0)
@@ -342,7 +447,12 @@ def price_oscillator_z_vectors(
     """Causal extra-z for walk-forward slicing. Works on any asset's close."""
     spec = oscillators or SdcaOscillatorSpec()
     return {
-        "weekly_rsi": mtf_rsi_z(dates, close, length=spec.rsi_length).to_list(),
+        "weekly_rsi": rsi_confluence_z(
+            dates,
+            close,
+            weekly_length=spec.rsi_length,
+            daily_length=spec.daily_rsi_length,
+        ).to_list(),
         "weekly_macd": weekly_macd_z(
             dates,
             close,
@@ -364,11 +474,13 @@ __all__ = [
     "SdcaOscillatorSpec",
     "completed_monthly_closes",
     "completed_weekly_closes",
+    "daily_rsi_z",
     "documented_warmup_calendar_days",
     "lmacd_top_cap",
     "monthly_rsi_z",
     "mtf_rsi_z",
     "price_oscillator_z_vectors",
+    "rsi_confluence_z",
     "rsi_deadzone_z",
     "sma_band_z",
     "weekly_macd_z",

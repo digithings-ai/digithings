@@ -20,6 +20,7 @@ from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
 from digiquant.strategies.sdca.weight_search import (
     optimize_stage_a_by_backtest,
     search_names_with_data,
+    search_oscillator_periods_by_backtest,
 )
 
 pytestmark = pytest.mark.unit
@@ -230,6 +231,133 @@ def test_backtest_search_skips_enabled_extra_without_z() -> None:
     )
     assert "dxy" not in result.weights.enabled_extras()
     assert result.weights.dxy == pytest.approx(0.0)
+
+
+def test_period_search_picks_the_best_synthetic_period() -> None:
+    """Same folds/evaluator/rank machinery as weight search, gridded over params."""
+    dates = _dates()
+    prices = [100.0 + 0.2 * i for i in range(len(dates))]
+    n = len(dates)
+    param_z = {5: 0.5, 14: 1.0, 30: 2.0}
+
+    def evaluator(
+        window_dates: list[date],
+        window_prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        rsi_z_mean = 0.0
+        for ind in extra_indicators or []:
+            if getattr(ind, "name", "") == "weekly_rsi":
+                vals = [v for v in ind.z.to_list() if v is not None]
+                rsi_z_mean = sum(vals) / len(vals) if vals else 0.0
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=10.0 + 2.0 * rsi_z_mean - 0.001 * len(window_dates),
+            vs_lump_pct=-1.0,
+            capital_deployed_pct=40.0,
+            max_drawdown_pct=12.0,
+        )
+
+    def compute_indicator_z(params: dict) -> list[float]:
+        return [param_z[params["period"]]] * n
+
+    result = search_oscillator_periods_by_backtest(
+        dates,
+        prices,
+        indicator_name="weekly_rsi",
+        param_candidates=[{"period": 5}, {"period": 14}, {"period": 30}],
+        compute_indicator_z=compute_indicator_z,
+        base_extra_z={},
+        base_weights=SdcaCompositeWeights(valuation=1.0),
+        rails_fitter=_fitter,
+        evaluator=evaluator,
+        shape=_SHAPE,
+    )
+    assert result.indicator_name == "weekly_rsi"
+    assert result.best.params == {"period": 30}
+    assert result.num_evaluations == 3
+    assert len(result.all_scores) == 3
+    assert isinstance(result.best.mean_oos_vs_flat_dca_pct, float)
+
+
+def test_period_search_probes_indicator_weight_regardless_of_base() -> None:
+    """indicator_name is forced to probe_weight even when base_weights has it at 0."""
+    dates = _dates()
+    prices = [100.0] * len(dates)
+    seen_weights: list[float] = []
+
+    def evaluator(
+        window_dates: list[date],
+        window_prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        for ind in extra_indicators or []:
+            if getattr(ind, "name", "") == "weekly_rsi":
+                seen_weights.append(float(ind.weight))
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=1.0, vs_lump_pct=0.0, capital_deployed_pct=40.0, max_drawdown_pct=10.0
+        )
+
+    search_oscillator_periods_by_backtest(
+        dates,
+        prices,
+        indicator_name="weekly_rsi",
+        param_candidates=[{"period": 5}],
+        compute_indicator_z=lambda params: [0.0] * len(dates),
+        base_extra_z={},
+        base_weights=SdcaCompositeWeights(valuation=1.0),  # weekly_rsi defaults to 0.0
+        rails_fitter=_fitter,
+        evaluator=evaluator,
+        shape=_SHAPE,
+        probe_weight=1.0,
+    )
+    assert seen_weights, "evaluator never saw the probed indicator"
+    assert all(w == pytest.approx(1.0) for w in seen_weights)
+
+
+def test_period_search_rejects_empty_param_candidates() -> None:
+    dates = _dates()
+    prices = [100.0] * len(dates)
+    with pytest.raises(ValueError, match="param_candidates"):
+        search_oscillator_periods_by_backtest(
+            dates,
+            prices,
+            indicator_name="weekly_rsi",
+            param_candidates=[],
+            compute_indicator_z=lambda params: [0.0] * len(dates),
+            base_extra_z={},
+            base_weights=SdcaCompositeWeights(valuation=1.0),
+            rails_fitter=_fitter,
+            evaluator=lambda *a, **k: SdcaTrialMetrics(
+                vs_flat_dca_pct=0.0, vs_lump_pct=0.0, capital_deployed_pct=0.0, max_drawdown_pct=0.0
+            ),
+            shape=_SHAPE,
+        )
+
+
+def test_period_search_rejects_mismatched_z_length() -> None:
+    dates = _dates()
+    prices = [100.0] * len(dates)
+    with pytest.raises(ValueError, match="expected"):
+        search_oscillator_periods_by_backtest(
+            dates,
+            prices,
+            indicator_name="weekly_rsi",
+            param_candidates=[{"period": 5}],
+            compute_indicator_z=lambda params: [0.0] * (len(dates) - 1),
+            base_extra_z={},
+            base_weights=SdcaCompositeWeights(valuation=1.0),
+            rails_fitter=_fitter,
+            evaluator=lambda *a, **k: SdcaTrialMetrics(
+                vs_flat_dca_pct=0.0, vs_lump_pct=0.0, capital_deployed_pct=0.0, max_drawdown_pct=0.0
+            ),
+            shape=_SHAPE,
+        )
 
 
 def test_drop_extras_missing_sources_zeros_plugins_only() -> None:

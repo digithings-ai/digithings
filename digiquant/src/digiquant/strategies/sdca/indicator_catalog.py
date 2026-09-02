@@ -34,8 +34,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
-    mtf_rsi_z,
     price_oscillator_z_vectors,
+    rsi_confluence_z,
     sma_band_z,
     weekly_macd_z,
 )
@@ -313,7 +313,12 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="weekly_rsi",
-                z=mtf_rsi_z(dates, btc_price, length=spec.rsi_length),
+                z=rsi_confluence_z(
+                    dates,
+                    btc_price,
+                    weekly_length=spec.rsi_length,
+                    daily_length=spec.daily_rsi_length,
+                ),
                 weight=enabled["weekly_rsi"],
             )
         )

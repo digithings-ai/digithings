@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import math
 from datetime import date
 
 import polars as pl
@@ -16,9 +17,12 @@ from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
 )
 from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
     completed_monthly_closes,
     completed_weekly_closes,
+    daily_rsi_z,
     monthly_rsi_z,
+    rsi_confluence_z,
     rsi_deadzone_z,
     sma_band_z,
     weekly_macd_z,
@@ -198,6 +202,187 @@ class TestMonthlyRsiZ:
         f_idx = dates.to_list().index(date(2020, 2, 1))
         assert z1[f_idx] is not None
         assert z1[f_idx] != pytest.approx(z2[f_idx])
+
+
+class TestDailyRsiZ:
+    def test_oversold_daily_rsi_is_positive_z(self) -> None:
+        n = 60
+        dates = _dates(n)
+        close = pl.Series([1000.0 - 5.0 * i for i in range(n)])
+        z = daily_rsi_z(dates, close)
+        tail = [v for v in z.to_list()[-20:] if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0.5
+
+    def test_overbought_daily_rsi_is_negative_z(self) -> None:
+        n = 60
+        dates = _dates(n)
+        close = pl.Series([100.0 + 5.0 * i for i in range(n)])
+        z = daily_rsi_z(dates, close)
+        tail = [v for v in z.to_list()[-20:] if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) < -0.5
+
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 60
+        dates = _dates(n)
+        close = pl.Series([50.0 + i for i in range(n)])
+        z = daily_rsi_z(dates, close)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_no_asof_lag_reacts_to_the_same_day(self) -> None:
+        """Unlike weekly/monthly RSI, daily RSI needs no join-asof broadcast."""
+        n = 60
+        dates = _dates(n)
+        base = [100.0 + 4.0 * ((i % 10) - 5) for i in range(n)]
+        z1 = daily_rsi_z(dates, pl.Series(base))
+        spiked = base.copy()
+        spiked[40] = 10_000.0
+        z2 = daily_rsi_z(dates, pl.Series(spiked))
+        assert z1[40] != pytest.approx(z2[40])
+
+
+class TestRsiConfluenceZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 400
+        dates = _dates(n)
+        close = pl.Series(
+            [1000.0 - 0.5 * i + 15.0 * math.sin(i / 5.0) for i in range(n)]
+        )
+        z = rsi_confluence_z(dates, close, weekly_length=8, daily_length=10)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        """Reconstruct the blend independently from the weekly/daily legs.
+
+        Cross-checks both the wiring (weekly + daily are actually combined)
+        and the arithmetic (amplify on agreement, damp on disagreement, pass
+        through when one leg is at the dead-zone) against real generated
+        price data instead of hand-picked edge cases.
+        """
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly_length, daily_length = 8, 10
+        weekly = weekly_rsi_z(dates, close, length=weekly_length)
+        daily = daily_rsi_z(dates, close, length=daily_length)
+        confluence = rsi_confluence_z(
+            dates, close, weekly_length=weekly_length, daily_length=daily_length
+        )
+
+        saw_agreement = saw_disagreement = False
+        for w, d, c in zip(weekly.to_list(), daily.to_list(), confluence.to_list(), strict=True):
+            if w is None and d is None:
+                assert c is None
+                continue
+            if w is None:
+                assert c == pytest.approx(d, abs=1e-9)
+                continue
+            if d is None:
+                assert c == pytest.approx(w, abs=1e-9)
+                continue
+            base = 0.5 * w + 0.5 * d
+            if w == 0.0 or d == 0.0:
+                expected = base
+            elif (w > 0) == (d > 0):
+                frac = min(abs(w), abs(d)) / max(abs(w), abs(d))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
+
+    def test_agreement_amplifies_beyond_simple_average(self) -> None:
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly_length, daily_length = 8, 10
+        weekly = weekly_rsi_z(dates, close, length=weekly_length).to_list()
+        daily = daily_rsi_z(dates, close, length=daily_length).to_list()
+        confluence = rsi_confluence_z(
+            dates, close, weekly_length=weekly_length, daily_length=daily_length
+        ).to_list()
+        checked = 0
+        for w, d, c in zip(weekly, daily, confluence, strict=True):
+            if w is None or d is None or w == 0.0 or d == 0.0:
+                continue
+            base = 0.5 * w + 0.5 * d
+            if (w > 0) == (d > 0) and abs(base) < 2.9:
+                assert abs(c) >= abs(base) - 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced an unclipped agreement case"
+
+    def test_disagreement_damps_toward_zero(self) -> None:
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly_length, daily_length = 8, 10
+        weekly = weekly_rsi_z(dates, close, length=weekly_length).to_list()
+        daily = daily_rsi_z(dates, close, length=daily_length).to_list()
+        confluence = rsi_confluence_z(
+            dates, close, weekly_length=weekly_length, daily_length=daily_length
+        ).to_list()
+        checked = 0
+        for w, d, c in zip(weekly, daily, confluence, strict=True):
+            if w is None or d is None or w == 0.0 or d == 0.0:
+                continue
+            if (w > 0) != (d > 0):
+                base = 0.5 * w + 0.5 * d
+                assert abs(c) <= abs(base) + 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced a disagreement case"
+
+    def test_daily_length_changes_output(self) -> None:
+        n = 200
+        dates = _dates(n)
+        close = pl.Series(
+            [1000.0 - 0.3 * i + 20.0 * math.sin(i / 6.0) for i in range(n)]
+        )
+        z_short = rsi_confluence_z(dates, close, weekly_length=8, daily_length=5).to_list()
+        z_long = rsi_confluence_z(dates, close, weekly_length=8, daily_length=30).to_list()
+        assert z_short != z_long
+
+
+class TestOscillatorSpecDailyRsiLength:
+    def test_default_matches_rsi_length(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.daily_rsi_length == 14
+
+    def test_daily_rsi_length_independent_of_weekly(self) -> None:
+        spec = SdcaOscillatorSpec(rsi_length=21, daily_rsi_length=7)
+        assert spec.rsi_length == 21
+        assert spec.daily_rsi_length == 7
 
 
 class TestSmaBandZ:
