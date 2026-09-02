@@ -163,7 +163,7 @@ curl -s -X POST http://127.0.0.1:8002/query \
 
 **digisearch MCP:** `docker compose --profile digisearch-mcp up` — port **8765** ([docker-compose.yml](../docker-compose.yml)). IDE/OpenClaw clients; digigraph + digichat normally use HTTP.
 
-**OmniRoute (optional):** `docker compose --profile omniroute up` — loopback **20128**. Requires `OMNIROUTE_AUTH_PASSWORD` (do not use the vendor default). Overlay: [config/litellm.omniroute.yaml](../config/litellm.omniroute.yaml). House DigiQuant pins stay on OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
+**OmniRoute (optional):** `docker compose --profile omniroute up` — loopback **20128**. Requires `OMNIROUTE_AUTH_PASSWORD` at start (do not use the vendor default); default `docker compose config` does not. Overlay: [config/litellm.omniroute.yaml](../config/litellm.omniroute.yaml). House pins stay on OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
 
 ## Security notes
 

@@ -289,19 +289,45 @@ services:
 
   # ─── OmniRoute (optional profile: omniroute) — #3413 ───
   # Off by default. Self-host OpenAI-compat at 127.0.0.1:20128/v1.
-  # Do not enable cookie / MITM / web-session providers. Do not cut DigiQuant
+  # Do not enable cookie / MITM / web-session providers. Do not cut digiquant
   # house pins over to OmniRoute. See docs/providers/omniroute.md.
+  #
+  # Compose interpolates env for EVERY service at `docker compose config`,
+  # including inactive profiles — never use ${VAR:?} here or compose-validate
+  # fails without OMNIROUTE_AUTH_PASSWORD. Require the password only when the
+  # profile actually starts (omniroute-auth-guard below).
+  omniroute-auth-guard:
+    image: busybox:1.36
+    container_name: digi-omniroute-auth-guard
+    profiles:
+      - omniroute
+    environment:
+      - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$OMNIROUTE_AUTH_PASSWORD" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD is required to start the omniroute profile" >&2
+          exit 1
+        fi
+        if [ "$$OMNIROUTE_AUTH_PASSWORD" = "CHANGEME" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD must not be the vendor default" >&2
+          exit 1
+        fi
   omniroute:
     image: diegosouzapw/omniroute:latest
     container_name: digi-omniroute
     profiles:
       - omniroute
+    depends_on:
+      omniroute-auth-guard:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:20128:20128"
     environment:
       - PORT=20128
-      # Fail closed if the operator does not override the vendor default password.
-      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:?set_OMNIROUTE_AUTH_PASSWORD}
+      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
       - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
     volumes:
       - omniroute_data:/app/data
