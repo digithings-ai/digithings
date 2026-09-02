@@ -66,9 +66,14 @@ describe('unpublishedBookNote', () => {
 
 describe('assertDailySnapshotQueryOk', () => {
   it('throws on a query error', () => {
-    expect(() => assertDailySnapshotQueryOk({ message: 'permission denied' })).toThrow(
-      /Daily snapshot query failed/
-    );
+    const err = { message: 'permission denied', code: 'PGRST205' };
+    expect(() => assertDailySnapshotQueryOk(err)).toThrow(/Daily snapshot query failed/);
+    try {
+      assertDailySnapshotQueryOk(err);
+    } catch (thrown) {
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).cause).toBe(err);
+    }
   });
 
   it('does not throw when the query succeeded', () => {

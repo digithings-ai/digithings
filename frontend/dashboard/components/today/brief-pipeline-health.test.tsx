@@ -141,12 +141,16 @@ describe('BriefPipelineHealth', () => {
   });
 
   it('keys the unpublished note to the snapshot, not pipeline runHealth', () => {
+    // Discriminates the old keying: runDate 2026-08-27 vs now 2026-08-31 would
+    // have emitted the note (`unpublishedBookNote(runDate, formatYmd(now))`).
+    // Snapshot 2026-08-28 with no newer position dates must stay silent.
     const html = renderToStaticMarkup(
       createElement(BriefPipelineHealth, {
-        runHealth: { ...runHealth, runDate: '2026-08-31' },
-        diagnostics: [diag({ run_date: '2026-08-31' })],
+        runHealth,
+        diagnostics: [diag()],
         snapshotDate: '2026-08-28',
         positionDates: ['2026-08-28', '2026-08-27'],
+        now: new Date('2026-08-31T17:00:00Z'),
       })
     );
     expect(html).not.toContain('data-testid="unpublished-book-note"');

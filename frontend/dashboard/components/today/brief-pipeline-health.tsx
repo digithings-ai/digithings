@@ -253,7 +253,7 @@ export type BriefPipelineHealthProps = {
   runHealth: BriefRunHealth | null | undefined;
   diagnostics: AtlasRunDiagnostics[];
   snapshotDate?: string | null;
-  positionDates?: Iterable<string>;
+  positionDates?: readonly string[];
   now?: Date;
   initialWeekStart?: string;
 };
