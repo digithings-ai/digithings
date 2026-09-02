@@ -36,7 +36,7 @@ describe("dashboard security-headers", () => {
     expect(landingBlock).not.toContain("Content-Security-Policy");
   });
 
-  it("does not keep a CSP path for retired /dashboard*", () => {
-    expect(publicHeaders).not.toContain("/dashboard*");
+  it("does not keep a CSP path for retired /olympus*", () => {
+    expect(publicHeaders).not.toContain("/olympus*");
   });
 });
