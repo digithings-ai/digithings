@@ -1,6 +1,6 @@
-"""digiquant plan-tier → artifact-class entitlement map (Kairos tenancy T5 mirror).
+"""digiquant plan-tier → artifact-class entitlement map (execution tenancy T5 mirror).
 
-Spec §5-T5 matrix as amended by ``docs/agent-backlog/kairos-tenancy/PRICING.md``:
+Spec §5-T5 matrix as amended by ``docs/agent-backlog/execution-tenancy/PRICING.md``:
 Observer (free) teaser; Brief (weights/NAV); Desk (glass-box + paper brokers);
 Studio (overlay / private book / BYOK). Enterprise matches Studio for content.
 

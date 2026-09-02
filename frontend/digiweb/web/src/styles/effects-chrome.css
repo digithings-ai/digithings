@@ -27,7 +27,7 @@
      --nav-h   sticky-pin offset for <StackingPanels/> (falls back to 3.4rem)
    ========================================================================== */
 
-/* ── Pipeline — workflow viz (ported from the olympus dashboard) ──────────
+/* ── Pipeline — workflow viz (ported from the dashboard) ──────────
    The components carry the outer boxes (summary strip, flow row, columns) as
    token utilities; the classes stay on the elements for the combinator /
    modifier rules here: node states, the running pulse, the detail grids. */
@@ -546,7 +546,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
-/* chip — the olympus dashboard sub-nav dress: wrapping row of bordered
+/* chip — the dashboard sub-nav dress: wrapping row of bordered
    chips, sans face, accent-tinted active chip (parity with the app's
    `subpageTabButtonClass` active/inactive reads). */
 .tab-strip.chip {

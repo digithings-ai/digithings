@@ -104,7 +104,7 @@ describe('holdingWeightDeltaPp', () => {
  * but a mutation test showed the call site is still unguarded: putting
  * `prevWeightByTicker.get(t) ?? 0` back breaks nothing, and the fabricated delta returns silently.
  *
- * So this pins the one expression that matters, the same way `test_pipeline_olympus_attempt.py`
+ * So this pins the one expression that matters, the same way `test_pipeline_dashboard_attempt.py`
  * pins the workflow's retry counter. It asserts the SHAPE (a `.has()` guard feeding a `null`, not
  * a `?? 0`) rather than an exact string, so a reasonable refactor still passes.
  */

@@ -73,7 +73,7 @@ import {
  * measured to fail: two consumers on a shared constant topic hit `channel()`'s dedupe and lose
  * the lane for both. Do not remove that.
  */
-const CHANNEL_PREFIX = "olympus-prices-live";
+const CHANNEL_PREFIX = "dashboard-prices-live";
 /**
  * Monotonic per-SUBSCRIPTION discriminator. Incremented in the effect BODY, never during
  * render: a render-phase mutation is not idempotent, and React would double-fire it under

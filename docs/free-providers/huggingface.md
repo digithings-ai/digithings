@@ -82,7 +82,7 @@ model_list:
 | DIGI_LLM_MODE tier | Not in primary chain — embeddings only |
 | Single-shot 100k | Not recommended — credit limits too low |
 | Privacy safe | Unknown (routes to third parties) |
-| Atlas/Hermes role | **Not in research pipeline** — embeddings for digisearch only |
+| research/portfolio role | **Not in research pipeline** — embeddings for digisearch only |
 
 ---
 

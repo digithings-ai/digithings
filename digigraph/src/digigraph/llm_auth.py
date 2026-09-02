@@ -275,7 +275,7 @@ def byok_operator_model_routes_elsewhere(provider: str, model: str) -> bool:
 
     Same billing rule as :func:`byok_model_routes_elsewhere`, asked about a model the
     caller never sent but the operator's own configuration produced — the tier default
-    on the mode path, a ``phase_models`` override or an ``olympus_models.yaml``
+    on the mode path, a ``phase_models`` override or an ``digiquant_models.yaml``
     capability model on the phase path. Whichever one it is reaches digillm
     **verbatim**. That difference is the whole reason this is a second entry point
     rather than a reuse, and it is not a latent distinction — it changes the answer.

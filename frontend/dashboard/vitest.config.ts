@@ -2,7 +2,7 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 /**
- * Atlas frontend Vitest config — node-environment, mirrors the digichat setup
+ * research frontend Vitest config — node-environment, mirrors the digichat setup
  * (`frontend/digichat/vitest.config.ts`). Tests live next to the code under
  * `lib/` and `components/`.
  *

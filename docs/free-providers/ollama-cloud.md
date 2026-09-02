@@ -85,7 +85,7 @@ model_list:
 | DIGI_LLM_MODE tier | `medium` (for 671B models with large context) |
 | Single-shot 100k | Yes — DeepSeek V3.1 671B supports 163k; Nemotron supports 1M |
 | Privacy safe | Unknown |
-| Atlas/Hermes role | Large open-weight single-shot when DeepSeek API credits exhausted |
+| research/portfolio role | Large open-weight single-shot when DeepSeek API credits exhausted |
 
 ---
 

@@ -8,7 +8,7 @@
  * - DigiquantMark: four strokes in currentColor; strokes keep their
  *   `dq-stroke-N` classes by default so the dashboard's stroke-draw
  *   loader animation could be replayed via CSS if ever wanted here
- *   (`strokeClassPrefix` retargets them, e.g. to `atlas-loader-stroke-N`).
+ *   (`strokeClassPrefix` retargets them, e.g. to `research-loader-stroke-N`).
  * - Wordmark: the text lockup grammar shared with the footer colophon —
  *   `digi` in ink, the suffix wearing var(--accent) so a livery scope
  *   (e.g. `.accent-digiquant`) dresses it automatically. Mono, weight 500.

@@ -186,7 +186,7 @@ digithings-web `app/globals.css` import `chat-core.css` + `chat-widgets.css`
 *before* the digichat-ui sheets and `@source` the shared chat components. Both
 also import `chat-math.css` (after `chat-core.css`), which carries KaTeX's own
 stylesheet and its ~1 MB of fonts — an app that renders no math must not import
-it, which is why olympus and the design reference do not.
+it, which is why dashboard and the design reference do not.
 
 ## Extension guide
 

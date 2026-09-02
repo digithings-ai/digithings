@@ -11,10 +11,11 @@
 /* Homepage primitives (#1450): NumberedStages spine (stages.css), the
    digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
    the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
-   the stack Marquee it styled — the band under the hero is <RepoStrip> now, built
-   from tokens and utilities. digiquant-web still imports it. */
+   the stack Marquee it styled. Repository activity is the shared <RepoActivity>
+   family (repo-activity.css). digiquant-web still imports marquee.css. */
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/repo-activity.css";
 @import "@digithings/web/styles/word-reveal.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
@@ -23,7 +24,7 @@
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
    (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -44,6 +45,7 @@
 @source "../../digiweb/web/src/components/chat";
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/data-layout";
+@source "../../digiweb/web/src/components/repo-activity";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/symbols";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
@@ -62,7 +64,7 @@
    digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
-   must NOT change that file (digiquant-web + olympus consume it). Instead we
+   must NOT change that file (digiquant-web + dashboard consume it). Instead we
    override the semantic accent tokens here, scoped to this app's stylesheet
    only, collapsing accent to monochrome ink/white. Everything that reads
    the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary

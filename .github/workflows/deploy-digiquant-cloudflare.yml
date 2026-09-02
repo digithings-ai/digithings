@@ -68,7 +68,7 @@ on:
       - "package-lock.json"
       # No per-workspace manifest is listed here *for build reasons*, and that is a
       # derived result rather than an omission. This site's build closure, read off the
-      # @digithings/* deps, is digiquant-web → design + web and olympus → design + web,
+      # @digithings/* deps, is digiquant-web → design + web and dashboard → design + web,
       # with web → design — and all four of those manifests already fall under the
       # directory globs at the top of this list. The root lock would not stand in for them
       # if they did not: counted at PR granularity, 17 of the 38 PRs that have touched one

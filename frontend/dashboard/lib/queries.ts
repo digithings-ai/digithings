@@ -203,7 +203,7 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
       : null;
   const dt = String(p?.doc_type || '');
 
-  // Both the legacy `rebalance-decision.json` key and the Hermes flat
+  // Both the legacy `rebalance-decision.json` key and the portfolio flat
   // `pm-rebalance` key (no date segment) route to the rebalance structured view.
   // `dt === 'rebalance_decision'` covers any future payload-typed variant.
   if (key === 'rebalance-decision.json' || key === 'pm-rebalance' || dt === 'rebalance_decision') {
@@ -224,7 +224,7 @@ function resolveLibraryDocumentView(document_key: string, payload: unknown): Lib
   }
   // Pipeline per-ticker analyst specialist reports (`analyst/{ticker}`) — structured card view.
   if (key.startsWith('analyst/')) return 'analyst';
-  // Hermes risk-temperament debate singleton (`risk-debate`) — reuse deliberation structured view.
+  // portfolio risk-temperament debate singleton (`risk-debate`) — reuse deliberation structured view.
   if (key === 'risk-debate') return 'risk_debate';
   const isDeliberationTranscriptPath =
     dt === 'deliberation_transcript' ||
@@ -296,7 +296,7 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
   const kMap = `thesis-vehicle-map/${dashboardDate}.json`;
   const kMemo = `pm-allocation-memo/${dashboardDate}.json`;
   const kIdx = `deliberation-transcript-index/${dashboardDate}.json`;
-  // Hermes pipeline docs (#699/#700) use flat keys (no date segment) — the date
+  // portfolio pipeline docs (#699/#700) use flat keys (no date segment) — the date
   // lives in the row's `date` column. risk-debate + pm-rebalance are singletons.
   const kRisk = 'risk-debate';
   const kPmReb = 'pm-rebalance';
@@ -458,7 +458,7 @@ export async function fetchThesisVehicleMap(): Promise<ThesisVehicleRow[]> {
 
 /**
  * Coerce a `documents.payload` jsonb blob into the H5 `AnalystPayload` shape
- * (mirrors `digiquant/.../hermes/models/analyst.py`). Defensive against partial/
+ * (mirrors `digiquant/.../portfolio/models/analyst.py`). Defensive against partial/
  * malformed payloads — every field falls back to its schema default rather than
  * throwing, since this renders directly in the Ticker Dossier (#1562 PR2).
  * `price_targets` is passed through as-is (a free-form label→number dict; keys
@@ -916,7 +916,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     ? allTheses.filter((t) => t.date === latestThesisDate)
     : [];
 
-  // The Atlas pipeline (SIMP-013) writes the digest into the `snapshot` JSONB;
+  // The research pipeline (SIMP-013) writes the digest into the `snapshot` JSONB;
   // the legacy flat columns were dropped (#714). The strategy panel reads
   // everything from the digest.
   const digest = (snapshotJson ?? {}) as Record<string, unknown>;
@@ -985,7 +985,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   // ── Resolve proposed positions — pm-rebalance is the primary source ─────────
   //
-  // The live Hermes pipeline writes the recommended book into the `documents`
+  // The live portfolio pipeline writes the recommended book into the `documents`
   // table as `document_key='pm-rebalance'`.  Its payload shape:
   //   { recommended_portfolio: [{ticker, target_pct}], actions: [{ticker,
   //     action, current_pct, target_pct, rationale}], notes: string }

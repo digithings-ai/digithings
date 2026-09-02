@@ -89,7 +89,7 @@ jobs:
       #
       # Scope is wider than the step name: @digithings/web exports raw `src/index.ts`, so
       # tsc pulls ~103 of its sources into the program. A type error in that package —
-      # which digichat and olympus work also edits — reddens this step. Extra coverage,
+      # which digichat and dashboard work also edits — reddens this step. Extra coverage,
       # but read the error path before assuming the reference is at fault.
       #
       # Run through the workspace's own `typecheck` script rather than a bare root `tsc`

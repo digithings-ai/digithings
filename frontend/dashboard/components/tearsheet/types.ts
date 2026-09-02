@@ -1,7 +1,7 @@
 /**
  * Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema).
  * The chart-facing shapes (TearsheetSeriesPoint, TearsheetTrade) are owned by the
- * finance-tearsheet family (#1463); the full payload schema and the Olympus
+ * finance-tearsheet family (#1463); the full payload schema and the dashboard
  * wrapper below stay app-local data wiring.
  */
 
@@ -103,9 +103,6 @@ export interface PerformanceTearsheet {
   currentHoldings: PerformanceHoldingRow[];
   historicalHoldings: PerformanceHoldingRow[];
 }
-
-/** @deprecated Use PerformanceTearsheet. One-release alias (ADR-0026 wave 3). */
-export type OlympusTearsheet = PerformanceTearsheet;
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */
 export interface StrategyIndexEntry {

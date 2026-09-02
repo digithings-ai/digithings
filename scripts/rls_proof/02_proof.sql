@@ -241,7 +241,7 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- anon / olympus_accounting / periods
+-- anon / dashboard_accounting / periods
 TRUNCATE _probe;
 DO $$
 DECLARE
@@ -262,7 +262,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'anon', 'olympus_accounting', 'periods', '0|permission_denied', p.actual,
+SELECT 'anon', 'dashboard_accounting', 'periods', '0|permission_denied', p.actual,
   CASE
     WHEN '0|permission_denied' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0|permission_denied' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1241,7 +1241,7 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_studio / olympus_accounting / periods_own
+-- user_a_studio / dashboard_accounting / periods_own
 TRUNCATE _probe;
 DO $$
 DECLARE
@@ -1262,7 +1262,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_studio', 'olympus_accounting', 'periods_own', '1', p.actual,
+SELECT 'user_a_studio', 'dashboard_accounting', 'periods_own', '1', p.actual,
   CASE
     WHEN '1' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '1' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')
@@ -1278,7 +1278,7 @@ BEGIN
     r.identity, r.family, r.query_label, r.expected, r.actual,
     CASE WHEN r.pass THEN 'PASS' ELSE 'FAIL' END;
 END $$;
--- user_a_studio / olympus_accounting / periods_peer
+-- user_a_studio / dashboard_accounting / periods_peer
 TRUNCATE _probe;
 DO $$
 DECLARE
@@ -1299,7 +1299,7 @@ BEGIN
   INSERT INTO _probe VALUES (a);
 END $$;
 INSERT INTO public.rls_proof_results(identity, family, query_label, expected, actual, pass, detail)
-SELECT 'user_a_studio', 'olympus_accounting', 'periods_peer', '0', p.actual,
+SELECT 'user_a_studio', 'dashboard_accounting', 'periods_peer', '0', p.actual,
   CASE
     WHEN '0' = '>0' THEN p.actual ~ '^[0-9]+$' AND p.actual::bigint > 0
     WHEN '0' = '0|permission_denied' THEN p.actual IN ('0', 'permission_denied')

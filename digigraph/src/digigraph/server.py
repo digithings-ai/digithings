@@ -129,7 +129,7 @@ def _byok_default_routes_elsewhere(provider: str) -> bool:
     is wider than the free-mode ``ValueError``) lets the resolver judge the same string
     this function could not resolve. On the phase path, ``get_model_for_phase`` never
     calls ``operator_default_model`` at all: it hands the resolver a ``phase_models``
-    override or an ``olympus_models.yaml`` capability model, neither of which this
+    override or an ``digiquant_models.yaml`` capability model, neither of which this
     middleware ever sees, and the resolver refuses on *that* string. Either way the
     refusal — or the failure — lands on whatever the request would actually have been
     billed for.

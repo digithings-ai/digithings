@@ -16,9 +16,9 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
     elif "phase-3" in names:
         phase = "Phase 3 — Domain unification"
     elif "phase-4" in names:
-        phase = "Phase 4 — Atlas on digigraph"
+        phase = "Phase 4 — research on digigraph"
     elif "phase-5" in names:
-        phase = "Phase 5 — Atlas tiering"
+        phase = "Phase 5 — research tiering"
     elif "client-pilot" in names:
         phase = "Client Pilot"
 

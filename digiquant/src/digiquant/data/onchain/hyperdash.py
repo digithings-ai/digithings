@@ -13,7 +13,7 @@ include **equity perps** (``xyz:SP500``, ``xyz:XYZ100``) alongside crypto, so th
 Boundaries (deliberate):
 - The endpoint is undocumented/internal and may drift, so EVERY failure mode (network, HTTP
   error, GraphQL error, shape change) fails soft to an empty result — a Hyperdash outage must
-  never block an Atlas run. The signal is an overlay that adjusts conviction/sizing; it never
+  never block an research run. The signal is an overlay that adjusts conviction/sizing; it never
   originates a trade.
 - HTTP is split from computation: ``cohort_summary_to_positioning`` is a pure, HTTP-free parser +
   divergence calculator (unit-tested against a captured-shape fixture); ``HyperdashScraper.fetch``
@@ -356,7 +356,7 @@ def _onchain_enabled() -> bool:
     """Opt-in kill-switch for the LIVE Hyperdash scrape (env ATLAS_ONCHAIN_POSITIONING).
 
     Defaults OFF so unit tests never hit the network just by invoking preflight (the scrape is an
-    external HTTP call, unlike the DB-backed fed_odds path). The Atlas workflows set it to "1" to
+    external HTTP call, unlike the DB-backed fed_odds path). The research workflows set it to "1" to
     enable the signal in CI/prod; the owner can flip it off instantly if the third-party endpoint
     becomes unavailable or its ToS changes — no code change. An injected ``provider`` bypasses the
     switch entirely (tests + alternative providers)."""

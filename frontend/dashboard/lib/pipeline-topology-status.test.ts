@@ -58,7 +58,7 @@ describe('pipeline topology status audit', () => {
     }
   });
 
-  it('research-only day: Atlas honest, Hermes/Learning stay not-run', () => {
+  it('research-only day: research honest, portfolio/Learning stay not-run', () => {
     const day: PipelineDayData = {
       fanoutCounts: { sectors: 1 },
       fanoutKeys: { sectors: ['sector-technology'] },
@@ -66,8 +66,8 @@ describe('pipeline topology status audit', () => {
       artifacts: [],
     };
     const bands = topologyEvidenceBands(day);
-    expect(bands.atlas).toBe(true);
-    expect(bands.hermes).toBe(false);
+    expect(bands.research).toBe(true);
+    expect(bands.portfolio).toBe(false);
     expect(bands.learning).toBe(false);
 
     const matrix = auditStaticTopologyRunStatuses(day);
@@ -95,7 +95,7 @@ describe('pipeline topology status audit', () => {
     }
   });
 
-  it('Hermes commit implies Learning should have published a same-date beliefs doc (WP-I)', () => {
+  it('portfolio commit implies Learning should have published a same-date beliefs doc (WP-I)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {
@@ -128,12 +128,12 @@ describe('pipeline topology status audit', () => {
     expect(matrix['learning:beliefs']).toBe('expected-artifact-missing');
   });
 
-  it('recorded run with zero documents: Atlas-only reach; Hermes/Learning stay not-run', () => {
+  it('recorded run with zero documents: research-only reach; portfolio/Learning stay not-run', () => {
     const day: PipelineDayData = { ...emptyDay, runRecorded: true };
     const bands = topologyEvidenceBands(day);
     expect(bands.emptyRecordedRun).toBe(true);
-    expect(bands.atlas).toBe(true);
-    expect(bands.hermes).toBe(false);
+    expect(bands.research).toBe(true);
+    expect(bands.portfolio).toBe(false);
     expect(bands.learning).toBe(false);
 
     const matrix = auditStaticTopologyRunStatuses(day);

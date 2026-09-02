@@ -164,8 +164,8 @@ def create_mcp_server() -> Any:
         Reads the maintained ``price_technicals`` table in Supabase. Returns
         ``{"error": ...}`` if the data layer is unavailable.
         """
-        from digiquant.olympus.atlas.data.queries import get_price_technicals
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import get_price_technicals
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -181,8 +181,8 @@ def create_mcp_server() -> Any:
         Reads the maintained ``macro_series_observations`` table in Supabase.
         Returns ``{"error": ...}`` if the data layer is unavailable.
         """
-        from digiquant.olympus.atlas.data.queries import get_macro_series
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import get_macro_series
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -202,10 +202,10 @@ def create_mcp_server() -> Any:
         desc: bool = True,
         limit: int = 50,
     ) -> str:
-        """Read rows from a whitelisted Olympus table (JSON).
+        """Read rows from a whitelisted dashboard table (JSON).
 
-        Exposes the same read-only, table-scoped reader the in-process Hermes
-        agents use, so external agents (digichat / Kairos) can fetch the paper
+        Exposes the same read-only, table-scoped reader the in-process portfolio
+        agents use, so external agents (digichat / execution) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
@@ -216,8 +216,8 @@ def create_mcp_server() -> Any:
         ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
         ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
         """
-        from digiquant.olympus.atlas.data.queries import query_data
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import query_data
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -585,7 +585,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
     @mcp.tool()
-    def olympus_run_policy_replay(
+    def dashboard_run_policy_replay(
         pair_content_hash: str,
         run_id: str | None = None,
     ) -> str:
@@ -593,7 +593,7 @@ def create_mcp_server() -> Any:
 
         Recommendation/read only — never activates or promotes production policy.
         """
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_run_policy_replay
 
         try:
@@ -606,9 +606,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_replay(run_id: str) -> str:
+    def dashboard_get_policy_replay(run_id: str) -> str:
         """Fetch a policy replay run summary by id (fail closed if unknown)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_replay
 
         try:
@@ -618,9 +618,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_comparison(comparison_id: str) -> str:
+    def dashboard_get_policy_comparison(comparison_id: str) -> str:
         """Fetch a policy comparison summary (artifact IDs / status only)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_comparison
 
         try:
@@ -630,12 +630,12 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_evaluate_policy_gate(
+    def dashboard_evaluate_policy_gate(
         comparison_id: str,
         criteria_version_id: str,
     ) -> str:
         """Evaluate immutable gate criteria (eligibility only — never activates)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_evaluate_policy_gate
 
         try:
@@ -648,9 +648,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_gate_evaluation(evaluation_id: str) -> str:
+    def dashboard_get_policy_gate_evaluation(evaluation_id: str) -> str:
         """Fetch a gate-evaluation summary by id (fail closed if unknown)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_gate_evaluation
 
         try:

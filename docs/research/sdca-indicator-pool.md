@@ -75,15 +75,15 @@ signal delay** is later — not this note.
 | Daily technicals | [`technicals.py`](../../digiquant/src/digiquant/data/prices/technicals.py) | RSI(7/14/21), MACD(12,26,9), SMA 20/50/**200**, `% vs SMA200`, **zscore vs SMA200**. **Daily only** — no weekly resample. |
 | Bar-by-bar RSI | [`oscillators.py`](../../digiquant/src/digiquant/indicators/oscillators.py) | Nautilus `rsi_momentum` path. Not a batch weekly series. |
 | M2 vote (separate strategy) | [`m2_signals.py`](../../digiquant/src/digiquant/indicators/m2_signals.py), [`m2_liquidity.py`](../../digiquant/src/digiquant/strategies/m2_liquidity.py) | Five sub-indicators on **M2 ROC**, including RSI and MACD **of M2**, not of BTC. Expects a precomputed parquet. Planned `digiquant.data.m2` **never landed**. |
-| FRED ingest | [`macro_ingest.py`](../../digiquant/src/digiquant/data/prices/macro_ingest.py), [`macro_series.yaml`](../../digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml) | Free FRED + Yahoo FX. Stores `realtime_start` in row meta. **`M2SL` is not in the default YAML** (Atlas skills still mention it). Present and useful: `DTWEXBGS` (broad USD), `WALCL` (Fed assets, weekly), HY/IG OAS, VIX, yields. |
+| FRED ingest | [`macro_ingest.py`](../../digiquant/src/digiquant/data/prices/macro_ingest.py), [`macro_series.yaml`](../../digiquant/src/digiquant/research/config/macro_series.yaml) | Free FRED + Yahoo FX. Stores `realtime_start` in row meta. **`M2SL` is not in the default YAML** (research skills still mention it). Present and useful: `DTWEXBGS` (broad USD), `WALCL` (Fed assets, weekly), HY/IG OAS, VIX, yields. |
 | Relative strength | [`relative_strength.py`](../../digiquant/src/digiquant/data/prices/relative_strength.py) | Sector ETF vs **SPY**. Not BTC/ETH. RS-driven SDCA risk is [#1084](https://github.com/digithings-ai/digithings/issues/1084) / leftover #1082 item 4. |
-| On-chain in-repo | [`hyperdash.py`](../../digiquant/src/digiquant/data/onchain/hyperdash.py) | Hyperliquid **perp cohort positioning** (smart vs rekt). Snapshot overlay for Atlas, fail-soft, **not** a long MVRV/NUPL history. |
+| On-chain in-repo | [`hyperdash.py`](../../digiquant/src/digiquant/data/onchain/hyperdash.py) | Hyperliquid **perp cohort positioning** (smart vs rekt). Snapshot overlay for research, fail-soft, **not** a long MVRV/NUPL history. |
 | ETF “flows” | [`etf_flows.py`](../../digiquant/src/digiquant/data/prices/etf_flows.py) | Dollar-volume z + OBV **proxy**. Explicitly not IBIT creations. Too noisy / not valuation. |
 | Signal delay (publish) | `apply_signal_delay` in `generate_tearsheets.py`, tearsheet schema 1.2 | Calendar-day truncation already exists. **Do not change delay or `--push-supabase` now.** |
 | In-flight extras | `cursor/sdca-composite-weights-af6c` | Named extras **`m2` / `rs_eth` / `dxy`** plus `causal_rolling_z` / `align_to_dates`. Treat those names as reserved. |
 
-Atlas ops docs list Glassnode / CryptoQuant as **paid** research sources
-([`data-sources.md`](../../digiquant/src/digiquant/olympus/atlas/docs/ops/data-sources.md)).
+research ops docs list Glassnode / CryptoQuant as **paid** research sources
+([`data-sources.md`](../../digiquant/src/digiquant/research/docs/ops/data-sources.md)).
 That is a directory, not an ingest.
 
 ---
@@ -171,7 +171,7 @@ add a paid API.** Do not scrape Look Into Bitcoin without a human ToS review
 
 | Metric | What it measures | Independence vs close / rails | Feasibility (checked 2026-08-30) | v1 |
 |---|---|---|---|---|
-| **MVRV** (market / realized cap) | How far cap sits vs on-chain cost basis | **Independent** — realized cap is not a function of close alone | **Coinmetrics community** `CapMVRVCur` returned without an API key; history from **2010-07-18**. `CapRealUSD` is **forbidden** on the community plan (MVRV ratio is available; the legs are not). BGeometrics `GET https://bitcoin-data.com/v1/mvrv` is free but **last 4 years only** (here: 2022-08-30 → 2026-08-29) and the free plan **forbids commercial publishing**. Glassnode / CryptoQuant: paid (already listed in Atlas ops docs). | Defer. Best free path for #1086: Coinmetrics `CapMVRVCur`. Community data is CC-licensed — **legal review before any digiquant.io publish**. New vendor even if unpaid. |
+| **MVRV** (market / realized cap) | How far cap sits vs on-chain cost basis | **Independent** — realized cap is not a function of close alone | **Coinmetrics community** `CapMVRVCur` returned without an API key; history from **2010-07-18**. `CapRealUSD` is **forbidden** on the community plan (MVRV ratio is available; the legs are not). BGeometrics `GET https://bitcoin-data.com/v1/mvrv` is free but **last 4 years only** (here: 2022-08-30 → 2026-08-29) and the free plan **forbids commercial publishing**. Glassnode / CryptoQuant: paid (already listed in research ops docs). | Defer. Best free path for #1086: Coinmetrics `CapMVRVCur`. Community data is CC-licensed — **legal review before any digiquant.io publish**. New vendor even if unpaid. |
 | **MVRV-Z** | MVRV standardized vs its own history | Same series as MVRV | Compute **our** causal rolling/expanding z from `CapMVRVCur`. Do not buy Glassnode's z. | Defer; **this** is the z to blend, not raw MVRV and MVRV-Z as two votes. |
 | **NUPL** | (market − realized) / market = `1 − 1/MVRV` | **Monotone transform of MVRV** | Coinmetrics community: **forbidden** without credentials. | Defer; **do not** add NUPL alongside MVRV. |
 | **Puell** | Daily miner USD revenue / 365d MA | True Puell (with fees) spikes at tops independently; subsidy-only ≈ SMA of price | No free long history verified. BGeometrics has an endpoint under the 4y free cap. | Defer until a fee-inclusive series exists. |
@@ -184,7 +184,7 @@ back to valuation-only when the feed is down (composite null rule currently
 **cannot** fall back per indicator — see below). Do not also ingest NUPL.
 Human review of CC license vs commercial tearsheets before publish.
 
-Hyperdash stays an Atlas overlay, not an SDCA vote.
+Hyperdash stays an research overlay, not an SDCA vote.
 
 ---
 
@@ -257,7 +257,7 @@ Required:
   SDCA vote may only read already-released M2.
 - `DTWEXBGS` is daily; still as-of on the last available print (weekends/holidays).
 
-`M2SL` is missing from [`macro_series.yaml`](../../digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml).
+`M2SL` is missing from [`macro_series.yaml`](../../digiquant/src/digiquant/research/config/macro_series.yaml).
 Adding it is an ingest one-liner with the existing FRED client — not a new
 vendor. The `digiquant.data.m2` module from the 2026-06 plan was never merged;
 SDCA should not wait on that whole M2 strategy fetcher.

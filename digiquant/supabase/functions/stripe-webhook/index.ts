@@ -1,5 +1,5 @@
 /**
- * stripe-webhook — Olympus consumer billing (T2 / roadmap P4).
+ * stripe-webhook — dashboard consumer billing (T2 / roadmap P4).
  *
  * verify_jwt = false (configured in config.toml). Auth is Stripe-Signature with
  * STRIPE_WEBHOOK_SECRET — never rely on Supabase JWT for this path.

@@ -101,7 +101,7 @@ PY
 #
 # That is the failure CLAUDE.md already documents for stale module branches
 # (2026-06-17: `module/digiquant` ~400 commits behind, predating the
-# apps/digiquant-atlas → digiquant/src/digiquant/olympus move, so PRs cut from it
+# digiquant/src/digiquant/research → digiquant/src/digiquant/dashboard move, so PRs cut from it
 # edited files that no longer existed). Its answer was a manual pre-flight check.
 # A manual check is a check that gets skipped, and this is the one place it can be
 # made unconditional for every future task branch.

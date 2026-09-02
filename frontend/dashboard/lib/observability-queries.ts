@@ -2,7 +2,7 @@
  * Observability dashboard data access (Pillar 3D).
  *
  * Reads the decision track record (`decision_log`) the Decision Scorecard needs, plus
- * — via `fetchAtlasRunDiagnostics` — run health from the anon-readable
+ * — via `fetchResearchRunDiagnostics` — run health from the anon-readable
  * `atlas_run_health` view (migration 041). Kept separate from `getFullDashboardData`
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
@@ -23,7 +23,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
-import type { AtlasRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics } from './types';
 import type {
   BenchmarkComparison,
   PerformanceTearsheet,
@@ -123,7 +123,7 @@ const RUN_DIAGNOSTICS_LIMIT = 90;
  * deliberately omits operator-internal spend telemetry. Fail-soft: empty array
  * on missing source / RLS deny.
  */
-export async function fetchAtlasRunDiagnostics(): Promise<AtlasRunDiagnostics[]> {
+export async function fetchResearchRunDiagnostics(): Promise<ResearchRunDiagnostics[]> {
   const res = await safeSelect<ViewRow<'atlas_run_health'>>('atlas_run_health', (sb) =>
     sb
       .from('atlas_run_health')
@@ -704,7 +704,3 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
     holdingMarks: holdingMarksRes.rows,
   });
 }
-
-/** @deprecated Use buildPerformanceTearsheet / fetchPerformanceTearsheet. */
-export const buildOlympusTearsheet = buildPerformanceTearsheet;
-export const fetchOlympusTearsheet = fetchPerformanceTearsheet;

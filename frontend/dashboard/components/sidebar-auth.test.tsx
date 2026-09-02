@@ -19,7 +19,7 @@ vi.mock('@/components/app-shell-context', () => ({
   }),
 }));
 vi.mock('@/components/sidebar-settings', () => ({ default: () => null }));
-vi.mock('@/components/atlas-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
+vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 vi.mock('next/link', () => ({
   default: (props: { children?: unknown; href?: string }) =>
     createElement('a', { href: props.href }, props.children as never),

@@ -1,7 +1,7 @@
 /**
  * Test-only fixture for a `daily_snapshots` row + the parsed
  * {@link SnapshotEnvelope} digest payload. Mirrors the shape Pydantic emits
- * (`digiquant.atlas.snapshot.SnapshotEnvelope.model_dump()`).
+ * (`digiquant.research.snapshot.SnapshotEnvelope.model_dump()`).
  *
  * Kept under `__fixtures__/` so the production bundle never imports it.
  */

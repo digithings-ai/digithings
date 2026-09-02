@@ -14,14 +14,14 @@ interface StatCardProps {
   valueClass?: string;
 }
 
-/** Olympus's historical tone names, kept so call sites need zero churn. */
-type OlympusBadgeVariant = 'default' | 'blue' | 'green' | 'red' | 'amber';
+/** dashboard's historical tone names, kept so call sites need zero churn. */
+type DashboardBadgeVariant = 'default' | 'blue' | 'green' | 'red' | 'amber';
 
 type BadgeProps = Omit<
   Extract<ControlBadgeProps, { dress?: 'reference' }>,
   'dress' | 'variant'
 > & {
-  variant?: OlympusBadgeVariant;
+  variant?: DashboardBadgeVariant;
 };
 
 interface SectionTitleProps {
@@ -66,8 +66,8 @@ export function StatCard({
   );
 }
 
-/** Olympus tone → shared reference-dress tone (same color semantics). */
-const BADGE_TONE: Record<OlympusBadgeVariant, BadgeReferenceVariant> = {
+/** dashboard tone → shared reference-dress tone (same color semantics). */
+const BADGE_TONE: Record<DashboardBadgeVariant, BadgeReferenceVariant> = {
   default: 'neutral',
   blue: 'accent',
   green: 'up',
@@ -77,7 +77,7 @@ const BADGE_TONE: Record<OlympusBadgeVariant, BadgeReferenceVariant> = {
 
 /** Badge — thin re-export of the shared @digithings/web controls Badge
  * (#1419 shim pattern, adopted for F4 #1450). Pinned to dress="reference"
- * (the .dg-tier mono micro-caps hairline pill); olympus's historical tone
+ * (the .dg-tier mono micro-caps hairline pill); dashboard's historical tone
  * names map onto the shared tones so every call site keeps its color
  * semantics with zero churn. Extra props (data-testid, aria-*) now pass
  * through to the rendered span. */

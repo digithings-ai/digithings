@@ -3,7 +3,7 @@
 > **Date:** 2026-08-29  
 > **Status:** Implementation spec — authorizes filing the epic + task issues; runtime changes still land through per-task PRs with normal gates  
 > **Supersedes ambiguity in:** [2026-08-29 milestone brief](../plans/2026-08-29-olympus-kairos-tenancy-milestone-brief.md) (D1–D7 are **locked** here)  
-> **Binds to:** [2026-08-25 vision realignment brief](../plans/2026-08-25-olympus-vision-realignment-brief.md), [metaplan](../plans/2026-08-06-olympus-pipeline-metaplan.md), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
+> **Binds to:** [2026-08-25 vision realignment brief](../plans/2026-08-25-olympus-vision-realignment-brief.md), [metaplan](../plans/2026-08-06-olympus-pipeline-metaplan.md), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
 > **Outcome:** Olympus becomes a client-ready product — users sign up, subscribe, hold private books, connect Alpaca/IBKR (paper first), run overlay pipelines with their own LLM keys, and receive email digests.
 
 ---
@@ -166,7 +166,7 @@ CREATE TABLE notification_prefs (
 );
 ```
 
-T-track tables (`workspaces`, `workspace_members`, `stripe_events`, `job_runs`, BYOK `workspace_provider_credentials`, tenant columns + RLS rewrite) are specified in [Wave 3 roadmap §P2](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) — execute as written there with two deltas: (a) `plan_tier` enum is `free | baseline | custom | enterprise` per D1; (b) tenant columns go on the **private** tables listed in §2 above; corpus/documents shared rows live in the system workspace.
+T-track tables (`workspaces`, `workspace_members`, `stripe_events`, `job_runs`, BYOK `workspace_provider_credentials`, tenant columns + RLS rewrite) are specified in [Wave 3 roadmap §P2](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) — execute as written there with two deltas: (a) `plan_tier` enum is `free | baseline | custom | enterprise` per D1; (b) tenant columns go on the **private** tables listed in §2 above; corpus/documents shared rows live in the system workspace.
 
 ---
 
@@ -305,7 +305,7 @@ class BrokerAccountSnapshot(BaseModel): ...  # account_id, equity, cash, buying_
 
 ## 5. Milestone 2 — Tenancy work packages
 
-Execute [Wave 3 roadmap P2–P8](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) as the detailed schema/acceptance source, with the deltas below. Order: T0 → T1 → T2 → {T3, T5} → T4.
+Execute [Wave 3 roadmap P2–P8](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) as the detailed schema/acceptance source, with the deltas below. Order: T0 → T1 → T2 → {T3, T5} → T4.
 
 ### T0 — Workspaces + RLS privacy boundary (risk:high — data exposure)
 

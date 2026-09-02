@@ -51,7 +51,7 @@ export type PeriodInspectabilityState =
   | 'typed-gap-private-base-tables';
 
 /**
- * Anon olympus must not SELECT private `olympus_accounting_*` base tables.
+ * Anon dashboard must not SELECT private `dashboard_accounting_*` base tables.
  * Curated tip status is available via `public_accounting_period_status` (#2599 / #2652).
  * Callers should load that view and map the result; this helper labels the contract.
  */

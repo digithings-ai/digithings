@@ -126,7 +126,7 @@ export function PaymentBand() {
               <span>$120.00</span>
             </li>
             <li>
-              <span>hermes add-on</span>
+              <span>portfolio add-on</span>
               <span>$24.00</span>
             </li>
             <li>

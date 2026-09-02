@@ -477,7 +477,7 @@ CSS-only, both themes. Same deferred-React-wrapper note as ProductFrame (#1195).
 ## `HeroFeaturePicker` (CSS + `hero-picker.js`, EVOLUTION.md Phase E)
 
 Graphite-style **icon-tab row** below the hero that swaps which `ProductFrame`
-(#1202) preview shows — e.g. Olympus / Strategies / Pipeline on digiquant.io.
+(#1202) preview shows — e.g. dashboard / Strategies / Pipeline on digiquant.io.
 **Static UI crops only** (no video swap — lighter weight per the design spec).
 Follows the WAI-ARIA "Tabs" pattern; each panel wraps a `.product-frame`, so it
 inherits the container-query sizing and never clips at browser zoom. Tabs are
@@ -486,8 +486,8 @@ icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
 ```html
 <div class="hero-picker">
   <div class="hero-picker__tabs" role="tablist" aria-label="Preview context">
-    <button class="hero-picker__tab" role="tab" id="hp-tab-olympus"
-            aria-controls="hp-panel-olympus" aria-selected="true" aria-label="Olympus">
+    <button class="hero-picker__tab" role="tab" id="hp-tab-dashboard"
+            aria-controls="hp-panel-dashboard" aria-selected="true" aria-label="dashboard">
       <svg viewBox="0 0 24 24" aria-hidden="true"><!-- icon --></svg>
     </button>
     <button class="hero-picker__tab" role="tab" id="hp-tab-strategies"
@@ -496,8 +496,8 @@ icon-only (`~53×53px`, Graphite reference) — give each an `aria-label`.
     </button>
   </div>
   <div class="hero-picker__panels">
-    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-olympus" aria-labelledby="hp-tab-olympus">
-      <div class="product-frame"><div class="product-frame__surface"><!-- Olympus crop --></div></div>
+    <div class="hero-picker__panel" role="tabpanel" id="hp-panel-dashboard" aria-labelledby="hp-tab-dashboard">
+      <div class="product-frame"><div class="product-frame__surface"><!-- dashboard crop --></div></div>
     </div>
     <div class="hero-picker__panel" role="tabpanel" id="hp-panel-strategies" aria-labelledby="hp-tab-strategies" hidden>
       <div class="product-frame"><div class="product-frame__surface"><!-- Strategies crop --></div></div>

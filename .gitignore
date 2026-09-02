@@ -51,7 +51,7 @@ build/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
 
-# Repo-root runtime caches (Atlas price-history, agent-cache paths) — JAN-004
+# Repo-root runtime caches (research price-history, agent-cache paths) — JAN-004
 /data/
 
 # Local agent memory archives (Cursor/agent tooling) — JAN-005

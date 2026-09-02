@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
-import type { AtlasRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
+import type { ResearchRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import {
   DEFAULT_BRIEF_BENCHMARK_TICKER,
   pickBriefBenchmarkTicker,
 } from '@/lib/benchmark-tickers';
-import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
+import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
 import PageSkeleton from '@/components/page-skeleton';
@@ -52,13 +52,13 @@ export default function OverviewPage() {
   const { data, loading, error } = useDashboard();
   const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
   const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
-  const [runDiagnostics, setRunDiagnostics] = useState<AtlasRunDiagnostics[]>([]);
+  const [runDiagnostics, setRunDiagnostics] = useState<ResearchRunDiagnostics[]>([]);
 
   useEffect(() => {
     if (!dashboardDate) return;
     let cancelled = false;
 
-    void fetchAtlasRunDiagnostics()
+    void fetchResearchRunDiagnostics()
       .then((runs) => {
         if (cancelled) return;
         setRunDiagnostics(runs);

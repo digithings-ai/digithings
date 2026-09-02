@@ -1,4 +1,4 @@
-# Atlas research sandbox — paper book / research only (#396).
+# research sandbox — paper book / research only (#396).
 # Baked at image build time; agents must not pip-install at runtime.
 #
 # Pins: match digiquant floor where present (polars>=1.0, statsmodels>=0.14,

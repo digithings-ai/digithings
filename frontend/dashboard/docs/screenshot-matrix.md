@@ -3,7 +3,7 @@
 Glass-box acceptance for #2645 / #1945: every Pipeline topology **stage** has
 desktop + mobile fixtures, plus a representative **artifact family** set.
 
-Product names stay lowercase in prose (`digithings`, `olympus`, `digiquant`).
+Product names stay lowercase in prose (`digithings`, `dashboard`, `digiquant`).
 
 ## Fixture layout
 

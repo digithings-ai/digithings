@@ -42,7 +42,7 @@ def routing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         },
         "phase_models": {
             "master-digest": "openrouter/deepseek/deepseek-v4-flash",
-            "hermes/portfolio/deliberation-": "openrouter/deepseek/deepseek-v4-flash",
+            "portfolio/deliberation-": "openrouter/deepseek/deepseek-v4-flash",
             # Non-prefix key (no trailing '-') must never match via startswith.
             "risk-aggressive": "openrouter/pinned-risk",
         },
@@ -61,13 +61,13 @@ def test_exact_phase_slug_wins(routing: Any) -> None:
 
 
 def test_trailing_dash_prefix_matches_per_ticker_slug(routing: Any) -> None:
-    """#1006 — deliberation- prefix must cover hermes/portfolio/deliberation-{ticker}."""
+    """#1006 — deliberation- prefix must cover portfolio/deliberation-{ticker}."""
     assert (
-        routing.get_model_for_phase("hermes/portfolio/deliberation-AAPL")
+        routing.get_model_for_phase("portfolio/deliberation-AAPL")
         == "openrouter/deepseek/deepseek-v4-flash"
     )
     assert (
-        routing.get_model_for_phase("hermes/portfolio/deliberation-DBO")
+        routing.get_model_for_phase("portfolio/deliberation-DBO")
         == "openrouter/deepseek/deepseek-v4-flash"
     )
 
@@ -148,7 +148,7 @@ def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
     mod = _load()
     monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
     assert (
-        mod.get_model_for_phase("hermes/portfolio/deliberation-AAPL")
+        mod.get_model_for_phase("portfolio/deliberation-AAPL")
         == "openrouter/deepseek/deepseek-v4-flash"
     )
     assert mod.get_model_for_phase("master-digest") == "openrouter/deepseek/deepseek-v4-flash"

@@ -23,7 +23,7 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => search,
 }));
 
-vi.mock('@/components/AtlasLoader', () => ({ default: () => null }));
+vi.mock('@/components/DashboardLoader', () => ({ default: () => null }));
 
 import {
   LibraryToWhyRedirectPage,

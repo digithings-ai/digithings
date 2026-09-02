@@ -139,9 +139,9 @@ Typical homepage flow:
 | Surface | Cursor patterns to use |
 |---------|------------------------|
 | digithings.ai | Bento module grid; hero with stack diagram frame; principles as 4-cell grid |
-| digiquant.io | Bento for Pipeline/Strategies/Pricing; **one** Graphite scrolly for Olympus only |
+| digiquant.io | Bento for Pipeline/Strategies/Pricing; **one** Graphite scrolly for dashboard only |
 | digichat | Chat UI **is** the landing — Cursor’s “product as hero” |
-| Olympus | Changelog-style activity feed; literal nav labels |
+| dashboard | Changelog-style activity feed; literal nav labels |
 | twelve-x | Tab bar + dense tables — Cursor’s agent list density, not marketing bento |
 
 ---

@@ -1,6 +1,6 @@
 # digiquant/supabase/ — the `core` Supabase project
 
-The single Supabase CLI project dir for the suite-wide **`core`** backend (Olympus/Atlas
+The single Supabase CLI project dir for the suite-wide **`core`** backend (dashboard/research
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
@@ -8,7 +8,7 @@ portfolio, market data, strategy store — see
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
-`digiquant/scripts/atlas/verify-supabase-migrations.sh` guards the chain's shape:
+`digiquant/scripts/research/verify-supabase-migrations.sh` guards the chain's shape:
 `config.toml` is present, every file matches `NNN_name.sql`, and no two files share
 a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
@@ -52,7 +52,7 @@ deploy`, or the SQL editor.
 
 | Path | What it is |
 |---|---|
-| `config.toml` | Supabase CLI project config (local alias `digiquant-atlas`) |
+| `config.toml` | Supabase CLI project config (local alias `digiquant-research`) |
 | `migrations/` | The numbered migration chain — source of truth for the schema |
 | `SCHEMA.md` | Hand-maintained inventory of live tables, views, and RLS conventions |
 | `migrations/050_public_portfolio_views.sql` | Three anon-readable views — the public portfolio read surface (#1461/#1462) |
@@ -450,7 +450,7 @@ allowlist (performance metrics only, never research notes — user ruling 2026-0
 
 ## What is public on purpose, what is locked (#1462 rulings, 2026-07-10)
 
-Many Atlas base tables carry permissive anon SELECT policies predating these rulings.
+Many research base tables carry permissive anon SELECT policies predating these rulings.
 The user resolved that split explicitly — both halves are deliberate, not oversights:
 
 - **Locked (migration 051):** the live strategy store — `strategy_signals` (current
@@ -459,9 +459,9 @@ The user resolved that split explicitly — both halves are deliberate, not over
   PR #1479). Public strategy data flows only through the delayed static JSON and
   `strategy_tearsheets` (which keeps its anon policy — the pipeline writes the delayed
   view there).
-- **Public by design:** the Atlas research internals — `documents`, `theses`,
+- **Public by design:** the research internals — `documents`, `theses`,
   `decision_log`, `deliberation_*`, and the `rationale`/`pm_notes` columns on
-  `positions`. Olympus is an open research project and its dashboard is itself an
+  `positions`. dashboard is an open research project and its dashboard is itself an
   anon-key client of these tables. Do not "fix" this exposure; the curated views above
   exist to give digiquant.io a stable, minimal read surface, not to hide the research.
 

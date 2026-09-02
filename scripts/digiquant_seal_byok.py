@@ -29,7 +29,7 @@ try:
 except ImportError:
     _create_client = None  # type: ignore[misc,assignment]
 
-from digiquant.olympus.overlay.byok_seal import (  # noqa: E402
+from digiquant.dashboard.overlay.byok_seal import (  # noqa: E402
     EXIT_BYOK_SEAL_FAILED,
     run_byok_seal,
 )

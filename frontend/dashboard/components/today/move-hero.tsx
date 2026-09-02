@@ -61,7 +61,7 @@ export interface MoveHeroNav {
   /**
    * Date of the latest nav_history point. When it lags the digest date the
    * daily delta must NOT read "today" — the book can freeze while research
-   * stays fresh (#1555: Hermes committed nothing for 3 weeks and the hero
+   * stays fresh (#1555: portfolio committed nothing for 3 weeks and the hero
    * kept presenting a June NAV move as today's).
    */
   asOfDate?: string | null;

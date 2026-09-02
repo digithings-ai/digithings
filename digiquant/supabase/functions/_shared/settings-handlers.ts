@@ -103,10 +103,10 @@ const LLM_PROVIDERS = new Set([
   "gemini",
 ]);
 
-/** AAD env-slot for BYOK — must match digiquant.olympus.overlay.byok.BYOK_AAD_PURPOSE. */
+/** AAD env-slot for BYOK — must match digiquant.dashboard.overlay.byok.BYOK_AAD_PURPOSE. */
 export const BYOK_AAD_PURPOSE = "llm";
 
-/** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
+/** Fixed OAuth callback path under dashboard (must match frontend alpacaOAuthCallbackPath). */
 export { ALPACA_OAUTH_CALLBACK_PATH } from "./app-url.ts";
 
 function pathOf(url: URL): string {

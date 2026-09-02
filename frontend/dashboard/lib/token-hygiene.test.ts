@@ -17,7 +17,7 @@ describe('canon token hygiene (#1402)', () => {
   it('no pre-canon vocabulary survives in components (text-text-*, bg-bg-*, fin-*)', () => {
     // The digiweb canon bridge (@digithings/web web-theme.css) owns the utility
     // vocabulary: text-ink/-soft/-mute, bg-bg/surface/term-bg, border-hair,
-    // text-up/down/warn/accent. The olympus-local @theme block that used to
+    // text-up/down/warn/accent. The dashboard-local @theme block that used to
     // define these names is gone — any survivor would silently compile to
     // nothing under Tailwind v4.
     const legacy =
@@ -39,7 +39,7 @@ describe('canon token hygiene (#1402)', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('olympus core has no glass-card class (tonal slabs are .oly-slab)', () => {
+  it('dashboard core has no glass-card class (tonal slabs are .oly-slab)', () => {
     const appFiles = walk(join(__dirname, '..', 'app'));
     const core = [...files, ...appFiles].filter((f) => !/\.test\.tsx?$/.test(f));
     const offenders = core.filter((f) => {

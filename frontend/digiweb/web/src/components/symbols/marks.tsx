@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * Brand marks — promoted from the design reference (symbols/marks) as pure,
  * props-driven components. The four-stroke digiquant signature was previously
- * copied verbatim in four places (dashboard atlas-mark.tsx + AtlasLoader.tsx,
+ * copied verbatim in four places (dashboard-mark.tsx + DashboardLoader.tsx,
  * digiquant-web's DigiquantMark, the reference specimen) — this file is the
  * canonical copy. Everything draws in currentColor so a mark inherits the
  * ink/accent of its livery scope. No CSS ships with this family: the marks
@@ -20,7 +20,7 @@ export type DigiquantMarkProps = {
   /**
    * Per-path class hook for stroke-draw animations: each stroke gets
    * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The dashboard
-   * loader keys its draw keyframes off "atlas-loader-stroke";
+   * loader keys its draw keyframes off "research-loader-stroke";
    * the reference / landing hover replay uses the default
    * "dq-stroke".
    */
