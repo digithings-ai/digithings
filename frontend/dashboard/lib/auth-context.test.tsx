@@ -170,6 +170,20 @@ describe('AuthProvider', () => {
     expect(container.querySelector('[data-has-session="0"]')).not.toBeNull();
   });
 
+  it('signOut drops a stashed FX Hub invite so the next session cannot inherit it', async () => {
+    const { FX_HUB_INVITE_STORAGE_KEY } = await import('./invite-stash');
+    sessionStorage.setItem(FX_HUB_INVITE_STORAGE_KEY, 'fx-hub-desk-token');
+    supabaseMock.setSession({
+      access_token: 'tok',
+      user: { id: 'u1', email: 'reader@example.com' },
+    });
+    await mountProbe();
+    await act(async () => {
+      await latest!.signOut();
+    });
+    expect(sessionStorage.getItem(FX_HUB_INVITE_STORAGE_KEY)).toBeNull();
+  });
+
   it('signInWithOAuth delegates to supabase-js with PKCE redirect including /dashboard', async () => {
     vi.stubEnv('NEXT_PUBLIC_DASHBOARD_BASE_PATH', '/dashboard');
     const assign = vi.fn();
