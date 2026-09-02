@@ -34,7 +34,6 @@ from digigraph import usage as _usage
 from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
-    wrap_execute_tool_for_tier1,
 )
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
@@ -327,18 +326,15 @@ def run_research_agent(
         return result
 
     # Pre-LLM compaction (#399): Atlas phases can ship large phase_inputs / prior
-    # briefs in ``messages``. Tier-1 also wraps the tool executor so digillm never
-    # injects multi-MB tool payloads into its local transcript. Without a session
-    # workspace, compaction is a no-op for offload (keeps full payloads).
+    # briefs in ``messages``. Do **not** wrap ``execute_tool`` with
+    # ``wrap_execute_tool_for_tier1`` — same-turn stubbing hid tool results from
+    # the model (digillm already caps via ``DIGI_TOOL_MESSAGE_MAX_CHARS``).
+    # Without a session workspace, compaction is a no-op for offload (keeps full
+    # payloads).
     tool_grounded = bool(tools) and execute_tool is not None
     compaction_cfg = compaction_config_from_env()
     compaction = compact_messages(messages, compaction_cfg)
     messages = compaction.llm_messages
-    execute_for_llm = (
-        wrap_execute_tool_for_tier1(traced_execute_tool, config=compaction_cfg)
-        if tool_grounded
-        else traced_execute_tool
-    )
 
     last_error: Exception | None = None
     parent_call_id = None
@@ -370,7 +366,7 @@ def run_research_agent(
                             effective_model,
                             messages,
                             tools=tools,
-                            execute_tool=execute_for_llm,
+                            execute_tool=traced_execute_tool,
                             temperature=temperature,
                             search_parameters=search_parameters,
                         )
