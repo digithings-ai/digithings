@@ -331,6 +331,26 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
   });
 
+  it("forwards X-Digi-Force-Tool to digigraph upstream headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-force-tool": "digisearch",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
+  });
+
   it("passes responseLanguage to the Foundry adapter", async () => {
     vi.mocked(resolveChatTenantContext).mockResolvedValue({
       tenantSlug: "foundry-tenant",
