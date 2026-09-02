@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import inspect
+import importlib.util
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -20,7 +22,9 @@ from digiquant.olympus.postgrest_timeout import (
 
 pytestmark = pytest.mark.unit
 
-_WORKFLOW = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "pipeline-olympus.yml"
+_REPO = Path(__file__).resolve().parents[3]
+_WORKFLOW = _REPO / ".github" / "workflows" / "pipeline-olympus.yml"
+_AT_OPEN = _REPO / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
 
 
 def test_httpx_timeout_constants() -> None:
@@ -30,10 +34,27 @@ def test_httpx_timeout_constants() -> None:
     assert POOL_TIMEOUT_SECONDS == 10.0
 
 
-def test_execute_and_insert_do_not_abandon_a_worker() -> None:
-    combined = inspect.getsource(ledger_io._execute) + inspect.getsource(ledger_io._insert)
-    assert "run_with_deadline" not in combined
-    assert "Thread(" not in combined
+def test_insert_execute_runs_on_the_caller_thread() -> None:
+    caller = threading.get_ident()
+    seen: list[int] = []
+
+    class _Client:
+        def table(self, _name: str) -> _Client:
+            return self
+
+        def insert(self, _rows: list[dict[str, Any]]) -> _Client:
+            return self
+
+        def execute(self) -> SimpleNamespace:
+            seen.append(threading.get_ident())
+            return SimpleNamespace(data=[])
+
+    ledger_io._insert(
+        client=_Client(),
+        table="broker_orders",
+        rows=[{"id": "row-1", "workspace_id": "ws"}],
+    )
+    assert seen == [caller]
 
 
 def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,12 +82,38 @@ def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> N
     assert timeout.pool == POOL_TIMEOUT_SECONDS
 
 
-def test_research_pipeline_run_step_has_timeout_minutes() -> None:
+def test_execute_at_open_sb_uses_build_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = importlib.util.spec_from_file_location("execute_at_open_timeout", _AT_OPEN)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    captured: dict[str, Any] = {}
+
+    def fake_build(cfg: SupabaseConfig) -> dict[str, str]:
+        captured["cfg"] = cfg
+        return {"client": "timed"}
+
+    monkeypatch.setattr(mod, "build_client", fake_build)
+    monkeypatch.setenv("CORE_SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("CORE_SUPABASE_SERVICE_KEY", "sk")
+    assert mod._sb() == {"client": "timed"}
+    cfg = captured["cfg"]
+    assert cfg.url == "https://example.supabase.co"
+    assert cfg.service_key == "sk"
+
+
+def test_research_pipeline_run_step_has_per_attempt_timeout() -> None:
     doc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
     job = doc["jobs"]["run"]
-    assert job["timeout-minutes"] == 240
-    steps = [s for s in job["steps"] if isinstance(s, dict) and s.get("id") == "run"]
-    assert len(steps) == 1
-    step_timeout = steps[0].get("timeout-minutes")
-    assert step_timeout is not None
-    assert int(step_timeout) < 240
+    job_timeout = job["timeout-minutes"]
+    assert job_timeout == 240
+    [step] = [s for s in job["steps"] if isinstance(s, dict) and s.get("id") == "run"]
+    step_timeout = step["timeout-minutes"]
+    assert isinstance(step_timeout, int)
+    assert step_timeout < job_timeout
+    script = step["run"]
+    assert "ATTEMPT_TIMEOUT=70m" in script
+    assert "timeout --kill-after=30s" in script
+    assert "${ATTEMPT_TIMEOUT}" in script
+    assert "MAX_OUTER_ATTEMPTS=3" in script

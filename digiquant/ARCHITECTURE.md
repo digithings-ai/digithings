@@ -2277,12 +2277,14 @@ Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `the
 portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
 see below). **PostgREST timeout:** `build_client` sets
 `httpx.Timeout(connect=10, read=60, write=30, pool=10)` on the Supabase client.
-Ledger `_insert` / `_execute` do not wrap `execute()` in a thread deadline.
-Hung I/O fails via httpx; the research pipeline run step in
-`.github/workflows/pipeline-olympus.yml` sets step `timeout-minutes` under
-the 240-minute job cap. `_insert` raises if `workspace_id` is missing on a
-row. No client-level retries on this path (disconnect retries are a separate
-#3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
+Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
+construct that client through `build_client`. `_insert` / `_execute` call
+`execute()` directly; hung I/O fails via httpx (no thread deadline). The
+research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
+under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
+on a row. No client-level retries on this path (disconnect retries are a
+separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation publishes a same-date document on every house run (short fold;
 full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.

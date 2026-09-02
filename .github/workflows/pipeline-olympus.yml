@@ -213,8 +213,8 @@ jobs:
 
       - name: Run Olympus research pipeline
         id: run
-        # Under the job's 240m cap so a hung run fails this step, not the job.
-        timeout-minutes: 210
+        # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
+        timeout-minutes: 230
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -242,6 +242,8 @@ jobs:
 
           MAX_OUTER_ATTEMPTS=3
           OUTER_BACKOFF=(0 300 900)
+          # Per-attempt cap so a hung attempt fails and attempts 2/3 can still run.
+          ATTEMPT_TIMEOUT=70m
           attempt=1
           while : ; do
             sleep "${OUTER_BACKOFF[$((attempt-1))]}"
@@ -258,7 +260,7 @@ jobs:
                  --refresh-scope "${REFRESH_SCOPE}")
             [ "${DRY_RUN:-}" = "true" ] && CMD+=(--dry-run)
             [ -n "${RESUME_RUN_ID:-}" ] && CMD+=(--resume-run-id "${RESUME_RUN_ID}")
-            if "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
+            if timeout --kill-after=30s "${ATTEMPT_TIMEOUT}" "${CMD[@]}" 2>&1 | tee -a artifacts/run.log; then
               break
             fi
             if [ "${attempt}" -ge "${MAX_OUTER_ATTEMPTS}" ]; then
