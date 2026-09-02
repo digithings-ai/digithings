@@ -32,6 +32,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     _CASH,
     APPROVED_TARGETS,
     COMMITS,
+    ORDER_INTENTS,
     LedgerAppend,
     _execute,
     _head_by_symbol,
@@ -260,6 +261,22 @@ def _approved_matches_book(
     )
 
 
+def _chain_has_order_intents(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | None,
+    weights: dict[str, float],
+) -> bool:
+    """Last FK table present, or the book has no tradeable names to order."""
+    if not weights:
+        return True
+    orders = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=workspace_id
+    )
+    return bool(_heads(orders))
+
+
 def recover_ledger_from_book(
     *,
     client: SupabaseClient,
@@ -314,6 +331,12 @@ def recover_ledger_from_book(
         weights=weights,
         cash_pct=cash_pct,
     )
+    chain_complete = _chain_has_order_intents(
+        client=client,
+        run_date=run_date,
+        workspace_id=workspace_id,
+        weights=weights,
+    )
     book_fp = weights_fingerprint(weights)
     latest_id = str((latest or {}).get("ledger_commit_id") or "") or None
     latest_source = str((latest or {}).get("source_run_id") or "") or None
@@ -344,7 +367,7 @@ def recover_ledger_from_book(
                     commit_id=latest_id,
                     source_run_id=latest_source,
                 )
-            if latest_id and latest_id in head_ids and approved_match:
+            if latest_id and latest_id in head_ids and approved_match and chain_complete:
                 return outcome(
                     "already_committed",
                     f"ledger commit {latest_id} already present for {run_date.isoformat()}",
@@ -361,6 +384,35 @@ def recover_ledger_from_book(
             )
         if commit_heads:
             head_id = str(commit_heads[0].get("id") or "") or None
+            if approved_match and head_id and chain_complete:
+                source_run_id = latest_source
+                has_head_manifest = any(
+                    str(m.get("ledger_commit_id") or "") == head_id for m in manifests
+                )
+                if apply and not has_head_manifest:
+                    new_id, state = _new_recovery_state(
+                        client=client, run_date=run_date, workspace_id=workspace_id
+                    )
+                    _write_recovery_manifest(
+                        client=client,
+                        state=state,
+                        weights=weights,
+                        cash_pct=cash_pct,
+                        nav=nav,
+                        ledger=LedgerAppend(
+                            commit_id=head_id, frozen_symbols=[], unpriced_symbols=[]
+                        ),
+                        commit_seq=next_seq,
+                        manifests=manifests,
+                    )
+                    source_run_id = str(new_id)
+                present = f"ledger commit {head_id} already present for {run_date.isoformat()}"
+                return outcome(
+                    "already_committed",
+                    f"{present}; published missing commit-run manifest" if apply else present,
+                    commit_id=head_id,
+                    source_run_id=source_run_id,
+                )
             if not (approved_match and head_id):
                 return outcome(
                     "conflict",
@@ -371,32 +423,6 @@ def recover_ledger_from_book(
                     commit_id=head_id,
                     source_run_id=latest_source,
                 )
-            source_run_id = latest_source
-            has_head_manifest = any(
-                str(m.get("ledger_commit_id") or "") == head_id for m in manifests
-            )
-            if apply and not has_head_manifest:
-                new_id, state = _new_recovery_state(
-                    client=client, run_date=run_date, workspace_id=workspace_id
-                )
-                _write_recovery_manifest(
-                    client=client,
-                    state=state,
-                    weights=weights,
-                    cash_pct=cash_pct,
-                    nav=nav,
-                    ledger=LedgerAppend(commit_id=head_id, frozen_symbols=[], unpriced_symbols=[]),
-                    commit_seq=next_seq,
-                    manifests=manifests,
-                )
-                source_run_id = str(new_id)
-            present = f"ledger commit {head_id} already present for {run_date.isoformat()}"
-            return outcome(
-                "already_committed",
-                f"{present}; published missing commit-run manifest" if apply else present,
-                commit_id=head_id,
-                source_run_id=source_run_id,
-            )
 
     source_run_id, state = _new_recovery_state(
         client=client, run_date=run_date, workspace_id=workspace_id

@@ -10,7 +10,12 @@ from uuid import uuid4
 import pytest
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.olympus.hermes.writers.commit_io import weights_fingerprint
-from digiquant.olympus.hermes.writers.ledger_io import APPROVED_TARGETS, COMMITS, _policy_version_id
+from digiquant.olympus.hermes.writers.ledger_io import (
+    APPROVED_TARGETS,
+    COMMITS,
+    ORDER_INTENTS,
+    _policy_version_id,
+)
 from digiquant.olympus.hermes.writers.recover_ledger import (
     _prior_current_weights,
     _recovery_state,
@@ -118,6 +123,21 @@ def _seed_approved(client: FakeSupabaseClient, weights: dict[str, float]) -> Non
     ]
 
 
+def _seed_order_intents(client: FakeSupabaseClient, symbols: tuple[str, ...] = TICKERS) -> None:
+    client.canned_reads[ORDER_INTENTS] = [
+        {
+            "id": str(uuid4()),
+            "run_date": RUN_DATE.isoformat(),
+            "symbol": symbol,
+            "quantity": 1.0,
+            "status": "pending",
+            "supersedes_id": None,
+            "workspace_id": HOUSE,
+        }
+        for symbol in symbols
+    ]
+
+
 class TestRecoverLedgerFromBook:
     def test_dry_run_does_not_insert(self) -> None:
         client = FakeSupabaseClient()
@@ -183,6 +203,7 @@ class TestRecoverLedgerFromBook:
         _seed_booked_day(client)
         _seed_head_commit(client)
         _seed_approved(client, {**BOOK_WEIGHTS, "CASH": BOOK_CASH})
+        _seed_order_intents(client)
         result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
         assert result.status == "already_committed"
         assert result.commit_id == HEAD_COMMIT_ID
@@ -196,6 +217,23 @@ class TestRecoverLedgerFromBook:
         assert payload["ledger_commit_id"] == HEAD_COMMIT_ID
         assert payload["weights"]["VGK"] == 25.0
         assert payload["supersedes"] == []
+
+    def test_incomplete_chain_missing_order_intents_is_not_already_committed(self) -> None:
+        """Approved without order_intents is a partial ledger, not a committed chain."""
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {**BOOK_WEIGHTS, "CASH": BOOK_CASH})
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status != "already_committed"
+        committed_over_partial = [
+            row
+            for row in client.store.get("documents", [])
+            if str(row.get("document_key", "")).startswith("commit-run/")
+            and (row.get("payload") or {}).get("status") == "committed"
+            and (row.get("payload") or {}).get("ledger_commit_id") == HEAD_COMMIT_ID
+        ]
+        assert committed_over_partial == []
 
     def test_ledger_without_manifest_mismatch_is_conflict_without_force(self) -> None:
         client = FakeSupabaseClient()
@@ -354,6 +392,7 @@ class TestRecoverLedgerFromBook:
             },
         ]
         _seed_approved(client, {**BOOK_WEIGHTS, "CASH": BOOK_CASH})
+        _seed_order_intents(client)
         client.store["documents"] = [
             {
                 "date": RUN_DATE.isoformat(),
