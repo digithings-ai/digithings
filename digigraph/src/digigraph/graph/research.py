@@ -16,7 +16,6 @@ from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
-    wrap_execute_tool_for_tier1,
 )
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
@@ -456,10 +455,13 @@ def _run_document_rag_path(
     # exactly 1).
     #
     # Two-tier compaction (#399): prior-turn ``llm_messages`` (when present) plus the
-    # current system/user pair are compacted *before* digillm sees them. Tier-1 also
-    # wraps ``execute_search`` so large tool payloads are offloaded before digillm
-    # appends them to its local transcript. The checkpoint keeps ``_compaction_event``
-    # (refs only); originals live under the session workspace.
+    # current system/user pair are compacted *before* digillm sees them.
+    # Do **not** wrap ``execute_search`` with ``wrap_execute_tool_for_tier1``: that
+    # replaced same-turn digisearch payloads (>2 KB) with workspace stubs the model
+    # cannot read, so project-mode RAG answers were synthesized from stubs alone.
+    # digillm already caps injected tool text via ``DIGI_TOOL_MESSAGE_MAX_CHARS``.
+    # The checkpoint keeps ``_compaction_event`` (refs only); originals live under
+    # the session workspace when tier-1/2 run on the pre-LLM message list.
     compaction_cfg = compaction_config_from_env()
     prior = state.get("llm_messages")
     base_messages: list[dict[str, Any]] = [
@@ -476,18 +478,11 @@ def _run_document_rag_path(
         compaction_cfg,
         session_id=state.get("session_id"),
     )
-    tier1_refs: list[str] = list(compaction.event.tier1_refs) if compaction.event else []
-    execute_for_llm = wrap_execute_tool_for_tier1(
-        execute_search,
-        config=compaction_cfg,
-        session_id=state.get("session_id"),
-        refs_out=tier1_refs,
-    )
     content = run_tools(
         model=get_model_for_mode(),
         messages=compaction.llm_messages,
         tools=tools_for_llm,
-        execute_tool=execute_for_llm,
+        execute_tool=execute_search,
         max_tool_rounds=4,
         on_tool_step=stream_callback,
         tool_choice="required" if state.get("require_tool_calls") else "auto",
@@ -535,19 +530,7 @@ def _run_document_rag_path(
         "llm_messages": compaction.llm_messages,
     }
     if compaction.event is not None:
-        event_payload = compaction.event.model_dump()
-        if tier1_refs and len(tier1_refs) > event_payload.get("tier1_truncated", 0):
-            event_payload["tier1_refs"] = list(dict.fromkeys(tier1_refs))
-            event_payload["tier1_truncated"] = len(event_payload["tier1_refs"])
-        out_state["_compaction_event"] = event_payload
-    elif tier1_refs:
-        from digigraph.compaction import CompactionEvent
-
-        out_state["_compaction_event"] = CompactionEvent(
-            event_id="tier1-only",
-            tier1_truncated=len(tier1_refs),
-            tier1_refs=list(dict.fromkeys(tier1_refs)),
-        ).model_dump()
+        out_state["_compaction_event"] = compaction.event.model_dump()
     if collected_stored:
         merged = dict(state.get("stored_datasets") or {})
         for ref, profile in collected_stored.items():
