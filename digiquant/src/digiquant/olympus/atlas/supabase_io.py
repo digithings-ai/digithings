@@ -185,7 +185,7 @@ def build_client(cfg: SupabaseConfig) -> SupabaseClient:
     The ``supabase`` package is an optional extra; this helper defers the
     import so unit tests (which use :class:`FakeSupabaseClient`) never need
     it installed. Production entry points (commit 9's graph compiler) call
-    this once at startup. PostgREST uses an explicit httpx timeout (#3319).
+    this once at startup. PostgREST I/O uses ``httpx.Timeout``.
     """
     from supabase.lib.client_options import SyncClientOptions
 

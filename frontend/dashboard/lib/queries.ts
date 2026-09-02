@@ -10,6 +10,7 @@
  */
 import { supabase, isSupabaseConfigured } from './supabase';
 import {
+  assertDailySnapshotQueryOk,
   bookedCoversCommittedSnapshot,
   committedBookDate,
   previousBookDate,
@@ -825,6 +826,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (rt === 'baseline' || rt === 'delta') snapshot_run_type_by_date[row.date] = rt;
   }
 
+  assertDailySnapshotQueryOk(snapshotRes.error);
   const snapshot: TableRow<'daily_snapshots'> = snapshotRes.data ?? ({} as TableRow<'daily_snapshots'>);
   const rawSnapshotJson = snapshot.snapshot;
   const snapshotJson: DigestSnapshot | null =

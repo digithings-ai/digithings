@@ -12,7 +12,6 @@ import {
   canGoToNextWeek,
   clampWeekStart,
   formatWeekRangeLabel,
-  formatYmd,
   mondayOfWeek,
   shiftWeekStart,
 } from '@/lib/run-health-week';
@@ -250,19 +249,23 @@ function WeekBar({
   );
 }
 
+export type BriefPipelineHealthProps = {
+  runHealth: BriefRunHealth | null | undefined;
+  diagnostics: AtlasRunDiagnostics[];
+  snapshotDate?: string | null;
+  positionDates?: readonly string[];
+  now?: Date;
+  initialWeekStart?: string;
+};
+
 export function BriefPipelineHealth({
   runHealth,
   diagnostics,
-  /** Injectable clock for tests — defaults to today (UTC calendar date). */
+  snapshotDate = null,
+  positionDates = [],
   now = new Date(),
-  /** Controlled week start (Monday YYYY-MM-DD); defaults to current week. */
   initialWeekStart,
-}: {
-  runHealth: BriefRunHealth | null | undefined;
-  diagnostics: AtlasRunDiagnostics[];
-  now?: Date;
-  initialWeekStart?: string;
-}) {
+}: BriefPipelineHealthProps) {
   const pipeline = runStatus(runHealth);
   const [weekStart, setWeekStart] = useState(() =>
     clampWeekStart(initialWeekStart ?? mondayOfWeek(now), now)
@@ -278,7 +281,7 @@ export function BriefPipelineHealth({
 
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
-  const commitNote = unpublishedBookNote(runHealth?.runDate ?? null, formatYmd(now));
+  const commitNote = unpublishedBookNote(snapshotDate, positionDates);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">

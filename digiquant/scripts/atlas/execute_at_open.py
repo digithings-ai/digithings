@@ -3,19 +3,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import date as dt_date, datetime, timedelta, timezone
+from datetime import date as dt_date
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-
-try:
-    from supabase import create_client  # type: ignore
-
-    _HAS_SB = True
-except ImportError:
-    _HAS_SB = False
 
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -38,6 +31,11 @@ def _ensure_importable() -> None:
 
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
+from digiquant.olympus.atlas.supabase_io import (  # noqa: E402
+    SupabaseConfig,
+    SupabaseNotConfiguredError,
+    build_client,
+)
 from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
 
 
@@ -50,13 +48,12 @@ def _eq_house(query: Any) -> Any:
 
 
 def _sb():
-    if not _HAS_SB:
-        raise RuntimeError("pip install supabase")
-    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
-    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
-    if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
-    return create_client(url, key)
+    try:
+        return build_client(SupabaseConfig.from_env())
+    except SupabaseNotConfiguredError as exc:
+        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required") from exc
+    except ImportError as exc:
+        raise RuntimeError("pip install supabase") from exc
 
 
 def _is_calendar_date(raw: str) -> bool:

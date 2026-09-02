@@ -1,142 +1,60 @@
-"""H9 PostgREST/httpx timeouts must fail in minutes, not hang until the job cancel (#3319)."""
+"""httpx timeouts on ``build_client``; ledger inserts do not abandon a worker."""
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
-import time
-from datetime import date
+import importlib.util
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import httpx
 import pytest
+import yaml
 from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
 from digiquant.olympus.hermes.writers import ledger_io
 from digiquant.olympus.postgrest_timeout import (
     CONNECT_TIMEOUT_SECONDS,
-    EXECUTE_DEADLINE_SECONDS,
+    POOL_TIMEOUT_SECONDS,
     READ_TIMEOUT_SECONDS,
-    PostgrestTimeoutError,
-    run_with_deadline,
+    WRITE_TIMEOUT_SECONDS,
 )
 
 pytestmark = pytest.mark.unit
 
-RUN_DATE = date(2026, 8, 31)
+_REPO = Path(__file__).resolve().parents[3]
+_WORKFLOW = _REPO / ".github" / "workflows" / "pipeline-olympus.yml"
+_AT_OPEN = _REPO / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
 
 
-def test_deadline_constants_are_minutes_not_hours() -> None:
+def test_httpx_timeout_constants() -> None:
     assert CONNECT_TIMEOUT_SECONDS == 10.0
     assert READ_TIMEOUT_SECONDS == 60.0
-    assert EXECUTE_DEADLINE_SECONDS == 70.0
-    assert EXECUTE_DEADLINE_SECONDS < 5 * 60
+    assert WRITE_TIMEOUT_SECONDS == 30.0
+    assert POOL_TIMEOUT_SECONDS == 10.0
 
 
-def test_run_with_deadline_returns_quickly_on_success() -> None:
-    assert run_with_deadline(lambda: 7, seconds=1.0) == 7
+def test_insert_execute_runs_on_the_caller_thread() -> None:
+    caller = threading.get_ident()
+    seen: list[int] = []
 
+    class _Client:
+        def table(self, _name: str) -> _Client:
+            return self
 
-def test_run_with_deadline_raises_without_waiting_unbounded() -> None:
-    def hang() -> None:
-        time.sleep(30)
+        def insert(self, _rows: list[dict[str, Any]]) -> _Client:
+            return self
 
-    t0 = time.monotonic()
-    with pytest.raises(PostgrestTimeoutError, match="0.05"):
-        run_with_deadline(hang, seconds=0.05)
-    elapsed = time.monotonic() - t0
-    assert elapsed < 2.0, f"deadline wrapper waited {elapsed:.1f}s; must not hang"
+        def execute(self) -> SimpleNamespace:
+            seen.append(threading.get_ident())
+            return SimpleNamespace(data=[])
 
-
-def test_run_with_deadline_propagates_worker_timeout_error() -> None:
-    def boom() -> None:
-        raise TimeoutError("socket read timed out")
-
-    with pytest.raises(TimeoutError, match="socket read timed out") as excinfo:
-        run_with_deadline(boom, seconds=1.0)
-    assert not isinstance(excinfo.value, PostgrestTimeoutError)
-
-
-def test_deadline_allows_process_exit_while_worker_still_hung() -> None:
-    """Non-daemon workers would pin process exit until the hung call finished."""
-    script = (
-        "import time\n"
-        "from digiquant.olympus.postgrest_timeout import "
-        "PostgrestTimeoutError, run_with_deadline\n"
-        "\n"
-        "def hang() -> None:\n"
-        "    time.sleep(30)\n"
-        "\n"
-        "try:\n"
-        "    run_with_deadline(hang, seconds=0.2)\n"
-        "except PostgrestTimeoutError:\n"
-        "    pass\n"
+    ledger_io._insert(
+        client=_Client(),
+        table="broker_orders",
+        rows=[{"id": "row-1", "workspace_id": "ws"}],
     )
-    src = Path(run_with_deadline.__code__.co_filename).resolve().parents[2]
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(src)
-    t0 = time.monotonic()
-    proc = subprocess.run(
-        [sys.executable, "-c", script],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=8,
-        env=env,
-    )
-    wall = time.monotonic() - t0
-    assert proc.returncode == 0, proc.stderr
-    assert wall < 3.0, f"process hung {wall:.1f}s after deadline; daemon thread required"
-
-
-class _HungQuery:
-    def select(self, *_a: Any, **_k: Any) -> _HungQuery:
-        return self
-
-    def in_(self, *_a: Any, **_k: Any) -> _HungQuery:
-        return self
-
-    def gte(self, *_a: Any, **_k: Any) -> _HungQuery:
-        return self
-
-    def lt(self, *_a: Any, **_k: Any) -> _HungQuery:
-        return self
-
-    def execute(self) -> SimpleNamespace:
-        time.sleep(30)
-        return SimpleNamespace(data=[])
-
-
-class _HungClient:
-    def table(self, _name: str) -> _HungQuery:
-        return _HungQuery()
-
-
-def test_last_closes_does_not_wait_unbounded_on_hung_price_history(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(ledger_io, "EXECUTE_DEADLINE_SECONDS", 0.05)
-    t0 = time.monotonic()
-    with pytest.raises(PostgrestTimeoutError):
-        ledger_io._last_closes(client=_HungClient(), tickers={"SPY"}, run_date=RUN_DATE)
-    elapsed = time.monotonic() - t0
-    assert elapsed < 2.0, f"_last_closes hung for {elapsed:.1f}s on a timed-out client"
-
-
-def test_frozen_symbols_does_not_wait_unbounded_on_hung_paper_executions(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(ledger_io, "EXECUTE_DEADLINE_SECONDS", 0.05)
-    t0 = time.monotonic()
-    with pytest.raises(PostgrestTimeoutError):
-        ledger_io._frozen_symbols(
-            client=_HungClient(),
-            order_rows=[{"id": "oi-1", "symbol": "SPY", "status": "pending"}],
-        )
-    elapsed = time.monotonic() - t0
-    assert elapsed < 2.0, f"_frozen_symbols hung for {elapsed:.1f}s on a timed-out client"
+    assert seen == [caller]
 
 
 def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -160,3 +78,42 @@ def test_build_client_passes_httpx_timeout(monkeypatch: pytest.MonkeyPatch) -> N
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.connect == CONNECT_TIMEOUT_SECONDS
     assert timeout.read == READ_TIMEOUT_SECONDS
+    assert timeout.write == WRITE_TIMEOUT_SECONDS
+    assert timeout.pool == POOL_TIMEOUT_SECONDS
+
+
+def test_execute_at_open_sb_uses_build_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    spec = importlib.util.spec_from_file_location("execute_at_open_timeout", _AT_OPEN)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    captured: dict[str, Any] = {}
+
+    def fake_build(cfg: SupabaseConfig) -> dict[str, str]:
+        captured["cfg"] = cfg
+        return {"client": "timed"}
+
+    monkeypatch.setattr(mod, "build_client", fake_build)
+    monkeypatch.setenv("CORE_SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("CORE_SUPABASE_SERVICE_KEY", "sk")
+    assert mod._sb() == {"client": "timed"}
+    cfg = captured["cfg"]
+    assert cfg.url == "https://example.supabase.co"
+    assert cfg.service_key == "sk"
+
+
+def test_research_pipeline_run_step_has_per_attempt_timeout() -> None:
+    doc = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
+    job = doc["jobs"]["run"]
+    job_timeout = job["timeout-minutes"]
+    assert job_timeout == 240
+    [step] = [s for s in job["steps"] if isinstance(s, dict) and s.get("id") == "run"]
+    step_timeout = step["timeout-minutes"]
+    assert isinstance(step_timeout, int)
+    assert step_timeout < job_timeout
+    script = step["run"]
+    assert "ATTEMPT_TIMEOUT=70m" in script
+    assert "timeout --kill-after=30s" in script
+    assert "${ATTEMPT_TIMEOUT}" in script
+    assert "MAX_OUTER_ATTEMPTS=3" in script

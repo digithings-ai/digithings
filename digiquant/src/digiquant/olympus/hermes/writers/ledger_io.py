@@ -61,8 +61,7 @@ from digiquant.olympus.overlay.persist import (
     require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
-from digiquant.olympus.postgrest_timeout import EXECUTE_DEADLINE_SECONDS, run_with_deadline
-from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +116,7 @@ class LedgerAppend:
 
 
 def _execute(query: Any) -> Any:
-    """Run PostgREST ``execute()`` under the #3319 deadline (module constant, call-time)."""
-    return run_with_deadline(query.execute, seconds=EXECUTE_DEADLINE_SECONDS)
+    return query.execute()
 
 
 def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -> None:
@@ -129,18 +127,14 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
 
-    T0 (#5-T0): ``workspace_id`` is NOT NULL as of migration 097 with no column
-    DEFAULT (every writer reaching these tables is expected to stamp it explicitly —
-    see migration 097's header). H9 is single-tenant today, so this one gate stamps
-    the house workspace on every row that does not already carry one, which covers
-    every caller (``append_commit_chain`` here, plus ``opening_snapshot`` and
-    ``execution_io`` which both route through this same function).
+    Raises ``ValueError`` if any row is missing ``workspace_id``.
     """
     if not rows:
         return
-    house_id = str(house_workspace_id())
-    stamped = [{"workspace_id": house_id, **row} for row in rows]
-    _execute(client.table(table).insert(stamped))
+    for row in rows:
+        if not str(row.get("workspace_id") or "").strip():
+            raise ValueError(f"{table} insert refused: workspace_id is missing on a row")
+    _execute(client.table(table).insert(rows))
 
 
 def _is_cash(ticker: Any) -> bool:

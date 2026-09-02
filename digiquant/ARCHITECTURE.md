@@ -2275,15 +2275,16 @@ assuming it is always present.
 Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
 Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
 portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
-see below). **PostgREST timeout (#3319):** `build_client` sets
+see below). **PostgREST timeout:** `build_client` sets
 `httpx.Timeout(connect=10, read=60, write=30, pool=10)` on the Supabase client.
-`append_commit_chain` additionally wraps every `execute()` (including the
-`price_history` read in `_last_closes`) with a 70s daemon-thread deadline
-(`digiquant.olympus.postgrest_timeout`). A hung call raises `PostgrestTimeoutError`
-so the outer pipeline retry can fire; it must not sit until the GitHub Actions
-240-minute job cancel. The worker is daemon so process exit is not joined to the
-hung call (`ThreadPoolExecutor` workers would reintroduce the stall). No client-level retries on this path (disconnect retries
-are a separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
+Ledger writers, at-open (`execute_at_open.py`), and the opening-snapshot seed
+construct that client through `build_client`. `_insert` / `_execute` call
+`execute()` directly; hung I/O fails via httpx (no thread deadline). The
+research pipeline run step wraps each of 3 attempts in `timeout 70m` so a
+hung attempt fails and the retry can fire; the step `timeout-minutes` is 230,
+under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
+on a row. No client-level retries on this path (disconnect retries are a
+separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation publishes a same-date document on every house run (short fold;
 full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
@@ -2400,20 +2401,20 @@ next attempt reads to decide "already committed", so a partial chain must leave 
 behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
 failed append as a clean no-op and leave the lineage silently one commit short.
 
-When `book_portfolio` already wrote `positions` / `nav_history` but the chain insert
+When booking already wrote `positions` / `nav_history` but the chain insert
 died (cron on `main` omitting `workspace_id` → `23502`, #3330), recover without an LLM
-rerun: `python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD`
-(dry-run) then `--apply`. That path (`hermes/writers/recover_ledger.py`) reads the booked
-weights and calls `append_commit_chain` + a `commit-run/{run_id}` manifest tagged
-`recovery=append_from_existing_book`. It does not call H8 or rewrite positions. It is an
-operator recovery *caller* of the same writer, not a second implementation.
-`test_h9_is_the_only_ledger_writer` allowlists that file explicitly. Idempotent only when
-a committed manifest fingerprint matches the booked weights **and** approved-target rows
-cover that book; a fingerprint mismatch is `conflict` (nonzero exit); a commit row without
-children falls through to `append_commit_chain` (supersede), never a false-finalized
-manifest. The matching commit must also be the current ledger `_heads()` tip;
-`resolve_prior_commit` orders manifests by `commit_seq` (ambiguous seq → `conflict`).
-Recovery manifests carry the next `commit_seq` and `supersedes` fingerprints.
+rerun: `python digiquant/scripts/recover_ledger.py --date YYYY-MM-DD` (dry-run) then
+`--apply` (`--yes` if the date is older than 7 days). That path
+(`writers/recover_ledger.py`; CLI under `digiquant/scripts/`) reads the booked
+weights. If a head commit exists and approved weights match the book, status is
+`already_committed` and only a missing `commit-run/{run_id}` document is published
+(tagged `recovery=append_from_existing_book`). If the head does not match, status is
+`conflict` until `--force-recommit`. With no head commit it calls
+`append_commit_chain` plus the commit-run document. It does not rewrite positions.
+It is an operator recovery *caller* of the same writer, not a second implementation.
+`supersedes` is prior manifests' fingerprints. `resolve_prior_commit` orders
+manifests by `commit_seq` (ambiguous seq → `conflict`). Recovery manifests carry
+the next `commit_seq`.
 
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
