@@ -245,4 +245,6 @@ class TestOlympusWorkflowDailyCadence:
 
     def test_olympus_workflow_schedule_is_daily(self) -> None:
         text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")
-        assert 'cron: "0 12 * * *"' in text
+        assert 'cron: "17 9 * * *"' in text
+        assert 'cron: "17 12 * * *"' in text
+        assert 'cron: "0 12 * * *"' not in text

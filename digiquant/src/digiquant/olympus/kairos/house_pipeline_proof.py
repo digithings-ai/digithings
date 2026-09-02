@@ -13,7 +13,7 @@ fail-softs [#3343](https://github.com/digithings-ai/digithings/pull/3343) →
 [#3351](https://github.com/digithings-ai/digithings/pull/3351) →
 [#3354](https://github.com/digithings-ai/digithings/pull/3354). While
 ``origin/main`` is that SHA the CLI exits 5 so operators merge those PRs
-before the next ``0 12 * * *`` cron. Exit 5 also prints ``failsofts=``
+before the next ``17 9/10/11/12 * * *`` cron. Exit 5 also prints ``failsofts=``
 mergeability (OPEN/MERGEABLE/CLEAN). That line is status only — never merge
 those PRs from this authoring agent.
 """
@@ -426,7 +426,7 @@ def main(
     if code == EXIT_SCHEDULE_FAILED:
         err("DIGIQUANT_HOUSE_PIPELINE: post-hotfix schedule failed (not a dispatch)")
     elif code == EXIT_WAITING_SCHEDULE:
-        err("DIGIQUANT_HOUSE_PIPELINE: waiting for cron 0 12 * * * (do not dispatch)")
+        err("DIGIQUANT_HOUSE_PIPELINE: waiting for cron 17 9/10/11/12 * * * (do not dispatch)")
     return code
 
 
