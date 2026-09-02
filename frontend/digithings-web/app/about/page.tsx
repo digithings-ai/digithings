@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
 // credentials (llm_auth.py:92-96 — no set_byok branch). Fixing that path is
 // tracked on its own branch; until it lands, this copy must not promise it.
 // Page grammar is the site's own: .section / .wrap / .section-head / .kicker,
-// DtNav + Footer, no new CSS families.
+// DtNav + DtFooter, no new CSS families.
 
 // The four properties of the repository as a whole. Each one is a fact with a
 // filename behind it, named in the body copy so it stays checkable.
@@ -236,7 +236,7 @@ export default function AboutPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

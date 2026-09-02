@@ -45,7 +45,15 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+`SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
+is the quiet company-profile utility row: the same borderless `.btn-icon`
+grammar as the NavShell GitHub slot (radius 0, ink-mute → ink, `--accent` only
+on `:focus-visible`). Default `DIGITHINGS_SOCIALS` is the live GitHub / X /
+LinkedIn set; Discord is not a network we run. Specimens live on the reference
+chrome page (`SocialsReference`). `Footer` accepts an optional `profiles` slot
+so marketing sites can mount the row without a fake Connect column.
 
 `AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
 `./styles/account-auth.css`) is the promoted sign-in / create-account card.

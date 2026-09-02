@@ -206,6 +206,44 @@
   display: block;
 }
 
+/* Quiet company-profile row — the same borderless glyph buttons as the nav
+   tail, usable in a contact band or footer. Phosphor (`--accent`) only on
+   :focus-visible; hover stays ink. Radius 0, no fill. */
+.social-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ink-mute);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s var(--ease);
+}
+
+.btn-icon:hover {
+  color: var(--ink);
+  background: transparent;
+}
+
+.btn-icon:focus-visible {
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-icon svg {
+  display: block;
+}
+
 /* ── hamburger: two lines folding to an × from the parent state ─────────── */
 .nav-shell-toggle {
   display: none; /* wide viewports; media query below re-enables */

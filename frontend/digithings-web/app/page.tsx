@@ -1,18 +1,18 @@
 import {
   Colophon,
-  Footer,
   NumberedStages,
   OdometerStrip,
   RepoActivity,
   Reveal,
+  SocialRow,
   StackRow,
   WordReveal,
   type NumberedStage,
   type OdometerStat,
   type StackItem,
 } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
 import { ContactMailto } from "@/components/ContactMailto";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
@@ -340,6 +340,9 @@ export default function Home() {
                 Or email us directly
               </ContactMailto>
             </p>
+            <div className="mt-[1.6rem] flex justify-center">
+              <SocialRow />
+            </div>
           </Reveal>
         </section>
       </main>
@@ -347,7 +350,7 @@ export default function Home() {
       {/* sweep: the flagship page opts into the reference footer's glow
           sweep — every other consumer keeps the outline-only default. */}
       <Colophon name="digi" suffix="things" sweep />
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }
