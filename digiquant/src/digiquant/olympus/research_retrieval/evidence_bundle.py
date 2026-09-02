@@ -8,13 +8,13 @@ selection (WP11.3+). Reuses WP11.1 / WP12 identity helpers only.
 
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from typing import Annotated, TypeAlias
 from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
+from digiquant.olympus.envcompat import EVIDENCE_BUNDLE_WRITER, env_lookup
 from digiquant.olympus.hermes.models.forecast import ForecastTerms
 from digiquant.olympus.research_retrieval.models import (
     EvidenceRecord,
@@ -102,7 +102,7 @@ class H5EvidenceBundleBuild(BaseModel):
 
 def evidence_bundle_writer_enabled() -> bool:
     """Durable store append is on unless explicitly disabled for rollback."""
-    raw = os.environ.get(OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV, "on").strip().lower()
+    raw = env_lookup(EVIDENCE_BUNDLE_WRITER, default="on").strip().lower()
     return raw not in {"off", "0", "false", "no"}
 
 

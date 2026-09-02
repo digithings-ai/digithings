@@ -88,7 +88,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         if (part.type === ACTIVITY_PART_TYPE || part.type === "data-digigraphTrace") return null;
         if (isReasoningUIPart(part)) {
           return (
-            <Collapsible key={i} className="rounded-lg border border-border/60 bg-muted/30">
+            <Collapsible key={i} className="rounded-none border border-border/60 bg-muted/30">
               <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/50">
                 Reasoning
               </CollapsibleTrigger>
@@ -122,7 +122,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-none border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -340,7 +340,7 @@ export function ChatPanel({
       {headerSlot}
 
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
+        <div ref={scrollRef} className="h-full overflow-y-auto rounded-none border border-border/40 dc-term-pane">
           {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>

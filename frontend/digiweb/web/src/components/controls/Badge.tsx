@@ -1,17 +1,16 @@
 /**
- * Badge — the shared status pill promoted for #1419. Rendering behavior
+ * Badge — the shared status chip promoted for #1419. Rendering behavior
  * comes from @base-ui/react's useRender (the same hook digichat's
  * ui/badge.tsx uses, so the `render` composition prop carries over). Two
  * dresses:
  *
- * - dress="reference" (default): the mono micro-caps hairline pill — the
+ * - dress="reference" (default): the mono micro-caps hairline rect — the
  *   .dg-tier grammar (web-theme.css). Variants are tones: "neutral"
  *   (ink-mute, default), "accent" (t-core), "warn" (t-roadmap), and the
  *   money colors "up" / "down" by the same 40%-mix border formula.
- * - dress="chat": digichat's current shadcn-derived dress, matching
- *   digichat ui/badge.tsx variant enums exactly ("default" | "secondary" |
- *   "destructive" | "outline" | "ghost" | "link") so that wrapper can pin
- *   dress="chat" and re-export with no rendered-look change.
+ * - dress="chat": same zero-radius chip with digichat ui/badge.tsx variant
+ *   enums ("default" | "secondary" | "destructive" | "outline" | "ghost" |
+ *   "link") so the wrapper can pin dress="chat".
  *
  * All dress lives in styles/controls-core.css (import once app-wide).
  */

@@ -26,8 +26,12 @@ A green third-party **status check** is not an approving review. Check review de
 
 ## Cost-efficient tiering
 
-1. **Scope pass (cheap / fast model)** — map the diff, list risk areas, skip clean files. In Claude: haiku or sonnet. In Cursor: a fast/cheap model slug (e.g. `composer-2.5-fast`), not the expensive default.
-2. **Deep pass (strong model)** — only on flagged areas: correctness, auth, data integrity, races, claim accuracy. In Claude: opus. In Cursor: stronger model or dedicated review agent.
+**General rule (all subagents):** best model for the job; prefer the token-efficient
+choice that still clears the bar; **do not use fast mode** (`*-fast` / speed-optimized
+Cursor slugs). Quality of fit first; cost second; latency never overrides either.
+
+1. **Scope pass (token-efficient)** — map the diff, list risk areas, skip clean files. In Claude: haiku or sonnet. In Cursor: a cheaper non-fast slug (e.g. `composer-2.5`), not the expensive default and not `composer-2.5-fast`.
+2. **Deep pass (strong model)** — only on flagged areas: correctness, auth, data integrity, races, claim accuracy. In Claude: opus. In Cursor: stronger non-fast model or dedicated review agent.
 3. **Refute** — every surviving finding needs a command that was run; drop what a refuter can disprove.
 
 Do not run every lens at opus on a tiny diff. Do not leave review `model` unset under an expensive orchestrator (inheritance tax).
@@ -38,3 +42,8 @@ Do not run every lens at opus on a tiny diff. Do not leave review `model` unset 
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
+- Do not skip review coverage just to merge faster. Use the **review skill** (`/review`, in-session review, `review-and-ship`) when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
+
+## After review: merge
+
+Review is a skill you run when the diff warrants it, not a hand-off that leaves the PR open. When required CI is green, threads are triaged, and a coverage hatch is on the record (when required), the authoring agent merges into the PR's base unless a human-gate exception in AGENTS.md applies (including PRs into `main`).

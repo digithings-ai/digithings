@@ -12,6 +12,7 @@ contract without touching OpenRouter.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -109,6 +110,50 @@ def test_accepts_an_explicit_model_override(vp: Any) -> None:
         assert vp.check_openrouter("openrouter/some-model") is True
 
     assert calls[0]["model"] == "openrouter/some-model"
+
+
+def test_preflight_configures_bounded_digillm_env(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """digillm reads timeout/retry env at import — preflight must set them first (#2528/#2531)."""
+    monkeypatch.delenv("DIGILLM_REQUEST_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("DIGILLM_EMPTY_RETRY_MAX", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ["DIGILLM_REQUEST_TIMEOUT_SECONDS"] == str(
+        vp._PREFLIGHT_REQUEST_TIMEOUT_SECONDS
+    )
+    assert os.environ["DIGILLM_EMPTY_RETRY_MAX"] == str(vp._PREFLIGHT_EMPTY_RETRY_MAX)
+
+
+def test_preflight_applies_openrouter_allowed_models(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight must call apply_olympus_openrouter_env so check 3 matches production (#2532)."""
+    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
+
+
+def test_structured_auto_router_request_shape_matches_production(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """openrouter/auto with a constrained pool uses the auto-router plugin, not require_parameters."""
+    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
+    vp._configure_preflight_environment()
+    from digillm.client import _with_openrouter_cost_controls
+
+    kwargs = {
+        "model": "openrouter/openrouter/auto",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "ping", "schema": {"type": "object"}},
+        },
+    }
+    merged = _with_openrouter_cost_controls(kwargs, "openrouter")
+    extra = merged["extra_body"]
+    auto_plugins = [p for p in extra.get("plugins", []) if p.get("id") == "auto-router"]
+    assert auto_plugins, "production constrains openrouter/auto via auto-router plugin"
+    assert auto_plugins[0]["allowed_models"]
+    provider = extra.get("provider") or {}
+    assert "require_parameters" not in provider
 
 
 def _fake_tier_config(models: list[str]) -> Any:

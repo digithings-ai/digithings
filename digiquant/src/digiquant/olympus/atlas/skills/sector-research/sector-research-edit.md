@@ -14,7 +14,7 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 - `target_document_key`: the sector slug from PHASE_INPUTS (`segment` or `sector_config.slug`, e.g. `sector-technology`)
 - `prior_date` / `date` from PHASE_INPUTS
 - `status`: `updated` with ops, or `skipped` when nothing material changed
-- `ops`: RFC 6901 paths (`/headline`, `/bias`, `/relative_strength_vs_spy`, `/sub_segment_leader`, `/driver_confirmation_count`, `/conviction`, …)
+- `ops`: RFC 6901 paths (`/body`, `/internal_bias`, `/sources`, …)
 
 ## Inputs
 
@@ -26,4 +26,4 @@ Respond with a single JSON object validating against **`DocumentPatch`**:
 
 - Patch only drivers/stance fields affected by ETF moves, earnings, or upstream regime shifts.
 - Ground ETF/ticker claims with `query_data` on `sector_config.etfs` and `top_tickers`.
-- Preserve valid `SectorReport` literals (`relative_strength_vs_spy`, `conviction`, `bias`).
+- Preserve a readable markdown memo; optional `internal_bias` is a non-rendered token.

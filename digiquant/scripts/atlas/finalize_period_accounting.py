@@ -78,8 +78,14 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     _rows_for_date,
 )
 from digiquant.olympus.hermes.writers.opening_snapshot import cold_start_requires_seed
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", str(house_workspace_id()))
+
 
 _ENV_MODE = "OLYMPUS_ACCOUNTING_FINALIZER"
 _OFF = frozenset({"0", "off", "false", "no", "disabled"})
@@ -90,9 +96,7 @@ _EXIT_DECLINED = 3
 # PostgREST / supabase-js default max_rows is 1000 (see digiquant/supabase/config.toml).
 # Closed lots accumulate forever; an unbounded select silently truncates the opening book.
 _LOT_PAGE_SIZE = 1000
-_LOT_SELECT_COLS = (
-    "opened_by_execution_id,opened_at,run_date,quantity,status,closed_at,symbol"
-)
+_LOT_SELECT_COLS = "opened_by_execution_id,opened_at,run_date,quantity,status,closed_at,symbol"
 
 
 class FinalizerDeclined(RuntimeError):
@@ -180,8 +184,7 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
             if cash is not None and cash >= 0:
                 return cash
     resp = (
-        client.table("nav_history")
-        .select("date, nav, cash_pct")
+        _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -197,8 +200,7 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
         # Fall through to positions CASH weight * indexed nav as a continuity estimate.
         if nav is not None and nav > 0:
             pos = (
-                client.table("positions")
-                .select("ticker, weight_pct")
+                _eq_house(client.table("positions").select("ticker, weight_pct"))
                 .eq("date", str(rows[0]["date"])[:10])
                 .execute()
             )
@@ -440,11 +442,10 @@ def assemble_period_input(
 def _legacy_nav_day_return_pct(*, client: Any, period_date: date) -> Decimal | None:
     """Legacy indexed NAV day return from ``nav_history`` (provisional H9 continuity)."""
     iso = period_date.isoformat()
-    cur = client.table("nav_history").select("nav").eq("date", iso).limit(1).execute()
+    cur = _eq_house(client.table("nav_history").select("nav")).eq("date", iso).limit(1).execute()
     cur_rows = list(getattr(cur, "data", None) or [])
     prev = (
-        client.table("nav_history")
-        .select("nav")
+        _eq_house(client.table("nav_history").select("nav"))
         .lt("date", iso)
         .order("date", desc=True)
         .limit(1)

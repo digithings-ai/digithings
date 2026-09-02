@@ -36,6 +36,7 @@ from digiquant.olympus.atlas.supabase_io import (
     update_decision_resolution,
 )
 from digiquant.olympus.hermes.payloads import analyst_payloads
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,15 @@ def persist_pending(
     instead of duplicating it (the Jun-19 prod run double-wrote 20 rows for 10
     tickers under two run_ids; #947). The resolver's ``status='pending'`` guard
     still prevents overwriting an already-resolved reflection on replay.
+
+    Overlay workspaces skip this write: ``decision_log`` is a house-owned
+    shared register (no ``workspace_id``; leftover ``UNIQUE(run_date, ticker)``).
     """
+    if skip_overlay_shared_register(state.config.workspace_id):
+        logger.info(
+            "overlay skip shared register decision_log (house-only UNIQUE(run_date, ticker))"
+        )
+        return 0
     analysts = analyst_payloads(state)
     if not analysts:
         return 0
@@ -127,6 +136,7 @@ def resolve_pending(
     client: SupabaseClient,
     run_date: date,
     reflector: Callable[[dict[str, Any]], ReflectorOutput] | None = None,
+    workspace_id: str | None = None,
 ) -> int:
     """Phase B — resolve every pending row whose holding window has elapsed.
 
@@ -145,8 +155,16 @@ def resolve_pending(
     default implementation calls ``run_research_agent`` against the
     ``decision-reflector`` skill.
 
+    Overlay workspaces skip: resolving would stamp house rows by id on the
+    leftover ``UNIQUE(run_date, ticker)`` register.
+
     Returns the number of rows actually resolved.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register decision_log (house-only UNIQUE(run_date, ticker))"
+        )
+        return 0
     pending = query_pending_decisions(client=client, run_date=run_date)
     if not pending:
         return 0

@@ -87,6 +87,41 @@ def test_each_vault_tool_name_dispatches(tool_name: str, tmp_path: Path) -> None
     assert result.data is not None
 
 
+def test_mcp_search_tag_returns_slim_array(tmp_path: Path) -> None:
+    """MCP surface keeps pre-#3041 array projection; orchestrator keeps {notes: ...}."""
+    import json
+
+    from digivault.tool_dispatch import register_mcp_tools
+
+    (tmp_path / "a.md").write_text("---\ntitle: A\ntags: [doc]\n---\n\n", encoding="utf-8")
+    vault = Vault(tmp_path)
+
+    class _FakeMcp:
+        def __init__(self) -> None:
+            self.tools: dict[str, object] = {}
+
+        def tool(self, *, name: str):
+            def deco(fn):
+                self.tools[name] = fn
+                return fn
+
+            return deco
+
+    fake = _FakeMcp()
+    register_mcp_tools(fake, lambda: vault)
+    raw = fake.tools[TOOL_VAULT_SEARCH_TAG]("doc")  # type: ignore[operator]
+    assert isinstance(raw, str)
+    payload = json.loads(raw)
+    assert isinstance(payload, list)
+    assert payload == [{"name": "a", "title": "A", "rel_path": "a.md"}]
+
+    orch = dispatch_vault_tool(TOOL_VAULT_SEARCH_TAG, {"tag": "doc"}, vault)
+    assert orch.ok is True
+    assert isinstance(orch.data, dict)
+    assert "notes" in orch.data
+    assert orch.data["notes"][0]["name"] == "a"
+
+
 def test_dispatch_backlinks_missing_note(tmp_path: Path) -> None:
     (tmp_path / "a.md").write_text("---\ntitle: A\n---\n\n", encoding="utf-8")
     result = dispatch_vault_tool(TOOL_VAULT_BACKLINKS, {"name": "missing"}, Vault(tmp_path))

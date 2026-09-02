@@ -19,6 +19,7 @@ function jsonResponse(body: TestResult, status: number): Response {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
+      "x-content-type-options": "nosniff",
       // Responses here can carry information derived from a submitted secret
       // key (validation result, provider error text) -- never cache.
       "cache-control": "no-store",
@@ -145,9 +146,9 @@ async function testAnthropic(key: string): Promise<TestResult> {
 }
 
 async function testGemini(key: string): Promise<TestResult> {
-  const resp = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
-  );
+  const resp = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models", {
+    headers: { "x-goog-api-key": key },
+  });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
@@ -205,7 +206,7 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     raw !== "openrouter" &&
     raw !== "xai"
   ) {
-    return jsonResponse({ ok: false, error: `Unknown BYOK provider: ${raw}` }, 400);
+    return jsonResponse({ ok: false, error: "Unknown BYOK provider." }, 400);
   }
   const provider: ProviderId = raw;
 

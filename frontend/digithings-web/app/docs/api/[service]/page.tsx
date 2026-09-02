@@ -96,7 +96,7 @@ export default async function OpenApiServicePage({
                   key={s.id}
                   href={`/docs/api/${s.id}/`}
                   aria-current={s.id === entry.id ? "page" : undefined}
-                  className={`rounded-[7px] border px-[0.65rem] py-[0.28rem] font-mono text-[0.76rem] no-underline transition-colors duration-150 ease-brand ${
+                  className={`rounded-none border px-[0.65rem] py-[0.28rem] font-mono text-[0.76rem] no-underline transition-colors duration-150 ease-brand ${
                     s.id === entry.id
                       ? "border-accent bg-accent-weak text-ink"
                       : "border-hair text-ink-soft hover:bg-accent-weak hover:text-ink"

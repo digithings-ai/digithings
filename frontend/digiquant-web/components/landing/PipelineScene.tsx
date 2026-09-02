@@ -1,11 +1,11 @@
 "use client";
 /**
- * Scroll-pinned Olympus research pipeline (ported from v7).
+ * Scroll-pinned digiquant research pipeline (ported from v7).
  *
  * One continuous, lerp-smoothed horizontal track of the REAL research phases:
- *   Atlas  — atlas/phases/* (preflight → … → publish, 10 phases)
- *   Hermes — hermes/phases/* (h1 thesis review → … → h9 commit, 9 phases)
- *   Kairos — execution, marked "In development" (not built yet)
+ *   research  — atlas/phases/* (preflight → … → publish, 10 phases)
+ *   portfolio — hermes/phases/* (h1 thesis review → … → h9 commit, 9 phases)
+ *   execution — marked "In development" for live venues
  * The track stays put and pans continuously; only the engine heading crossfades
  * as scroll progress (`gp`) crosses each engine's dwell window. The rAF loop is
  * gated by an IntersectionObserver so it idles when the scene is off-screen, and
@@ -13,12 +13,12 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
-import { OlympusMark } from "./OlympusMark";
+import { DigiquantMark } from "./OlympusMark";
 
 type Phase = [id: string, name: string, detail: string];
 
-// Real Atlas research phases (digiquant/src/digiquant/olympus/atlas/phases/*).
-const ATLAS: Phase[] = [
+// Research phases (digiquant/src/digiquant/olympus/atlas/phases/*).
+const RESEARCH: Phase[] = [
   ["00", "Preflight", "config + data-layer check"],
   ["01", "Triage", "what changed since last run"],
   ["02", "Alt-data", "sentiment, flows, on-chain"],
@@ -31,8 +31,8 @@ const ATLAS: Phase[] = [
   ["09", "Publish", "to the thesis store"],
 ];
 
-// Real Hermes deliberation phases (digiquant/src/digiquant/olympus/hermes/phases/*).
-const HERMES: Phase[] = [
+// Portfolio / deliberation phases (digiquant/src/digiquant/olympus/hermes/phases/*).
+const PORTFOLIO: Phase[] = [
   ["h1", "Thesis review", "inherit & re-score"],
   ["h2", "Market thesis", "exploration"],
   ["h3", "Vehicle map", "thesis → instruments"],
@@ -45,41 +45,41 @@ const HERMES: Phase[] = [
 ];
 
 // The chips below render the REAL phase-folder names (atlas/phases/,
-// hermes/phases/), not a display count — Hermes's h7 → h7e → h9 has no h8
+// hermes/phases/), not a display count — the h7 → h7e → h9 sequence has no h8
 // because that number was never assigned a phase, not because one is
 // missing. Surfaced as a title so a visitor unfamiliar with the codebase
 // does not read the gap as a typo or broken enumeration (full-UI-suite
 // critique, digiquant-web target, P3).
 const PHASE_ID_TITLE =
-  "The real internal phase-folder name, not a sequential count — a gap (like Hermes's missing h8) means that number was never assigned, not a typo.";
+  "The real internal phase-folder name, not a sequential count — a gap (like the missing h8) means that number was never assigned, not a typo.";
 
 const NODES: [num: string, label: string][] = [
-  ["01", "Atlas"],
-  ["02", "Hermes"],
-  ["03", "Kairos"],
+  ["01", "Research"],
+  ["02", "Portfolio"],
+  ["03", "Execution"],
 ];
 
 const HEADS: [tag: string, h: string, p: string][] = [
   [
-    "01 — Atlas · research",
+    "01 — Research",
     "Reads the market into ranked, sourced theses.",
     "Ten phases turn alt-data, institutional flow and macro into evidence-linked theses — every claim traceable to its source.",
   ],
   [
-    "02 — Hermes · deliberation",
+    "02 — Portfolio",
     "Debates the thesis, sizes the conviction.",
     "Thesis review to committed run — multi-agent deliberation, PM direction and risk sizing, with the dissent on record.",
   ],
   [
-    "03 — Kairos · execution (planned)",
-    "The stage after the backtest. Not built.",
-    "Kairos names the execution stage, not a package: there is no digiquant.olympus.kairos, and every broker adapter under digiquant/src/digiquant/brokers/ is a stub that raises NotImplementedError.",
+    "03 — Execution",
+    "The stage after the book is committed.",
+    "Paper routing is ready. Connecting a live venue is your own integration, not a flag we flip.",
   ],
 ];
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export function OlympusScene() {
+export function PipelineScene() {
   const scrollyRef = useRef<HTMLDivElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const railFillRef = useRef<HTMLDivElement>(null);
@@ -131,14 +131,14 @@ export function OlympusScene() {
     });
     const A = byEng[0];
     const H = byEng[1];
-    // Kairos leg spans the "in development" card AND the trailing dashboard link,
+    // Execution leg spans the "in development" card AND the trailing dashboard link,
     // so the pan ends by centring the link as the final beat (Kend), passing the
-    // Kairos card on the way.
+    // execution card on the way.
     const Kend = byEng[2][byEng[2].length - 1];
     const Aend = A[A.length - 1];
     const Hend = H[H.length - 1];
 
-    // dwell windows: Atlas 0–.42, Hermes .42–.80, Kairos .80–1
+    // dwell windows: research 0–.42, portfolio .42–.80, execution .80–1
     function frontierCf(g: number) {
       if (g < 0.42) return A[0] + (g / 0.42) * (Aend - A[0]);
       if (g < 0.8) return H[0] + ((g - 0.42) / 0.38) * (Hend - H[0]);
@@ -155,7 +155,7 @@ export function OlympusScene() {
       const total = scrolly!.offsetHeight - window.innerHeight;
       gp = clamp(-rect.top / (total || 1), 0, 1);
       railFill!.style.transform = `scaleX(${gp})`;
-      // kinetic 3D Olympus mark behind the scene — fades in then keeps growing
+      // kinetic 3D digiquant mark behind the scene — fades in then keeps growing
       if (logoBg) {
         const lt = document.documentElement.getAttribute("data-theme") === "light";
         logoBg.style.opacity = String(clamp(gp / 0.12, 0, 1) * (lt ? 0.1 : 0.16));
@@ -231,17 +231,17 @@ export function OlympusScene() {
   }, []);
 
   return (
-    <section className="dq-olympus" id="olympus">
+    <section className="dq-desk" id="desk">
       <div className="dqp-scrolly" ref={scrollyRef}>
         <div className="dqp-pin">
           <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
-            <OlympusMark size={560} />
+            <DigiquantMark size={560} />
           </div>
           <div className="wrap">
           <div className="dqp-scene-head">
-            <div className="dqp-olympus">
-              <OlympusMark size={22} />
-              <span>Olympus · research → portfolio</span>
+            <div className="dqp-desk">
+              <DigiquantMark size={22} />
+              <span>digiquant · research → portfolio</span>
             </div>
             <div className="dqp-scene-title">The research desk in a box.</div>
           </div>
@@ -280,9 +280,9 @@ export function OlympusScene() {
           <div className="dqp-track">
             <div className="dqp-steps" ref={stepsRef}>
               <div className="dqp-step dqp-group" data-eng="-1">
-                <span>Atlas</span>
+                <span>Research</span>
               </div>
-              {ATLAS.map(([id, n, d]) => (
+              {RESEARCH.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="0" key={`a-${id}`}>
                   <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
@@ -290,9 +290,9 @@ export function OlympusScene() {
                 </div>
               ))}
               <div className="dqp-step dqp-group" data-eng="-1">
-                <span>Hermes</span>
+                <span>Portfolio</span>
               </div>
-              {HERMES.map(([id, n, d]) => (
+              {PORTFOLIO.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="1" key={`h-${id}`}>
                   <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
@@ -300,19 +300,19 @@ export function OlympusScene() {
                 </div>
               ))}
               <div className="dqp-step dqp-group" data-eng="-1">
-                <span>Kairos</span>
+                <span>Execution</span>
               </div>
               <div className="dqp-step dqp-sooncard" data-eng="2">
                 <span className="dqp-badge">In development</span>
-                <p>Atlas and Hermes run today. Kairos — live execution — is next.</p>
+                <p>Research and portfolio run today. Live execution is next.</p>
               </div>
               {/* Final beat of the horizontal track: after the pipeline pans by,
-                  a quiet text+arrow that launches the dashboard. `/olympus/` is the
-                  separate dashboard export (dist/olympus/), so a plain <a> (full
+                  a quiet text+arrow that launches the dashboard. `/dashboard/` is the
+                  separate dashboard export (dist/dashboard/), so a plain <a> (full
                   cross-app navigation), not a Next <Link>. data-eng="2" ties it to
-                  the Kairos leg so the pan centres it last (Kend). */}
-              <a className="dqp-step dqp-golink" data-eng="2" href="/olympus/">
-                <span className="dqp-golink-label">Open the Olympus dashboard</span>
+                  the execution leg so the pan centres it last (Kend). */}
+              <a className="dqp-step dqp-golink" data-eng="2" href="/dashboard/">
+                <span className="dqp-golink-label">Open dashboard</span>
                 <span className="dqp-golink-arrow" aria-hidden="true">→</span>
               </a>
               <div className="dqp-step dqp-spacer" data-eng="-1" aria-hidden="true" ref={spacerRef} />
@@ -324,3 +324,6 @@ export function OlympusScene() {
     </section>
   );
 }
+
+/** @deprecated Use PipelineScene. One-release alias (ADR-0026 wave 3). */
+export const OlympusScene = PipelineScene;

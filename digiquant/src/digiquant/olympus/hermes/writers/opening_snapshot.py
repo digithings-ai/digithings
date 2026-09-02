@@ -48,6 +48,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     _rows_for_date,
     _symbol,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,11 @@ def _open_lots_exist(*, client: SupabaseClient) -> bool:
 
 
 def _held_positions(*, client: SupabaseClient, book_date: date) -> list[dict[str, Any]]:
+    """House ``positions`` for ``book_date``. Overlay rows on the same date are ignored."""
     book = (
         client.table("positions")
         .select("ticker,weight_pct,entry_price")
+        .eq("workspace_id", str(house_workspace_id()))
         .eq("date", book_date.isoformat())
         .execute()
     )
@@ -144,9 +147,11 @@ def cold_start_requires_seed(*, client: SupabaseClient, book_date: date | None) 
 
 
 def _nav_for_date(*, client: SupabaseClient, book_date: date) -> Decimal | None:
+    """House ``nav_history.nav`` for ``book_date``. Overlay NAV cannot size house lots."""
     resp = (
         client.table("nav_history")
         .select("nav")
+        .eq("workspace_id", str(house_workspace_id()))
         .eq("date", book_date.isoformat())
         .limit(1)
         .execute()

@@ -91,28 +91,17 @@ Supplement with `mcp_fred_*` tools for data not in the fetch files:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Date every yield and spread inline. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Bonds and rates — {as-of date of the data}
+
+## Yields and curve
+2s/10s/30s, shape, and what moved.
+
+## Credit and real yields
+HY/IG spreads, TIPS breakevens, real yield.
+
+## Watch
+Auctions, Fed speak, or inflation prints that could move the curve.
 ```
-### 🏦 BONDS & RATES
-**Bias**: [Bullish bonds (yields falling) / Bearish bonds (yields rising) / Neutral / Conflicted]
-
-**Yields**: [2Y: X% | 10Y: X% | 30Y: X% | Daily Δ: ...]
-**Curve**: [2s10s: Xbps | Shape: steepening/flattening/inverted | Implication: ...]
-
-**Fed**: [Funds rate: X% | Next meeting: date | Market pricing: X% cut prob]
-
-**Credit**: [HY spreads: tightening/widening | Signal: risk-on/off]
-
-**Inflation / Real Yields**:
-- 10Y Breakeven: X.XX% | Direction: [rising/falling]
-- 10Y TIPS Real Yield: X.XX% | [Positive = headwind / Negative = tailwind for gold+commodities]
-- 5Y Breakeven: X.XX%
-
-**Credit**: HY spreads [tightening/widening at Xbps] | IG: [Xbps] | Signal: [risk-on/off]
-
-**Sovereign Stress**: [Italy/periphery spread | EM sovereign | Any stress flag]
-
-**TLT / IEF**: [Price, trend, key level]
-
-**Watch**: [Upcoming Treasury auction, Fed speak, or inflation print that could move rates]
-```
-

@@ -6,7 +6,7 @@
  *     eyebrow, mono title, right-side badge), unpadded body (children carry
  *     their own padding, so grids can run edge-to-edge), and an optional
  *     bordered actions footer. The result cards and approval gates.
- *   - "embed": a bare hairline media frame (8px radius, overflow clipped) for
+ *   - "embed": a bare hairline media frame (radius 0, overflow clipped) for
  *     inline charts/graphs — the frame is promoted, the chart/graph internals
  *     stay with the consumer.
  * Server component — no state, no effects. Action buttons come from
@@ -24,7 +24,7 @@ export type ChatWidgetFrameProps = {
   eyebrow?: string;
   /** Mono head title, e.g. `trend_xsec · ETH-USD · 8y`. */
   title?: ReactNode;
-  /** Right side of the head row — a status pill, an icon. */
+  /** Right side of the head row — a status badge, an icon. */
   badge?: ReactNode;
   /** Footer action row (compose ChatWidgetButton here). Card variant only. */
   actions?: ReactNode;
@@ -47,8 +47,8 @@ export function ChatWidgetFrame({
 }: ChatWidgetFrameProps) {
   const frame =
     variant === "embed"
-      ? "overflow-hidden rounded-[8px] border border-hair"
-      : "overflow-hidden rounded-[12px] border border-hair bg-surface";
+      ? "overflow-hidden rounded-none border border-hair"
+      : "overflow-hidden rounded-none border border-hair bg-surface";
   const hasHead = Boolean(eyebrow || title || badge);
 
   return (
@@ -79,12 +79,12 @@ export function ChatWidgetFrame({
 export type ChatWidgetButtonTone = "primary" | "ghost" | "danger";
 
 export type ChatWidgetButtonProps = ComponentPropsWithoutRef<"button"> & {
-  /** primary = accent fill, ghost = hairline, danger = danger-toned hairline. */
+  /** primary = ink/paper fill, ghost = hairline, danger = danger-toned hairline. */
   tone?: ChatWidgetButtonTone;
 };
 
 const TONES: Record<ChatWidgetButtonTone, string> = {
-  primary: "cw-btn--primary border-transparent bg-accent",
+  primary: "cw-btn--primary border-transparent bg-ink text-bg",
   ghost: "cw-btn--ghost border-hair bg-transparent text-ink",
   danger: "cw-btn--danger bg-transparent text-danger",
 };
@@ -98,7 +98,7 @@ export function ChatWidgetButton({
   return (
     <button
       type={type ?? "button"}
-      className={`cw-btn cursor-pointer rounded-full border px-[1rem] py-[0.5rem] font-mono text-[0.72rem] ${TONES[tone]}${
+      className={`cw-btn cursor-pointer rounded-none border px-[1rem] py-[0.5rem] font-mono text-[0.72rem] ${TONES[tone]}${
         className ? ` ${className}` : ""
       }`}
       {...rest}

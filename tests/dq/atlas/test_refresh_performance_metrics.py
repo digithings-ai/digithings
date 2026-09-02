@@ -19,8 +19,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -57,6 +59,7 @@ _nav_history_count = _mod._nav_history_count
 _risk_metrics_from_nav_history = _mod._risk_metrics_from_nav_history
 upsert_portfolio_metrics_daily = _mod.upsert_portfolio_metrics_daily
 refresh_positions_metrics = _mod.refresh_positions_metrics
+refresh_event_cumulative = _mod.refresh_event_cumulative
 _MIN_HISTORY_ROWS = _mod._MIN_HISTORY_ROWS
 
 
@@ -158,6 +161,8 @@ class TestUpsertPortfolioMetricsDaily:
         # the poison magnitude but comes from nav — prove lookback is ignored by
         # also poisoning a divergent sum below.
         assert row["pnl_pct"] == pytest.approx(0.6, abs=1e-4)
+        assert row["_on_conflict"] == "workspace_id,date"
+        assert row["workspace_id"] == str(house_workspace_id())
 
     def test_pnl_pct_lookback_cannot_override_nav(self) -> None:
         # Divergent lookback (+9.99) must not win over nav day return (+1.0%).
@@ -637,6 +642,44 @@ class TestCarriedPriceProvenance:
         assert sb.store["positions"][0]["metrics_as_of"] is None
 
 
+class TestRefreshEventCumulativeHouseScope:
+    """House cron must not patch overlay (or leaked) ``position_events`` by bare ``id``."""
+
+    def test_skips_overlay_workspace_events(self) -> None:
+        house = str(house_workspace_id())
+        overlay = str(uuid4())
+        house_ev = {
+            "id": "house-1",
+            "date": "2026-06-01",
+            "ticker": "SPY",
+            "workspace_id": house,
+            "cumulative_return_since_event_pct": None,
+        }
+        overlay_ev = {
+            "id": "overlay-1",
+            "date": "2026-06-01",
+            "ticker": "SPY",
+            "workspace_id": overlay,
+            "cumulative_return_since_event_pct": None,
+        }
+        prices = [
+            {"ticker": "SPY", "date": "2026-06-01", "close": 500.0},
+            {"ticker": "SPY", "date": "2026-06-12", "close": 550.0},
+        ]
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "position_events": [house_ev, overlay_ev],
+                "price_history": prices,
+            }
+        )
+        sb.store["position_events"] = [dict(house_ev), dict(overlay_ev)]
+        n = refresh_event_cumulative(sb, "2026-06-12")
+        assert n == 1
+        by_id = {r["id"]: r for r in sb.store["position_events"]}
+        assert by_id["house-1"]["cumulative_return_since_event_pct"] == pytest.approx(10.0)
+        assert by_id["overlay-1"]["cumulative_return_since_event_pct"] is None
+
+
 class TestMetricsCronRunsEveryDay:
     """The schedule half of #1833. The book cron is daily; the metrics cron was MON-SAT, so a
     Sunday book was written and then never enriched — NULL permanently, not just until 22:00."""
@@ -681,7 +724,7 @@ class TestResolveScheduledMetricsDate:
     """The flagless cron path resolves *today UTC*, never ``max(positions.date)``.
 
     Falling back to the latest existing book let ``portfolio_metrics``' upsert
-    ``on_conflict='date'`` rewrite an older row: 22 of 33 green prod runs advanced no
+    ``on_conflict='workspace_id,date'`` rewrite an older row: 22 of 33 green prod runs advanced no
     date, and 2026-06-26's row was re-stamped on 2026-07-16.
     """
 

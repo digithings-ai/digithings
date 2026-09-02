@@ -197,3 +197,26 @@ class TestTheMigrationMatchesTheCode:
             "segments_failed",
             "created_at",
         ], "the pre-existing column order must be preserved exactly, or the REPLACE fails"
+
+
+class TestOpenrouterFallbackModelsPinnedTogether:
+  """Preflight and pipeline steps must share the same OPENROUTER_FALLBACK_MODELS pool (#2523)."""
+
+  def test_preflight_and_pipeline_steps_share_fallback_pool(self) -> None:
+      doc = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+      steps = [
+          step
+          for job in doc["jobs"].values()
+          for step in job.get("steps", [])
+          if isinstance(step, dict) and step.get("env", {}).get("OPENROUTER_FALLBACK_MODELS")
+      ]
+      names = [step.get("name", "<unnamed>") for step in steps]
+      pools = [step["env"]["OPENROUTER_FALLBACK_MODELS"] for step in steps]
+      assert len(pools) == 2, (
+          f"expected exactly two OPENROUTER_FALLBACK_MODELS env entries, found {len(pools)} "
+          f"on steps {names}"
+      )
+      assert pools[0] == pools[1], (
+          "preflight and pipeline steps must share the same fallback pool; edit one without "
+          "the other and the preflight silently tests stricter routing than the real run"
+      )

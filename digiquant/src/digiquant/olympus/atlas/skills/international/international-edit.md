@@ -10,7 +10,7 @@ Update an **existing** international document; do not rewrite from scratch.
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"international"`.
-Patch paths: `/headline`, `/bias`, `/asia_stance`, `/europe_stance`, `/em_stance`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

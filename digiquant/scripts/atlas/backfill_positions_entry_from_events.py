@@ -35,7 +35,19 @@ try:
 except ImportError:
     pass
 
-from position_entry_from_events import patch_positions_entries_for_date
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+from position_entry_from_events import patch_positions_entries_for_date  # noqa: E402
 
 
 def _sb() -> Any:
@@ -50,7 +62,12 @@ def _sb() -> Any:
 
 def _distinct_position_dates(sb: Any, limit_rows: int = 8000) -> List[str]:
     """Recent snapshot dates from positions (descending)."""
-    res = sb.table("positions").select("date").order("date", desc=True).limit(limit_rows).execute()
+    res = (
+        eq_house_workspace(sb.table("positions").select("date"))
+        .order("date", desc=True)
+        .limit(limit_rows)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     seen: Set[str] = set()
     out: List[str] = []
@@ -90,8 +107,7 @@ def main() -> int:
     for d in dates:
         if args.dry_run:
             res = (
-                sb.table("positions")
-                .select("ticker,entry_price")
+                eq_house_workspace(sb.table("positions").select("ticker,entry_price"))
                 .eq("date", d)
                 .execute()
             )

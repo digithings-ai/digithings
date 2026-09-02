@@ -308,7 +308,11 @@ def build_commit_run_node(deps: CommitRunDeps):
         current_fp = weights_fingerprint(weights)
 
         # Date-scoped, not run_id-scoped (#1744): run_id is a fresh uuid4 per process.
-        priors = load_commit_manifests(client=deps.client, run_date=state.run_date)
+        priors = load_commit_manifests(
+            client=deps.client,
+            run_date=state.run_date,
+            workspace_id=getattr(state.config, "workspace_id", None),
+        )
         latest, commit_seq = resolve_prior_commit(priors)
 
         # WP9.4: validate report identity before booking. Enforce rejects incomplete

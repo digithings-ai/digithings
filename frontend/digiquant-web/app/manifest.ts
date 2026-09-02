@@ -4,8 +4,8 @@ export const dynamic = "force-static";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "DigiQuant",
-    short_name: "DigiQuant",
+    name: "digiquant",
+    short_name: "digiquant",
     description: "Open-source research-to-execution infrastructure for quantitative investing.",
     start_url: "/",
     scope: "/",

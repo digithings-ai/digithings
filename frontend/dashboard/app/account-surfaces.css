@@ -1,0 +1,191 @@
+/* Account surfaces consumed from the digiweb account family (login, signup,
+   session, settings). Token-only; class prefix `.acct-`. Button dress is the
+   reference `.btn-*` grammar (reference/app/globals.css) — olympus does not
+   load that sheet. */
+
+.acct-login-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  color: var(--ink);
+}
+
+.acct-login-card .btn-primary,
+.acct-login-card .btn-ghost,
+.acct-session-rail .btn-ghost {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.acct-login-card .btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.acct-login-card .btn-primary:disabled,
+.acct-login-card .btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.acct-login-card .btn-ghost,
+.acct-session-rail .btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.acct-login-card .btn-ghost:hover,
+.acct-session-rail .btn-ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.acct-login-card {
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--surface);
+  padding: 1.2rem;
+}
+
+.acct-login-mark {
+  margin-bottom: 0.85rem;
+}
+
+.acct-field {
+  margin-top: 0.85rem;
+}
+
+.acct-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.55rem 0.7rem;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.acct-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.acct-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-input-error,
+.acct-input-error:focus-visible {
+  border-color: var(--danger);
+}
+
+.acct-input-error:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.acct-error {
+  margin-top: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--danger);
+}
+
+.acct-btn-block {
+  display: block;
+  width: 100%;
+  margin-top: 1.1rem;
+}
+
+.acct-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-divider::before,
+.acct-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--hair);
+}
+
+.acct-strength-seg {
+  height: 3px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
+  transition: background 0.25s var(--ease);
+}
+
+.acct-session-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.75rem;
+}
+
+.acct-session-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+
+.acct-session-meta {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-settings-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.acct-settings-copy {
+  max-width: 46ch;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.acct-settings-panel {
+  border: 1px solid var(--hair);
+  background: var(--surface);
+  padding: 1.1rem 1.2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-input,
+  .acct-strength-seg {
+    transition: none !important;
+  }
+}

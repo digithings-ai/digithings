@@ -1,7 +1,11 @@
-"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658).
+"""Grounding pre-pass for the `alt-ai-portfolios` segment (#658 / #2567).
 
 Reads the latest public posts of tracked AI-run portfolio accounts on X via
-OpenRouter web search, returning a cited summary to inject into phase_inputs.
+OpenRouter **native** web search (web-search-capable grounding model), returning
+a cited summary to inject into phase_inputs. Does not assemble Exa
+``engine`` / ``max_results`` params — those belong to the digillm toolkit
+fallback, not Olympus.
+
 Requires ``OPENROUTER_API_KEY``; fails soft to ``None`` otherwise.
 """
 
@@ -59,15 +63,10 @@ def fetch_ai_portfolio_grounding(
     if not accounts:
         return None
     recency = int(cfg.get("recency_days", 7))
-    max_results = int(cfg.get("max_search_results", 16))
     from digigraph.llm_client import openrouter_web_search
 
-    result = openrouter_web_search(
-        model,
-        _build_query(accounts, run_date, recency),
-        max_results=max_results,
-        engine="exa",
-    )
+    # Native grounding only — no Exa toolkit params (#2567).
+    result = openrouter_web_search(model, _build_query(accounts, run_date, recency))
     if result is None:
         return None
     summary, sources = result

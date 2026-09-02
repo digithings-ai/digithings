@@ -14,9 +14,10 @@ from digiquant.olympus.atlas.data import ai_portfolios
 def test_fetch_ai_portfolio_grounding_returns_summary_sources_handles():
     captured = {}
 
-    def _or_ws(model, query, *, max_results=12, engine="exa", allowed_domains=None):
+    def _or_ws(model, query, **kwargs):
         captured["query"] = query
         captured["model"] = model
+        captured["kwargs"] = kwargs
         return (
             "@grkportfolio bought $GFI[[1]](https://x.com/grkportfolio/status/1)",
             ["https://x.com/grkportfolio/status/1"],
@@ -24,14 +25,15 @@ def test_fetch_ai_portfolio_grounding_returns_summary_sources_handles():
 
     with patch("digigraph.llm_client.openrouter_web_search", side_effect=_or_ws):
         out = ai_portfolios.fetch_ai_portfolio_grounding(
-            model="openrouter/deepseek/deepseek-chat", run_date=date(2026, 6, 9)
+            model="openrouter/perplexity/sonar", run_date=date(2026, 6, 9)
         )
     assert out is not None
     assert "$GFI" in out["summary"]
     assert out["sources"] == ["https://x.com/grkportfolio/status/1"]
     assert out["as_of"] == "2026-06-09"
     assert out["accounts"]  # the tracked handles, for transparency
-    assert captured["model"] == "openrouter/deepseek/deepseek-chat"
+    assert captured["model"] == "openrouter/perplexity/sonar"
+    assert captured["kwargs"] == {}  # no Exa engine/max_results (#2567)
     # every configured handle is named in the query so all latest posts are read
     for h in ("theaiportfolios", "grkportfolio", "ralliesarena", "geminiportfolio"):
         assert h in captured["query"]
@@ -50,7 +52,7 @@ def test_fetch_ai_portfolio_grounding_none_on_empty():
     with patch("digigraph.llm_client.openrouter_web_search", return_value=("  ", [])):
         assert (
             ai_portfolios.fetch_ai_portfolio_grounding(
-                model="openrouter/deepseek/deepseek-chat", run_date=date(2026, 6, 9)
+                model="openrouter/perplexity/sonar", run_date=date(2026, 6, 9)
             )
             is None
         )
