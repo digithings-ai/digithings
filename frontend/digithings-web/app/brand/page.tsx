@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { DocsCodeBlock, Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DocsCodeBlock, Reveal, SocialRow } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
@@ -235,8 +235,11 @@ export default function BrandPage() {
               Questions about a listing or a slide:{" "}
               <ContactMailto className="text-accent hover:text-ink">email us</ContactMailto>
               . The kit folder in the repository remains the one place to look for off-repo
-              uploads.
+              uploads. Live profiles:
             </p>
+            <div className="mt-[0.9rem]">
+              <SocialRow />
+            </div>
             <p className="mt-[1rem]">
               <Link className="btn btn-ghost" href="/about">
                 About digithings <span aria-hidden="true">→</span>
@@ -246,7 +249,7 @@ export default function BrandPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }
