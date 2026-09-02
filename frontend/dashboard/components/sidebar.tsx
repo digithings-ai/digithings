@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
-import { DashboardMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/dashboard-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';

@@ -18,7 +18,7 @@ docs_path_prefixes:
   ["/docs", "/chat", "/modules", "/architecture",
    # Marketing/customer-facing docs (verified against live nav 2026-08-11):
    # digithings.ai — /about, /quality, /security, /services, /team.
-   # digiquant.io's /olympus and /strategies are deliberately excluded —
+   # digiquant.io's /dashboard and /strategies are deliberately excluded —
    # those are live interactive tools, not static content worth ingesting.
    "/about", "/quality", "/security", "/services", "/team"]
 skip_path_prefixes: ["/blog", "/careers", "/legal"]

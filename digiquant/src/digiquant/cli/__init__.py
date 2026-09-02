@@ -41,7 +41,7 @@ def main() -> None:
 def _register_subgroups() -> None:
     from digiquant.cli.prices import prices as _prices_group
     from digiquant.cli.strategy import strategy as _strategy_group
-    from digiquant.olympus.replay.cli import policy_replay as _policy_replay_group
+    from digiquant.dashboard.replay.cli import policy_replay as _policy_replay_group
 
     main.add_command(_prices_group)
     main.add_command(_strategy_group)

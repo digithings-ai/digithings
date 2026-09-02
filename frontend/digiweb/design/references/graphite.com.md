@@ -144,8 +144,8 @@ fallback (`frontend/digiweb/design/scroll-trigger.js`).
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
-| Scroll-pinned **one** flagship section per landing | Use digiquant Olympus pipeline, not PR UI | Copying orange/zinc palette wholesale |
-| Product UI in flat dark frames | Our tearsheets, digichat, Olympus clips | Glass + mesh **on top of** product mocks |
+| Scroll-pinned **one** flagship section per landing | Use digiquant dashboard pipeline, not PR UI | Copying orange/zinc palette wholesale |
+| Product UI in flat dark frames | Our tearsheets, digichat, dashboard clips | Glass + mesh **on top of** product mocks |
 | Glide easing token in `tokens.css` | Map to `--ease-glide` alongside `--ease` | Five separate 400vh scroll sections |
 | Container-query product scaling | `ProductFrame` primitive | Nine breakpoints — start with 3–4 |
 | Nav link opacity hover | Already close in `site.css` nav | Category rainbow in main chrome |
@@ -158,10 +158,10 @@ fallback (`frontend/digiweb/design/scroll-trigger.js`).
 
 | Surface | Graphite patterns to use |
 |---------|--------------------------|
-| digiquant.io | Scroll-pinned Olympus + pipeline; tearsheet in frame |
+| digiquant.io | Scroll-pinned dashboard + pipeline; tearsheet in frame |
 | digithings.ai | One scrolly “module stack”; architecture manifest in frame |
 | digichat | Agent conversation UI as hero visual (like Graphite Chat section) |
-| Olympus | Motion on enter only; flat zinc panels inside dashboard |
+| dashboard | Motion on enter only; flat zinc panels inside dashboard |
 | twelve-x | Skip scroll theater; use flat panels + data density |
 
 ---

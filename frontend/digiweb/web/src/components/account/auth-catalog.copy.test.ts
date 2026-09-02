@@ -13,9 +13,9 @@ const accountPage = join(here, "../../../../reference/app/account/page.tsx");
 const FORBIDDEN = [
   /reply\s*[abc]/i,
   /pick a sign-in/i,
-  /olympus kicker/i,
-  /oauth-first \(olympus\)/i,
-  /oauth first \(olympus\)/i,
+  /dashboard kicker/i,
+  /oauth-first \(dashboard\)/i,
+  /oauth first \(dashboard\)/i,
   /not selected/i,
   /· selected/i,
   /is selected/i,
@@ -63,14 +63,14 @@ describe("account auth catalog copy", () => {
     }
   });
 
-  it("login and sign-up specimen labels omit the olympus task tag", () => {
+  it("login and sign-up specimen labels omit the dashboard task tag", () => {
     const login = load("login-card.tsx");
     const signup = load("signup-card.tsx");
     expect(login).toContain("// oauth first");
     expect(signup).toContain("// oauth first");
-    expect(login).not.toMatch(/oauth first \(olympus\)/i);
-    expect(signup).not.toMatch(/oauth first \(olympus\)/i);
-    expect(login).not.toMatch(/oauth-first \(olympus\)/i);
+    expect(login).not.toMatch(/oauth first \(dashboard\)/i);
+    expect(signup).not.toMatch(/oauth first \(dashboard\)/i);
+    expect(login).not.toMatch(/oauth-first \(dashboard\)/i);
     expect(signup).not.toMatch(/incumbent/i);
     expect(login).not.toMatch(/\bolympus\b/i);
     expect(signup).not.toMatch(/\bolympus\b/i);

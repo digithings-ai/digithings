@@ -1,10 +1,10 @@
 """Shared in-memory FakeSupabaseClient for unit tests (#1196).
 
-Canonical location for the Atlas/Hermes/overlay PostgREST fake. Prefer::
+Canonical location for the research/portfolio/overlay PostgREST fake. Prefer::
 
     from tests.fixtures.fake_supabase import FakeSupabaseClient
 
-``tests.dq.atlas.test_supabase_io`` re-exports the same symbols for older
+``tests.dq.research.test_supabase_io`` re-exports the same symbols for older
 imports. Simpler upsert-only stubs in ``tests/dq/data/`` and friends stay
 local — they intentionally omit filter semantics.
 
@@ -18,7 +18,7 @@ from typing import (
     Any,  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
 )
 
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 

@@ -174,7 +174,7 @@ def test_eod_finishes_before_the_metrics_cron_and_shares_no_minute_with_intraday
 ) -> None:
     """Two constraints that pin the EOD *minute* rather than its hour.
 
-    ``pipeline-atlas-metrics.yml``'s ``0 22`` cron documents that it must run after
+    ``pipeline-research-metrics.yml``'s ``0 22`` cron documents that it must run after
     this ingest, and the job's own ``timeout-minutes`` bounds the worst case. And
     since intraday now extends through hour 21, an EOD minute on the 15-minute grid
     would collide with an intraday tick — ``digiquant-prices-intraday`` is a per-job

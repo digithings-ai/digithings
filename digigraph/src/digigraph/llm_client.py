@@ -269,9 +269,9 @@ def openrouter_web_search(
     """OpenRouter web grounding (digillm toolkit wrapper).
 
     Native-search models (``perplexity/*``, ``:online``) use built-in search —
-    Olympus grounding. Non-native models use the Exa ``openrouter:web_search``
+    dashboard grounding. Non-native models use the Exa ``openrouter:web_search``
     server tool as a digillm toolkit fallback (#2567). Do not pass ``engine`` /
-    ``max_results`` from Olympus call sites.
+    ``max_results`` from dashboard call sites.
     """
     with _logical_call_scope(CallPurpose.WEB_GROUNDING, NoArtifactReason.CONSUMED_INLINE):
         return _digillm_openrouter_web_search(

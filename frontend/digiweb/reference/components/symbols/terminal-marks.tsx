@@ -3,7 +3,7 @@
  *
  * Canonical implementation lives in @digithings/web
  * (components/symbols/terminal-marks.tsx); this specimen re-exports it for the
- * symbols page, exactly as marks.tsx does for the olympus signature.
+ * symbols page, exactly as marks.tsx does for the dashboard signature.
  *
  * - TerminalMark: outlined `digi` + block cursor in currentColor, Geist Mono 400
  *   (the weight terminal text renders at). `variant="compact"` is the `d`

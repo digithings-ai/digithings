@@ -8,7 +8,7 @@ const d = (
   conviction: number | null,
 ): DecisionInput => ({ run_date, return_frac, benchmark_frac, conviction, holding_days: 10 });
 
-describe('backtestDecisions (parity with atlas/backtest.py)', () => {
+describe('backtestDecisions (parity with research/backtest.py)', () => {
   it('empty → zeroed record', () => {
     const r = backtestDecisions([]);
     expect(r.n_trades).toBe(0);

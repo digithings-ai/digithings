@@ -2,7 +2,7 @@
 
 import { SectionCard } from '@/components/observability/shared';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
 
 // Horizontal timeline — green for successful, orange for recovered/degraded, red for failed.
@@ -117,7 +117,7 @@ export function RunHealthTimeline({
   diagnostics,
   compact = false,
 }: {
-  diagnostics: AtlasRunDiagnostics[];
+  diagnostics: ResearchRunDiagnostics[];
   /** Bare timeline for Brief — skips SectionCard chrome. */
   compact?: boolean;
 }) {

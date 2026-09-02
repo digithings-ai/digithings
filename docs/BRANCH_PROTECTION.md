@@ -62,7 +62,8 @@ This check does not require a live approving review on the promotion PR
 (`required_approving_review_count: 0`, `require_code_owner_reviews: false` — verified via
 API). Instead, `scripts/check_review_coverage.py` walks every commit in the PR's range
 (merge and bot commits exempt) and requires each one to already carry review evidence from
-its own task PR, satisfied by any one of:
+its own task PR. The walker batches GitHub GraphQL (PR hatch state + associated SHAs)
+instead of sequential `gh pr view`; hatch rules are unchanged, satisfied by any one of:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|

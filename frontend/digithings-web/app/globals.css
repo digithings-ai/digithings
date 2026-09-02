@@ -24,7 +24,7 @@
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
    (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -64,7 +64,7 @@
    digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
-   must NOT change that file (digiquant-web + olympus consume it). Instead we
+   must NOT change that file (digiquant-web + dashboard consume it). Instead we
    override the semantic accent tokens here, scoped to this app's stylesheet
    only, collapsing accent to monochrome ink/white. Everything that reads
    the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary

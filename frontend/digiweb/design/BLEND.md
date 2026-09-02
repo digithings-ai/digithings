@@ -56,7 +56,7 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 | **Soft card** vs **zero slab** | “Soft” usually means radius; you also picked zero everywhere | Keep **soft = tonal fill** (`--surface` + hairline), drop soft radius. Rename mentally to **tonal slab**. Depth from value step, not roundness. |
 | **Mono everything** vs Instrument Serif in shipping `DESIGN.md` | Current canon uses serif for human claims | Round-1 default: **mono for all roles**. Serif becomes an *escape hatch* for rare editorial moments (quotes, legal names) — not marketing H1. |
 | **White rect CTA** vs “one loud accent-colored thing” | Old rule spent `--accent` on the primary button | New rule: **loud = ink-on-paper (or paper-on-ink) fill**. `--accent` moves to focus, live/status, links-in-prose, chart identity — never the primary marketing fill. |
-| **Sparse density** vs finance/olympus dashboards | Sparse marketing air fights data density | **Two densities by surface:** marketing/docs = sparse; olympus/tearsheet/terminal scrollback = instrument density. Same radius/type/CTA grammar. |
+| **Sparse density** vs finance/dashboards | Sparse marketing air fights data density | **Two densities by surface:** marketing/docs = sparse; dashboard/tearsheet/terminal scrollback = instrument density. Same radius/type/CTA grammar. |
 | **Bracket docs** vs zero radius | Brackets are ornamental corners | Keep — brackets are *structure marks*, not radius. They read as terminal chrome, not soft UI. |
 
 ### Cohesive v0.1 rules (locked · promoted)
@@ -89,7 +89,7 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 
 ## Promotion status
 
-v0.1 is **promoted** into `DESIGN.md` frontmatter + `tokens.css` + design-reference foundations and an early `@digithings/web` chrome sweep. Product apps (digithings-web, digiquant-web, digichat, olympus / FX Hub) follow [`ROLLOUT.md`](ROLLOUT.md) Phases 2–3.
+v0.1 is **promoted** into `DESIGN.md` frontmatter + `tokens.css` + design-reference foundations and an early `@digithings/web` chrome sweep. Product apps (digithings-web, digiquant-web, digichat, dashboard / FX Hub) follow [`ROLLOUT.md`](ROLLOUT.md) Phases 2–3.
 
 The `/iterate` gallery stays as the preference ledger UI (`uv-` CSS only). Further round tweaks edit BLEND first, then re-promote tokens.
 

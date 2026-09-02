@@ -63,7 +63,7 @@ describe('LoginScreen', () => {
       root.render(createElement(LoginScreen));
     });
     expect(container.textContent).toContain('digiquant');
-    expect(container.textContent).not.toContain('olympus');
+    expect(container.textContent).not.toContain('dashboard');
     expect(container.textContent).not.toContain('DigiQuant');
     expect(container.textContent).not.toContain('Open the desk.');
     expect(container.textContent).not.toContain('Continue with Google');

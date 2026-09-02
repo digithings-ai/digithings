@@ -2,7 +2,7 @@
  * Dedicated twelve-x (FX research) Supabase client.
  *
  * Reads the twelve-x-specific public env vars when present, falling back to the
- * main Olympus Supabase env vars when they are unset. This lets Olympus point
+ * main dashboard Supabase env vars when they are unset. This lets dashboard point
  * at a separate twelve-x project OR share the primary project transparently:
  *
  *   NEXT_PUBLIC_TWELVEX_SUPABASE_URL       (preferred)
@@ -29,11 +29,11 @@ const twelveXAnonKey =
  * The twelve-x Supabase client, or `null` when no URL / anon key is configured.
  *
  * Untyped (`SupabaseClient` without a `Database` generic) on purpose: the
- * twelve-x FX tables live outside the main Olympus `database.types.ts`, and the
+ * twelve-x FX tables live outside the main dashboard `database.types.ts`, and the
  * typed fetchers in `./fetch.ts` cast their selected rows to the contract types
  * in `./types.ts`.
  */
-/** Secondary client: never share GoTrue storage with the Olympus auth singleton. */
+/** Secondary client: never share GoTrue storage with the dashboard auth singleton. */
 export const twelveXSupabase: SupabaseClient | null =
   twelveXUrl && twelveXAnonKey
     ? createClient(twelveXUrl, twelveXAnonKey, {

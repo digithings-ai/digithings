@@ -1,5 +1,5 @@
 /**
- * Dashboard plan-tier → artifact-class entitlement map (Kairos tenancy T5).
+ * Dashboard plan-tier → artifact-class entitlement map (execution tenancy T5).
  *
  * Spec §5-T5 matrix is the single source of truth — pin it in entitlements.test.ts.
  * Product addendum (2026-08-30): free = teaser only (`digest_summary` +

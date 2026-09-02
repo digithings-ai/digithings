@@ -285,11 +285,11 @@ def build_digiquant_fit_sdca_weights_tool() -> dict[str, Any]:
     }
 
 
-def build_olympus_run_policy_replay_tool() -> dict[str, Any]:
+def build_dashboard_run_policy_replay_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "olympus_run_policy_replay",
+            "name": "dashboard_run_policy_replay",
             "description": (
                 "Register a policy replay run against a stored pair. Returns summary "
                 "IDs/status only. Never activates or promotes production policy."
@@ -312,11 +312,11 @@ def build_olympus_run_policy_replay_tool() -> dict[str, Any]:
     }
 
 
-def build_olympus_get_policy_replay_tool() -> dict[str, Any]:
+def build_dashboard_get_policy_replay_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "olympus_get_policy_replay",
+            "name": "dashboard_get_policy_replay",
             "description": "Fetch a policy replay run summary by run_id (fail closed if unknown).",
             "parameters": {
                 "type": "object",
@@ -329,11 +329,11 @@ def build_olympus_get_policy_replay_tool() -> dict[str, Any]:
     }
 
 
-def build_olympus_get_policy_comparison_tool() -> dict[str, Any]:
+def build_dashboard_get_policy_comparison_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "olympus_get_policy_comparison",
+            "name": "dashboard_get_policy_comparison",
             "description": (
                 "Fetch a policy comparison summary (artifact IDs and status only — "
                 "no confidential evidence)."
@@ -349,11 +349,11 @@ def build_olympus_get_policy_comparison_tool() -> dict[str, Any]:
     }
 
 
-def build_olympus_evaluate_policy_gate_tool() -> dict[str, Any]:
+def build_dashboard_evaluate_policy_gate_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "olympus_evaluate_policy_gate",
+            "name": "dashboard_evaluate_policy_gate",
             "description": (
                 "Evaluate immutable human-authored gate criteria against a comparison. "
                 "Returns eligibility for human review only — never activates policy."
@@ -370,11 +370,11 @@ def build_olympus_evaluate_policy_gate_tool() -> dict[str, Any]:
     }
 
 
-def build_olympus_get_policy_gate_evaluation_tool() -> dict[str, Any]:
+def build_dashboard_get_policy_gate_evaluation_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "olympus_get_policy_gate_evaluation",
+            "name": "dashboard_get_policy_gate_evaluation",
             "description": "Fetch a gate-evaluation summary by evaluation_id (fail closed if unknown).",
             "parameters": {
                 "type": "object",
@@ -401,9 +401,9 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
         build_digiquant_fit_sdca_weights_tool(),
-        build_olympus_run_policy_replay_tool(),
-        build_olympus_get_policy_replay_tool(),
-        build_olympus_get_policy_comparison_tool(),
-        build_olympus_evaluate_policy_gate_tool(),
-        build_olympus_get_policy_gate_evaluation_tool(),
+        build_dashboard_run_policy_replay_tool(),
+        build_dashboard_get_policy_replay_tool(),
+        build_dashboard_get_policy_comparison_tool(),
+        build_dashboard_evaluate_policy_gate_tool(),
+        build_dashboard_get_policy_gate_evaluation_tool(),
     ]

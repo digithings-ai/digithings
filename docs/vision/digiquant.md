@@ -7,13 +7,13 @@ tags:
   - core
   - quant
 relevance:
-  - olympus
+  - dashboard
   - digichat
 ---
 # digiquant
 > The quantitative finance platform — from macro research to deployed trading strategies, powered by AI agents.
 
-**Names (ADR-0026):** the product is digiquant. The three jobs are research, portfolio, and execution. Historical package paths (`digiquant.olympus.{atlas,hermes,kairos}`) stay until a dedicated rename PR.
+**Names (ADR-0026):** the product is digiquant. The three jobs are research, portfolio, and execution. Historical package paths (`digiquant.dashboard.{research,portfolio,execution}`) stay until a dedicated rename PR.
 
 ## What it is
 
@@ -33,7 +33,7 @@ Three jobs, one product. There is no second brand beside digiquant ([ADR-0026](.
 
 ### Research
 
-The macro research engine and the knowledge foundation everything else builds on (`digiquant.olympus.atlas`, phases A0–A4).
+The macro research engine and the knowledge foundation everything else builds on (`digiquant.research`, phases A0–A4).
 
 It runs daily research cycles across parallel layers — data ingestion, sector analysis, macro synthesis — producing a persistent, structured research library and a daily market digest. Three temporal cycles govern how that library is maintained:
 
@@ -45,7 +45,7 @@ Research is built as digigraph sub-graphs with parallel execution, batched API c
 
 ### Portfolio
 
-The portfolio management orchestration layer (`digiquant.olympus.hermes`, phases H1–H9). It takes the research library and translates it into portfolio action through a structured deliberation pipeline:
+The portfolio management orchestration layer (`digiquant.portfolio`, phases H1–H9). It takes the research library and translates it into portfolio action through a structured deliberation pipeline:
 
 1. **Research ingestion** — pulls the current research library as context.
 2. **Investment thesis construction** — generates theses with explicit validity requirements and exit triggers.
@@ -57,7 +57,7 @@ The portfolio graph uses PyPortfolioOpt for the quantitative math — mean-varia
 
 ### Execution
 
-The hands-on strategy building and order-intent toolkit (`digiquant.olympus.kairos`). Algorithmic trading is about identifying and seizing the exact right entry and exit window. Live venue cutover stays human-gated.
+The hands-on strategy building and order-intent toolkit (`digiquant.execution`). Algorithmic trading is about identifying and seizing the exact right entry and exit window. Live venue cutover stays human-gated.
 
 Execution operates in two modes:
 
@@ -84,7 +84,7 @@ Data and state flow across the broader stack:
 - **digisearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
 - **digiclaw** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
 - **digichat** is the user-facing chat interface for querying research interactively.
-- **Dashboard** (`frontend/dashboard`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[olympus|olympus.md]]. Sub-graphs live in `digiquant.olympus` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
+- **Dashboard** (`frontend/dashboard`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[dashboard|dashboard.md]]. Sub-graphs live in `digiquant.dashboard` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
 
 ## Data philosophy
 

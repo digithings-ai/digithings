@@ -1,4 +1,4 @@
-import type { AtlasRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics } from './types';
 
 export type RunOutcome = 'ok' | 'recovered' | 'degraded' | 'failed';
 
@@ -8,7 +8,7 @@ export interface RunEpisode {
   runType: string | null;
   attempts: number;
   outcome: RunOutcome;
-  latest: AtlasRunDiagnostics;
+  latest: ResearchRunDiagnostics;
   errorSummary: string | null;
 }
 
@@ -19,7 +19,7 @@ function classify(status: string | null): 'ok' | 'degraded' | 'failed' {
   return 'failed';
 }
 
-function ts(d: AtlasRunDiagnostics): number {
+function ts(d: ResearchRunDiagnostics): number {
   return d.created_at ? Date.parse(d.created_at) : 0;
 }
 
@@ -32,15 +32,15 @@ function ts(d: AtlasRunDiagnostics): number {
  * last attempt's. So prefer the counter, and fall back to the timestamp for rows that predate
  * it (`attempt` 0 or null) or when a date mixes both.
  */
-function byAttempt(a: AtlasRunDiagnostics, b: AtlasRunDiagnostics): number {
+function byAttempt(a: ResearchRunDiagnostics, b: ResearchRunDiagnostics): number {
   const ai = a.attempt ?? 0;
   const bi = b.attempt ?? 0;
   if (ai > 0 && bi > 0 && ai !== bi) return ai - bi;
   return ts(a) - ts(b);
 }
 
-export function groupRunEpisodes(diagnostics: AtlasRunDiagnostics[]): RunEpisode[] {
-  const byKey = new Map<string, AtlasRunDiagnostics[]>();
+export function groupRunEpisodes(diagnostics: ResearchRunDiagnostics[]): RunEpisode[] {
+  const byKey = new Map<string, ResearchRunDiagnostics[]>();
   for (const d of diagnostics) {
     const key = `${d.run_date ?? '?'}|${d.run_type ?? '?'}`;
     const arr = byKey.get(key) ?? [];

@@ -10,7 +10,7 @@ import {
   weekDates,
   weekdayShort,
 } from './run-health-week';
-import type { AtlasRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics } from './types';
 
 function episode(runDate: string, outcome: RunEpisode['outcome'] = 'ok'): RunEpisode {
   const latest = {
@@ -38,7 +38,7 @@ function episode(runDate: string, outcome: RunEpisode['outcome'] = 'ok'): RunEpi
     error_summary: null,
     breakdown: null,
     created_at: `${runDate}T12:00:00Z`,
-  } satisfies AtlasRunDiagnostics;
+  } satisfies ResearchRunDiagnostics;
   return {
     key: `${runDate}|delta`,
     runDate,

@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.kairos.pages_dashboard_gate import (  # noqa: E402
+from digiquant.execution.pages_dashboard_gate import (  # noqa: E402
     main as _main,
 )
 

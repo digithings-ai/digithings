@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability atlas-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init score score-delta clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
 
 build:
 	docker compose build
@@ -201,19 +201,19 @@ gen-api-vault:
 agents-init:
 	python3 scripts/agents_init.py
 
-# Validate Atlas providers and graph compilation before triggering a real run.
+# Validate research providers and graph compilation before triggering a real run.
 # Pings OpenRouter (connectivity, structured output, function tools, web search),
 # checks Supabase baseline row, and runs --dry-run.
-# Usage: make atlas-validate              (full check)
-#        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
-atlas-validate:
-	python3 digiquant/scripts/atlas/validate-providers.py $(SKIP)
+# Usage: make research-validate              (full check)
+#        make research-validate SKIP=--skip-llm   (env + DB + dry-run only)
+research-validate:
+	python3 digiquant/scripts/research/validate-providers.py $(SKIP)
 
 # Guard the `core` Supabase migration chain: config.toml present, every file named
 # NNN_name.sql, no duplicate numeric prefix. Pure bash, no deps — the same check
 # test-digiquant.yml runs as its first step. Run before adding a migration.
 supabase-migrations-check:
-	bash digiquant/scripts/atlas/verify-supabase-migrations.sh
+	bash digiquant/scripts/research/verify-supabase-migrations.sh
 
 # Self-score staged changes against 4-dimension rubrics (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9)
 score:

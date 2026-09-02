@@ -1,6 +1,6 @@
 'use client';
 
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 
 export function formatDuration(seconds: number | null): string {
   if (seconds == null || Number.isNaN(seconds)) return '—';
@@ -13,7 +13,7 @@ export function formatDuration(seconds: number | null): string {
 export function RunEconomicsRow({
   latest,
 }: {
-  latest: AtlasRunDiagnostics;
+  latest: ResearchRunDiagnostics;
 }) {
   const metrics = [
     { label: 'Duration', value: formatDuration(latest.duration_s) },

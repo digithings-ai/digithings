@@ -237,7 +237,7 @@
         "name": "ConvictionReference",
         "id": "conviction",
         "path": "reference/components/data/conviction-reference.tsx",
-        "summary": "Conviction vocabulary — recorded faithfully from the olympus dashboard's shared conviction primitives, RECORDED-FROM-OLYMPUS pending a promotion ruling: no @digithings/web export exists yet, so this specimen reproduces the dress as static markup sourced class-for-class from `frontend/dashboard/components/shared/conviction-meter.tsx` and `signed-conviction-badge.tsx`, rather than consuming a shared primitive."
+        "summary": "Conviction vocabulary — recorded faithfully from the dashboard's shared conviction primitives, RECORDED-FROM-DASHBOARD pending a promotion ruling: no @digithings/web export exists yet, so this specimen reproduces the dress as static markup sourced class-for-class from `frontend/dashboard/components/shared/conviction-meter.tsx` and `signed-conviction-badge.tsx`, rather than consuming a shared primitive."
       },
       {
         "name": "MetricCard",
@@ -340,7 +340,7 @@
         "name": "PipelineReference",
         "id": "pipeline",
         "path": "reference/components/pipeline-reference.tsx",
-        "summary": "Pipeline — a workflow visualization ported from the olympus dashboard's pipeline section (frontend/dashboard/components/pipeline)."
+        "summary": "Pipeline — a workflow visualization ported from the dashboard's pipeline section (frontend/dashboard/components/pipeline)."
       },
       {
         "name": "ResearchPipeline",
@@ -519,9 +519,9 @@
         "summary": "Numbered stages — a Linear-style numbered progression mapped to the digithings pipeline, each stage carrying its module livery, title, and mechanism."
       },
       {
-        "name": "PhoneOlympus",
-        "id": "phone-olympus",
-        "path": "reference/components/phone-olympus.tsx",
+        "name": "PhoneDashboard",
+        "id": "phone-dashboard",
+        "path": "reference/components/phone-dashboard.tsx",
         "summary": "Phone mockup showcasing the digiquant app — a device frame (matte bezel, dynamic-island, side buttons) wrapping a mock digiquant mobile dashboard."
       },
       {

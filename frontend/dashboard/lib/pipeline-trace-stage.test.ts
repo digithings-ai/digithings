@@ -68,7 +68,7 @@ function buildScaleFixture(count: number): PipelineRunEvent[] {
     if (band === 3) {
       return event({
         sequence,
-        phase: 'hermes_h9_commit_run',
+        phase: 'portfolio_h9_commit_run',
         operation: 'Commit',
         document_key: `commit-run/${1000 + sequence}`,
       });

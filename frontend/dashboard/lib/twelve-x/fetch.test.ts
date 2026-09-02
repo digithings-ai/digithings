@@ -133,7 +133,7 @@ vi.mock('../supabase', () => {
 
 /**
  * `boardColumn` consolidates broker view currencies into the 8 G10 matrix
- * columns. Olympus owns this rule outright, so this table is the authoritative
+ * columns. dashboard owns this rule outright, so this table is the authoritative
  * statement of it — keep it exhaustive.
  */
 describe('getTradeIdeas', () => {
@@ -331,7 +331,7 @@ const consensus = (over: Partial<FxConsensusSnapshotRow>): FxConsensusSnapshotRo
 });
 
 const ledger = (over: Partial<FxLedgerRow>): FxLedgerRow => ({
-  run_date: '2026-06-24', source_file: 's.pdf', view_index: 0, broker_name: 'Atlas Macro',
+  run_date: '2026-06-24', source_file: 's.pdf', view_index: 0, broker_name: 'research Macro',
   currency: 'USD', direction: 'bullish', conviction: 'high', report_date: '2026-06-24',
   w_time: 1.0, w_event: 1.0, w_review: 0.9, relevance: 0.92, classification: 'active',
   reason: 'US rate resilience keeps the dollar bid.', as_of: '2026-06-24T00:00:00Z', ...over,
@@ -348,7 +348,7 @@ describe('assembleIntelligenceWhy', () => {
     const out = assembleIntelligenceWhy(
       [confluence({ currency: 'USD', rank: 1 })],
       [consensus({ currency: 'USD' })],
-      [ledger({ currency: 'USD', broker_name: 'Atlas Macro' }), ledger({ currency: 'EUR', broker_name: 'Other' })],
+      [ledger({ currency: 'USD', broker_name: 'research Macro' }), ledger({ currency: 'EUR', broker_name: 'Other' })],
       '2026-06-24'
     );
     expect(out.runDate).toBe('2026-06-24');
@@ -370,7 +370,7 @@ describe('assembleIntelligenceWhy', () => {
     expect(item.consensus?.bullish_pct).toBe(60);
     // Tier 3 desks — only the USD desk, NOT the EUR one.
     expect(item.desks).toHaveLength(1);
-    expect(item.desks[0].broker).toBe('Atlas Macro');
+    expect(item.desks[0].broker).toBe('research Macro');
     expect(item.desks[0].classification).toBe('active');
     expect(item.desks[0].relevance).toBeCloseTo(0.92);
     expect(item.desks[0].reason).toBe('US rate resilience keeps the dollar bid.');
@@ -416,9 +416,9 @@ describe('assembleMatrix', () => {
   it('creates one cell per (broker, column) with the newest view as primary', () => {
     const briefs = [
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas-latest.pdf',
+        source_file: 'research-latest.pdf',
         currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
       }),
       brief({
@@ -430,10 +430,10 @@ describe('assembleMatrix', () => {
     ];
     const cells = assembleMatrix(briefs);
     expect(cells).toHaveLength(2);
-    const atlas = cells.find((c) => c.broker === 'Atlas' && c.column === 'USD');
-    expect(atlas).toBeDefined();
-    expect(atlas!.direction).toBe('bullish');
-    expect(atlas!.run_date).toBe('2026-06-24');
+    const research = cells.find((c) => c.broker === 'research' && c.column === 'USD');
+    expect(research).toBeDefined();
+    expect(research!.direction).toBe('bullish');
+    expect(research!.run_date).toBe('2026-06-24');
     const meridian = cells.find((c) => c.broker === 'Meridian' && c.column === 'EUR');
     expect(meridian).toBeDefined();
     expect(meridian!.direction).toBe('bearish');
@@ -442,15 +442,15 @@ describe('assembleMatrix', () => {
   it('deduplicates exact (source_file, run_date) pairs keeping only first occurrence', () => {
     const briefs = [
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas-duplicate.pdf',
+        source_file: 'research-duplicate.pdf',
         currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
       }),
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas-duplicate.pdf', // exact duplicate
+        source_file: 'research-duplicate.pdf', // exact duplicate
         currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
       }),
     ];
@@ -462,21 +462,21 @@ describe('assembleMatrix', () => {
   it('preserves distinct views as history sorted newest-first', () => {
     const briefs = [
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas-2026-06-24.pdf',
+        source_file: 'research-2026-06-24.pdf',
         currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high', rationale: 'Latest view' }],
       }),
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-23',
-        source_file: 'atlas-2026-06-23.pdf',
+        source_file: 'research-2026-06-23.pdf',
         currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'medium', rationale: 'Previous view' }],
       }),
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-22',
-        source_file: 'atlas-2026-06-22.pdf',
+        source_file: 'research-2026-06-22.pdf',
         currency_views: [{ currency: 'USD', direction: 'neutral', conviction: 'low', rationale: 'Oldest view' }],
       }),
     ];
@@ -495,9 +495,9 @@ describe('assembleMatrix', () => {
   it('files pairs under their base currency only (EUR/USD → EUR column)', () => {
     const briefs = [
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas.pdf',
+        source_file: 'research.pdf',
         currency_views: [{ currency: 'EUR/USD', direction: 'bullish', conviction: 'high' }],
       }),
     ];
@@ -510,9 +510,9 @@ describe('assembleMatrix', () => {
   it('drops views outside the extended G10 set', () => {
     const briefs = [
       brief({
-        broker_name: 'Atlas',
+        broker_name: 'research',
         run_date: '2026-06-24',
-        source_file: 'atlas.pdf',
+        source_file: 'research.pdf',
         currency_views: [
           { currency: 'USD', direction: 'bullish', conviction: 'high' },
           { currency: 'USD/TRY', direction: 'bearish', conviction: 'high' }, // exotic

@@ -17,7 +17,7 @@ from digiquant.brokers.connections import (
 )
 from digiquant.brokers.contracts import BrokerAccountSnapshot, BrokerOrderStatus
 from digiquant.brokers.stubs import AlpacaAdapterStub
-from digiquant.olympus.kairos.sync import SyncCursor, run_sync_batch
+from digiquant.execution.sync import SyncCursor, run_sync_batch
 
 pytestmark = pytest.mark.unit
 

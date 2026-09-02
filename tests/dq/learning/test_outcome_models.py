@@ -13,7 +13,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     ComponentAttributionReport,

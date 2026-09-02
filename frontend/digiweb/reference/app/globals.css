@@ -66,7 +66,7 @@
 /* Token → Tailwind bridge: supplied by @digithings/web/styles/web-theme.css
    (the single `@theme inline` canon — see its header). The former local bridge
    and the reference-only color rulings (--up/--down phosphor money colors,
-   atlas/hermes/kairos → ink) were promoted into the shared files 2026-07-08. */
+   research/portfolio/execution → ink) were promoted into the shared files 2026-07-08. */
 
 /* Anchor jumps clear the sticky nav instead of tucking the target title
    underneath it. Every id-anchored section inherits the same offset. */

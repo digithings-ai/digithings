@@ -13,8 +13,6 @@ import {
 
 /** User preference: fixed light/dark, or follow OS */
 export type DashboardTheme = 'light' | 'dark' | 'auto';
-/** @deprecated Use DashboardTheme. */
-export type AtlasTheme = DashboardTheme;
 
 const STORAGE_KEY = 'dashboard-theme';
 /** Pre-rebrand key. Read so a chosen theme survives the rename; never write. */
@@ -94,9 +92,6 @@ export function useDashboardTheme() {
   if (!ctx) throw new Error('useDashboardTheme must be used within ThemeProvider');
   return ctx;
 }
-
-/** @deprecated Use useDashboardTheme. One-release alias (ADR-0026 wave 3). */
-export const useAtlasTheme = useDashboardTheme;
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const theme = useSyncExternalStore(subscribeTheme, getThemeSnapshot, () => 'auto' as DashboardTheme);

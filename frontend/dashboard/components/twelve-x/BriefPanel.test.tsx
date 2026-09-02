@@ -14,10 +14,10 @@ import type { FxBriefRow } from '@/lib/twelve-x/types';
  */
 const fixtureBrief: FxBriefRow = {
   run_date: '2026-06-24',
-  source_file: 'atlas-macro-2026-06-24.pdf',
+  source_file: 'research-macro-2026-06-24.pdf',
   source_url: null,
-  document_title: 'Atlas Macro Daily',
-  broker_name: 'Atlas Macro',
+  document_title: 'research Macro Daily',
+  broker_name: 'research Macro',
   analyst_names: null,
   report_date: '2026-06-24',
   trader_relevance: 'high',

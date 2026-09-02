@@ -15,7 +15,7 @@
  *    stay stable across themes and must not collapse into one another
  *    (e.g. in dark mode --up equals --accent, which would merge OPEN and ADD
  *    event markers if they were token-driven). Preserve these hues; do not
- *    add raw hex anywhere else in olympus.
+ *    add raw hex anywhere else in dashboard.
  */
 
 import { useSyncExternalStore } from 'react';

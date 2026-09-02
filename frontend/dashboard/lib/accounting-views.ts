@@ -1,8 +1,8 @@
 /**
- * Curated Olympus / digiquant.io accounting read surface (#2599 / Task 3.4).
+ * Curated dashboard / digiquant.io accounting read surface (#2599 / Task 3.4).
  *
  * Prefer these view names in adapters. Rollback = repoint to LEGACY_* without
- * deleting olympus_accounting_* rows.
+ * deleting dashboard_accounting_* rows.
  */
 
 /** Preferred public NAV series (finalized tips + labeled legacy estimates). */

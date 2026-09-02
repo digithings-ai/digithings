@@ -15,11 +15,11 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from _env import load_repo_env  # noqa: E402
 
-from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client  # noqa: E402
-from digiquant.olympus.hermes.writers.recover_ledger import (  # noqa: E402
+from digiquant.research.supabase_io import SupabaseConfig, build_client  # noqa: E402
+from digiquant.portfolio.writers.recover_ledger import (  # noqa: E402
     recover_ledger_from_book,
 )
-from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 
 APPLY_MAX_AGE_DAYS = 7
 

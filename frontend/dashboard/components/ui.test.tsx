@@ -4,7 +4,7 @@ import { Badge, formatPct, pnlColor } from './ui';
 
 /**
  * Badge is a thin shim over the shared @digithings/web controls Badge
- * (dress="reference", F4 #1450). These tests pin the olympus tone → shared
+ * (dress="reference", F4 #1450). These tests pin the dashboard tone → shared
  * tone mapping so a call site's color semantics can never silently drift,
  * and the props passthrough the old local Badge did not have.
  */
@@ -16,7 +16,7 @@ describe('Badge (re-backed by @digithings/web controls Badge)', () => {
     ['amber', 'ctl-badge-ref--warn'],
   ];
 
-  it.each(TONES)('maps olympus tone "%s" onto the shared "%s" dress', (variant, cls) => {
+  it.each(TONES)('maps dashboard tone "%s" onto the shared "%s" dress', (variant, cls) => {
     const html = renderToStaticMarkup(<Badge variant={variant}>x</Badge>);
     expect(html).toContain('ctl-badge-ref');
     expect(html).toContain(cls);

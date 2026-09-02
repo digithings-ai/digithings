@@ -337,7 +337,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── hero feature picker (Graphite icon-tab row swapping a ProductFrame) ─
    Icon tablist below the hero that swaps which ProductFrame preview shows
-   (e.g. Olympus / Strategies / Pipeline). WAI-ARIA tabs — wire with
+   (e.g. dashboard / Strategies / Pipeline). WAI-ARIA tabs — wire with
    hero-picker.js (roving tabindex, ArrowLeft/Right/Home/End). Static UI crops
    only (no video). Each panel wraps a .product-frame, so it inherits the
    CQ-scaled sizing and never clips at browser zoom. Icon buttons are ~53×53px

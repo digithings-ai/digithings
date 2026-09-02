@@ -1,5 +1,5 @@
 # Broker adapters: IB native + Alpaca/QuantConnect stubs. Phase 2.
-# Kairos execution contracts (K0): typed venue/order/position models re-exported here
+# execution contracts (K0): typed venue/order/position models re-exported here
 # alongside the protocol and stubs so a caller does not need to import `contracts`
 # separately for the common case.
 #

@@ -5,7 +5,7 @@
  * display template, no live account behind it.
  */
 const ACTIVITY = [
-  { at: "2026-07-05 14:12", entry: "deployed hermes sub-graph to staging" },
+  { at: "2026-07-05 14:12", entry: "deployed portfolio sub-graph to staging" },
   { at: "2026-07-04 09:48", entry: "ran 24 backtests on momentum-carry basket" },
   { at: "2026-07-02 17:03", entry: "rotated digikey API token" },
   { at: "2026-06-30 11:26", entry: "invited m.tanaka as analyst" },

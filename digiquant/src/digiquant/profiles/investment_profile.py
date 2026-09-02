@@ -1,7 +1,7 @@
 """Versioned Pydantic v2 schema for a user's investment profile.
 
 The ``InvestmentProfile`` is a coarse-grained input that downstream services
-(Atlas idea generation, Hermes deliberation, Kairos portfolio construction)
+(research idea generation, portfolio deliberation, execution portfolio construction)
 consult to filter strategies and constrain allocation. It is intentionally
 small: refinements are captured by bumping ``schema_version`` and shipping a
 migration, not by inflating this model.

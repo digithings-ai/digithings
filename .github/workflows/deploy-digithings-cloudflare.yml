@@ -19,7 +19,7 @@ on:
       #
       # The miss is silent because no other job in CI runs a production `next build` of
       # digithings-web. test-web.yml lints it (`eslint .`) and runs vitest; the only
-      # `run build` invocations in .github/workflows/ are digichat's and olympus's. So a
+      # `run build` invocations in .github/workflows/ are digichat's and dashboard's. So a
       # `next build`-only failure — a "use client" boundary violation, a crash while
       # prerendering the static export — is caught here or nowhere.
       #
@@ -27,8 +27,8 @@ on:
       # scripts/build-digithings.sh compiles: digithings-web, plus its transitive workspace
       # deps @digithings/design, @digithings/web, and this. All four are now listed. The
       # digiquant sibling needs no equivalent entry — its closure is digiquant-web +
-      # olympus + design + web, already complete, and neither app consumes digichat-ui
-      # (scripts/ci_paths.yaml's `olympus` filter records that half; the digiquant-web half
+      # dashboard + design + web, already complete, and neither app consumes digichat-ui
+      # (scripts/ci_paths.yaml's `dashboard` filter records that half; the digiquant-web half
       # is verified by there being no import of it anywhere in that app). The same file's
       # `web` filter already lists frontend/digichat-ui/** for the reason above — added in
       # #1948, for the lint/test lane only. Do not read this entry as "watch every

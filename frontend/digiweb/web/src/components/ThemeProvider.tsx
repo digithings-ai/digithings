@@ -1,7 +1,7 @@
 "use client";
 /**
  * Theme controller for the React marketing apps. Sets [data-theme] on <html>
- * and persists the shared `dt-theme` key (also read by Olympus → cross-surface
+ * and persists the shared `dt-theme` key (also read by dashboard → cross-surface
  * sync on the same origin). Pair with the pre-paint snippet (themeInitScript)
  * inlined in <head> to avoid a flash.
  */

@@ -1,5 +1,5 @@
 /**
- * Decision track-record metrics — TS port of digiquant/.../atlas/backtest.py
+ * Decision track-record metrics — TS port of digiquant/.../research/backtest.py
  * (backtest_decisions). Pure, computed client-side; covered by a parity test.
  * Mirrors the Python exactly: population std for the information ratio (per-decision,
  * NOT annualized — unlike portfolio-risk-metrics.ts's √252 Sharpe), sortino falling

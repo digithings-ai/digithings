@@ -57,7 +57,7 @@ Beyond root `AGENTS.md`:
 | Short news wires / alerts where latency matters | **token** | `DIGISEARCH_CHUNKER=token` — `ChonkieTokenChunker` |
 | Rollback / characterization of pre-Chonkie behavior | `recursive` / `fixed` | Legacy `ingestion/chunkers/` via the same env var |
 
-`POST /ingest` and the CLI wrap the selected backend in `SegmentAwareChunker` so structural segments never cross chunk boundaries. Atlas flat payloads use `get_document_chunker()` (no segment wrapper).
+`POST /ingest` and the CLI wrap the selected backend in `SegmentAwareChunker` so structural segments never cross chunk boundaries. research flat payloads use `get_document_chunker()` (no segment wrapper).
 
 Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chunker_backend()` in `digisearch.chunking.factory`.
 

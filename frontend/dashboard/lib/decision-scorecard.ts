@@ -15,7 +15,7 @@
  *   medium |conv| ≥ 2
  *   low    |conv| < 2
  *
- * This matches the Python backtest core (digiquant/…/atlas/backtest.py
+ * This matches the Python backtest core (digiquant/…/research/backtest.py
  * `_HIGH_CONVICTION` / `_MED_CONVICTION`) — both sides of the sign axis use the same
  * thresholds so the in-graph backtest and this dashboard agree.
  */

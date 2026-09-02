@@ -199,9 +199,9 @@
   }
 }
 
-/* ── dress="glass" — the olympus dashboard's shipped ⌘K look, translated
+/* ── dress="glass" — the dashboard's shipped ⌘K look, translated
       exactly from its Tailwind utilities (#1548). Black-based scrim/shadow
-      literals are depth cues, not themed colors (same ruling as olympus's
+      literals are depth cues, not themed colors (same ruling as dashboard's
       --shadow-glass); color-mix(in oklab, …) matches Tailwind v4's opacity
       modifier compilation (bg-accent/15, ring-accent/35, bg-ink/[0.06]). ── */
 

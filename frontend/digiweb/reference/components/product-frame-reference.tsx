@@ -21,7 +21,7 @@ export type MockTearsheetProps = {
 };
 
 /**
- * A mock atlas tearsheet crop — stand-in for a real product screenshot.
+ * A mock research tearsheet crop — stand-in for a real product screenshot.
  * Every field defaults to the original demo values so existing call sites
  * keep working unchanged, but every ProductFrame consumer on
  * /layout-patterns now passes its own distinct values — before this, all
