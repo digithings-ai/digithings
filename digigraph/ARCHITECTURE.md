@@ -748,6 +748,8 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
+**Write boundary:** `data_manipulation._helpers.write_result` (used by `data_manipulation_agent` / `data_engineer_agent`) accepts only a logical leaf `output_name` (same rules as `digistore._safe_name`). Path separators, `..`, and absolute paths fail closed. When digistore is available, size-cap / validation `ValueError`s also fail closed — they must not fall back to an unsanitized `Path` join under `{run_data_dir}/{session}/datasets/`, which previously allowed cross-session overwrites.
+
 ### 8.3.1 Two-tier context compaction (#399)
 
 Long research sessions (document RAG + Atlas `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
