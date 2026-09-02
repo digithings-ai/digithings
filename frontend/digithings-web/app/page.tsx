@@ -3,6 +3,7 @@ import {
   Footer,
   NumberedStages,
   OdometerStrip,
+  RepoActivity,
   Reveal,
   StackRow,
   WordReveal,
@@ -15,26 +16,28 @@ import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
-import { RepoActivity } from "@/components/landing/RepoActivity";
-import { RepoStrip } from "@/components/landing/RepoStrip";
+import {
+  CONTRIBUTING_URL,
+  REPO_CLONE,
+  REPO_LIVE,
+  REPO_URL,
+  repoActivity,
+} from "@/lib/repoActivity";
 
 // v8 landing for the digithings platform — 100% reference-sourced + expressive
 // (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
 // HeroGraph) opens, then every visual block is a promoted @digithings/web
-// primitive or token-backed utility: the RepoStrip activity band, a digit-roll
-// OdometerStrip metrics band, the shared TerminalManifest, the NumberedStages
-// principles spine, the RepoActivity section, and the one big WordReveal claim.
-// The mesh / graph / counters / reveal are client islands; the page stays a
-// server component and exports statically. Every motion moment honors
-// prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
+// primitive or token-backed utility: a digit-roll OdometerStrip metrics band,
+// the shared TerminalManifest, the NumberedStages principles spine, the
+// RepoActivity section, and the one big WordReveal claim. The mesh / graph /
+// counters / reveal are client islands; the page stays a server component and
+// exports statically. Every motion moment honors prefers-reduced-motion and
+// reads with no JS (html.no-js fallbacks).
 //
 // The slot under the hero used to hold a drifting <Marquee> of the seven core
-// dependencies. It was removed, not restyled: it named the same libraries the
-// #integrations section names deliberately and in full, so it added no
-// information and paid for that with perpetual motion under the hero. <RepoStrip>
-// takes the slot and spends it on live repository activity instead. The Marquee
-// primitive itself stays in @digithings/web — the design reference still
-// specimens it.
+// dependencies, then a RepoStrip of snapshot figures. Both are gone: the
+// marquee named libraries the #integrations section already names, and the
+// strip restated counts that now live once in <RepoActivity> further down.
 
 // Every figure here is countable in the repo — no projections, no asterisks
 // (#1846). Each one is checked against the code, and the band must not
@@ -178,8 +181,6 @@ export default function Home() {
           </div>
         </HeroMesh>
 
-        <RepoStrip />
-
         <section className="section" id="metrics">
           <div className="wrap">
             <Reveal className="section-head center">
@@ -251,7 +252,31 @@ export default function Home() {
             its figures never sit adjacent to the #metrics odometer, where two
             number-bearing blocks would read as one restated twice. Plain
             .section: section-alt stays the single accent before the claim. */}
-        <RepoActivity />
+        <section className="section" id="repository">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// the repository"}</span>
+              <h2>Maintained in the open.</h2>
+              <p>
+                One MIT-licensed monorepo, public and moving. Below are the most recent pull
+                requests to land on{" "}
+                <code className="font-mono text-ink">{repoActivity.branch}</code> — each one you
+                can open and read, not a changelog entry we wrote about ourselves.
+              </p>
+            </Reveal>
+            <Reveal>
+              <RepoActivity
+                variant="detailed"
+                snapshot={repoActivity}
+                repoUrl={REPO_URL}
+                live={REPO_LIVE}
+                cloneCommand={REPO_CLONE}
+                contributingUrl={CONTRIBUTING_URL}
+                className="mx-auto mt-[2rem] max-w-[980px]"
+              />
+            </Reveal>
+          </div>
+        </section>
 
         <section className="section section-alt" id="principles">
           <div className="wrap">
