@@ -105,7 +105,7 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     expect(html).toContain('AAA');
   });
 
-  it('Baseline: weight panel passthrough', () => {
+  it('Brief: weight panel passthrough', () => {
     const html = renderToStaticMarkup(
       createElement(VehicleExpressionRow, {
         ticker: 'AAA',
@@ -115,7 +115,7 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
         latestDecision: decision(),
         dossierHref: '/portfolio/tickers?ticker=AAA',
         deliberationHref: '/pipeline',
-        tier: 'baseline',
+        tier: 'brief',
       }),
     );
     expect(html).toContain('vehicle-weight-panel');

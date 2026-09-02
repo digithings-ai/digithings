@@ -3,10 +3,10 @@
 Exit 0 is allowed only when every hop here is proven from product state:
 
 - Stripe: ``subscription_status=active`` **and** ``has_stripe_subscription``
-  **and** ``plan_tier`` in ``{custom, enterprise}``. House is seeded
+  **and** ``plan_tier`` in ``{studio, enterprise}``. House is seeded
   ``enterprise``/``active`` without Stripe ids — that must not prove checkout.
-  A Baseline Stripe subscription also must not: broker connect and overlay
-  stay ``TIER_FORBIDDEN``. Ops grants with ``subscription_status=none`` do not.
+  Brief or Desk Stripe also must not: overlay stays Studio-gated. Ops grants
+  with ``subscription_status=none`` do not.
 - Alpaca: paper connection ``active`` with ``auth_kind=oauth``.
 - Overlay: ``job_type=overlay_daily`` with status ``succeeded`` (not
   ``running`` / ``skipped`` / ``persist_disabled`` / ``not_entitled``). A
@@ -41,9 +41,9 @@ REMAINING_LIVE_HOPS: tuple[str, ...] = (
 )
 EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"succeeded"})
-STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"custom", "enterprise"})
+STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"studio", "enterprise"})
 REMAINING_HOP_BLOCKER_CODES: tuple[str, ...] = (
-    "plan_tier_not_custom",
+    "plan_tier_not_studio",
     "missing_stripe_ids",
     "subscription_not_active",
     "alpaca_api_key_not_oauth",
@@ -138,7 +138,7 @@ def remaining_hop_blockers(evidence: RemainingHopEvidence) -> dict[str, str]:
     blockers: dict[str, str] = {}
     if not proven["browser_stripe_checkout"]:
         if evidence.plan_tier not in STRIPE_CHECKOUT_TIERS:
-            blockers["browser_stripe_checkout"] = "plan_tier_not_custom"
+            blockers["browser_stripe_checkout"] = "plan_tier_not_studio"
         elif not evidence.has_stripe_subscription:
             blockers["browser_stripe_checkout"] = "missing_stripe_ids"
         else:

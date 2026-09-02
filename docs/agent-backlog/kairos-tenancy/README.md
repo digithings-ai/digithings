@@ -14,6 +14,8 @@ implement it from the issue body alone, without re-deriving anything from the sp
 `positions` / `nav_history` / `position_events` / `portfolio_metrics` readers or
 writers. Epic status and cutover 113 notes stay in [`EPIC.md`](EPIC.md).
 
+Consumer Stripe SKUs: [`PRICING.md`](PRICING.md) (Brief / Desk / Studio — proposed).
+
 ## Filing (human or authorized session)
 
 ```bash

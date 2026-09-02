@@ -87,10 +87,12 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/digithings-supabase-pat` (label **digithings**) works; re-paste into Cursor env if process env drops it. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
-| `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
-| `STRIPE_PRICE_CUSTOM_MONTHLY` | `price_…` |
-| `STRIPE_PRICE_BASELINE_ANNUAL` | `price_…` (optional) |
-| `STRIPE_PRICE_CUSTOM_ANNUAL` | `price_…` (optional) |
+| `STRIPE_PRICE_BRIEF_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_DESK_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_STUDIO_MONTHLY` | `price_…` |
+| `STRIPE_PRICE_BRIEF_ANNUAL` | `price_…` |
+| `STRIPE_PRICE_DESK_ANNUAL` | `price_…` |
+| `STRIPE_PRICE_STUDIO_ANNUAL` | `price_…` |
 | `MAILGUN_API_KEY` | Mailgun private API key (MCP currently auth-fails; env EMPTY) |
 | `MAILGUN_DOMAIN` | Verified sending domain |
 | `NOTIFY_FROM` | Verified From address on that domain |
@@ -105,7 +107,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 ## 0b) Workspace bootstrap — RESOLVED
 
-mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists. Ops may elevate to `custom` for vault/overlay probes until Stripe prices land (document clearly — **not** Stripe-sourced). GitHub user’s personal WS remains **`free`** (2026-08-30 Settings E2E; ops elevate not applied). Notification prefs point at Agentmail inbox for digest when Mailgun lands.
+mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists. Ops may elevate to `studio` for vault/overlay probes until Stripe prices land (document clearly — **not** Stripe-sourced). GitHub user’s personal WS remains **`free`** (2026-08-30 Settings E2E; ops elevate not applied). Notification prefs point at Agentmail inbox for digest when Mailgun lands.
 
 ---
 
@@ -117,8 +119,9 @@ mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200*
 supabase secrets set \
   STRIPE_SECRET_KEY=… \
   STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… \
-  STRIPE_PRICE_CUSTOM_MONTHLY=… \
+  STRIPE_PRICE_BRIEF_MONTHLY=… \
+  STRIPE_PRICE_DESK_MONTHLY=… \
+  STRIPE_PRICE_STUDIO_MONTHLY=… \
   MAILGUN_API_KEY=… \
   MAILGUN_DOMAIN=… \
   NOTIFY_FROM=… \

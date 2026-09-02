@@ -11,7 +11,15 @@ export {
 } from "./motion/scrolly";
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
-export { GitHubGlyph } from "./components/icons";
+export { GitHubGlyph, GoogleGlyph, XGlyph } from "./components/icons";
+export {
+  AuthCard,
+  passwordStrength,
+  type AuthCardLayout,
+  type AuthCardMode,
+  type AuthCardProps,
+  type AuthOAuthProvider,
+} from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
   Nav,

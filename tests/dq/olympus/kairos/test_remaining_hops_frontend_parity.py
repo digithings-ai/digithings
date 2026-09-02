@@ -111,7 +111,7 @@ def test_frontend_blocker_codes_match_python() -> None:
     assert names == REMAINING_HOP_BLOCKER_CODES
     source = _ts_source()
     assert "export function remainingHopBlockers" in source
-    assert "plan_tier_not_custom" in source
+    assert "plan_tier_not_studio" in source
     assert "alpaca_api_key_not_oauth" in source
     assert "overlay_persist_disabled" in source
     assert "overlay_legacy_book_unique" in source

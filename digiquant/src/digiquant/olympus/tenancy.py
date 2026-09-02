@@ -44,12 +44,17 @@ class WorkspaceType(StrEnum):
 
 
 class PlanTier(StrEnum):
-    """Billing tier vocabulary (spec D1; supersedes the roadmap's ``free|pro|enterprise``
-    sketch — ``baseline``/``custom`` replace ``pro`` per the locked spec decision)."""
+    """Billing tier vocabulary (PRICING.md / migration 115).
+
+    Observer is ``free``. Paid SKUs are Brief / Desk / Studio. Enterprise is
+    invoice-only. D1 ``baseline``/``custom`` ids are gone — house-run jargon
+    ``baseline`` (Sunday ``run_type``) is unrelated.
+    """
 
     FREE = "free"
-    BASELINE = "baseline"
-    CUSTOM = "custom"
+    BRIEF = "brief"
+    DESK = "desk"
+    STUDIO = "studio"
     ENTERPRISE = "enterprise"
 
 

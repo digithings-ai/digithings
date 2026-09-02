@@ -91,8 +91,8 @@ describe('Settings page tab visibility', () => {
     expect(container.textContent).not.toContain('profile-body');
   });
 
-  it('Custom sees the full tab set including Profile', async () => {
-    entitlement.tier = 'custom';
+  it('Studio sees the full tab set including Profile', async () => {
+    entitlement.tier = 'studio';
     await act(async () => {
       root.render(createElement(SettingsPage));
     });
@@ -100,6 +100,17 @@ describe('Settings page tab visibility', () => {
     expect(container.querySelector('[data-testid="settings-tab-brokers"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="settings-tab-keys"]')).not.toBeNull();
     expect(container.textContent).toContain('profile-body');
+  });
+
+  it('Desk sees Brokers but not Profile / Pipeline / Keys', async () => {
+    entitlement.tier = 'desk';
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.querySelector('[data-testid="settings-tab-brokers"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="settings-tab-profile"]')).toBeNull();
+    expect(container.querySelector('[data-testid="settings-tab-pipeline"]')).toBeNull();
+    expect(container.querySelector('[data-testid="settings-tab-keys"]')).toBeNull();
   });
 
   it('opens Billing when the URL hash is #billing', async () => {

@@ -28,8 +28,8 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Test mode toggle | Dashboard top-right **Test mode** |
 | Secret key | Developers → API keys → Secret key (`sk_test_…`) |
 | Publishable key | Same page (`pk_test_…`) — not required by current EFs |
-| Products / prices | Product catalog → create **Baseline** + **Custom** (monthly required; annual optional) |
-| Env → price IDs | `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_CUSTOM_MONTHLY`, optional `*_ANNUAL` |
+| Products / prices | Product catalog → **Brief / Desk / Studio** (see [`PRICING.md`](PRICING.md)). Do **not** name products Baseline or Custom. |
+| Env → price IDs | `STRIPE_PRICE_BRIEF_{MONTHLY,ANNUAL}` / `STRIPE_PRICE_DESK_*` / `STRIPE_PRICE_STUDIO_*` |
 | Webhook endpoint | Developers → Webhooks → Add endpoint |
 | Webhook URL | `https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webhook` |
 | Webhook secret | Endpoint → Signing secret (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` |

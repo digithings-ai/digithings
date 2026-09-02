@@ -15,6 +15,9 @@
    state/structural rules unlayered — see its header). No @source needed:
    the controls carry no Tailwind utilities. */
 @import "@digithings/web/styles/controls-core.css";
+/* Compact AuthCard from @digithings/web (login / signup). Imported PLAINLY:
+   account-auth.css is token-only and manages its own rules. */
+@import "@digithings/web/styles/account-auth.css";
 /* Account surfaces (login / signup / session / settings) — grammar from
    digiweb/reference/app/account/account.css. Imported after controls-core so
    .acct-btn-block can override .btn-* display. */
@@ -74,6 +77,8 @@
    marks/wordmark render here (MIGRATION.md rule 3, #1548). */
 @source "../../digiweb/web/src/components/command-palette";
 @source "../../digiweb/web/src/components/symbols";
+@source "../../digiweb/web/src/components/account";
+@source "../../digiweb/web/src/components/icons.tsx";
 
 /* Tailwind never scans package sources (MIGRATION.md rule 3) — the shared
    finance-charts scaffold's ChartTipShell renders here via lib/lw-chart. */

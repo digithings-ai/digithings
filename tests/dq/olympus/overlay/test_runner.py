@@ -68,7 +68,7 @@ def _claimed(workspace_id=None):
     store = MemoryJobRunStore()
     ws = WorkspaceEntitlement(
         workspace_id=workspace_id or uuid4(),
-        plan_tier=PlanTier.CUSTOM,
+        plan_tier=PlanTier.STUDIO,
         subscription_status=SubscriptionStatus.ACTIVE,
     )
     result = dispatch_overlay_daily(store=store, workspace=ws, run_date=date(2026, 8, 30), byok=_OK)

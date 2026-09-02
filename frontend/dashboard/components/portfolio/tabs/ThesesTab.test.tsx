@@ -106,6 +106,44 @@ describe('ThesesTab (story spine)', () => {
     expect(terminalHtml).not.toContain('Invalidated opinion');
   });
 
+  it('does not list vehicle-shaped ghosts as market theses', () => {
+    const html = renderToStaticMarkup(createElement(ThesesTab, {
+      ...base,
+      theses: [
+        thesis({
+          id: 'gold-silver-structural-rally',
+          name: 'Gold rally',
+          confidence: 0.7,
+        }),
+        thesis({
+          id: 'veicle-ewg',
+          name: 'veicle-ewg',
+          thesis_kind: null,
+          notes: 'price_technicals:EWG ADX 26.9',
+          validation_criteria: [],
+          invalidation_criteria: [],
+        }),
+        thesis({
+          id: 'veicle-gld',
+          name: 'veicle-gld',
+          thesis_kind: null,
+          notes: 'price_technicals:GLD $408.89',
+        }),
+        thesis({
+          id: 'veicle-xlb',
+          name: 'veicle-xlb',
+          thesis_kind: null,
+          notes: 'price_technicals:XLB: +2.99% vs 50-DMA',
+        }),
+      ],
+    }));
+    expect(html).toContain('Gold rally');
+    expect(html).toContain('1 thesis');
+    expect(html).not.toContain('veicle-ewg');
+    expect(html).not.toContain('veicle-gld');
+    expect(html).not.toContain('veicle-xlb');
+  });
+
   it('renders one active view per durable topic key', () => {
     const duplicateHtml = renderToStaticMarkup(createElement(ThesesTab, {
       ...base,

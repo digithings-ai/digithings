@@ -47,7 +47,7 @@ def _entitled(workspace_id: UUID | None = None) -> WorkspaceEntitlement:
         workspace_id=workspace_id or uuid4(),
         plan_tier=PlanTier.FREE,
         subscription_status=SubscriptionStatus.NONE,
-        plan_floor=PlanTier.CUSTOM,
+        plan_floor=PlanTier.STUDIO,
     )
 
 
@@ -258,7 +258,7 @@ def test_apply_refuses_not_entitled_without_writing(tmp_path: Path) -> None:
     assert not any(_SECRET in line for line in logs)
 
 
-def test_apply_stores_for_plan_floor_custom(tmp_path: Path) -> None:
+def test_apply_stores_for_plan_floor_studio(tmp_path: Path) -> None:
     workspace = uuid4()
     _write_file(tmp_path, workspace_id=workspace)
     store = _MemoryStore()

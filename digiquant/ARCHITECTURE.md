@@ -3364,9 +3364,9 @@ exit **3** (live app-urls `/olympus` vs `/dashboard` plus redeem-invite 404
 must not hide product-state blockers). Observer-hop failure still exits **3**.
 A hop is proven only from that
 product state: `subscription_status=active` **and** `has_stripe_subscription`
-**and** `plan_tier` in `{custom, enterprise}` (boolean Stripe id only; house is
+**and** `plan_tier` in `{studio, enterprise}` (boolean Stripe id only; house is
 seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
-Baseline Stripe also must not — broker connect and overlay stay
+Brief or Desk Stripe also must not — overlay stays
 `TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
 Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
 (not `running` / `skipped` / `persist_disabled` / `not_entitled`). Persist-on
@@ -3377,15 +3377,15 @@ fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
 do not prove the hop); a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 **and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
-off; Observer PATCH `/settings/notifications` is not Custom-gated).
+off; Observer PATCH `/settings/notifications` is not Studio-gated).
 Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
 ``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
 human-owned gate is named. Exit **0** only when all five remaining hops are
 proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
-Phase C (and the Observer checkout hop) POST `tier=custom` — Baseline would
-leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
+Phase C (and the Observer checkout hop) POST `tier=studio` — Brief/Desk would
+leave overlay `TIER_FORBIDDEN` after Stripe lands.
 Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
@@ -3432,8 +3432,8 @@ Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
 webhook Edge Functions under `digiquant/supabase/functions/` (not Next.js route handlers).
 This is distinct from ADR-0004's digikey metered API seat flow — here entitlements ride
-Supabase Auth JWT `app_metadata.plan_tier` (`free | baseline | custom | enterprise` per
-spec D1) and denormalized `workspaces` billing columns for RLS.
+Supabase Auth JWT `app_metadata.plan_tier` (`free | brief | desk | studio | enterprise`)
+and denormalized `workspaces` billing columns for RLS.
 
 | Function | Auth | Role |
 |----------|------|------|
@@ -3465,8 +3465,8 @@ stale. Never weakens `public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN`
 for the post-deploy ESZIP proof (never logged).
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
-Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
-`STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
+Price → tier map keys off `STRIPE_PRICE_BRIEF_{MONTHLY,ANNUAL}` /
+`STRIPE_PRICE_DESK_{MONTHLY,ANNUAL}` / `STRIPE_PRICE_STUDIO_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
 `digiquant/supabase/functions/README.md`). Paid claims only while status maps to
 `active`/`past_due` (trialing→active); deleted/incomplete force `plan_tier=free`.
 Ordering is atomic via `workspaces.last_stripe_event_created` CAS (migration 101).
@@ -3497,12 +3497,12 @@ checkout→active→cancel, and claim-sync failure. CI Deno wiring is a document
 ## Overlay runs
 
 T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
-Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
+Studio/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
 `run_type` fork, no planner changes).
 
-**Dispatch (`dispatch.py`).** Entitlement is paid Custom/Enterprise
-(`plan_tier ∈ {custom, enterprise}` AND `subscription_status = active`) **or**
-D1 `entitlement_grants.plan_floor ∈ {custom, enterprise}` (creator/ops without
+**Dispatch (`dispatch.py`).** Entitlement is paid Studio/Enterprise
+(`plan_tier ∈ {studio, enterprise}` AND `subscription_status = active`) **or**
+D1 `entitlement_grants.plan_floor ∈ {studio, enterprise}` (creator/ops without
 Stripe), **and** BYOK present-and-unsealable. Misses write a
 `job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
 never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim

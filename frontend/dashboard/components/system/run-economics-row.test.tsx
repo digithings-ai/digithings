@@ -61,12 +61,12 @@ describe('RunEconomicsRow entitlement wrap', () => {
     expect(html).not.toContain('run-economics-row');
   });
 
-  it('passthrough for Baseline', async () => {
+  it('passthrough for Desk', async () => {
     const { EntitledSurface } = await import('@/components/entitled-surface');
     const html = renderToStaticMarkup(
       createElement(
         EntitledSurface,
-        { artifactClass: 'glassbox_economics', tier: 'baseline' },
+        { artifactClass: 'glassbox_economics', tier: 'desk' },
         createElement(RunEconomicsRow, { latest: diag({ duration_s: 10 }) }),
       ),
     );

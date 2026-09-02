@@ -19,21 +19,23 @@ export type AccessSnapshot = {
 
 const TIER_RANK: Record<PlanTier, number> = {
   free: 0,
-  baseline: 1,
-  custom: 2,
-  enterprise: 3,
+  brief: 1,
+  desk: 2,
+  studio: 3,
+  enterprise: 4,
 };
 
 export function isPlanTier(value: unknown): value is PlanTier {
   return (
     value === "free" ||
-    value === "baseline" ||
-    value === "custom" ||
+    value === "brief" ||
+    value === "desk" ||
+    value === "studio" ||
     value === "enterprise"
   );
 }
 
-/** Higher of two plan tiers (free < baseline < custom < enterprise). */
+/** Higher of two plan tiers (free < brief < desk < studio < enterprise). */
 export function maxPlanTier(a: PlanTier, b: PlanTier | null | undefined): PlanTier {
   if (!b || !isPlanTier(b)) return a;
   return TIER_RANK[a] >= TIER_RANK[b] ? a : b;
@@ -175,16 +177,32 @@ export async function resolveAccessSnapshot(args: {
   };
 }
 
-/** Custom/enterprise write gate using *effective* tier (creator ops floor counts). */
-export function requireCustomEligible(
+function requireMinTier(
   effectivePlanTier: PlanTier,
+  min: Extract<PlanTier, "desk" | "studio">,
 ): { ok: true } | { ok: false; message: string } {
-  if (effectivePlanTier === "custom" || effectivePlanTier === "enterprise") {
+  if (TIER_RANK[effectivePlanTier] >= TIER_RANK[min]) {
     return { ok: true };
   }
   return {
     ok: false,
     message:
-      "plan_tier must be custom or enterprise for this settings action (or hold an ops entitlement grant)",
+      min === "desk"
+        ? "plan_tier must be desk, studio, or enterprise for this settings action (or hold an ops entitlement grant)"
+        : "plan_tier must be studio or enterprise for this settings action (or hold an ops entitlement grant)",
   };
+}
+
+/** Desk+ write gate (paper brokers) using *effective* tier. */
+export function requireDeskEligible(
+  effectivePlanTier: PlanTier,
+): { ok: true } | { ok: false; message: string } {
+  return requireMinTier(effectivePlanTier, "desk");
+}
+
+/** Studio+ write gate (overlay / BYOK) using *effective* tier. */
+export function requireStudioEligible(
+  effectivePlanTier: PlanTier,
+): { ok: true } | { ok: false; message: string } {
+  return requireMinTier(effectivePlanTier, "studio");
 }

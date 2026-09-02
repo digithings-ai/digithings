@@ -17,9 +17,9 @@ describe('PortfolioTeaserSurface', () => {
     expect(html).not.toContain('%');
   });
 
-  it('hides when baseline+ (full book available)', () => {
+  it('hides when Brief+ (full book available)', () => {
     const html = renderToStaticMarkup(
-      <PortfolioTeaserSurface tier="baseline" tickers={['AAPL']} />,
+      <PortfolioTeaserSurface tier="brief" tickers={['AAPL']} />,
     );
     expect(html).toBe('');
   });
