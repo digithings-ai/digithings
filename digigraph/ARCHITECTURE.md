@@ -750,6 +750,8 @@ Search results from digisearch are written to `{run_data_dir}/{session_id}/datas
 
 `digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
 
+**Write boundary:** `data_manipulation._helpers.write_result` (used by `data_manipulation_agent` / `data_engineer_agent`) accepts only a logical leaf `output_name` (same rules as `digistore._safe_name`). Path separators, `..`, and absolute paths fail closed. When digistore is available, size-cap / validation `ValueError`s also fail closed — they must not fall back to an unsanitized `Path` join under `{run_data_dir}/{session}/datasets/`, which previously allowed cross-session overwrites.
+
 ### 8.3.1 Two-tier context compaction (#399)
 
 Long research sessions (document RAG + Atlas `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
