@@ -1,15 +1,19 @@
 """Phase 7E / H8 — deterministic risk-sizing enforcement (#726, Pillar 2).
 
-H7 ``PMDirectionMemo`` supplies direction (long|flat) and conviction ranks only.
-This phase maps those inputs plus H5/H6 analyst context into deterministic,
-risk-managed weights via :func:`~digiquant.olympus.hermes.sizing.size_portfolio` —
-the sole weight owner on the thesis-first path (ADR-0020).
+H7 ``PMDirectionMemo`` supplies direction (long|flat), conviction ranks (order only),
+and optional ``confidence`` ∈ [0, 1]. This phase maps those inputs plus H5/H6 analyst
+context into deterministic, risk-managed weights via
+:func:`~digiquant.olympus.hermes.sizing.size_portfolio` — the sole weight owner on the
+thesis-first path (ADR-0020).
 
 **WP8.4 (#2734):** on the memo path, when ``h8_sizing_input_mode=calibrated`` (default)
 and a validated ``AllocationInputBundle`` is present, raw weights come from calibrated
 forecasts (reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly are
 not used on that path. Missing bundle falls back to the characterized incumbent path
 (versioned; never an unversioned hybrid). Downstream controls are unchanged.
+
+**WP-H:** each long's sized weight is then scaled by H7 ``confidence`` (cash-first).
+Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
 
 **H8 inside Hermes graph (PR 4c):** output lands in ``phase_hermes.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
@@ -75,6 +79,8 @@ _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 H8_SIZING_INPUT_MODE_CALIBRATED = "calibrated"
 H8_SIZING_INPUT_MODE_INCUMBENT = "incumbent"
+# Fail-soft when H7 omits ``confidence``: conservative half-size, never treat as 1.0.
+H8_MISSING_CONFIDENCE_DEFAULT = 0.5
 _H8_SIZING_INPUT_MODES = frozenset(
     {H8_SIZING_INPUT_MODE_CALIBRATED, H8_SIZING_INPUT_MODE_INCUMBENT}
 )
@@ -111,6 +117,34 @@ def resolve_h8_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
     if mode not in _H8_SIZING_INPUT_MODES:
         return H8_SIZING_INPUT_MODE_CALIBRATED
     return mode
+
+
+def pm_confidence_scale(confidence: float | None) -> float:
+    """Map H7 confidence to an H8 size multiplier in [0, 1].
+
+    Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5). Never treat
+    an omitted field as full size (1.0).
+    """
+    if confidence is None:
+        return H8_MISSING_CONFIDENCE_DEFAULT
+    return max(0.0, min(1.0, float(confidence)))
+
+
+def confidence_scales_from_memo(memo: PMDirectionMemo) -> dict[str, float] | None:
+    """Per-long H7 confidence multipliers. Flats are omitted (H8 does not size them).
+
+    When **every** long omits ``confidence`` (pre-WP-G memos), return ``None`` so H8
+    does not silently haircut the book. When any long has a value, omitted rows use
+    :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
+    """
+    longs = [
+        entry for entry in memo.roster if entry.direction == "long" and not _is_cash(entry.ticker)
+    ]
+    if not longs:
+        return None
+    if all(entry.confidence is None for entry in longs):
+        return None
+    return {entry.ticker: pm_confidence_scale(entry.confidence) for entry in longs}
 
 
 def calibrated_scores_from_bundle(
@@ -866,6 +900,7 @@ def _build_sized_book(
                 ", ".join(unchallenged),
             )
         risk = _load_ticker_risk(deps.client, pm_tickers, state.run_date)
+        confidence_scales = confidence_scales_from_memo(memo_obj) if memo_obj is not None else None
         result = size_portfolio(
             convictions=convictions,
             stances=stances,
@@ -874,6 +909,7 @@ def _build_sized_book(
             caps=caps,
             breaker_scale=breaker_scale,
             calibrated_scores=calibrated_scores,
+            confidence_scales=confidence_scales,
         )
     except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
@@ -1341,6 +1377,7 @@ def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
 
 
 __all__ = [
+    "H8_MISSING_CONFIDENCE_DEFAULT",
     "H8_SIZING_INPUT_MODE_CALIBRATED",
     "H8_SIZING_INPUT_MODE_INCUMBENT",
     "RiskSizingDeps",
@@ -1348,5 +1385,7 @@ __all__ = [
     "build_risk_sizing_node",
     "build_risk_sizing_phase",
     "calibrated_scores_from_bundle",
+    "confidence_scales_from_memo",
+    "pm_confidence_scale",
     "resolve_h8_sizing_input_mode",
 ]

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { Badge, SectionTitle } from '@/components/ui';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { fetchLatestSnapshot } from '@/lib/snapshot-fetch';
 import type {
   ActionableItem,
@@ -29,6 +30,14 @@ export const BIAS_VARIANT: Record<SnapshotBias, 'green' | 'red' | 'amber' | 'blu
 
 export function biasLabel(bias: SnapshotBias): string {
   return bias.replace(/_/g, ' ');
+}
+
+function digestTitle(digest: DigestPayload): string {
+  const headline = digest.headline?.trim();
+  if (headline) return headline;
+  const body = digest.body?.trim() ?? '';
+  const match = /^#\s+(.+)$/m.exec(body);
+  return match?.[1]?.trim() || 'Daily digest';
 }
 
 /**
@@ -263,13 +272,15 @@ function SnapshotContent({
               data-testid="snapshot-headline"
               className="mt-2 text-xl font-semibold leading-snug text-ink"
             >
-              {digest.headline}
+              {digestTitle(digest)}
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-mute">
-            <Badge variant={BIAS_VARIANT[digest.bias] ?? 'default'} data-testid="snapshot-bias">
-              {biasLabel(digest.bias)}
-            </Badge>
+            {digest.bias ? (
+              <Badge variant={BIAS_VARIANT[digest.bias] ?? 'default'} data-testid="snapshot-bias">
+                {biasLabel(digest.bias)}
+              </Badge>
+            ) : null}
             <span data-testid="snapshot-segment">{digest.segment}</span>
             <span aria-hidden="true">·</span>
             <span data-testid="snapshot-run-date">{envelope.run_date}</span>
@@ -286,25 +297,57 @@ function SnapshotContent({
           </div>
         </header>
 
-        <NarrativeSection title="Market regime" body={digest.market_regime_snapshot} testId="snapshot-section-regime" />
-        <NarrativeSection title="Alt data" body={digest.alt_data_dashboard} testId="snapshot-section-alt-data" />
-        <NarrativeSection title="Institutional flows" body={digest.institutional_summary} testId="snapshot-section-institutional" />
-        <NarrativeSection title="Asset classes" body={digest.asset_classes_summary} testId="snapshot-section-asset-classes" />
-        <NarrativeSection title="US equities" body={digest.us_equities_summary} testId="snapshot-section-us-equities" />
+        {digest.body?.trim() ? (
+          <div data-testid="snapshot-digest-body">
+            <SafeMarkdown>{digest.body}</SafeMarkdown>
+          </div>
+        ) : (
+          <>
+            <NarrativeSection
+              title="Market regime"
+              body={digest.market_regime_snapshot ?? ''}
+              testId="snapshot-section-regime"
+            />
+            <NarrativeSection
+              title="Alt data"
+              body={digest.alt_data_dashboard ?? ''}
+              testId="snapshot-section-alt-data"
+            />
+            <NarrativeSection
+              title="Institutional flows"
+              body={digest.institutional_summary ?? ''}
+              testId="snapshot-section-institutional"
+            />
+            <NarrativeSection
+              title="Asset classes"
+              body={digest.asset_classes_summary ?? ''}
+              testId="snapshot-section-asset-classes"
+            />
+            <NarrativeSection
+              title="US equities"
+              body={digest.us_equities_summary ?? ''}
+              testId="snapshot-section-us-equities"
+            />
 
-        {digest.thesis_tracker.trim().length > 0 && (
-          <NarrativeSection title="Thesis tracker" body={digest.thesis_tracker} testId="snapshot-section-thesis" />
-        )}
-        {digest.portfolio_recommendations.trim().length > 0 && (
-          <NarrativeSection
-            title="Portfolio recommendations"
-            body={digest.portfolio_recommendations}
-            testId="snapshot-section-portfolio-recs"
-          />
-        )}
+            {(digest.thesis_tracker ?? '').trim().length > 0 && (
+              <NarrativeSection
+                title="Thesis tracker"
+                body={digest.thesis_tracker ?? ''}
+                testId="snapshot-section-thesis"
+              />
+            )}
+            {(digest.portfolio_recommendations ?? '').trim().length > 0 && (
+              <NarrativeSection
+                title="Portfolio recommendations"
+                body={digest.portfolio_recommendations ?? ''}
+                testId="snapshot-section-portfolio-recs"
+              />
+            )}
 
-        <ActionableList items={digest.actionable_summary} />
-        <RiskList items={digest.risk_radar} />
+            <ActionableList items={digest.actionable_summary ?? []} />
+            <RiskList items={digest.risk_radar ?? []} />
+          </>
+        )}
       </article>
     </section>
   );

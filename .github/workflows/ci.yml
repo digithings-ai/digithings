@@ -111,6 +111,7 @@ jobs:
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/brand/**'
               - 'frontend/digiweb/reference/**'
               - 'frontend/digichat-cloudflare/**'
               - 'frontend/digithings-stack-cloudflare/**'

@@ -20,7 +20,7 @@ factual backbone:
 - `snapshot_ts`, `total_traders` — provenance.
 
 If `onchain_positioning` is **absent or empty** (a Hyperdash outage or no cohort data this run),
-do not invent numbers: set `bias: neutral`, `data_quality: absent`, and say so in `notes`.
+do not invent numbers: say so in the markdown `body`. Optional `internal_bias` may be `neutral`.
 
 ## Purpose
 
@@ -45,24 +45,17 @@ it never originates a trade.
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Ground on the Hyperdash snapshot in PHASE_INPUTS. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# On-chain cohort positioning — {as-of date of the snapshot}
+
+## Aggregate
+Smart-money vs crowd net bias and overall divergence, dated.
+
+## Divergent markets
+The notable tickers and what the split means.
+
+## Implication
+Which asset-class reads this confirms or contradicts.
 ```
-### 🔗 ON-CHAIN COHORT POSITIONING
-**Net Signal**: [smart-money-confirm bullish / distribution bearish / aligned / mixed]
-
-**Aggregate (as of [snapshot_ts], [total_traders] traders):**
-- Smart-money net bias: [smart_net_bias]   Crowd net bias: [crowd_net_bias]
-- Overall divergence: [overall_divergence]
-
-**Most divergent markets:**
-| Market | Divergence | Smart bias | Crowd bias | Read |
-|--------|-----------|-----------|-----------|------|
-| [ticker] | [±] | [0..1] | [0..1] | [smart-confirm / distribution / aligned] |
-
-**Implication for Portfolio**:
-[Which holdings or asset-class tilts does this confirm or contradict? Equity perps → equity tilt;
-BTC/ETH → crypto tilt. Adjust conviction, not direction-of-record.]
-```
-
-Populate the structured fields: `bias` (overall), `smart_money_stance`, `crowd_stance`,
-`divergence_signal` (`smart_long_crowd_short` / `smart_short_crowd_long` / `aligned` / `none`),
-`top_divergent_markets` (≤5 tickers), and `material_findings` for each notable divergence.

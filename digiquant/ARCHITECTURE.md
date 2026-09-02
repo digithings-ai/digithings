@@ -1488,8 +1488,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   absent from that path. Missing/empty coverage falls back to characterized
   incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
-  unchanged (no optimizer / control reorder). WP8.5 locks that shell in
+  `h8_sizing_input_mode`. H8 then scales each long by H7 `confidence` (cash-first;
+  missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
+  same order; confidence is a reduce-only haircut after vol-target so leftover
+  cash is not redistributed. WP8.5 locks that shell in
   `tests/dq/hermes/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
@@ -1689,6 +1691,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
   and `078` (category `planner`) register allow-list values. UI must not invent
   rows without a published document.
+  Inspectable I/O (pipeline operator review WP-B): `publish_phase` also fail-soft
+  publishes `document_key='inputs'` (watchlist, hashed profile identity, market-data
+  freshness, prior-context dates, attention-plan pointer) and `document_key='bias-row'`
+  (deterministic `phase6_bias_row` table) via `olympus.atlas.inspectable_io`. Hermes H1
+  publishes `thesis/thesis-review`; H4 publishes `opportunity-screener` (`doc_type`
+  `opportunity_screen`). Overlay uses `hermes_document_key` for Hermes keys; Atlas
+  inspectable keys stay unprefixed with `workspace_id` on the row.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
@@ -1739,16 +1748,21 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
     components.
 
   Scoped to segments. The digest's equivalent freeze was fixed by #1559's
-  `carried_from`/`continuity` markers on the synthesis-carry path. The dominant cause was unguarded `Literal[...]` axes, so
-  `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
-  subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
-  `None` on an Optional axis and is still rejected on a required one (`growth` /
-  `inflation` have no non-directional member, so coercing them would invent a macro
-  call that Phases 4–7 consume as fact).   A field that declares its own
-  `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
-  ownership of its vocabulary and is skipped by the generic pass. `bias` still
-  consults `_LITERAL_SYNONYMS` after `_BIAS_SYNONYMS` (house GHA 33426508863
-  `cautious` → `neutral`); unknown values stay rejected.
+  `carried_from`/`continuity` markers on the synthesis-carry path. Phase 1–5
+  research validates as `ResearchMemo` (`segment`, `date`, markdown `body`,
+  optional `sources` / `internal_bias` / `regime_label`; `extra="allow"` for
+  historical metric slots). The daily digest is a stitched markdown briefing
+  (`DigestSnapshot`: `date`, `body`, `regime_label`; `extra="allow"` for
+  historical bias/headline/summary slots). H1/H2 read
+  `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
+  `ResearchMemo` and `SegmentReport` both run `_apply_literal_axis_normalization`:
+  an unrecognized value degrades to `None` on an Optional axis and is still
+  rejected on a required one. A field that declares its
+  own `mode="before"` validator (`internal_bias`, `bias`, `data_quality`) keeps
+  ownership of its vocabulary and is skipped by the generic pass. `internal_bias`
+  / `bias` still consult `_LITERAL_SYNONYMS` after `_BIAS_SYNONYMS` (house GHA
+  33426508863 `cautious` → `neutral`); unknown `internal_bias` degrades to
+  `None`, unknown required `bias` stays rejected.
 - **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
   **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
   unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
@@ -1810,9 +1824,14 @@ flowchart TB
 
 **Live graph** (`build_hermes_graph` → `build_hermes_phases_thesis`): Atlas A0–A4 →
 Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research artifacts
-only — Hermes terminal persist is **H9 `commit_run`** (positions, nav, theses sync,
-portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
-(`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
+(`inputs`, `bias-row` when present, segments, digest) — Hermes terminal persist is
+**H9 `commit_run`** (positions, nav, theses sync, portfolio brief, `decision_log` append)
+plus per-phase inspectable documents (H1 `thesis/thesis-review`, H4 `opportunity-screener`).
+Beliefs distillation runs **daily** as a short fold after the house chain
+(`today's unfolded lessons` + prior beliefs body). ``refresh_scope=beliefs`` is the
+full rewrite; an unfolded backlog above ``OLYMPUS_BELIEFS_BACKLOG`` is an additional
+full-fold catch-up. Empty-lesson days still publish a same-date `beliefs` document
+that carries the prior body.
 
 #### Day-over-day continuity contract (#859)
 
@@ -1999,24 +2018,33 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
-- **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
+- **H7** emits `PMDirectionMemo` (direction + conviction rank + optional
+  `confidence` in `[0, 1]` — no weights). Rank is order, not size.
   Each roster row may carry a deterministic `ForecastReference` to the effective
   forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
-  never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
-  ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
-  the portfolio lineage ledger commit chain (see below), and fail-soft prospective
-  forecast-registry persistence (#2663).
+  never LLM-authored. The dashboard `PmDirectionDocumentView` hides those audit
+  fields. **H8** (`phase7e_risk_sizing`) is the sole weight owner. On the
+  calibrated path (`h8_sizing_input_mode=calibrated`) raw size is
+  `reliability × max(0, μ) / σ_ε`; rank is unused for magnitude. H8 then scales
+  each long by H7 `confidence` (cash-first: leftover stays cash, never renormalized
+  into peers). Missing confidence on a mixed roster fail-softs to
+  `H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0. Pre-WP-G memos that omit
+  confidence on every long skip the haircut so replay does not silently shrink.
+  **H9** (`commit_run`) is the Hermes terminal: positions, nav, theses sync, brief
+  publish, `decision_log` append, the portfolio lineage ledger commit chain (see
+  below), and fail-soft prospective forecast-registry persistence (#2663).
 
 #### Risk-sizing layer (Pillar 2)
 
 Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
-narrative; **H8** deterministic code owns sizing, caps, and risk.
+narrative + confidence; **H8** deterministic code owns sizing, caps, and risk. Rank is
+order only — it is not a size input on the calibrated path.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
   conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
   raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
-  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → round-DOWN to grid → cash residual.
+  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → **PM confidence scale** (reduce-only /
+  cash-first) → round-DOWN to grid → cash residual.
   Raw-weight modes: **calibrated** (`reliability × max(0, μ) / σ_ε`, #2734),
   conviction-∝ × inverse-vol, or fractional-Kelly (incumbent fallback only). Every
   reduction is **reduce-only / cash-first**: freed weight becomes cash, never redistributed
@@ -2024,6 +2052,8 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   **asset-class bucket** ρ (`_bucket_corr`: equity↔bond ≈0, equity↔equity≈0.8; UNKNOWN class
   stays ρ=1.0 conservative) rather than full-correlation — the #934 over-cashing fix.
   `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
+  A 12% portfolio vol budget plus the 5% weight grid can pin a name near 10% without
+  rank driving size (operator 2026-08-31 gold observation; rank unused on calibrated).
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -2031,12 +2061,14 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
 - `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
-  `PMDirectionMemo` (direction + ranks), assembles `AllocationInputBundle`, and on the
-  calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
-  Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
-  empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. After the final control shell (carry / cadence / backstop /
-  grid / final caps), builds and attaches `phase_hermes.pre_trade_risk_report` via
+  `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
+  and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
+  unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
+  when omitted). Falls back to dense rank→conviction when mode is `incumbent` or
+  calibrated coverage is empty. Writes `phase_hermes.sized_book` with
+  `allocation_input_bundle_hash` + `h8_sizing_input_mode`. After the final control shell
+  (carry / cadence / backstop / grid / final caps), builds and attaches
+  `phase_hermes.pre_trade_risk_report` via
   `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
   `pre_trade_risk_report_hash` on the book; report omission is fail-soft. Per-ticker vol
   from `price_technicals` and `sector_map` buckets still feed caps/vol-target. Wired
@@ -2142,9 +2174,9 @@ assuming it is always present.
   - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
     flush is counted and reported as incomplete coverage, never submitted. This is a reachable
     path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
-    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
-    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
-    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    outside any graph node, so LLM-backed provider calls are orphaned when the fold
+    calls the model (daily short fold with new lessons, or a full rewrite). Empty-lesson
+    days carry the prior body with no LLM call. And a run with no `DiagnosticsDeps` has
     no run identifier at all, so no node runs and no logical calls are produced *at the source*.
     A flush can therefore carry attributed and orphaned records together, which is why
     eligibility is decided per record rather than per flush.
@@ -2252,7 +2284,8 @@ so the outer pipeline retry can fire; it must not sit until the GitHub Actions
 240-minute job cancel. The worker is daemon so process exit is not joined to the
 hung call (`ThreadPoolExecutor` workers would reintroduce the stall). No client-level retries on this path (disconnect retries
 are a separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
-beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
+beliefs distillation publishes a same-date document on every house run (short fold;
+full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
@@ -2492,6 +2525,11 @@ the grants would refuse anyway.
   looking at magnitude; the position is flat and the surplus is logged as a data error.
   Reading it back is also what makes two orders on one symbol in one run chain correctly —
   the second sees the first's residual, not the pre-run book.
+- **ADD/TRIM of +0.0pp is HOLD.** Event kind still comes from residual quantity, but if the
+  approved weight and prior book round to the same 1-decimal pp, the projection writes
+  `HOLD` rather than a dust true-up. House 2026-09-01 FXI/VGK/XLF filled ~0.05–0.14 shares
+  at unchanged 5/25/20%. `OPEN`/`EXIT` are unchanged (#1743). H9 also skips `order_intents`
+  when `_decision` returns `NO_OP` (no-trade band), so those fills should not mint again.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
   row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
@@ -3326,9 +3364,9 @@ exit **3** (live app-urls `/olympus` vs `/dashboard` plus redeem-invite 404
 must not hide product-state blockers). Observer-hop failure still exits **3**.
 A hop is proven only from that
 product state: `subscription_status=active` **and** `has_stripe_subscription`
-**and** `plan_tier` in `{custom, enterprise}` (boolean Stripe id only; house is
+**and** `plan_tier` in `{studio, enterprise}` (boolean Stripe id only; house is
 seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
-Baseline Stripe also must not — broker connect and overlay stay
+Brief or Desk Stripe also must not — overlay stays
 `TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
 Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
 (not `running` / `skipped` / `persist_disabled` / `not_entitled`). Persist-on
@@ -3339,15 +3377,15 @@ fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
 do not prove the hop); a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 **and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
-off; Observer PATCH `/settings/notifications` is not Custom-gated).
+off; Observer PATCH `/settings/notifications` is not Studio-gated).
 Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
 ``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
 human-owned gate is named. Exit **0** only when all five remaining hops are
 proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
-Phase C (and the Observer checkout hop) POST `tier=custom` — Baseline would
-leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
+Phase C (and the Observer checkout hop) POST `tier=studio` — Brief/Desk would
+leave overlay `TIER_FORBIDDEN` after Stripe lands.
 Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
@@ -3365,8 +3403,9 @@ PRs. `gh run list` `headSha` is the default-branch **trigger** (develop), not
 the job checkout, so counting is `created_at` strictly after the later of
 #3334 (`2026-08-31T20:39Z`) and current `origin/main` committer time. Exit **0**
 only for a **schedule** success after that cutoff. `workflow_dispatch` never
-counts. Exit **3** until a counting `cron: "0 12 * * *"` (a 12:00 UTC run that
-started before fail-softs merged does not count). Exit **2** if a counting
+counts. Exit **3** until a counting `schedule` after that cutoff (crons are
+`17 9/10/11/12 * * *` — not `0 12 * * *`). A 12:00 UTC run that started
+before fail-softs merged does not count. Exit **2** if a counting
 schedule fails. The CLI refuses `--dispatch` / `--apply`.
 
 **Entry points:**
@@ -3394,8 +3433,8 @@ Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
 webhook Edge Functions under `digiquant/supabase/functions/` (not Next.js route handlers).
 This is distinct from ADR-0004's digikey metered API seat flow — here entitlements ride
-Supabase Auth JWT `app_metadata.plan_tier` (`free | baseline | custom | enterprise` per
-spec D1) and denormalized `workspaces` billing columns for RLS.
+Supabase Auth JWT `app_metadata.plan_tier` (`free | brief | desk | studio | enterprise`)
+and denormalized `workspaces` billing columns for RLS.
 
 | Function | Auth | Role |
 |----------|------|------|
@@ -3427,8 +3466,8 @@ stale. Never weakens `public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN`
 for the post-deploy ESZIP proof (never logged).
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
-Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
-`STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
+Price → tier map keys off `STRIPE_PRICE_BRIEF_{MONTHLY,ANNUAL}` /
+`STRIPE_PRICE_DESK_{MONTHLY,ANNUAL}` / `STRIPE_PRICE_STUDIO_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
 `digiquant/supabase/functions/README.md`). Paid claims only while status maps to
 `active`/`past_due` (trialing→active); deleted/incomplete force `plan_tier=free`.
 Ordering is atomic via `workspaces.last_stripe_event_created` CAS (migration 101).
@@ -3459,12 +3498,12 @@ checkout→active→cancel, and claim-sync failure. CI Deno wiring is a document
 ## Overlay runs
 
 T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
-Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
+Studio/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
 `run_type` fork, no planner changes).
 
-**Dispatch (`dispatch.py`).** Entitlement is paid Custom/Enterprise
-(`plan_tier ∈ {custom, enterprise}` AND `subscription_status = active`) **or**
-D1 `entitlement_grants.plan_floor ∈ {custom, enterprise}` (creator/ops without
+**Dispatch (`dispatch.py`).** Entitlement is paid Studio/Enterprise
+(`plan_tier ∈ {studio, enterprise}` AND `subscription_status = active`) **or**
+D1 `entitlement_grants.plan_floor ∈ {studio, enterprise}` (creator/ops without
 Stripe), **and** BYOK present-and-unsealable. Misses write a
 `job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
 never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim

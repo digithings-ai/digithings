@@ -10,6 +10,7 @@ import {
   SnapshotSkeleton,
   useLatestSnapshot,
 } from '@/components/overview/daily-snapshot-panel';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import type { DigestPayload, SegmentFreshness } from '@/lib/snapshot-types';
 
 /**
@@ -100,46 +101,60 @@ export function TheReadBody({ digest }: { digest: DigestPayload }) {
         ) : null}
       </header>
 
-      <div className="py-5">
-        <NarrativeSection title="Market regime" body={digest.market_regime_snapshot} testId="read-regime" />
-      </div>
-
-      <section className="grid gap-px bg-hair md:grid-cols-2">
-        <div className="bg-surface py-5 md:pr-5">
-          {digest.actionable_summary.length ? (
-            <ActionableList items={digest.actionable_summary} flat />
-          ) : (
-            <p className="text-sm text-ink-mute">No actionable items for the latest run.</p>
-          )}
+      {digest.body?.trim() ? (
+        <div className="py-5" data-testid="read-digest-body">
+          <SafeMarkdown>{digest.body}</SafeMarkdown>
         </div>
-        <div className="bg-surface py-5 md:pl-5">
-          {digest.risk_radar.length ? (
-            <RiskList items={digest.risk_radar} flat />
-          ) : (
-            <p className="text-sm text-ink-mute">No risks flagged for the latest run.</p>
-          )}
-        </div>
-      </section>
+      ) : (
+        <>
+          <div className="py-5">
+            <NarrativeSection
+              title="Market regime"
+              body={digest.market_regime_snapshot ?? ''}
+              testId="read-regime"
+            />
+          </div>
 
-      <div data-testid="why-read-disclosures" className="divide-y divide-hair">
-        {DEEP_SECTIONS.map(({ key, title }) => {
-          const body = String(digest[key] ?? '').trim();
-          if (!body) return null;
-          return (
-            <details key={String(key)} className="group py-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
-                <span>{title}</span>
-                <ChevronRight
-                  size={16}
-                  className="shrink-0 transition-transform group-open:rotate-90"
-                  aria-hidden
-                />
-              </summary>
-              <p className="mt-3 text-sm leading-relaxed text-ink-soft whitespace-pre-line">{body}</p>
-            </details>
-          );
-        })}
-      </div>
+          <section className="grid gap-px bg-hair md:grid-cols-2">
+            <div className="bg-surface py-5 md:pr-5">
+              {(digest.actionable_summary ?? []).length ? (
+                <ActionableList items={digest.actionable_summary ?? []} flat />
+              ) : (
+                <p className="text-sm text-ink-mute">No actionable items for the latest run.</p>
+              )}
+            </div>
+            <div className="bg-surface py-5 md:pl-5">
+              {(digest.risk_radar ?? []).length ? (
+                <RiskList items={digest.risk_radar ?? []} flat />
+              ) : (
+                <p className="text-sm text-ink-mute">No risks flagged for the latest run.</p>
+              )}
+            </div>
+          </section>
+
+          <div data-testid="why-read-disclosures" className="divide-y divide-hair">
+            {DEEP_SECTIONS.map(({ key, title }) => {
+              const body = String(digest[key] ?? '').trim();
+              if (!body) return null;
+              return (
+                <details key={String(key)} className="group py-4">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-ink-soft hover:text-ink">
+                    <span>{title}</span>
+                    <ChevronRight
+                      size={16}
+                      className="shrink-0 transition-transform group-open:rotate-90"
+                      aria-hidden
+                    />
+                  </summary>
+                  <p className="mt-3 text-sm leading-relaxed text-ink-soft whitespace-pre-line">
+                    {body}
+                  </p>
+                </details>
+              );
+            })}
+          </div>
+        </>
+      )}
     </section>
   );
 }

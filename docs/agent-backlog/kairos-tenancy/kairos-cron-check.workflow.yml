@@ -24,8 +24,8 @@ name: "Pipeline: Kairos cron check"
 
 on:
   schedule:
-    # 15 minutes after house daily (0 12 * * *) so the jobs overlap in wall
-    # time but never in-process.
+    # Independent of house retries (17 9/10/11/12). Offset so the probe never
+    # shares a process with hermes.chain; 12:15 UTC is still off minute 0.
     - cron: "15 12 * * *"
   workflow_dispatch:
 

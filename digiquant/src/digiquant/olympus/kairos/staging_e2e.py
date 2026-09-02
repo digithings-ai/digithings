@@ -60,9 +60,9 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
 
 DEFAULT_PUBLIC_APP_ORIGIN = "https://digiquant.io"
 _LOOPBACK_MARKERS: tuple[str, ...] = ("127.0.0.1", "localhost")
-# Broker connect + overlay + paper fill are Custom+. Baseline checkout would
-# prove Stripe then leave Observer TIER_FORBIDDEN on the remaining hops.
-STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "custom", "interval": "monthly"}
+# Broker connect + overlay + paper fill are Studio+. Brief/Desk checkout would
+# prove Stripe then leave Observer TIER_FORBIDDEN on the overlay hop.
+STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "studio", "interval": "monthly"}
 # Shorter than Deno INVITE_MIN_CODE_LENGTH (10). Handler returns INVITE_INVALID
 # without recording an attempt, so Observer probes cannot grant or burn the
 # rate-limit window. Live settings v32 has no this route (404).

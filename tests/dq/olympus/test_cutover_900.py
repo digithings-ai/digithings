@@ -92,7 +92,7 @@ def test_still_drops_anon_read_on_book_tables(sql: str) -> None:
 def test_post_cutover_proof_expects_zero_house_book_for_non_members() -> None:
     """Harness applies 900; 109 teaser must not be encoded as post-cutover PASS."""
     proof = (REPO_ROOT / "scripts" / "rls_proof" / "02_proof.sql").read_text(encoding="utf-8")
-    assert "user_a_custom', 'positions', 'house', '0'" in proof
+    assert "user_a_studio', 'positions', 'house', '0'" in proof
     assert "user_c_free', 'positions', 'no_private', '0'" in proof
 
 

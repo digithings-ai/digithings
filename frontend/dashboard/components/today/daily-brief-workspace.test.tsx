@@ -412,9 +412,9 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('30%');
   });
 
-  it('Baseline: scoreboard + holdings passthrough', () => {
+  it('Brief: scoreboard + holdings passthrough', () => {
     const html = renderToStaticMarkup(
-      <DailyBriefWorkspace {...populatedProps} tier="baseline" />,
+      <DailyBriefWorkspace {...populatedProps} tier="brief" />,
     );
     expect(html).toContain('data-brief-section="scoreboard"');
     expect(html).toContain('data-testid="brief-holdings-panel"');

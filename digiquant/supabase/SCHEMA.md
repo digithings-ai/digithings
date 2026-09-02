@@ -651,7 +651,7 @@ Product gating without widening free Observer:
 
 | Object | Purpose |
 |--------|---------|
-| `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`baseline`,`custom`,`enterprise`). Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `custom` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
+| `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`brief`,`desk`,`studio`,`enterprise`) after migration 115. Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `studio` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
 | `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom Olympus products reuse the same table. 12x client emails via ops insert **or** hashed invite redeem (migration 112). Seed: creator → `fx_hub`. |
 | `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. |
 | `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math. |
@@ -667,7 +667,7 @@ baseline/Kairos works while Stripe captchas block Checkout. Free remains teaser-
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
+| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`brief`,`desk`,`studio`,`enterprise`) after migration 115 (D1 `baseline`→`desk`, `custom`→`studio`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
 | `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
 | `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here via `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`); `MemoryJobRunStore` is the test seam. Status vocabulary: 104 adds `skipped` / `budget_exhausted`; 105 adds `persist_disabled`. Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |

@@ -14,13 +14,13 @@
 import type { Session } from '@supabase/supabase-js';
 import { isDashboardAuthEnabled } from './supabase';
 
-/** String-match `workspaces.plan_tier` DB enum. */
-export type PlanTier = 'free' | 'baseline' | 'custom' | 'enterprise';
+/** String-match `workspaces.plan_tier` DB enum (migration 115). */
+export type PlanTier = 'free' | 'brief' | 'desk' | 'studio' | 'enterprise';
 
 /**
- * Artifact classes gated by plan tier (spec §5-T5 + free-teaser addendum).
- * `research` / `narrative` / teaser classes are Observer+; house book surfaces
- * are Baseline+; private workspace surfaces are Custom+.
+ * Artifact classes gated by plan tier (spec §5-T5 + Brief/Desk/Studio).
+ * Observer = teaser; Brief = house weights/NAV; Desk = glass-box + paper
+ * brokers; Studio = overlay / private book / BYOK.
  */
 export type ArtifactClass =
   | 'research'
@@ -35,8 +35,9 @@ export type ArtifactClass =
 
 const PLAN_TIERS: readonly PlanTier[] = [
   'free',
-  'baseline',
-  'custom',
+  'brief',
+  'desk',
+  'studio',
   'enterprise',
 ] as const;
 
@@ -48,34 +49,41 @@ const OBSERVER_CLASSES: readonly ArtifactClass[] = [
   'portfolio_teaser',
 ] as const;
 
-/** Baseline adds house paper-book glass-box surfaces (full pipeline for subscribers). */
-const BASELINE_CLASSES: readonly ArtifactClass[] = [
+/** Brief adds house portfolio weights / NAV (summary outputs, no pipeline). */
+const BRIEF_CLASSES: readonly ArtifactClass[] = [
   ...OBSERVER_CLASSES,
   'house_weights_nav',
-  'glassbox_economics',
 ] as const;
 
-/** Custom adds private workspace surfaces (own workspace only — RLS enforces). */
-const CUSTOM_CLASSES: readonly ArtifactClass[] = [
-  ...BASELINE_CLASSES,
-  'private_book',
+/** Desk adds house glass-box + paper broker connect. */
+const DESK_CLASSES: readonly ArtifactClass[] = [
+  ...BRIEF_CLASSES,
+  'glassbox_economics',
   'broker_status',
+] as const;
+
+/** Studio adds private workspace overlay surfaces (own workspace only — RLS enforces). */
+const STUDIO_CLASSES: readonly ArtifactClass[] = [
+  ...DESK_CLASSES,
+  'private_book',
   'overlay_profile',
 ] as const;
 
 const ALLOWED: Record<PlanTier, ReadonlySet<ArtifactClass>> = {
   free: new Set(OBSERVER_CLASSES),
-  baseline: new Set(BASELINE_CLASSES),
-  custom: new Set(CUSTOM_CLASSES),
-  /** Enterprise matches Custom for content; contract seats/SLA are out of band. */
-  enterprise: new Set(CUSTOM_CLASSES),
+  brief: new Set(BRIEF_CLASSES),
+  desk: new Set(DESK_CLASSES),
+  studio: new Set(STUDIO_CLASSES),
+  /** Enterprise matches Studio for content; contract seats/SLA are out of band. */
+  enterprise: new Set(STUDIO_CLASSES),
 };
 
 const TIER_RANK: Record<PlanTier, number> = {
   free: 0,
-  baseline: 1,
-  custom: 2,
-  enterprise: 3,
+  brief: 1,
+  desk: 2,
+  studio: 3,
+  enterprise: 4,
 };
 
 export function isPlanTier(value: unknown): value is PlanTier {
@@ -126,13 +134,11 @@ export function effectivePlanTier(
 /** Minimum tier that unlocks a class — for locked-state upgrade copy. */
 export function requiredTierFor(artifactClass: ArtifactClass): PlanTier {
   if (OBSERVER_CLASSES.includes(artifactClass)) return 'free';
-  if (
-    artifactClass === 'house_weights_nav' ||
-    artifactClass === 'glassbox_economics'
-  ) {
-    return 'baseline';
+  if (artifactClass === 'house_weights_nav') return 'brief';
+  if (artifactClass === 'glassbox_economics' || artifactClass === 'broker_status') {
+    return 'desk';
   }
-  return 'custom';
+  return 'studio';
 }
 
 export const ARTIFACT_CLASSES: readonly ArtifactClass[] = [
@@ -167,8 +173,9 @@ export type SettingsTabDef = {
 };
 
 /**
- * Settings IA: Custom+ tabs are omitted (not greyed) when the effective tier
- * cannot use them. Observer/Baseline never see Profile, Pipeline, Keys, Brokers.
+ * Settings IA: Studio+ overlay tabs and Desk+ Brokers are omitted (not
+ * greyed) when the effective tier cannot use them. Observer/Brief never
+ * see Profile, Pipeline, Keys, or Brokers. Desk sees Brokers.
  */
 export const SETTINGS_TAB_DEFS: readonly SettingsTabDef[] = [
   { id: 'profile', label: 'Profile', requires: 'overlay_profile' },

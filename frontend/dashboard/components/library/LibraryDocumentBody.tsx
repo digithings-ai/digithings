@@ -7,8 +7,11 @@ import RebalanceDocumentView from './RebalanceDocumentView';
 import DeltaRequestDocumentView from './DeltaRequestDocumentView';
 import DeliberationDocumentView from './DeliberationDocumentView';
 import DigestDocumentView from './DigestDocumentView';
+import PmDirectionDocumentView from './PmDirectionDocumentView';
 import EvolutionSourcesDocumentView from './EvolutionSourcesDocumentView';
 import OpportunityScreenerDocumentView from './OpportunityScreenerDocumentView';
+import InputsDocumentView from './InputsDocumentView';
+import BiasRowDocumentView from './BiasRowDocumentView';
 import GenericDiffDocumentView from './GenericDiffDocumentView';
 import AnalystDocumentView from './AnalystDocumentView';
 import PayloadKeyValueView from './PayloadKeyValueView';
@@ -42,13 +45,25 @@ export default function LibraryDocumentBody({
     case 'risk_debate':
       // `risk_debate` reuses DeliberationDocumentView which now renders the
       // aggressive/conservative/key-tension shape alongside the bull/bear debate.
-      return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+      return <DeliberationDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} docDate={docDate} />;
+    case 'pm_direction':
+      return (
+        <PmDirectionDocumentView
+          payload={payload}
+          fallbackMarkdown={normalizedMarkdown}
+          docDate={docDate}
+        />
+      );
     case 'analyst':
       return <AnalystDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'evolution_sources':
       return <EvolutionSourcesDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'opportunity_screener':
       return <OpportunityScreenerDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+    case 'inputs':
+      return <InputsDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
+    case 'bias_row':
+      return <BiasRowDocumentView payload={payload} fallbackMarkdown={normalizedMarkdown} />;
     case 'diffable':
       return (
         <GenericDiffDocumentView

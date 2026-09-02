@@ -64,7 +64,7 @@ describe('PortfolioLedgerPage tier gate', () => {
     expect(html).not.toContain('No position events recorded yet');
   });
 
-  it('Baseline: loads body (skeleton while dashboard loading)', () => {
+  it('Brief: loads body (skeleton while dashboard loading)', () => {
     vi.mocked(useDashboard).mockReturnValue({
       data: null,
       loading: true,
@@ -73,7 +73,7 @@ describe('PortfolioLedgerPage tier gate', () => {
     } as ReturnType<typeof useDashboard>);
 
     const html = renderToStaticMarkup(
-      createElement(PortfolioLedgerPage, { tier: 'baseline' }),
+      createElement(PortfolioLedgerPage, { tier: 'brief' }),
     );
     expect(html).toContain('page-skeleton');
     expect(html).not.toContain('locked-surface');

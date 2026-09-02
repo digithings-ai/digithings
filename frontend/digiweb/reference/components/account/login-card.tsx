@@ -3,8 +3,8 @@
 import type { FormEvent } from "react";
 
 /**
- * Login — the sign-in card. Three states: oauth-first (olympus), email default,
- * and error. OAuth-first is Google filled, GitHub ghost, then email under a
+ * Login — the sign-in card. Three states: oauth first, email default, and
+ * error. OAuth first is Google filled, GitHub ghost, then email under a
  * hairline. An interactive display template.
  */
 
@@ -30,7 +30,7 @@ export function LoginCard() {
       <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(280px,380px))] items-start gap-[1.2rem]">
         <div>
           <p className="mb-2 font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute">
-            {"// oauth first (olympus)"}
+            {"// oauth first"}
           </p>
           <form
             className="w-full max-w-[380px] rounded-none border border-hair bg-surface p-[1.2rem]"
@@ -38,7 +38,7 @@ export function LoginCard() {
             noValidate
           >
             <p className="font-mono text-[0.72rem] tracking-[0.02em] text-ink">
-              olympus <span className="text-ink-mute">· sign in</span>
+              digiquant <span className="text-ink-mute">· sign in</span>
             </p>
             <p className="mt-2 font-display text-[1.45rem] font-normal leading-[1.15] tracking-[-0.02em] text-ink">
               Open the desk.

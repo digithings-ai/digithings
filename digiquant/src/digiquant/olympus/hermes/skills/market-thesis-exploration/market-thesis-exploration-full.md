@@ -6,6 +6,7 @@ description: Full rewrite of market thesis exploration from digest + segments.
 # Market Thesis Exploration (H2)
 
 Propose **market** theses (`thesis_kind=market`) grounded in the daily digest and research segments.
+Never use `vehicle-{ticker}` or misspellings (`veicle-*`) as a `thesis_id` — those are H5 vehicle rows.
 
 ## Existing-opinion check
 

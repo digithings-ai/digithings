@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { BookOpen, FileSearch } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
@@ -31,13 +30,13 @@ export default function PipelineNodeDetail({
   // Reader ergonomics (#1679): comfortable (default) / wide / full-screen. Desktop
   // only — the mobile docked pane keeps its height-based layout untouched.
   const [size, setSize] = useState<DetailPanelSize>('default');
-  const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
+  const explanation = node && node.kind !== 'stage'
+    ? pipelineNodeExplanation(node.stageId, node.id)
+    : null;
   const runStatus = node?.runStatus
-    ?? (documentKey ? 'persisted-artifact' : node?.stateOnly ? 'state-only' : null);
+    ?? (documentKey ? 'persisted-artifact' : null);
 
   useEffect(() => {
-    // No selection: the render derives the empty state from `documentKey`, so
-    // there is nothing to set here (avoids setState-in-effect cascading renders).
     if (!documentKey) return;
 
     let cancelled = false;
@@ -64,6 +63,8 @@ export default function PipelineNodeDetail({
     return () => { cancelled = true; };
   }, [documentKey, date]);
 
+  if (!documentKey) return null;
+
   // Mobile detail replaces the browser as a full-page surface; closing it returns to
   // the exact Pipeline selection. Desktop keeps the in-workspace side panel.
   return (
@@ -88,9 +89,7 @@ export default function PipelineNodeDetail({
           <div className="mb-1 text-xs font-bold uppercase text-accent">
             {runStatus
               ? pipelineNodeRunStatusLabel(runStatus)
-              : explanation
-                ? 'Pipeline guide'
-                : 'No selection'}
+              : 'Document'}
           </div>
           <div className="font-mono text-sm truncate text-ink">
             {node?.label ?? documentKey ?? '—'}
@@ -111,65 +110,6 @@ export default function PipelineNodeDetail({
           size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
         ].join(' ')}
       >
-        {/* Empty state */}
-        {!documentKey && !explanation && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-            <FileSearch size={32} className="text-ink-mute opacity-40" />
-            <p className="text-ink-mute text-sm">No document selected.</p>
-            <p className="text-xs text-ink-mute/60">
-              Select a node in the pipeline graph to view its output here.
-            </p>
-          </div>
-        )}
-
-        {!documentKey && explanation && (
-          <div className="space-y-5">
-            <div className="flex h-9 w-9 items-center justify-center border border-hair bg-surface text-accent">
-              <BookOpen size={17} aria-hidden />
-            </div>
-            <div>
-              <p className="font-display text-lg leading-snug text-ink">{explanation.title}</p>
-              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
-                {explanation.description}
-              </p>
-            </div>
-            <dl className="grid grid-cols-2 gap-px overflow-hidden border border-hair bg-hair">
-              <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-xs uppercase text-ink-mute">
-                  Stage
-                </dt>
-                <dd className="mt-1 text-xs text-ink">{explanation.stageLabel}</dd>
-              </div>
-              <div className="bg-term-bg px-3 py-2.5">
-                <dt className="font-mono text-xs uppercase text-ink-mute">
-                  Execution
-                </dt>
-                <dd className="mt-1 text-xs text-ink">{explanation.behavior}</dd>
-              </div>
-            </dl>
-            <div className="border-t border-hair pt-4">
-              <p className="font-mono text-xs uppercase text-ink-mute">
-                This run
-              </p>
-              <p className="mt-2 text-xs leading-relaxed text-ink-mute">
-                {node?.kind === 'stage'
-                  ? 'The stage is a navigational overview. Expand it to inspect each operation and any artifacts published for the selected run.'
-                  : runStatus === 'not-run'
-                    ? 'This operation was not recorded for the selected run date.'
-                    : runStatus === 'state-only'
-                    ? 'This operation updates pipeline state and does not publish a standalone document.'
-                    : runStatus === 'expected-artifact-missing'
-                      ? 'The run was recorded, but the expected standalone artifact is missing.'
-                      : runStatus === 'parallel-dispatch'
-                        ? 'This operation dispatched parallel work. Expand it to inspect the persisted branch artifacts.'
-                        : 'No standalone artifact is attached to this node for the selected run. Its role in the process remains the same.'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Loading — content-shaped sk shimmer stack (title line + body lines),
-            not placeholder text (#1548; one loading grammar app-wide). */}
         {documentKey && loading && (
           <SkeletonGroup aria-label="Loading document" className="py-4 flex flex-col gap-3">
             <Skeleton className="h-4 w-1/2" />

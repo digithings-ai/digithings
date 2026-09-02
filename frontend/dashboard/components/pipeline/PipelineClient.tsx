@@ -294,7 +294,7 @@ export default function PipelineClient() {
           />
         )}
 
-        {!artifactLedgerOpen && !traceLedgerOpen && (activeNode !== null || resolvedActiveDocumentKey !== null) && (
+        {!artifactLedgerOpen && !traceLedgerOpen && resolvedActiveDocumentKey !== null && (
           <PipelineNodeDetail
             node={activeNode}
             documentKey={resolvedActiveDocumentKey}

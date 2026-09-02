@@ -106,9 +106,8 @@ class TestPhase2CircuitBreaker:
             # Deterministic absent stub (fresh 'today' slot, not a baseline carry).
             assert slot.payload.source == "today"
             body = slot.payload.body
-            assert body["data_quality"] == "absent"
-            assert body["bias"] == "neutral"
-            assert body["material_findings"] == []
+            assert body["body"] == ""
+            assert body["internal_bias"] == "neutral"
             assert body["circuit_breaker"] == INST_ABSENT_REASON
             assert INST_ABSENT_REASON in body["notes"]
             assert slot.payload.segment == slug
@@ -146,7 +145,9 @@ class TestPhase2CircuitBreaker:
         for slot in final.phase2_outputs.values():
             assert slot.payload.source == "today"
             assert slot.payload.body.get("circuit_breaker") is None
-            assert slot.payload.body["headline"] == "Fresh institutional read"
+            assert "Fresh institutional read" in (
+                slot.payload.body.get("body") or slot.payload.body.get("headline") or ""
+            )
         # Full run → the research agent was actually called for each segment.
         assert final.__dict__["_agent_call"].call_count == len(_INST_SLUGS)
 

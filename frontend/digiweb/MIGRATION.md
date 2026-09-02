@@ -6,7 +6,7 @@ playbook that migrated all five apps (#1399, 2026-07) and the contract the
 forward. The guard runs as a dedicated **unconditional** `frontend-canon` job
 in `ci.yml` on every PR/push (#1434) — it scans the whole `frontend/` tree via
 `git ls-files`, not just the diff, so it must not be path-gated — and also runs
-(redundantly) inside the web/olympus/digichat test jobs.
+(redundantly) inside the web/dashboard/digichat test jobs.
 
 ## The wiring (every app, in this order)
 
@@ -66,7 +66,7 @@ descendant selectors, two-color `color-mix()`, custom-prop readers, print
 blocks, and unlayered-override classes. Re-point their color values at
 tokens; never leave raw hex without a comment naming the token it mirrors.
 
-**Concrete colors are sanctioned only in:** `olympus/lib/chart-colors.ts`
+**Concrete colors are sanctioned only in:** `dashboard/lib/chart-colors.ts`
 (categorical/benchmark hues), tenant embed accents, SSR `theme-color` metas
 (commented), canvas scenes, print pins, and the reference livery swatch
 table — the guard's ALLOWLIST. Anything else needs a

@@ -26,8 +26,8 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
 packages are on `develop`. Live house GHA book-commit, Pages `/dashboard/` cutover
 (including Alpaca callback), and staging E2E remaining hops are **not** proven;
 they are tracked in [#3391](https://github.com/digithings-ai/digithings/issues/3391).
-Pick that issue up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"`
-schedule. Do not claim those probes passed. Do not re-open this epic unless a
+Pick that issue up after the next `pipeline-olympus.yml` schedule
+(`cron: "17 9/10/11/12 * * *"`). Do not claim those probes passed. Do not re-open this epic unless a
 probe contradicts delivery (house GHA red for a new writer bug, or Pages/EF
 cutover broke Auth).
 
@@ -84,7 +84,7 @@ Wave E
       (`eb791dd99`). Do **not** merge conflicting
       [#3332](https://github.com/digithings-ai/digithings/pull/3332) (atlas-graph
       red: `test_h9_is_the_only_ledger_writer`; overlaps #3335 `_json_safe`).
-      Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
+      Next scheduled GHA (`cron: "17 9/10/11/12 * * *"`) is still the live
       *pipeline* book-commit proof (`python scripts/digiquant_house_pipeline_proof.py`,
       [#3367](https://github.com/digithings-ai/digithings/pull/3367) on `develop`
       `207dd0a68`; fail-close [#3383](https://github.com/digithings-ai/digithings/pull/3383)
@@ -172,7 +172,8 @@ so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
 **Remaining hops (Observer JWT, re-audit 2026-08-31T08:36Z):** all five unproven.
 Unproven hops now carry closed-vocabulary blocker codes in Settings About and
-the staging harness (Observer live: `plan_tier_not_custom`,
+the staging harness (Observer live at that audit: `plan_tier_not_custom`, now
+`plan_tier_not_studio` after migration 115;
 `no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`
 (or `overlay_legacy_book_unique` once persist-on fails against leftover
 `UNIQUE(date)`),
@@ -183,14 +184,14 @@ v32). [#3375](https://github.com/digithings-ai/digithings/pull/3375) logs the fi
 remaining-hop blockers on that exit and still returns 3. After Pages+EF cutover
 the next miss is **exit 2**
 (9 named vendor secrets). Observer hops still match, including
-Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
+Studio checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
 has an Alpaca **paper `api_key`** connection (1 active + 2 revoked; not OAuth;
 does not prove the remaining hop). House is `enterprise`/`active` **without**
-Stripe ids — must not prove checkout. Baseline Stripe also must not (Custom-only
+Stripe ids — must not prove checkout. Brief/Desk Stripe also must not (Studio-only
 remaining-hop pin). Overlay `--dry-run` against core
 (after D1 `plan_floor` honor): `considered=5 targets=3 billing_active=1` — the
-creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
+creator GitHub workspace (`plan_tier=free`, `plan_floor=studio` after 115). Dry-run now
 also prints `byok_present` and `persist_enabled` (live core: `byok_present=0
 persist_enabled=0`). Overlay `--execute` refuses without `OLYMPUS_OVERLAY_PERSIST=1`
 (`OVERLAY_EXECUTE_NOT_CONFIGURED`) so a persist-off run cannot finish
@@ -230,8 +231,8 @@ stays unproven). Overlay publish skips `daily_snapshots`. Flag still **unset**
 because BYOK rows = **0** — do not `--execute`. Seal resume path:
 `python scripts/kairos_seal_byok.py` → exit **2** until gitignored
 `digithings-byok.env` exists. Do not seal a placeholder; `--apply` only against
-an overlay-entitled workspace (GitHub creator `plan_floor=custom`, not Observer
-free, not house/system, not ops-custom `custom`/`none` without a grant).
+an overlay-entitled workspace (GitHub creator `plan_floor=studio`, not Observer
+free, not house/system, not ops-custom `studio`/`none` without a grant).
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
@@ -253,8 +254,9 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
   `feat/` branch. Scheduled probe is installed as `.github/workflows/kairos-cron-check.yml`
   (#3380); `cursor/*` cannot rename it. Canonical CLI is `scripts/digiquant_cron_check.py`.
 
-**Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP
-still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
+**Auth (`core`):** GitHub Enabled + Email Enabled. Vendor consoles use
+`admin@digithings.ai` on Proton — not Agentmail and not a company Google account.
+See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **3** (Observer
 `GET /settings/app-urls` fails `public_app_urls_ok`: live EF still returns
@@ -283,14 +285,15 @@ it does not prove Stripe.
 
 **Landed 2026-08-31 — [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop` (`a8bd41741`):**
 squash-merged from `cursor/dashboard-rebrand-rebase-3d52`. Combines #3320
-(no `/olympus/` public path, no 308s, `NEXT_PUBLIC_DASHBOARD_*`) + #3297
+(no `/olympus/` source twin, `NEXT_PUBLIC_DASHBOARD_*`) + #3297
 (`frontend/olympus` → `frontend/dashboard`, npm package `dashboard`) + leftover-key
 sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_build_digiquant_dashboard_path.py`,
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
 `9f898ec1d`, site `/build-info.json`) still serve `/olympus/` until a **human**
-coordinates Pages+EF `/dashboard` cutover. **Do not** weaken `public_app_urls_ok`
-to `/olympus`.
+coordinates Pages+EF `/dashboard` cutover. The promotion merge restores a temporary
+308 from `/olympus/*` to `/dashboard/*` for bookmark safety; **do not** weaken
+`public_app_urls_ok` to accept `/olympus`.
 House GHA `33426508863` (schedule on default `develop`, checkout `ref: main`)
 **failed** (`23502` null `workspace_id` on `portfolio_ledger_commits`; book not
 committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on

@@ -16,7 +16,7 @@ multi-workspace writers (T4) will pass an explicit id.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal  # score:allow validated JSON metadata boundary
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field

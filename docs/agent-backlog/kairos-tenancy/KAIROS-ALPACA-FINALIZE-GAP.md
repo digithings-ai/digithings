@@ -13,9 +13,9 @@ remain blocked.
 
 | Rule | Status in code |
 |------|----------------|
-| Creator (GitHub / `chris.stefan@proton.me`) gets baseline+Kairos without Stripe | **Implemented** — `entitlement_grants.plan_floor=custom` + settings EF effective tier |
-| Everyone else needs subscription for full product | **Documented + gated** — free teaser matrix; Custom writes require paid or grant |
-| Free = teaser (digest summary + portfolio glimpse); no brokers/automations | **Implemented** — `digest_summary` / `portfolio_teaser` classes; brokers stay Custom+ |
+| Creator (GitHub / `chris.stefan@proton.me`) gets Studio overlay without Stripe | **Implemented** — `entitlement_grants.plan_floor=studio` + settings EF effective tier |
+| Everyone else needs subscription for full product | **Documented + gated** — free teaser matrix; Studio writes require paid or grant |
+| Free = teaser (digest summary + portfolio glimpse); no brokers/automations | **Implemented** — `digest_summary` / `portfolio_teaser` classes; brokers stay Desk+ |
 | FX Hub = creator + email allowlist | **Implemented** — `client_product_grants` + nav/page/`ClientProductGate` |
 | General client-product gate | **Plumbing** — same table + UI gate for future products |
 | SETTINGS-IA / D1 amended (supersede baseline-broker tension) | **Done** |

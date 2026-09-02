@@ -342,6 +342,15 @@ def test_097_profile_config_house_row_maps_to_system_workspace(sql_097: str) -> 
     )
 
 
+def test_097_temporarily_removes_075_append_only_trigger_for_backfill(sql_097: str) -> None:
+    """The schema backfill must not fire migration 075's UPDATE rejection trigger."""
+    dropped = sql_097.index("DROP TRIGGER IF EXISTS reject_olympus_profile_config_mutation")
+    updated = sql_097.index("UPDATE public.olympus_profile_config")
+    recreated = sql_097.index("CREATE TRIGGER reject_olympus_profile_config_mutation")
+    assert dropped < updated < recreated
+    assert "EXECUTE FUNCTION public.reject_olympus_profile_config_mutation()" in sql_097[recreated:]
+
+
 def test_097_adds_widened_uniques_alongside_legacy_keys(sql_097: str, raw_097: str) -> None:
     """097 ADDs widened UNIQUEs; must NOT DROP legacy arbiters (live writers still use them)."""
     for token in (

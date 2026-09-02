@@ -7,13 +7,13 @@ import {
 } from './remaining-hops';
 
 describe('provenRemainingHops', () => {
-  it('does not treat ops-custom none as Stripe', () => {
+  it('does not treat ops-studio none as Stripe', () => {
     const proven = provenRemainingHops({ subscription_status: 'none' });
     expect(proven.browser_stripe_checkout).toBe(false);
     expect(remainingHopsUnproven(proven)).toEqual([...REMAINING_LIVE_HOPS]);
     expect(
       provenRemainingHops({
-        plan_tier: 'custom',
+        plan_tier: 'studio',
         subscription_status: 'none',
         has_stripe_subscription: false,
       }).browser_stripe_checkout,
@@ -29,19 +29,26 @@ describe('provenRemainingHops', () => {
     expect(proven.browser_stripe_checkout).toBe(false);
   });
 
-  it('does not treat Baseline Stripe as the checkout hop', () => {
+  it('does not treat Brief or Desk Stripe as the overlay checkout hop', () => {
     expect(
       provenRemainingHops({
         subscription_status: 'active',
         has_stripe_subscription: true,
-        plan_tier: 'baseline',
+        plan_tier: 'brief',
       }).browser_stripe_checkout,
     ).toBe(false);
     expect(
       provenRemainingHops({
         subscription_status: 'active',
         has_stripe_subscription: true,
-        plan_tier: 'custom',
+        plan_tier: 'desk',
+      }).browser_stripe_checkout,
+    ).toBe(false);
+    expect(
+      provenRemainingHops({
+        subscription_status: 'active',
+        has_stripe_subscription: true,
+        plan_tier: 'studio',
       }).browser_stripe_checkout,
     ).toBe(true);
   });
@@ -115,7 +122,7 @@ describe('provenRemainingHops', () => {
     const proven = provenRemainingHops({
       subscription_status: 'active',
       has_stripe_subscription: true,
-      plan_tier: 'custom',
+      plan_tier: 'studio',
       connections: [['alpaca', 'paper', 'active', 'oauth']],
       jobs: [['overlay_daily', 'succeeded']],
       fill_count: 1,
@@ -130,7 +137,7 @@ describe('provenRemainingHops', () => {
     expect(remainingHopBlockers({
       subscription_status: 'active',
       has_stripe_subscription: true,
-      plan_tier: 'custom',
+      plan_tier: 'studio',
       connections: [['alpaca', 'paper', 'active', 'oauth']],
       jobs: [['overlay_daily', 'succeeded']],
       fill_count: 1,
@@ -149,7 +156,7 @@ describe('provenRemainingHops', () => {
       digest_event_keys: ['digest:2026-08-31'],
       daily_digest_enabled: true,
     });
-    expect(blockers.browser_stripe_checkout).toBe('plan_tier_not_custom');
+    expect(blockers.browser_stripe_checkout).toBe('plan_tier_not_studio');
     expect(blockers.alpaca_paper_oauth_connect).toBe('alpaca_api_key_not_oauth');
     expect(blockers.overlay_daily_claimed).toBe('overlay_not_succeeded');
     expect(blockers.paper_fill_mirrored).toBe('fill_without_oauth');

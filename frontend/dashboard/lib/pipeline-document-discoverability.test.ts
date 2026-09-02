@@ -41,6 +41,17 @@ describe('document-key discoverability (#2627)', () => {
       path: 'artifact-ledger',
       stage: 'selection',
     });
+    expect(classifyDocumentDiscovery('commit-run/1234567890')).toEqual({
+      documentKey: 'commit-run/1234567890',
+      path: 'artifact-ledger',
+      stage: 'decision',
+    });
+    // Historical sector-scorecard rows stay discoverable as ledger, not a graph leaf.
+    expect(classifyDocumentDiscovery('sector-scorecard')).toEqual({
+      documentKey: 'sector-scorecard',
+      path: 'artifact-ledger',
+      stage: 'research',
+    });
     expect(classifyDocumentDiscovery('unknown-thing')).toBeNull();
   });
 

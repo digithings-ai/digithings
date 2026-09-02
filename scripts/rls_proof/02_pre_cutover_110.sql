@@ -83,13 +83,13 @@ SELECT public._rls_110_probe(
 -- Member isolation still holds under 109+110 (authenticated)
 SELECT public._rls_110_probe(
     'user_a_custom', 'own_positions', 'authenticated',
-    '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}',
+    '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}',
     'SELECT count(*)::text FROM public.positions WHERE workspace_id = ''a1111111-1111-4111-8111-111111111111''',
     '1'
 );
 SELECT public._rls_110_probe(
     'user_a_custom', 'peer_positions_hidden', 'authenticated',
-    '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"custom"}}',
+    '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","app_metadata":{"plan_tier":"studio"}}',
     'SELECT count(*)::text FROM public.positions WHERE workspace_id = ''b2222222-2222-4222-8222-222222222222''',
     '0'
 );

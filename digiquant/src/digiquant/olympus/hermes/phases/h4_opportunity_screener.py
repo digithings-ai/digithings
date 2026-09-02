@@ -19,17 +19,20 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.atlas.supabase_io import SupabaseClient, publish_document
 from digiquant.olympus.hermes.budget_controller import assess_budget
-from digiquant.olympus.hermes.candidates import select_focus_tickers
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book, select_focus_tickers
 from digiquant.olympus.hermes.research_attention import h4_phase_attention_update
 from digiquant.olympus.hermes.roster_cap import capped_tickers, configured_max_analysts
 from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.overlay.persist import hermes_document_key
 
 logger = logging.getLogger(__name__)
 
 NODE_ID = "hermes/thesis/opportunity-screener"
 PHASE_NAME = "hermes_h4_opportunity_screener"
+OPPORTUNITY_SCREENER_DOCUMENT_KEY = "opportunity-screener"
+OPPORTUNITY_SCREENER_PAYLOAD_DOC_TYPE = "opportunity_screen"
 
 
 def _held_passes_gate(
@@ -342,16 +345,96 @@ def _h4_node_factory(client: SupabaseClient | None):
                 update={"focus_roster": roster, "focus_roster_excluded": excluded}
             ),
         }
+        if client is not None:
+            try:
+                _publish_screener_document(
+                    client,
+                    state,
+                    roster=roster,
+                    excluded=excluded,
+                )
+            except Exception:
+                logger.exception(
+                    "H4: opportunity-screener document publish failed for %s; continuing",
+                    state.run_date,
+                )
         planned = state.model_copy(update=phase_update)
         return {**phase_update, **h4_phase_attention_update(planned)}
 
     return _h4_node
 
 
+def build_screener_document(
+    *,
+    run_date: date,
+    roster: list[FocusRosterEntry],
+    excluded: list[ExcludedTicker],
+) -> dict[str, Any]:
+    """Envelope the H4 roster for ``OpportunityScreenerDocumentView``."""
+    shortlist = [entry.model_dump(mode="json") for entry in roster]
+    excluded_rows = [row.model_dump(mode="json") for row in excluded]
+    tickers = ", ".join(e.ticker for e in roster) or "none"
+    summary = f"Focus roster ({len(roster)}): {tickers}."
+    return {
+        "schema_version": "1.0",
+        "doc_type": OPPORTUNITY_SCREENER_PAYLOAD_DOC_TYPE,
+        "date": run_date.isoformat(),
+        "body": {
+            "summary": summary,
+            "shortlist": shortlist,
+            "excluded": excluded_rows,
+        },
+    }
+
+
+def _screener_markdown(document: dict[str, Any]) -> str:
+    body = document.get("body") if isinstance(document.get("body"), dict) else {}
+    date_str = str(document.get("date") or "")
+    summary = str((body or {}).get("summary") or "").strip()
+    shortlist = (body or {}).get("shortlist") or []
+    lines = [f"# Opportunity screener {date_str}", ""]
+    if summary:
+        lines.extend([summary, ""])
+    if isinstance(shortlist, list) and shortlist:
+        lines.extend(["| Ticker | Reason | Thesis | Rationale |", "| --- | --- | --- | --- |"])
+        for row in shortlist:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"| {row.get('ticker') or '—'} | {row.get('roster_reason') or '—'} | "
+                f"{row.get('linked_market_thesis_id') or '—'} | {row.get('rationale') or '—'} |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _publish_screener_document(
+    client: SupabaseClient,
+    state: HermesState,
+    *,
+    roster: list[FocusRosterEntry],
+    excluded: list[ExcludedTicker],
+) -> None:
+    document = build_screener_document(run_date=state.run_date, roster=roster, excluded=excluded)
+    date_str = state.run_date.isoformat()
+    workspace_id = state.config.workspace_id
+    publish_document(
+        client=client,
+        document_key=hermes_document_key(OPPORTUNITY_SCREENER_DOCUMENT_KEY, workspace_id),
+        payload=document,
+        doc_type=None,
+        run_type=state.run_type,
+        title=f"Opportunity screener {date_str}",
+        date_str=date_str,
+        category="portfolio",
+        segment="opportunity-screener",
+        content_markdown=_screener_markdown(document),
+        workspace_id=workspace_id,
+    )
+
+
 def holdings_from_state(state: HermesState) -> set[str]:
     """Prior-book holdings from preflight ``prior_context.prior_book``."""
-    from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-
     return set(holdings_from_prior_book(state.prior_context.prior_book))
 
 

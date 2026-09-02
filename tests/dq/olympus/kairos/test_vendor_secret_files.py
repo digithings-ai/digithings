@@ -14,6 +14,7 @@ from digiquant.olympus.kairos.vendor_secret_files import (
     function_deploy_argv,
     inspect_vendor_secret_files,
     secrets_set_argv,
+    write_vendor_secret_env_file,
 )
 
 pytestmark = pytest.mark.unit
@@ -21,8 +22,9 @@ pytestmark = pytest.mark.unit
 _FAKE = {
     "STRIPE_SECRET_KEY": "sk_test_not_a_real_key",
     "STRIPE_WEBHOOK_SECRET": "whsec_not_a_real_secret",
-    "STRIPE_PRICE_BASELINE_MONTHLY": "price_baseline",
-    "STRIPE_PRICE_CUSTOM_MONTHLY": "price_custom",
+    "STRIPE_PRICE_BRIEF_MONTHLY": "price_brief",
+    "STRIPE_PRICE_DESK_MONTHLY": "price_desk",
+    "STRIPE_PRICE_STUDIO_MONTHLY": "price_studio",
     "MAILGUN_API_KEY": "key-not-real",
     "MAILGUN_DOMAIN": "mg.example.test",
     "NOTIFY_FROM": "Kairos <noreply@example.test>",
@@ -40,8 +42,9 @@ def _write_complete(root: Path) -> None:
             for k in (
                 "STRIPE_SECRET_KEY",
                 "STRIPE_WEBHOOK_SECRET",
-                "STRIPE_PRICE_BASELINE_MONTHLY",
-                "STRIPE_PRICE_CUSTOM_MONTHLY",
+                "STRIPE_PRICE_BRIEF_MONTHLY",
+                "STRIPE_PRICE_DESK_MONTHLY",
+                "STRIPE_PRICE_STUDIO_MONTHLY",
             )
         )
         + "\n",
@@ -117,7 +120,8 @@ def test_apply_runs_secrets_set_and_deploys(tmp_path: Path) -> None:
     )
     assert code == 0
     assert captured[0][:4] == ["npx", "supabase", "secrets", "set"]
-    assert any(item.startswith("STRIPE_SECRET_KEY=") for item in captured[0])
+    assert any(item.startswith("--env-file=") for item in captured[0])
+    assert not any("sk_test_not_a_real_key" in item for item in captured[0])
     names = [cmd[4] for cmd in captured[1:] if len(cmd) > 4]
     assert "stripe-webhook" in names
     assert "settings" in names
@@ -128,9 +132,14 @@ def test_apply_runs_secrets_set_and_deploys(tmp_path: Path) -> None:
     assert "whsec_not_a_real_secret" not in joined_logs
 
 
-def test_argv_builders_pin_core_project() -> None:
-    argv = secrets_set_argv({"STRIPE_SECRET_KEY": "x"})
+def test_argv_builders_pin_core_project(tmp_path: Path) -> None:
+    env_file = tmp_path / "vendor.env"
+    write_vendor_secret_env_file({"STRIPE_SECRET_KEY": "x"}, env_file)
+    argv = secrets_set_argv(env_file)
     assert "--project-ref=rwagjbkvxkdwqmouagad" in argv
+    assert f"--env-file={env_file}" in argv
+    assert "STRIPE_SECRET_KEY=x" not in argv
+    assert env_file.stat().st_mode & 0o777 == 0o600
     deploy = function_deploy_argv("settings")
     assert "--no-verify-jwt" not in deploy
     assert function_deploy_argv("stripe-webhook")[-1] == "--no-verify-jwt"
