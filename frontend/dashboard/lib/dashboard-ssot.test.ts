@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertDailySnapshotQueryOk,
   bookedCoversCommittedSnapshot,
   committedBookDate,
   previousBookDate,
@@ -48,13 +49,35 @@ describe('bookedCoversCommittedSnapshot', () => {
 });
 
 describe('unpublishedBookNote', () => {
-  it('notes when the committed snapshot is older than today', () => {
-    expect(unpublishedBookNote('2026-08-28', '2026-08-31')).toBe(
+  it('is silent on a weekend or holiday when no position date is newer than the snapshot', () => {
+    // Friday snapshot, Sunday today, book only through Friday — not a hidden-book claim.
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'], '2026-08-30')).toBeNull();
+  });
+
+  it('notes when a position date is newer than the committed snapshot', () => {
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-31', '2026-08-28'], '2026-08-31')).toBe(
       'Last committed snapshot is 2026-08-28. Newer positions are hidden until a snapshot exists for that date.'
     );
   });
 
-  it('is silent when the snapshot is today', () => {
-    expect(unpublishedBookNote('2026-08-31', '2026-08-31')).toBeNull();
+  it('is silent when the snapshot date equals the latest position date', () => {
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'], '2026-08-31')).toBeNull();
+  });
+
+  it('is silent without a snapshot', () => {
+    expect(unpublishedBookNote(null, ['2026-08-31'], '2026-08-31')).toBeNull();
+  });
+});
+
+describe('assertDailySnapshotQueryOk', () => {
+  it('throws on a query error', () => {
+    expect(() => assertDailySnapshotQueryOk({ message: 'permission denied' })).toThrow(
+      /Daily snapshot query failed/
+    );
+  });
+
+  it('does not throw when the query succeeded', () => {
+    expect(() => assertDailySnapshotQueryOk(null)).not.toThrow();
+    expect(() => assertDailySnapshotQueryOk(undefined)).not.toThrow();
   });
 });

@@ -26,6 +26,11 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
     expect(src).toContain('assertAccountingNavQueryOk(navRes.error)');
   });
 
+  it('dashboard asserts daily snapshot query ok before using snapshot rows', () => {
+    const src = readFileSync(join(here, 'queries.ts'), 'utf8');
+    expect(src).toContain('assertDailySnapshotQueryOk(snapshotRes.error)');
+  });
+
   it('digiquant-web live book uses typed contract error and surfaces it', () => {
     const hook = join(repoRoot, 'frontend/digiquant-web/lib/live/useLivePortfolio.ts');
     const panel = join(

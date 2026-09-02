@@ -114,11 +114,13 @@ describe('BriefPipelineHealth', () => {
     expect(html).not.toContain('brief-run-health-timeline');
   });
 
-  it('notes when the committed snapshot is older than today', () => {
+  it('notes when a position date is newer than the committed snapshot', () => {
     const html = renderToStaticMarkup(
       createElement(BriefPipelineHealth, {
         runHealth,
         diagnostics: [diag()],
+        snapshotDate: '2026-08-27',
+        positionDates: ['2026-08-31', '2026-08-27'],
         now: new Date('2026-08-31T17:00:00Z'),
         initialWeekStart: '2026-08-31',
       })
@@ -126,6 +128,20 @@ describe('BriefPipelineHealth', () => {
     expect(html).toContain('data-testid="unpublished-book-note"');
     expect(html).toContain('Last committed snapshot is 2026-08-27');
     expect(html).toContain('Newer positions are hidden until a snapshot exists for that date');
+  });
+
+  it('does not claim hidden positions on a weekend with no newer book dates', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth,
+        diagnostics: [diag()],
+        snapshotDate: '2026-08-28',
+        positionDates: ['2026-08-28', '2026-08-27'],
+        now: new Date('2026-08-30T17:00:00Z'),
+        initialWeekStart: '2026-08-24',
+      })
+    );
+    expect(html).not.toContain('data-testid="unpublished-book-note"');
   });
 
   it('defaults the week window to the current week of `now`', () => {
