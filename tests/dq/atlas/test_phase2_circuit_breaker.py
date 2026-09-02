@@ -106,9 +106,8 @@ class TestPhase2CircuitBreaker:
             # Deterministic absent stub (fresh 'today' slot, not a baseline carry).
             assert slot.payload.source == "today"
             body = slot.payload.body
-            assert body["data_quality"] == "absent"
-            assert body["bias"] == "neutral"
-            assert body["material_findings"] == []
+            assert body["body"] == ""
+            assert body["internal_bias"] == "neutral"
             assert body["circuit_breaker"] == INST_ABSENT_REASON
             assert INST_ABSENT_REASON in body["notes"]
             assert slot.payload.segment == slug
@@ -146,7 +145,9 @@ class TestPhase2CircuitBreaker:
         for slot in final.phase2_outputs.values():
             assert slot.payload.source == "today"
             assert slot.payload.body.get("circuit_breaker") is None
-            assert slot.payload.body["headline"] == "Fresh institutional read"
+            assert "Fresh institutional read" in (
+                slot.payload.body.get("body") or slot.payload.body.get("headline") or ""
+            )
         # Full run → the research agent was actually called for each segment.
         assert final.__dict__["_agent_call"].call_count == len(_INST_SLUGS)
 
@@ -221,3 +222,28 @@ class TestInstitutionalAbsenceStreak:
         client = FakeSupabaseClient(canned_reads={"documents": docs})
         streak = query_institutional_absence_streak(client=client, run_date=date(2026, 6, 20))
         assert streak == 0
+
+    def test_overlay_inst_row_does_not_clear_house_streak(self) -> None:
+        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
+        from digiquant.olympus.tenancy import house_workspace_id
+
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        docs = [
+            {
+                "date": "2026-06-19",
+                "document_key": "inst-hedge-fund-intel",
+                "workspace_id": overlay,
+            },
+            {"date": "2026-06-19", "document_key": "macro", "workspace_id": house},
+            {"date": "2026-06-18", "document_key": "equity", "workspace_id": house},
+            {"date": "2026-06-17", "document_key": "macro", "workspace_id": house},
+            {
+                "date": "2026-06-16",
+                "document_key": "inst-institutional-flows",
+                "workspace_id": house,
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        streak = query_institutional_absence_streak(client=client, run_date=date(2026, 6, 20))
+        assert streak == 3

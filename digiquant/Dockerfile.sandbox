@@ -1,0 +1,65 @@
+# digiquant Atlas research sandbox — paper book / research only (#396).
+#
+# Isolated image for Atlas agents to execute Python research code. Quant stack
+# is baked at build time; do not pip-install inside agent runs.
+#
+# Separate from digiquant/Dockerfile (HTTP service). Do not merge.
+#
+# Build (from repo root OR digiquant/):
+#   docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+#   docker build -f Dockerfile.sandbox -t digiquant-sandbox .
+#
+# Smoke:
+#   docker run --rm digiquant-sandbox \
+#     python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+#
+# Scope: research / paper book only — no live trading, no broker credentials.
+# Network to Yahoo/FRED is optional for data pulls; never point this image at
+# live order venues.
+
+FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="digiquant-sandbox" \
+      org.opencontainers.image.description="Atlas research sandbox with baked open-source quant stack (#396)" \
+      org.opencontainers.image.source="https://github.com/digithings-ai/digithings"
+
+# Runtime libs for scientific wheels (matplotlib, BLAS-backed numpy/scipy) and
+# curl for health/debug. TA-Lib C library: modern PyPI wheels (TA-Lib>=0.7)
+# ship manylinux-bundled libta-lib — no apt libta-lib-dev on debian slim.
+# Historical alternative (when OS packages exist): apt-get install libta-lib-dev
+# + pip install TA-Lib against system headers.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libgomp1 \
+        libfreetype6 \
+        libpng16-16 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /sandbox
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    MPLBACKEND=Agg \
+    PYTHONPATH=/opt/digiquant_sandbox
+
+COPY requirements.sandbox.txt /tmp/requirements.sandbox.txt
+
+RUN pip install --upgrade pip \
+    && pip install -r /tmp/requirements.sandbox.txt \
+    && rm -f /tmp/requirements.sandbox.txt
+
+# Compat shim: pandas-ta-classic installs as pandas_ta_classic; agents and
+# acceptance criteria expect `import pandas_ta` (legacy pandas-ta API name).
+COPY sandbox/pandas_ta /opt/digiquant_sandbox/pandas_ta
+COPY sandbox/yfinance_retry.py /opt/digiquant_sandbox/yfinance_retry.py
+
+# Non-root research user — no sudo, no docker socket, no broker secrets.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin sandbox \
+    && chown -R sandbox:sandbox /sandbox /opt/digiquant_sandbox
+USER sandbox
+
+# Default: interactive REPL for local debugging. Agents override with python -c / script.
+CMD ["python"]

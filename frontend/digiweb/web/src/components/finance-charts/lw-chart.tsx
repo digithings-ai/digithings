@@ -283,7 +283,7 @@ export function useChartTip(
 export function ChartTipShell({ tip, children }: { tip: ChartTip; children: ReactNode }) {
   return (
     <div
-      className="pointer-events-none absolute z-10 rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-[240px]"
+      className="pointer-events-none absolute z-10 rounded-none border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-[240px]"
       style={{ left: tip.left, top: tip.top }}
     >
       {children}

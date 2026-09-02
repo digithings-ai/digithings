@@ -1,7 +1,7 @@
 # digichat — Architecture
 
-> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `digichat/`.
-> The legacy zero-dependency demo at `website/digichat/` is out of scope.
+> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `frontend/digichat/`.
+> Marketing parent is `frontend/digithings-web` `/chat` → iframe `/embed` (not the deleted `frontend/website/`).
 
 ---
 
@@ -101,28 +101,38 @@ connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversatio
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
 **Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
-`src/components/providers.tsx` — #1403): the app runs on the shared digithings token
-canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
-tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
-bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
-set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
-`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
-wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
-`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
-both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
-`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
-`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
-variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
-token names, the reverse direction) is no longer imported; `/embed` sets
-`[data-theme]` on the root from the effective theme (URL `?theme=`, parent
-`digichat:theme` postMessage, or tenant `theme` — its own iframe document) and
-per-tenant accent hexes still override at the wrapper. Because the shared
-`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
-keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
-whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
-`/embed` re-asserts the effective theme with a `MutationObserver` on `html[data-theme]`
-(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
-can't silently override a parent- or tenant-forced theme (#1434).
+`src/components/providers.tsx` — #1403, Phase 3 utilitarian-terminal v0.1):
+the app runs on the shared digithings token canon. `@digithings/design/tokens.css`
+defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings/web/styles/web-theme.css`
+is the single Tailwind `@theme inline` bridge for token-named utilities;
+digichat's `globals.css` derives the shadcn variable set from those tokens under
+`:root[data-theme]` scopes (`--background: var(--bg)`, `--border: var(--hair)`,
+`--destructive: var(--danger)`, …). **Loud CTA fill** is ink/paper
+(`--primary: var(--ink)` / `--primary-foreground: var(--bg)`); rose livery
+(`.accent-digichat` / `--accent-digichat`) is **accent only** — `--ring`,
+`--chart-1`, `--sidebar-primary`, live dots, transcript markers — never the
+default button fill. Local `@theme` `--radius-*` pins to `0` (true circles
+keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
+(`--font-sans`/`--font-display`/`--font-family` remap to `--font-geist-mono`).
+`<html>` ships `data-theme="dark"` + `.dark` as SSR defaults; the shared
+`themeInitScript` re-points both pre-paint (`dt-theme` localStorage key, shared
+with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
+`providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
+classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
+`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) is
+no longer imported; `/embed` sets `[data-theme]` on the root from the effective
+theme (URL `?theme=`, parent `digichat:theme` postMessage, or tenant `theme` —
+its own iframe document) and per-tenant accent hexes still override at the
+wrapper. Because the shared `ThemeProvider` (in `providers.tsx`, which wraps
+`/embed` too via the root layout) keeps a `prefers-color-scheme` listener that
+rewrites `[data-theme]` to the OS scheme whenever there is no `dt-theme` key —
+always true for an anonymous embed visitor — `/embed` re-asserts the effective
+theme with a `MutationObserver` on `html[data-theme]` (guarded write, so the
+observer never loops), so a mid-session OS light↔dark flip can't silently
+override a parent- or tenant-forced theme (#1434). Composer send (imported
+`.dc-send` plus the authenticated ↵ kbd) is overridden locally to an ink/paper
+rect because `@digithings/digichat-ui` session.css still ships an 8px
+accent-tinted pill.
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -200,7 +210,7 @@ probe).
 - Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
-- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). IP is read from `cf-connecting-ip`, falling back to the first `X-Forwarded-For` hop — both are spoofable by the client unless a proxy in front strips/overwrites them (true of Cloudflare in the ADR-0018 production deployment, not guaranteed elsewhere). digigraph closed the equivalent gap with a `DIGI_TRUSTED_PROXIES` allowlist (`digigraph/ARCHITECTURE.md` §12.8, REM-027); digichat has no equivalent yet — acceptable for now since this is a rate-limiting decision, not an authorization one, but tracked as a follow-up.
+- **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
 - **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` when `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`) or a valid legacy `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`; registered tenants resolve via `DIGICHAT_EMBED_TENANTS` (token or first-party bypass). Otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
@@ -305,7 +315,7 @@ present, allowing LiteLLM to route models per-tenant.
 
 ```
 src/app/
-  layout.tsx            # Root layout (Providers, Inter font)
+  layout.tsx            # Root layout (Providers, Geist Mono)
   page.tsx              # Server component: default → /embed; optional root auth → ChatShell
   login/                # Login page (only when DIGICHAT_REQUIRE_ROOT_AUTH=1)
   api/
@@ -1124,6 +1134,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_HOSTS` | Plain comma-separated embed-tenant hostnames, no secrets. Feeds `/embed` CSP `frame-ancestors` at **runtime** via `src/proxy.ts` (preferred over deriving hosts from `DIGICHAT_EMBED_TENANTS` when both are set — #1360). Optional seed list: `embed-hosts.txt` (not baked into the GHCR image). Never emits `frame-ancestors *`; fail-closed to first-party origins when unset/invalid. | Optional |
 | `DIGICHAT_CHAT_RATE_LIMIT_MAX` / `_WINDOW_MS` | Shared per-`{tenantSlug}:{ownerUserSub}` chat rate limit (default 30/60000ms) | Optional |
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
+| `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
 | `DIGICHAT_VERSION` | Version string returned in health response | Optional |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |

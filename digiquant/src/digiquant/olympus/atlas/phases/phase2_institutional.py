@@ -16,18 +16,16 @@ import logging
 from typing import (  # score:allow untyped any — used for node-update dict shape
     Any,
     Callable,
-    Literal,
 )
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field, field_validator
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
     dict_slot_write_adapter,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import ResearchMemo
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     SegmentPayload,
@@ -44,56 +42,12 @@ ABSENCE_BREAKER_THRESHOLD = 3
 INST_ABSENT_REASON = "institutional_data_absent_circuit_breaker"
 
 
-# LLM synonyms observed for flow_direction (run 29846393424 emitted 'positive', #1641).
-_FLOW_DIRECTION_SYNONYMS = {
-    "inflow": "inflow",
-    "inflows": "inflow",
-    "net inflow": "inflow",
-    "net inflows": "inflow",
-    "positive": "inflow",
-    "outflow": "outflow",
-    "outflows": "outflow",
-    "net outflow": "outflow",
-    "net outflows": "outflow",
-    "negative": "outflow",
-    "mixed": "mixed",
-    "neutral": "mixed",
-    "balanced": "mixed",
-    "flat": "mixed",
-}
-
-
-class InstitutionalFlowsReport(SegmentReport):
+class InstitutionalFlowsReport(ResearchMemo):
     """Phase 2A — ETF inflows / outflows, dark-pool prints, 13D/13G/Form 4."""
 
-    flow_direction: Literal["inflow", "outflow", "mixed"] | None = None
 
-    @field_validator("flow_direction", mode="before")
-    @classmethod
-    def _normalize_flow_direction(cls, v: object) -> object:
-        """Map LLM synonyms onto the literal; unknown values degrade to None — this is
-        an informational field and must never fail a merge (#1641), matching the
-        fail-soft ``data_quality`` idiom in ``SegmentReport``."""
-        if isinstance(v, str):
-            return _FLOW_DIRECTION_SYNONYMS.get(v.strip().lower())
-        return v
-
-    largest_sector_inflow: str | None = Field(default=None)
-    largest_sector_outflow: str | None = Field(default=None)
-    notable_filings: list[str] = Field(
-        default_factory=list,
-        description="≤5 short filing labels (e.g., '13D by Elliott on XYZ').",
-    )
-
-
-class HedgeFundIntelReport(SegmentReport):
+class HedgeFundIntelReport(ResearchMemo):
     """Phase 2B — tracked-fund signals (13F, X posts, conference calls)."""
-
-    tracked_funds_count: int = Field(default=0, ge=0)
-    top_signals: list[str] = Field(
-        default_factory=list,
-        description="≤8 short signal labels; ordered by conviction.",
-    )
 
 
 # ─── Phase assembly ─────────────────────────────────────────────────────────
@@ -133,25 +87,22 @@ def _breaker_tripped(state: AtlasResearchState) -> bool:
 def _absent_stub_slot(spec: SegmentNodeSpec, state: AtlasResearchState) -> SegmentSlot:
     """Deterministic, search-free 'absent' stub for a skipped institutional segment.
 
-    Graded ``data_quality='absent'`` with bias ``neutral`` and no findings, so
-    publish suppresses it (Pillar 1E ``_is_degenerate``) instead of surfacing a
-    confident empty document. The breaker reason is stamped into ``notes`` and a
-    machine-readable ``circuit_breaker`` marker so diagnostics can record the
-    skip without a new column.
+    Empty markdown ``body`` so publish suppresses it (``_is_degenerate``) instead
+    of surfacing a confident empty document. The breaker reason is stamped into
+    ``notes`` and a machine-readable ``circuit_breaker`` marker so diagnostics
+    can record the skip without a new column.
     """
     body: dict[str, Any] = {
         "segment": spec.segment_slug,
         "date": state.run_date.isoformat(),
-        "bias": "neutral",
-        "headline": "Institutional data absent — circuit-breaker engaged; segment skipped.",
-        "material_findings": [],
+        "body": "",
         "sources": [],
+        "internal_bias": "neutral",
         "notes": (
             f"{INST_ABSENT_REASON}: institutional ingest absent for "
             f"{state.data_layer.institutional_absence_streak} consecutive runs "
             f"(>= {ABSENCE_BREAKER_THRESHOLD}); skipped paid LLM/web-search nodes."
         ),
-        "data_quality": "absent",
         "circuit_breaker": INST_ABSENT_REASON,
     }
     return SegmentSlot(

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
+from digiquant.olympus.envcompat import CONTEXT_COMPILER_MODE, env_lookup
 from digiquant.olympus.research_retrieval.blinding import (
     assert_blinded_h5_prompt,
     assert_blinded_h6_prompt,
@@ -66,7 +66,7 @@ class RoleContextWireResult:
 
 def resolve_context_compiler_mode() -> ContextCompilerMode:
     """Read ``OLYMPUS_CONTEXT_COMPILER_MODE``; unknown values → shadow."""
-    raw = os.environ.get(OLYMPUS_CONTEXT_COMPILER_MODE_ENV, "shadow").strip().lower()
+    raw = env_lookup(CONTEXT_COMPILER_MODE, default="shadow").strip().lower()
     try:
         return ContextCompilerMode(raw)
     except ValueError:

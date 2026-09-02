@@ -444,3 +444,64 @@ def test_opening_quantities_pages_past_postgrest_max_rows() -> None:
     assert qty.get("AAPL") == Decimal("100")
     # Unpaginated PostgREST would return only the first 1000 (all closed) and miss AAPL.
     assert len(closed_lots) == mod._LOT_PAGE_SIZE
+
+
+def test_legacy_nav_day_return_ignores_overlay_nav() -> None:
+    from digiquant.olympus.tenancy import house_workspace_id
+
+    mod = _load_finalize_mod()
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    house = str(house_workspace_id())
+    client = FakeSupabaseClient(
+        canned_reads={
+            "nav_history": [
+                {"date": "2026-08-25", "nav": 999.0, "workspace_id": overlay},
+                {"date": "2026-08-24", "nav": 1.0, "workspace_id": overlay},
+                {"date": "2026-08-25", "nav": 101.0, "workspace_id": house},
+                {"date": "2026-08-24", "nav": 100.0, "workspace_id": house},
+            ]
+        }
+    )
+    got = mod._legacy_nav_day_return_pct(client=client, period_date=PERIOD)
+    assert got == Decimal("1")
+
+
+def test_opening_cash_ignores_overlay_nav_and_cash_weight() -> None:
+    from digiquant.olympus.tenancy import house_workspace_id
+
+    mod = _load_finalize_mod()
+    overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    house = str(house_workspace_id())
+    client = FakeSupabaseClient(
+        canned_reads={
+            "nav_history": [
+                {
+                    "date": "2026-08-24",
+                    "nav": 999.0,
+                    "cash_pct": 99.0,
+                    "workspace_id": overlay,
+                },
+                {
+                    "date": "2026-08-24",
+                    "nav": 100.0,
+                    "workspace_id": house,
+                },
+            ],
+            "positions": [
+                {
+                    "date": "2026-08-24",
+                    "ticker": "CASH",
+                    "weight_pct": 99.0,
+                    "workspace_id": overlay,
+                },
+                {
+                    "date": "2026-08-24",
+                    "ticker": "CASH",
+                    "weight_pct": 20.0,
+                    "workspace_id": house,
+                },
+            ],
+        }
+    )
+    got = mod._opening_cash(client=client, period_date=PERIOD)
+    assert got == Decimal("20.00")

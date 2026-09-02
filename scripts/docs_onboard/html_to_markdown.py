@@ -1,4 +1,4 @@
-"""Lightweight HTML → markdown for vault note bodies (stdlib only)."""
+"""Lightweight HTML → markdown for vault notes and digisearch ingest (stdlib only)."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ class _ToMarkdown(HTMLParser):
 
 
 def html_to_markdown(html: str) -> str:
-    """Convert HTML to a rough markdown body suitable for digivault notes."""
+    """Convert HTML to a rough markdown body for digivault notes and search ingest."""
     parser = _ToMarkdown()
     try:
         parser.feed(html)

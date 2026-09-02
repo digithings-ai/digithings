@@ -84,11 +84,12 @@ class TestBuildGraph:
             "crypto",
             "equity",
             "sector-technology",
-            "sector-scorecard",
             "consolidate",
             "master-digest",
         ):
             assert expected in names, f"{expected!r} missing from compiled baseline graph"
+        # WP-D: sector memos remain; the deterministic sector-scorecard step is gone.
+        assert "sector-scorecard" not in names
         # Sanity: no analyst / PM / evolution nodes leaked into Atlas.
         for forbidden in (
             "technical-analyst-AAPL",

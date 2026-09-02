@@ -33,7 +33,7 @@ The library ships modules under `digibase/src/digibase/`, including the optional
 | `otel.py` | Optional OTel FastAPI instrumentation wiring (requires `digibase[otel]`) | Yes |
 | `cors.py` | Shared CORS helper for FastAPI services | Yes |
 | `connectors/base.py` | Abstract `ConnectorPayload` / `ConnectorResult` DTOs for write actions | Yes |
-| `connectors/supabase.py` | Supabase upsert + filtered-select connector (requires `digibase[supabase]`) | Yes |
+| `connectors/supabase.py` | Supabase upsert, filtered-select, and guarded filtered-delete connector (requires `digibase[supabase]`) | Yes |
 | `util.py` | Small shared utilities | Yes |
 
 The package is declared in `digibase/pyproject.toml` at version `0.1.0`. It requires Python 3.12+, Pydantic v2, httpx 0.27+, FastAPI 0.115+, and `prometheus-client >= 0.20`. OTel support is gated behind the `[otel]` optional extra, which pulls in the OpenTelemetry SDK, OTLP HTTP exporter, and FastAPI instrumentation packages.
@@ -161,6 +161,11 @@ Registers two exception handlers on the FastAPI application instance: one for `S
 
 ### `digibase.audit`
 
+Sole fleet-wide JSONL audit emitter (CHR-151 / #1193). Component packages
+(`digigraph.audit`, `digiquant.audit`, `digiclaw.audit`) keep a thin `audit_log()`
+compat wrapper that delegates here — they must not open or append the audit file
+themselves.
+
 ```python
 DEFAULT_REDACT_SUBSTRINGS: tuple[str, ...] = ("password", "api_key", "token", "secret")
 
@@ -169,7 +174,54 @@ redact_mapping(
     redact: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]
 ```
-Returns a shallow copy of `payload` with any key whose lowercase form contains a redact substring replaced by the string `"[REDACTED]"`. If `redact` is `None`, the default substrings are used. Does not recurse into nested dicts.
+Returns a deep copy of `payload` with any key whose lowercase form contains a
+redact substring replaced by `"[REDACTED]"`. Recurses into nested dicts and lists.
+If `redact` is `None`, the default substrings are used.
+
+```python
+class AuditEvent(BaseModel):  # pydantic v2, extra=forbid
+    ts: str
+    event_type: str
+    agent_id: str = ""
+    payload: dict[str, Any] = {}
+    key_prefix: str | None = None
+    tenant: str | None = None
+    project_id: str | None = None
+    jti: str | None = None
+    path: str | None = None  # request-path correlation, not the log file path
+
+emit_event(
+    event_type: str,
+    agent_id: str = "",
+    payload: dict[str, Any] | None = None,
+    *,
+    redact: list[str] | tuple[str, ...] | None = None,
+    key_prefix: str = "",
+    tenant: str = "",
+    project_id: str = "",
+    jti: str = "",
+    path: str = "",
+    log_path: str | None = None,
+) -> AuditEvent
+```
+Builds an `AuditEvent`, redacts `payload` via `redact_mapping`, appends one UTF-8
+JSONL line to `log_path` or `AUDIT_LOG_PATH` (default
+`digiquant/results/audit/events.jsonl`), and optionally POSTs the same NDJSON line
+to `AUDIT_SINK_URL` (fire-and-forget; failures swallowed). Empty optional
+correlation fields are omitted from the wire dict (not written as `null`).
+Returns the validated `AuditEvent` for callers/tests that assert shape.
+
+**PII / secrets contract.** Default payloads must not contain raw prompts, JWTs,
+API keys, passwords, or full document bodies. Redaction is pattern-based on key
+names (`password` / `api_key` / `token` / `secret`); callers still must not put
+PII under innocuous keys.
+
+**Documented non-emitters (not duplicates).** Names containing “audit” that are
+*not* JSONL audit emitters and must not be migrated to `emit_event`:
+
+- `digisearch.demos.audit_rag_demo` — RAG assertion/evidence demo, unrelated I/O
+- `digiquant/scripts/atlas/audit_*.py` — ops coverage/config scripts, not JSONL
+- `digigraph.workflow._emit_event` — streaming queue helper for SSE/chunk events
 
 ### `digibase.metrics`
 
@@ -313,9 +365,10 @@ The canonical over-the-wire shape used by every digithings HTTP service:
 
 `service` is nullable and identifies the originating service for cross-service error attribution. It is set explicitly by each service via the `service` parameter to `register_fastapi_error_handlers` and `json_error_response`.
 
-### Audit event schema (informal — not yet a Pydantic model)
+### Audit event schema (`AuditEvent` Pydantic v2)
 
-Each audit consumer builds its own event dict and calls `redact_mapping` before writing. The schema is by convention, not enforcement. Observed fields across `digigraph/audit.py`:
+Emitted exclusively by `digibase.audit.emit_event`. Optional correlation fields are
+omitted from the wire dict when empty (not written as `null`):
 
 ```json
 {
@@ -331,7 +384,8 @@ Each audit consumer builds its own event dict and calls `redact_mapping` before 
 }
 ```
 
-This informal contract is a known gap — see Section 12, recommendation (d).
+`payload` is redacted via `redact_mapping` before the model is constructed.
+Component wrappers must not invent alternate schemas.
 
 ### OTel span attribute contract
 
@@ -356,7 +410,9 @@ digibase.http
     └── (no imports — pure Python)
 
 digibase.audit
-    └── (no imports — pure Python)
+    ├── pydantic (BaseModel, Field, ConfigDict)
+    ├── digibase.util (ensure_dir)
+    └── stdlib (json, os, urllib, datetime)
 
 digibase.otel
     ├── logging (stdlib)
@@ -364,21 +420,22 @@ digibase.otel
     └── opentelemetry.* (optional, guarded by try/except ImportError)
 ```
 
-The library has no internal circular dependencies. `errors.py` is the only module with framework dependencies (FastAPI/Starlette). `http.py` and `audit.py` are pure Python with no third-party imports, making them safe to use in any context — Lambda, CLI, test harness — without pulling in the web framework.
+The library has no internal circular dependencies. `errors.py` and `audit.py` depend on Pydantic. `http.py` is pure Python with no third-party imports.
 
 ### Consumer dependency map
 
 | Service | `http.py` | `errors.py` | `audit.py` | `otel.py` |
 |---------|-----------|-------------|------------|-----------|
-| digigraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `redact_mapping` (via `digigraph/audit.py`) | `setup_otel_fastapi` |
-| digiquant | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
+| digigraph | `outbound_service_headers` (connectors, hub, nodes, tools) | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digigraph.audit.audit_log`) | `setup_otel_fastapi` |
+| digiquant | — | `json_error_response`, `register_fastapi_error_handlers` | `emit_event` (via thin `digiquant.audit.audit_log`) | `setup_otel_fastapi` |
 | digisearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digismith | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digikey | — | `register_fastapi_error_handlers` | — | — |
+| digiclaw | — | — | `emit_event` (via thin `digiclaw.audit.audit_log`) | — |
 
 digigraph is the heaviest consumer: it uses `outbound_service_headers` in five locations (both connector modules, both vertical orchestrator hub modules, and the graph nodes module) to propagate correlation ids and bearer tokens on every outbound service-to-service call.
 
-digiclaw does not appear to import digibase directly; it uses the shared audit format by convention rather than by library import.
+digiclaw imports digibase for audit emission (`emit_event` / `redact_mapping`) via its thin `audit_log` wrapper.
 
 ---
 
@@ -447,7 +504,7 @@ The batch processor uses a background thread. If the application process is kill
 
 ### Audit JSONL append
 
-`digigraph/audit.py` (the primary consumer of `redact_mapping`) writes audit events by opening the JSONL file in append mode (`"a"`) per event, writing, and closing. This is correct for correctness (no partial writes, no shared file handle state between calls) but suboptimal for throughput: each `audit_log()` call pays an `open()` + `write()` + `close()` syscall sequence. Under normal digigraph usage (tens of events per minute), this is inconsequential. Under high-frequency automated workflows, this could become a bottleneck and a source of file descriptor exhaustion on high-concurrency event loops. A buffered writer with periodic flush would be more efficient.
+`digibase.audit.emit_event` writes audit events by opening the JSONL file in append mode (`"a"`) per event, writing, and closing. This is correct for correctness (no partial writes, no shared file handle state between calls) but suboptimal for throughput: each call pays an `open()` + `write()` + `close()` syscall sequence. Under normal digigraph usage (tens of events per minute), this is inconsequential. Under high-frequency automated workflows, this could become a bottleneck and a source of file descriptor exhaustion on high-concurrency event loops. A buffered writer with periodic flush would be more efficient.
 
 ### Future service: connection pool sizing
 
@@ -459,9 +516,9 @@ The digibase service will need to expose Postgres connection pools sized for the
 
 ### How each service uses digibase today
 
-**digigraph** (`digigraph/src/digigraph/`) is the primary consumer. It uses `outbound_service_headers` in every outbound call to digiquant and digisearch, ensuring correlation ids and bearer tokens are forwarded. It uses `json_error_response` for the rate limit middleware response and `register_fastapi_error_handlers` at app startup. It calls `setup_otel_fastapi` to optionally enable tracing. Its local `audit.py` wraps `redact_mapping` from digibase with digigraph-specific event construction.
+**digigraph** (`digigraph/src/digigraph/`) is the primary consumer. It uses `outbound_service_headers` in every outbound call to digiquant and digisearch, ensuring correlation ids and bearer tokens are forwarded. It uses `json_error_response` for the rate limit middleware response and `register_fastapi_error_handlers` at app startup. It calls `setup_otel_fastapi` to optionally enable tracing. Its local `audit.py` is a thin wrapper over `digibase.audit.emit_event`.
 
-**digiquant** (`digiquant/src/digiquant/server.py`) uses `json_error_response`, `register_fastapi_error_handlers`, and `setup_otel_fastapi`. It does not use the HTTP header helpers directly (it is a destination service, not a hub).
+**digiquant** (`digiquant/src/digiquant/server.py`) uses `json_error_response`, `register_fastapi_error_handlers`, and `setup_otel_fastapi`. Its `audit.py` also delegates to `emit_event`. It does not use the HTTP header helpers directly (it is a destination service, not a hub).
 
 **digisearch** (`digisearch/src/digisearch/server.py`) mirrors digiquant: error handlers and OTel wiring, no outbound header usage from digibase.
 
@@ -551,7 +608,7 @@ There is no plan in the roadmap to expose digibase as an MCP tool server. Its ro
 
 **digikey-scoped tokens.** Phase 1 requires digikey to issue service-scoped tokens that digibase accepts and validates. This is a dependency between digikey and digibase that does not exist in `../digikey/ARCHITECTURE.md` today. The scoping model (which service token grants access to which logical database) needs to be specified before Phase 1 implementation.
 
-**Audit schema gap.** digibase (service) would emit its own audit events for connection issuance, policy denials, and admin changes. These must align with the digiclaw JSONL format. Neither format is currently specified as a Pydantic model, making cross-service audit log analysis fragile.
+**Audit schema.** Fleet JSONL events use `digibase.audit.AuditEvent` (Pydantic v2). Future digibase-service events (connection issuance, policy denials, admin changes) must call `emit_event` with the same schema.
 
 ---
 
@@ -562,14 +619,14 @@ The following are actionable recommendations ordered by urgency:
 **(a) Implement Phase 1 digibase service immediately.**
 digichat and digikey are the first consumers that need managed Postgres credentials. Both are active development priorities. Delaying digibase means more code is written against direct `DATABASE_URL` environment variables, increasing the migration cost later. The minimal Phase 1 surface is small: a `/v1/db/handle` endpoint that validates a digikey service token and returns a scoped connection string or pool reference. The existing `digibase` library already provides the error envelope and HTTP helpers to build this service correctly.
 
-**(b) Add `audit.py` emit-to-remote buffering with retry.**
-`digigraph/audit.py` currently writes to a local JSONL file with no retry, no batching, and no remote destination. If the `AUDIT_LOG_PATH` volume is unavailable (mount failure, permissions error), `audit_log()` raises an exception that propagates into the agent workflow. This should be wrapped in a try/except so audit failures are logged but do not crash the service. For production, an async buffered writer with configurable flush interval and an optional remote sink (HTTP POST to digiclaw or digibase) would make audit events durable and observable across the fleet without requiring log volume aggregation.
+**(b) Add `emit_event` buffering with retry.**
+`digibase.audit.emit_event` writes to a local JSONL file (optional best-effort `AUDIT_SINK_URL` POST, no retry). If the `AUDIT_LOG_PATH` volume is unavailable, the exception propagates into the caller. Wrap local write failures so audit outages do not crash workflows, and add an async buffered writer with retry for the remote sink.
 
 **(c) Add OTel trace context propagation helper for HTTP outbound calls.**
 `digibase.http.outbound_service_headers` correctly propagates `X-Request-ID` but does not inject W3C `traceparent`/`tracestate` headers. Services using `FastAPIInstrumentor` receive inbound trace context automatically, but when they make outbound calls with httpx, the trace context is not propagated unless `httpx` is also instrumented via `opentelemetry-instrumentation-httpx`. Add a `propagate_trace_context(headers: dict[str, str]) -> dict[str, str]` helper to `digibase.otel` that calls `opentelemetry.propagate.inject(headers)` when OTel is configured, making distributed trace stitching automatic for all callers of `outbound_service_headers`.
 
-**(d) Standardize audit event schema with a Pydantic model.**
-Define `AuditEvent` in `digibase/audit.py` as a Pydantic v2 model with required fields (`ts`, `event_type`) and optional fields matching the observed schema (`agent_id`, `payload`, `key_prefix`, `tenant`, `project_id`, `jti`, `path`). Callers use `AuditEvent(...).model_dump()` before writing, ensuring the schema is validated at construction time. This eliminates silent schema drift across digigraph, digiclaw, digiquant, and the future digibase service. The `redact_mapping` call should be integrated as a validator on the `payload` field (applied automatically).
+**(d) ~~Standardize audit event schema with a Pydantic model.~~ Done (CHR-151 / #1193).**
+`AuditEvent` + `emit_event` live in `digibase.audit`; component `audit_log` helpers are thin wrappers. Remaining work: optional payload-field validator integration and callers that still build large unredacted dicts before calling.
 
 **(e) Add `digibase[vault]` extra for HashiCorp Vault credential fetching.**
 Phase 1 digibase service needs to fetch credentials from somewhere. Hard-coded environment variables are an operational risk. Add an optional `digibase[vault]` extra that wraps `hvac` (the Python Vault client) and exposes a `fetch_secret(path: str) -> str` helper that caches the result with TTL and renews leases. This extra would be used by the digibase server module only, not by application services, keeping the library surface clean for lightweight installs.

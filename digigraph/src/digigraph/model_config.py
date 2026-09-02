@@ -35,6 +35,7 @@ from digigraph.llm_auth import (
     byok_default_model_refusal,
     byok_model_routes_elsewhere,
     byok_operator_model_routes_elsewhere,
+    byok_provider_supported,
     byok_routable_model,
     get_byok_model_override,
     get_byok_override,
@@ -465,7 +466,10 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
 
 def get_olympus_tier() -> str:
     """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``olympus_models.yaml`` default."""
-    raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
+    if "DIGIQUANT_MODEL_TIER" in os.environ:
+        raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
+    else:
+        raw = os.environ.get("OLYMPUS_MODEL_TIER", "").strip().lower()
     if raw in _VALID_OLYMPUS_TIERS:
         return raw
     return _load_olympus_models().default_tier or "cheap"
@@ -568,7 +572,11 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return an OpenRouter model for web-search grounding pre-passes."""
+    """Return a web-search-capable OpenRouter model for Olympus grounding pre-passes.
+
+    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — Olympus must
+    not ground via the digillm Exa toolkit branch.
+    """
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
         return None
@@ -871,10 +879,23 @@ def resolve_request_model(request_model: str) -> str:
       API key is set → returned unchanged; digillm routes it to that provider.
     - same prefix but the key is **missing** → fall back to the Ollama mode model
       (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
-      silent Ollama fallback rather than digillm's hard error.
+      silent Ollama fallback rather than digillm's hard error — **except** when a
+      BYOK override is bound for that same provider (user key pays; keep the slug).
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
+    - bare / non-prefixed slug with an active BYOK override **for a routable
+      provider** → returned unchanged. ``openai`` is not a digillm-registered
+      prefix, so OpenAI BYOK models are bare (``gpt-4o-mini``).
+      ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over the request
+      string; applying it under BYOK would send a local Ollama slug to the
+      user's OpenAI (or other) endpoint while digillm still holds their key.
+      Gated on :func:`byok_provider_supported` rather than "BYOK is bound at
+      all": ``push_byok_header`` sets digigraph's override whenever a key is
+      present, independent of whether the provider has a catalog base URL, so
+      checking presence alone would let an unroutable-provider override this
+      branch too — harmless only by the coincidence that server.py's 400 on
+      unroutable providers (#1873) never lets one reach here today.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -894,4 +915,11 @@ def resolve_request_model(request_model: str) -> str:
         return resolve_effective_model(get_model_for_mode())
     if request_model.startswith("ollama-cloud/"):
         return request_model[len("ollama-cloud/") :]
+    # BYOK already chose the spendable model via ``_apply_byok_model_override``.
+    # Do not let ``OLLAMA_MODEL`` / mode defaults clobber a bare OpenAI (etc.) slug.
+    # Gated on the provider actually being BYOK-routable, not just "a BYOK override
+    # is bound" -- see the docstring note on ``push_byok_header`` vs ``set_byok``.
+    byok = get_byok_override()
+    if byok is not None and byok_provider_supported(byok[1]):
+        return request_model
     return resolve_effective_model(request_model)

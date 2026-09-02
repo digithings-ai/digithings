@@ -449,6 +449,11 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 constraints=constraints,
                 data_path=args.get("data_path"),
                 data_dir=args.get("data_dir"),
+                base_params=(
+                    args.get("strategy_params")
+                    if isinstance(args.get("strategy_params"), dict)
+                    else None
+                ),
             )
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
@@ -517,6 +522,73 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             payload={"strategy_name": strategy, "symbols": symbols, "tool": tool},
         )
         return {"ok": True, "service": "digiquant", "tool": tool, "data": raw}
+
+
+    if tool == "digiquant_build_sdca_risk_index":
+        from digiquant.sdca_mcp import run_build_sdca_risk_index
+
+        payload = json.loads(
+            run_build_sdca_risk_index(
+                ticker=str(args.get("ticker") or "BTC-USD"),
+                cache_dir=args.get("cache_dir"),
+                refresh=bool(args.get("refresh", True)),
+                bulk_period=str(args.get("bulk_period") or "max"),
+                risk_model=str(args.get("risk_model") or "btc_power_law"),
+                profile=args.get("profile"),
+                profile_json=args.get("profile_json"),
+                coefficients_path=args.get("coefficients_path"),
+                output_path=args.get("output_path"),
+                indicator_weights=str(args.get("indicator_weights") or "{}"),
+                m2_path=args.get("m2_path"),
+                dxy_path=args.get("dxy_path"),
+                eth_ticker=str(args.get("eth_ticker") or "ETH-USD"),
+                valuation_form=str(args.get("valuation_form") or "log_quadratic"),
+                rolling_window=int(args.get("rolling_window") or 90),
+            )
+        )
+        if payload.get("error"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "digiquant_fetch_bitview_series":
+        from digiquant.sdca_mcp import run_fetch_bitview_series
+
+        series_ids = args.get("series_ids_json")
+        if isinstance(args.get("series_ids"), list):
+            series_ids = json.dumps(args["series_ids"])
+        payload = json.loads(
+            run_fetch_bitview_series(
+                series_ids_json=str(series_ids or ""),
+                cache_dir=args.get("cache_dir"),
+                timeout=float(args.get("timeout") or 30.0),
+                start=(int(args["start"]) if args.get("start") is not None else None),
+                end=(int(args["end"]) if args.get("end") is not None else None),
+            )
+        )
+        if payload.get("error") and not payload.get("series"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "digiquant_fit_sdca_weights":
+        from digiquant.sdca_mcp import run_fit_sdca_weights
+
+        payload = json.loads(
+            run_fit_sdca_weights(
+                profile=str(args.get("profile") or "btc_v1"),
+                profile_json=args.get("profile_json"),
+                cache_dir=args.get("cache_dir"),
+                coefficients_path=args.get("coefficients_path"),
+                output_path=args.get("output_path"),
+                m2_path=args.get("m2_path"),
+                dxy_path=args.get("dxy_path"),
+                eth_ticker=str(args.get("eth_ticker") or "ETH-USD"),
+                valuation_form=str(args.get("valuation_form") or "log_quadratic"),
+                rolling_window=int(args.get("rolling_window") or 90),
+            )
+        )
+        if payload.get("error"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
 
     if tool == "olympus_run_policy_replay":
         pair_hash = str(args.get("pair_content_hash") or "").strip()

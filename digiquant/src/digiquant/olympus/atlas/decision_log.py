@@ -36,13 +36,9 @@ from digiquant.olympus.atlas.supabase_io import (
     update_decision_resolution,
 )
 from digiquant.olympus.hermes.payloads import analyst_payloads
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
-
-# Upper bound on the ``thesis`` column written to ``decision_log`` — Pydantic
-# ``AnalystPayload.thesis`` allows up to 1200, so truncate explicitly rather
-# than letting Postgres ``text`` store a longer value.
-THESIS_MAX_CHARS = 800
 
 # Trading-day window over which alpha is computed. Override per run via
 # ``state.config.preferences['holding_days']``.
@@ -59,12 +55,11 @@ class ReflectorOutput(BaseModel):
     reflection: str = Field(min_length=1)
 
 
-def _truncate_thesis(thesis: str | None) -> str:
-    """Trim ``thesis`` to ``THESIS_MAX_CHARS``; ``None`` becomes ``""`` so
-    the DB write never stores ``NULL`` for missing analyst output."""
+def _thesis_text(thesis: str | None) -> str:
+    """Normalize thesis for DB write; ``None`` becomes ``""`` (never NULL)."""
     if not thesis:
         return ""
-    return thesis[:THESIS_MAX_CHARS]
+    return thesis
 
 
 def persist_pending(
@@ -87,7 +82,15 @@ def persist_pending(
     instead of duplicating it (the Jun-19 prod run double-wrote 20 rows for 10
     tickers under two run_ids; #947). The resolver's ``status='pending'`` guard
     still prevents overwriting an already-resolved reflection on replay.
+
+    Overlay workspaces skip this write: ``decision_log`` is a house-owned
+    shared register (no ``workspace_id``; leftover ``UNIQUE(run_date, ticker)``).
     """
+    if skip_overlay_shared_register(state.config.workspace_id):
+        logger.info(
+            "overlay skip shared register decision_log (house-only UNIQUE(run_date, ticker))"
+        )
+        return 0
     analysts = analyst_payloads(state)
     if not analysts:
         return 0
@@ -110,7 +113,7 @@ def persist_pending(
             "ticker": ticker,
             "stance": stance,
             "conviction": _coerce_int(payload.get("conviction_score")),
-            "thesis": _truncate_thesis(payload.get("thesis")),
+            "thesis": _thesis_text(payload.get("thesis")),
             "benchmark": DEFAULT_BENCHMARK,
             "holding_days": holding_days,
             "status": "pending",
@@ -133,6 +136,7 @@ def resolve_pending(
     client: SupabaseClient,
     run_date: date,
     reflector: Callable[[dict[str, Any]], ReflectorOutput] | None = None,
+    workspace_id: str | None = None,
 ) -> int:
     """Phase B — resolve every pending row whose holding window has elapsed.
 
@@ -151,8 +155,16 @@ def resolve_pending(
     default implementation calls ``run_research_agent`` against the
     ``decision-reflector`` skill.
 
+    Overlay workspaces skip: resolving would stamp house rows by id on the
+    leftover ``UNIQUE(run_date, ticker)`` register.
+
     Returns the number of rows actually resolved.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info(
+            "overlay skip shared register decision_log (house-only UNIQUE(run_date, ticker))"
+        )
+        return 0
     pending = query_pending_decisions(client=client, run_date=run_date)
     if not pending:
         return 0
@@ -354,7 +366,6 @@ __all__ = [
     "DEFAULT_BENCHMARK",
     "DEFAULT_HOLDING_DAYS",
     "ReflectorOutput",
-    "THESIS_MAX_CHARS",
     "fetch_recent_lessons",
     "persist_pending",
     "resolve_pending",

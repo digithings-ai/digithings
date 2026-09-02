@@ -56,18 +56,34 @@ def _skill_edit_path(slug: str) -> Path:
 # segments per run, and the master digest itself on 2026-07-28.
 #
 # Appended at the single load chokepoint rather than copied into 17 heterogeneous
-# files, so it cannot drift between them. Keep the numbers in sync with
+# files, so it cannot drift between them. Keep in sync with
 # digiquant.olympus.edit_mode.models.PatchOp / DocumentPatch — there is a test
-# asserting they match.
+# asserting path caps and that reason/summary have no max_length (#1740 / #3063).
 EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
 
-These are hard limits. Exceeding one previously discarded the entire patch:
-
-- `ops[].reason` — **240 characters maximum**. One short sentence. Over-long
-  values are now truncated rather than rejected, so anything past 240 chars is
-  silently lost; keep it brief instead.
 - `ops[].path` — 512 characters maximum; an RFC 6901 JSON Pointer starting `/`.
-- `one_line_summary` — 400 characters maximum."""
+- `ops[].reason` and `one_line_summary` — free prose with **no** character
+  maximum. A previous 240/400-char hard cap discarded entire patches (#1740);
+  do not invent a limit or truncate these fields."""
+
+
+# Skills that must not receive RESEARCH_MEMO_RULES (Phase 1–5 memo skeleton).
+# Digest + digest-subsection get DIGEST_BRIEFING_RULES instead.
+_NON_RESEARCH_MEMO_SKILLS = frozenset(
+    {
+        "digest",
+        "digest-subsection",
+        "beliefs-distillation",
+        "monthly-synthesis",
+        "decision-reflector",
+    }
+)
+
+_DIGEST_BRIEFING_SKILLS = frozenset({"digest", "digest-subsection"})
+
+
+def _is_research_memo_skill(slug: str) -> bool:
+    return slug not in _NON_RESEARCH_MEMO_SKILLS
 
 
 # Appended to EVERY skill, full and edit alike (#1750). Deliberately at the single load
@@ -88,22 +104,58 @@ These are hard limits. Exceeding one previously discarded the entire patch:
 #     fabricated number does not make it true. Detecting that needs a numeric-fidelity
 #     validator cross-checking prose against `price_technicals`; the instruction below only
 #     makes the claim auditable.
+# Appended to every Phase 1–5 skill (full and edit). The JSON skeleton used to
+# win over the markdown templates already in the skills; this block is the
+# contract the renderer and digest slim assume.
+RESEARCH_MEMO_RULES = """## Research memo (required)
+
+Write a markdown `body` — that is the operator artifact, not a JSON dump.
+
+Suggested skeleton (variable depth is allowed; skip empty sections):
+
+```markdown
+# {Topic} — {as-of date of the data}
+
+## {Topical heading 1}
+Prose with inline [title](url) citations.
+
+## {Topical heading 2}
+…
+```
+
+Use 2–5 topical `##` sections that fit today's evidence. Do **not** invent
+data-quality or confidence scores. Do **not** emit a Signals section. Do **not**
+print `Bias:` at the top. Optional `internal_bias` is a non-rendered token for
+digest/triage only. `sources` is grounding, not an appendix dump."""
+
+
+DIGEST_BRIEFING_RULES = """## Digest briefing (required)
+
+Write a markdown `body` — that is the operator artifact, not a JSON dump of
+bias / headline / Signals / confidence / data_quality.
+
+This is a long analyst-entry briefing. Length is allowed. Use topical `##`
+headings and inline `[title](url)` citations.
+
+Do **not** emit `**Overall bias:**`, a Signals section, data-quality grades, or
+confidence floats. Optional `regime_label` is a short chip token, not a
+rendered metric."""
+
+
 QUANTITATIVE_FINDING_RULES = """## Dating your numbers (required)
 
-Every figure you quote must carry the date of the DATA — not the date of this run.
+Every figure you quote in the markdown body must carry the date of the DATA — not the date of this run.
 
-- Set `material_findings[].as_of` to the ISO date (`YYYY-MM-DD`) the numbers describe, and
-  name it inline too when it reads naturally: `SPY flat at $738.93 (Jul 24)`.
-- `as_of` is the date of the row you read from the tool. If the latest `price_technicals` row
+- Name the date inline when you quote a number: `SPY flat at $738.93 (2026-07-24)`.
+- That date is the date of the row you read from the tool. If the latest `price_technicals` row
   is 2026-07-30 because today's close has not landed yet, write `2026-07-30` — do NOT write
   today's date.
-- Omit `as_of` only for a purely qualitative finding that quotes no figure.
 - **Never carry a number forward from the prior document without re-reading it.** If you cannot
-  re-verify a figure from a tool on this run, either drop the finding or state the older date it
-  came from. A stale number under a fresh date is the specific failure this rule exists to stop.
-- Quote only figures you actually read from a tool this run. `source_ids` is an assertion that
-  the named source contains the number — attributing an unverified figure to a database table
-  is worse than leaving it unsourced."""
+  re-verify a figure from a tool on this run, drop it or state the older date it came from. A
+  stale number under a fresh date is the specific failure this rule exists to stop.
+- Quote only figures you actually read from a tool this run. An inline `[title](url)` (or a
+  `sources` id) is an assertion that the named source contains the number — attributing an
+  unverified figure is worse than leaving it unsourced."""
 
 
 class MalformedFrontmatterError(ValueError):
@@ -149,7 +201,13 @@ def load_skill(slug: str) -> str:
         raise SkillNotFoundError(f"skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return f"{body.strip()}\n\n{QUANTITATIVE_FINDING_RULES}"
+    parts = [body.strip()]
+    if _is_research_memo_skill(slug):
+        parts.append(RESEARCH_MEMO_RULES)
+    if slug in _DIGEST_BRIEFING_SKILLS:
+        parts.append(DIGEST_BRIEFING_RULES)
+    parts.append(QUANTITATIVE_FINDING_RULES)
+    return "\n\n".join(parts)
 
 
 @lru_cache(maxsize=64)
@@ -167,7 +225,13 @@ def load_skill_edit(slug: str) -> str:
         raise SkillNotFoundError(f"edit skill not found: {slug!r} (expected at {path})")
     raw = path.read_text(encoding="utf-8")
     _, body = _split_frontmatter(raw)
-    return f"{body.strip()}\n\n{EDIT_SCHEMA_CONSTRAINTS}\n\n{QUANTITATIVE_FINDING_RULES}"
+    parts = [body.strip()]
+    if _is_research_memo_skill(slug):
+        parts.append(RESEARCH_MEMO_RULES)
+    if slug in _DIGEST_BRIEFING_SKILLS:
+        parts.append(DIGEST_BRIEFING_RULES)
+    parts.extend((EDIT_SCHEMA_CONSTRAINTS, QUANTITATIVE_FINDING_RULES))
+    return "\n\n".join(parts)
 
 
 def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:

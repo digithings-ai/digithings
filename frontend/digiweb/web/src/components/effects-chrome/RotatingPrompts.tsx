@@ -58,7 +58,7 @@ export function RotatingPrompts({ prompts, intervalMs = 3200, className }: Rotat
 
   return (
     <div
-      className={`flex items-baseline gap-[0.55rem] rounded-[12px] border border-hair bg-surface px-[1.2rem] py-[1rem] font-mono text-[0.9rem] min-h-[3.4rem]${
+      className={`flex items-baseline gap-[0.55rem] rounded-none border border-hair bg-surface px-[1.2rem] py-[1rem] font-mono text-[0.9rem] min-h-[3.4rem]${
         className ? ` ${className}` : ""
       }`}
       aria-live="polite"

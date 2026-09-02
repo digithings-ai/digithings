@@ -53,17 +53,33 @@ def _skill_full_path(slug: str) -> Path:
     return _hermes_data_root() / "skills" / slug / f"{slug}-full.md"
 
 
+def _skill_full_candidates(slug: str) -> tuple[Path, ...]:
+    """Resolve ``*-full.md`` for a slug, including nested family files.
+
+    Conventional path is ``skills/<slug>/<slug>-full.md``. Hyphenated slugs may
+    also live beside a parent skill: ``deliberation-analyst-response`` reads
+    ``skills/deliberation/analyst-response-full.md`` (H6 reply; not H5).
+    """
+    root = _hermes_data_root() / "skills"
+    paths = [root / slug / f"{slug}-full.md"]
+    if "-" in slug:
+        family, rest = slug.split("-", 1)
+        paths.append(root / family / f"{rest}-full.md")
+    paths.append(root / slug / "SKILL.md")
+    return tuple(paths)
+
+
 @lru_cache(maxsize=64)
 def load_skill_full(slug: str) -> str:
-    """Return the Markdown body of ``skills/<slug>/<slug>-full.md``."""
-    path = _skill_full_path(slug)
-    if not path.is_file():
-        path = _skill_path(slug)
-    if not path.is_file():
-        raise SkillNotFoundError(f"full skill not found: {slug!r} (expected at {path})")
-    raw = path.read_text(encoding="utf-8")
-    _, body = _split_frontmatter(raw)
-    return body.strip()
+    """Return the Markdown body of a Hermes full skill (see ``_skill_full_candidates``)."""
+    last = _skill_full_path(slug)
+    for path in _skill_full_candidates(slug):
+        last = path
+        if path.is_file():
+            raw = path.read_text(encoding="utf-8")
+            _, body = _split_frontmatter(raw)
+            return body.strip()
+    raise SkillNotFoundError(f"full skill not found: {slug!r} (expected at {last})")
 
 
 @lru_cache(maxsize=64)

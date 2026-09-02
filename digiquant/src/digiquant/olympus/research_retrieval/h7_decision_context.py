@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -331,9 +331,7 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
         outcome_lesson_version_id=(
             inp.outcome_lesson_version_id
             if inp.outcome_lesson_version_id is not None
-            else (
-                prerequisites.outcome_lesson_version_id if prerequisites is not None else None
-            )
+            else (prerequisites.outcome_lesson_version_id if prerequisites is not None else None)
         ),
     )
     prior_auth = _build_section(H7SectionKind.PRIOR_AUTHORIZATION, entity_ids=auth_ids)

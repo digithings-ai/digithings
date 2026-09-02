@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
 from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport

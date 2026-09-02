@@ -31,6 +31,18 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -56,9 +68,9 @@ def main() -> int:
     sb = create_client(url, key)
 
     # Legacy path keys should have been normalized by migration 009; catch stragglers.
+    # House only — overlay leftover ``outputs/`` keys must not fail house canonical verify.
     res = (
-        sb.table("documents")
-        .select("date,document_key")
+        eq_house_workspace(sb.table("documents").select("date,document_key"))
         .like("document_key", "%outputs/%")
         .limit(200)
         .execute()

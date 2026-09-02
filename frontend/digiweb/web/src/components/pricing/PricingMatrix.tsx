@@ -113,7 +113,7 @@ export function PricingMatrix({
                   key={i}
                   className={cx(
                     "border-b border-hair px-[0.9rem] pt-[0.8rem] pb-[1rem] text-left align-top",
-                    tier.popular && "rounded-t-[8px] border-t-2 border-t-accent bg-accent/6",
+                    tier.popular && "rounded-none border-t-2 border-t-accent bg-accent/6",
                   )}
                 >
                   <span className="block text-[0.95rem]">{tier.name}</span>

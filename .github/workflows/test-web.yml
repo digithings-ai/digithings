@@ -69,7 +69,7 @@ jobs:
 
       # Nothing in .github/workflows built, linted or type-checked the design reference
       # until these two steps — the only `run build` calls are test-digichat.yml and
-      # test-olympus.yml. It is the surface the other frontends copy patterns from
+      # test-dashboard.yml. It is the surface the other frontends copy patterns from
       # (.claude/skills/digiweb/SKILL.md routes web work through it), so a broken pattern
       # here propagates by design, and it took ~137 commits in the month after it was
       # scaffolded (2026-07-06) with nothing able to fail.

@@ -18,7 +18,7 @@
   .deck-card {
     background: var(--surface);
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 1rem;
   }
 }
@@ -93,7 +93,7 @@
 .deck-rail .dot {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
   flex-shrink: 0;
 }

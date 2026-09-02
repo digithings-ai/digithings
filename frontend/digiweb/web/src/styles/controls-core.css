@@ -19,8 +19,8 @@
      controls grammar, value-for-value copies of the specimen CSS —
      .btn-primary / .btn-ghost / .btn-quiet / .btn-danger / .btn-icon
      (reference/app/globals.css + styles/nav-shell.css), .ff-input
-     (reference/app/controls/controls.css), and the .dg-tier pill
-     (styles/web-theme.css). Mono type, pill radii, hairline borders,
+     (reference/app/controls/controls.css), and the .dg-tier badge
+     (styles/web-theme.css). Mono type, radius 0, hairline borders,
      srgb color-mix — kept verbatim so a specimen swap is pixel-faithful.
 
    - the CHAT dress (`*-chat` classes): digichat's current shadcn-derived
@@ -71,16 +71,17 @@
   font-family: var(--font-mono);
   font-size: 0.78rem;
   letter-spacing: 0.02em;
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.62rem 1.3rem;
   cursor: pointer;
   border: 1px solid transparent;
 }
 
 .ctl-btn-ref--primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  /* Utilitarian v0.1: loud = ink/paper fill; accent = focus/live only. */
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .ctl-btn-ref--primary:disabled {
@@ -154,8 +155,8 @@
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
-  border-top-color: var(--on-accent);
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
   animation: ctl-btn-spin 0.7s linear infinite;
 }
 
@@ -176,7 +177,7 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-lg, 0.625rem);
+    border-radius: 0;
     border: 1px solid transparent;
     background-clip: padding-box;
     font-size: 0.875rem;
@@ -191,8 +192,9 @@
   /* variants — hovers sit under (hover: hover) further down, exactly as
      Tailwind v4 emits digichat's hover: utilities */
   .ctl-btn-chat--default {
-    background: var(--primary, var(--accent));
-    color: var(--primary-foreground, var(--on-accent));
+    /* Utilitarian v0.1: loud fill is ink/paper; accent stays for focus/live. */
+    background: var(--ink);
+    color: var(--bg);
   }
 
   .ctl-btn-chat--outline {
@@ -286,7 +288,7 @@
 
 @media (hover: hover) {
   a.ctl-btn-chat--default:hover {
-    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+    background: color-mix(in oklab, var(--ink) 80%, transparent);
   }
 
   .ctl-btn-chat--outline:hover {
@@ -336,7 +338,7 @@
   .ctl-btn-chat--size-xs {
     height: 1.5rem;
     gap: 0.25rem;
-    border-radius: min(var(--radius-md, 0.5rem), 10px);
+    border-radius: 0;
     padding-inline: 0.5rem;
     font-size: 0.75rem;
     line-height: calc(1 / 0.75);
@@ -345,7 +347,7 @@
   .ctl-btn-chat--size-sm {
     height: 1.75rem;
     gap: 0.25rem;
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
     padding-inline: 0.625rem;
     font-size: 0.8rem;
   }
@@ -364,13 +366,13 @@
   .ctl-btn-chat--size-icon-xs {
     width: 1.5rem;
     height: 1.5rem;
-    border-radius: min(var(--radius-md, 0.5rem), 10px);
+    border-radius: 0;
   }
 
   .ctl-btn-chat--size-icon-sm {
     width: 1.75rem;
     height: 1.75rem;
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
   }
 
   .ctl-btn-chat--size-icon-lg {
@@ -431,10 +433,10 @@
 [data-slot="button-group"] .ctl-btn-chat--size-sm,
 [data-slot="button-group"] .ctl-btn-chat--size-icon-xs,
 [data-slot="button-group"] .ctl-btn-chat--size-icon-sm {
-  border-radius: var(--radius-lg, 0.625rem);
+  border-radius: 0;
 }
 
-/* ── Badge — reference dress (web-theme.css .dg-tier pill grammar) ──────── */
+/* ── Badge — reference dress (web-theme.css .dg-tier badge grammar) ──────── */
 
 .ctl-badge-ref {
   font-family: var(--font-mono);
@@ -443,7 +445,7 @@
   text-transform: uppercase;
   color: var(--ink-mute);
   border: 1px solid var(--hair);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.16rem 0.5rem;
 }
 
@@ -480,7 +482,7 @@
     justify-content: center;
     gap: 0.25rem;
     overflow: hidden;
-    border-radius: var(--radius-4xl, 1.625rem);
+    border-radius: 0;
     border: 1px solid transparent;
     padding: 0.125rem 0.5rem;
     font-size: 0.75rem;
@@ -596,7 +598,7 @@
 
 .ctl-card-ref {
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   overflow: hidden;
 }
@@ -652,7 +654,7 @@
     flex-direction: column;
     gap: 1rem;
     overflow: hidden;
-    border-radius: var(--radius-xl, 0.875rem);
+    border-radius: 0;
     background: var(--card, var(--surface));
     padding-block: 1rem;
     font-size: 0.875rem;
@@ -667,8 +669,8 @@
     grid-auto-rows: min-content;
     align-items: start;
     gap: 0.25rem;
-    border-top-left-radius: var(--radius-xl, 0.875rem);
-    border-top-right-radius: var(--radius-xl, 0.875rem);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
     padding-inline: 1rem;
   }
 
@@ -695,8 +697,8 @@
     border-top: 1px solid var(--border, var(--hair));
     background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
     padding: 1rem;
-    border-bottom-left-radius: var(--radius-xl, 0.875rem);
-    border-bottom-right-radius: var(--radius-xl, 0.875rem);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
 
   /* the action slot places itself the same way under both dresses */
@@ -726,13 +728,13 @@
 }
 
 .ctl-card-chat > img:first-child {
-  border-top-left-radius: var(--radius-xl, 0.875rem);
-  border-top-right-radius: var(--radius-xl, 0.875rem);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .ctl-card-chat > img:last-child {
-  border-bottom-left-radius: var(--radius-xl, 0.875rem);
-  border-bottom-right-radius: var(--radius-xl, 0.875rem);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .ctl-card-chat .ctl-card-header:has([data-slot="card-action"]) {
@@ -776,7 +778,7 @@
   width: 100%;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-mono);
@@ -815,7 +817,7 @@
     height: 2rem;
     width: 100%;
     min-width: 0;
-    border-radius: var(--radius-lg, 0.625rem);
+    border-radius: 0;
     border: 1px solid var(--input, var(--hair));
     background: transparent;
     padding: 0.25rem 0.625rem;
@@ -1041,7 +1043,7 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    border-radius: 9999px;
+    border-radius: 0;
     background: var(--muted, var(--surface-2));
     font-size: 0.875rem;
     line-height: calc(1.25 / 0.875);
@@ -1094,7 +1096,7 @@
     position: relative;
     overflow: hidden;
     background: color-mix(in srgb, var(--ink) 9%, transparent);
-    border-radius: 6px;
+    border-radius: 0;
   }
 
   .sk-circle {
@@ -1115,14 +1117,14 @@
   .sk-btn {
     width: 6.6rem;
     height: 2rem;
-    border-radius: 999px;
+    border-radius: 0;
     flex-shrink: 0;
   }
 
   .sk-block {
     height: 1.5rem;
     width: 60%;
-    border-radius: 5px;
+    border-radius: 0;
   }
 }
 
@@ -1159,7 +1161,7 @@
     align-items: center;
     gap: 0.55rem;
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: 0;
     background: color-mix(in oklab, var(--surface) 55%, transparent);
     padding: 1.8rem 1.3rem;
     text-align: center;
@@ -1283,7 +1285,7 @@
     display: inline-flex;
     overflow: hidden;
     border: 1px solid var(--hair);
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .nb-seg {
@@ -1318,7 +1320,7 @@
     height: 2rem;
     padding: 0 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface);
     color: var(--ink-soft);
     font-family: var(--font-mono);
@@ -1334,7 +1336,7 @@
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 8px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink-mute);
     cursor: pointer;
@@ -1401,7 +1403,7 @@
     gap: 0.5rem;
     padding: 0.375rem 0.625rem;
     border: 1px solid var(--hair);
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--term-bg);
     font-family: var(--font-mono);
     font-size: 12.5px;
@@ -1444,7 +1446,7 @@
     margin: 0;
     padding: 0;
     border: none;
-    border-radius: 4px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink);
     font: inherit;
@@ -1520,7 +1522,7 @@
     gap: 0.4rem;
     padding: 0.5rem 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: 0;
     background: var(--surface);
     cursor: text;
     transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -1532,7 +1534,7 @@
     gap: 0.35rem;
     padding: 0.22rem 0.35rem 0.22rem 0.6rem;
     border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     font-family: var(--font-mono);
     font-size: 0.74rem;
@@ -1549,7 +1551,7 @@
     background: transparent;
     color: var(--ink-mute);
     cursor: pointer;
-    border-radius: 999px;
+    border-radius: 0;
     transition: color 0.15s var(--ease);
   }
 
@@ -1588,7 +1590,7 @@
   .tg-suggest-chip {
     padding: 0.25rem 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 999px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink-soft);
     font-family: var(--font-mono);
@@ -1632,7 +1634,7 @@
     gap: 0.125rem;
     padding: 0.125rem 0.25rem 0.125rem 0.5rem;
     border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    border-radius: 0.375rem;
+    border-radius: 0;
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     font-size: 11px;
     font-weight: 500;
@@ -1642,7 +1644,7 @@
 
 .tg-chip-quant .tg-x {
   padding: 0.125rem;
-  border-radius: 0.25rem;
+  border-radius: 0;
   color: var(--ink-soft);
 }
 
@@ -1667,7 +1669,7 @@
     gap: 0.55rem;
     padding: 0.55rem 0.7rem;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: 0;
     background: var(--surface);
     transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
   }

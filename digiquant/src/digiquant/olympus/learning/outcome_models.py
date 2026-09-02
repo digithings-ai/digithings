@@ -36,7 +36,9 @@ from digiquant.olympus.hermes.allocation_hashes import sha256_hex
 _EPISODE_VERSION_ID_NS = UUID("d1a0e601-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _LESSON_VERSION_ID_NS = UUID("d1a0e602-4b8d-5f2a-9c17-3d6e8f0a1b22")
 
+# Identifiers / short keys. Free-text messages use NonEmptyText (no max_length).
 NonEmptyStr: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
+NonEmptyText: TypeAlias = Annotated[str, Field(min_length=1)]
 ContentHash: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]
 FiniteDec: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]
 SignedDec: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]
@@ -235,7 +237,7 @@ class OutcomeQualityIssue(OutcomeLearningModel):
     """Typed quality flag on an episode."""
 
     code: OutcomeQualityCode
-    message: NonEmptyStr
+    message: NonEmptyText
 
 
 class OutcomeEpisode(OutcomeLearningModel):

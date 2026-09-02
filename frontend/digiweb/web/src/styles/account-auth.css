@@ -1,0 +1,283 @@
+/* Account auth card — promoted from the reference account family.
+   Token-only. Prefix `.acct-auth`. Button dress is the host `.btn-*` grammar. */
+
+.acct-auth {
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--surface);
+  padding: 1.2rem;
+}
+
+.acct-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  min-width: 0;
+}
+
+.acct-auth-brand .acct-auth-mark {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.acct-auth-wordmark {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.acct-auth-mark {
+  margin-bottom: 0.85rem;
+  color: var(--ink);
+}
+
+.acct-auth-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.acct-auth-copy {
+  margin-top: 0.45rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.acct-auth-field {
+  margin-top: 0.85rem;
+}
+
+.acct-auth-field:first-of-type {
+  margin-top: 0;
+}
+
+.acct-auth-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-auth-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.55rem 0.7rem;
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.acct-auth-input::placeholder {
+  color: var(--ink-mute);
+}
+
+.acct-auth-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-auth-input-error,
+.acct-auth-input-error:focus-visible {
+  border-color: var(--danger);
+}
+
+.acct-auth-input-error:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.acct-auth-error {
+  margin-top: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--danger);
+}
+
+.acct-auth-info {
+  margin-top: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+
+.acct-auth-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+  margin-top: 1.1rem;
+}
+
+.acct-auth-oauth-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.45rem;
+  margin-top: 0.15rem;
+}
+
+.acct-auth-oauth-row .acct-oauth {
+  flex: 1;
+}
+
+.acct-oauth {
+  display: grid;
+  place-items: center;
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.acct-oauth:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
+}
+
+.acct-oauth:focus-visible,
+.acct-auth-submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.acct-oauth:disabled,
+.acct-auth-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.acct-auth-submit,
+.acct-auth-submit-block {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  background: var(--ink);
+  color: var(--bg);
+  border: 1px solid var(--ink);
+  text-align: center;
+}
+
+.acct-auth-submit {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.acct-auth-submit-block {
+  display: block;
+  width: 100%;
+  margin-top: 1.1rem;
+}
+
+.acct-auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 1rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+.acct-auth-divider::before,
+.acct-auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--hair);
+}
+
+.acct-auth-switch {
+  margin-top: 1rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-mute);
+}
+
+.acct-auth-switch a {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}
+
+.acct-auth-switch a:hover {
+  text-decoration: underline;
+}
+
+.acct-auth-forgot {
+  display: block;
+  width: 100%;
+  margin-top: 0.45rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-mute);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.acct-auth-strength {
+  margin-top: 0.45rem;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.acct-auth-strength-track {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.acct-auth-strength-seg {
+  height: 3px;
+  background: color-mix(in srgb, var(--ink-mute) 22%, transparent);
+  transition: background 0.25s var(--ease);
+}
+
+.acct-auth-strength-word {
+  min-width: 3.6rem;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-mute);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acct-auth-input,
+  .acct-auth-strength-seg {
+    transition: none !important;
+  }
+}
