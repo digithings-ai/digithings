@@ -784,6 +784,36 @@ Proof: `tests/dq/dashboard/test_migration_110_anon_house_only.py`,
 `tests/dq/dashboard/overlay/test_persist.py`, and
 `tests/dq/dashboard/test_cutover_113.py`.
 
+### Authenticated read parity on public reference — migration 116 (hotfix)
+
+109 fixed three teaser tables and stopped there. Eighteen more kept RLS on, a
+SELECT grant to `authenticated`, and no policy for that role — which Postgres
+answers with zero rows and PostgREST reports as `200 []`. Signed-out visitors
+therefore saw more of digiquant.io/dashboard than signed-in ones, with no error
+anywhere to point at it. Migration **116** mirrors each table's anon SELECT
+policy (all `USING (true)` today) as `authenticated_read_public_reference`:
+
+| Group | Tables |
+|-------|--------|
+| Market / reference | `price_history`, `price_technicals`, `trading_calendar`, `fx_economic_calendar`, `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
+| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers`, `deliberation_sessions`, `deliberation_rounds`, `architecture_notes` |
+| House projections already anon-public | `portfolio_lots`, `portfolio_trades`, `portfolio_holdings_daily`, `current_book_lookback` |
+
+Not a widening: the anon key already reads every one of these. Tables that are
+deliberately anon-denied (`atlas_run_diagnostics`, `checkpoint*`,
+`strategy_calibrations`, all `portfolio_ledger_*` / `olympus_accounting_*`) are
+untouched and stay own-workspace-only.
+
+Two `security_invoker=true` views sit downstream and were empty for the same
+reason, with no policy of their own to fix: `position_attribution` and
+`price_history_tickers` both read `price_history`.
+
+Cutover **900** must re-scope the third group behind the plan-tier gate rather
+than simply dropping it — those rows are house-derived, unlike the first two
+groups. Proof: `tests/dq/research/test_migration_116.py`, whose
+`test_no_anon_select_without_authenticated_counterpart` replays every top-level
+migration and fails on the next table opened to anon without a signed-in twin.
+
 Staged cutover **900** section A2 restores 098 membership-only
 `authenticated_select_own_workspace` on the four book tables and drops
 `authenticated_read_house_teaser` on `daily_snapshots` (SELECT already REVOKEd
