@@ -31,6 +31,9 @@ def test_resolve_language_directive_for_known_non_english_code() -> None:
     directive = resolve_language_directive("de")
     assert directive is not None
     assert "German" in directive
+    # #3417: answering in German must not rewrite retrieval queries into German.
+    assert "retriev" in directive.lower()
+    assert "do not translate" in directive.lower()
 
 
 def test_resolve_language_directive_is_case_insensitive() -> None:

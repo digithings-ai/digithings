@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
@@ -177,6 +177,7 @@ export function useEmbedDigiChat({
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
 } {
+  const pendingForceTool = useRef<string | undefined>(undefined);
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -205,15 +206,19 @@ export function useEmbedDigiChat({
           // Send-time read — same freeze reason as isEmbedTrialUnlockedAtSend/
           // chatAccessTokenAtSend below (#1339): a language value closed over
           // by the transport at creation time would stay frozen at whatever
-          // detectBrowserLanguageCode() returned at mount, so picking a new
-          // language in the dropdown would never reach the header (#2103
-          // final review, Critical finding). Normalize against the curated
-          // list before forwarding — defense-in-depth for a hypothetical
+          // detectBrowserLanguageCode() returned at mount, so `/lang` would
+          // never reach the header (#2103 / #3418). Normalize against the
+          // curated list before forwarding — defense-in-depth for a hypothetical
           // future caller of this exported hook that doesn't already pass a
           // curated-safe value (see #2103 final review, Fix 6).
           const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
+          }
+          const forceTool = pendingForceTool.current;
+          pendingForceTool.current = undefined;
+          if (forceTool) {
+            headers["X-Digi-Force-Tool"] = forceTool;
           }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
@@ -296,9 +301,10 @@ export function useEmbedDigiChat({
   }, [error, onGated]);
 
   const send = useCallback(
-    (question: string) => {
+    (question: string, opts?: { forceTool?: string }) => {
       const q = question.trim();
       if (!q || busy) return;
+      pendingForceTool.current = opts?.forceTool;
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: q }],
@@ -306,6 +312,10 @@ export function useEmbedDigiChat({
     },
     [busy, sendMessage],
   );
+
+  const reset = useCallback(() => {
+    setMessages([]);
+  }, [setMessages]);
 
   // Mid-stream: keep completed searches as running tool_call rows until
   // retrieve arrives (or the turn settles). Settling early flashes "no hits".
@@ -338,6 +348,7 @@ export function useEmbedDigiChat({
     /** Raw AI SDK error — for structured code detection (quota → BYOK). */
     rawError: error,
     send,
+    reset,
     stop: () => {
       void stop();
     },

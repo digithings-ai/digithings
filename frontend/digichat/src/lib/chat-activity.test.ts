@@ -532,6 +532,7 @@ describe("Phase 2 document fields + brief allowlist", () => {
             tier: "peer_reviewed",
             year: 2024,
             snippet: "hello",
+            body: "# note body",
             source_id: "leak",
             score: 0.99,
             body_markdown: "# secret",
@@ -546,8 +547,11 @@ describe("Phase 2 document fields + brief allowlist", () => {
         tier: "peer_reviewed",
         year: 2024,
         snippet: "hello",
+        body: "# note body",
       },
     ]);
+    expect(JSON.stringify(out!.documents)).not.toContain("body_markdown");
+    expect(JSON.stringify(out!.documents)).not.toContain("source_id");
   });
 
   it("caps snippet length", () => {

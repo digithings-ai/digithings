@@ -443,7 +443,30 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
   });
 });
 
-describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)", () => {
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", () => {
+  it("omits the header when send did not force a tool", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({});
+    expect(headers.has("X-Digi-Force-Tool")).toBe(false);
+  });
+
+  it("reads the force tool at send time, then clears it", async () => {
+    capturedTransportConfig = undefined;
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions());
+    });
+    const config = readCapturedTransportConfig();
+    if (!config || !chat) {
+      throw new Error("useEmbedDigiChat did not construct a transport");
+    }
+    chat.send("RS256 token exchange", { forceTool: "digisearch" });
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).get("X-Digi-Force-Tool")).toBe("digisearch");
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).has("X-Digi-Force-Tool")).toBe(false);
+    unmount();
+  });
+});
   // The embed widget used to gate this header on byokRequiresModel(provider),
   // so a visitor who pasted an OpenAI key and picked a model had the model
   // dropped on the floor. digigraph then answered on its own default — an

@@ -27,8 +27,10 @@ describe("ChatActivities — tool calls render in the canon grammar", () => {
     // Running status wears the pulsing ellipsis, not a tick.
     expect(html).toContain("tc-run");
     expect(html).toContain("…");
-    // Nothing to fold open yet, so the head is a plain row, not a button.
-    expect(html).not.toContain("aria-expanded");
+    // Searching… is a real body so the head is a disclosure with a caret.
+    expect(html).toContain("Searching…");
+    expect(html).toContain("aria-expanded");
+    expect(html).toContain("tc-caret");
   });
 
   it("renders a completed tool call as an expandable block with its outcome count", () => {

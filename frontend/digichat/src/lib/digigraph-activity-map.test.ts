@@ -50,6 +50,25 @@ describe("mapDigigraphTraceToSpans", () => {
     expect(JSON.stringify(spans)).not.toContain("source_id");
   });
 
+  it("maps a started tool_call trace to a running execute_tool span", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "tool_call",
+        payload: { tool: "digisearch", query: "RS256 token exchange", status: "started" },
+      },
+      "full",
+    );
+    expect(spans).toEqual([
+      {
+        operation: "execute_tool",
+        status: "started",
+        label: "digisearch",
+        toolName: "digisearch",
+        query: "RS256 token exchange",
+      },
+    ]);
+  });
+
   it("maps graph_update research_brief to brief span", () => {
     const spans = mapDigigraphTraceToSpans(
       {

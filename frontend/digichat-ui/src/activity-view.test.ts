@@ -5,6 +5,7 @@ import {
   distinctHitPath,
   liveActivityLabel,
   outcomeMeta,
+  readableSnippet,
   stripFoundryCitationMarkers,
   toCanonRows,
   WORKING_LABEL,
@@ -23,7 +24,7 @@ function onlyRow(activities: DigiChatActivity[]): CanonActivityRow {
 }
 
 describe("toCanonRows — tool calls", () => {
-  it("maps an in-flight tool_call to a running ChatToolCall row with no body", () => {
+  it("maps an in-flight tool_call to a running ChatToolCall row with a Searching… body", () => {
     const row = onlyRow([{ kind: "tool_call", name: "digivault.search", query: "auth" }]);
     expect(row).toEqual({
       kind: "tool",
@@ -31,8 +32,8 @@ describe("toCanonRows — tool calls", () => {
       name: "digivault.search",
       args: "auth",
       status: "running",
+      lines: ["Searching…"],
     });
-    // No sources and no meta => ChatToolCall renders a plain, non-expandable row.
     expect(row).not.toHaveProperty("sources");
     expect(row).not.toHaveProperty("meta");
   });
@@ -108,6 +109,34 @@ describe("toCanonRows — tool calls", () => {
     expect(rows[1]).toMatchObject({ kind: "tool", name: "Drafting the answer", status: "ok" });
     expect(rows[0]).not.toHaveProperty("sources");
   });
+
+  it("shows human labels, not raw tool ids", () => {
+    const search = onlyRow([{ kind: "tool_call", name: "digisearch", query: "jwt" }]);
+    expect(search).toMatchObject({ name: "Search the knowledge base" });
+    const docs = onlyRow([
+      { kind: "tool_result", name: "digivault_search_notes", query: "jwt", count: 0, hits: [] },
+    ]);
+    expect(docs).toMatchObject({ name: "Find original documents" });
+    const load = onlyRow([
+      { kind: "tool_result", name: "digivault_get_note", query: "1 note", count: 1, hits: [] },
+    ]);
+    expect(load).toMatchObject({ name: "Load document" });
+  });
+
+  it("does not echo the same query on the following row", () => {
+    const rows = rowsOf([
+      { kind: "tool_call", name: "digisearch", query: "how does RS256 token exchange work in the auth plane" },
+      {
+        kind: "tool_result",
+        name: "digivault_get_note",
+        query: "how does RS256 token exchange work in the auth plane",
+        count: 1,
+        hits: [],
+      },
+    ]);
+    expect(rows[0]).toHaveProperty("args");
+    expect(rows[1]).not.toHaveProperty("args");
+  });
 });
 
 describe("toCanonRows — reasoning, briefs and asides", () => {
@@ -173,6 +202,15 @@ describe("outcomeMeta", () => {
     expect(outcomeMeta(1)).toBe("1 note");
     expect(outcomeMeta(3)).toBe("3 notes");
     expect(outcomeMeta(0)).toBe("no hits");
+  });
+});
+
+describe("readableSnippet", () => {
+  it("strips markdown so a heading wall becomes a sentence", () => {
+    const raw = "# Auth\n\n**RS256** tokens. See [docs](https://example.invalid).";
+    expect(readableSnippet(raw)).toBe("Auth RS256 tokens. See docs.");
+    expect(readableSnippet(raw)).not.toContain("#");
+    expect(readableSnippet(raw)).not.toContain("**");
   });
 });
 
@@ -320,6 +358,27 @@ describe("citationHits", () => {
         { kind: "tool_call", name: "azure_ai_search", query: "auth" },
       ]),
     ).toEqual([]);
+  });
+
+  it("prefers a hit that already carries a full body", () => {
+    expect(
+      citationHits([
+        {
+          kind: "tool_result",
+          name: "digisearch",
+          query: "auth",
+          count: 1,
+          hits: [{ title: "Auth", path: "clients/x/p001", snippet: "short" }],
+        },
+        {
+          kind: "tool_result",
+          name: "digivault_get_note",
+          query: "1 note",
+          count: 1,
+          hits: [{ title: "Auth", path: "clients/x/p001", body: "# Auth\n\nFull note." }],
+        },
+      ]),
+    ).toEqual([{ title: "Auth", path: "clients/x/p001", body: "# Auth\n\nFull note." }]);
   });
 });
 

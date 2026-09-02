@@ -6,6 +6,8 @@ export type VaultHitSummary = {
   tier?: string;
   year?: number;
   snippet?: string;
+  /** Full note body from digivault_get_note — never an invented URL. */
+  body?: string;
 };
 
 export type DigiChatActivity =
@@ -58,9 +60,10 @@ export type DigiChatController = {
   busy: boolean;
   error: string | null;
   quotaPrompt?: boolean;
-  send: (question: string) => void | Promise<void>;
+  send: (question: string, opts?: { forceTool?: string }) => void | Promise<void>;
   stop?: () => void;
   onRetry?: () => void;
+  reset?: () => void;
   modelLabel?: string;
   providerIsSet?: boolean;
   openSettings?: () => void;
@@ -77,4 +80,6 @@ export type DigiChatSessionProps = DigiChatSessionConfig & {
   renderAssistantContent?: (content: string, streaming: boolean) => ReactNode;
   /** When false, skip streaming intro (e.g. resumed handoff with messages). */
   showIntro?: boolean;
+  /** /lang on the embed — the session does not own language state. */
+  onLanguageChange?: (code: string) => void;
 };

@@ -1,16 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChatStreamCursor } from "@digithings/web";
-import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { ChatStreamCursor, ChatToolCall } from "@digithings/web";
+import {
+  stripFoundryCitationMarkers,
+  chainActivities,
+  citationHits,
+} from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
 import { DigiChatWordmark } from "./components/DigiChatMark";
+import { DocumentPane } from "./components/DocumentPane";
 import { MiniMarkdown } from "./components/MiniMarkdown";
-import type { DigiChatSessionProps } from "./types";
+import {
+  isLangCode,
+  LANG_LABELS,
+  matchingSlashCommands,
+  parseSlashInput,
+  slashHelpText,
+} from "./slash-commands";
+import type { DigiChatSessionProps, VaultHitSummary } from "./types";
 import { useStreamingIntro } from "./useStreamingIntro";
 
 const MAX_INPUT_LINES = 5;
+
+function clearComposer(ta: HTMLTextAreaElement | null, setInput: (v: string) => void) {
+  setInput("");
+  if (ta) {
+    ta.style.height = "auto";
+    ta.style.overflowY = "hidden";
+  }
+}
 
 export function DigiChatSession({
   welcomeIntro,
@@ -30,6 +50,7 @@ export function DigiChatSession({
   settingsPanel,
   renderAssistantContent,
   showIntro = true,
+  onLanguageChange,
 }: DigiChatSessionProps) {
   const {
     messages,
@@ -39,21 +60,25 @@ export function DigiChatSession({
     send,
     stop,
     onRetry,
+    reset,
     providerIsSet = false,
     openSettings,
   } = chat;
 
   const [input, setInput] = useState("");
+  const [localNotes, setLocalNotes] = useState<string[]>([]);
+  const [openDoc, setOpenDoc] = useState<VaultHitSummary | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const introEnabled = showIntro && messages.length === 0 && !formReplacement;
   const { text: intro, done: introDone } = useStreamingIntro(welcomeIntro, introEnabled);
+  const slashMatches = matchingSlashCommands(input);
 
   useEffect(() => {
     const el = threadRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, busy, intro, quotaPrompt, formReplacement]);
+  }, [messages, busy, intro, quotaPrompt, formReplacement, localNotes]);
 
   function resizeTextarea(ta: HTMLTextAreaElement) {
     const style = getComputedStyle(ta);
@@ -69,15 +94,53 @@ export function DigiChatSession({
   function submit(question: string) {
     const q = question.trim();
     if (!q || busy) return;
-    void send(q);
-    setInput("");
-    if (taRef.current) {
-      taRef.current.style.height = "auto";
-      taRef.current.style.overflowY = "hidden";
+    if (q.startsWith("/")) {
+      const parsed = parseSlashInput(q);
+      if (parsed.kind === "incomplete") {
+        setInput(parsed.prefix);
+        return;
+      }
+      if (parsed.kind === "unknown") {
+        setLocalNotes((notes) => [...notes, `Unknown command \`${parsed.name}\`. Type /help.`]);
+        clearComposer(taRef.current, setInput);
+        return;
+      }
+      if (parsed.kind === "command") {
+        if (parsed.command.id === "help") {
+          setLocalNotes((notes) => [...notes, slashHelpText()]);
+          clearComposer(taRef.current, setInput);
+          return;
+        }
+        if (parsed.command.id === "new") {
+          reset?.();
+          setLocalNotes([]);
+          setOpenDoc(null);
+          clearComposer(taRef.current, setInput);
+          return;
+        }
+        if (parsed.command.id === "lang") {
+          const code = parsed.arg.trim().toLowerCase();
+          if (!isLangCode(code)) {
+            setLocalNotes((notes) => [...notes, "Use /lang en, de, it, es, or fr."]);
+          } else {
+            onLanguageChange?.(code);
+            setLocalNotes((notes) => [...notes, `Language set to ${LANG_LABELS[code]}.`]);
+          }
+          clearComposer(taRef.current, setInput);
+          return;
+        }
+        if (parsed.command.forceTool) {
+          void send(parsed.arg, { forceTool: parsed.command.forceTool });
+          clearComposer(taRef.current, setInput);
+          return;
+        }
+      }
     }
+    void send(q);
+    clearComposer(taRef.current, setInput);
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       submit(input);
@@ -89,6 +152,7 @@ export function DigiChatSession({
   const sessionClass = [
     "dc-session",
     layout === "embed" ? "dc-session-embed" : "",
+    openDoc ? "dc-session-with-pane" : "",
     className ?? "",
   ]
     .filter(Boolean)
@@ -100,6 +164,13 @@ export function DigiChatSession({
     if (!clean) return null;
     return <MiniMarkdown text={clean} />;
   };
+
+  const waitingForAssistant =
+    busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user");
+  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  const lastChain = lastAssistant ? chainActivities(lastAssistant.activities ?? []) : [];
+  const showOptimisticSearch =
+    busy && !waitingForAssistant && lastAssistant && lastChain.length === 0 && !lastAssistant.content;
 
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
@@ -130,6 +201,7 @@ export function DigiChatSession({
         </header>
       ) : null}
 
+      <div className="dc-session-main">
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
         {introEnabled && welcomeIntro ? (
           <div className="dc-msg dc-assistant dc-intro" aria-live="off">
@@ -138,8 +210,6 @@ export function DigiChatSession({
             </span>
             <div className="dc-body dc-intro-body">
               {intro}
-              {/* Shared caret primitive (#1418); keeps .dt-cur so consumer CSS
-                  and the cursor.css contract stay authoritative on ties. */}
               {!introDone && <ChatStreamCursor className="dt-cur" />}
               {introDone && showByok && !providerIsSet ? (
                 <p className="dc-intro-byok">
@@ -172,9 +242,9 @@ export function DigiChatSession({
 
         {messages.map((m, i) => {
           const streaming = busy && m.role === "assistant" && i === messages.length - 1;
-          /* Working… (and any other Foundry ack) is caret-only noise in the
-             chain — strip it. Tool rows carry their own running/ok state. */
           const chain = chainActivities(m.activities ?? []);
+          const sources = m.role === "assistant" && !streaming ? citationHits(chain) : [];
+          const emptyWait = streaming && chain.length === 0 && !m.content;
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -183,46 +253,68 @@ export function DigiChatSession({
               <div className="dc-body">
                 {m.role === "assistant" ? (
                   <>
-                    {chain.length ? <ChatActivities activities={chain} /> : null}
+                    {chain.length ? (
+                      <ChatActivities activities={chain} onOpenSource={setOpenDoc} />
+                    ) : emptyWait || (showOptimisticSearch && i === messages.length - 1) ? (
+                      <ChatToolCall name="Searching…" status="running" lines={["Searching…"]} />
+                    ) : null}
                     {renderAssistant(m.content, streaming)}
-                    {/* One bare flash for the whole turn: under an empty wait,
-                        under the growing tool chain, then under the answer as
-                        it streams. Tool rows themselves say Searching/done —
-                        no typed "Working…" / "Searching for…" line on top.
-                        Gone the moment busy clears. */}
-                    {streaming ? <ChatStreamCursor className="dt-cur" /> : null}
+                    {sources.length ? (
+                      <ul className="dc-source-cards">
+                        {sources.map((hit) => (
+                          <li key={hit.path}>
+                            <button
+                              type="button"
+                              className="dc-source-card"
+                              onClick={() => setOpenDoc(hit)}
+                            >
+                              <span className="dc-source-card-title">{hit.title}</span>
+                              {hit.path && hit.path !== hit.title ? (
+                                <span className="dc-source-card-path">{hit.path}</span>
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {!streaming && m.content ? (
+                      <CopyButton
+                        text={stripFoundryCitationMarkers(m.content)}
+                        className="dc-msg-copy"
+                        ariaLabel="Copy answer"
+                      />
+                    ) : null}
+                    {streaming && m.content ? <ChatStreamCursor className="dt-cur" /> : null}
                   </>
                 ) : (
                   m.content
                 )}
               </div>
-              {/* No copy button on embed: the clipboard API is unavailable in a
-                  cross-origin iframe, so the button silently no-ops. */}
-              {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
-                <CopyButton
-                  text={stripFoundryCitationMarkers(m.content)}
-                  className="dc-msg-copy"
-                  ariaLabel="Copy answer"
-                />
-              ) : null}
             </div>
           );
         })}
 
-        {/* useChat only appends the assistant message once the first stream
-            chunk arrives — often seconds after submit (Foundry create +
-            empty reasoning). Until then the last row is still the user turn,
-            so mount a placeholder assistant with the same bare caret. */}
-        {busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user") ? (
+        {waitingForAssistant ? (
           <div className="dc-msg dc-assistant" aria-busy="true">
             <span className="dc-who" aria-hidden="true">
               ·
             </span>
             <div className="dc-body">
-              <ChatStreamCursor className="dt-cur" />
+              <ChatToolCall name="Searching…" status="running" lines={["Searching…"]} />
             </div>
           </div>
         ) : null}
+
+        {localNotes.map((note, i) => (
+          <div key={`note-${i}`} className="dc-msg dc-assistant">
+            <span className="dc-who" aria-hidden="true">
+              ·
+            </span>
+            <div className="dc-body dc-slash-note">
+              <pre>{note}</pre>
+            </div>
+          </div>
+        ))}
 
         {showByok && quotaPrompt && !providerIsSet ? (
           <div className="dc-quota-banner" role="status">
@@ -257,8 +349,9 @@ export function DigiChatSession({
           </p>
         ) : null}
 
-        {/* BYOK terminal flow — inline in the transcript, not a separate modal */}
         {settingsPanel}
+      </div>
+      {openDoc ? <DocumentPane hit={openDoc} onClose={() => setOpenDoc(null)} /> : null}
       </div>
 
       {formReplacement ?? (
@@ -269,6 +362,25 @@ export function DigiChatSession({
             submit(input);
           }}
         >
+          {slashMatches.length ? (
+            <ul className="dc-slash" role="listbox" aria-label="Slash commands">
+              {slashMatches.map((cmd) => (
+                <li key={cmd.id}>
+                  <button
+                    type="button"
+                    className="dc-slash-item"
+                    onClick={() => {
+                      setInput(cmd.needsArg ? `${cmd.names[0]} ` : cmd.names[0]);
+                      taRef.current?.focus();
+                    }}
+                  >
+                    <span className="dc-slash-cmd">{cmd.names[0]}</span>
+                    <span className="dc-slash-hint">{cmd.hint}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <textarea
             ref={taRef}
             className="dc-textarea"
