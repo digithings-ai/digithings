@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { mergeRemoteAndLocal } from "@/lib/thread-local";
+import {
+  canFlushServerMessages,
+  localCacheIsAuthoritative,
+  mergeRemoteAndLocal,
+  withHydratedConversation,
+  type ChatThreadState,
+} from "@/lib/thread-local";
 
 const userMsg = (text: string): UIMessage =>
   ({
@@ -10,13 +16,13 @@ const userMsg = (text: string): UIMessage =>
   }) as UIMessage;
 
 describe("mergeRemoteAndLocal", () => {
-  it("prefers server title and keeps local messages when ids match", () => {
+  it("trusts local messages only when local updatedAt is at least as fresh as server", () => {
     const merged = mergeRemoteAndLocal(
       [
         {
           id: "a",
           title: "Server title",
-          updatedAt: "2025-01-02T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
         },
       ],
       [
@@ -34,6 +40,30 @@ describe("mergeRemoteAndLocal", () => {
     expect(merged[0].remote).toBe(true);
     expect(merged[0].hydrated).toBe(true);
     expect(merged[0].hydrateVersion).toBe(1);
+  });
+
+  it("refuses stale local cache when server updatedAt is newer", () => {
+    const merged = mergeRemoteAndLocal(
+      [
+        {
+          id: "a",
+          title: "Server title",
+          updatedAt: "2025-01-02T00:00:00.000Z",
+        },
+      ],
+      [
+        {
+          id: "a",
+          title: "Local old",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+          messages: [userMsg("stale")],
+        },
+      ]
+    );
+    expect(merged[0].messages).toEqual([]);
+    expect(merged[0].hydrated).toBe(false);
+    expect(merged[0].hydrateVersion).toBe(0);
+    expect(merged[0].title).toBe("Server title");
   });
 
   it("marks remote threads without local messages as not hydrated", () => {
@@ -86,5 +116,51 @@ describe("mergeRemoteAndLocal", () => {
       []
     );
     expect(merged.map((m) => m.id)).toEqual(["newer", "older"]);
+  });
+});
+
+describe("localCacheIsAuthoritative", () => {
+  it("fails closed on unparseable timestamps", () => {
+    expect(
+      localCacheIsAuthoritative("not-a-date", {
+        updatedAt: "2025-01-01T00:00:00.000Z",
+        messages: [userMsg("x")],
+      })
+    ).toBe(false);
+  });
+});
+
+describe("canFlushServerMessages", () => {
+  it("refuses remote threads that have not been hydrated", () => {
+    expect(canFlushServerMessages({ remote: true, hydrated: false })).toBe(false);
+  });
+
+  it("allows remote hydrated and local-only threads", () => {
+    expect(canFlushServerMessages({ remote: true, hydrated: true })).toBe(true);
+    expect(canFlushServerMessages({ remote: false, hydrated: false })).toBe(true);
+    expect(canFlushServerMessages({ remote: false, hydrated: true })).toBe(true);
+  });
+});
+
+describe("withHydratedConversation", () => {
+  it("marks the thread hydrated and bumps hydrateVersion", () => {
+    const base: ChatThreadState = {
+      id: "t1",
+      title: "Old",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+      messages: [],
+      remote: true,
+      hydrated: false,
+      hydrateVersion: 0,
+    };
+    const next = withHydratedConversation(base, {
+      title: "Server title",
+      messages: [userMsg("kept")],
+    });
+    expect(next.hydrated).toBe(true);
+    expect(next.hydrateVersion).toBe(1);
+    expect(next.title).toBe("Server title");
+    expect(next.messages).toHaveLength(1);
+    expect(canFlushServerMessages(next)).toBe(true);
   });
 });
