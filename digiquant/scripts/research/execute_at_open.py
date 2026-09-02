@@ -32,6 +32,7 @@ def _ensure_importable() -> None:
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
 from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
@@ -177,15 +178,20 @@ def _event_kind_from_order_delta(
     fill: Any,
     weight_pct: Optional[float],
     prev_weight_pct: Optional[float],
-) -> str:
-    """Name the event from the prior→target weight delta that sized the order.
+) -> PositionEventKind:
+    """Name the event from the prior-book → target weight delta.
 
-    Lot residual is fill-vs-intent reconciliation for OPEN/EXIT (a sell that
-    consumes every share is still an EXIT even when H7 said trim — #1743) and
-    for quantity-only targets with no approved weight. ADD vs TRIM vs HOLD
-    comes from that same delta, never from a later ``positions`` join. A
-    0.0pp display move cannot be ADD/TRIM.
+    Lot residual still names OPEN vs ADD and EXIT vs TRIM when the approved
+    weight is missing or when a same-run chain closes a position (#1743).
+    ADD vs TRIM vs HOLD comes from the book-to-book delta. A 0.0pp display
+    move cannot be ADD/TRIM.
+
+    The booked fill side always wins on disagreement: a sell may only be
+    TRIM/EXIT/HOLD and a buy only ADD/OPEN/HOLD. Extreme mark-to-market drift
+    can flip the book-to-book sign relative to the order; never write that
+    contradiction into ``position_events``.
     """
+    lot_kind: PositionEventKind
     if fill.is_sell:
         lot_kind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
     else:
@@ -196,11 +202,20 @@ def _event_kind_from_order_delta(
     if _desk_weight_unchanged(weight_pct, prev):
         return "HOLD"
     chg = float(weight_pct) - prev
+    named: PositionEventKind
     if chg > 0:
-        return "ADD"
-    if chg < 0:
-        return "TRIM"
-    return "HOLD"
+        named = "ADD"
+    elif chg < 0:
+        named = "TRIM"
+    else:
+        named = "HOLD"
+    if named == "HOLD":
+        return named
+    if fill.is_sell and named == "ADD":
+        return lot_kind
+    if (not fill.is_sell) and named == "TRIM":
+        return lot_kind
+    return named
 
 
 def _parse_pct(value: Any) -> Optional[float]:
@@ -372,8 +387,9 @@ def _hold_events_for_positions_not_in_rebalance(
 
     ``prior_date`` is the comparison book for ``prev_weight_pct``. When omitted it is
     ``_prior_book_date(execution_date)`` (legacy prose callers). The ledger path must
-    pass ``_prior_book_date(run_date)`` so HOLD uses the same prior as fill projection
-    and does not display a later book's move.
+    pass ``_prior_book_date(run_date)`` so HOLD uses the same prior *book date* as
+    fill projection and does not display a later book's move. The displayed pp is
+    book-to-book, not the drifted H8 mark used to size the fill.
     """
     res = (
         _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id,rationale"))
@@ -683,9 +699,10 @@ def build_events_from_paper_fills(
             ticker=fill.symbol,
             event=event_kind,
             weight_pct=weight_pct,
-            # Display-only: the pre-commit ``positions`` book (``_prior_book_date(run_d)``),
-            # which is the same prior H8/ledger used to size the ``OrderIntent``. Never the
-            # ``run_date`` book H9 already wrote before the open.
+            # Display-only: the pre-commit ``positions`` book (``_prior_book_date(run_d)``).
+            # Same prior *book date* as the OrderIntent, undrifted — the shown pp is
+            # book-to-book, not the marked-to-market H8 weights that sized the fill.
+            # Never the ``run_date`` book H9 already wrote before the open.
             prev_weight_pct=prev_weight_pct,
             price=float(fill.price),
             reason=(

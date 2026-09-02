@@ -2550,8 +2550,10 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 `prev_weight_pct` is the **pre-commit** `positions` book — `_prior_book_date(run_date)`,
 never `_prior_book_date(execution_d)`. H9 writes today's targets onto `run_date` before
 the open, so an execution-day lookback finds that already-committed new book and every
-ADD/TRIM looks like +0.0pp (house post-2026-08-27). The same prior sizes `OrderIntent`
-and HOLD continuity; `position_events` must not invent a second labeling system.
+ADD/TRIM looks like +0.0pp (house post-2026-08-27). The same prior *book date*
+sizes `OrderIntent` and HOLD continuity; the displayed pp is book-to-book (undrifted
+pre-commit weights), not the marked-to-market H8 snapshot that sized the fill.
+`position_events` must not invent a second labeling system.
 
 - **ADD/TRIM come from that prior→target delta.** Lot residual still names OPEN vs ADD
   and EXIT vs TRIM when the approved weight is missing or when a same-run chain closes

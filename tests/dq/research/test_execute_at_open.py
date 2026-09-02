@@ -831,8 +831,8 @@ class TestBuildEventsFromPaperFills:
         by_ticker = _events_by_ticker(events)
         assert {t: e["event"] for t, e in by_ticker.items()} == {
             "FXI": "OPEN",  # prior book 0 → target 7
-            "UUP": "TRIM",  # 39.9226 → 25; lot residual is not a second label
-            "XLF": "ADD",  # 10.1141 → 15
+            "UUP": "ADD",  # buy fill; book-to-book 39.9226 → 25 would be TRIM, fill side wins
+            "XLF": "TRIM",  # sell fill; book-to-book 10.1141 → 15 would be ADD, fill side wins
             "DBO": "EXIT",  # quantity-only sell that consumed the lot
         }
 
@@ -1186,10 +1186,10 @@ class TestBuildEventsOpeningSnapshotSeed:
         assert declined == ""
         assert events is not None
         by_ticker = _events_by_ticker(events)
-        # Seed kept residual non-zero so this is not EXIT (#2589). ADD vs TRIM follows
-        # the prior→target weight delta (10 → 15), not the H7 action string.
+        # Seed kept residual non-zero so this is not EXIT (#2589). A sell fill
+        # may only be TRIM/EXIT/HOLD even when the book-to-book delta is +pp.
         assert by_ticker["XLF"]["event"] != "EXIT"
-        assert by_ticker["XLF"]["event"] == "ADD"
+        assert by_ticker["XLF"]["event"] == "TRIM"
 
 
 class TestAnAllRejectedDayIsNotAQuietDay:
