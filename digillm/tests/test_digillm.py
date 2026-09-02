@@ -183,6 +183,66 @@ def test_default_client_cached_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
         assert c is not a
 
 
+def test_house_proxy_routes_registered_prefix_to_default_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House traffic is service → digillm → LiteLLM (#3414).
+
+    ``OPENAI_API_BASE`` is the proxy; registered prefixes must not skip it (or
+    ``anthropic/claude-sonnet-5`` would demand ``ANTHROPIC_API_KEY``). BYOK is unchanged.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-operator")
+    made: dict[str, Any] = {}
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.update(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        digillm.get_client_for_model("anthropic/claude-sonnet-5")
+    assert made["api_key"] == "sk-proxy"
+    assert made["base_url"] == "http://127.0.0.1:4000/v1"
+
+
+def test_house_proxy_does_not_require_vendor_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+    with patch.object(client_mod, "OpenAI", return_value=MagicMock()):
+        digillm.get_client_for_model("gemini/gemini-2.5-flash")
+
+
+def test_byok_still_uses_vendor_when_house_proxy_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-5")
+    assert made[0]["api_key"] == "sk-ant-user"
+    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_completion_sends_full_model_id_through_house_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LiteLLM ``model_list`` keys are the caller ids (e.g. ``anthropic/claude-sonnet-5``)."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "anthropic/claude-sonnet-5"
+
+
 def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     client_mod.register_provider("acme", "https://acme.test/v1", "ACME_API_KEY")
     try:

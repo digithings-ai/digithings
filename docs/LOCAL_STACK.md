@@ -1,6 +1,6 @@
 # Local full stack (digikey + services + LiteLLM + digichat)
 
-Single reference for running **digikey**, **LiteLLM** (and optional **Ollama**), **digigraph**, **digiquant**, **digisearch**, **digismith**, and **digichat** on loopback with **JWT auth** aligned across services.
+Single reference for running **digikey**, **LiteLLM** (and optional **Ollama** / **OmniRoute**), **digigraph**, **digiquant**, **digisearch**, **digismith**, and **digichat** on loopback with **JWT auth** aligned across services.
 
 ## Architecture
 
@@ -18,6 +18,7 @@ flowchart TB
     DS[digisearch_8002]
     SM[digismith_8003]
     Oll[Ollama_optional]
+    Omni[OmniRoute_optional]
   end
   Browser --> Next
   Next -->|"JWT_or_legacy_key"| DG
@@ -27,6 +28,7 @@ flowchart TB
   DG --> DS
   DG --> SM
   LM --> Oll
+  LM --> Omni
   DG --> DK
   DQ --> DK
   DS --> DK
@@ -160,6 +162,8 @@ curl -s -X POST http://127.0.0.1:8002/query \
 ## Optional MCP
 
 **digisearch MCP:** `docker compose --profile digisearch-mcp up` — port **8765** ([docker-compose.yml](../docker-compose.yml)). IDE/OpenClaw clients; digigraph + digichat normally use HTTP.
+
+**OmniRoute (optional):** `docker compose --profile omniroute up` — loopback **20128**. Requires `OMNIROUTE_AUTH_PASSWORD` (do not use the vendor default). Overlay: [config/litellm.omniroute.yaml](../config/litellm.omniroute.yaml). House DigiQuant pins stay on OpenRouter slugs in `config/litellm.yaml`. See [providers/omniroute.md](providers/omniroute.md).
 
 ## Security notes
 

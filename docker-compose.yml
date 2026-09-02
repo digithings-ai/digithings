@@ -287,6 +287,25 @@ services:
       retries: 5
       start_period: 5s
 
+  # ─── OmniRoute (optional profile: omniroute) — #3413 ───
+  # Off by default. Self-host OpenAI-compat at 127.0.0.1:20128/v1.
+  # Do not enable cookie / MITM / web-session providers. Do not cut DigiQuant
+  # house pins over to OmniRoute. See docs/providers/omniroute.md.
+  omniroute:
+    image: diegosouzapw/omniroute:latest
+    container_name: digi-omniroute
+    profiles:
+      - omniroute
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      - PORT=20128
+      # Fail closed if the operator does not override the vendor default password.
+      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:?set_OMNIROUTE_AUTH_PASSWORD}
+      - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
+    volumes:
+      - omniroute_data:/app/data
+
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
@@ -460,6 +479,7 @@ services:
 
 volumes:
   ollama_data:
+  omniroute_data:
   digichat_pg:
   digikey_data:
   digisearch_chroma:

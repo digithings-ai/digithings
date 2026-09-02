@@ -148,7 +148,7 @@ class TemplateSynthesizer:
 
 
 DEFAULT_SYNTHESIS_MODEL_ENV = "DIGISKILLS_SYNTHESIS_MODEL"
-DEFAULT_SYNTHESIS_MODEL = "openrouter/auto"
+DEFAULT_SYNTHESIS_MODEL = "openai/gpt-oss-20b:free"
 
 # Keeps the synthesis prompt bounded regardless of how large the ingested corpus is.
 _MAX_PROMPT_CHARS = 60_000

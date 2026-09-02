@@ -29,11 +29,11 @@ _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 # for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
 _CHEAP_PHASE_MODELS = frozenset(
     {
-        "openrouter/deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
+        "deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
         # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
         # deliberate decision, not a drive-by.
-        "openrouter/meta-llama/llama-4-maverick",
+        "meta-llama/llama-4-maverick",
     }
 )
 
@@ -43,33 +43,33 @@ _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
         # stays on balanced (grok-4.6 is quality-only). gemini-3.7-flash: native PDF/
         # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
         # reasoning bump, gate-proven and also pooled on quality.
-        "openrouter/google/gemini-3.7-flash",
-        "openrouter/openai/gpt-5.6-luna",
-        "openrouter/x-ai/grok-4.3",
-        "openrouter/deepseek/deepseek-v4-pro",  # #1622
+        "google/gemini-3.7-flash",
+        "openai/gpt-5.6-luna",
+        "x-ai/grok-4.3",
+        "deepseek/deepseek-v4-pro",  # #1622
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
         # #2368 (2026-08-14): latest-generation flagship slugs per vendor.
-        "openrouter/openai/gpt-5.6-sol",
-        "openrouter/anthropic/claude-sonnet-5",
-        "openrouter/x-ai/grok-4.6",
+        "openai/gpt-5.6-sol",
+        "anthropic/claude-sonnet-5",
+        "x-ai/grok-4.6",
     }
 )
 
 # Web-search/grounding pools keep ``:online`` (built-in plugin) and perplexity (native).
 _WEB_SEARCH_MODELS = frozenset(
     {
-        "openrouter/perplexity/sonar",
-        "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
-        "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/google/gemini-3.7-flash:online",
-        "openrouter/openai/gpt-5.6-luna:online",
-        "openrouter/openai/gpt-5.6-sol:online",
-        "openrouter/anthropic/claude-sonnet-5:online",
-        "openrouter/x-ai/grok-4.6:online",
+        "perplexity/sonar",
+        "deepseek/deepseek-v4-flash:online",  # #1622
+        "meta-llama/llama-4-maverick:online",
+        "google/gemini-3.7-flash:online",
+        "openai/gpt-5.6-luna:online",
+        "openai/gpt-5.6-sol:online",
+        "anthropic/claude-sonnet-5:online",
+        "x-ai/grok-4.6:online",
     }
 )
 
@@ -137,7 +137,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     ).split()
     for ticker in watchlist:
         model = get_model_for_phase(f"portfolio/deliberation-{ticker}")
-        assert model == "openrouter/deepseek/deepseek-v4-flash", (
+        assert model == "deepseek/deepseek-v4-flash", (
             f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable "
             "deepseek-v4-flash"
         )
@@ -157,7 +157,7 @@ def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> No
     """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     model = get_model_for_phase("master-digest")
-    assert model == "openrouter/deepseek/deepseek-v4-flash"
+    assert model == "deepseek/deepseek-v4-flash"
     assert is_tool_use_capable_model(model)
 
 
@@ -169,7 +169,6 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     model = get_model_for_phase("portfolio/asset-analyst-AAPL")
     assert model is not None
-    assert model.startswith("openrouter/")
     assert model in _CHEAP_PHASE_MODELS
     assert is_tool_use_capable_model(model)
 
@@ -231,6 +230,9 @@ def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
 ) -> None:
     monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
     monkeypatch.delenv("OPENROUTER_COST_QUALITY_TRADEOFF", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     tier = apply_digiquant_openrouter_env()
     assert tier == "cheap"
@@ -241,6 +243,20 @@ def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
     assert "openai" not in pool
     assert "anthropic" not in pool
     assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "10"
+    assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-or-test"
+
+
+@pytest.mark.unit
+def test_apply_does_not_override_existing_openai_api_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-litellm")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    apply_digiquant_openrouter_env()
+    assert os.environ["OPENAI_API_BASE"] == "http://127.0.0.1:4000/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-litellm"
 
 
 @pytest.mark.unit
@@ -269,7 +285,6 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     model = get_grounding_model(segment="macro")
     assert model is not None
-    assert model.startswith("openrouter/")
     assert is_web_search_capable_model(model)
     cfg = model_config._load_digiquant_models()
     assert model in cfg.tiers["cheap"].web_search_models
@@ -280,7 +295,7 @@ def test_grounding_model_may_be_perplexity(monkeypatch: pytest.MonkeyPatch) -> N
     """Perplexity is valid for grounding-only paths, not tool phases."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     cfg = model_config._load_digiquant_models()
-    assert "openrouter/perplexity/sonar" in cfg.tiers["cheap"].web_search_models
+    assert "perplexity/sonar" in cfg.tiers["cheap"].web_search_models
     # Deterministic pick for a segment that hashes to perplexity
     for segment in ("macro", "bonds", "perplexity-grounding", "alt-sentiment-news"):
         model = get_grounding_model(segment=segment)
@@ -553,7 +568,6 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     assert get_digiquant_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
     assert model is not None
-    assert model.startswith("openrouter/")
     assert not is_flagship_openrouter_model(model)
     # Phase models are bare (tool-capable); grounding is a separate web-search pre-pass.
     assert ":online" not in model
@@ -631,9 +645,11 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase(slug)
-    assert resolved is not None, f"phase slug {slug!r} is unmapped — falls back to dev model (401)"
-    assert resolved.startswith("openrouter/"), (
-        f"phase slug {slug!r} resolved to non-OpenRouter model {resolved!r}"
+    assert resolved is not None, (
+        f"phase slug {slug!r} is unmapped — falls back to a dev model (401)"
+    )
+    assert "/" in resolved and not resolved.startswith(("ollama/", "gemini/", "xai/")), (
+        f"phase slug {slug!r} resolved to non-house OpenRouter slug {resolved!r}"
     )
 
 

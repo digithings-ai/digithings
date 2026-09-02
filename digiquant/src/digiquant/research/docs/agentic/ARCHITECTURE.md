@@ -631,7 +631,7 @@ Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capabili
 
 Pools rebalanced in #2368 (2026-08-14, grok-4.6 added 2026-08-15; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` on cheap; `grok-4.3` (untouched by #2368; `grok-4.6` is the current xAI flagship but reserved for quality), `gpt-5.6-luna`, `gemini-3.7-flash`, and `deepseek-v4-pro` on balanced; `grok-4.6`/`gpt-5.6-sol`/`claude-sonnet-5`/`deepseek-v4-pro` on quality. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
 
-> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `openrouter/deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
+> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
 
 ### Observed token volume
 
@@ -657,10 +657,10 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 phase_models:
   # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
-  portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash   # trailing '-' = prefix match
+  portfolio/deliberation-: deepseek/deepseek-v4-flash   # trailing '-' = prefix match
   # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
   # removes the #1559 64k synthesis ceiling (#1622).
-  master-digest: openrouter/deepseek/deepseek-v4-flash
+  master-digest: deepseek/deepseek-v4-flash
 ```
 
 Model strings with a registered `provider/` prefix (`openrouter/`, `gemini/`, `xai/`) route to the corresponding OpenAI-compatible client via digillm's provider registry (`digillm/src/digillm/client.py`); all other strings go through the legacy Ollama path.
@@ -701,7 +701,7 @@ Pin a phase via the `phase_models` block in `config/model_modes.yaml` (exact slu
 
 ```yaml
 phase_models:
-  master-digest: "openrouter/deepseek/deepseek-v4-flash"   # pin synthesis to one pool model
+  master-digest: "deepseek/deepseek-v4-flash"   # pin synthesis to one pool model
   "sector-":     "openrouter/mistralai/mistral-large"  # prefix match: sector-tech, sector-energy, …
 ```
 

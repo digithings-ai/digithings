@@ -75,7 +75,7 @@ make pull-ghcr && make up-ghcr
 
 See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
 
-**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). Research/portfolio phases route on **pinned** per-capability models selected from `config/digiquant_models.yaml` per the active `OLYMPUS_MODEL_TIER` (`openrouter/openrouter/auto` is reserved for the OpenRouter diagnostic scripts, not phase routing and not grounding — grounding resolves a web-search-capable model from the active tier via `get_grounding_model()` — see `digiquant/src/digiquant/research/docs/RUNBOOK.md` "OpenRouter model tiers"). Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
+**LLM routing:** house traffic is service → digillm → LiteLLM (`OPENAI_API_BASE`). Digicon/digiquant phase pins in `config/digiquant_models.yaml` are unprefixed OpenRouter slugs listed in `config/litellm.yaml`. Set `OPENROUTER_API_KEY` on the LiteLLM process (sign up at https://openrouter.ai). `openrouter/auto` is reserved for diagnostic scripts, not phase routing. Grounding uses unprefixed `:online` / `perplexity/*` slugs via `get_grounding_model()`. Optional OmniRoute is off by default — see `docs/providers/omniroute.md`. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):
 
