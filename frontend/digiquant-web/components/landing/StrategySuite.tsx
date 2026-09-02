@@ -50,6 +50,7 @@ import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsh
 import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
 import { isDcaIndexEntry, isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "@/components/tearsheet/dca";
 import { BacktestOnlyChip } from "@/components/tearsheet/honesty";
+import { suiteSlotState } from "./suite-slot";
 
 const SUITE_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper", "btc_sdca"] as const;
 
@@ -283,6 +284,42 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
   );
 }
 
+/** Index resolved with no row — honest empty, not a KPI skeleton that looks loaded. */
+function UnpublishedStrategyCard({ strategyId }: { strategyId: string }) {
+  const dca = strategyId.includes("sdca");
+  const label = strategyDisplayName(strategyId);
+  return (
+    <>
+      <header className="ts-header">
+        <div className="ts-header-main">
+          <h3 className="ts-h1 ts-h1-with-logo">
+            <span className="dqss-logo-skeleton" aria-hidden="true" />
+            <span>{label}</span>
+          </h3>
+          <div className="ts-meta">
+            <StrategyTypeChip strategy={strategyId} />
+            {dca ? (
+              <>
+                <BacktestOnlyChip />
+                <SignalDelayChip days={3} />
+              </>
+            ) : null}
+          </div>
+        </div>
+      </header>
+      <p className="ts-status ts-status-error" role="status">
+        Could not load tearsheet data — the live store returned nothing. Charts and KPIs
+        appear after the operator publishes this backtest.
+      </p>
+      <p className="dqss-preview-footer">
+        <Link className="dqss-full" href={`/strategies/${strategyId}`}>
+          View full tearsheet ↗
+        </Link>
+      </p>
+    </>
+  );
+}
+
 /**
  * One tearsheet preview card body — header, current position, KPIs,
  * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
@@ -477,6 +514,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
 
 export function StrategySuite() {
   const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+  const [indexResolved, setIndexResolved] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -484,6 +522,7 @@ export function StrategySuite() {
       if (!alive) return;
       const ordered = orderSuite(all);
       setStrategies(ordered);
+      setIndexResolved(true);
       prefetchAllTearsheets(ordered.map((s) => s.strategy));
     });
     return () => {
@@ -528,10 +567,13 @@ export function StrategySuite() {
         >
           {SUITE_ORDER.map((id) => {
             const entry = strategies.find((s) => s.strategy === id);
+            const slot = suiteSlotState(indexResolved, entry);
             return (
               <DeckCard key={id} className="dqss-card">
-                {entry ? (
+                {slot === "ready" && entry ? (
                   <StrategyTearsheetCard entry={entry} />
+                ) : slot === "unpublished" ? (
+                  <UnpublishedStrategyCard strategyId={id} />
                 ) : (
                   <StrategyCardSkeleton strategyId={id} />
                 )}

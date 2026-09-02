@@ -56,6 +56,7 @@ import type { StatsPivot } from "./pivot-stats";
 import { RemainingBookNotes, StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
 import { StrategyTypeChip } from "./strategy-type-chip";
+import { showsIndicatorsTab } from "./strategy-kinds";
 import { chartFullSpan, clipOhlc, clipPoints, closesFromOhlc } from "./series";
 import {
   avgTradePct,
@@ -275,15 +276,18 @@ export function TearsheetView({ slug }: { slug: string }) {
   const hasPrice = chartOhlc.length > 0;
   const hasRails = chartRails.length > 0 && chartSpot.length > 0;
   const hasRisk = chartRisk.length > 0;
-  const hasIndicators = chartIndicators.length > 0;
+  const showIndicatorsTab = showsIndicatorsTab(slug, data?.kind);
   const hasAccum = chartCost.length > 0 || chartAllocated.length > 0;
   const hasLump = chartLump.length > 0;
   const showTradeKpis = data ? hasTradeKpis(data.win_rate_pct, data.profit_factor) : true;
   const dcaBook = data ? isDcaTearsheet(data) : false;
   const scale: ChartScale = scaleOverride ?? (dcaBook ? "log" : "linear");
+  const defaultChartTab: ChartTab =
+    dcaBook && hasAccum ? "accumulation" : hasRails ? "rails" : hasPrice ? "price" : "equity";
   const chartTab =
-    chartTabPick ??
-    (dcaBook && hasAccum ? "accumulation" : hasRails ? "rails" : hasPrice ? "price" : "equity");
+    chartTabPick === "indicators" && !showIndicatorsTab
+      ? defaultChartTab
+      : (chartTabPick ?? defaultChartTab);
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, data?.label);
@@ -319,13 +323,13 @@ export function TearsheetView({ slug }: { slug: string }) {
     if (hasPrice) opts.push({ value: "price", label: "Price" });
     if (hasRails) opts.push({ value: "rails", label: "Rails" });
     if (hasRisk) opts.push({ value: "risk", label: dcaBook ? "Risk" : "Index" });
-    if (hasIndicators) opts.push({ value: "indicators", label: "Indicators" });
+    if (showIndicatorsTab) opts.push({ value: "indicators", label: "Indicators" });
     if (hasAccum && !dcaBook) opts.push({ value: "accumulation", label: "Allocation" });
     opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
     if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
     opts.push({ value: "matrix", label: "Matrix" });
     return opts;
-  }, [dcaBook, hasAccum, hasIndicators, hasPrice, hasRails, hasRisk, showTradeKpis]);
+  }, [dcaBook, hasAccum, hasPrice, hasRails, hasRisk, showIndicatorsTab, showTradeKpis]);
 
   const railsOverlay: OverlaySeries[] = useMemo(() => {
     if (!hasRails) return [];
@@ -648,7 +652,7 @@ export function TearsheetView({ slug }: { slug: string }) {
               </div>
             </div>
           ) : null}
-          {hasIndicators ? (
+          {showIndicatorsTab ? (
             <div className="ts-tab-pane" hidden={chartTab !== "indicators"}>
               <PrintHeading>Underlying indicators</PrintHeading>
               <div className="ts-indicator-grid">
