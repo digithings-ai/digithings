@@ -2,13 +2,16 @@
 
 **Cost:** operator-run. OmniRoute is a self-hosted OpenAI-compatible gateway. It is **off by default** in digithings — same pattern as optional local Ollama, not an always-on compose service.
 
-**Best for:** operators who already self-host OmniRoute and want LiteLLM to treat it as one more upstream. It does **not** replace OpenRouter as the house default, and this change does **not** cut DigiQuant pins over to OmniRoute.
+**Best for:** operators who already self-host OmniRoute and want LiteLLM to treat it as one more upstream. It does **not** replace OpenRouter as the house default, and this change does **not** cut digiquant pins over to OmniRoute.
 
 **Follow-up (not this work):** compare house OpenRouter `:free` routing vs the OmniRoute hosted catalog on the models we actually pin, then decide whether a bake-off issue is worth filing. Do not swap pins here.
 
 ## Guardrails
 
-- Override the vendor default admin/master password. Compose refuses to start unless `OMNIROUTE_AUTH_PASSWORD` is set.
+- Override the vendor default admin/master password. `docker compose config` (no
+  profile) must succeed without it — Compose interpolates inactive profiles.
+  `docker compose --profile omniroute up` fails closed via `omniroute-auth-guard`
+  if `OMNIROUTE_AUTH_PASSWORD` is empty or `CHANGEME`.
 - Secrets via env only (`.env`, never committed).
 - **Do not** enable OmniRoute cookie / MITM / web-session providers.
 - Bind loopback only (`127.0.0.1:20128`).
@@ -42,7 +45,7 @@ model_list:
       api_key: os.environ/OMNIROUTE_API_KEY
 ```
 
-House DigiQuant pins stay on the OpenRouter slugs in `config/litellm.yaml`. Point a *caller* at `omniroute/auto` only if you are experimenting — do not change `config/olympus_models.yaml` for this.
+House pins in `config/olympus_models.yaml` stay on the OpenRouter slugs in `config/litellm.yaml`. Point a *caller* at `omniroute/auto` only if you are experimenting — do not change `config/olympus_models.yaml` for this.
 
 When LiteLLM runs in Docker and OmniRoute is on the host, use `http://host.docker.internal:20128/v1` as `OMNIROUTE_API_BASE`.
 
@@ -57,5 +60,5 @@ curl -sS http://127.0.0.1:20128/v1/models \
 
 - Cookie / MITM / TPROXY / web-session OmniRoute providers
 - Replacing OpenRouter as the default house upstream
-- Cutting DigiQuant phase or grounding pins over to OmniRoute
+- Cutting house phase or grounding pins in `config/olympus_models.yaml` over to OmniRoute
 - Cost bake-off vs OpenRouter `:free` (follow-up on the models we pin)
