@@ -37,7 +37,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     macd_confluence_z,
     price_oscillator_z_vectors,
     rsi_confluence_z,
-    sma_band_z,
+    sma_band_confluence_z,
 )
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
@@ -343,11 +343,13 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="sma_band",
-                z=sma_band_z(
+                z=sma_band_confluence_z(
                     dates,
                     btc_price,
-                    window=spec.sma_band_window,
-                    min_samples=spec.sma_band_min_samples,
+                    slow_window=spec.sma_band_window,
+                    slow_min_samples=spec.sma_band_min_samples,
+                    fast_window=spec.sma_band_fast_window,
+                    fast_min_samples=spec.sma_band_fast_min_samples,
                 ),
                 weight=enabled["sma_band"],
             )

@@ -27,6 +27,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     monthly_rsi_z,
     rsi_confluence_z,
     rsi_deadzone_z,
+    sma_band_confluence_z,
     sma_band_z,
     weekly_macd_z,
     weekly_rsi_z,
@@ -634,6 +635,138 @@ class TestSmaBandZ:
         spiked[-1] = 400.0
         z2 = sma_band_z(dates, pl.Series(spiked), window=90, min_samples=30)
         assert z1[100] == pytest.approx(z2[100])
+
+
+class TestSmaBandConfluenceZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 500
+        dates = _dates(n)
+        close = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        z = sma_band_confluence_z(dates, close)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        n = 500
+        dates = _dates(n)
+        close = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        slow = sma_band_z(dates, close, window=90, min_samples=30)
+        fast = sma_band_z(dates, close, window=20, min_samples=10)
+        confluence = sma_band_confluence_z(dates, close)
+
+        saw_agreement = saw_disagreement = False
+        for s, f, c in zip(slow.to_list(), fast.to_list(), confluence.to_list(), strict=True):
+            if s is None and f is None:
+                assert c is None
+                continue
+            if s is None:
+                assert c == pytest.approx(f, abs=1e-9)
+                continue
+            if f is None:
+                assert c == pytest.approx(s, abs=1e-9)
+                continue
+            base = 0.5 * s + 0.5 * f
+            if s == 0.0 or f == 0.0:
+                expected = base
+            elif (s > 0) == (f > 0):
+                frac = min(abs(s), abs(f)) / max(abs(s), abs(f))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
+
+    def test_agreement_amplifies_beyond_simple_average(self) -> None:
+        n = 500
+        dates = _dates(n)
+        close = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        slow = sma_band_z(dates, close, window=90, min_samples=30).to_list()
+        fast = sma_band_z(dates, close, window=20, min_samples=10).to_list()
+        confluence = sma_band_confluence_z(dates, close).to_list()
+        checked = 0
+        for s, f, c in zip(slow, fast, confluence, strict=True):
+            if s is None or f is None or s == 0.0 or f == 0.0:
+                continue
+            base = 0.5 * s + 0.5 * f
+            if (s > 0) == (f > 0) and abs(base) < 2.9:
+                assert abs(c) >= abs(base) - 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced an unclipped agreement case"
+
+    def test_disagreement_damps_toward_zero(self) -> None:
+        n = 500
+        dates = _dates(n)
+        close = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        slow = sma_band_z(dates, close, window=90, min_samples=30).to_list()
+        fast = sma_band_z(dates, close, window=20, min_samples=10).to_list()
+        confluence = sma_band_confluence_z(dates, close).to_list()
+        checked = 0
+        for s, f, c in zip(slow, fast, confluence, strict=True):
+            if s is None or f is None or s == 0.0 or f == 0.0:
+                continue
+            if (s > 0) != (f > 0):
+                base = 0.5 * s + 0.5 * f
+                assert abs(c) <= abs(base) + 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced a disagreement case"
+
+    def test_fast_leg_params_change_output(self) -> None:
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 - 0.3 * i + 20.0 * math.sin(i / 6.0) for i in range(n)])
+        z_short = sma_band_confluence_z(dates, close, fast_window=10, fast_min_samples=5).to_list()
+        z_long = sma_band_confluence_z(dates, close, fast_window=30, fast_min_samples=15).to_list()
+        assert z_short != z_long
+
+
+class TestOscillatorSpecSmaBandFast:
+    def test_default_matches_shorter_window(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.sma_band_fast_window == 20
+        assert spec.sma_band_fast_min_samples == 10
+
+    def test_fast_independent_of_slow(self) -> None:
+        spec = SdcaOscillatorSpec(sma_band_window=120, sma_band_fast_window=15)
+        assert spec.sma_band_window == 120
+        assert spec.sma_band_fast_window == 15
+
+    def test_fast_min_samples_must_not_exceed_window(self) -> None:
+        with pytest.raises(ValueError, match="sma_band_fast_min_samples"):
+            SdcaOscillatorSpec(sma_band_fast_window=10, sma_band_fast_min_samples=20)
 
 
 class TestCatalogWiring:

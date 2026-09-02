@@ -26,7 +26,12 @@ register against recent normal rather than an absolute, secular-scale
 threshold. ``SdcaCompositeWeights`` still defaults both to 0; published
 ``btc_sdca`` turns them on in ``settings.json``.
 
-``sma_band`` stays a 90-day SMA z (Bollinger-style), **not** Mayer / 200w
+``sma_band`` is the same agreement-scaled pattern applied to the Bollinger-
+style SMA z (``sma_band_confluence_z``): a slow leg (``sma_band_z`` at the
+original 90-day window, long-term) blended with a fast leg (``sma_band_z``
+at a shorter window, medium-term). Unlike RSI/MACD, both legs share one
+formula — timeframe separation comes purely from window length, since
+``sma_band_z`` never aggregates to weekly bars. Still **not** Mayer / 200w
 SMA (*r* ≈ 0.84 vs power-law ``valuation_z``). Alpha vs the power-law
 median is collinear with ``valuation_z`` and is omitted — see
 ``btc_richer_composite.json``.
@@ -58,6 +63,11 @@ _MACD_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _MACD_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 _SMA_BAND_WINDOW = 90
 _SMA_BAND_MIN_SAMPLES = 30
+_SMA_BAND_FAST_WINDOW = 20
+_SMA_BAND_FAST_MIN_SAMPLES = 10
+_SMA_BAND_CONFLUENCE_SLOW_WEIGHT = 0.5
+_SMA_BAND_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_SMA_BAND_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 _SIGMA_FLOOR = 1e-12
 _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
 _RSI_DEAD_LOW = 30.0
@@ -87,6 +97,10 @@ class SdcaOscillatorSpec(BaseModel):
     ``macd_daily_fast``/``macd_daily_slow`` are its medium-term daily leg,
     rolling-z-scored over ``macd_daily_z_window`` (``macd_daily_min_samples``
     warmup) instead of the weekly leg's absolute top-cap thresholds.
+    ``sma_band_window``/``sma_band_min_samples`` are the long-term slow leg
+    of the SMA-band confluence (``sma_band_confluence_z``);
+    ``sma_band_fast_window``/``sma_band_fast_min_samples`` are its
+    medium-term fast leg — same formula, shorter window.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -103,6 +117,8 @@ class SdcaOscillatorSpec(BaseModel):
     macd_daily_min_samples: int = Field(_MACD_DAILY_Z_MIN_SAMPLES, ge=2)
     sma_band_window: int = Field(_SMA_BAND_WINDOW, ge=2)
     sma_band_min_samples: int = Field(_SMA_BAND_MIN_SAMPLES, ge=2)
+    sma_band_fast_window: int = Field(_SMA_BAND_FAST_WINDOW, ge=2)
+    sma_band_fast_min_samples: int = Field(_SMA_BAND_FAST_MIN_SAMPLES, ge=2)
 
     @model_validator(mode="after")
     def _ordered(self) -> SdcaOscillatorSpec:
@@ -114,6 +130,8 @@ class SdcaOscillatorSpec(BaseModel):
             raise ValueError("macd_daily_min_samples must be <= macd_daily_z_window")
         if self.sma_band_min_samples > self.sma_band_window:
             raise ValueError("sma_band_min_samples must be <= sma_band_window")
+        if self.sma_band_fast_min_samples > self.sma_band_fast_window:
+            raise ValueError("sma_band_fast_min_samples must be <= sma_band_fast_window")
         return self
 
 
@@ -567,6 +585,37 @@ def sma_band_z(
     return (-raw).clip(-3.0, 3.0).alias("sma_band")
 
 
+def sma_band_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    slow_window: int = _SMA_BAND_WINDOW,
+    slow_min_samples: int = _SMA_BAND_MIN_SAMPLES,
+    fast_window: int = _SMA_BAND_FAST_WINDOW,
+    fast_min_samples: int = _SMA_BAND_FAST_MIN_SAMPLES,
+    slow_weight: float = _SMA_BAND_CONFLUENCE_SLOW_WEIGHT,
+    agreement_boost: float = _SMA_BAND_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _SMA_BAND_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Slow (long-term) + fast (medium-term) SMA-band z, amplified on agreement.
+
+    Same agreement-scaled blend as ``rsi_confluence_z``/``macd_confluence_z``.
+    Unlike RSI/MACD, both legs are the same daily Bollinger-style z
+    (``sma_band_z``) — timeframe separation comes purely from window length,
+    since ``sma_band_z`` never aggregates to weekly bars in the first place.
+    """
+    slow = sma_band_z(dates, close, window=slow_window, min_samples=slow_min_samples)
+    fast = sma_band_z(dates, close, window=fast_window, min_samples=fast_min_samples)
+    return agreement_scaled_blend(
+        slow,
+        fast,
+        long_term_weight=slow_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="sma_band",
+    )
+
+
 def price_oscillator_z_vectors(
     dates: pl.Series,
     close: pl.Series,
@@ -591,11 +640,13 @@ def price_oscillator_z_vectors(
             daily_z_window=spec.macd_daily_z_window,
             daily_min_samples=spec.macd_daily_min_samples,
         ).to_list(),
-        "sma_band": sma_band_z(
+        "sma_band": sma_band_confluence_z(
             dates,
             close,
-            window=spec.sma_band_window,
-            min_samples=spec.sma_band_min_samples,
+            slow_window=spec.sma_band_window,
+            slow_min_samples=spec.sma_band_min_samples,
+            fast_window=spec.sma_band_fast_window,
+            fast_min_samples=spec.sma_band_fast_min_samples,
         ).to_list(),
     }
 
@@ -615,6 +666,7 @@ __all__ = [
     "price_oscillator_z_vectors",
     "rsi_confluence_z",
     "rsi_deadzone_z",
+    "sma_band_confluence_z",
     "sma_band_z",
     "weekly_macd_z",
     "weekly_rsi_z",

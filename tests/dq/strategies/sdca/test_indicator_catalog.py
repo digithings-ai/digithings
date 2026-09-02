@@ -28,6 +28,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     macd_confluence_z,
     rsi_confluence_z,
+    sma_band_confluence_z,
 )
 from digiquant.strategies.sdca.risk_index import build_risk_index
 from digiquant.strategies.sdca.valuation import valuation_z_score
@@ -224,6 +225,27 @@ class TestBuildExtraIndicators:
         assert len(extras) == 1
         expected = macd_confluence_z(
             dates, close, weekly_fast=8, weekly_slow=21, daily_fast=5, daily_slow=10
+        )
+        assert extras[0].z.to_list() == expected.to_list()
+
+    def test_sma_band_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """sma_band now wires to sma_band_confluence_z (slow+fast), not the raw single-window z."""
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        spec = SdcaOscillatorSpec(
+            sma_band_window=80, sma_band_fast_window=15, sma_band_fast_min_samples=8
+        )
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(valuation=1.0, sma_band=1.0),
+            ExtraIndicatorSources(),
+            oscillators=spec,
+        )
+        assert len(extras) == 1
+        expected = sma_band_confluence_z(
+            dates, close, slow_window=80, fast_window=15, fast_min_samples=8
         )
         assert extras[0].z.to_list() == expected.to_list()
 
