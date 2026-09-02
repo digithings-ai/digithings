@@ -863,14 +863,18 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Model routing:** callers must pass a concrete model string. DigiQuant
+- **Model routing:** callers must pass a concrete model string. digiquant
   phase pins in `config/olympus_models.yaml` are **unprefixed** OpenRouter
   slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
-  service → digillm → LiteLLM. Registered prefixes (`openrouter/`, `gemini/`,
-  `anthropic/`, `xai/`) are BYOK/diagnostics only. `openrouter/auto` remains
-  the diagnostic auto-router id (preflight structured-output probe), not a
-  phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs via
-  `get_grounding_model()`. Optional OmniRoute is a separate overlay
+  always caller → digillm → LiteLLM → vendor (or the user's OpenAI-compat
+  endpoint). House keys and BYOK keys both stay on that path: BYOK is passed
+  through LiteLLM as request `api_key` / `api_base` (clientside credentials),
+  not as a direct vendor HTTP client. Registered prefixes (`openrouter/`,
+  `gemini/`, `anthropic/`, `xai/`) are leftover caller spellings and
+  no-proxy diagnostics — they do not skip `OPENAI_API_BASE`. `openrouter/auto`
+  remains the diagnostic auto-router id (preflight structured-output probe),
+  not a phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs
+  via `get_grounding_model()`. Optional OmniRoute is a separate overlay
   (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
   default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).

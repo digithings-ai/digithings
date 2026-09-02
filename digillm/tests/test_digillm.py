@@ -189,7 +189,7 @@ def test_house_proxy_routes_registered_prefix_to_default_client(
     """House traffic is service → digillm → LiteLLM (#3414).
 
     ``OPENAI_API_BASE`` is the proxy; registered prefixes must not skip it (or
-    ``anthropic/claude-sonnet-5`` would demand ``ANTHROPIC_API_KEY``). BYOK is unchanged.
+    ``anthropic/claude-sonnet-5`` would demand ``ANTHROPIC_API_KEY``).
     """
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
     monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
@@ -213,7 +213,26 @@ def test_house_proxy_does_not_require_vendor_key(monkeypatch: pytest.MonkeyPatch
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
-def test_byok_still_uses_vendor_when_house_proxy_set(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("model", "user_key", "user_base"),
+    [
+        ("openrouter/openai/gpt-4o-mini", "sk-or-user", "https://openrouter.ai/api/v1"),
+        (
+            "gemini/gemini-2.5-flash",
+            "sk-gem-user",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        ),
+        ("anthropic/claude-sonnet-5", "sk-ant-user", "https://api.anthropic.com/v1/"),
+        ("xai/grok-4", "sk-xai-user", "https://api.x.ai/v1"),
+    ],
+)
+def test_prefixed_byok_does_not_bypass_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+    user_key: str,
+    user_base: str,
+) -> None:
+    """Prefixed BYOK must stay on LiteLLM — no direct vendor HTTP (#3414)."""
     monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
     made: list[dict[str, Any]] = []
@@ -223,10 +242,70 @@ def test_byok_still_uses_vendor_when_house_proxy_set(monkeypatch: pytest.MonkeyP
         return MagicMock()
 
     with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok(user_key, user_base):
+            digillm.get_client_for_model(model)
+    assert made, "expected a LiteLLM client construction"
+    assert made[0]["api_key"] == "sk-proxy"
+    assert made[0]["base_url"] == "http://127.0.0.1:4000/v1"
+    assert all("openrouter.ai" not in (kw.get("base_url") or "") for kw in made)
+    assert all("api.anthropic.com" not in (kw.get("base_url") or "") for kw in made)
+    assert all("generativelanguage.googleapis.com" not in (kw.get("base_url") or "") for kw in made)
+    assert all("api.x.ai" not in (kw.get("base_url") or "") for kw in made)
+
+
+def test_unprefixed_byok_does_not_bypass_litellm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://litellm:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-user-openai", "https://api.openai.com/v1"):
+            digillm.get_client()
+            digillm.get_client_for_model("gpt-4o-mini")
+    assert made
+    assert all(kw["api_key"] == "sk-proxy" for kw in made)
+    assert all(kw["base_url"] == "http://litellm:4000/v1" for kw in made)
+
+
+def test_prefixed_byok_completion_passes_user_key_through_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LiteLLM clientside credentials: house Bearer, user key in extra_body."""
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
         with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
-            digillm.get_client_for_model("anthropic/claude-sonnet-5")
-    assert made[0]["api_key"] == "sk-ant-user"
-    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+            digillm.completion("anthropic/claude-sonnet-5", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    extra = kwargs.get("extra_body") or {}
+    assert kwargs["model"] == "anthropic/claude-sonnet-5"
+    assert extra["api_key"] == "sk-ant-user"
+    assert extra["api_base"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_prefixed_byok_stream_passes_user_key_through_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proxy")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = iter([])
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            client_mod._stream_completion_one_turn(
+                "openrouter/openai/gpt-4o-mini",
+                [{"role": "user", "content": "hi"}],
+            )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    extra = kwargs.get("extra_body") or {}
+    assert extra["api_key"] == "sk-or-user"
+    assert extra["api_base"].rstrip("/") == "https://openrouter.ai/api/v1"
 
 
 def test_completion_sends_full_model_id_through_house_proxy(

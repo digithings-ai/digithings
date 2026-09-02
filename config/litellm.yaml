@@ -13,126 +13,149 @@ model_list:
     litellm_params:
       model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: gpt-4o-mini
     litellm_params:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # ── OpenRouter house slugs (#3414) ────────────────────────────────────────
-  # DigiQuant pins and dogfood send unprefixed OpenRouter ids (no openrouter/).
+  # digiquant pins and dogfood send unprefixed OpenRouter ids (no openrouter/).
   # LiteLLM maps each model_name to openrouter/<slug>. Prefixed aliases remain
   # so leftover openrouter/… callers still resolve. No default marketplace.
+  # BYOK: configurable_clientside_auth_params lets extra_body api_key/api_base
+  # pass the user's token through this proxy (no vendor-direct skip).
   # Do not add router fallbacks here (strict routing; see litellm.dev.yaml).
   - model_name: openai/gpt-oss-20b:free
     litellm_params: &or_gpt_oss_20b_free
       model: openrouter/openai/gpt-oss-20b:free
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/openai/gpt-oss-20b:free
     litellm_params: *or_gpt_oss_20b_free
   - model_name: openrouter/auto
     litellm_params:
       model: openrouter/openrouter/auto
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: deepseek/deepseek-v4-flash
     litellm_params: &or_ds_v4_flash
       model: openrouter/deepseek/deepseek-v4-flash
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/deepseek/deepseek-v4-flash
     litellm_params: *or_ds_v4_flash
   - model_name: deepseek/deepseek-v4-flash:online
     litellm_params: &or_ds_v4_flash_online
       model: openrouter/deepseek/deepseek-v4-flash:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/deepseek/deepseek-v4-flash:online
     litellm_params: *or_ds_v4_flash_online
   - model_name: deepseek/deepseek-v4-pro
     litellm_params: &or_ds_v4_pro
       model: openrouter/deepseek/deepseek-v4-pro
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/deepseek/deepseek-v4-pro
     litellm_params: *or_ds_v4_pro
   - model_name: meta-llama/llama-4-maverick
     litellm_params: &or_llama4_mav
       model: openrouter/meta-llama/llama-4-maverick
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/meta-llama/llama-4-maverick
     litellm_params: *or_llama4_mav
   - model_name: meta-llama/llama-4-maverick:online
     litellm_params: &or_llama4_mav_online
       model: openrouter/meta-llama/llama-4-maverick:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/meta-llama/llama-4-maverick:online
     litellm_params: *or_llama4_mav_online
   - model_name: google/gemini-3.7-flash
     litellm_params: &or_gem_37_flash
       model: openrouter/google/gemini-3.7-flash
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/google/gemini-3.7-flash
     litellm_params: *or_gem_37_flash
   - model_name: google/gemini-3.7-flash:online
     litellm_params: &or_gem_37_flash_online
       model: openrouter/google/gemini-3.7-flash:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/google/gemini-3.7-flash:online
     litellm_params: *or_gem_37_flash_online
   - model_name: openai/gpt-5.6-luna
     litellm_params: &or_gpt56_luna
       model: openrouter/openai/gpt-5.6-luna
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/openai/gpt-5.6-luna
     litellm_params: *or_gpt56_luna
   - model_name: openai/gpt-5.6-luna:online
     litellm_params: &or_gpt56_luna_online
       model: openrouter/openai/gpt-5.6-luna:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/openai/gpt-5.6-luna:online
     litellm_params: *or_gpt56_luna_online
   - model_name: openai/gpt-5.6-sol
     litellm_params: &or_gpt56_sol
       model: openrouter/openai/gpt-5.6-sol
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/openai/gpt-5.6-sol
     litellm_params: *or_gpt56_sol
   - model_name: openai/gpt-5.6-sol:online
     litellm_params: &or_gpt56_sol_online
       model: openrouter/openai/gpt-5.6-sol:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/openai/gpt-5.6-sol:online
     litellm_params: *or_gpt56_sol_online
   - model_name: x-ai/grok-4.3
     litellm_params: &or_grok43
       model: openrouter/x-ai/grok-4.3
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/x-ai/grok-4.3
     litellm_params: *or_grok43
   - model_name: x-ai/grok-4.6
     litellm_params: &or_grok46
       model: openrouter/x-ai/grok-4.6
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/x-ai/grok-4.6
     litellm_params: *or_grok46
   - model_name: x-ai/grok-4.6:online
     litellm_params: &or_grok46_online
       model: openrouter/x-ai/grok-4.6:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/x-ai/grok-4.6:online
     litellm_params: *or_grok46_online
   - model_name: anthropic/claude-sonnet-5
     litellm_params: &or_sonnet5
       model: openrouter/anthropic/claude-sonnet-5
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/anthropic/claude-sonnet-5
     litellm_params: *or_sonnet5
   - model_name: anthropic/claude-sonnet-5:online
     litellm_params: &or_sonnet5_online
       model: openrouter/anthropic/claude-sonnet-5:online
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/anthropic/claude-sonnet-5:online
     litellm_params: *or_sonnet5_online
   - model_name: perplexity/sonar
     litellm_params: &or_pplx_sonar
       model: openrouter/perplexity/sonar
       api_key: os.environ/OPENROUTER_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: openrouter/perplexity/sonar
     litellm_params: *or_pplx_sonar
 
@@ -146,6 +169,7 @@ model_list:
       model: openai/deepseek-v4-flash:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # GLM-5.1: 744B MoE (40B active), 198K ctx, SWE-Bench Pro 58.4%, strong agentic
   - model_name: ollama-cloud/glm-5.1:cloud
@@ -153,6 +177,7 @@ model_list:
       model: openai/glm-5.1:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Kimi K2.6: 256K ctx, multimodal, 300-agent swarms, design-to-code
   - model_name: ollama-cloud/kimi-k2.6:cloud
@@ -160,6 +185,7 @@ model_list:
       model: openai/kimi-k2.6:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Devstral 2: 123B, SWE-bench 72.2%, Mistral coding specialist
   - model_name: ollama-cloud/devstral-2:123b-cloud
@@ -167,6 +193,7 @@ model_list:
       model: openai/devstral-2:123b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Nemotron-3 Super: 120B MoE (12B active), NVIDIA, multi-agent, 256K–1M ctx
   - model_name: ollama-cloud/nemotron-3-super:cloud
@@ -174,6 +201,7 @@ model_list:
       model: openai/nemotron-3-super:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Qwen3 Coder 480B: maximum coding capacity
   - model_name: ollama-cloud/qwen3-coder:480b-cloud
@@ -181,6 +209,7 @@ model_list:
       model: openai/qwen3-coder:480b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # DeepSeek V3.2: strong reasoning + agent tasks (previous gen, kept for fallback)
   - model_name: ollama-cloud/deepseek-v3.2:cloud
@@ -188,6 +217,7 @@ model_list:
       model: openai/deepseek-v3.2:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # ── medium tier ────────────────────────────────────────────────────────────
   # Qwen3-Next 80B: efficient 80B MoE, hybrid GatedDeltaNet+Attention, 256K ctx — new default medium
@@ -196,6 +226,7 @@ model_list:
       model: openai/qwen3-next:80b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # MiniMax M2.7: SWE-Pro 56.22%, professional productivity (Excel/PPT/Word), 200K ctx
   - model_name: ollama-cloud/minimax-m2.7:cloud
@@ -203,6 +234,7 @@ model_list:
       model: openai/minimax-m2.7:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # GLM-4.7: SWE-bench 73.8%, UI generation, math/reasoning — intermediate GLM
   - model_name: ollama-cloud/glm-4.7:cloud
@@ -210,6 +242,7 @@ model_list:
       model: openai/glm-4.7:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Qwen3-Coder-Next: 80B MoE (3B active), pure coding + agentic, efficient
   - model_name: ollama-cloud/qwen3-coder-next:cloud
@@ -217,6 +250,7 @@ model_list:
       model: openai/qwen3-coder-next:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Devstral Small 2: 24B, SWE-Bench 65.8%, Mistral coding specialist, Apache 2.0
   - model_name: ollama-cloud/devstral-small-2:24b-cloud
@@ -224,6 +258,7 @@ model_list:
       model: openai/devstral-small-2:24b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Nemotron-3 Nano: 30B MoE+Mamba-2, 1M ctx, NVIDIA, reasoning toggle
   - model_name: ollama-cloud/nemotron-3-nano:30b-cloud
@@ -231,6 +266,7 @@ model_list:
       model: openai/nemotron-3-nano:30b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Gemma 4 31B: Google, multimodal (vision+audio), 256K ctx
   - model_name: ollama-cloud/gemma4:31b-cloud
@@ -238,6 +274,7 @@ model_list:
       model: openai/gemma4:31b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Qwen3.5: 397B MoE, 201 languages, 256K ctx (retained for compatibility)
   - model_name: ollama-cloud/qwen3.5:cloud
@@ -245,6 +282,7 @@ model_list:
       model: openai/qwen3.5:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # ── test tier ──────────────────────────────────────────────────────────────
   # RNJ-1 8B: fast, code + STEM, agentic
@@ -253,6 +291,7 @@ model_list:
       model: openai/rnj-1:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Ministral 3B: edge/fast, vision, function calling
   - model_name: ollama-cloud/ministral-3:cloud
@@ -260,6 +299,7 @@ model_list:
       model: openai/ministral-3:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # ── legacy (kept for transition; retire after 2026-Q3) ─────────────────────
   - model_name: ollama-cloud/glm-5:cloud
@@ -267,26 +307,31 @@ model_list:
       model: openai/glm-5:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: ollama-cloud/kimi-k2.5:cloud
     litellm_params:
       model: openai/kimi-k2.5:cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: ollama-cloud/deepseek-v3.1:671b-cloud
     litellm_params:
       model: openai/deepseek-v3.1:671b-cloud
       api_base: https://ollama.com/v1
       api_key: os.environ/OLLAMA_API_KEY
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
   # Ollama local (Docker: ollama:11434)
   - model_name: ollama/qwen3:8b
     litellm_params:
       model: ollama/qwen3:8b
       api_base: http://ollama:11434
+      configurable_clientside_auth_params: ["api_key", "api_base"]
   - model_name: ollama/deepseek-r1:14b
     litellm_params:
       model: ollama/deepseek-r1:14b
       api_base: http://ollama:11434
+      configurable_clientside_auth_params: ["api_key", "api_base"]
 
 router_settings:
   routing_strategy: simple-shuffle

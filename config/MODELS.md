@@ -7,7 +7,7 @@
 
 | File | Role |
 |------|------|
-| `config/litellm.yaml` | LiteLLM router: house DigiQuant OpenRouter slugs, OpenAI, Ollama Cloud, local Ollama. Add new entries here. |
+| `config/litellm.yaml` | LiteLLM router: house digiquant OpenRouter slugs, OpenAI, Ollama Cloud, local Ollama. Add new entries here. |
 | `config/litellm.omniroute.yaml` | Optional OmniRoute overlay — **not** loaded by default (#3413). |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
 
