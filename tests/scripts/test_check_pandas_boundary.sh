@@ -47,7 +47,7 @@ assert_contains() {
   fi
 }
 
-FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/pandas-boundary.XXXXXX")"
+FIXTURE="$(mktemp -d)"
 cleanup() {
   rm -rf "$FIXTURE"
 }
@@ -81,7 +81,7 @@ PY
 # ── 1. Missing ripgrep fails closed (#3107) ──────────────────────────────────
 # Host images often ship /usr/bin/rg. Build a PATH with only the coreutils the
 # gate needs so `command -v rg` fails without breaking `dirname`/`pwd`/`cd`.
-EMPTY_BIN="$(mktemp -d "$FIXTURE/empty-bin.XXXXXX")"
+EMPTY_BIN="$FIXTURE/empty-bin"; mkdir -p "$EMPTY_BIN"
 for cmd in dirname pwd; do
   src="$(command -v "$cmd")"
   ln -s "$src" "$EMPTY_BIN/$cmd"
