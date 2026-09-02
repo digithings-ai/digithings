@@ -75,6 +75,8 @@ import json
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -154,6 +156,13 @@ BUGBOT_CHECK = "Cursor Bugbot"
 # output anyone can read afterwards.
 AGENT_REVIEW_MARKER = "<!-- in-session-review -->"
 
+# GraphQL aliases per query. GitHub's complexity budget is 5000; 25 PRs with
+# labels/reviews/comments/checks stays well under it and turns a 169-PR promotion
+# range into a handful of round-trips instead of one `gh pr view` each.
+_GRAPHQL_PR_BATCH = 25
+_GRAPHQL_SHA_BATCH = 50
+_REST_POOL = 8
+
 # `reviewed:owner` exists because of a hole the gate's own first run exposed. In a
 # single-maintainer org every PR is authored by the same account, so GitHub blocks
 # self-approval; with Bugbot out of quota the only satisfiable hatch was
@@ -181,6 +190,248 @@ def _gh_json(args: list[str]) -> dict | list:
     return json.loads(_run(["gh", *args]))
 
 
+def _gh_graphql(query: str, variables: dict | None = None) -> dict:
+    """One `gh api graphql` round-trip. Tests mock this; CI never hits live GitHub."""
+    args = ["api", "graphql", "-f", f"query={query}"]
+    if variables:
+        args.extend(["-F", f"variables={json.dumps(variables)}"])
+    data = _gh_json(args)
+    if not isinstance(data, dict):
+        raise json.JSONDecodeError("graphql envelope was not an object", "", 0)
+    return data
+
+
+def _chunks(items: list, size: int) -> list[list]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+@lru_cache(maxsize=1)
+def _repo_slug() -> str:
+    return _run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+
+
+def _repo_owner_name() -> tuple[str, str]:
+    owner, name = _repo_slug().split("/", 1)
+    return owner, name
+
+
+def baseline_ancestor_shas(baseline: str) -> set[str]:
+    """Every commit at or before `baseline` — one `git rev-list`, not N merge-bases."""
+    return set(_run(["git", "rev-list", baseline]).split())
+
+
+_PR_GRAPHQL_FIELDS = """
+number
+title
+labels(first: 40) { nodes { name } }
+reviews(last: 80) { nodes { state author { login } } }
+comments(last: 100) { nodes { author { login } body createdAt url } }
+timelineItems(last: 80, itemTypes: [LABELED_EVENT]) {
+  nodes {
+    ... on LabeledEvent {
+      createdAt
+      actor { login }
+      label { name }
+    }
+  }
+}
+commits(last: 1) {
+  nodes {
+    commit {
+      statusCheckRollup {
+        contexts {
+          ... on CheckRun { name conclusion }
+          ... on StatusContext { context state }
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def _pr_batch_query(numbers: list[int]) -> str:
+    owner, name = _repo_owner_name()
+    aliases = " ".join(
+        f"p{n}: pullRequest(number: {n}) {{ {_PR_GRAPHQL_FIELDS} }}" for n in numbers
+    )
+    return f'query {{ repository(owner: "{owner}", name: "{name}") {{ {aliases} }} }}'
+
+
+def _sha_batch_query(shas: list[str]) -> str:
+    owner, name = _repo_owner_name()
+    aliases = " ".join(
+        (
+            f'c{i}: object(expression: "{sha}") {{ '
+            "... on Commit { associatedPullRequests(first: 10) { nodes { number mergedAt } } } }"
+        )
+        for i, sha in enumerate(shas)
+    )
+    return f'query {{ repository(owner: "{owner}", name: "{name}") {{ {aliases} }} }}'
+
+
+def _author_login(node: dict | None) -> str:
+    return ((node or {}).get("author") or (node or {}).get("user") or {}).get("login") or ""
+
+
+def _agent_review_from_comments(comments: list[dict]) -> dict | None:
+    latest = None
+    for comment in comments:
+        if AGENT_REVIEW_MARKER not in (comment.get("body") or ""):
+            continue
+        latest = {
+            "actor": _author_login(comment) or "unknown",
+            "at": comment.get("createdAt") or comment.get("created_at") or "",
+            "url": comment.get("url") or comment.get("html_url") or "",
+        }
+    return latest
+
+
+def _owner_review_from_events(events: list[dict], label: str) -> dict | None:
+    latest = None
+    for event in events:
+        event_name = event.get("event")
+        label_name = (event.get("label") or {}).get("name")
+        if event_name and event_name != "labeled":
+            continue
+        if label_name != label:
+            continue
+        actor = (event.get("actor") or {}).get("login") or "unknown"
+        latest = {"actor": actor, "at": event.get("createdAt") or event.get("created_at") or ""}
+    return latest
+
+
+def _apply_reviews_checks_comments(
+    state: dict,
+    *,
+    reviews: list[dict],
+    checks: list[dict],
+    comments: list[dict],
+) -> dict:
+    state["approvals"] = [
+        _author_login(review)
+        for review in reviews
+        if review.get("state") == "APPROVED"
+        and _author_login(review) not in BOT_AUTHORS
+        and _author_login(review)
+    ]
+    agent_tool: list[dict] = []
+    for check in checks:
+        name = check.get("name") or check.get("context") or ""
+        conclusion = (
+            check.get("conclusion") or check.get("state") or check.get("status") or ""
+        ).upper()
+        if name == BUGBOT_CHECK:
+            state["bugbot"] = conclusion
+        elif name in REVIEW_BOT_CHECK_NAMES and conclusion == "SUCCESS":
+            agent_tool.append({"bot": name, "via": "check"})
+    for review in reviews:
+        login = _author_login(review)
+        if login in REVIEW_BOTS and review.get("state") in REVIEW_STATES:
+            agent_tool.append({"bot": login, "via": "review"})
+    for comment in comments:
+        login = _author_login(comment)
+        body = comment.get("body") or ""
+        if login in CODERABBIT_LOGINS and coderabbit_comment_is_completed_review(body):
+            agent_tool.append({"bot": "coderabbitai", "via": "comment"})
+    state["agent_tool"] = agent_tool
+    if AGENT_REVIEW_LABEL in state["labels"]:
+        state["agent_review"] = _agent_review_from_comments(comments)
+    return state
+
+
+def state_from_graphql_pr(node: dict) -> dict:
+    """Map a GraphQL pullRequest node onto the dict `verdict_for` already judges."""
+    labels = {
+        item.get("name")
+        for item in ((node.get("labels") or {}).get("nodes") or [])
+        if item.get("name")
+    }
+    reviews = (node.get("reviews") or {}).get("nodes") or []
+    comments = (node.get("comments") or {}).get("nodes") or []
+    labeled = (node.get("timelineItems") or {}).get("nodes") or []
+    commits = (node.get("commits") or {}).get("nodes") or []
+    rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") if commits else None) or {}
+    checks = rollup.get("contexts") or []
+    state = {
+        "labels": labels,
+        "approvals": [],
+        "bugbot": None,
+        "title": node.get("title") or "",
+        "owner_review": None,
+        "agent_tool": [],
+        "agent_review": None,
+    }
+    _apply_reviews_checks_comments(state, reviews=reviews, checks=checks, comments=comments)
+    if OWNER_REVIEW_LABEL in labels:
+        state["owner_review"] = _owner_review_from_events(labeled, OWNER_REVIEW_LABEL)
+    return state
+
+
+def prefetch_pr_states(numbers: list[int], cache: dict[int, dict], invalid: set[int]) -> None:
+    """Fill `cache` / `invalid` for distinct PR numbers via batched GraphQL."""
+    pending = [n for n in dict.fromkeys(numbers) if n not in cache and n not in invalid]
+    if not pending:
+        return
+    try:
+        for chunk in _chunks(pending, _GRAPHQL_PR_BATCH):
+            payload = _gh_graphql(_pr_batch_query(chunk))
+            repo = (payload.get("data") or {}).get("repository") or {}
+            for number in chunk:
+                node = repo.get(f"p{number}")
+                if node is None:
+                    invalid.add(number)
+                else:
+                    cache[number] = state_from_graphql_pr(node)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+        _prefetch_pr_states_rest(pending, cache, invalid)
+
+
+def _prefetch_pr_states_rest(numbers: list[int], cache: dict[int, dict], invalid: set[int]) -> None:
+    def one(number: int) -> tuple[int, dict | None]:
+        try:
+            return number, _pr_review_state(number)
+        except subprocess.CalledProcessError:
+            return number, None
+
+    with ThreadPoolExecutor(max_workers=_REST_POOL) as pool:
+        futures = [pool.submit(one, number) for number in numbers]
+        for future in as_completed(futures):
+            number, state = future.result()
+            if state is None:
+                invalid.add(number)
+            else:
+                cache[number] = state
+
+
+def prefetch_associated_prs(shas: list[str]) -> dict[str, int | None]:
+    """Merged source PR per SHA, one GraphQL query per chunk of commits."""
+    pending = list(dict.fromkeys(shas))
+    if not pending:
+        return {}
+    try:
+        found: dict[str, int | None] = {}
+        for chunk in _chunks(pending, _GRAPHQL_SHA_BATCH):
+            payload = _gh_graphql(_sha_batch_query(chunk))
+            repo = (payload.get("data") or {}).get("repository") or {}
+            for index, sha in enumerate(chunk):
+                found[sha] = _merged_number_from_associated(repo.get(f"c{index}"))
+        return found
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError):
+        with ThreadPoolExecutor(max_workers=_REST_POOL) as pool:
+            return dict(zip(pending, pool.map(associated_pr_number, pending), strict=True))
+
+
+def _merged_number_from_associated(node: dict | None) -> int | None:
+    if not node:
+        return None
+    pulls = (node.get("associatedPullRequests") or {}).get("nodes") or []
+    for pull in pulls:
+        if pull.get("mergedAt") and pull.get("number") is not None:
+            return int(pull["number"])
+    return None
+
+
 def parse_pr_number(subject: str) -> int | None:
     """Return the PR number a commit subject names, or None."""
     for pattern in (_SQUASH_PR, _MERGE_PR):
@@ -190,8 +441,10 @@ def parse_pr_number(subject: str) -> int | None:
     return None
 
 
-def associated_pr_number(sha: str) -> int | None:
+def associated_pr_number(sha: str, associated: dict[str, int | None] | None = None) -> int | None:
     """Return the merged source PR associated with an unnumbered commit."""
+    if associated is not None and sha in associated:
+        return associated[sha]
     try:
         pulls = _gh_json(["api", f"repos/{_repo_slug()}/commits/{sha}/pulls"])
     except (subprocess.CalledProcessError, json.JSONDecodeError):
@@ -207,7 +460,11 @@ def is_merge_commit(parents: str) -> bool:
 
 
 def resolve_pr_number(
-    subject: str, sha: str, cache: dict[int, dict], invalid: set[int] | None = None
+    subject: str,
+    sha: str,
+    cache: dict[int, dict],
+    invalid: set[int] | None = None,
+    associated: dict[str, int | None] | None = None,
 ) -> int | None:
     """The PR whose review state judges this commit, or None if it has none.
 
@@ -234,7 +491,10 @@ def resolve_pr_number(
                 invalid.add(number)
             number = None
     if number is None:
-        number = associated_pr_number(sha)
+        if associated is not None and sha in associated:
+            number = associated[sha]
+        else:
+            number = associated_pr_number(sha)
     return number
 
 
@@ -266,7 +526,7 @@ def coderabbit_comment_is_completed_review(body: str) -> bool:
 
 
 def _pr_review_state(number: int) -> dict:
-    """How a PR was reviewed. Network-bound; one call per distinct PR."""
+    """How a PR was reviewed. REST fallback when GraphQL batching is unavailable."""
     data = _gh_json(
         [
             "pr",
@@ -277,44 +537,26 @@ def _pr_review_state(number: int) -> dict:
         ]
     )
     labels = {label["name"] for label in data.get("labels") or []}
-    approvals = [
-        review["author"]["login"]
-        for review in data.get("reviews") or []
-        if review.get("state") == "APPROVED"
-        and (review.get("author") or {}).get("login") not in BOT_AUTHORS
-        and (review.get("author") or {}).get("login")
-    ]
-    bugbot = None
-    agent_tool: list[dict] = []
-    for check in data.get("statusCheckRollup") or []:
-        name = check.get("name") or check.get("context") or ""
-        conclusion = (check.get("conclusion") or check.get("status") or "").upper()
-        if name == BUGBOT_CHECK:
-            bugbot = conclusion
-        elif name in REVIEW_BOT_CHECK_NAMES and conclusion == "SUCCESS":
-            agent_tool.append({"bot": name, "via": "check"})
-    for review in data.get("reviews") or []:
-        login = (review.get("author") or {}).get("login") or ""
-        if login in REVIEW_BOTS and review.get("state") in REVIEW_STATES:
-            agent_tool.append({"bot": login, "via": "review"})
-    for comment in data.get("comments") or []:
-        login = (comment.get("author") or {}).get("login") or ""
-        body = comment.get("body") or ""
-        if login in CODERABBIT_LOGINS and coderabbit_comment_is_completed_review(body):
-            agent_tool.append({"bot": "coderabbitai", "via": "comment"})
+    comments = data.get("comments") or []
     state = {
         "labels": labels,
-        "approvals": approvals,
-        "bugbot": bugbot,
+        "approvals": [],
+        "bugbot": None,
         "title": data.get("title") or "",
         "owner_review": None,
-        "agent_tool": agent_tool,
+        "agent_tool": [],
         "agent_review": None,
     }
-    # Only pay for the extra calls when the claim is actually being made.
-    if OWNER_REVIEW_LABEL in labels:
+    _apply_reviews_checks_comments(
+        state,
+        reviews=data.get("reviews") or [],
+        checks=data.get("statusCheckRollup") or [],
+        comments=comments,
+    )
+    # Extra REST only when the hatch is claimed and the first page did not prove it.
+    if OWNER_REVIEW_LABEL in labels and not state.get("owner_review"):
         state["owner_review"] = label_provenance(number, OWNER_REVIEW_LABEL)
-    if AGENT_REVIEW_LABEL in labels:
+    if AGENT_REVIEW_LABEL in labels and not state.get("agent_review"):
         state["agent_review"] = agent_review_comment(number)
     return state
 
@@ -329,15 +571,7 @@ def agent_review_comment(number: int) -> dict | None:
         comments = _gh_json(["api", "--paginate", f"repos/{_repo_slug()}/issues/{number}/comments"])
     except (subprocess.CalledProcessError, json.JSONDecodeError):
         return None
-    latest = None
-    for comment in comments if isinstance(comments, list) else []:
-        if AGENT_REVIEW_MARKER in (comment.get("body") or ""):
-            latest = {
-                "actor": (comment.get("user") or {}).get("login") or "unknown",
-                "at": comment.get("created_at") or "",
-                "url": comment.get("html_url") or "",
-            }
-    return latest
+    return _agent_review_from_comments(comments if isinstance(comments, list) else [])
 
 
 def label_provenance(number: int, label: str) -> dict | None:
@@ -368,10 +602,6 @@ def label_provenance(number: int, label: str) -> dict | None:
             "at": event.get("created_at") or "",
         }
     return latest
-
-
-def _repo_slug() -> str:
-    return _run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
 
 
 def verdict_for(state: dict) -> tuple[bool, str]:
@@ -434,19 +664,49 @@ def main() -> int:
     try:
         baseline_ok = True
         _run(["git", "rev-parse", "--verify", f"{BASELINE_SHA}^{{commit}}"])
+        ancestors = baseline_ancestor_shas(BASELINE_SHA)
     except subprocess.CalledProcessError:
         baseline_ok = False
+        ancestors = set()
 
     checked: list[dict] = []
     unreviewed: list[dict] = []
     cache: dict[int, dict] = {}
     invalid_numbers: set[int] = set()
+    associated: dict[str, int | None] = {}
+
+    needed_numbers: list[int] = []
+    unnumbered_shas: list[str] = []
+    for commit in commits:
+        if baseline_ok and commit["sha"] in ancestors:
+            continue
+        if is_merge_commit(commit["parents"]) or commit["author"] in BOT_AUTHORS:
+            continue
+        parsed = parse_pr_number(commit["subject"])
+        if parsed is not None:
+            needed_numbers.append(parsed)
+        else:
+            unnumbered_shas.append(commit["sha"])
+
+    prefetch_pr_states(needed_numbers, cache, invalid_numbers)
+    need_assoc = list(unnumbered_shas)
+    for commit in commits:
+        parsed = parse_pr_number(commit["subject"])
+        if parsed is not None and parsed in invalid_numbers:
+            need_assoc.append(commit["sha"])
+    associated = prefetch_associated_prs(need_assoc)
+    extra = [
+        n
+        for n in associated.values()
+        if n is not None and n not in cache and n not in invalid_numbers
+    ]
+    prefetch_pr_states(extra, cache, invalid_numbers)
 
     for commit in commits:
         short = commit["sha"][:8]
         row = {"sha": short, "subject": commit["subject"][:72]}
 
-        if baseline_ok and _is_ancestor(commit["sha"], BASELINE_SHA):
+        if baseline_ok and commit["sha"] in ancestors:
             row.update(reviewed=True, why=f"at or before baseline {BASELINE_SHA}")
             checked.append(row)
             continue
@@ -459,7 +719,9 @@ def main() -> int:
             checked.append(row)
             continue
 
-        number = resolve_pr_number(commit["subject"], commit["sha"], cache, invalid_numbers)
+        number = resolve_pr_number(
+            commit["subject"], commit["sha"], cache, invalid_numbers, associated
+        )
         if number is None:
             row.update(
                 reviewed=False,

@@ -709,3 +709,222 @@ def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
     assert '["git", "cat-file", "-e"' in src
     assert "--is-shallow-repository" in src
     assert "pytest.fail" in src
+
+
+# ── batched GitHub fetch (no live network) ───────────────────────────────────
+#
+# Sequential `gh pr view` + per-SHA `/commits/{sha}/pulls` is the promotion-range
+# bottleneck (~1.9s per full view). Hatch rules stay in `verdict_for`; these tests
+# pin that the walker batches GraphQL and still refuses `reviewed:agent` without
+# the in-session marker.
+
+
+def _graphql_pr(
+    *,
+    number: int = 1,
+    title: str = "fix",
+    labels: list[str] | None = None,
+    reviews: list[dict[str, Any]] | None = None,
+    comments: list[dict[str, Any]] | None = None,
+    checks: list[dict[str, Any]] | None = None,
+    labeled: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": title,
+        "labels": {"nodes": [{"name": name} for name in (labels or [])]},
+        "reviews": {"nodes": reviews or []},
+        "comments": {"nodes": comments or []},
+        "timelineItems": {"nodes": labeled or []},
+        "commits": {
+            "nodes": [
+                {
+                    "commit": {
+                        "statusCheckRollup": {
+                            "contexts": checks or [],
+                        }
+                    }
+                }
+            ]
+        },
+    }
+
+
+def test_graphql_pr_counts_coderabbit_review_without_comment_bodies() -> None:
+    state = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "coderabbitai"}, "state": "COMMENTED"},
+            ]
+        )
+    )
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "coderabbitai" in why
+
+
+def test_graphql_pr_reviewed_agent_requires_the_marker() -> None:
+    """Do not weaken the hatch: the label alone is still a refusal."""
+    without = crc.state_from_graphql_pr(
+        _graphql_pr(
+            labels=[crc.AGENT_REVIEW_LABEL],
+            comments=[
+                {"author": {"login": "a"}, "body": "looks fine", "createdAt": "t", "url": "u"}
+            ],
+        )
+    )
+    reviewed, why = crc.verdict_for(without)
+    assert not reviewed
+    assert crc.AGENT_REVIEW_MARKER in why
+
+    with_marker = crc.state_from_graphql_pr(
+        _graphql_pr(
+            labels=[crc.AGENT_REVIEW_LABEL],
+            comments=[
+                {
+                    "author": {"login": "chrizefan"},
+                    "body": f"{crc.AGENT_REVIEW_MARKER}\nfindings",
+                    "createdAt": "2026-09-02T00:00:00Z",
+                    "url": "https://github.com/o/r/pull/1#issuecomment-1",
+                }
+            ],
+        )
+    )
+    reviewed, why = crc.verdict_for(with_marker)
+    assert reviewed
+    assert "in-session review" in why
+    assert "issuecomment-1" in why
+
+
+def test_prefetch_pr_states_uses_one_graphql_query_for_a_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del variables
+        calls.append(query)
+        return {
+            "data": {
+                "repository": {
+                    "p1894": _graphql_pr(
+                        number=1894,
+                        checks=[{"name": "Cursor Bugbot", "conclusion": "SUCCESS"}],
+                    ),
+                    "p1893": _graphql_pr(number=1893, labels=["risk:low"]),
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894, 1893, 1894], cache, invalid)
+
+    assert len(calls) == 1, "distinct PR numbers in one range must share one GraphQL query"
+    assert "p1894" in calls[0] and "p1893" in calls[0]
+    reviewed, why = crc.verdict_for(cache[1894])
+    assert reviewed
+    assert "Bugbot completed" in why
+    reviewed, why = crc.verdict_for(cache[1893])
+    assert reviewed
+    assert "risk:low" in why
+    assert not invalid
+
+
+def test_prefetch_pr_states_treats_a_null_node_as_not_a_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An issue number cited as '(#2103)' must not crash; it is invalid, not reviewed."""
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        return {"data": {"repository": {"p2103": None}}}
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([2103], cache, invalid)
+    assert 2103 in invalid
+    assert 2103 not in cache
+
+
+def test_prefetch_pr_states_does_not_re_query_cached_numbers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        nonlocal calls
+        calls += 1
+        return {"data": {"repository": {"p1": _graphql_pr(number=1, labels=["risk:low"])}}}
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1], cache, invalid)
+    crc.prefetch_pr_states([1], cache, invalid)
+    assert calls == 1
+
+
+def test_prefetch_associated_prs_batches_unnumbered_shas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del variables
+        calls.append(query)
+        return {
+            "data": {
+                "repository": {
+                    "c0": {
+                        "associatedPullRequests": {
+                            "nodes": [
+                                {"number": 1900, "mergedAt": None},
+                                {"number": 1899, "mergedAt": "2026-08-05T19:51:00Z"},
+                            ]
+                        }
+                    },
+                    "c1": {"associatedPullRequests": {"nodes": [{"number": 7, "mergedAt": None}]}},
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    found = crc.prefetch_associated_prs(["aaa1111", "bbb2222"])
+    assert len(calls) == 1
+    assert found["aaa1111"] == 1899
+    assert found["bbb2222"] is None
+
+
+def test_repo_slug_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> str:
+        runs.append(args)
+        return "digithings-ai/digithings"
+
+    monkeypatch.setattr(crc, "_run", fake_run)
+    crc._repo_slug.cache_clear()
+    assert crc._repo_slug() == "digithings-ai/digithings"
+    assert crc._repo_slug() == "digithings-ai/digithings"
+    assert len(runs) == 1
+
+
+def test_baseline_ancestor_set_is_one_rev_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> str:
+        runs.append(args)
+        return "aaa\nbbb\n"
+
+    monkeypatch.setattr(crc, "_run", fake_run)
+    ancestors = crc.baseline_ancestor_shas("e03c7095")
+    assert ancestors == {"aaa", "bbb"}
+    assert runs == [["git", "rev-list", "e03c7095"]]
