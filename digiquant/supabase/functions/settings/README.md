@@ -71,7 +71,7 @@ Profile schema re-validation imports the real
 | `GET` | `/jobs` | Member-scoped `job_runs` (id, job_type, status, error, idempotency_key, started_at, finished_at; limit 50). Service-role read — PostgREST `authenticated` is revoked. Empty → **200** `{jobs: []}`. |
 | `GET` | `/fills` | Member-scoped `broker_executions` fingerprints (id, symbol, quantity, executed_at, recorded_at — never `external_fill_id`). Empty → **200** `{fills: []}`. |
 | `GET` | `/app-urls` | Member read of pinned Alpaca `redirect_uri`, billing return URL, and **public** Alpaca OAuth client id (never `ALPACA_OAUTH_CLIENT_SECRET`). Empty client id → `""` until EF secrets land. |
-| `POST` | `/access/redeem-invite` | JWT required. Body `{ code, product_key? }`. Compares SHA-256 of `code` to secret `FX_HUB_INVITE_HASH` and/or `product_invite_codes`. On match, INSERT `client_product_grants` for the caller email (`fx_hub`). Rate-limited. Does not accept a missing email (OAuth without email → `EMAIL_REQUIRED`). Never returns whether the env hash exists. |
+| `POST` | `/access/redeem-invite` | JWT required. Body `{ code, product_key? }`. Compares SHA-256 of `code` to secret `FX_HUB_INVITE_HASH` and/or `product_invite_codes`. On match, INSERT `client_product_grants` for the caller email (`fx_hub`). Rate-limited (8/hour). Does not accept a missing email (OAuth without email → `EMAIL_REQUIRED`). Never returns whether the env hash exists. Dashboard auto-redeems after auth when the visitor opened `?invite=` (stashed in sessionStorage); the paste form is fallback. |
 
 ## Writes vs remaining-hop Stripe
 
