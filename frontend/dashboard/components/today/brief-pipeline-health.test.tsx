@@ -121,8 +121,6 @@ describe('BriefPipelineHealth', () => {
         diagnostics: [diag()],
         snapshotDate: '2026-08-27',
         positionDates: ['2026-08-31', '2026-08-27'],
-        now: new Date('2026-08-31T17:00:00Z'),
-        initialWeekStart: '2026-08-31',
       })
     );
     expect(html).toContain('data-testid="unpublished-book-note"');
@@ -137,8 +135,6 @@ describe('BriefPipelineHealth', () => {
         diagnostics: [diag()],
         snapshotDate: '2026-08-28',
         positionDates: ['2026-08-28', '2026-08-27'],
-        now: new Date('2026-08-30T17:00:00Z'),
-        initialWeekStart: '2026-08-24',
       })
     );
     expect(html).not.toContain('data-testid="unpublished-book-note"');
@@ -151,8 +147,6 @@ describe('BriefPipelineHealth', () => {
         diagnostics: [diag({ run_date: '2026-08-31' })],
         snapshotDate: '2026-08-28',
         positionDates: ['2026-08-28', '2026-08-27'],
-        now: new Date('2026-08-31T17:00:00Z'),
-        initialWeekStart: '2026-08-24',
       })
     );
     expect(html).not.toContain('data-testid="unpublished-book-note"');

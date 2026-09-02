@@ -7,8 +7,20 @@ function latestMatching(
   dates: Iterable<string>,
   keep: (date: string) => boolean
 ): string | null {
-  const matching = [...new Set(dates)].filter((date) => date && keep(date)).sort();
-  return matching.at(-1) ?? null;
+  let latest: string | null = null;
+  for (const date of dates) {
+    if (date && keep(date) && (latest === null || date > latest)) {
+      latest = date;
+    }
+  }
+  return latest;
+}
+
+function queryErrorDetail(error: unknown): string {
+  if (typeof error === 'object' && error && 'message' in error) {
+    return String(error.message);
+  }
+  return String(error);
 }
 
 /** Latest positions date on or before the committed snapshot; otherwise null. */
@@ -42,28 +54,16 @@ export function unpublishedBookNote(
   snapshotDate: string | null | undefined,
   positionDates: Iterable<string>
 ): string | null {
-  if (!snapshotDate) return null;
-  for (const date of positionDates) {
-    if (date && date > snapshotDate) {
-      return (
-        `Last committed snapshot is ${snapshotDate}. ` +
-        'Newer positions are hidden until a snapshot exists for that date.'
-      );
-    }
+  if (!snapshotDate || !latestMatching(positionDates, (date) => date > snapshotDate)) {
+    return null;
   }
-  return null;
+  return (
+    `Last committed snapshot is ${snapshotDate}. ` +
+    'Newer positions are hidden until a snapshot exists for that date.'
+  );
 }
 
 /** Throw when the latest daily_snapshots query failed. */
 export function assertDailySnapshotQueryOk(error: unknown): void {
-  if (!error) return;
-  let detail: string;
-  if (error instanceof Error) {
-    detail = error.message;
-  } else if (typeof error === 'object' && 'message' in error) {
-    detail = String(error.message);
-  } else {
-    detail = String(error);
-  }
-  throw new Error(`Daily snapshot query failed: ${detail}`);
+  if (error) throw new Error(`Daily snapshot query failed: ${queryErrorDetail(error)}`);
 }

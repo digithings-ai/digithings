@@ -249,6 +249,15 @@ function WeekBar({
   );
 }
 
+export type BriefPipelineHealthProps = {
+  runHealth: BriefRunHealth | null | undefined;
+  diagnostics: AtlasRunDiagnostics[];
+  snapshotDate?: string | null;
+  positionDates?: Iterable<string>;
+  now?: Date;
+  initialWeekStart?: string;
+};
+
 export function BriefPipelineHealth({
   runHealth,
   diagnostics,
@@ -256,14 +265,7 @@ export function BriefPipelineHealth({
   positionDates = [],
   now = new Date(),
   initialWeekStart,
-}: {
-  runHealth: BriefRunHealth | null | undefined;
-  diagnostics: AtlasRunDiagnostics[];
-  snapshotDate?: string | null;
-  positionDates?: Iterable<string>;
-  now?: Date;
-  initialWeekStart?: string;
-}) {
+}: BriefPipelineHealthProps) {
   const pipeline = runStatus(runHealth);
   const [weekStart, setWeekStart] = useState(() =>
     clampWeekStart(initialWeekStart ?? mondayOfWeek(now), now)
