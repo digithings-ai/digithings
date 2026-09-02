@@ -467,6 +467,8 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", ()
     unmount();
   });
 });
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)", () => {
   // The embed widget used to gate this header on byokRequiresModel(provider),
   // so a visitor who pasted an OpenAI key and picked a model had the model
   // dropped on the floor. digigraph then answered on its own default — an

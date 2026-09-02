@@ -24,11 +24,11 @@ describe("ChatActivities — tool calls render in the canon grammar", () => {
     expect(html).toContain("tc-head");
     expect(html).toContain("digivault.search");
     expect(html).toContain("how auth works");
-    // Running status wears the pulsing ellipsis, not a tick.
+    // Running status wears the pulsing ellipsis, not a tick. lines=["Searching…"]
+    // make the head a disclosure with a caret; the body mounts on expand (SSR
+    // keeps it folded).
     expect(html).toContain("tc-run");
     expect(html).toContain("…");
-    // Searching… is a real body so the head is a disclosure with a caret.
-    expect(html).toContain("Searching…");
     expect(html).toContain("aria-expanded");
     expect(html).toContain("tc-caret");
   });

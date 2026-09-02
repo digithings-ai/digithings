@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from digigraph.retrieval import (
     GET_NOTE_BATCH_MAX,
     GET_NOTE_TOOL,
@@ -78,9 +77,7 @@ def test_vault_paths_cap_at_batch_max_and_dedupe() -> None:
         {"doc_id": f"clients/x/p{i:03d}", "metadata": {}} for i in range(GET_NOTE_BATCH_MAX + 5)
     ]
     sources.append({"doc_id": "clients/x/p000", "metadata": {}})
-    paths = vault_paths_from_retrieval(
-        "digivault_search_notes", {"rag_sources": sources}
-    )
+    paths = vault_paths_from_retrieval("digivault_search_notes", {"rag_sources": sources})
     assert len(paths) == GET_NOTE_BATCH_MAX
     assert paths[0] == "clients/x/p000"
     assert len(set(paths)) == GET_NOTE_BATCH_MAX
@@ -260,7 +257,7 @@ def test_research_node_injects_force_tool_then_synthesizes_with_auto(
 
     monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
     monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
-    monkeypatch.setattr("digigraph.graph.research.get_tools_for_skills", lambda *_a, **_k: [])
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
 
     from digigraph.graph.research import research_node
 
@@ -300,7 +297,7 @@ def test_research_node_force_tool_keeps_auto_even_when_require_tool_calls(
 
     monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
     monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
-    monkeypatch.setattr("digigraph.graph.research.get_tools_for_skills", lambda *_a, **_k: [])
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
 
     from digigraph.graph.research import research_node
 
@@ -346,7 +343,7 @@ def test_research_node_auto_loads_notes_on_model_driven_search(
 
     monkeypatch.setattr("digigraph.orchestration.execute", fake_execute)
     monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
-    monkeypatch.setattr("digigraph.graph.research.get_tools_for_skills", lambda *_a, **_k: [])
+    monkeypatch.setattr("digigraph.skills.get_tools_for_skills", lambda *_a, **_k: [])
 
     from digigraph.graph.research import research_node
 

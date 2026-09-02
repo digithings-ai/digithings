@@ -775,6 +775,7 @@ def _stream_completions_progressive(
     request_id: str | None = None,
     workflow_extras: dict | None = None,
     suppress_tool_stream: bool = False,
+    force_tool: str | None = None,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -790,10 +791,11 @@ def _stream_completions_progressive(
         "allowed_tools": allowed_tools,
         "require_tool_calls": require_tool_calls,
         "request_id": request_id,
-        "force_tool": _resolve_force_tool_chat(req, request),
     }
     if workflow_extras:
         wf_kw.update(workflow_extras)
+    # Resolved body-or-header force_tool wins over a header-only extras copy.
+    wf_kw["force_tool"] = force_tool
     workflow_req = WorkflowRequest(**wf_kw)
 
     from digigraph.llm_auth import clear_byok_bindings
@@ -1095,6 +1097,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 request_id=request_id,
                 workflow_extras=wf_extras,
                 suppress_tool_stream=suppress_tool_stream,
+                force_tool=_resolve_force_tool_chat(req, request),
             ),
             media_type="text/event-stream",
             headers={
