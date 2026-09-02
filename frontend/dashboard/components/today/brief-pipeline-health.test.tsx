@@ -130,7 +130,7 @@ describe('BriefPipelineHealth', () => {
     expect(html).toContain('Newer positions are hidden until a snapshot exists for that date');
   });
 
-  it('does not claim hidden positions on a weekend with no newer book dates', () => {
+  it('does not claim hidden positions when no book date is newer than the snapshot', () => {
     const html = renderToStaticMarkup(
       createElement(BriefPipelineHealth, {
         runHealth,
@@ -138,6 +138,20 @@ describe('BriefPipelineHealth', () => {
         snapshotDate: '2026-08-28',
         positionDates: ['2026-08-28', '2026-08-27'],
         now: new Date('2026-08-30T17:00:00Z'),
+        initialWeekStart: '2026-08-24',
+      })
+    );
+    expect(html).not.toContain('data-testid="unpublished-book-note"');
+  });
+
+  it('keys the unpublished note to the snapshot, not pipeline runHealth', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth: { ...runHealth, runDate: '2026-08-31' },
+        diagnostics: [diag({ run_date: '2026-08-31' })],
+        snapshotDate: '2026-08-28',
+        positionDates: ['2026-08-28', '2026-08-27'],
+        now: new Date('2026-08-31T17:00:00Z'),
         initialWeekStart: '2026-08-24',
       })
     );

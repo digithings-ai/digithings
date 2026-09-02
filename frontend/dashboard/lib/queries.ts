@@ -826,9 +826,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (rt === 'baseline' || rt === 'delta') snapshot_run_type_by_date[row.date] = rt;
   }
 
-  // Fail closed: a snapshot query error must not become an empty digest/book (#3426).
-  // maybeSingle still yields data=null without error (empty RLS / no row) — that
-  // empty object path is the honest empty-digest shell, not a swallowed failure.
   assertDailySnapshotQueryOk(snapshotRes.error);
   const snapshot: TableRow<'daily_snapshots'> = snapshotRes.data ?? ({} as TableRow<'daily_snapshots'>);
   const rawSnapshotJson = snapshot.snapshot;

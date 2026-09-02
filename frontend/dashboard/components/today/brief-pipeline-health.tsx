@@ -12,7 +12,6 @@ import {
   canGoToNextWeek,
   clampWeekStart,
   formatWeekRangeLabel,
-  formatYmd,
   mondayOfWeek,
   shiftWeekStart,
 } from '@/lib/run-health-week';
@@ -255,16 +254,12 @@ export function BriefPipelineHealth({
   diagnostics,
   snapshotDate = null,
   positionDates = [],
-  /** Injectable clock for tests — defaults to today (UTC calendar date). */
   now = new Date(),
-  /** Controlled week start (Monday YYYY-MM-DD); defaults to current week. */
   initialWeekStart,
 }: {
   runHealth: BriefRunHealth | null | undefined;
   diagnostics: AtlasRunDiagnostics[];
-  /** Committed `daily_snapshots.date` — not pipeline run telemetry. */
   snapshotDate?: string | null;
-  /** All position dates (including unpublished rows newer than the snapshot). */
   positionDates?: Iterable<string>;
   now?: Date;
   initialWeekStart?: string;
@@ -284,7 +279,7 @@ export function BriefPipelineHealth({
 
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
   const allowNextWeek = canGoToNextWeek(weekStart, now);
-  const commitNote = unpublishedBookNote(snapshotDate, positionDates, formatYmd(now));
+  const commitNote = unpublishedBookNote(snapshotDate, positionDates);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">

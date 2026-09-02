@@ -49,23 +49,18 @@ describe('bookedCoversCommittedSnapshot', () => {
 });
 
 describe('unpublishedBookNote', () => {
-  it('is silent on a weekend or holiday when no position date is newer than the snapshot', () => {
-    // Friday snapshot, Sunday today, book only through Friday — not a hidden-book claim.
-    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'], '2026-08-30')).toBeNull();
+  it('is silent when no position date is newer than the snapshot', () => {
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'])).toBeNull();
   });
 
   it('notes when a position date is newer than the committed snapshot', () => {
-    expect(unpublishedBookNote('2026-08-28', ['2026-08-31', '2026-08-28'], '2026-08-31')).toBe(
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-31', '2026-08-28'])).toBe(
       'Last committed snapshot is 2026-08-28. Newer positions are hidden until a snapshot exists for that date.'
     );
   });
 
-  it('is silent when the snapshot date equals the latest position date', () => {
-    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'], '2026-08-31')).toBeNull();
-  });
-
   it('is silent without a snapshot', () => {
-    expect(unpublishedBookNote(null, ['2026-08-31'], '2026-08-31')).toBeNull();
+    expect(unpublishedBookNote(null, ['2026-08-31'])).toBeNull();
   });
 });
 

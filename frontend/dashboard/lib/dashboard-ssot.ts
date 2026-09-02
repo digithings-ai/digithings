@@ -1,8 +1,15 @@
 /**
  * Committed-book SSOT: Brief, Pipeline, pm-rebalance, and holdings follow
- * `daily_snapshots.date`. Positions newer than that snapshot are unpublished
- * and must not mix into the UI.
+ * `daily_snapshots.date`. Positions newer than that snapshot stay unpublished.
  */
+
+function latestMatching(
+  dates: Iterable<string>,
+  keep: (date: string) => boolean
+): string | null {
+  const matching = [...new Set(dates)].filter((date) => date && keep(date)).sort();
+  return matching.at(-1) ?? null;
+}
 
 /** Latest positions date on or before the committed snapshot; otherwise null. */
 export function committedBookDate(
@@ -10,10 +17,7 @@ export function committedBookDate(
   positionDates: Iterable<string>
 ): string | null {
   if (!snapshotDate) return null;
-  const onOrBefore = [...new Set(positionDates)]
-    .filter((d) => d && d <= snapshotDate)
-    .sort();
-  return onOrBefore.at(-1) ?? null;
+  return latestMatching(positionDates, (date) => date <= snapshotDate);
 }
 
 /** Prior book date strictly before the committed book date. */
@@ -22,10 +26,7 @@ export function previousBookDate(
   positionDates: Iterable<string>
 ): string | null {
   if (!bookDate) return null;
-  const earlier = [...new Set(positionDates)]
-    .filter((d) => d && d < bookDate)
-    .sort();
-  return earlier.at(-1) ?? null;
+  return latestMatching(positionDates, (date) => date < bookDate);
 }
 
 /** True only when the booked positions row-set is for the snapshot date itself. */
@@ -36,34 +37,33 @@ export function bookedCoversCommittedSnapshot(
   return snapshotDate != null && bookDate != null && bookDate === snapshotDate;
 }
 
-/**
- * Operator copy when unpublished positions exist past the committed snapshot.
- * Driven by `snapshot.date` vs position dates — not calendar-today (weekends
- * and holidays must not fire this just because the snapshot is older than today).
- * `_todayYmd` stays on the contract so Brief can pass `formatYmd(now)`; it is not a trigger.
- */
+/** Operator copy when a position date is newer than the committed snapshot. */
 export function unpublishedBookNote(
   snapshotDate: string | null | undefined,
-  positionDates: Iterable<string>,
-  _todayYmd: string
+  positionDates: Iterable<string>
 ): string | null {
   if (!snapshotDate) return null;
-  const hasNewerPosition = [...new Set(positionDates)].some((d) => Boolean(d) && d > snapshotDate);
-  if (!hasNewerPosition) return null;
-  return (
-    `Last committed snapshot is ${snapshotDate}. ` +
-    'Newer positions are hidden until a snapshot exists for that date.'
-  );
+  for (const date of positionDates) {
+    if (date && date > snapshotDate) {
+      return (
+        `Last committed snapshot is ${snapshotDate}. ` +
+        'Newer positions are hidden until a snapshot exists for that date.'
+      );
+    }
+  }
+  return null;
 }
 
-/** Throw when the latest daily_snapshots query failed — never treat an error as an empty snapshot. */
+/** Throw when the latest daily_snapshots query failed. */
 export function assertDailySnapshotQueryOk(error: unknown): void {
   if (!error) return;
-  const detail =
-    error && typeof error === 'object' && 'message' in error
-      ? String((error as { message: unknown }).message)
-      : error instanceof Error
-        ? error.message
-        : String(error);
+  let detail: string;
+  if (error instanceof Error) {
+    detail = error.message;
+  } else if (typeof error === 'object' && 'message' in error) {
+    detail = String(error.message);
+  } else {
+    detail = String(error);
+  }
   throw new Error(`Daily snapshot query failed: ${detail}`);
 }
