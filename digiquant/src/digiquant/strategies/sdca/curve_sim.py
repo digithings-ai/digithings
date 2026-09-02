@@ -30,7 +30,7 @@ def evaluate_sdca_trial_curve_sim(
     prices: Sequence[float],
     risk_model: RiskModel,
     shape: SdcaCurveShape,
-    valuation_weight: float,
+    power_law_weight: float,
     extra_indicators: Sequence[IndicatorWeight] | None = None,
     *,
     initial_cash: float = DEFAULT_TRIAL_CASH,
@@ -45,7 +45,7 @@ def evaluate_sdca_trial_curve_sim(
         price_s,
         risk_model,
         extra_indicators=list(extra_indicators) if extra_indicators is not None else None,
-        valuation_weight=valuation_weight,
+        power_law_weight=power_law_weight,
     )
     report, _frame = run_backtest(
         date_s,

@@ -774,7 +774,7 @@ class TestCatalogWiring:
         assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
         assert set(PRICE_OSCILLATOR_NAMES).issubset(set(EXTRA_INDICATOR_NAMES))
         w = SdcaCompositeWeights()
-        assert w.valuation == pytest.approx(1.0)
+        assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
 
     def test_zero_weight_skips_oscillators(self) -> None:
@@ -793,7 +793,7 @@ class TestCatalogWiring:
         extras = build_extra_indicators(
             dates,
             pl.Series([100.0 + 0.2 * i for i in range(n)]),
-            SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.4),
+            SdcaCompositeWeights(power_law=1.0, weekly_rsi=0.4),
             ExtraIndicatorSources(),
             window=20,
             min_samples=10,

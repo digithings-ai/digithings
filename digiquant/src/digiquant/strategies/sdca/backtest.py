@@ -22,7 +22,7 @@ class SdcaBacktestReport(BaseModel):
     """Summary stats for one SDCA backtest run vs. its lump-sum benchmark.
 
     This report is a CI-only parity harness for the allocation math in this
-    module (curve/composite-risk/valuation) — it is never the authoritative
+    module (curve/composite-risk/power-law) — it is never the authoritative
     backtest result. NautilusTrader remains the sole backtest/live engine
     (digiquant/AGENTS.md); the Nautilus strategy wrapper (#1081) calls
     ``size_trade()`` below rather than reimplementing it, so there is exactly

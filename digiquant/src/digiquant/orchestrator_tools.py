@@ -94,7 +94,7 @@ def build_digiquant_run_optimize_tool() -> dict[str, Any]:
                         "type": "object",
                         "description": (
                             "Base/frozen params. For sdca Stage B, pass "
-                            "valuation_weight / weekly_rsi_weight / ... from "
+                            "power_law_weight / weekly_rsi_weight / ... from "
                             "digiquant_fit_sdca_weights.regularized_weight_params."
                         ),
                     },

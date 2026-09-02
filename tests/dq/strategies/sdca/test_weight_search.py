@@ -75,7 +75,7 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         assert isinstance(model, _ConstRails)
@@ -85,7 +85,7 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
                 rsi_w = float(ind.weight)
             elif getattr(ind, "name", "") == "m2":
                 m2_w = float(ind.weight)
-        vs_flat = 10.0 + 5.0 * rsi_w - 8.0 * m2_w + 0.1 * valuation_weight
+        vs_flat = 10.0 + 5.0 * rsi_w - 8.0 * m2_w + 0.1 * power_law_weight
         return SdcaTrialMetrics(
             vs_flat_dca_pct=vs_flat - 0.001 * len(window_dates),
             vs_lump_pct=-1.0,
@@ -102,12 +102,12 @@ def test_backtest_search_keeps_helpful_extra_and_drops_harmful() -> None:
         shape=_SHAPE,
         search_names=("weekly_rsi", "m2", "sma_band"),
         grid=(0.0, 1.0),
-        valuation_grid=(1.0,),
+        power_law_grid=(1.0,),
     )
     assert result.weights.weekly_rsi == pytest.approx(1.0)
     assert result.weights.m2 == pytest.approx(0.0)
     assert result.weights.sma_band == pytest.approx(0.0)
-    assert result.weights.valuation == pytest.approx(1.0)
+    assert result.weights.power_law == pytest.approx(1.0)
     assert result.num_evaluations > 0
     assert result.mean_is_vs_flat_dca_pct > result.mean_oos_vs_flat_dca_pct - 50.0
 
@@ -123,7 +123,7 @@ def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         rsi_w = 0.0
@@ -146,7 +146,7 @@ def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
         shape=_SHAPE,
         search_names=("weekly_rsi",),
         grid=(0.0, 1.0),
-        valuation_grid=(1.0,),
+        power_law_grid=(1.0,),
     )
     assert result.weights.weekly_rsi == pytest.approx(1.0)
 
@@ -167,7 +167,7 @@ def test_backtest_search_keeps_extra_when_early_fold_is_all_cash() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         rsi_w = 0.0
@@ -192,7 +192,7 @@ def test_backtest_search_keeps_extra_when_early_fold_is_all_cash() -> None:
         shape=_SHAPE,
         search_names=("weekly_rsi",),
         grid=(0.0, 1.0),
-        valuation_grid=(1.0,),
+        power_law_grid=(1.0,),
     )
     assert result.weights.weekly_rsi == pytest.approx(1.0)
     assert any(not score.feasible for score in result.fold_scores)
@@ -208,11 +208,11 @@ def test_backtest_search_skips_enabled_extra_without_z() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         return SdcaTrialMetrics(
-            vs_flat_dca_pct=float(valuation_weight),
+            vs_flat_dca_pct=float(power_law_weight),
             vs_lump_pct=0.0,
             capital_deployed_pct=40.0,
             max_drawdown_pct=10.0,
@@ -227,7 +227,7 @@ def test_backtest_search_skips_enabled_extra_without_z() -> None:
         shape=_SHAPE,
         search_names=("weekly_rsi", "dxy"),
         grid=(0.0, 1.0),
-        valuation_grid=(1.0,),
+        power_law_grid=(1.0,),
     )
     assert "dxy" not in result.weights.enabled_extras()
     assert result.weights.dxy == pytest.approx(0.0)
@@ -245,7 +245,7 @@ def test_period_search_picks_the_best_synthetic_period() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         rsi_z_mean = 0.0
@@ -270,7 +270,7 @@ def test_period_search_picks_the_best_synthetic_period() -> None:
         param_candidates=[{"period": 5}, {"period": 14}, {"period": 30}],
         compute_indicator_z=compute_indicator_z,
         base_extra_z={},
-        base_weights=SdcaCompositeWeights(valuation=1.0),
+        base_weights=SdcaCompositeWeights(power_law=1.0),
         rails_fitter=_fitter,
         evaluator=evaluator,
         shape=_SHAPE,
@@ -293,7 +293,7 @@ def test_period_search_probes_indicator_weight_regardless_of_base() -> None:
         window_prices: list[float],
         model: RiskModel,
         shape: SdcaCurveShape,
-        valuation_weight: float,
+        power_law_weight: float,
         extra_indicators: object = None,
     ) -> SdcaTrialMetrics:
         for ind in extra_indicators or []:
@@ -310,7 +310,7 @@ def test_period_search_probes_indicator_weight_regardless_of_base() -> None:
         param_candidates=[{"period": 5}],
         compute_indicator_z=lambda params: [0.0] * len(dates),
         base_extra_z={},
-        base_weights=SdcaCompositeWeights(valuation=1.0),  # weekly_rsi defaults to 0.0
+        base_weights=SdcaCompositeWeights(power_law=1.0),  # weekly_rsi defaults to 0.0
         rails_fitter=_fitter,
         evaluator=evaluator,
         shape=_SHAPE,
@@ -331,7 +331,7 @@ def test_period_search_rejects_empty_param_candidates() -> None:
             param_candidates=[],
             compute_indicator_z=lambda params: [0.0] * len(dates),
             base_extra_z={},
-            base_weights=SdcaCompositeWeights(valuation=1.0),
+            base_weights=SdcaCompositeWeights(power_law=1.0),
             rails_fitter=_fitter,
             evaluator=lambda *a, **k: SdcaTrialMetrics(
                 vs_flat_dca_pct=0.0, vs_lump_pct=0.0, capital_deployed_pct=0.0, max_drawdown_pct=0.0
@@ -351,7 +351,7 @@ def test_period_search_rejects_mismatched_z_length() -> None:
             param_candidates=[{"period": 5}],
             compute_indicator_z=lambda params: [0.0] * (len(dates) - 1),
             base_extra_z={},
-            base_weights=SdcaCompositeWeights(valuation=1.0),
+            base_weights=SdcaCompositeWeights(power_law=1.0),
             rails_fitter=_fitter,
             evaluator=lambda *a, **k: SdcaTrialMetrics(
                 vs_flat_dca_pct=0.0, vs_lump_pct=0.0, capital_deployed_pct=0.0, max_drawdown_pct=0.0
@@ -361,11 +361,11 @@ def test_period_search_rejects_mismatched_z_length() -> None:
 
 
 def test_drop_extras_missing_sources_zeros_plugins_only() -> None:
-    raw = SdcaCompositeWeights(valuation=1.0, m2=1.0, weekly_rsi=0.5)
+    raw = SdcaCompositeWeights(power_law=1.0, m2=1.0, weekly_rsi=0.5)
     dropped = drop_extras_missing_sources(raw, ExtraIndicatorSources())
     assert dropped.m2 == pytest.approx(0.0)
     assert dropped.weekly_rsi == pytest.approx(0.5)
-    assert dropped.valuation == pytest.approx(1.0)
+    assert dropped.power_law == pytest.approx(1.0)
 
 
 def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
@@ -377,5 +377,5 @@ def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
     )
     assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES)
     assert payload["num_evaluations"] >= 128
-    kept = {k: v for k, v in payload["weights"].items() if k != "valuation" and v > 0}
+    kept = {k: v for k, v in payload["weights"].items() if k != "power_law" and v > 0}
     assert kept == {}

@@ -103,13 +103,13 @@ def materialize_sdca_risk_index(
     *,
     coefficients_path: Path | None = None,
     extra_indicators: list[IndicatorWeight] | None = None,
-    valuation_weight: float = 1.0,
+    power_law_weight: float = 1.0,
 ) -> pl.DataFrame:
     """Build the SDCA ``risk_path`` parquet from *this* OHLCV frame only (#1462).
 
     Callers must pass the already-``apply_signal_delay()``-truncated frame so
     the index cannot leak bars beyond the published window. Default
-    ``valuation_weight=1`` and no extras matches the catalog model default.
+    ``power_law_weight=1`` and no extras matches the catalog model default.
     Published ``btc_sdca`` extras come from ``settings.json``.
     """
     import polars as pl
@@ -127,7 +127,7 @@ def materialize_sdca_risk_index(
         ohlcv["close"],
         model,
         extra_indicators=extra_indicators,
-        valuation_weight=valuation_weight,
+        power_law_weight=power_law_weight,
     )
     write_risk_index(index, output_path)
     return index
@@ -747,7 +747,7 @@ def run_and_write(
         tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
         raw_w = sdca_cfg.get("indicator_weights") or {}
         published_weights = SdcaCompositeWeights(
-            valuation=float(raw_w.get("valuation", 1.0)),
+            power_law=float(raw_w.get("power_law", 1.0)),
             m2=float(raw_w.get("m2", 0.0)),
             rs_eth=float(raw_w.get("rs_eth", 0.0)),
             dxy=float(raw_w.get("dxy", 0.0)),
@@ -784,7 +784,7 @@ def run_and_write(
             ohlcv,
             tmp_risk,
             extra_indicators=extras or None,
-            valuation_weight=weights.valuation,
+            power_law_weight=weights.power_law,
         )
         sdca_index = index
         coefficients = load_coefficients()
@@ -809,14 +809,14 @@ def run_and_write(
             "SDCA risk index built from the signal-delayed OHLCV frame "
             f"{index['date'].min()} → {index['date'].max()} "
             f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')}, "
-            f"weights=valuation:{weights.valuation}/m2:{weights.m2}/"
+            f"weights=power_law:{weights.power_law}/m2:{weights.m2}/"
             f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy}/"
             f"weekly_rsi:{weights.weekly_rsi}/weekly_macd:{weights.weekly_macd}/"
             f"sma_band:{weights.sma_band})."
         )
         if extras_unused:
             provenance_notes.append(
-                "Published index is power-law only (valuation weight 1.0). Extra "
+                "Published index is power-law only (power-law weight 1.0). Extra "
                 "indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH RS) are "
                 "unused (weight 0) — not a multi-indicator composite."
             )
@@ -829,7 +829,7 @@ def run_and_write(
             unused = [
                 indicator_display_name(name)
                 for name, weight in published_weights.model_dump().items()
-                if name != "valuation" and weight == 0.0
+                if name != "power_law" and weight == 0.0
             ]
             note = "Published index is a composite valuation index (" + " + ".join(keepers) + ")."
             if unused:

@@ -18,7 +18,7 @@ rest of the ``sdca`` package.
 
 **Independently-fit quantile curves can cross** (a lower quantile's curve
 overtaking a higher one at some ``x``), which would violate ``low < median < high``
-downstream in ``valuation.py``. ``rails()``/``rails_full()`` fix this with the
+downstream in ``power_law_zscore.py``. ``rails()``/``rails_full()`` fix this with the
 standard rearrangement method (Chernozhukov et al.): sort each row's 7 quantile
 values ascending before returning them, rather than trusting the raw regression
 output to already be monotonic.
@@ -250,7 +250,7 @@ def _evaluate_rails(coefficients: BtcPowerLawCoefficients, dates: pl.Series) -> 
     days_since_genesis = np.array([(d - coefficients.genesis).days for d in date_list], dtype=float)
     # Pre/at-genesis dates have undefined log-time (ln(<=0)) — refused as a null row
     # rather than raising, matching the engine's existing no-data-day convention
-    # (valuation.py/composite_risk.py/backtest.py all treat a null row as no-trade).
+    # (power_law_zscore.py/composite_risk.py/backtest.py all treat a null row as no-trade).
     valid = days_since_genesis > 0
 
     raw_x = np.full_like(days_since_genesis, np.nan)
@@ -279,7 +279,7 @@ class BtcPowerLawRiskModel:
     """``RiskModel`` provider backed by a fitted BTC power-law (RAQQR).
 
     ``rails()`` satisfies the ``RiskModel`` protocol (low/median/high, for
-    ``valuation.py``); ``rails_full()`` additionally exposes all 7 fitted
+    ``power_law_zscore.py``); ``rails_full()`` additionally exposes all 7 fitted
     quantile rails (#1082's "optional full 7-quantile set") for callers that
     want the wider corridor. ``low_quantile``/``high_quantile`` pick which of
     the 7 fitted rails map to "low"/"high" — median is always ``q50``. The

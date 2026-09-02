@@ -149,7 +149,7 @@ class TestRailsRefitPerFold:
             "sell_max_rate": 10.0,
             "buy_curvature": 1.0,
             "sell_curvature": 2.0,
-            "valuation_weight": 1.0,
+            "power_law_weight": 1.0,
         }
         scores = score_trial_on_folds(
             params, dates, prices, folds, fitter, evaluator, SdcaOptimizeObjective()

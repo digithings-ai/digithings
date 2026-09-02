@@ -5,7 +5,7 @@ The engine already blends ``Σ(zᵢ·wᵢ)/Σ(wᵢ)`` then
 (independent of BTC close: M2, BTC/ETH, DXY) or **price oscillators**
 (weekly RSI / weekly log-MACD / 90d SMA-band z). Oscillators are
 long-horizon votes; they are **not** Mayer / 200w SMA (near-duplicate of
-power-law ``valuation_z``).
+``power_law_z``).
 
 ``rs_eth`` is the same agreement-scaled multi-timeframe pattern used by the
 price oscillators (``price_oscillators.py``), applied to the BTC/ETH log
@@ -14,15 +14,15 @@ window, long-term rotation) with a fast leg (30-day, medium-term rotation).
 ``m2``/``dxy`` stay single-window — they track slow macro regimes without a
 comparably fast rotation to confluence against.
 
-``SdcaCompositeWeights`` defaults ``valuation=1``, extras ``0`` (disabled,
+``SdcaCompositeWeights`` defaults ``power_law=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
 on M2, DXY, weekly log-MACD, and MTF weekly/monthly RSI — see
 ``btc_richer_composite.json``. Model defaults stay extras-off so a missing
 macro row cannot null an unpublished path.
 
 Omitted on purpose (see ARCHITECTURE.md):
-- Mayer / 200w SMA — *r* ≈ 0.84 vs ``valuation_z`` (research PR #3232)
-- a second power-law residual ("alpha") — collinear with ``valuation_z``
+- Mayer / 200w SMA — *r* ≈ 0.84 vs ``power_law_z`` (research PR #3232)
+- a second power-law residual ("alpha") — collinear with ``power_law_z``
 - on-chain MVRV/NUPL — #1086, no in-repo history
 - equity CAPE / Buffett / ERP — #3176 forbade equity RiskModel in v1
 - RS rotation pool — #1084; this module only uses ETH from the Coinbase cache
@@ -60,7 +60,7 @@ _RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
 _RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 WEIGHT_PARAM_BY_NAME: dict[str, str] = {
-    "valuation": "valuation_weight",
+    "power_law": "power_law_weight",
     "m2": "m2_weight",
     "rs_eth": "rs_eth_weight",
     "dxy": "dxy_weight",
@@ -69,9 +69,9 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "sma_band": "sma_band_weight",
 }
 
-# User-facing labels. Code ids stay ``valuation``; charts must say "power law".
+# User-facing labels. The fallback (``name.replace("_", " ")``) covers every
+# id here; this dict only overrides ids where that fallback reads wrong.
 INDICATOR_DISPLAY_NAMES: dict[str, str] = {
-    "valuation": "power law",
     "m2": "M2 liquidity",
     "rs_eth": "BTC/ETH relative strength",
     "dxy": "DXY",
@@ -82,7 +82,7 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
 
 
 def indicator_display_name(name: str) -> str:
-    """Chart/UI label for an indicator code id (``valuation`` → ``power law``)."""
+    """Chart/UI label for an indicator code id (``power_law`` → ``power law``)."""
     return INDICATOR_DISPLAY_NAMES.get(name, name.replace("_", " "))
 
 
@@ -91,7 +91,7 @@ class SdcaCompositeWeights(BaseModel):
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    valuation: float = Field(1.0, ge=0.0)
+    power_law: float = Field(1.0, ge=0.0)
     m2: float = Field(0.0, ge=0.0)
     rs_eth: float = Field(0.0, ge=0.0)
     dxy: float = Field(0.0, ge=0.0)
@@ -140,7 +140,7 @@ class ExtraIndicatorSources(BaseModel):
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
     """Read ``*_weight`` keys used by ``strategy_specs`` / walk-forward."""
     return SdcaCompositeWeights(
-        valuation=float(params.get("valuation_weight", 1.0)),
+        power_law=float(params.get("power_law_weight", 1.0)),
         m2=float(params.get("m2_weight", 0.0)),
         rs_eth=float(params.get("rs_eth_weight", 0.0)),
         dxy=float(params.get("dxy_weight", 0.0)),
@@ -151,7 +151,7 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
 
 
 def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
-    """MCP/settings JSON object. Empty → valuation-only default."""
+    """MCP/settings JSON object. Empty → power-law-only default."""
     text = raw.strip() if raw else ""
     payload: object = json.loads(text) if text else {}
     if payload is None:
@@ -159,7 +159,7 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
     if not isinstance(payload, dict):
         raise ValueError("indicator_weights must be a JSON object")
     return SdcaCompositeWeights(
-        valuation=float(payload.get("valuation", 1.0)),
+        power_law=float(payload.get("power_law", 1.0)),
         m2=float(payload.get("m2", 0.0)),
         rs_eth=float(payload.get("rs_eth", 0.0)),
         dxy=float(payload.get("dxy", 0.0)),

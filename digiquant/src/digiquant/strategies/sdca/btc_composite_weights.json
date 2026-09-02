@@ -1,6 +1,6 @@
 {
   "weights": {
-    "valuation": 1.0,
+    "power_law": 1.0,
     "m2": 0.0,
     "rs_eth": 0.0,
     "dxy": 0.0,

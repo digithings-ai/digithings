@@ -57,8 +57,8 @@ def search_names_with_data(
 
 
 def _weight_complexity(weights: SdcaCompositeWeights) -> tuple[int, float]:
-    """Tie-break: fewer enabled extras, then higher valuation weight."""
-    return (len(weights.enabled_extras()), -weights.valuation)
+    """Tie-break: fewer enabled extras, then higher power-law weight."""
+    return (len(weights.enabled_extras()), -weights.power_law)
 
 
 def _is_better(
@@ -119,9 +119,9 @@ def _score_weights_on_cached_folds(
         oos_dates, oos_prices = window_slice(dates, prices, fold.oos_start, fold.oos_end)
         extras_is = extra_indicators_for_window(is_dates, dates, zmap, weights)
         extras_oos = extra_indicators_for_window(oos_dates, dates, zmap, weights)
-        in_sample = evaluator(is_dates, is_prices, model, shape, weights.valuation, extras_is)
+        in_sample = evaluator(is_dates, is_prices, model, shape, weights.power_law, extras_is)
         out_of_sample = evaluator(
-            oos_dates, oos_prices, model, shape, weights.valuation, extras_oos
+            oos_dates, oos_prices, model, shape, weights.power_law, extras_oos
         )
         scores.append(
             FoldScore(
@@ -144,7 +144,7 @@ def optimize_stage_a_by_backtest(
     shape: SdcaCurveShape,
     search_names: Sequence[str] = EXTRA_INDICATOR_NAMES,
     grid: Sequence[float] = (0.0, 0.5, 1.0),
-    valuation_grid: Sequence[float] = (0.0, 0.5, 1.0),
+    power_law_grid: Sequence[float] = (0.0, 0.5, 1.0),
     objective: SdcaOptimizeObjective | None = None,
     n_folds: int = 3,
     holdout_frac: float = 0.2,
@@ -171,11 +171,11 @@ def optimize_stage_a_by_backtest(
     best_rank = float("-inf")
     best_scores: list[FoldScore] | None = None
     evaluated = 0
-    for val in valuation_grid:
+    for val in power_law_grid:
         for combo in product(grid, repeat=len(names)):
             payload = {name: float(weight) for name, weight in zip(names, combo, strict=True)}
             try:
-                weights = SdcaCompositeWeights(valuation=float(val), **payload)
+                weights = SdcaCompositeWeights(power_law=float(val), **payload)
             except ValueError:
                 continue
             if missing_extra_names(weights, extra_z):

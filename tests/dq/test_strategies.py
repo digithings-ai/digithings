@@ -291,7 +291,7 @@ class TestSdcaRiskIndexNautilusChain:
         dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
         model = BtcPowerLawRiskModel(load_coefficients())
         rails = model.rails(dates)
-        # Price at the low rail → valuation-z = +3 → risk = 0 → max buy.
+        # Price at the low rail → power-law-z = +3 → risk = 0 → max buy.
         price = rails["low"].alias("price")
         frame = build_risk_index(dates, price, model)
         assert frame["risk"].drop_nulls().min() == pytest.approx(0.0)

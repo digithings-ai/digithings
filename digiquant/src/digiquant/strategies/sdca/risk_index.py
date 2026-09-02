@@ -1,10 +1,10 @@
 """Risk-index builder — glue from a ``RiskModel`` to the Nautilus ``risk_path`` parquet.
 
-Closes the #3168 integration gap: every piece (rails, valuation-z, composite
+Closes the #3168 integration gap: every piece (rails, power-law-z, composite
 risk, ``SdcaStrategy`` loading a ``date``/``risk`` parquet) already existed,
 but nothing joined them. This module is pure wiring — no new maths.
 
-``build_risk_index()`` runs the already-written pipeline (rails → valuation-z
+``build_risk_index()`` runs the already-written pipeline (rails → power-law-z
 → composite risk) and returns the two columns ``SdcaStrategy`` needs plus
 diagnostic columns for an auditable tearsheet (#3172). ``write_risk_index()``
 persists the two-column parquet under every validation
@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.valuation import valuation_confluence_z
+from digiquant.strategies.sdca.power_law_zscore import power_law_confluence_z
 
 _REQUIRED_RAIL_COLUMNS = ("low", "median", "high")
 _DIAGNOSTIC_COLUMNS = (
@@ -33,7 +33,7 @@ _DIAGNOSTIC_COLUMNS = (
     "low",
     "median",
     "high",
-    "valuation_z",
+    "power_law_z",
     "composite_z",
 )
 
@@ -55,17 +55,17 @@ def build_risk_index(
     price: pl.Series,
     risk_model: RiskModel,
     extra_indicators: list[IndicatorWeight] | None = None,
-    valuation_weight: float = 1.0,
+    power_law_weight: float = 1.0,
     oscillators: SdcaOscillatorSpec | None = None,
 ) -> pl.DataFrame:
     """Join a ``RiskModel`` + price series into the SDCA risk index.
 
     Returns a frame with ``date``, ``risk``, and diagnostic columns
-    (``price``, ``low``, ``median``, ``high``, ``valuation_z``, ``composite_z``).
-    Null semantics are inherited from ``valuation_confluence_z`` /
+    (``price``, ``low``, ``median``, ``high``, ``power_law_z``, ``composite_z``).
+    Null semantics are inherited from ``power_law_confluence_z`` /
     ``compute_composite_risk``: a null in any enabled indicator makes that
     day's ``risk`` null (an explicit no-trade day for ``SdcaStrategy``).
-    ``valuation_z`` here is ``valuation_confluence_z``'s output (whole-history
+    ``power_law_z`` here is ``power_law_confluence_z``'s output (whole-history
     power-law leg blended with a rolling trend leg) — ``oscillators`` (default
     ``SdcaOscillatorSpec()``) configures the trend leg's window.
     """
@@ -86,16 +86,16 @@ def build_risk_index(
         )
 
     spec = oscillators or SdcaOscillatorSpec()
-    valuation_z = valuation_confluence_z(
+    power_law_z = power_law_confluence_z(
         dates,
         price,
         rails["low"],
         rails["median"],
         rails["high"],
-        trend_window=spec.valuation_trend_window,
+        trend_window=spec.power_law_trend_window,
     )
     indicators = [
-        IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight),
+        IndicatorWeight(name="power_law", z=power_law_z, weight=power_law_weight),
         *(extra_indicators or []),
     ]
     composite = compute_composite_risk(indicators)
@@ -106,7 +106,7 @@ def build_risk_index(
         "low": rails["low"],
         "median": rails["median"],
         "high": rails["high"],
-        "valuation_z": valuation_z,
+        "power_law_z": power_law_z,
         "composite_z": composite["composite_z"],
     }
     extra_z_cols: list[str] = []

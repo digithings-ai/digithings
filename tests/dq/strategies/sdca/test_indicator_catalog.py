@@ -33,7 +33,7 @@ from digiquant.strategies.sdca.price_oscillators import (
     sma_band_confluence_z,
 )
 from digiquant.strategies.sdca.risk_index import build_risk_index
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
 pytestmark = pytest.mark.unit
 
@@ -49,33 +49,33 @@ def _dates(n: int, start: date = date(2020, 1, 1)) -> pl.Series:
 
 
 class TestSdcaCompositeWeights:
-    def test_default_is_valuation_only(self) -> None:
+    def test_default_is_power_law_only(self) -> None:
         w = SdcaCompositeWeights()
-        assert w.valuation == pytest.approx(1.0)
+        assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
-        assert w.normalized().valuation == pytest.approx(1.0)
+        assert w.normalized().power_law == pytest.approx(1.0)
 
     def test_zero_weight_is_disabled_not_in_blend(self) -> None:
-        w = SdcaCompositeWeights(valuation=1.0, m2=0.0, rs_eth=0.0, dxy=0.0)
+        w = SdcaCompositeWeights(power_law=1.0, m2=0.0, rs_eth=0.0, dxy=0.0)
         assert "m2" not in w.enabled_extras()
 
     def test_normalize_is_simplex(self) -> None:
-        w = SdcaCompositeWeights(valuation=2.0, m2=2.0, rs_eth=0.0, dxy=0.0).normalized()
-        assert w.valuation == pytest.approx(0.5)
+        w = SdcaCompositeWeights(power_law=2.0, m2=2.0, rs_eth=0.0, dxy=0.0).normalized()
+        assert w.power_law == pytest.approx(0.5)
         assert w.m2 == pytest.approx(0.5)
-        assert w.valuation + w.m2 + w.rs_eth + w.dxy == pytest.approx(1.0)
+        assert w.power_law + w.m2 + w.rs_eth + w.dxy == pytest.approx(1.0)
 
     def test_all_zero_rejected(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
-            SdcaCompositeWeights(valuation=0.0, m2=0.0, rs_eth=0.0, dxy=0.0)
+            SdcaCompositeWeights(power_law=0.0, m2=0.0, rs_eth=0.0, dxy=0.0)
 
     def test_from_params_defaults_match_current_btc_charts(self) -> None:
         w = composite_weights_from_params({"buy_max_rate": 10.0})
-        assert w.valuation == pytest.approx(1.0)
+        assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
 
     def test_parse_json_object(self) -> None:
-        w = parse_indicator_weights_json('{"valuation": 0.5, "m2": 0.5}')
+        w = parse_indicator_weights_json('{"power_law": 0.5, "m2": 0.5}')
         assert w.m2 == pytest.approx(0.5)
         assert w.rs_eth == pytest.approx(0.0)
 
@@ -246,14 +246,14 @@ class TestBuildExtraIndicators:
             build_extra_indicators(
                 dates,
                 pl.Series([100.0] * 30),
-                SdcaCompositeWeights(valuation=1.0, m2=0.5),
+                SdcaCompositeWeights(power_law=1.0, m2=0.5),
                 ExtraIndicatorSources(),
             )
 
     def test_window_slice_keeps_alignment(self) -> None:
         dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(10)]
         extra_z = {"m2": [float(i) for i in range(10)]}
-        w = SdcaCompositeWeights(valuation=1.0, m2=1.0)
+        w = SdcaCompositeWeights(power_law=1.0, m2=1.0)
         sliced = extra_indicators_for_window(dates[3:6], dates, extra_z, w)
         assert len(sliced) == 1
         assert sliced[0].name == "m2"
@@ -287,7 +287,7 @@ class TestBuildExtraIndicators:
         extras = build_extra_indicators(
             dates,
             close,
-            SdcaCompositeWeights(valuation=1.0, weekly_rsi=1.0),
+            SdcaCompositeWeights(power_law=1.0, weekly_rsi=1.0),
             ExtraIndicatorSources(),
             oscillators=spec,
         )
@@ -304,7 +304,7 @@ class TestBuildExtraIndicators:
         extras = build_extra_indicators(
             dates,
             close,
-            SdcaCompositeWeights(valuation=1.0, weekly_macd=1.0),
+            SdcaCompositeWeights(power_law=1.0, weekly_macd=1.0),
             ExtraIndicatorSources(),
             oscillators=spec,
         )
@@ -325,7 +325,7 @@ class TestBuildExtraIndicators:
         extras = build_extra_indicators(
             dates,
             close,
-            SdcaCompositeWeights(valuation=1.0, sma_band=1.0),
+            SdcaCompositeWeights(power_law=1.0, sma_band=1.0),
             ExtraIndicatorSources(),
             oscillators=spec,
         )
@@ -348,7 +348,7 @@ class TestBuildExtraIndicators:
         extras = build_extra_indicators(
             dates,
             btc,
-            SdcaCompositeWeights(valuation=1.0, rs_eth=1.0),
+            SdcaCompositeWeights(power_law=1.0, rs_eth=1.0),
             sources,
             oscillators=spec,
         )
@@ -359,7 +359,7 @@ class TestBuildExtraIndicators:
         assert extras[0].z.to_list() == expected.to_list()
 
 
-class TestDefaultMatchesValuationOnly:
+class TestDefaultMatchesPowerLawOnly:
     def test_disabled_extras_match_single_indicator_risk(self) -> None:
         dates = _dates(5)
         price = pl.Series([80.0] * 5)
@@ -374,16 +374,16 @@ class TestDefaultMatchesValuationOnly:
 
     def test_nonzero_m2_weight_changes_composite(self) -> None:
         dates = _dates(1)
-        price = pl.Series([100.0])  # at median → valuation_z = 0
+        price = pl.Series([100.0])  # at median → power_law_z = 0
         model = StaticRiskModel()
         rails = model.rails(dates)
-        val_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
+        val_z = power_law_z_score(price, rails["low"], rails["median"], rails["high"])
         assert val_z[0] == pytest.approx(0.0)
         extras = [IndicatorWeight(name="m2", z=pl.Series([3.0]), weight=1.0)]
         frame = build_risk_index(dates, price, model, extra_indicators=extras)
         expected = compute_composite_risk(
             [
-                IndicatorWeight(name="valuation", z=val_z, weight=1.0),
+                IndicatorWeight(name="power_law", z=val_z, weight=1.0),
                 extras[0],
             ]
         )

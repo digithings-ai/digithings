@@ -15,26 +15,26 @@ pytestmark = pytest.mark.unit
 
 class TestRegularizeWeights:
     def test_rounds_to_tenths_and_renormalizes(self) -> None:
-        raw = SdcaCompositeWeights(valuation=0.37, weekly_rsi=0.33, sma_band=0.22)
+        raw = SdcaCompositeWeights(power_law=0.37, weekly_rsi=0.33, sma_band=0.22)
         out = regularize_weights(raw, step=0.1)
         # 0.37→0.4, 0.33→0.3, 0.22→0.2 (sum 0.9) then renormalize.
-        assert out.valuation == pytest.approx(0.4 / 0.9)
+        assert out.power_law == pytest.approx(0.4 / 0.9)
         assert out.weekly_rsi == pytest.approx(0.3 / 0.9)
         assert out.sma_band == pytest.approx(0.2 / 0.9)
         assert out.weekly_macd == pytest.approx(0.0)
-        assert out.valuation + out.weekly_rsi + out.sma_band == pytest.approx(1.0)
+        assert out.power_law + out.weekly_rsi + out.sma_band == pytest.approx(1.0)
 
     def test_zero_stays_zero(self) -> None:
-        raw = SdcaCompositeWeights(valuation=1.0, weekly_rsi=0.0, weekly_macd=0.0)
+        raw = SdcaCompositeWeights(power_law=1.0, weekly_rsi=0.0, weekly_macd=0.0)
         out = regularize_weights(raw, step=0.1)
         assert out.weekly_rsi == pytest.approx(0.0)
         assert out.weekly_macd == pytest.approx(0.0)
-        assert out.valuation == pytest.approx(1.0)
+        assert out.power_law == pytest.approx(1.0)
 
     def test_step_five_hundredths(self) -> None:
-        raw = SdcaCompositeWeights(valuation=0.42, weekly_rsi=0.38)
+        raw = SdcaCompositeWeights(power_law=0.42, weekly_rsi=0.38)
         out = regularize_weights(raw, step=0.05)
-        assert out.valuation == pytest.approx(0.4 / 0.8)
+        assert out.power_law == pytest.approx(0.4 / 0.8)
         assert out.weekly_rsi == pytest.approx(0.4 / 0.8)
 
 

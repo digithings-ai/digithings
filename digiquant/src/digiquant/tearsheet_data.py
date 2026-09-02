@@ -103,7 +103,7 @@ class TearsheetFillMarker(BaseModel):
 class TearsheetIndicatorCurve(BaseModel):
     """One composite-member series on the 0–100 risk scale.
 
-    ``display_name`` is the user-facing label (``valuation`` → ``power law``).
+    ``display_name`` is the user-facing label (``m2`` → ``M2 liquidity``).
     ``in_index`` is true iff ``weight > 0``.
     """
 

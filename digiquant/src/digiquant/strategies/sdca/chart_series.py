@@ -21,7 +21,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     indicator_display_name,
 )
 from digiquant.strategies.sdca.presets import load_preset
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
 _BOOK_FRAC_EPS = 1e-12
 # Reconstruction Δunits floor: JSON round-trip jitter, not a real fill.
@@ -153,7 +153,7 @@ def catalog_indicator_curves(
 ) -> list[SdcaIndicatorCurve]:
     """Power-law first, then extras. Zero-weight extras stay in the layout."""
     payload = weights.model_dump()
-    ordered = ("valuation", *EXTRA_INDICATOR_NAMES)
+    ordered = ("power_law", *EXTRA_INDICATOR_NAMES)
     out: list[SdcaIndicatorCurve] = []
     for name in ordered:
         z_vals = z_by_name.get(name)
@@ -186,11 +186,11 @@ def knees_from_preset(preset_name: str) -> SdcaCurveKnees:
 
 
 def z_from_risk_index(risk_df: pl.DataFrame) -> dict[str, list[float | None]]:
-    """Pull ``valuation_z`` / ``{extra}_z`` columns off the #3168 diagnostic frame."""
+    """Pull ``power_law_z`` / ``{extra}_z`` columns off the #3168 diagnostic frame."""
     out: dict[str, list[float | None]] = {}
-    if "valuation_z" in risk_df.columns:
-        out["valuation"] = [
-            None if v is None else float(v) for v in risk_df["valuation_z"].to_list()
+    if "power_law_z" in risk_df.columns:
+        out["power_law"] = [
+            None if v is None else float(v) for v in risk_df["power_law_z"].to_list()
         ]
     for name in EXTRA_INDICATOR_NAMES:
         col = f"{name}_z"
@@ -210,7 +210,7 @@ def power_law_z_from_rails(
     medians = [r[1] for r in rails]
     highs = [r[2] for r in rails]
     price_vals = [None if p != p else float(p) for p in prices]
-    z = valuation_z_score(
+    z = power_law_z_score(
         pl.Series("price", price_vals, dtype=pl.Float64),
         pl.Series("low", lows, dtype=pl.Float64),
         pl.Series("median", medians, dtype=pl.Float64),
@@ -332,15 +332,15 @@ def chart_inputs_from_payload(payload: Mapping[str, object]) -> dict[str, object
         rail_seq = [rail_by_t.get(t, (None, None, None)) for t in dates]
         z_pl = power_law_z_from_rails(prices, rail_seq)
         raw_w = payload.get("indicator_weights")
-        wmap = raw_w if isinstance(raw_w, Mapping) else {"valuation": 1.0}
+        wmap = raw_w if isinstance(raw_w, Mapping) else {"power_law": 1.0}
         weights = SdcaCompositeWeights(
             **{
-                n: float(wmap.get(n, 1.0 if n == "valuation" else 0.0))  # type: ignore[union-attr]
-                for n in ("valuation", *EXTRA_INDICATOR_NAMES)
+                n: float(wmap.get(n, 1.0 if n == "power_law" else 0.0))  # type: ignore[union-attr]
+                for n in ("power_law", *EXTRA_INDICATOR_NAMES)
             }
         )
         indicators = catalog_indicator_curves(
-            dates=dates, z_by_name={"valuation": z_pl}, weights=weights
+            dates=dates, z_by_name={"power_law": z_pl}, weights=weights
         )
 
     persisted_knees = payload.get("curve_knees")

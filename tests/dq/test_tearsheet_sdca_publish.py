@@ -68,7 +68,7 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     weights = sdca["indicator_weights"]
     catalog = ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy")
     assert set(catalog) <= set(weights)
-    assert weights["valuation"] == 1.0
+    assert weights["power_law"] == 1.0
     assert weights["m2"] == 0.5
     assert weights["dxy"] == 0.5
     assert weights["rs_eth"] == 0.0
@@ -191,7 +191,7 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert {"t", "low", "median", "high"} <= set(payload["rails"][0])
     assert "Coefficients" in " ".join(payload["notes"])
     assert "Preset btc_optimized" in " ".join(payload["notes"])
-    assert "valuation:1.0" in " ".join(payload["notes"])
+    assert "power_law:1.0" in " ".join(payload["notes"])
     assert "composite valuation index" in " ".join(payload["notes"]).lower()
     assert "weekly log-MACD" in " ".join(payload["notes"])
     assert "weekly RSI" in " ".join(payload["notes"])

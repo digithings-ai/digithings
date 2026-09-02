@@ -146,7 +146,7 @@ def published_indicator_weights(
     raw = json.loads(path.read_text())
     block = raw["strategies"]["btc_sdca"]["sdca"]["indicator_weights"]
     return SdcaCompositeWeights(
-        valuation=float(block.get("valuation", 1.0)),
+        power_law=float(block.get("power_law", 1.0)),
         m2=float(block.get("m2", 0.0)),
         rs_eth=float(block.get("rs_eth", 0.0)),
         dxy=float(block.get("dxy", 0.0)),
@@ -471,7 +471,7 @@ def persist_curve_winner(
         prov = json.loads(provenance_path.read_text())
         weight_params: dict[str, float] = {}
         for name, val in result.frozen_weights.items():
-            key = "valuation_weight" if name == "valuation" else f"{name}_weight"
+            key = "power_law_weight" if name == "power_law" else f"{name}_weight"
             weight_params[key] = float(val)
         prov["best_params"] = {**params_from_shape(shape), **weight_params}
         prov["beats_flat_dca_oos"] = False
@@ -525,7 +525,7 @@ def load_frozen_index(
         ohlcv["close"],
         BtcPowerLawRiskModel(load_coefficients()),
         extra_indicators=extras or None,
-        valuation_weight=weights.valuation,
+        power_law_weight=weights.power_law,
     )
     cutoff = date.fromisoformat(trade_start)
     window = index.filter(pl.col("date") >= cutoff)

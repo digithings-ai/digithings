@@ -2,7 +2,7 @@
 
 Cycle-window overlap search cannot honestly live inside ``run_optimize``:
 that path is Stage B walk-forward (vs-flat-DCA, IS rails, curve shape).
-This module loads cached OHLCV, builds valuation-z + extras for the
+This module loads cached OHLCV, builds power-law-z + extras for the
 profile, runs ``optimize_stage_a_weights``, and regularizes the winner.
 """
 
@@ -30,7 +30,7 @@ from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
 from digiquant.strategies.sdca.regularize import regularize_weights
 from digiquant.strategies.sdca.stage_a import CycleOverlapScore, optimize_stage_a_weights
 from digiquant.strategies.sdca.two_stage import freeze_weight_params
-from digiquant.strategies.sdca.valuation import valuation_confluence_z
+from digiquant.strategies.sdca.power_law_zscore import power_law_confluence_z
 
 KNOWN_SDCA_PROFILES: tuple[str, ...] = ("btc_v1", "eth_research_v1")
 
@@ -94,13 +94,13 @@ def fit_sdca_weights_from_cache(
         rolling_window=rolling_window,
     )
     rails = model.rails(dates)
-    valuation_z = valuation_confluence_z(
+    power_law_z = power_law_confluence_z(
         dates,
         close,
         rails["low"],
         rails["median"],
         rails["high"],
-        trend_window=profile.oscillators.valuation_trend_window,
+        trend_window=profile.oscillators.power_law_trend_window,
     ).to_list()
     search_names = stage_a_search_names(profile)
     extra_z = technicals_from_ohlcv(dates, close, oscillators=profile.oscillators)
@@ -119,7 +119,7 @@ def fit_sdca_weights_from_cache(
         )
         enabled = {name: 1.0 for name in plugin}
         try:
-            plugin_weights = SdcaCompositeWeights(valuation=1.0, **enabled)
+            plugin_weights = SdcaCompositeWeights(power_law=1.0, **enabled)
             extra_z.update(
                 extra_z_vectors(
                     dates,
@@ -135,7 +135,7 @@ def fit_sdca_weights_from_cache(
             pass
     stage = optimize_stage_a_weights(
         dates.to_list(),
-        valuation_z=valuation_z,
+        power_law_z=power_law_z,
         extra_z=extra_z,
         windows=profile.cycle_windows,
         search_names=search_names,

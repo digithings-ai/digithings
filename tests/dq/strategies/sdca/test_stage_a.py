@@ -151,10 +151,10 @@ class TestStageAWeightSearch:
             else:
                 dummy.append(0.0)
             noise.append(0.0)
-        valuation = [0.0] * len(dates)
+        power_law = [0.0] * len(dates)
         result = optimize_stage_a_weights(
             dates,
-            valuation_z=valuation,
+            power_law_z=power_law,
             extra_z={"weekly_rsi": dummy, "sma_band": noise},
             windows=windows,
             search_names=("weekly_rsi", "sma_band"),
@@ -165,8 +165,8 @@ class TestStageAWeightSearch:
         assert result.weights.weekly_rsi == pytest.approx(1.0)
         assert result.weights.sma_band == pytest.approx(0.0)
 
-    def test_uninformative_extras_lose_to_valuation_only(self) -> None:
-        """Equal overlap prefers fewer extras and valuation=1 (parsimony)."""
+    def test_uninformative_extras_lose_to_power_law_only(self) -> None:
+        """Equal overlap prefers fewer extras and power_law=1 (parsimony)."""
         start = date(2020, 1, 1)
         dates = _dates(90, start)
         windows = SdcaCycleWindows(
@@ -185,22 +185,22 @@ class TestStageAWeightSearch:
                 ),
             )
         )
-        valuation = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        power_law = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
         zeros = [0.0] * len(dates)
         result = optimize_stage_a_weights(
             dates,
-            valuation_z=valuation,
+            power_law_z=power_law,
             extra_z={"weekly_rsi": zeros, "sma_band": zeros},
             windows=windows,
             search_names=("weekly_rsi", "sma_band"),
             grid=(0.0, 1.0),
-            valuation_grid=(0.5, 1.0),
+            power_law_grid=(0.5, 1.0),
         )
         assert result.weights.weekly_rsi == pytest.approx(0.0)
         assert result.weights.sma_band == pytest.approx(0.0)
-        assert result.weights.valuation == pytest.approx(1.0)
+        assert result.weights.power_law == pytest.approx(1.0)
 
-    def test_require_extras_skips_valuation_only(self) -> None:
+    def test_require_extras_skips_power_law_only(self) -> None:
         start = date(2020, 1, 1)
         dates = _dates(90, start)
         windows = SdcaCycleWindows(
@@ -219,27 +219,27 @@ class TestStageAWeightSearch:
                 ),
             )
         )
-        valuation = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        power_law = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
         dummy = [-3.0 if d <= date(2020, 1, 25) else 3.0 for d in dates]
         zeros = [0.0] * len(dates)
         result = optimize_stage_a_weights(
             dates,
-            valuation_z=valuation,
+            power_law_z=power_law,
             extra_z={"weekly_rsi": dummy, "sma_band": zeros},
             windows=windows,
             search_names=("weekly_rsi", "sma_band"),
             grid=(0.0, 1.0),
-            valuation_grid=(1.0,),
+            power_law_grid=(1.0,),
             require_extras=True,
         )
-        # Valuation-only is skipped; any non-zero extra satisfies require_extras
-        # (sma_band zeros still count as an enabled extra and dilute valuation).
+        # Power-law-only is skipped; any non-zero extra satisfies require_extras
+        # (sma_band zeros still count as an enabled extra and dilute power_law).
         assert result.weights.enabled_extras()
-        assert result.weights.valuation == pytest.approx(1.0)
+        assert result.weights.power_law == pytest.approx(1.0)
         assert sum(result.weights.enabled_extras().values()) > 0.0
 
     def test_all_null_extra_combos_are_skipped_not_aborted(self) -> None:
-        """Warmup-null extras must not abort the grid; valuation-only still wins."""
+        """Warmup-null extras must not abort the grid; power_law-only still wins."""
         start = date(2020, 1, 1)
         dates = _dates(60, start)
         windows = SdcaCycleWindows(
@@ -258,26 +258,26 @@ class TestStageAWeightSearch:
                 ),
             )
         )
-        valuation = [3.0 if d <= date(2020, 1, 20) else -3.0 for d in dates]
+        power_law = [3.0 if d <= date(2020, 1, 20) else -3.0 for d in dates]
         result = optimize_stage_a_weights(
             dates,
-            valuation_z=valuation,
+            power_law_z=power_law,
             extra_z={"weekly_rsi": [None] * len(dates)},
             windows=windows,
             search_names=("weekly_rsi",),
             grid=(0.0, 1.0),
-            valuation_grid=(1.0,),
+            power_law_grid=(1.0,),
         )
         assert result.weights.weekly_rsi == pytest.approx(0.0)
-        assert result.weights.valuation == pytest.approx(1.0)
+        assert result.weights.power_law == pytest.approx(1.0)
 
     def test_risk_from_weighted_z_matches_composite_formula(self) -> None:
         dates = [date(2020, 1, 1), date(2020, 1, 2)]
         risk = risk_from_weighted_z(
             dates,
-            valuation_z=[0.0, 0.0],
+            power_law_z=[0.0, 0.0],
             extra_z={"weekly_rsi": [3.0, 3.0]},
-            weights=SdcaCompositeWeights(valuation=1.0, weekly_rsi=1.0),
+            weights=SdcaCompositeWeights(power_law=1.0, weekly_rsi=1.0),
         )
         # composite_z = (0 + 3) / 2 = 1.5 → risk = 50 - 1.5 * 50/3 = 25
         assert risk[0] == pytest.approx(25.0)

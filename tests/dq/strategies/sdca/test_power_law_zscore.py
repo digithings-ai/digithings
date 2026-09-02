@@ -1,4 +1,4 @@
-"""Tests for the valuation z-score indicator (mirrors the artifact's eqmZScoreAtIndex)."""
+"""Tests for the power-law z-score indicator (mirrors the artifact's eqmZScoreAtIndex)."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from datetime import date
 import numpy as np
 import polars as pl
 import pytest
-from digiquant.strategies.sdca.valuation import (
-    valuation_confluence_z,
-    valuation_trend_z,
-    valuation_z_score,
+from digiquant.strategies.sdca.power_law_zscore import (
+    power_law_confluence_z,
+    power_law_trend_z,
+    power_law_z_score,
 )
 
 pytestmark = pytest.mark.unit
@@ -22,13 +22,13 @@ def _dates(n: int, start: date = date(2020, 1, 1)) -> pl.Series:
     return pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
 
 
-class TestValuationZScore:
+class TestPowerLawZScore:
     def test_price_at_median_is_zero(self) -> None:
         price = pl.Series("price", [100.0])
         low = pl.Series("low", [50.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(0.0)
 
     def test_price_at_low_rail_is_plus_3(self) -> None:
@@ -36,7 +36,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(3.0)
 
     def test_price_at_high_rail_is_minus_3(self) -> None:
@@ -44,7 +44,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(-3.0)
 
     def test_price_below_low_rail_clamps_to_plus_3(self) -> None:
@@ -52,7 +52,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(3.0)
 
     def test_price_above_high_rail_clamps_to_minus_3(self) -> None:
@@ -60,7 +60,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(-3.0)
 
     def test_vectorized_over_multiple_rows(self) -> None:
@@ -68,7 +68,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0, 50.0, 50.0])
         median = pl.Series("median", [100.0, 100.0, 100.0])
         high = pl.Series("high", [200.0, 200.0, 200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z.to_list() == pytest.approx([0.0, 3.0, -3.0])
 
     def test_interior_prices_interpolate_in_log_space_not_linear_space(self) -> None:
@@ -84,7 +84,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0, 50.0])
         median = pl.Series("median", [100.0, 100.0])
         high = pl.Series("high", [200.0, 200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(1.2451125, abs=1e-7)
         assert z[1] == pytest.approx(-1.7548875, abs=1e-7)
 
@@ -93,7 +93,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0, None])
         median = pl.Series("median", [100.0, 100.0])
         high = pl.Series("high", [200.0, 200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(0.0)
         assert z[1] is None
 
@@ -103,7 +103,7 @@ class TestValuationZScore:
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
         with pytest.raises(ValueError, match="positive"):
-            valuation_z_score(price, low, median, high)
+            power_law_z_score(price, low, median, high)
 
     def test_non_finite_price_raises(self) -> None:
         price = pl.Series("price", [float("inf")])
@@ -111,7 +111,7 @@ class TestValuationZScore:
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
         with pytest.raises(ValueError, match="finite"):
-            valuation_z_score(price, low, median, high)
+            power_law_z_score(price, low, median, high)
 
     def test_low_not_less_than_median_raises(self) -> None:
         price = pl.Series("price", [100.0])
@@ -119,7 +119,7 @@ class TestValuationZScore:
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [200.0])
         with pytest.raises(ValueError, match="low < median < high"):
-            valuation_z_score(price, low, median, high)
+            power_law_z_score(price, low, median, high)
 
     def test_median_not_less_than_high_raises(self) -> None:
         price = pl.Series("price", [100.0])
@@ -127,7 +127,7 @@ class TestValuationZScore:
         median = pl.Series("median", [200.0])
         high = pl.Series("high", [200.0])
         with pytest.raises(ValueError, match="low < median < high"):
-            valuation_z_score(price, low, median, high)
+            power_law_z_score(price, low, median, high)
 
     def test_null_high_is_null_even_when_the_below_branch_is_taken(self) -> None:
         """A null rail must null the row even when the taken branch does not read it.
@@ -140,7 +140,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0, 50.0])
         median = pl.Series("median", [100.0, 100.0])
         high = pl.Series("high", [200.0, None])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(0.0)
         assert z[1] is None
 
@@ -150,7 +150,7 @@ class TestValuationZScore:
         low = pl.Series("low", [50.0, None])
         median = pl.Series("median", [100.0, 100.0])
         high = pl.Series("high", [200.0, 200.0])
-        z = valuation_z_score(price, low, median, high)
+        z = power_law_z_score(price, low, median, high)
         assert z[0] == pytest.approx(0.0)
         assert z[1] is None
 
@@ -167,15 +167,15 @@ class TestValuationZScore:
         low = pl.Series("low", [999.0])
         median = pl.Series("median", [100.0])
         high = pl.Series("high", [None])
-        assert valuation_z_score(price, low, median, high)[0] is None
+        assert power_law_z_score(price, low, median, high)[0] is None
 
 
-class TestValuationTrendZ:
+class TestPowerLawTrendZ:
     def test_values_before_full_window_are_null(self) -> None:
         n, window = 40, 20
         dates = _dates(n)
         price = pl.Series("price", [100.0 * math.exp(0.01 * i) for i in range(n)])
-        z = valuation_trend_z(dates, price, window=window)
+        z = power_law_trend_z(dates, price, window=window)
         assert z[: window - 1].null_count() == window - 1
         assert z[window - 1] is not None
 
@@ -190,7 +190,7 @@ class TestValuationTrendZ:
         n, window = 60, 20
         dates = _dates(n)
         price = pl.Series("price", [100.0 * math.exp(0.01 * i) for i in range(n)])
-        z = valuation_trend_z(dates, price, window=window)
+        z = power_law_trend_z(dates, price, window=window)
         for i in range(window - 1, n):
             assert abs(z[i]) < 0.1
 
@@ -199,7 +199,7 @@ class TestValuationTrendZ:
         dates = _dates(n)
         values = [100.0 * math.exp(0.01 * i) for i in range(n)]
         values[-1] *= 1.05
-        z = valuation_trend_z(dates, pl.Series("price", values), window=window)
+        z = power_law_trend_z(dates, pl.Series("price", values), window=window)
         assert z[-1] < 0.0
 
     def test_downward_jump_reads_positive_cheap(self) -> None:
@@ -207,7 +207,7 @@ class TestValuationTrendZ:
         dates = _dates(n)
         values = [100.0 * math.exp(0.01 * i) for i in range(n)]
         values[-1] /= 1.05
-        z = valuation_trend_z(dates, pl.Series("price", values), window=window)
+        z = power_law_trend_z(dates, pl.Series("price", values), window=window)
         assert z[-1] > 0.0
 
     def test_extreme_jumps_clip_to_plus_minus_3(self) -> None:
@@ -217,12 +217,12 @@ class TestValuationTrendZ:
 
         up = list(base)
         up[-1] *= math.exp(10.0)
-        z_up = valuation_trend_z(dates, pl.Series("price", up), window=window)
+        z_up = power_law_trend_z(dates, pl.Series("price", up), window=window)
         assert z_up[-1] == pytest.approx(-3.0)
 
         down = list(base)
         down[-1] *= math.exp(-10.0)
-        z_down = valuation_trend_z(dates, pl.Series("price", down), window=window)
+        z_down = power_law_trend_z(dates, pl.Series("price", down), window=window)
         assert z_down[-1] == pytest.approx(3.0)
 
     def test_matches_numpy_polyfit_per_window(self) -> None:
@@ -234,7 +234,7 @@ class TestValuationTrendZ:
         log_price = np.cumsum(log_returns) + math.log(100.0)
         price = pl.Series("price", np.exp(log_price).tolist())
 
-        z = valuation_trend_z(dates, price, window=window)
+        z = power_law_trend_z(dates, price, window=window)
 
         xs = np.arange(window, dtype=np.float64)
         for i in range(window - 1, n):
@@ -248,7 +248,7 @@ class TestValuationTrendZ:
             assert z[i] == pytest.approx(expected, abs=1e-6)
 
 
-class TestValuationConfluenceZ:
+class TestPowerLawConfluenceZ:
     def test_matches_agreement_scaled_formula_across_history(self) -> None:
         n = 500
         dates = _dates(n)
@@ -268,7 +268,7 @@ class TestValuationConfluenceZ:
         disagreement_damp = 0.5
         trend_window = 60
 
-        blended = valuation_confluence_z(
+        blended = power_law_confluence_z(
             dates,
             price,
             low,
@@ -279,8 +279,8 @@ class TestValuationConfluenceZ:
             agreement_boost=agreement_boost,
             disagreement_damp=disagreement_damp,
         )
-        long_term = valuation_z_score(price, low, median, high)
-        medium_term = valuation_trend_z(dates, price, window=trend_window)
+        long_term = power_law_z_score(price, low, median, high)
+        medium_term = power_law_trend_z(dates, price, window=trend_window)
 
         saw_agreement = False
         saw_disagreement = False
@@ -326,7 +326,7 @@ class TestValuationConfluenceZ:
         median = pl.Series("median", [100.0] * n)
         high = pl.Series("high", [200.0] * n)
 
-        blended = valuation_confluence_z(dates, price, low, median, high, trend_window=180)
-        long_term = valuation_z_score(price, low, median, high)
+        blended = power_law_confluence_z(dates, price, low, median, high, trend_window=180)
+        long_term = power_law_z_score(price, low, median, high)
 
         assert blended.to_list() == pytest.approx(long_term.to_list())

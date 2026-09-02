@@ -170,7 +170,7 @@ def run_build_sdca_risk_index(
             close,
             model,
             extra_indicators=extras,
-            valuation_weight=weights.valuation,
+            power_law_weight=weights.power_law,
         )
         dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
         path = write_risk_index(frame, dest)

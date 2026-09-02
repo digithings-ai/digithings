@@ -109,7 +109,7 @@ class TestBuildSdcaRiskIndexTool:
         assert loaded["date"].dtype == pl.Date
         assert loaded["date"][0] == date(2020, 1, 1)
 
-    def test_default_weights_match_valuation_only_risk(self, tmp_path: Path) -> None:
+    def test_default_weights_match_power_law_only_risk(self, tmp_path: Path) -> None:
         _write_cache(tmp_path, n=15)
         out_default = tmp_path / "risk_default.parquet"
         out_explicit = tmp_path / "risk_explicit.parquet"
@@ -124,7 +124,7 @@ class TestBuildSdcaRiskIndexTool:
             _tool()(
                 **base,
                 output_path=str(out_explicit),
-                indicator_weights='{"valuation": 1.0, "m2": 0.0, "rs_eth": 0.0, "dxy": 0.0}',
+                indicator_weights='{"power_law": 1.0, "m2": 0.0, "rs_eth": 0.0, "dxy": 0.0}',
             )
         )
         assert "error" not in a and "error" not in b
@@ -154,7 +154,7 @@ class TestBuildSdcaRiskIndexTool:
             _tool()(
                 **base,
                 output_path=str(out_blend),
-                indicator_weights='{"valuation": 1.0, "m2": 1.0}',
+                indicator_weights='{"power_law": 1.0, "m2": 1.0}',
                 m2_path=str(m2_path),
             )
         )

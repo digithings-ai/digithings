@@ -96,7 +96,7 @@ class TestFitSdcaWeightsFromCache:
         )
         assert result.symbol == "ETH-USD"
         assert result.num_evaluations > 0
-        assert result.weights["valuation"] >= 0.0
+        assert result.weights["power_law"] >= 0.0
         assert abs(sum(result.regularized_weights.values()) - 1.0) < 1e-9
         assert "weekly_rsi_weight" in result.regularized_weight_params
         assert Path(result.path or "").exists()

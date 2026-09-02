@@ -110,11 +110,11 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
     # SDCA (#3174 + remaining-book curve search): six SdcaCurveShape params
-    # plus valuation/macro/oscillator weights in [0, 1] (composite normalizes).
+    # plus power-law/macro/oscillator weights in [0, 1] (composite normalizes).
     # Curve bounds are widened so remaining-book rates can concentrate at
     # extremes (max 40%/day, knees at/inside the published 25/70 dead zone,
     # curvature up to 5). Zero extra weight = disabled.
-    # Default valuation=1 / extras=0 matches today's BTC charts unless settings
+    # Default power_law=1 / extras=0 matches today's BTC charts unless settings
     # freeze a composite (published BTC is power law 1.0 + M2 0.5 + DXY 0.5).
     "sdca": {
         "buy_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
@@ -123,7 +123,7 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "sell_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
         "buy_curvature": (1.0, 5.0, 2.0, 0.5, "float"),
         "sell_curvature": (1.0, 5.0, 3.0, 0.5, "float"),
-        "valuation_weight": (0.0, 1.0, 1.0, 0.1, "float"),
+        "power_law_weight": (0.0, 1.0, 1.0, 0.1, "float"),
         "m2_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "rs_eth_weight": (0.0, 1.0, 0.0, 0.1, "float"),
         "dxy_weight": (0.0, 1.0, 0.0, 0.1, "float"),

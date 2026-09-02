@@ -5,7 +5,7 @@ Weekly oscillators are computed on **completed ISO weeks** (Monday-aligned
 dates with ``join_asof(..., strategy="backward")``. A Wednesday never sees
 the in-progress week's Friday/Sunday close.
 
-Sign convention matches ``valuation_z``: cheap / buy = +z, rich / sell = −z,
+Sign convention matches ``power_law_z``: cheap / buy = +z, rich / sell = −z,
 clipped to ``[-3, 3]``.
 
 ``weekly_rsi`` is a **dead-zone** map (mid-cycle 30–80 → z≈0, RSI 85 is
@@ -32,8 +32,8 @@ original 90-day window, long-term) blended with a fast leg (``sma_band_z``
 at a shorter window, medium-term). Unlike RSI/MACD, both legs share one
 formula — timeframe separation comes purely from window length, since
 ``sma_band_z`` never aggregates to weekly bars. Still **not** Mayer / 200w
-SMA (*r* ≈ 0.84 vs power-law ``valuation_z``). Alpha vs the power-law
-median is collinear with ``valuation_z`` and is omitted — see
+SMA (*r* ≈ 0.84 vs ``power_law_z``). Alpha vs the power-law
+median is collinear with ``power_law_z`` and is omitted — see
 ``btc_richer_composite.json``.
 """
 
@@ -72,7 +72,7 @@ _RS_ETH_WINDOW = 90
 _RS_ETH_MIN_SAMPLES = 20
 _RS_ETH_FAST_WINDOW = 30
 _RS_ETH_FAST_MIN_SAMPLES = 15
-_VALUATION_TREND_WINDOW = 180
+_POWER_LAW_TREND_WINDOW = 180
 _SIGMA_FLOOR = 1e-12
 _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
 _RSI_DEAD_LOW = 30.0
@@ -112,12 +112,12 @@ class SdcaOscillatorSpec(BaseModel):
     relative strength is not a price-oscillator technical, but reuses this
     spec as the one per-indicator-period config object already threaded
     through ``build_extra_indicators``.
-    ``valuation_trend_window`` configures the medium-term leg of
-    ``valuation_confluence_z`` (``valuation.py``) — a rolling
+    ``power_law_trend_window`` configures the medium-term leg of
+    ``power_law_confluence_z`` (``power_law_zscore.py``) — a rolling
     linear-regression-trend z-score, blended with the whole-history
-    power-law ``valuation_z`` (which has no window of its own, since its
+    power-law ``power_law_z`` (which has no window of its own, since its
     long-term character comes entirely from the whole-history rails fit).
-    There is no companion ``valuation_trend_min_samples``: unlike the other
+    There is no companion ``power_law_trend_min_samples``: unlike the other
     confluence legs, a partial-window regression is not a meaningful trend
     line, so the leg is null until a full window of history is available.
     """
@@ -142,7 +142,7 @@ class SdcaOscillatorSpec(BaseModel):
     rs_eth_min_samples: int = Field(_RS_ETH_MIN_SAMPLES, ge=2)
     rs_eth_fast_window: int = Field(_RS_ETH_FAST_WINDOW, ge=2)
     rs_eth_fast_min_samples: int = Field(_RS_ETH_FAST_MIN_SAMPLES, ge=2)
-    valuation_trend_window: int = Field(_VALUATION_TREND_WINDOW, ge=3)
+    power_law_trend_window: int = Field(_POWER_LAW_TREND_WINDOW, ge=3)
 
     @model_validator(mode="after")
     def _ordered(self) -> SdcaOscillatorSpec:

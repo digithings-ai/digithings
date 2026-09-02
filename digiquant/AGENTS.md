@@ -137,7 +137,7 @@ accumulation/distribution curve → daily backtest). See
 the full module map.
 
 - **The core engine (`curve.py`, `composite_risk.py`, `risk_model.py`,
-  `valuation.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
+  `power_law_zscore.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
   `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
   import to any other file in this package, or `strategies.sdca` stops being
   importable without the `nautilus` extra.
@@ -176,7 +176,7 @@ the full module map.
   environment.
 - **Published `btc_sdca` is a composite valuation index + remaining-book.**
   Keepers **power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI**
-  (`valuation=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
+  (`power_law=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
   are persisted in `settings.json`. SMA band and BTC/ETH RS stay at 0.
   Oscillator z is cycle-scaled (RSI dead-zone + cap; log-MACD sloped top),
   not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
@@ -302,7 +302,7 @@ a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
 Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
 `weekly_rsi_weight`, `weekly_macd_weight`, `sma_band_weight`) are searched by
 `method=random`/`bayesian` or an explicit `param_grid`; auto-grid holds them
-at 0 (valuation-only, current BTC charts) unless Stage A weights are passed
+at 0 (power-law-only, current BTC charts) unless Stage A weights are passed
 as `strategy_params` (frozen onto every trial). Weekly RSI/MACD/SMA-band z are
 computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
 file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC

@@ -301,7 +301,7 @@ def _sdca_trials(
     base_params: dict[str, float | int | str] | None,
 ) -> list[dict[str, float | int | str]]:
     """SDCA search points. Auto-grid drops curvatures and extra-indicator
-    weights (held at defaults: valuation=1, extras=0) so the grid stays small.
+    weights (held at defaults: power_law=1, extras=0) so the grid stays small.
     Random/bayesian and an explicit ``param_grid`` search the extra weights.
     """
     extra_weight_keys = {

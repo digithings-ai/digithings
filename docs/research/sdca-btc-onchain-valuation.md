@@ -235,7 +235,7 @@ cluster unless we want a license-constrained MVRV audit tape.
 ## BTC SDCA on-chain v1 subset
 
 Four votes, four families. Map each to `[-3, +3]` with **cheap = +**
-(same convention as `valuation.py`). Do **not** also enable NUPL,
+(same convention as `power_law_zscore.py`). Do **not** also enable NUPL,
 realized price, MVRV-Z-as-raw, LTH/STH MVRV, or Pi Cycle.
 
 | # | Indicator | Bitview series | Family | z mapping (when #1086 is executed) |
@@ -255,7 +255,7 @@ tearsheets / Atlas). Skip `nupl`.
 - NUPL, raw MVRV alongside MVRV-Z, LTH/STH MVRV.
 - Reserve Risk (same conviction family as RHODL; add only if RHODL is
   dropped).
-- Pi Cycle, Mayer, 200w — price-only, overlap the power-law `valuation_z`
+- Pi Cycle, Mayer, 200w — price-only, overlap the power-law `power_law_z`
   (*r* ≈ 0.84 in the indicator-pool note).
 - CVDD — not in BRK; floor model, not an oscillator.
 - Thermocap multiple — slow cousin of Puell; keep off the v1 ballot.

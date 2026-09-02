@@ -44,8 +44,8 @@ class StageAResult(BaseModel):
 
 
 def _weight_complexity(weights: SdcaCompositeWeights) -> tuple[int, float]:
-    """Tie-break: fewer enabled extras, then higher valuation weight."""
-    return (len(weights.enabled_extras()), -weights.valuation)
+    """Tie-break: fewer enabled extras, then higher power-law weight."""
+    return (len(weights.enabled_extras()), -weights.power_law)
 
 
 def _is_better(
@@ -104,20 +104,20 @@ def cycle_overlap_score(
 
 def risk_from_weighted_z(
     dates: Sequence[date],
-    valuation_z: Sequence[float | None],
+    power_law_z: Sequence[float | None],
     extra_z: Mapping[str, Sequence[float | None]],
     weights: SdcaCompositeWeights,
 ) -> list[float | None]:
-    """Blend valuation + extras the same way ``compute_composite_risk`` does."""
-    if len(dates) != len(valuation_z):
-        raise ValueError("dates and valuation_z must be the same length")
+    """Blend power-law + extras the same way ``compute_composite_risk`` does."""
+    if len(dates) != len(power_law_z):
+        raise ValueError("dates and power_law_z must be the same length")
     indicators: list[IndicatorWeight] = []
-    if weights.valuation > 0.0:
+    if weights.power_law > 0.0:
         indicators.append(
             IndicatorWeight(
-                name="valuation",
-                z=pl.Series(list(valuation_z), dtype=pl.Float64),
-                weight=weights.valuation,
+                name="power_law",
+                z=pl.Series(list(power_law_z), dtype=pl.Float64),
+                weight=weights.power_law,
             )
         )
     for name, weight in weights.enabled_extras().items():
@@ -135,28 +135,28 @@ def risk_from_weighted_z(
 def optimize_stage_a_weights(
     dates: Sequence[date],
     *,
-    valuation_z: Sequence[float | None],
+    power_law_z: Sequence[float | None],
     extra_z: Mapping[str, Sequence[float | None]],
     windows: SdcaCycleWindows,
     search_names: Sequence[str] = EXTRA_INDICATOR_NAMES,
     grid: Sequence[float] = (0.0, 0.5, 1.0),
-    valuation_grid: Sequence[float] = (0.0, 0.5, 1.0),
+    power_law_grid: Sequence[float] = (0.0, 0.5, 1.0),
     require_extras: bool = False,
 ) -> StageAResult:
     """Grid-search extra weights so composite troughs/peaks overlap ``windows``.
 
-    ``require_extras=True`` skips valuation-only (and other zero-extra) rows so
+    ``require_extras=True`` skips power-law-only (and other zero-extra) rows so
     the published composite is actually a blend, not a re-discovery of
     power-law-only risk.
     """
     best: StageAResult | None = None
     evaluated = 0
     names = tuple(search_names)
-    for val in valuation_grid:
+    for val in power_law_grid:
         for combo in product(grid, repeat=len(names)):
             payload = {name: float(weight) for name, weight in zip(names, combo, strict=True)}
             try:
-                weights = SdcaCompositeWeights(valuation=float(val), **payload)
+                weights = SdcaCompositeWeights(power_law=float(val), **payload)
             except ValueError:
                 continue
             if require_extras and not weights.enabled_extras():
@@ -165,7 +165,7 @@ def optimize_stage_a_weights(
                 continue
             evaluated += 1
             try:
-                risk = risk_from_weighted_z(dates, valuation_z, extra_z, weights)
+                risk = risk_from_weighted_z(dates, power_law_z, extra_z, weights)
                 score = cycle_overlap_score(dates, risk, windows)
             except ValueError:
                 # Warmup / missing extra z can leave windows all-null; skip that combo.

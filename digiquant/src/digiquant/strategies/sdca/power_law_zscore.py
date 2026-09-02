@@ -1,12 +1,12 @@
-"""Valuation z-score indicator — mirrors the artifact's ``eqmZScoreAtIndex``.
+"""Power-law z-score indicator — mirrors the artifact's ``eqmZScoreAtIndex``.
 
 Positions price in log-space between a ``RiskModel``'s low/median/high rails,
 reversed so cheap = +3 (max buy signal) and rich = -3 (max sell signal). This
 is the SDCA engine's default/primary indicator; it takes rails as plain
 Polars series so it has zero dependency on any specific ``RiskModel``.
 
-``valuation_confluence_z`` blends this whole-history power-law leg
-(long-term, unchanged) with a new medium-term leg (``valuation_trend_z``) via
+``power_law_confluence_z`` blends this whole-history power-law leg
+(long-term, unchanged) with a new medium-term leg (``power_law_trend_z``) via
 the same agreement-scaled pattern used by the price-oscillator confluences
 (``price_oscillators.agreement_scaled_blend``). The medium-term leg is
 deliberately *not* a rolling/truncated refit of the power-law's quadratic
@@ -28,12 +28,12 @@ from digiquant.strategies.sdca.price_oscillators import agreement_scaled_blend
 
 _TREND_WINDOW = 180
 _SIGMA_FLOOR = 1e-12
-_VALUATION_CONFLUENCE_LONG_WEIGHT = 0.5
-_VALUATION_CONFLUENCE_AGREEMENT_BOOST = 0.5
-_VALUATION_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
+_POWER_LAW_CONFLUENCE_LONG_WEIGHT = 0.5
+_POWER_LAW_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_POWER_LAW_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 
 
-def valuation_z_score(
+def power_law_z_score(
     price: pl.Series,
     low: pl.Series,
     median: pl.Series,
@@ -55,14 +55,14 @@ def valuation_z_score(
     if complete.height:
         for col in ("price", "low", "median", "high"):
             if not complete[col].is_finite().all():
-                raise ValueError(f"valuation_z_score requires finite {col} values")
+                raise ValueError(f"power_law_z_score requires finite {col} values")
             if not (complete[col] > 0).all():
-                raise ValueError(f"valuation_z_score requires positive {col} values")
+                raise ValueError(f"power_law_z_score requires positive {col} values")
         if (
             not (complete["low"] < complete["median"]).all()
             or not (complete["median"] < complete["high"]).all()
         ):
-            raise ValueError("valuation_z_score requires low < median < high")
+            raise ValueError("power_law_z_score requires low < median < high")
 
     log_price = df["price"].log()
     log_low = df["low"].log()
@@ -79,11 +79,11 @@ def valuation_z_score(
         pl.when(has_data)
         .then(pl.when(df["price"] <= df["median"]).then(below).otherwise(above))
         .otherwise(None)
-        .alias("valuation_z")
+        .alias("power_law_z")
     ).to_series()
 
 
-def valuation_trend_z(
+def power_law_trend_z(
     dates: pl.Series,
     price: pl.Series,
     *,
@@ -143,10 +143,10 @@ def valuation_trend_z(
     dof = max(w - 2.0, 1.0)
     resid_std = (rss / dof).sqrt().clip(lower_bound=_SIGMA_FLOOR)
 
-    return (-(residual / resid_std)).clip(-3.0, 3.0).alias("valuation_trend")
+    return (-(residual / resid_std)).clip(-3.0, 3.0).alias("power_law_trend")
 
 
-def valuation_confluence_z(
+def power_law_confluence_z(
     dates: pl.Series,
     price: pl.Series,
     low: pl.Series,
@@ -154,29 +154,29 @@ def valuation_confluence_z(
     high: pl.Series,
     *,
     trend_window: int = _TREND_WINDOW,
-    long_term_weight: float = _VALUATION_CONFLUENCE_LONG_WEIGHT,
-    agreement_boost: float = _VALUATION_CONFLUENCE_AGREEMENT_BOOST,
-    disagreement_damp: float = _VALUATION_CONFLUENCE_DISAGREEMENT_DAMP,
+    long_term_weight: float = _POWER_LAW_CONFLUENCE_LONG_WEIGHT,
+    agreement_boost: float = _POWER_LAW_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _POWER_LAW_CONFLUENCE_DISAGREEMENT_DAMP,
 ) -> pl.Series:
-    """Whole-history power-law valuation (long-term) + rolling trend (medium-term).
+    """Whole-history power-law position (long-term) + rolling trend (medium-term).
 
     Same agreement-scaled blend as ``rsi_confluence_z`` /
     ``macd_confluence_z`` / ``sma_band_confluence_z`` /
-    ``rs_eth_confluence_z``. The long-term leg is ``valuation_z_score``
+    ``rs_eth_confluence_z``. The long-term leg is ``power_law_z_score``
     against the ``RiskModel`` rails, completely unchanged. The medium-term
-    leg is ``valuation_trend_z``, which is responsive to few-months
+    leg is ``power_law_trend_z``, which is responsive to few-months
     pullbacks the whole-history quantile bands never approach.
     """
-    long_term = valuation_z_score(price, low, median, high)
-    medium_term = valuation_trend_z(dates, price, window=trend_window)
+    long_term = power_law_z_score(price, low, median, high)
+    medium_term = power_law_trend_z(dates, price, window=trend_window)
     return agreement_scaled_blend(
         long_term,
         medium_term,
         long_term_weight=long_term_weight,
         agreement_boost=agreement_boost,
         disagreement_damp=disagreement_damp,
-        name="valuation_z",
+        name="power_law_z",
     )
 
 
-__all__ = ["valuation_confluence_z", "valuation_trend_z", "valuation_z_score"]
+__all__ = ["power_law_confluence_z", "power_law_trend_z", "power_law_z_score"]

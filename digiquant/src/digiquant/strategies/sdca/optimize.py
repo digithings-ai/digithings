@@ -64,7 +64,7 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "sell_max_rate": 10.0,
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
-    "valuation_weight": 1.0,
+    "power_law_weight": 1.0,
     "m2_weight": 0.0,
     "rs_eth_weight": 0.0,
     "dxy_weight": 0.0,
@@ -229,7 +229,7 @@ def load_sdca_extra_z(
     extra: dict[str, list[float | None]] = price_oscillator_z_vectors(date_s, price_s)
     sources = load_sdca_extra_sources(root)
     weights = SdcaCompositeWeights(
-        valuation=1.0,
+        power_law=1.0,
         m2=1.0 if sources.m2_dates is not None else 0.0,
         rs_eth=1.0 if sources.eth_dates is not None else 0.0,
         dxy=1.0 if sources.dxy_dates is not None else 0.0,
@@ -387,7 +387,7 @@ def _holdout_metrics(
     shape = shape_from_params(params)
     weights = composite_weights_from_params(params)
     extras = extra_indicators_for_window(hold_dates, dates, extra_z or {}, weights)
-    return evaluator(hold_dates, hold_prices, model, shape, weights.valuation, extras)
+    return evaluator(hold_dates, hold_prices, model, shape, weights.power_law, extras)
 
 
 def persist_btc_optimized(

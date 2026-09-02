@@ -34,8 +34,8 @@ from digiquant.tearsheet_data import TearsheetDcaBreakdown, from_nautilus_run, f
 pytestmark = pytest.mark.unit
 
 
-def test_indicator_display_name_renames_valuation_to_power_law() -> None:
-    assert indicator_display_name("valuation") == "power law"
+def test_indicator_display_name_overrides_and_fallback() -> None:
+    assert indicator_display_name("power_law") == "power law"
     assert indicator_display_name("m2") == "M2 liquidity"
     assert indicator_display_name("weekly_macd") == "weekly log-MACD"
     assert indicator_display_name("weekly_rsi") == "weekly RSI"
@@ -84,7 +84,7 @@ def test_fill_markers_use_daily_trade_usd_not_curve_rate_sign() -> None:
 def test_indicator_curve_maps_z_to_risk_and_labels_power_law() -> None:
     # z = +3 → risk 0 (cheap); z = -3 → risk 100 (rich).
     curve = indicator_curve_from_z(
-        name="valuation",
+        name="power_law",
         dates=["2020-01-01", "2020-01-02"],
         z_values=[3.0, -3.0],
         weight=1.0,
@@ -97,15 +97,15 @@ def test_indicator_curve_maps_z_to_risk_and_labels_power_law() -> None:
 
 
 def test_catalog_keeps_zero_weight_extras_out_of_index() -> None:
-    weights = SdcaCompositeWeights(valuation=1.0)
+    weights = SdcaCompositeWeights(power_law=1.0)
     curves = catalog_indicator_curves(
         dates=["2020-01-01"],
-        z_by_name={"valuation": [0.0]},
+        z_by_name={"power_law": [0.0]},
         weights=weights,
     )
     by_name = {c.name: c for c in curves}
-    assert by_name["valuation"].in_index is True
-    assert by_name["valuation"].display_name == "power law"
+    assert by_name["power_law"].in_index is True
+    assert by_name["power_law"].display_name == "power law"
     assert by_name["m2"].in_index is False
     assert by_name["m2"].weight == pytest.approx(0.0)
     assert by_name["m2"].points == []
@@ -128,9 +128,9 @@ def test_tearsheet_overlays_emit_allocated_and_fill_markers() -> None:
         rails=[(90.0, 100.0, 120.0), (91.0, 101.0, 121.0)],
         risk=[20.0, 80.0],
         asset_units=[0.5, 0.5 - 20.0 / 110.0],
-        weights=SdcaCompositeWeights(valuation=1.0),
+        weights=SdcaCompositeWeights(power_law=1.0),
         preset_name="btc_optimized",
-        indicator_z={"valuation": [1.0, -1.0]},
+        indicator_z={"power_law": [1.0, -1.0]},
     )
     alloc = overlays["allocated_pct_curve"]
     assert alloc[0]["v"] == pytest.approx(50.0)  # 0.5 * 100 / (50 + 50)
@@ -140,7 +140,7 @@ def test_tearsheet_overlays_emit_allocated_and_fill_markers() -> None:
     markers = overlays["fill_markers"]
     assert markers[0]["side"] == "buy"
     assert markers[1]["side"] == "sell"
-    power = next(c for c in overlays["indicator_curves"] if c["name"] == "valuation")
+    power = next(c for c in overlays["indicator_curves"] if c["name"] == "power_law")
     assert power["display_name"] == "power law"
     knees = knees_from_preset("btc_optimized")
     assert overlays["curve_knees"]["buy_knee_risk"] == pytest.approx(knees.buy_knee_risk)
@@ -227,7 +227,7 @@ def test_chart_inputs_from_2025_style_payload_reconstructs_sells() -> None:
     knees = knees_from_preset("btc_optimized")
     assert bundle["knees"].buy_knee_risk == pytest.approx(knees.buy_knee_risk)
     assert bundle["knees"].sell_knee_risk == pytest.approx(knees.sell_knee_risk)
-    power = next(c for c in bundle["indicators"] if c.name == "valuation")
+    power = next(c for c in bundle["indicators"] if c.name == "power_law")
     assert power.display_name == "power law"
     assert power.in_index is True
     # Negative deployed on 2025-01-20 is a sell (cash rose).
@@ -289,14 +289,14 @@ def test_from_nautilus_run_roundtrips_new_overlay_keys() -> None:
         ],
         indicator_curves=[
             {
-                "name": "valuation",
+                "name": "power_law",
                 "display_name": "power law",
                 "weight": 1.0,
                 "in_index": True,
                 "points": [{"t": "2020-01-01", "v": 50.0}],
             }
         ],
-        indicator_weights={"valuation": 1.0, "m2": 0.0},
+        indicator_weights={"power_law": 1.0, "m2": 0.0},
         curve_knees={"buy_knee_risk": 25.0, "sell_knee_risk": 70.0, "preset": "btc_optimized"},
         beats_flat_dca_oos=False,
     )

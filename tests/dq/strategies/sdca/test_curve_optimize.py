@@ -369,7 +369,7 @@ class TestSearchAndPersist:
 
     def test_published_weights_are_frozen_from_settings(self) -> None:
         weights = published_indicator_weights()
-        assert weights.valuation == pytest.approx(1.0)
+        assert weights.power_law == pytest.approx(1.0)
         assert weights.m2 == pytest.approx(0.5)
         assert weights.dxy == pytest.approx(0.5)
         assert weights.rs_eth == pytest.approx(0.0)
