@@ -1351,6 +1351,26 @@ class TestLedgerIoMutationPins:
         assert len(orders) == 1, orders
         assert float(orders[0]["quantity"]) == pytest.approx(0.4)
 
+    def test_no_trade_band_does_not_mint_order_intent(self) -> None:
+        """H8 HOLD / ``_decision`` NO_OP must not still emit an order because shares > 0."""
+        client = _ledger_client(SPY=50.0)
+        out = _run(
+            client,
+            _state(
+                sized_book=_sized_book(spy_pct=41.0),
+                preferences={
+                    "current_weights": {"SPY": 40.0},
+                    "rebalance_threshold_pct": 3.0,
+                    "rebalance_rel_band_pct": 20.0,
+                },
+            ),
+        )
+        assert not out.get("errors"), out.get("errors")
+        spy_orders = [r for r in _rows(client, _ORDERS) if r["symbol"] == "SPY"]
+        assert spy_orders == [], spy_orders
+        by_symbol = {r["symbol"]: r for r in _rows(client, _INTENTS)}
+        assert by_symbol["SPY"]["action"] == "no_op"
+
     def test_prior_held_exit_emits_order_and_exit_decision(self) -> None:
         """M24 — prior-held symbols must stay in the row set so exits are explicit."""
         client = _ledger_client(SPY=50.0, MSFT=25.0)

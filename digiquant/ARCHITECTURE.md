@@ -2519,22 +2519,18 @@ the grants would refuse anyway.
   its mark, so both are an exact `0` — `FillCosts` records that rather than leaving the
   columns NULL, and `slippage` is signed (`(price − mark) × quantity`) so a real broker
   adapter later fills the same fields without a schema change.
-- **The event name comes from the lots, not from the action label.** `DecisionAction` has no
-  "open": a buy is `add`. So `Fill` carries `prior_quantity` and `residual_quantity`, both
-  measured, and the projection names the event from them — `OPEN` when the prior live total
-  is 0 else `ADD`, `EXIT` when the residual is 0 else `TRIM`. There is no epsilon ladder;
-  that ladder is what made `EXIT` unreachable in #1743 (31 OPEN rows in one day, zero EXITs).
+- **The event name is the prior→target delta, with lot residual as OPEN/EXIT
+  reconciliation.** `DecisionAction` has no "open": a buy is `add`. `Fill` still
+  carries `prior_quantity` and `residual_quantity` so a sell that consumes every
+  share is EXIT (#1743) and a same-run open-then-close still names EXIT. ADD vs
+  TRIM vs HOLD is the weight delta against `_prior_book_date(run_date)`, not a
+  later book join. Zero display-pp ADD/TRIM is impossible.
 - **The residual is read back, never computed.** After booking the close rows the executor
   re-reads `_live_quantity` out of the lineages it just mutated. `prior − quantity` would
   report −2 shares for a sell of 5 against 3 live ones, which reads as a *short* to anything
   looking at magnitude; the position is flat and the surplus is logged as a data error.
   Reading it back is also what makes two orders on one symbol in one run chain correctly —
   the second sees the first's residual, not the pre-run book.
-- **ADD/TRIM of +0.0pp is HOLD.** Event kind still comes from residual quantity, but if the
-  approved weight and prior book round to the same 1-decimal pp, the projection writes
-  `HOLD` rather than a dust true-up. House 2026-09-01 FXI/VGK/XLF filled ~0.05–0.14 shares
-  at unchanged 5/25/20%. `OPEN`/`EXIT` are unchanged (#1743). H9 also skips `order_intents`
-  when `_decision` returns `NO_OP` (no-trade band), so those fills should not mint again.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
   row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
@@ -2553,9 +2549,19 @@ prior trading date, `3` for `--require-ledger` when the ledger declined, `0` oth
 Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
 `position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
 becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`. And
-`prev_weight_pct` is **display only**, read from the last committed `positions` book: migration
-069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
-all, and the book may be a different date than the run date.
+`prev_weight_pct` is the **pre-commit** `positions` book — `_prior_book_date(run_date)`,
+never `_prior_book_date(execution_d)`. H9 writes today's targets onto `run_date` before
+the open, so an execution-day lookback finds that already-committed new book and every
+ADD/TRIM looks like +0.0pp (house post-2026-08-27). The same prior *book date*
+sizes `OrderIntent` and HOLD continuity; the displayed pp is book-to-book (undrifted
+pre-commit weights), not the marked-to-market H8 snapshot that sized the fill.
+`position_events` must not invent a second labeling system.
+
+- **ADD/TRIM come from that prior→target delta.** Lot residual still names OPEN vs ADD
+  and EXIT vs TRIM when the approved weight is missing or when a same-run chain closes
+  a position (#1743). A 0.0pp display move cannot be ADD/TRIM (HOLD). H9 skips
+  `order_intents` when `_decision` returns `NO_OP` (no-trade band), so sub-threshold
+  trades must not exist as intents either.
 
 Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
 switch defaults *on*. After #2589 the morning job and backfill run the ledger path with

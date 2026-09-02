@@ -544,6 +544,8 @@ class _Ledger:
     orders: list[dict[str, Any]] = field(default_factory=list)
     lots: list[dict[str, Any]] = field(default_factory=list)
     prices: list[dict[str, Any]] = field(default_factory=list)
+    run_d: str = _RUN_D
+    exec_d: str = _EXEC_D
 
     def order(
         self,
@@ -564,13 +566,13 @@ class _Ledger:
         """
         ids = {p: _lid(f"{p}:{symbol}") for p in ("decision", "requested", "approved", "order")}
         self.decisions.append(
-            {"id": ids["decision"], "run_date": _RUN_D, "symbol": symbol, "action": action}
+            {"id": ids["decision"], "run_date": self.run_d, "symbol": symbol, "action": action}
         )
         self.requested.append(
             {
                 "id": ids["requested"],
                 "decision_intent_id": ids["decision"],
-                "run_date": _RUN_D,
+                "run_date": self.run_d,
                 "symbol": symbol,
             }
         )
@@ -578,7 +580,7 @@ class _Ledger:
             {
                 "id": ids["approved"],
                 "requested_target_id": ids["requested"],
-                "run_date": _RUN_D,
+                "run_date": self.run_d,
                 "symbol": symbol,
                 "approved_weight": weight,
                 "supersedes_id": None,
@@ -588,7 +590,7 @@ class _Ledger:
             {
                 "id": ids["order"],
                 "approved_target_id": ids["approved"],
-                "run_date": _RUN_D,
+                "run_date": self.run_d,
                 "symbol": symbol,
                 "quantity": quantity,
                 "status": "pending",
@@ -596,7 +598,7 @@ class _Ledger:
             }
         )
         if mark is not None:
-            self.prices.append({"ticker": symbol, "date": _EXEC_D, "open": mark})
+            self.prices.append({"ticker": symbol, "date": self.exec_d, "open": mark})
         return self
 
     def holding(self, symbol: str, quantity: str, *, open_price: str = "10.0") -> "_Ledger":
@@ -628,18 +630,28 @@ class _Ledger:
         # Opening-snapshot seed (#2589) needs NAV + marks when lots are empty but the prior
         # book is not. Provide them so cold-start auto-ensure succeeds in fixtures that
         # intentionally start with no lots (quiet day, all-rejected, chained fills).
+        book_dates = sorted(
+            {str(row.get("date") or "")[:10] for row in position_rows if row.get("date")}
+        )
+        nav_history = [{"date": d, "nav": "1000000"} for d in book_dates if d] or [
+            {"date": "2026-07-29", "nav": "1000000"}
+        ]
         seed_closes = [
-            {"ticker": str(row["ticker"]), "date": "2026-07-29", "close": "100"}
-            for row in _BOOK_0729
+            {
+                "ticker": str(row["ticker"]),
+                "date": str(row.get("date") or "2026-07-29")[:10],
+                "close": "100",
+            }
+            for row in position_rows
             if str(row.get("ticker") or "").upper() not in ("", "CASH")
         ]
         return _FakeClient(
             tables={
                 "positions": position_rows,
-                "nav_history": [{"date": "2026-07-29", "nav": "1000000"}],
+                "nav_history": nav_history,
                 "price_history": list(self.prices) + seed_closes,
                 _TABLES["commits"]: (
-                    [{"id": _lid("commit"), "run_date": _RUN_D}] if with_commit else []
+                    [{"id": _lid("commit"), "run_date": self.run_d}] if with_commit else []
                 ),
                 _TABLES["decisions"]: list(self.decisions),
                 _TABLES["requested"]: list(self.requested),
@@ -810,7 +822,7 @@ class TestOpenMarksAreDecimal:
 
 
 class TestBuildEventsFromPaperFills:
-    def test_event_names_come_from_the_position_not_the_label(self) -> None:
+    def test_event_names_come_from_the_weight_delta_with_lot_open_exit(self) -> None:
         events, declined = _mod.build_events_from_paper_fills(
             _day().client(), _RUN_D, _EXEC_D, now=_NOW
         )
@@ -818,10 +830,10 @@ class TestBuildEventsFromPaperFills:
         assert events is not None
         by_ticker = _events_by_ticker(events)
         assert {t: e["event"] for t, e in by_ticker.items()} == {
-            "FXI": "OPEN",  # buy into nothing
-            "UUP": "ADD",  # buy on top of 100 shares
-            "XLF": "TRIM",  # sell 10 of 50
-            "DBO": "EXIT",  # sell all 30
+            "FXI": "OPEN",  # prior book 0 → target 7
+            "UUP": "ADD",  # buy fill; book-to-book 39.9226 → 25 would be TRIM, fill side wins
+            "XLF": "TRIM",  # sell fill; book-to-book 10.1141 → 15 would be ADD, fill side wins
+            "DBO": "EXIT",  # quantity-only sell that consumed the lot
         }
 
     def test_ledger_projection_stamps_authoritative_book_source(self) -> None:
@@ -900,6 +912,69 @@ class TestBuildEventsFromPaperFills:
         assert ijr["event"] == "HOLD"
         assert ijr["weight_pct"] == pytest.approx(5.0)
         assert ijr["prev_weight_pct"] == pytest.approx(5.0)
+
+    def test_prev_weight_is_the_precommit_book_when_run_date_already_has_targets(
+        self,
+    ) -> None:
+        """Production shape after H9 books targets on ``run_date`` before the open.
+
+        ``_prior_book_date(execution_d)`` finds that already-committed new book, so
+        ADD/TRIM land at 0.0000pp (or get collapsed to HOLD). The prior used to size
+        the order is the book *before* ``run_date``.
+        """
+        run_d, exec_d = "2026-08-27", "2026-08-28"
+        books = [
+            {"date": "2026-08-26", "ticker": "FXI", "weight_pct": "10.0"},
+            {"date": "2026-08-27", "ticker": "FXI", "weight_pct": "15.0"},
+        ]
+        ledger = (
+            _Ledger(run_d=run_d, exec_d=exec_d)
+            .order("FXI", "add", "20", weight="0.15", mark="38.00")
+            .holding("FXI", "100", open_price="37.00")
+        )
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(books=books),
+            run_d,
+            exec_d,
+            now=datetime(2026, 8, 28, 13, 35, tzinfo=timezone.utc),
+        )
+        assert declined == ""
+        assert events is not None
+        fxi = _events_by_ticker(events)["FXI"]
+        assert fxi["event"] == "ADD"
+        assert fxi["weight_pct"] == pytest.approx(15.0)
+        assert fxi["prev_weight_pct"] == pytest.approx(10.0)
+        assert fxi["weight_pct"] - fxi["prev_weight_pct"] == pytest.approx(5.0)
+
+    def test_delayed_fill_shows_the_five_pp_on_the_add_row_not_only_hold(self) -> None:
+        """FXI-style: 5pp target change, no fill this morning, fill the next morning.
+
+        Extra positions books after ``run_date`` must not become the comparison
+        basis — that is how the real 5pp was left only on HOLD.
+        """
+        run_d, exec_d = "2026-08-27", "2026-08-31"
+        books = [
+            {"date": "2026-08-26", "ticker": "FXI", "weight_pct": "10.0"},
+            {"date": "2026-08-27", "ticker": "FXI", "weight_pct": "15.0"},
+            {"date": "2026-08-28", "ticker": "FXI", "weight_pct": "15.0"},
+        ]
+        ledger = (
+            _Ledger(run_d=run_d, exec_d=exec_d)
+            .order("FXI", "add", "20", weight="0.15", mark="38.00")
+            .holding("FXI", "100", open_price="37.00")
+        )
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(books=books),
+            run_d,
+            exec_d,
+            now=datetime(2026, 8, 31, 13, 35, tzinfo=timezone.utc),
+        )
+        assert declined == ""
+        assert events is not None
+        fxi = _events_by_ticker(events)["FXI"]
+        assert fxi["event"] == "ADD"
+        assert fxi["weight_pct"] - fxi["prev_weight_pct"] == pytest.approx(5.0)
+        assert fxi["event"] != "HOLD"
 
     def test_a_trim_that_closes_the_position_is_an_exit(self) -> None:
         """The #1743 class of mislabelling, from the other direction.
@@ -1086,7 +1161,7 @@ class TestBuildEventsFromPaperFillsDeclines:
 class TestBuildEventsOpeningSnapshotSeed:
     """#2589: auto-seed lots so a first trim is not mislabeled EXIT."""
 
-    def test_seeded_prior_quantity_keeps_a_partial_trim_as_trim(self) -> None:
+    def test_seeded_prior_quantity_does_not_relabel_a_partial_sell_as_exit(self) -> None:
         # No prior lots on the ledger, but the positions book holds XLF. Seed must open
         # lots before execute measures residuals — otherwise prior=0 and TRIM→EXIT.
         ledger = _Ledger().order("XLF", "trim", "10", weight="0.15", mark="52.10")
@@ -1111,6 +1186,9 @@ class TestBuildEventsOpeningSnapshotSeed:
         assert declined == ""
         assert events is not None
         by_ticker = _events_by_ticker(events)
+        # Seed kept residual non-zero so this is not EXIT (#2589). A sell fill
+        # may only be TRIM/EXIT/HOLD even when the book-to-book delta is +pp.
+        assert by_ticker["XLF"]["event"] != "EXIT"
         assert by_ticker["XLF"]["event"] == "TRIM"
 
 

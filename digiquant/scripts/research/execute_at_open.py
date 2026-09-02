@@ -31,12 +31,13 @@ def _ensure_importable() -> None:
 
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
+from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
 from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
     build_client,
 )
-from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 
 
 def _house_id() -> str:
@@ -170,6 +171,51 @@ def _desk_weight_unchanged(weight_pct: Optional[float], prev_weight_pct: Optiona
     if not (delta == delta):  # NaN
         return False
     return round(delta, _DESK_PP_DECIMALS) == 0.0
+
+
+def _event_kind_from_order_delta(
+    *,
+    fill: Any,
+    weight_pct: Optional[float],
+    prev_weight_pct: Optional[float],
+) -> PositionEventKind:
+    """Name the event from the prior-book → target weight delta.
+
+    Lot residual still names OPEN vs ADD and EXIT vs TRIM when the approved
+    weight is missing or when a same-run chain closes a position (#1743).
+    ADD vs TRIM vs HOLD comes from the book-to-book delta. A 0.0pp display
+    move cannot be ADD/TRIM.
+
+    The booked fill side always wins on disagreement: a sell may only be
+    TRIM/EXIT/HOLD and a buy only ADD/OPEN/HOLD. Extreme mark-to-market drift
+    can flip the book-to-book sign relative to the order; never write that
+    contradiction into ``position_events``.
+    """
+    lot_kind: PositionEventKind
+    if fill.is_sell:
+        lot_kind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
+    else:
+        lot_kind = "OPEN" if fill.prior_quantity <= 0 else "ADD"
+    if weight_pct is None or lot_kind in ("OPEN", "EXIT"):
+        return lot_kind
+    prev = 0.0 if prev_weight_pct is None else float(prev_weight_pct)
+    if _desk_weight_unchanged(weight_pct, prev):
+        return "HOLD"
+    chg = float(weight_pct) - prev
+    named: PositionEventKind
+    if chg > 0:
+        named = "ADD"
+    elif chg < 0:
+        named = "TRIM"
+    else:
+        named = "HOLD"
+    if named == "HOLD":
+        return named
+    if fill.is_sell and named == "ADD":
+        return lot_kind
+    if (not fill.is_sell) and named == "TRIM":
+        return lot_kind
+    return named
 
 
 def _parse_pct(value: Any) -> Optional[float]:
@@ -331,13 +377,19 @@ def _with_book_source(events: List[Dict[str, Any]], book_source: str) -> List[Di
 
 
 def _hold_events_for_positions_not_in_rebalance(
-    sb, execution_date: str, skip_tickers: Set[str]
+    sb, execution_date: str, skip_tickers: Set[str], *, prior_date: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     For every held line in `positions` on execution_date whose ticker is not in skip_tickers,
     emit a HOLD ledger row so Activity shows the full book.
     skip_tickers should include rebalance_table tickers and any tickers already present in
     position_events for this date (so we do not overwrite OPEN/TRIM/etc.).
+
+    ``prior_date`` is the comparison book for ``prev_weight_pct``. When omitted it is
+    ``_prior_book_date(execution_date)`` (legacy prose callers). The ledger path must
+    pass ``_prior_book_date(run_date)`` so HOLD uses the same prior *book date* as
+    fill projection and does not display a later book's move. The displayed pp is
+    book-to-book, not the drifted H8 mark used to size the fill.
     """
     res = (
         _eq_house(sb.table("positions").select("ticker,weight_pct,thesis_id,rationale"))
@@ -345,7 +397,7 @@ def _hold_events_for_positions_not_in_rebalance(
         .execute()
     )
     rows = getattr(res, "data", None) or []
-    prior_d = _prior_book_date(sb, execution_date)
+    prior_d = _prior_book_date(sb, execution_date) if prior_date is None else prior_date
     out: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -526,7 +578,6 @@ def build_events_from_paper_fills(
     _ensure_importable()
     try:
         from digiquant.portfolio.models.position_event import (
-            PositionEventKind,
             PositionEventRow,
         )
         from digiquant.portfolio.writers.execution_io import (
@@ -573,7 +624,10 @@ def build_events_from_paper_fills(
     # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
     # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
     # if still cold after, decline so --require-ledger exits 3 instead of mislabeling.
-    prior_book_d = _prior_book_date(sb, execution_d)
+    # The prior is the book *before* ``run_d`` — H9 already wrote today's targets onto
+    # ``run_date`` before the open, so ``_prior_book_date(execution_d)`` would compare
+    # the fill against that new book and project ADD/TRIM of +0.0pp.
+    prior_book_d = _prior_book_date(sb, run_d)
     prior_book_date = None
     if prior_book_d:
         try:
@@ -627,15 +681,6 @@ def build_events_from_paper_fills(
 
     events: List[Dict[str, Any]] = []
     for fill in result.fills:
-        # The event name comes from the *position*, not from the decision's label: a buy
-        # into nothing is an OPEN and a buy on top of something is an ADD; a sell to zero
-        # is an EXIT and a sell to anything else is a TRIM. No weight diff and no epsilon
-        # threshold is involved — that ladder is what made EXIT unreachable in #1743.
-        if fill.is_sell:
-            event_kind: PositionEventKind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
-        else:
-            event_kind = "OPEN" if fill.prior_quantity <= 0 else "ADD"
-
         weight = approved.get(fill.symbol)
         # approved_weight is a 0..1 fraction; position_events.weight_pct is in percent.
         # The ×100 happens in Decimal and only then becomes a float, because binary floats
@@ -644,19 +689,20 @@ def build_events_from_paper_fills(
         # make ordinary weights look like rounding artefacts.
         weight_pct = float(weight * 100) if weight is not None else None
         prev_weight_pct = prior_weights.get(fill.symbol)
-        # Lot-level true-ups (0.05–0.14 shares) keep the displayed weight the same and
-        # must not land as ADD/TRIM of +0.0pp. OPEN/EXIT still follow residual quantity.
-        if event_kind in ("ADD", "TRIM") and _desk_weight_unchanged(weight_pct, prev_weight_pct):
-            event_kind = "HOLD"
+        event_kind = _event_kind_from_order_delta(
+            fill=fill,
+            weight_pct=weight_pct,
+            prev_weight_pct=prev_weight_pct,
+        )
         row = PositionEventRow(
             date=execution_d,
             ticker=fill.symbol,
             event=event_kind,
             weight_pct=weight_pct,
-            # Display-only, and not from the ledger: migration 069 records no NAV, so
-            # the prior weight cannot be derived from the lots. It is read from the
-            # last committed `positions` book purely so the UI can show a delta, and
-            # the reason string below says so rather than implying the ledger holds it.
+            # Display-only: the pre-commit ``positions`` book (``_prior_book_date(run_d)``).
+            # Same prior *book date* as the OrderIntent, undrifted — the shown pp is
+            # book-to-book, not the marked-to-market H8 weights that sized the fill.
+            # Never the ``run_date`` book H9 already wrote before the open.
             prev_weight_pct=prev_weight_pct,
             price=float(fill.price),
             reason=(
@@ -824,7 +870,10 @@ def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict
     """
     filled: Set[str] = {str(e["ticker"]) for e in ledger_events if e.get("ticker")}
     holds = _hold_events_for_positions_not_in_rebalance(
-        sb, d, filled | _event_tickers_for_date(sb, d)
+        sb,
+        d,
+        filled | _event_tickers_for_date(sb, d),
+        prior_date=_prior_book_date(sb, rebalance_d),
     )
     # Ledger path owns the day: fills already carry authoritative; HOLD continuity under
     # ledger authority is stamped the same so Activity cannot mix unlabeled rows (#2422).
@@ -862,7 +911,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--date",
-        default=dt_date.today().isoformat(),
+        default=datetime.now(timezone.utc).date().isoformat(),
         help="Execution session date YYYY-MM-DD (opens from this day)",
     )
     ap.add_argument(
