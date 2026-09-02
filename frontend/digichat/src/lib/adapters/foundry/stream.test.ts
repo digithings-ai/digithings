@@ -8,7 +8,7 @@ import {
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
 } from "./stream";
-import { toDigiChatActivity, type ActivitySpan } from "@/lib/chat-activity";
+import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -656,7 +656,7 @@ describe("createFoundryStreamResponse activity detail", () => {
   // upstream response with many citations ships all of them over the wire
   // before the client ever gets a chance to truncate at render.
   it("caps an oversized citation list to MAX_DOCUMENTS before it reaches the stream", async () => {
-    const manyAnnotations = Array.from({ length: 20 }, (_, i) => ({
+    const manyAnnotations = Array.from({ length: MAX_DOCUMENTS + 5 }, (_, i) => ({
       type: "url_citation" as const,
       url: `https://x/doc-${i}`,
       title: `Doc ${i}`,
@@ -682,9 +682,9 @@ describe("createFoundryStreamResponse activity detail", () => {
     );
 
     expect(body).toContain("https://x/doc-0");
-    expect(body).toContain("https://x/doc-7");
-    expect(body).not.toContain("https://x/doc-8");
-    expect(body).not.toContain("https://x/doc-19");
+    expect(body).toContain(`https://x/doc-${MAX_DOCUMENTS - 1}`);
+    expect(body).not.toContain(`https://x/doc-${MAX_DOCUMENTS}`);
+    expect(body).not.toContain(`https://x/doc-${MAX_DOCUMENTS + 4}`);
   });
 
   // The gate is server-side: a labels tenant must not receive the titles at all.

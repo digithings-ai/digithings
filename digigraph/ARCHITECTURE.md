@@ -258,6 +258,7 @@ real node executions rather than compiled graph nodes.
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
 | `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
+| `force_tool` | `str \| None` | Per-request locate tool to inject with the user string as its query (`X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`). **Must** be declared. Resolved by `digigraph.retrieval.resolve_force_tool`. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
 | `_compaction_event` | `dict \| None` | Lean two-tier compaction event (#399); originals in session workspace. **Must** be declared — LangGraph drops undeclared keys. |
@@ -281,6 +282,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
+| `force_tool` | `str \| None` | Optional locate tool to inject (`X-Digi-Force-Tool`); aliases `search`/`digisearch`, `docs`/`digivault`. The model is not hinted — see 5.2 |
 | `digi_subject` | `str \| None` | Client-writable, but never trusted as-is: `server.py`'s `_digi_fields_from_request` unconditionally overwrites it with the verified `auth.subject` (or clears it to `None` when auth is absent or its subject claim is empty) before it reaches graph state — see §6.10 |
 
 ### 4.3 WorkflowResult (`models.py`)
@@ -325,6 +327,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
+| `force_tool` | `str \| None` | Also accepted via `X-Digi-Force-Tool`; aliases `search`/`digisearch`, `docs`/`digivault`. Injected locate then synthesize — the model is not asked to write the query |
 
 ---
 
@@ -335,6 +338,8 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 ```
 digigraph/src/digigraph/
 ├── chat_prompt.py               Flatten OpenAI chat messages → workflow prompt (multi-turn)
+├── languages.py                 Curated X-Digi-Language directive (do not translate retrieval queries)
+├── retrieval.py                 Force-tool aliases, vault-path extraction, auto digivault_get_note hop (batch ≤20)
 ├── server.py                    FastAPI app, middleware stack, all HTTP routes
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
@@ -349,7 +354,7 @@ digigraph/src/digigraph/
 ├── run_storage.py               Lower-level session path helpers, search result writer
 ├── mcp_server.py                FastMCP server exposing workflow, chat, thread_state, tool lists
 ├── audit.py                     Thin audit_log → digibase.audit.emit_event (workflow_start/end, tool_denied)
-├── trace_events.py              TraceEventV1, RagSourceItem, rag_sources_from_results
+├── trace_events.py              TraceEventV1, RagSourceItem (optional capped `body` for get_note / #3419), rag_sources_from_results
 ├── tool_policy.py               Allowed tool name resolution (request → project config → env)
 ├── trading_profile.py           optimization_constraints_dict_from_profile
 ├── project_config.py            DigiProjectConfig loader (DIGI_PROJECT_CONFIG YAML)
@@ -413,7 +418,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-Retrieval is model-driven, not prefetched: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`, then `digivault_get_note` with a hit's `vault_path` to load the full note instead of reasoning from the ~300-char excerpt `digivault_search_notes` returns. Nothing is invoked before the LLM turn and nothing is injected into the user message. `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools, `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
+Retrieval is model-driven by default: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`. After a locate, `auto_load_notes` (`retrieval.py`) calls `digivault_get_note` (batch ≤20 vault paths) so the model synthesizes from full notes instead of asking permission to read what it already found. `RagSourceItem.body` is stamped only on get_note (`include_body=True`, cap `MAX_RAG_SOURCE_BODY_CHARS`) and overlaid onto duplicate locate keys in `merge_loaded_notes` / `merge_rag_sources_accumulator`; WorkflowState strips `body` before checkpoint so the pane reads the stream, not graph state. Slash `/search` and `/docs` on the public embed set `force_tool` / `X-Digi-Force-Tool`: `last_user_turn()` (`chat_prompt.py`) extracts the current user string from the flattened `User:` / `Assistant:` transcript so the tool `query` is that turn, not the whole history. The locate is injected *before* the LLM turn **only when** `allowed_tool_names` is unrestricted (`None`) or includes the resolved tool — otherwise tenants with an allowlist would still get a started `tool_call` / Searching… row and a deny blob in `force_tool_messages` even though `execute()` would refuse the call. Then `run_tools` synthesizes with `tool_choice="auto"` (even when `require_tool_calls` is set). `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools (and no force-tool ran), `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 

@@ -257,6 +257,10 @@ export async function POST(req: Request) {
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
+  const forceTool = req.headers.get("x-digi-force-tool")?.trim();
+  if (forceTool) {
+    upstreamHeaders["X-Digi-Force-Tool"] = forceTool;
+  }
 
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (byokKey) {

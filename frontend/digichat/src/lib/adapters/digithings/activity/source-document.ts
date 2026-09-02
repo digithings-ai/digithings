@@ -1,4 +1,4 @@
-import { MAX_DOC_FIELD_CHARS, type ActivityDocument } from "@/lib/chat-activity";
+import { MAX_DOC_FIELD_CHARS, MAX_NOTE_BODY_CHARS, type ActivityDocument } from "@/lib/chat-activity";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -105,5 +105,10 @@ export function mapRawSourceToDocument(raw: Record<string, unknown>): ActivityDo
     doc.year = Math.trunc(meta.publication_year);
   }
   if (snippet) doc.snippet = snippet;
+  const bodyRaw =
+    (typeof raw.body === "string" && raw.body.trim()) ||
+    (typeof raw.body_markdown === "string" && raw.body_markdown.trim()) ||
+    "";
+  if (bodyRaw) doc.body = bodyRaw.slice(0, MAX_NOTE_BODY_CHARS);
   return doc;
 }
