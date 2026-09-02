@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
 import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
@@ -150,7 +150,7 @@ export default function TeamPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

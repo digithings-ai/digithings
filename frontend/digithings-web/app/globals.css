@@ -11,10 +11,11 @@
 /* Homepage primitives (#1450): NumberedStages spine (stages.css), the
    digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
    the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
-   the stack Marquee it styled — the band under the hero is <RepoStrip> now, built
-   from tokens and utilities. digiquant-web still imports it. */
+   the stack Marquee it styled. Repository activity is the shared <RepoActivity>
+   family (repo-activity.css). digiquant-web still imports marquee.css. */
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/repo-activity.css";
 @import "@digithings/web/styles/word-reveal.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
@@ -44,6 +45,7 @@
 @source "../../digiweb/web/src/components/chat";
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/data-layout";
+@source "../../digiweb/web/src/components/repo-activity";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/symbols";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */

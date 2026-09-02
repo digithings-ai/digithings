@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  Footer,
   NumberedStages,
   OdometerStrip,
   Reveal,
   type NumberedStage,
   type OdometerStat,
 } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead, RuledList, RuledRow } from "../_company/prose";
 import { DtNav } from "@/components/DtNav";
 
@@ -384,7 +383,7 @@ export default function QualityPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }
