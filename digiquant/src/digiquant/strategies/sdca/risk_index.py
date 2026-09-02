@@ -21,8 +21,9 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.valuation import valuation_confluence_z
 
 _REQUIRED_RAIL_COLUMNS = ("low", "median", "high")
 _DIAGNOSTIC_COLUMNS = (
@@ -55,14 +56,18 @@ def build_risk_index(
     risk_model: RiskModel,
     extra_indicators: list[IndicatorWeight] | None = None,
     valuation_weight: float = 1.0,
+    oscillators: SdcaOscillatorSpec | None = None,
 ) -> pl.DataFrame:
     """Join a ``RiskModel`` + price series into the SDCA risk index.
 
     Returns a frame with ``date``, ``risk``, and diagnostic columns
     (``price``, ``low``, ``median``, ``high``, ``valuation_z``, ``composite_z``).
-    Null semantics are inherited from ``valuation_z_score`` /
+    Null semantics are inherited from ``valuation_confluence_z`` /
     ``compute_composite_risk``: a null in any enabled indicator makes that
     day's ``risk`` null (an explicit no-trade day for ``SdcaStrategy``).
+    ``valuation_z`` here is ``valuation_confluence_z``'s output (whole-history
+    power-law leg blended with a rolling trend leg) — ``oscillators`` (default
+    ``SdcaOscillatorSpec()``) configures the trend leg's window.
     """
     dates = _require_date_series(dates, name="dates")
     if price.len() != dates.len():
@@ -80,7 +85,15 @@ def build_risk_index(
             f"got {rails.height} rows for {dates.len()} dates"
         )
 
-    valuation_z = valuation_z_score(price, rails["low"], rails["median"], rails["high"])
+    spec = oscillators or SdcaOscillatorSpec()
+    valuation_z = valuation_confluence_z(
+        dates,
+        price,
+        rails["low"],
+        rails["median"],
+        rails["high"],
+        trend_window=spec.valuation_trend_window,
+    )
     indicators = [
         IndicatorWeight(name="valuation", z=valuation_z, weight=valuation_weight),
         *(extra_indicators or []),

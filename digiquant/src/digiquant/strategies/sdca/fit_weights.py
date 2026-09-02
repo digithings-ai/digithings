@@ -30,7 +30,7 @@ from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
 from digiquant.strategies.sdca.regularize import regularize_weights
 from digiquant.strategies.sdca.stage_a import CycleOverlapScore, optimize_stage_a_weights
 from digiquant.strategies.sdca.two_stage import freeze_weight_params
-from digiquant.strategies.sdca.valuation import valuation_z_score
+from digiquant.strategies.sdca.valuation import valuation_confluence_z
 
 KNOWN_SDCA_PROFILES: tuple[str, ...] = ("btc_v1", "eth_research_v1")
 
@@ -94,8 +94,13 @@ def fit_sdca_weights_from_cache(
         rolling_window=rolling_window,
     )
     rails = model.rails(dates)
-    valuation_z = valuation_z_score(
-        close, rails["low"], rails["median"], rails["high"]
+    valuation_z = valuation_confluence_z(
+        dates,
+        close,
+        rails["low"],
+        rails["median"],
+        rails["high"],
+        trend_window=profile.oscillators.valuation_trend_window,
     ).to_list()
     search_names = stage_a_search_names(profile)
     extra_z = technicals_from_ohlcv(dates, close, oscillators=profile.oscillators)
