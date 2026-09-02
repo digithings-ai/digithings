@@ -73,7 +73,10 @@ export type CanonActivityRow =
       meta?: string;
       /** Retrieved documents, rendered as the fold-out body of this tool row. */
       sources?: VaultHitSummary[];
-      /** Running rows carry a "Searching…" line so the head is expandable. */
+      /**
+       * Running rows carry a body line so the head is expandable (caret).
+       * Locate tools use "Searching…"; other in-flight tools use "Working…".
+       */
       lines?: string[];
       /** Start expanded when a body is attached. */
       defaultOpen?: boolean;
@@ -114,9 +117,23 @@ const TOOL_LABELS: Record<string, string> = {
   digivault_get_note: "Load document",
 };
 
+/** Wire ids whose in-flight fold should read "Searching…", not "Working…". */
+const LOCATE_TOOL_NAMES = new Set([
+  "digisearch",
+  "azure_ai_search",
+  "rag_sources",
+  "digivault",
+  "digivault_search_notes",
+]);
+
 /** Human labels for the head only — identity keys still use the wire tool id. */
 export function toolDisplayName(name: string): string {
   return TOOL_LABELS[name] ?? name;
+}
+
+/** In-flight body so the head stays a disclosure; locate tools keep Searching…. */
+function inFlightToolLines(toolName: string): string[] {
+  return LOCATE_TOOL_NAMES.has(toolName) ? ["Searching…"] : [WORKING_LABEL];
 }
 
 const QUERY_DISPLAY_MAX = 80;
@@ -217,7 +234,7 @@ export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActiv
           name: toolDisplayName(activity.name),
           ...(args ? { args } : {}),
           status: "running",
-          lines: ["Searching…"],
+          lines: inFlightToolLines(activity.name),
         };
 
       case "tool_result":

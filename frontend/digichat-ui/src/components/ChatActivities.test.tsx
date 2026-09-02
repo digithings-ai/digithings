@@ -16,19 +16,29 @@ const render = (activities: DigiChatActivity[]) =>
   renderToStaticMarkup(<ChatActivities activities={activities} />);
 
 describe("ChatActivities — tool calls render in the canon grammar", () => {
-  it("renders an in-flight tool call as a running ChatToolCall row", () => {
-    const html = render([{ kind: "tool_call", name: "digivault.search", query: "how auth works" }]);
+  it("renders an in-flight locate tool call as a running ChatToolCall row", () => {
+    const html = render([{ kind: "tool_call", name: "digisearch", query: "how auth works" }]);
 
     // The shared primitive's own structure — not a re-implementation.
     expect(html).toContain('class="tc');
     expect(html).toContain("tc-head");
-    expect(html).toContain("digivault.search");
+    expect(html).toContain("Search the knowledge base");
     expect(html).toContain("how auth works");
-    // Running status wears the pulsing ellipsis, not a tick. lines=["Searching…"]
-    // make the head a disclosure with a caret; the body mounts on expand (SSR
-    // keeps it folded).
+    // Running status wears the pulsing ellipsis, not a tick. Locate tools get
+    // lines=["Searching…"] so the head is a disclosure with a caret; the body
+    // mounts on expand (SSR keeps it folded).
     expect(html).toContain("tc-run");
     expect(html).toContain("…");
+    expect(html).toContain("aria-expanded");
+    expect(html).toContain("tc-caret");
+  });
+
+  it("renders an in-flight load tool call with a caret, not Searching… copy", () => {
+    const html = render([{ kind: "tool_call", name: "digivault_get_note", query: "docs/auth.md" }]);
+
+    expect(html).toContain("Load document");
+    // Body is folded on SSR; projection uses Working… (asserted in activity-view tests).
+    expect(html).not.toContain("Searching…");
     expect(html).toContain("aria-expanded");
     expect(html).toContain("tc-caret");
   });

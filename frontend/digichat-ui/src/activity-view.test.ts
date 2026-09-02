@@ -24,12 +24,12 @@ function onlyRow(activities: DigiChatActivity[]): CanonActivityRow {
 }
 
 describe("toCanonRows — tool calls", () => {
-  it("maps an in-flight tool_call to a running ChatToolCall row with a Searching… body", () => {
-    const row = onlyRow([{ kind: "tool_call", name: "digivault.search", query: "auth" }]);
+  it("maps an in-flight locate tool_call to a running row with a Searching… body", () => {
+    const row = onlyRow([{ kind: "tool_call", name: "digisearch", query: "auth" }]);
     expect(row).toEqual({
       kind: "tool",
-      key: "tool:digivault.search|auth",
-      name: "digivault.search",
+      key: "tool:digisearch|auth",
+      name: "Search the knowledge base",
       args: "auth",
       status: "running",
       lines: ["Searching…"],
@@ -38,10 +38,26 @@ describe("toCanonRows — tool calls", () => {
     expect(row).not.toHaveProperty("meta");
   });
 
+  it("maps an in-flight load tool_call to Working…, not Searching…", () => {
+    const row = onlyRow([{ kind: "tool_call", name: "digivault_get_note", query: "docs/auth.md" }]);
+    expect(row).toMatchObject({
+      kind: "tool",
+      name: "Load document",
+      status: "running",
+      lines: ["Working…"],
+    });
+    expect(row.kind === "tool" && row.lines).not.toContain("Searching…");
+  });
+
   it("omits args when the provider sent no query", () => {
     const row = onlyRow([{ kind: "tool_call", name: "mcp.list_tools", query: "" }]);
     expect(row).not.toHaveProperty("args");
-    expect(row).toMatchObject({ kind: "tool", name: "mcp.list_tools", status: "running" });
+    expect(row).toMatchObject({
+      kind: "tool",
+      name: "mcp.list_tools",
+      status: "running",
+      lines: ["Working…"],
+    });
   });
 
   it("maps a tool_result to a settled row carrying its sources", () => {
@@ -84,11 +100,11 @@ describe("toCanonRows — tool calls", () => {
 
   it("leaves every tool-shaped row folded by default", () => {
     const [call, trace, result] = rowsOf([
-      { kind: "tool_call", name: "digivault.search", query: "auth" },
+      { kind: "tool_call", name: "digisearch", query: "auth" },
       { kind: "trace", label: "Planning", done: true },
       {
         kind: "tool_result",
-        name: "digivault.search",
+        name: "digisearch",
         query: "auth",
         count: 1,
         hits: [{ title: "Auth", path: "docs/auth.md" }],
