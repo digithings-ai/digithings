@@ -55,3 +55,39 @@ def test_rows_from_fredgraph_parses_observation_date() -> None:
 
 def test_series_files_match_load_sdca_extra_sources() -> None:
     assert mod.SERIES_FILES == {"M2SL": "M2SL.csv", "DTWEXBGS": "DTWEXBGS.csv"}
+
+
+def test_export_series_falls_through_when_fred_api_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FRED_API_KEY", "test-key")
+    monkeypatch.setattr(mod, "rows_from_supabase", lambda _sid: [])
+
+    def _boom(_sid: str, _key: str) -> list[tuple[str, float]]:
+        raise RuntimeError("fred 500")
+
+    monkeypatch.setattr(mod, "rows_from_fred_api", _boom)
+    monkeypatch.setattr(mod, "rows_from_fredgraph", lambda _sid: [("2024-01-02", 1.0)])
+    dest, source, n = mod.export_series("M2SL", tmp_path)
+    assert source == "fredgraph"
+    assert n == 1
+    assert dest.is_file()
+
+
+def test_btc_sdca_is_not_a_slapper_calibration_target() -> None:
+    """Nightly verify must not require strategy_calibrations for btc_sdca (#3456)."""
+    import json
+
+    from digiquant.strategies.calibrations_loader import entry_is_slapper
+
+    settings_path = (
+        Path(__file__).resolve().parents[2]
+        / "digiquant"
+        / "src"
+        / "digiquant"
+        / "strategies"
+        / "settings.json"
+    )
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    entry = settings["strategies"]["btc_sdca"]
+    assert not entry_is_slapper(entry, settings)

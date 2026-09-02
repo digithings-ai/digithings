@@ -169,8 +169,16 @@ def export_series(series_id: str, cache_dir: Path) -> tuple[Path, str, int]:
     if not rows:
         api_key = (os.environ.get("FRED_API_KEY") or "").strip()
         if api_key:
-            rows = rows_from_fred_api(series_id, api_key)
-            source = "fred_api"
+            try:
+                rows = rows_from_fred_api(series_id, api_key)
+                source = "fred_api"
+            except Exception:
+                logger.warning(
+                    "FRED API failed for %s — falling through to fredgraph",
+                    series_id,
+                    exc_info=True,
+                )
+                rows = []
     if not rows:
         rows = rows_from_fredgraph(series_id)
         source = "fredgraph"
