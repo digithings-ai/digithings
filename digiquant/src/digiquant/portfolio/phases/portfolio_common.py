@@ -701,7 +701,9 @@ def run_asset_analyst_llm(
             )
         except (MergeError, ValidationError) as exc:
             logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
-            errors.append(PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500]))
+            errors.append(
+                PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500])
+            )
             body_raw = prior_body or {}
             payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
             enriched = _attach_forecast_lineage(

@@ -201,7 +201,9 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
         patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(KeyboardInterrupt),
     ):
-        run_research_then_portfolio(research_input=ResearchInput(run_date=date(2026, 6, 12)), deps=deps)
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=date(2026, 6, 12)), deps=deps
+        )
 
     assert written["errors"] == [("chain", "terminal")]
     assert written["status"] == "failed"

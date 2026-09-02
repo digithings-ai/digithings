@@ -125,9 +125,7 @@ class TestAssessBudget:
         def boom(**_kw: object) -> dict:
             raise RuntimeError("db down")
 
-        monkeypatch.setattr(
-            "digiquant.portfolio.budget_controller.get_vix_term_structure", boom
-        )
+        monkeypatch.setattr("digiquant.portfolio.budget_controller.get_vix_term_structure", boom)
         b, floor, a = assess_budget(_state({"A": 0.01}), object(), static_cap=15)
         assert (b, floor) == (15, 1) and a is None
 

@@ -1039,7 +1039,9 @@ def _invoke_with_config(
 
     from digiquant.portfolio.graph import build_portfolio_graph
 
-    portfolio_graph = build_portfolio_graph(watchlist=list(research_input.watchlist), deps=chain_deps.portfolio)
+    portfolio_graph = build_portfolio_graph(
+        watchlist=list(research_input.watchlist), deps=chain_deps.portfolio
+    )
     state = portfolio_graph.invoke(state)
 
     if chain_deps.publish is not None:

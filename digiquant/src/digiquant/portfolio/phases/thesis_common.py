@@ -159,7 +159,9 @@ def run_thesis_phase_llm(
             )
         except (MergeError, ValidationError) as exc:
             logger.warning("thesis edit merge failed for %s (%s)", phase_slug, exc)
-            errors.append(PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500]))
+            errors.append(
+                PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500])
+            )
             return None, dict(prior.payload), errors
         materialized = dict(merge_result.materialized)
         body_raw = materialized.get("body", materialized)

@@ -367,8 +367,12 @@ class TestCommitRunIdempotency:
         pos_count_1 = len(client.store.get("positions", []))
         second = node(state)
         pos_count_2 = len(client.store.get("positions", []))
-        first_manifest = (first.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
-        second_manifest = (second.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
+        first_manifest = (
+            first.get("phase_portfolio") or PhasePortfolioState()
+        ).commit_manifest or {}
+        second_manifest = (
+            second.get("phase_portfolio") or PhasePortfolioState()
+        ).commit_manifest or {}
         assert first_manifest.get("status") == "committed"
         assert second_manifest.get("status") == "noop"
         assert pos_count_2 == pos_count_1
@@ -409,8 +413,12 @@ class TestCommitRunIdempotency:
         second = node(_state(sized_book=_sized_book(80.0)))
 
         assert not second.get("errors"), second.get("errors")
-        first_manifest = (first.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
-        second_manifest = (second.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
+        first_manifest = (
+            first.get("phase_portfolio") or PhasePortfolioState()
+        ).commit_manifest or {}
+        second_manifest = (
+            second.get("phase_portfolio") or PhasePortfolioState()
+        ).commit_manifest or {}
         assert second_manifest.get("status") == "committed"
         assert second_manifest.get("commit_seq") == first_manifest["commit_seq"] + 1
         assert second_manifest.get("supersedes") == [first_manifest["weights_fingerprint"]]
@@ -2328,7 +2336,9 @@ class TestPreTradeRiskH9:
         assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
         out2 = _run(client, state)
         assert out2["phase_portfolio"].commit_manifest["status"] == "noop"
-        assert out2["phase_portfolio"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
+        assert (
+            out2["phase_portfolio"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
+        )
         assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
 
     def test_append_only_no_upsert_or_update(self, monkeypatch) -> None:

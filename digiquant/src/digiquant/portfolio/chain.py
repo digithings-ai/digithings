@@ -446,13 +446,17 @@ def run_research_then_portfolio(
         if _diagnostics.research_produced(state):
             portfolio_graph = build_portfolio_graph(
                 watchlist=list(
-                    portfolio_watchlist if portfolio_watchlist is not None else research_input.watchlist
+                    portfolio_watchlist
+                    if portfolio_watchlist is not None
+                    else research_input.watchlist
                 ),
                 deps=deps.portfolio,
                 checkpointer=checkpointer,
                 held=portfolio_held,
             )
-            state = _safe_invoke_graph(portfolio_graph, state, checkpointer, thread_base, "portfolio")
+            state = _safe_invoke_graph(
+                portfolio_graph, state, checkpointer, thread_base, "portfolio"
+            )
             # WP10.1: one-way shadow artifact after H9. Fail-soft — never reruns or
             # mutates the production booking path / graph.
             _maybe_export_shadow_allocation_artifact(state)

@@ -348,7 +348,9 @@ def summarize_run(
     # ``portfolio_h9_commit_run`` PhaseError — which also covers the memo-present-but-no-book
     # fail-closed where nothing materialized (``book_materialized`` is False). H9 never both
     # commits and errors, so this can't fire on a healthy committed run (#1555).
-    portfolio_commit_error = any(getattr(e, "phase", None) == _PORTFOLIO_COMMIT_PHASE for e in errors)
+    portfolio_commit_error = any(
+        getattr(e, "phase", None) == _PORTFOLIO_COMMIT_PHASE for e in errors
+    )
     commit_failed = (book_materialized and not book_committed_) or portfolio_commit_error
     error_parts = [
         f"{getattr(e, 'phase', '?')}/{getattr(e, 'node', '?')}: {getattr(e, 'message', '')}"
@@ -444,7 +446,8 @@ def summarize_run(
             # A majority of the book's deliberations dead — see _portfolio_deliberation_health.
             (
                 "portfolio_deliberations",
-                portfolio_total > 0 and (portfolio_failed / portfolio_total) * 100.0 > portfolio_degraded_pct,
+                portfolio_total > 0
+                and (portfolio_failed / portfolio_total) * 100.0 > portfolio_degraded_pct,
             ),
             # No-book gate: research produced research, portfolio was therefore run by the chain,
             # and yet nothing committed. Closes the residual detection hole behind #1766 —

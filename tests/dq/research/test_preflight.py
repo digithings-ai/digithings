@@ -109,9 +109,7 @@ class TestPreflight:
         with patch.object(
             refresh_mod, "recompute_technicals_from_history", side_effect=_fake_recompute
         ):
-            out = build_preflight_node(deps)(
-                ResearchState(run_type="baseline", run_date=run_date)
-            )
+            out = build_preflight_node(deps)(ResearchState(run_type="baseline", run_date=run_date))
         # Refresh brought it current → fallback cleared back to supabase.
         assert out["data_layer"].fallback_used == "supabase"
         assert out["data_layer"].price_technicals_latest == run_date
@@ -297,9 +295,7 @@ class TestPreflightDataStarvation:
             client=client,
             config_loader=lambda: ResearchConfigBundle(watchlist=["SPY", "QQQ"]),
         )
-        return build_preflight_node(deps)(
-            ResearchState(run_type="baseline", run_date=run_date)
-        )
+        return build_preflight_node(deps)(ResearchState(run_type="baseline", run_date=run_date))
 
     # ── (a) price_basket_gap ──────────────────────────────────────────────
 

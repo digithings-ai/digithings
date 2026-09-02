@@ -74,9 +74,7 @@ def _quiet_state() -> ResearchState:
 @pytest.mark.unit
 class TestDeliberationSkip:
     def test_quiet_fingerprint_carries_summary_without_llm(self) -> None:
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
@@ -139,9 +137,7 @@ class TestDeliberationSkip:
                 }
             },
         )
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
@@ -161,9 +157,7 @@ class TestH6SelectionEnforceCarry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("enforce low-value must not call provider"),
@@ -181,9 +175,7 @@ class TestH6SelectionEnforceCarry:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "shadow")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("shadow incumbent skip must not call LLM"),

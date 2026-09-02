@@ -254,7 +254,9 @@ class TestChainHeldInvariant:
     so the held-aware cap can keep it.
     """
 
-    def test_portfolio_held_reaches_build_portfolio_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_portfolio_held_reaches_build_portfolio_graph(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from digiquant.portfolio import chain as chain_mod
 
         captured: dict[str, Any] = {}

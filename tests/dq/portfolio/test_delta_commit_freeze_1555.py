@@ -56,7 +56,9 @@ def _run_quiet_delta(*, commit_run: bool = True) -> tuple[ResearchState, dict]:
         replace_canned_defaults=True,
         commit_run=commit_run,
     ) as run:
-        final = run.invoke(ResearchInput(run_date=RUN_DATE, watchlist=WATCHLIST, refresh_scope="none"))
+        final = run.invoke(
+            ResearchInput(run_date=RUN_DATE, watchlist=WATCHLIST, refresh_scope="none")
+        )
     return final, run.client.store
 
 
@@ -126,9 +128,7 @@ class TestUncommittedBookIsLoud:
         assert diagnostics.is_degraded(final) is True
 
     def test_summarize_run_escalates_and_marks_head(self) -> None:
-        state = ResearchState(
-            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
-        )
+        state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26))
         # A fresh research segment so the base verdict would otherwise be "ok".
         from digiquant.research.state import SegmentPayload, SegmentSlot
 
@@ -152,9 +152,7 @@ class TestUncommittedBookIsLoud:
         # escalation must also fire on any ``portfolio_h9_commit_run`` PhaseError (#1555 3a).
         from digiquant.research.state import PhaseError, SegmentPayload, SegmentSlot
 
-        state = ResearchState(
-            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
-        )
+        state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26))
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
         }
@@ -172,9 +170,7 @@ class TestUncommittedBookIsLoud:
         assert summary.error_summary.startswith("portfolio_h9_commit_run/uncommitted")
 
     def test_idempotency_noop_counts_as_committed(self) -> None:
-        state = ResearchState(
-            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
-        )
+        state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26))
         from digiquant.research.state import SegmentPayload, SegmentSlot
 
         state.phase1_outputs = {
@@ -191,9 +187,7 @@ class TestUncommittedBookIsLoud:
     def test_diagnostics_row_carries_structured_commit_flag(self) -> None:
         from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
-        state = ResearchState(
-            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
-        )
+        state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26))
         from digiquant.research.state import SegmentPayload, SegmentSlot
 
         state.phase1_outputs = {

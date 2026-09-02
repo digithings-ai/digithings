@@ -405,7 +405,9 @@ def _invalidation_risk_for(state: PortfolioState, ticker: str, analyst: Mapping[
     return False
 
 
-def _resolve_h6_selection(state: PortfolioState, ticker: str, analyst: dict[str, Any]) -> H6Selection:
+def _resolve_h6_selection(
+    state: PortfolioState, ticker: str, analyst: dict[str, Any]
+) -> H6Selection:
     """Build features + selection; planner errors → incumbent fallback (full H6)."""
     mode = resolve_h6_selection_mode()
     if mode is H6SelectionMode.OFF:

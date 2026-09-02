@@ -15,7 +15,11 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research" / "resolve_decisions.py"
+    Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "scripts"
+    / "research"
+    / "resolve_decisions.py"
 )
 
 

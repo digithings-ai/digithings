@@ -80,9 +80,7 @@ class TestH6AnalystSkillLoad:
             loaded.append(slug)
             return f"# stub skill {slug}"
 
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         pm_calls = {"n": 0}
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:

@@ -58,9 +58,7 @@ def _state() -> ResearchState:
 @pytest.mark.unit
 class TestDeliberationConvergence:
     def test_pm_challenge_then_analyst_converges(self) -> None:
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -99,9 +97,7 @@ class TestDeliberationConvergence:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("ATLAS_DELIBERATION_MAX_ROUNDS", "1")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -147,9 +143,7 @@ class TestDeliberationConvergence:
         # — a PM that converges on its first turn returns WITHOUT an analyst turn. (The
         # default floor is 2, exercised by the test below.)
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -182,9 +176,7 @@ class TestDeliberationConvergence:
         # record its challenge and the analyst must respond before convergence is honored —
         # no more round-1 rubber-stamp (#945).
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -376,9 +368,7 @@ class TestH6SelectionWiring:
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
-        compiled = build_pipeline(
-            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})])
         calls: list[str] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:

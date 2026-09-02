@@ -512,9 +512,7 @@ class TestBookIntegrity:
     """#814 — book-write integrity: thesis_id on positions, invalidation defaults."""
 
     def _run(self, client, recommended, analysts=None, debates=None) -> None:
-        state = ResearchState(
-            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
-        )
+        state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9))
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
         state.phase_portfolio = PhasePortfolioState(
             asset_analysts=analysts or {},

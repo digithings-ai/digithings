@@ -76,7 +76,9 @@ def _h3_node_factory(client: SupabaseClient | None):
                 workspace_id=state.config.workspace_id,
             )
         return {
-            "phase_portfolio": state.phase_portfolio.model_copy(update={"thesis_vehicle_map": document}),
+            "phase_portfolio": state.phase_portfolio.model_copy(
+                update={"thesis_vehicle_map": document}
+            ),
         }
 
     return _node

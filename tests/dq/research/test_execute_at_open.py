@@ -32,7 +32,11 @@ from digiquant.dashboard.tenancy import house_workspace_id
 pytestmark = pytest.mark.unit
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research" / "execute_at_open.py"
+    Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "scripts"
+    / "research"
+    / "execute_at_open.py"
 )
 
 

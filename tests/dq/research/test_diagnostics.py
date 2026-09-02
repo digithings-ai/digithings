@@ -77,9 +77,7 @@ def _committed_book(**extra) -> PhasePortfolioState:
 def _state(
     *, phase1=None, phase3=None, phase5=None, errors=None, phase_portfolio=None
 ) -> ResearchState:
-    state = ResearchState(
-        run_type="baseline", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
-    )
+    state = ResearchState(run_type="baseline", run_date=RUN_DATE, baseline_date=date(2026, 6, 9))
     if phase1:
         state.phase1_outputs = phase1
     if phase3 is not None:
@@ -333,7 +331,9 @@ def test_noop_commit_manifest_satisfies_the_no_book_gate() -> None:
     # An idempotent re-run of an already-booked day is committed, not a gap.
     state = _prod_shaped_state(
         failed=0,
-        phase_portfolio=PhasePortfolioState(commit_manifest={"status": "noop", "source_run_id": "r1"}),
+        phase_portfolio=PhasePortfolioState(
+            commit_manifest={"status": "noop", "source_run_id": "r1"}
+        ),
     )
     assert diagnostics.summarize_run(state).status == "ok"
 
@@ -381,9 +381,7 @@ def test_h9_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
     portfolio, _ = _portfolio_deliberations(4, failed=0)
     state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = [
-        PhaseError(
-            phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict"
-        )
+        PhaseError(phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict")
     ]
     s = diagnostics.summarize_run(state)
     assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 0}

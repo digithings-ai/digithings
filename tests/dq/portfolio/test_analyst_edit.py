@@ -121,9 +121,7 @@ class TestAnalystEdit:
                 ),
             }
         )
-        compiled = build_pipeline(
-            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -541,9 +539,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(
-            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_missing_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             schema = next(
@@ -589,9 +585,7 @@ class TestH5ForecastMaterialization:
         state = state.model_copy(
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
-        compiled = build_pipeline(
-            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
-        )
+        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})])
 
         def fake_with_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
             return json.dumps(

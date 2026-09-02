@@ -71,7 +71,9 @@ def _phase_error(message: str) -> dict[str, Any]:
     }
 
 
-def _persist_risk_policy_registry(*, client: SupabaseClient, state: PortfolioState) -> dict[str, Any]:
+def _persist_risk_policy_registry(
+    *, client: SupabaseClient, state: PortfolioState
+) -> dict[str, Any]:
     """Fail-soft H8 risk snapshot registry (#2698). Never raises into booking."""
     try:
         result = persist_h8_risk_snapshots_from_state(client=client, state=state)

@@ -53,7 +53,9 @@ def _run_beliefs_only(monkeypatch: pytest.MonkeyPatch, deps: Any) -> None:
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
     monkeypatch.setattr(chain_mod, "_write_diagnostics_row", lambda *a, **k: None, raising=False)
     # `daily` is the only cadence ResearchState accepts; the run must reach _usage.start().
-    research_input = ResearchInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
+    research_input = ResearchInput(
+        cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs"
+    )
     try:
         chain_mod.run_research_then_portfolio(research_input=research_input, deps=deps)
     except Exception:
@@ -80,8 +82,12 @@ def test_manage_usage_false_does_not_start_or_reset(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(chain_mod._usage, "reset", lambda: seen_reset.append(1))
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
     deps = chain_mod.ChainDeps(research=None, portfolio=None)
-    research_input = ResearchInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
-    chain_mod.run_research_then_portfolio(research_input=research_input, deps=deps, manage_usage=False)
+    research_input = ResearchInput(
+        cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs"
+    )
+    chain_mod.run_research_then_portfolio(
+        research_input=research_input, deps=deps, manage_usage=False
+    )
     assert seen_start == []
     assert seen_reset == []
 
