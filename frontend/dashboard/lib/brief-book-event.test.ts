@@ -69,6 +69,48 @@ describe('isMaterialBookEvent', () => {
       )
     ).toBe(true);
   });
+
+  it('treats a correctly projected +5pp ADD as material and a 0.0000 ADD as not', () => {
+    expect(
+      isMaterialBookEvent(
+        ev({
+          date: '2026-08-28',
+          ticker: 'FXI',
+          event: 'ADD',
+          weight_pct: 15,
+          prev_weight_pct: 10,
+          weight_change_pct: 5,
+        })
+      )
+    ).toBe(true);
+    expect(
+      isMaterialBookEvent(
+        ev({
+          date: '2026-08-28',
+          ticker: 'FXI',
+          event: 'ADD',
+          weight_pct: 15,
+          prev_weight_pct: 15,
+          weight_change_pct: 0,
+        })
+      )
+    ).toBe(false);
+  });
+
+  it('does not treat HOLD as material even when the consecutive-book delta is 5pp', () => {
+    expect(
+      isMaterialBookEvent(
+        ev({
+          date: '2026-08-28',
+          ticker: 'FXI',
+          event: 'HOLD',
+          weight_pct: 15,
+          prev_weight_pct: 10,
+          weight_change_pct: 5,
+        })
+      )
+    ).toBe(false);
+  });
 });
 
 describe('selectBriefLedgerDayEvents', () => {
