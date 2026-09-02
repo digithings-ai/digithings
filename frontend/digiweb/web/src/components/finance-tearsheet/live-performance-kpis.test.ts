@@ -5,9 +5,33 @@ import {
   dayReturnAnchorNav,
   derivePriceAsOfDate,
   inceptionSignAgreesWithBase100,
+  MIN_OVERLAP_DAYS,
   sinceInceptionPctFromNav,
   type LiveKpiPosition,
 } from './live-performance-kpis';
+
+/** Weekday series long enough for Jensen α / IR (≥ {@link MIN_OVERLAP_DAYS} pairs). */
+function buildAlignedSeries(days: number): {
+  navHistory: Array<{ date: string; nav: number }>;
+  benchmarkHistory: Array<{ date: string; price: number }>;
+} {
+  const navHistory: Array<{ date: string; nav: number }> = [];
+  const benchmarkHistory: Array<{ date: string; price: number }> = [];
+  let nav = 100;
+  let price = 500;
+  const start = Date.UTC(2026, 5, 1); // 2026-06-01
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start + i * 86_400_000);
+    // Skip weekends so we mimic trading-day cadence without calendar deps.
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    const date = d.toISOString().slice(0, 10);
+    nav *= 1 + 0.001 + (i % 5) * 0.0002;
+    price *= 1 + 0.0005 + (i % 7) * 0.0001;
+    navHistory.push({ date, nav });
+    benchmarkHistory.push({ date, price });
+  }
+  return { navHistory, benchmarkHistory };
+}
 
 const positions: LiveKpiPosition[] = [
   {
@@ -199,6 +223,67 @@ describe('computeLivePerformanceKpis', () => {
     expect(kpis.liveNav).toBeNull();
     expect(kpis.dayReturnPct).toBeNull();
     expect(kpis.sinceInceptionPct).toBeNull();
+    expect(kpis.excessReturnPct).toBeNull();
+    expect(kpis.alphaPct).toBeNull();
+    expect(kpis.informationRatio).toBeNull();
+  });
+
+  it('computes non-null excess, alpha, and IR when NAV + SPY share enough overlap', () => {
+    const { navHistory: longNav, benchmarkHistory: spy } = buildAlignedSeries(45);
+    expect(longNav.length).toBeGreaterThan(MIN_OVERLAP_DAYS + 1);
+    const kpis = computeLivePerformanceKpis({
+      positions: positions.map((p) => ({
+        ...p,
+        isLive: false,
+        livePriceDate: null,
+        metricsAsOf: longNav[longNav.length - 1]!.date,
+      })),
+      navHistory: longNav,
+      benchmarkHistory: spy,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.benchmarkTicker).toBe('SPY');
+    expect(kpis.excessReturnPct).not.toBeNull();
+    expect(Number.isFinite(kpis.excessReturnPct)).toBe(true);
+    expect(kpis.alphaPct).not.toBeNull();
+    expect(Number.isFinite(kpis.alphaPct)).toBe(true);
+    expect(kpis.informationRatio).not.toBeNull();
+    expect(Number.isFinite(kpis.informationRatio)).toBe(true);
+  });
+
+  it('fails closed on alpha/IR when overlap is under MIN_OVERLAP_DAYS (excess still ok)', () => {
+    const shortNav = [
+      { date: '2026-06-23', nav: 100 },
+      { date: '2026-06-24', nav: 101 },
+      { date: '2026-06-25', nav: 102 },
+    ];
+    const shortSpy = [
+      { date: '2026-06-23', price: 500 },
+      { date: '2026-06-24', price: 505 },
+      { date: '2026-06-25', price: 510 },
+    ];
+    const kpis = computeLivePerformanceKpis({
+      positions: positions.map((p) => ({
+        ...p,
+        isLive: false,
+        livePriceDate: null,
+        metricsAsOf: '2026-06-25',
+      })),
+      navHistory: shortNav,
+      benchmarkHistory: shortSpy,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.excessReturnPct).not.toBeNull();
+    expect(kpis.alphaPct).toBeNull();
+    expect(kpis.informationRatio).toBeNull();
+  });
+
+  it('fails closed on excess/alpha when SPY series is missing', () => {
+    const kpis = computeLivePerformanceKpis({
+      positions,
+      navHistory,
+      benchmarkTicker: 'SPY',
+    });
     expect(kpis.excessReturnPct).toBeNull();
     expect(kpis.alphaPct).toBeNull();
     expect(kpis.informationRatio).toBeNull();

@@ -8,7 +8,6 @@ can inspect refresh reasons. Never actuates alternate routing.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date
 
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact
@@ -22,6 +21,7 @@ from digiquant.olympus.attention_plan_io import (
 from digiquant.olympus.edit_mode.content_identity import prior_content_date
 from digiquant.olympus.edit_mode.models import ArtifactKey, PriorPublished, TriageSignal
 from digiquant.olympus.edit_mode.prior import artifact_document_key
+from digiquant.olympus.envcompat import PLANNER_MODE, env_lookup
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class _StatePriorLoader:
 
 def planner_mode_from_env() -> PlannerMode:
     """Return ``off``|``shadow`` from env; unknown values fall back to ``shadow``."""
-    raw = os.environ.get(OLYMPUS_PLANNER_MODE_ENV, "shadow").strip().lower()
+    raw = env_lookup(PLANNER_MODE, default="shadow").strip().lower()
     if raw in ("off", "shadow"):
         return raw  # type: ignore[return-value]
     logger.warning(

@@ -21,7 +21,7 @@ export function ProfileCard() {
         the recent activity log underneath — timestamps first, verbs second.
       </p>
 
-      <div className="mt-[1.2rem] rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+      <div className="mt-[1.2rem] rounded-none border border-hair bg-surface p-[1.2rem]">
         <div className="flex items-center gap-4">
           <span
             className="inline-flex size-12 flex-shrink-0 items-center justify-center rounded-full bg-accent-weak font-mono text-[0.85rem] uppercase tracking-[0.06em] text-accent"

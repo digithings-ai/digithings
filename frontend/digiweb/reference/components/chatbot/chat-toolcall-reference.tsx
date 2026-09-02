@@ -67,7 +67,7 @@ export function ChatToolCallReference() {
         yet; a failed call reads in the down colour and keeps the fix inline.
       </p>
 
-      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-none border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
         <div className="flex gap-[0.55rem] items-baseline justify-start">
           <div className="chat-bubble--user min-w-0 border-0 bg-transparent p-0 font-mono text-[0.84rem] leading-[1.6] text-term-ink">
             backtest trend_xsec on ETH and check the funding regime

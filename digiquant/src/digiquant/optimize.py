@@ -13,7 +13,19 @@ from pathlib import Path
 from digiquant.backtest import run_backtest
 from digiquant.constraints import satisfies_constraints
 from digiquant.models import BacktestResult, OptimizationConstraints, OptimizeResult
-from digiquant.strategy_specs import infer_param_grid, sample_random_params
+from digiquant.strategies.sdca.indicator_catalog import WEIGHT_PARAM_BY_NAME
+from digiquant.strategies.sdca.optimize import (
+    btc_power_law_rails_fitter,
+    load_sdca_extra_z,
+    load_sdca_ohlcv,
+    run_sdca_walk_forward,
+    walk_forward_to_optimize_result,
+)
+from digiquant.strategy_specs import (
+    _resolve_strategy_name,
+    infer_param_grid,
+    sample_random_params,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +76,11 @@ def _run_trials_parallel(
             results.append((params, bt))
         return results
 
-    args_list = [
-        (strategy_name, symbols, params, data_path, data_dir) for params in trials
-    ]
+    args_list = [(strategy_name, symbols, params, data_path, data_dir) for params in trials]
     results: list[tuple[dict, BacktestResult]] = [None] * len(trials)  # type: ignore
     try:
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
-            future_to_idx = {
-                pool.submit(_run_trial, args): i for i, args in enumerate(args_list)
-            }
+            future_to_idx = {pool.submit(_run_trial, args): i for i, args in enumerate(args_list)}
             for future in as_completed(future_to_idx):
                 i = future_to_idx[future]
                 params, bt = future.result()
@@ -85,9 +93,7 @@ def _run_trials_parallel(
                     bt.total_return_pct,
                 )
     except (BrokenProcessPool, OSError, RuntimeError) as exc:
-        logger.warning(
-            "Parallel optimization failed (%s); falling back to sequential.", exc
-        )
+        logger.warning("Parallel optimization failed (%s); falling back to sequential.", exc)
         results = []
         for i, params in enumerate(trials):
             logger.info("Trial %d/%d (sequential): %s", i + 1, len(trials), params)
@@ -122,8 +128,10 @@ def generate_param_grid(
     param_values: dict[str, list[float | int | str]] = {}
 
     for name, spec in param_specs.items():
-        if isinstance(spec, (list, tuple)) and len(spec) == 3 and all(
-            isinstance(x, (int, float)) for x in spec
+        if (
+            isinstance(spec, (list, tuple))
+            and len(spec) == 3
+            and all(isinstance(x, (int, float)) for x in spec)
         ):
             # (min, max, step)
             lo, hi, step = spec[0], spec[1], spec[2]
@@ -194,6 +202,17 @@ def run_optimize(
     """
     if not symbols:
         raise ValueError("symbols required (non-empty list).")
+    if _resolve_strategy_name(strategy_name) == "sdca":
+        return _run_sdca_optimize(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            param_grid=param_grid,
+            method=method,
+            n_trials=n_trials,
+            data_path=data_path,
+            data_dir=data_dir,
+            base_params=base_params,
+        )
     run_id = f"optimize-{uuid.uuid4().hex[:8]}"
     workers = max_workers if max_workers is not None else _DEFAULT_WORKERS
 
@@ -273,3 +292,91 @@ def run_optimize(
         status="ok",
         message=f"{method} optimization ({len(valid)}/{len(results)} passed constraints).",
     )
+
+
+def _sdca_trials(
+    param_grid: list[dict[str, float | int | str]] | None,
+    method: str,
+    n_trials: int,
+    base_params: dict[str, float | int | str] | None,
+) -> list[dict[str, float | int | str]]:
+    """SDCA search points. Auto-grid drops curvatures and extra-indicator
+    weights (held at defaults: valuation=1, extras=0) so the grid stays small.
+    Random/bayesian and an explicit ``param_grid`` search the extra weights.
+    """
+    extra_weight_keys = {
+        "m2_weight",
+        "rs_eth_weight",
+        "dxy_weight",
+        "weekly_rsi_weight",
+        "weekly_macd_weight",
+        "sma_band_weight",
+    }
+    if param_grid is not None:
+        return param_grid
+    if method in {"random", "bayesian"}:
+        return sample_random_params("sdca", n_trials, base_params=base_params)
+    return infer_param_grid(
+        "sdca",
+        base_params={
+            "buy_curvature": 1.0,
+            "sell_curvature": 2.0,
+            "m2_weight": 0.0,
+            "rs_eth_weight": 0.0,
+            "dxy_weight": 0.0,
+            "weekly_rsi_weight": 0.0,
+            "weekly_macd_weight": 0.0,
+            "sma_band_weight": 0.0,
+            **dict(base_params or {}),
+        },
+        num_points_per_param=2,
+        exclude_params={
+            "buy_curvature",
+            "sell_curvature",
+            "trade_size",
+            *extra_weight_keys,
+        },
+    )
+
+
+def _run_sdca_optimize(
+    *,
+    strategy_name: str,
+    symbols: list[str],
+    param_grid: list[dict[str, float | int | str]] | None,
+    method: str,
+    n_trials: int,
+    data_path: str | Path | None,
+    data_dir: str | Path | None,
+    base_params: dict[str, float | int | str] | None,
+) -> OptimizeResult:
+    """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
+    # nautilus_trader is an optional extra; importing at module load would
+    # pull Nautilus into every optimize caller.
+    try:
+        from digiquant.strategies.sdca.nautilus_evaluator import evaluate_sdca_trial_nautilus
+    except ImportError as exc:
+        raise RuntimeError(
+            "SDCA walk-forward requires nautilus_trader (install digiquant[nautilus])."
+        ) from exc
+    dates, prices = load_sdca_ohlcv(symbols=symbols, data_path=data_path, data_dir=data_dir)
+    extra_z = load_sdca_extra_z(dates, prices, data_path=data_path, data_dir=data_dir)
+    trials = _sdca_trials(param_grid, method, n_trials, base_params)
+    if base_params:
+        frozen = {
+            key: float(base_params[key])
+            for key in WEIGHT_PARAM_BY_NAME.values()
+            if key in base_params
+        }
+        if frozen:
+            trials = [{**trial, **frozen} for trial in trials]
+    result = run_sdca_walk_forward(
+        dates,
+        prices,
+        trials,
+        rails_fitter=btc_power_law_rails_fitter,
+        evaluator=evaluate_sdca_trial_nautilus,
+        evaluator_label="nautilus",
+        extra_z=extra_z,
+    )
+    return walk_forward_to_optimize_result(result, strategy_name=strategy_name, symbols=symbols)

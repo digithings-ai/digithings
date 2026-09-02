@@ -86,13 +86,16 @@ def main() -> int:
         holds = eat._hold_events_for_positions_not_in_rebalance(sb, d, existing)
         if not holds:
             continue
+        holds = eat._with_book_source(holds, eat.BOOK_SOURCE_LEGACY)
         tickers = ", ".join(h["ticker"] for h in holds)
         if args.dry_run:
             print(f"  {d}: would upsert {len(holds)} HOLD — {tickers}")
             total += len(holds)
             continue
         for e in holds:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(
+                e, on_conflict="workspace_id,date,ticker"
+            ).execute()
         print(f"  {d}: upserted {len(holds)} HOLD — {tickers}")
         total += len(holds)
         null_px = sum(1 for e in holds if e.get("price") is None)

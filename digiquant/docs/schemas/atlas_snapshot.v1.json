@@ -28,8 +28,8 @@
       "type": "object"
     },
     "DigestPayload": {
-      "additionalProperties": false,
-      "description": "Frontend-facing copy of the Phase 7 master synthesis payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: a :class:`SegmentReport`-shaped core (segment, date, bias,\nheadline, findings, sources, notes) plus the digest-specific narrative\nsections defined in ARCHITECTURE.md \u00a7Phase 7.",
+      "additionalProperties": true,
+      "description": "Frontend-facing copy of the Phase 7 master briefing payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: markdown ``body`` plus a thin envelope. Historical JSON slots are\nallowed extras so old ``daily_snapshots`` rows still validate.\n\n``actionable_summary`` / ``risk_radar`` / ``material_findings`` stay typed\nso read-path personalization (#312) still sees ActionableItem / RiskItem /\nFinding objects. The stitcher ``DigestSnapshot`` does not require them.",
       "properties": {
         "actionable_summary": {
           "items": {
@@ -38,71 +38,14 @@
           "title": "Actionable Summary",
           "type": "array"
         },
-        "alt_data_dashboard": {
-          "title": "Alt Data Dashboard",
+        "body": {
+          "default": "",
+          "title": "Body",
           "type": "string"
-        },
-        "asset_classes_summary": {
-          "title": "Asset Classes Summary",
-          "type": "string"
-        },
-        "bias": {
-          "enum": [
-            "strong_bullish",
-            "bullish",
-            "neutral",
-            "bearish",
-            "strong_bearish",
-            "mixed"
-          ],
-          "title": "Bias",
-          "type": "string"
-        },
-        "confidence": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Confidence"
-        },
-        "data_quality": {
-          "anyOf": [
-            {
-              "enum": [
-                "high",
-                "medium",
-                "low",
-                "absent"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Data Quality"
         },
         "date": {
           "format": "date",
           "title": "Date",
-          "type": "string"
-        },
-        "headline": {
-          "title": "Headline",
-          "type": "string"
-        },
-        "institutional_summary": {
-          "title": "Institutional Summary",
-          "type": "string"
-        },
-        "market_regime_snapshot": {
-          "title": "Market Regime Snapshot",
           "type": "string"
         },
         "material_findings": {
@@ -112,20 +55,9 @@
           "title": "Material Findings",
           "type": "array"
         },
-        "notes": {
-          "default": "",
-          "title": "Notes",
-          "type": "string"
-        },
-        "portfolio_recommendations": {
-          "default": "",
-          "description": "Deprecated \u2014 Hermes owns allocation; always empty on new runs.",
-          "title": "Portfolio Recommendations",
-          "type": "string"
-        },
         "regime_label": {
           "default": "",
-          "description": "Short regime token, e.g. 'Risk-on / Policy easing' \u2014 NOT the full market_regime_snapshot paragraph.",
+          "description": "Short regime token, e.g. 'Risk-on / Policy easing' \u2014 NOT a restatement of the regime section.",
           "title": "Regime Label",
           "type": "string"
         },
@@ -137,6 +69,7 @@
           "type": "array"
         },
         "segment": {
+          "default": "master-digest",
           "title": "Segment",
           "type": "string"
         },
@@ -153,28 +86,10 @@
           },
           "title": "Sources",
           "type": "array"
-        },
-        "thesis_tracker": {
-          "default": "",
-          "description": "Deprecated \u2014 Hermes owns thesis lifecycle; always empty on new runs.",
-          "title": "Thesis Tracker",
-          "type": "string"
-        },
-        "us_equities_summary": {
-          "title": "Us Equities Summary",
-          "type": "string"
         }
       },
       "required": [
-        "segment",
-        "date",
-        "bias",
-        "headline",
-        "market_regime_snapshot",
-        "alt_data_dashboard",
-        "institutional_summary",
-        "asset_classes_summary",
-        "us_equities_summary"
+        "date"
       ],
       "title": "DigestPayload",
       "type": "object"

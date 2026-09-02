@@ -19,15 +19,18 @@ intraday — before today's close lands in ``price_history`` — the index advan
 using the most recent *available* close pair, i.e. one trading-day phase lag.
 That is the standard, defensible behavior for an EOD-priced paper index.
 
-All writes are idempotent upserts (``positions`` on ``(date, ticker)``,
-``nav_history`` on ``date``), so a re-run of the same date is a no-op-equivalent.
+All writes are idempotent upserts (``positions`` on
+``(workspace_id, date, ticker)``, ``nav_history`` / ``portfolio_metrics`` on
+``(workspace_id, date)``). This path stamps the house workspace. Overlay books
+stay refused (``legacy_book_unique``) until staged cutover 113 is applied
+(after ``main`` house GHA writers use the widened conflict). A re-run of the
+same house date is a no-op-equivalent.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-import os
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import (
@@ -38,10 +41,13 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 from digiquant.olympus.performance_returns import calculate_performance_returns
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +66,14 @@ _ALPHA_BENCHMARK = "SPY"
 # (migration 039) and entry_price/entry_date population only land when the flag is on AND
 # the migration has been applied to prod — so merging this code never breaks the scheduled
 # delta/baseline materialize (which would otherwise upsert columns that don't exist yet).
-_RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
+_RISK_FIELDS_ENV = POSITION_RISK_FIELDS
 _ATR_STOP_MULT = 2.0  # advisory stop at ~2× daily ATR below entry
 _ATR_TARGET_MULT = 3.0  # advisory target at ~3× daily ATR above entry (1.5 R:R)
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
 
 
 def _position_risk_fields_enabled() -> bool:
-    return os.environ.get(_RISK_FIELDS_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    return env_lookup(_RISK_FIELDS_ENV).strip().lower() in ("1", "true", "yes", "on")
 
 
 @dataclass(frozen=True)
@@ -153,6 +159,7 @@ def _upsert_theses(
     weights: dict[str, float],
     analysts: dict[str, Any],
     debates: dict[str, Any],
+    workspace_id: str | None = None,
 ) -> int:
     """Materialize one thesis row (+ vehicle) per booked holding (#713).
 
@@ -167,10 +174,16 @@ def _upsert_theses(
     parent rows are written first; vehicle writes are best-effort enrichment and
     never block the book.
 
+    Overlay workspaces skip this write: ``theses`` / ``thesis_vehicles`` are
+    house-owned shared registers (no ``workspace_id`` column).
+
     Invariants enforced on write (#814):
     - Every ACTIVE thesis has a non-empty invalidation string.
     - A rule-based default is generated when the analyst/debate left it blank.
     """
+    if skip_overlay_shared_register(workspace_id):
+        logger.info("overlay skip shared register theses (house-only UNIQUE(date, thesis_id))")
+        return 0
     if not weights:
         return 0
     thesis_rows: list[dict[str, Any]] = []
@@ -222,10 +235,15 @@ def _upsert_theses(
 
 
 def _prior_nav(client: SupabaseClient, run_date: date) -> float:
-    """Latest ``nav_history.nav`` strictly before ``run_date`` (seed if none)."""
+    """Latest house ``nav_history.nav`` strictly before ``run_date`` (seed if none).
+
+    This path is house-only. Overlay NAV on a later calendar date must not
+    compound the house index.
+    """
     resp = (
         client.table("nav_history")
         .select("date, nav")
+        .eq("workspace_id", str(house_workspace_id()))
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -276,13 +294,19 @@ def _upsert_portfolio_metrics(
 
     ``pnl_pct`` is the day-over-day NAV return (latest NAV pair).
 
-    Idempotent: upserts on ``date``.
+    Idempotent: upserts on ``(workspace_id, date)``.
     """
     date_str = run_date.isoformat()
+    workspace_id = str(house_workspace_id())
 
-    # Fetch all nav_history up to run_date for risk metrics.
+    # Fetch house nav_history up to run_date for risk metrics.
     resp = (
-        client.table("nav_history").select("date,nav").lte("date", date_str).order("date").execute()
+        client.table("nav_history")
+        .select("date,nav")
+        .eq("workspace_id", workspace_id)
+        .lte("date", date_str)
+        .order("date")
+        .execute()
     )
     nav_rows = list(getattr(resp, "data", None) or [])
     nav_observations = [row for row in nav_rows if row.get("date") and row.get("nav") is not None]
@@ -356,6 +380,7 @@ def _upsert_portfolio_metrics(
         alpha = performance_returns.relative_return_pct
 
     row: dict[str, Any] = {
+        "workspace_id": workspace_id,
         "date": date_str,
         "pnl_pct": pnl_pct,
         "sharpe": sharpe,
@@ -367,7 +392,7 @@ def _upsert_portfolio_metrics(
         "relative_return_pct": performance_returns.relative_return_pct,
         "benchmark_ticker": performance_returns.benchmark_ticker,
     }
-    client.table("portfolio_metrics").upsert(row, on_conflict="date").execute()
+    client.table("portfolio_metrics").upsert(row, on_conflict="workspace_id,date").execute()
     logger.debug(
         "phase9d: portfolio_metrics upserted for %s (sharpe=%s, vol=%s, dd=%s, alpha=%s)",
         date_str,
@@ -412,11 +437,12 @@ def _latest_values(
 
     We only need each ticker's *most recent* value, so the query is bounded to a short
     ``lookback_days`` window — enough to clear weekends/holidays and find the latest daily
-    row (``price_history`` / ``price_technicals`` are daily: ≤1 row/ticker/day). The page
-    limit is tied to that window (``N × (lookback_days + 1)``) so it can never truncate a
-    ticker still inside the window — the "crowding" failure mode this guards against. Fail-
-    soft: a read error or missing value yields no entry for that ticker (the caller leaves
-    the field unset rather than crashing the book); a partial resolve is logged.
+    row (``price_history`` / ``price_technicals`` are daily: ≤1 row/ticker/day).
+    ``.order("date", desc=True)`` ensures truncation drops the *oldest* rows, so every
+    ticker still resolves from the leading page — not because the requested ``.limit`` can
+    exceed PostgREST's server-side row cap. Fail-soft: a read error or missing value yields
+    no entry for that ticker (the caller leaves the field unset rather than crashing the
+    book); a partial resolve is logged.
     """
     if not tickers:
         return {}
@@ -605,12 +631,13 @@ def build_materialize_node(deps: MaterializeDeps):
 
         client.table("nav_history").upsert(
             {
+                "workspace_id": str(house_workspace_id()),
                 "date": date_str,
                 "nav": nav,
                 "cash_pct": cash_pct,
                 "invested_pct": round(invested, 4),
             },
-            on_conflict="date",
+            on_conflict="workspace_id,date",
         ).execute()
 
         # Portfolio-level risk metrics (#953): compute sharpe/vol/drawdown/alpha
@@ -651,8 +678,10 @@ def build_materialize_node(deps: MaterializeDeps):
                 "phase9d: non-CASH positions missing thesis_id (will write NULL): %s",
                 _non_cash_missing_thesis,
             )
+        house_id = str(house_workspace_id())
         for row in pos_rows:
-            client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+            row["workspace_id"] = house_id
+            client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
         # Theses surface (#713): one thesis per held ticker, from the analyst
         # payloads + debate summaries already in state. Skips the CASH ledger row
@@ -666,6 +695,7 @@ def build_materialize_node(deps: MaterializeDeps):
             weights=weights,
             analysts=analyst_payloads(state),
             debates=deliberation_summaries(state),
+            workspace_id=state.config.workspace_id,
         )
 
         logger.info(

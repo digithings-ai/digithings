@@ -76,7 +76,7 @@
 }
 
 .composer-send {
-  color: var(--on-accent);
+  color: var(--bg);
   transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
 }
 
@@ -99,7 +99,7 @@
 
 /* ── inline chart ───────────────────────────────────────────────────── */
 /* The .chat-inline-chart canvas-host wrapper migrated to utilities in
-   chat-inline-chart-reference.tsx (w-full, h-[180px], border-hair, rounded,
+   chat-inline-chart-reference.tsx (w-full, h-[180px], border-hair, rounded-none,
    overflow). The Lightweight-Charts instance itself is created in the tsx. */
 
 /* ── inline graph ───────────────────────────────────────────────────── */

@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { mapDigivaultSearchNotes } from "./digivault";
+import { mapDigivaultGetNote, mapDigivaultSearchNotes } from "./digivault";
 
 describe("mapDigivaultSearchNotes", () => {
   it("maps a zero-hit search-notes trace to a completed retrieve span with no documents", () => {
-    // Same defect as mapDigisearchRagSources: an empty `hits` array is a real
-    // completed search that found nothing, not "never searched".
     const span = mapDigivaultSearchNotes({ query: "nonexistent topic", hits: [] });
 
     expect(span).toEqual({
       operation: "retrieve",
       status: "completed",
       label: "Sources",
-      toolName: "digivault",
+      toolName: "digivault_search_notes",
       query: "nonexistent topic",
     });
     expect(span).not.toHaveProperty("documents");
@@ -22,7 +20,7 @@ describe("mapDigivaultSearchNotes", () => {
       operation: "retrieve",
       status: "completed",
       label: "Sources",
-      toolName: "digivault",
+      toolName: "digivault_search_notes",
     });
   });
 
@@ -31,7 +29,7 @@ describe("mapDigivaultSearchNotes", () => {
       operation: "execute_tool",
       status: "started",
       label: "Searching digivault…",
-      toolName: "digivault",
+      toolName: "digivault_search_notes",
       query: "showcase",
     });
   });
@@ -40,44 +38,7 @@ describe("mapDigivaultSearchNotes", () => {
     expect(mapDigivaultSearchNotes({ query: "showcase" })).toBeNull();
   });
 
-  it("preserves digivault_get_note batch errors when notes are absent", () => {
-    expect(
-      mapDigivaultSearchNotes({
-        query: "batch",
-        errors: {
-          "clients/x/missing": "not found",
-          "clients/x/bad": "forbidden",
-        },
-      }),
-    ).toEqual({
-      operation: "execute_tool",
-      status: "failed",
-      label: "digivault errors (2)",
-      toolName: "digivault",
-      query: "batch",
-    });
-  });
-
-  it("keeps successful batch notes alongside partial errors", () => {
-    const span = mapDigivaultSearchNotes({
-      notes: [
-        {
-          vault_path: "clients/digithings/ok",
-          title: "OK",
-          body_markdown: "body",
-        },
-      ],
-      errors: { "clients/digithings/missing": "not found" },
-      query: "batch",
-    });
-    expect(span?.status).toBe("completed");
-    expect(span?.label).toBe("Sources (1 errors)");
-    expect(span?.documents).toEqual([
-      { title: "OK", path: "clients/digithings/ok", snippet: "body" },
-    ]);
-  });
-
-  it("maps notes:[] with only errors as execute_tool failed (not a fake hitCount)", () => {
+  it("routes batch note payloads through mapDigivaultGetNote", () => {
     expect(
       mapDigivaultSearchNotes({
         notes: [],
@@ -87,13 +48,13 @@ describe("mapDigivaultSearchNotes", () => {
     ).toEqual({
       operation: "execute_tool",
       status: "failed",
-      label: "digivault errors (1)",
-      toolName: "digivault",
+      label: "digivault_get_note errors (1)",
+      toolName: "digivault_get_note",
       query: "batch",
     });
   });
 
-  it("leaves the successful (non-empty) path byte-identical", () => {
+  it("leaves the successful search path unchanged apart from toolName", () => {
     const payload = {
       query: "showcase",
       hits: [
@@ -108,7 +69,7 @@ describe("mapDigivaultSearchNotes", () => {
       operation: "retrieve",
       status: "completed",
       label: "Sources",
-      toolName: "digivault",
+      toolName: "digivault_search_notes",
       documents: [
         {
           title: "digithings chat — product showcase (client #0)",
@@ -117,6 +78,68 @@ describe("mapDigivaultSearchNotes", () => {
         },
       ],
       query: "showcase",
+    });
+  });
+});
+
+describe("mapDigivaultGetNote", () => {
+  it("preserves batch errors when notes are absent", () => {
+    expect(
+      mapDigivaultGetNote({
+        query: "batch",
+        errors: {
+          "clients/x/missing": "not found",
+          "clients/x/bad": "forbidden",
+        },
+      }),
+    ).toEqual({
+      operation: "execute_tool",
+      status: "failed",
+      label: "digivault_get_note errors (2)",
+      toolName: "digivault_get_note",
+      query: "batch",
+    });
+  });
+
+  it("keeps successful batch notes alongside partial errors", () => {
+    const span = mapDigivaultGetNote({
+      notes: [
+        {
+          vault_path: "clients/digithings/ok",
+          title: "OK",
+          body_markdown: "body",
+        },
+      ],
+      errors: { "clients/digithings/missing": "not found" },
+      query: "clients/digithings/ok",
+    });
+    expect(span).toMatchObject({
+      status: "completed",
+      toolName: "digivault_get_note",
+      label: "Loaded full note: clients/digithings/ok (1 errors)",
+      query: "clients/digithings/ok",
+    });
+    expect(span?.documents).toEqual([
+      { title: "OK", path: "clients/digithings/ok", snippet: "body" },
+    ]);
+  });
+
+  it("maps rag_sources get_note traces with a loaded-path label", () => {
+    const span = mapDigivaultGetNote({
+      tool: "digivault_get_note",
+      query: "clients/digithings/p001",
+      sources: [
+        {
+          doc_id: "clients/digithings/p001",
+          metadata: { title: "Page one" },
+          snippet: "# Page one",
+        },
+      ],
+    });
+    expect(span).toMatchObject({
+      toolName: "digivault_get_note",
+      label: "Loaded full note: clients/digithings/p001",
+      query: "clients/digithings/p001",
     });
   });
 });

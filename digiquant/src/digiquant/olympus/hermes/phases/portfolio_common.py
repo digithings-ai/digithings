@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import os
 from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
@@ -32,6 +31,7 @@ from digiquant.olympus.edit_mode import (
     resolve_edit_mode,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch
+from digiquant.olympus.envcompat import ATTEMPT, env_lookup
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.models.analyst import AnalystPayload
 from digiquant.olympus.hermes.models.forecast import (
@@ -221,7 +221,7 @@ def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
             "bias": _stance_to_bias(data["stance"]),
             "thesis_status": "ACTIVE",
             "recommended_weight_pct": None,
-            "rationale": data["thesis"][:2000],
+            "rationale": data["thesis"],
         },
     }
     if data.get("evidence") is not None:
@@ -432,7 +432,7 @@ def _attach_forecast_lineage(
 
 
 def _h5_attempt_id() -> str:
-    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    raw = env_lookup(ATTEMPT).strip()
     return raw or "1"
 
 

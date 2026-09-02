@@ -2,57 +2,36 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal  # score:allow untyped any — used for dict shape typing below
+from typing import Any  # score:allow untyped any — used for dict shape typing below
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import ResearchMemo
 from digiquant.olympus.atlas.state import AtlasResearchState
 
 
-class BondsReport(SegmentReport):
+class BondsReport(ResearchMemo):
     """Phase 4A — yield curve + credit."""
 
-    yield_curve_shape: Literal["steepening", "flattening", "inverted", "normal"] | None = None
-    two_ten_spread_bps: float | None = None
-    credit_ig_spread_bps: float | None = None
-    credit_hy_spread_bps: float | None = None
 
-
-class CommoditiesReport(SegmentReport):
+class CommoditiesReport(ResearchMemo):
     """Phase 4B — energy / metals / ags."""
 
-    oil_trend: Literal["bullish", "bearish", "neutral"] | None = None
-    gold_trend: Literal["bullish", "bearish", "neutral"] | None = None
-    industrial_metals_trend: Literal["bullish", "bearish", "neutral"] | None = None
 
-
-class ForexReport(SegmentReport):
+class ForexReport(ResearchMemo):
     """Phase 4C — DXY + major pairs."""
 
-    dxy_trend: Literal["stronger", "weaker", "range"] | None = None
-    policy_divergence: str | None = Field(default=None)
 
-
-class CryptoReport(SegmentReport):
+class CryptoReport(ResearchMemo):
     """Phase 4D — BTC/ETH + on-chain."""
 
-    btc_trend: Literal["bullish", "bearish", "neutral"] | None = None
-    btc_dominance: float | None = Field(default=None, ge=0, le=100)
-    funding_rate_bias: Literal["long_skew", "short_skew", "balanced"] | None = None
 
-
-class InternationalReport(SegmentReport):
+class InternationalReport(ResearchMemo):
     """Phase 4E — Asia / Europe / EM."""
-
-    asia_stance: Literal["bullish", "bearish", "neutral"] | None = None
-    europe_stance: Literal["bullish", "bearish", "neutral"] | None = None
-    em_stance: Literal["bullish", "bearish", "neutral"] | None = None
 
 
 # ─── Phase assembly ─────────────────────────────────────────────────────────

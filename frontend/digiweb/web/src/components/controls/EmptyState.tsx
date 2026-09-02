@@ -12,17 +12,16 @@
  * components/db-unavailable.tsx (title/body/Retry action), and the inline
  * "No matches" / "No runs recorded yet" strings.
  *
- * Dress axis (#1548 adoption ruling — API compatibility beats aesthetic
- * purity): the reference dress is the hairline card with a glyph disc and a
- * mono title. Olympus ships two glyphless, sans-type cuts, reproduced exactly:
- * - dress="glass"          — the observability quiet card (sans text-sm title,
+ * Dress axis: the reference dress is the hairline tonal slab with a glyph
+ * disc and a mono title. Olympus still has two glyphless cuts (API names
+ * kept; package chrome is radius 0):
+ * - dress="glass"          — observability quiet card (text-sm title,
  *                            text-xs body, italic note).
- * - dress="glass-display"  — the full-page gate card (font-display 2xl title,
+ * - dress="glass-display"  — full-page gate card (font-display 2xl title,
  *                            text-sm relaxed body) used by db-unavailable.
- * Both glass dresses restyle type/spacing/slots ONLY — the surface stays a
- * call-site class (olympus `.glass-card`) so the app's motion-reveal hook
- * (`html.motion-on .glass-card`) keeps firing; the package cannot own that
- * app-local behavior (gap-ledger'd here rather than forced).
+ * Both restyle type/spacing/slots ONLY — the surface class stays call-site
+ * (olympus `.glass-card` until Phase 3 retires it) so the app's
+ * motion-reveal hook keeps firing.
  */
 import type { HTMLAttributes, ReactNode } from "react";
 

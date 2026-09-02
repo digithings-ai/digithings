@@ -7,7 +7,7 @@ description: The pass-through for all digithings.ai / digiquant.io frontend work
 
 digiweb (`frontend/digiweb/`) is the **single source of truth** for digithings
 web UI. Every frontend surface for **digithings.ai**, **digiquant.io**,
-**digichat**, and **olympus** is assembled from the same tokens, livery, motion
+**digichat**, and the **dashboard** is assembled from the same tokens, livery, motion
 laws, and components living here. Your job on any frontend task: **reuse before
 you invent, and invent *here* before you consume.**
 

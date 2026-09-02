@@ -28,7 +28,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -45,6 +44,13 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from digiquant.olympus.envcompat import (
+    H6_BOUNDARY_PRICE_DELTA,
+    H6_MATERIAL_WEIGHT_PCT,
+    H6_SELECTION_MODE,
+    RESEARCH_POLICY_PATH,
+    env_lookup,
+)
 from digiquant.olympus.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
@@ -155,7 +161,7 @@ class H6Selection(H6PlannerModel):
 
 def resolve_h6_selection_mode() -> H6SelectionMode:
     """Read ``OLYMPUS_H6_SELECTION_MODE``; unknown values → shadow."""
-    raw = os.environ.get(OLYMPUS_H6_SELECTION_MODE_ENV, "shadow").strip().lower()
+    raw = env_lookup(H6_SELECTION_MODE, default="shadow").strip().lower()
     try:
         return H6SelectionMode(raw)
     except ValueError:
@@ -168,7 +174,7 @@ def resolve_h6_selection_mode() -> H6SelectionMode:
 
 
 def _material_weight_threshold() -> float:
-    raw = os.environ.get("OLYMPUS_H6_MATERIAL_WEIGHT_PCT", "").strip()
+    raw = env_lookup(H6_MATERIAL_WEIGHT_PCT).strip()
     if not raw:
         return _DEFAULT_MATERIAL_WEIGHT_PCT
     try:
@@ -178,7 +184,7 @@ def _material_weight_threshold() -> float:
 
 
 def _boundary_price_delta() -> float:
-    raw = os.environ.get("OLYMPUS_H6_BOUNDARY_PRICE_DELTA", "").strip()
+    raw = env_lookup(H6_BOUNDARY_PRICE_DELTA).strip()
     if not raw:
         return _DEFAULT_BOUNDARY_PRICE_DELTA
     try:
@@ -602,7 +608,7 @@ def default_research_policy_path() -> Path:
 
 
 def resolve_research_policy_path() -> Path:
-    override = os.environ.get(OLYMPUS_RESEARCH_POLICY_ENV, "").strip()
+    override = env_lookup(RESEARCH_POLICY_PATH).strip()
     if override:
         return Path(override)
     return default_research_policy_path()

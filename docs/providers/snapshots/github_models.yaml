@@ -1,13 +1,13 @@
 provider: github_models
-last_checked: 2026-07-19
+last_checked: 2026-08-30
 source: agent-research
 
 free_tier:
-  available: true
+  available: false          # confirmed fully retired 2026-07-30; no longer available to anyone
   tier_type: standing
   credit_amount_usd: null
   credit_expiry_days: null
-  privacy_warning: "RETIRING: GitHub Models is being fully retired 2026-07-30 — playground, model catalog, inference API, and BYOK endpoints all shut down for everyone, including existing customers. No longer available to new customers/orgs since 2026-06-16. Brownouts (intermittent errors) scheduled 2026-07-16 and 2026-07-23. Migration path: Microsoft Foundry or GitHub Copilot."
+  privacy_warning: "RETIRED: GitHub Models was fully retired 2026-07-30 — playground, model catalog, inference API, and BYOK endpoints are shut down for everyone, including existing customers. Confirmed dead by probe on 2026-08-30 (generic connection error, not an auth error). Migration path: Microsoft Foundry or GitHub Copilot."
   signup_required: false
   cc_required: false
   models:
@@ -15,11 +15,11 @@ free_tier:
       context_window: 128000
       max_input_tokens: 128000
       max_output_tokens: 16384
-      status: deprecated        # full platform retirement 2026-07-30
+      status: deprecated        # full platform retirement 2026-07-30, confirmed dead this cycle
       verified: false
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 317
-      verification_error: "Error code: 401 - {'error': {'code': 'unauthorized', 'message': 'The `models` permission is required to access this endpoint', 'details': 'The `models` permission is required to access this endpoint'}}"
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 1284
+      verification_error: "Connection error."
     - name: gpt-4o
       context_window: 128000
       max_input_tokens: 128000
@@ -56,7 +56,7 @@ free_tier:
     reset_window: calendar_day
 
 paid_tier:
-  available: true        # pay-as-you-go launched June 1 2026; production use now allowed
+  available: false       # platform fully retired 2026-07-30; pay-as-you-go tier retired along with it
   models: []             # same catalog as free but without RPD cap; routes to Azure pricing
   batching:
     available: false
@@ -99,4 +99,4 @@ verification:
   probe_model_alias: github-gpt4o-mini
   github_secret_key: GITHUB_TOKEN
 
-notes: "MATERIAL CHANGE 2026-07-19: GitHub confirmed (github.blog changelog) that GitHub Models is being FULLY RETIRED 2026-07-30 — this supersedes the June billing-change note below. Timeline: 2026-06-01 pay-as-you-go launched; 2026-06-16 blocked for new customers/orgs; 2026-07-01 full retirement announced for 2026-07-30 (11 days from this check); brownouts scheduled 2026-07-16 and 2026-07-23. PROBE 2026-07-19: gpt-4o-mini returned 401 'The `models` permission is required' — root cause confirmed via GitHub Docs: API access requires a token with `models:read` scope explicitly declared (fine-grained PAT, or `permissions: { models: read }` in an Actions workflow); the default Actions GITHUB_TOKEN does NOT carry this by default (contradicts this snapshot's prior claim that GITHUB_TOKEN 'always available — no extra secret needed'). Given the 11-day runway to full retirement, recommend NOT investing in an auth fix — instead plan removal of github_models from the digithings provider roster and migrate any dependent config to another provider before 2026-07-30. Catalog was expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) prior to the retirement announcement — now moot."
+notes: "CONFIRMED 2026-08-30: GitHub Models retirement (announced 2026-07-01, effective 2026-07-30) has completed — PROBE 2026-08-30 against gpt-4o-mini returned a generic 'Connection error.' (1284ms), not the 401 permission error seen last cycle, consistent with the endpoint being fully torn down rather than merely access-gated. free_tier.available and paid_tier.available both flipped to false this cycle. ACTION: remove github_models from scripts/provider_review/probe.py's PROVIDERS dict (currently lines 68-72) and from the active provider roster in docs/LLM_PROVIDERS.md / docs/free-providers — there is nothing left to probe or recommend. Historical note retained: platform expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) shortly before the retirement announcement, now moot."

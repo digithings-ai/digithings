@@ -8,6 +8,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
+from digiquant.olympus.tenancy import house_workspace_id
+
+
+def _house_id() -> str:
+    return str(house_workspace_id())
+
 
 def first_open_add_mark(sb: Any, ticker: str, as_of: str) -> Tuple[Optional[str], Optional[float]]:
     """Return (entry_date_iso, price) from the earliest OPEN/ADD with price, or (None, None)."""
@@ -17,6 +23,7 @@ def first_open_add_mark(sb: Any, ticker: str, as_of: str) -> Tuple[Optional[str]
     res = (
         sb.table("position_events")
         .select("date,price")
+        .eq("workspace_id", _house_id())
         .eq("ticker", t)
         .in_("event", ["OPEN", "ADD"])
         .lte("date", as_of)
@@ -68,7 +75,13 @@ def _close_on_or_after(sb: Any, ticker: str, iso: str) -> Optional[float]:
 
 def patch_positions_entries_for_date(sb: Any, metrics_date: str) -> int:
     """Update positions rows for ``metrics_date`` when entry_price is missing; returns rows updated."""
-    res = sb.table("positions").select("ticker,entry_price,entry_date").eq("date", metrics_date).execute()
+    res = (
+        sb.table("positions")
+        .select("ticker,entry_price,entry_date")
+        .eq("workspace_id", _house_id())
+        .eq("date", metrics_date)
+        .execute()
+    )
     rows: list[Dict[str, Any]] = getattr(res, "data", None) or []
     n = 0
     for r in rows:
@@ -94,6 +107,8 @@ def patch_positions_entries_for_date(sb: Any, metrics_date: str) -> int:
             patch: Dict[str, Any] = {"entry_price": price}
             if ed:
                 patch["entry_date"] = ed
-            sb.table("positions").update(patch).eq("date", metrics_date).eq("ticker", t).execute()
+            sb.table("positions").update(patch).eq("workspace_id", _house_id()).eq(
+                "date", metrics_date
+            ).eq("ticker", t).execute()
             n += 1
     return n

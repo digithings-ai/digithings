@@ -207,6 +207,14 @@ class AtlasConfigBundle(BaseModel):
             "overlay watchlist/themes/risk; never forks or cancels the house run."
         ),
     )
+    # T4 pin seam: overlay workspace. None → house writers keep the T0 house stamp.
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Overlay workspace id threaded through preflight. None selects the "
+            "house workspace stamp (byte-identical house path)."
+        ),
+    )
 
 
 class PriorContext(BaseModel):
@@ -387,19 +395,21 @@ class Phase9EvolutionPayload(TypedDict, total=False):
 
 
 class Phase7DigestPayload(TypedDict, total=False):
-    """Phase 7 master digest — mirrors ``DigestSnapshot`` / ``MonthlyDigest`` dumps."""
+    """Phase 7 master digest — thin markdown envelope plus historical extras."""
 
-    # SegmentReport core (present on daily + monthly digests).
     segment: str
     date: str
+    body: str
+    regime_label: str
+    sources: list[dict[str, Any]]
+    segment_freshness: dict[str, dict[str, Any]]
+    # Historical DigestSnapshot slots (pre-WP-E rows; extra on the live model).
     bias: str
     headline: str
     material_findings: list[dict[str, Any]]
-    sources: list[dict[str, Any]]
     notes: str
     data_quality: str | None
     confidence: float | None
-    # DigestSnapshot extensions.
     market_regime_snapshot: str
     alt_data_dashboard: str
     institutional_summary: str
@@ -409,8 +419,6 @@ class Phase7DigestPayload(TypedDict, total=False):
     portfolio_recommendations: str
     actionable_summary: list[dict[str, Any]]
     risk_radar: list[dict[str, Any]]
-    segment_freshness: dict[str, dict[str, Any]]
-    regime_label: str
     # Carry-forward provenance (#1559). Set only when master-digest synthesis FAILED
     # and the prior digest was carried forward (or, for ``continuity``, on the
     # publish-phase carried-incomplete path) — absent on a fresh synthesis and on a
@@ -721,6 +729,10 @@ class AtlasResearchState(BaseModel):
         default_factory=dict
     )
     phase6_bias_row: Phase6BiasRow | None = None
+    phase7_subsection_outputs: Annotated[dict[str, dict[str, Any]], _merge_segment_dict] = Field(
+        default_factory=dict,
+        description="Topical digest subsection markdown keyed by slug (macro, alt-data, …).",
+    )
     phase7_digest: Phase7DigestPayload | None = None
     phase7d_risk_debate: RiskDebatePayload | None = None
     phase7d_rebalance: RebalancePayload | None = None

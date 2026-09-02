@@ -77,6 +77,20 @@ def test_checked_in_schema_matches_pydantic_horizon_and_confidence_types() -> No
     }
 
 
+def test_rejects_vehicle_shaped_proposal_ids() -> None:
+    for thesis_id in ("vehicle-ewg", "veicle-gld", "VEICLE-xlb"):
+        proposal = _proposal(
+            thesis_id=thesis_id,
+            topic_key="usd-weakness-europe",
+            action="create",
+            existing_thesis_id=None,
+            title=f"{thesis_id} dumped as a market view",
+        )
+        accepted, errors = validate_market_thesis_proposals([proposal], [])
+        assert accepted == []
+        assert errors == [f"{thesis_id}: vehicle-shaped id cannot be a market thesis"]
+
+
 def test_rejects_new_id_for_an_existing_active_topic() -> None:
     active = [
         {
