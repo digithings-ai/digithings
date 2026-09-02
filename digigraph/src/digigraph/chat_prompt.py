@@ -88,7 +88,8 @@ def messages_to_workflow_prompt(messages: list[ChatMessage]) -> str:
       would then need explicit tool-turn support (e.g. a labeled "Tool result: ..." line),
       not a bigger message-list rewrite; see ``test_tool_role_messages_are_silently_omitted_today``.
     - Long multi-turn history is trimmed to ``DIGI_CHAT_HISTORY_MAX_TOKENS`` (default 8000)
-      before flattening, keeping the most recent turns.
+      before flattening, keeping the most recent turns. If trim leaves a single user turn,
+      that turn stays unlabeled (same as the single-turn fast path).
     """
     if not messages:
         return ""
@@ -112,6 +113,10 @@ def messages_to_workflow_prompt(messages: list[ChatMessage]) -> str:
         return turns[0][1]
 
     turns = _trim_to_budget(turns)
+    # Trim can leave a single user turn (long thread → one surviving question).
+    # Keep that unlabeled so ``last_user_turn`` does not treat ``User:`` as query text.
+    if len(turns) == 1 and turns[0][0] == "user":
+        return turns[0][1]
 
     lines: list[str] = []
     for role, content in turns:
