@@ -8,7 +8,7 @@ from uuid import UUID
 
 import pytest
 from digiquant.research import forecast_registry as fr
-from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio import forecast_calibration as fc
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
@@ -28,7 +28,7 @@ from digiquant.portfolio.models.forecast_calibration import (
 )
 from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
 
-from tests.dq.atlas.test_forecast_registry import RegistryFake, _assessment
+from tests.dq.research.test_forecast_registry import RegistryFake, _assessment
 
 pytestmark = pytest.mark.unit
 
@@ -134,15 +134,15 @@ def _resolved_outcome(
     return ForecastOutcome(outcome_id=outcome_id, content_hash=content_hash, **draft)  # type: ignore[arg-type]
 
 
-def _state_with_effective(*, ticker: str = "AAPL") -> AtlasResearchState:
+def _state_with_effective(*, ticker: str = "AAPL") -> ResearchState:
     eff = _effective(ticker=ticker)
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
         knowledge_cutoff_at=_AS_OF,
         prior_context=PriorContext(),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             deliberation_summaries={
                 ticker: {
                     "ticker": ticker,
@@ -214,13 +214,13 @@ class TestAttachShadowCalibrations:
 
     def test_from_state_without_cutoff_returns_empty(self) -> None:
         """#2797: never stamp identities with datetime.now when cutoff is missing."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             baseline_date=date(2026, 8, 24),
             knowledge_cutoff_at=None,
             prior_context=PriorContext(),
-            phase_hermes=PhaseHermesState(
+            phase_portfolio=PhasePortfolioState(
                 deliberation_summaries={
                     "AAPL": {
                         "effective_forecast": _effective().model_dump(mode="json"),
@@ -326,12 +326,12 @@ class TestPersistShadowCalibrations:
             outcomes=[],
             as_of=_AS_OF,
         )
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             baseline_date=date(2026, 8, 24),
             prior_context=PriorContext(),
-            phase_hermes=PhaseHermesState(
+            phase_portfolio=PhasePortfolioState(
                 asset_analysts={"SPY": {"forecast_assessment": assessment.model_dump(mode="json")}},
                 forecast_calibrations=attachment.calibration_dumps(),
                 calibrated_forecasts=attachment.calibrated_forecast_dumps(),
@@ -362,14 +362,14 @@ class TestH7BoundaryAttach:
             return_value=memo,
         ):
             out = node(state)
-        hermes = out["phase_hermes"]
-        assert hermes.pm_direction_memo is not None
-        assert hermes.forecast_calibrations
-        assert hermes.calibrated_forecasts
+        portfolio = out["phase_portfolio"]
+        assert portfolio.pm_direction_memo is not None
+        assert portfolio.forecast_calibrations
+        assert portfolio.calibrated_forecasts
         # H7 memo still direction-only — no calibrated economics on the memo.
-        assert not hasattr(hermes.pm_direction_memo.roster[0], "expected_gross_return")
-        assert "AAPL" in hermes.calibrated_forecasts
+        assert not hasattr(portfolio.pm_direction_memo.roster[0], "expected_gross_return")
+        assert "AAPL" in portfolio.calibrated_forecasts
         assert (
-            hermes.calibrated_forecasts["AAPL"]["status"]
+            portfolio.calibrated_forecasts["AAPL"]["status"]
             == CalibrationArtifactStatus.UNAVAILABLE.value
         )

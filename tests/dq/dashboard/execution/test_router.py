@@ -1,4 +1,4 @@
-"""Unit tests for Kairos venue policy + order-intent router (K4)."""
+"""Unit tests for execution venue policy + order-intent router (K4)."""
 
 # score:allow untyped any, notimplementederror stub
 # Fake BrokerAdapter unused methods raise; fake PostgREST rows are untyped dicts.
@@ -421,7 +421,7 @@ def test_route_deterministic_id_collision_on_retry(monkeypatch: pytest.MonkeyPat
 def test_router_module_has_no_upsert() -> None:
     from pathlib import Path
 
-    src = Path(__file__).resolve().parents[4] / "digiquant/src/digiquant/olympus/kairos"
+    src = Path(__file__).resolve().parents[4] / "digiquant/src/digiquant/execution"
     for path in src.glob("*.py"):
         text = path.read_text(encoding="utf-8")
         assert ".upsert(" not in text, f"upsert forbidden in {path.name}"

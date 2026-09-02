@@ -1,9 +1,9 @@
 """Custom research trigger tests (#313).
 
 Covers:
-- ``AtlasInput`` carries ``custom_prompt``.
-- CLI parses ``--custom-prompt`` and threads it into ``AtlasInput``.
-- ``AtlasResearchState.custom_prompt`` is populated by ``initial_state``.
+- ``ResearchInput`` carries ``custom_prompt``.
+- CLI parses ``--custom-prompt`` and threads it into ``ResearchInput``.
+- ``ResearchState.custom_prompt`` is populated by ``initial_state``.
 - Phase 7 synthesis adds ``custom_prompt`` to ``phase_inputs`` when set,
   and omits it on routine runs.
 - Publish phase routes the digest under ``doc_type='Custom Research'``
@@ -22,33 +22,33 @@ from uuid import UUID
 
 import pytest
 from digiquant.research.graph import (
-    AtlasInput,
+    ResearchInput,
     build_cli_parser,
     initial_state,
     resolve_cli_inputs,
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,  # noqa: F401 — re-export check
     SegmentPayload,
     SegmentSlot,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
-# ─── AtlasInput + CLI parser ────────────────────────────────────────────────
+# ─── ResearchInput + CLI parser ────────────────────────────────────────────────
 
 
 @pytest.mark.unit
-class TestAtlasInputCustomPrompt:
+class TestResearchInputCustomPrompt:
     def test_default_is_none(self) -> None:
-        inp = AtlasInput(run_date=date(2026, 4, 26))
+        inp = ResearchInput(run_date=date(2026, 4, 26))
         assert inp.custom_prompt is None
 
     def test_explicit_prompt_propagates(self) -> None:
-        inp = AtlasInput(
+        inp = ResearchInput(
             run_date=date(2026, 4, 26),
             custom_prompt="Drill into NVDA earnings risk.",
         )
@@ -103,7 +103,7 @@ class TestCustomPromptCli:
 @pytest.mark.unit
 class TestInitialStateCustomPrompt:
     def test_state_carries_custom_prompt(self) -> None:
-        inp = AtlasInput(
+        inp = ResearchInput(
             run_date=date(2026, 4, 26),
             custom_prompt="Hot take on small caps?",
         )
@@ -111,7 +111,7 @@ class TestInitialStateCustomPrompt:
         assert state.custom_prompt == "Hot take on small caps?"
 
     def test_state_default_custom_prompt_is_none(self) -> None:
-        inp = AtlasInput(run_date=date(2026, 4, 26))
+        inp = ResearchInput(run_date=date(2026, 4, 26))
         state = initial_state(inp)
         assert state.custom_prompt is None
 
@@ -119,11 +119,11 @@ class TestInitialStateCustomPrompt:
 # ─── Phase 7 synthesis input threading ──────────────────────────────────────
 
 
-def _seed_state_minimal(custom_prompt: str | None = None) -> AtlasResearchState:
-    state = AtlasResearchState(
+def _seed_state_minimal(custom_prompt: str | None = None) -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
     if custom_prompt is not None:
         state.custom_prompt = custom_prompt
@@ -236,7 +236,7 @@ class TestPhase7SynthesisCustomPrompt:
 # ─── Publish phase routing ──────────────────────────────────────────────────
 
 
-def _state_with_digest(custom_prompt: str | None = None) -> AtlasResearchState:
+def _state_with_digest(custom_prompt: str | None = None) -> ResearchState:
     state = _seed_state_minimal(custom_prompt)
     state.run_id = UUID("00000000-0000-0000-0000-000000000abc")
     state.phase7_digest = {"market_regime_snapshot": "x", "us_equities_summary": "y"}
@@ -256,7 +256,7 @@ class TestPublishCustomResearch:
         assert len(digest_rows) == 1
         assert digest_rows[0]["document_key"].startswith("custom-research/")
         assert "00000000" in digest_rows[0]["document_key"]
-        assert digest_rows[0]["title"].startswith("Atlas Custom Research")
+        assert digest_rows[0]["title"].startswith("research Custom Research")
 
     def test_custom_run_skips_daily_snapshots(self) -> None:
         """One-off custom runs must not pollute the cadence time series."""

@@ -1,10 +1,10 @@
-"""Kairos + tenancy — pre-staging composition proof (local twin of staging E2E).
+"""execution + tenancy — pre-staging composition proof (local twin of staging E2E).
 
 This module is the **local** end-to-end chain for the epic's composition path. It
 exercises the REAL merged Python seams (T2 seed shape → T4 overlay → K4 router/sync
 → K5 notify) with fakes only at external boundaries (PostgREST/Supabase, Mailgun,
 broker HTTP). It is **not** a substitute for the staging E2E in
-``docs/agent-backlog/kairos-tenancy/DEPLOYMENT.md`` §7 / EPIC.md program acceptance
+``docs/agent-backlog/execution-tenancy/DEPLOYMENT.md`` §7 / EPIC.md program acceptance
 (signup → Stripe test Checkout → Alpaca connect → overlay → paper fill → digest).
 
 Stripe hop
@@ -103,7 +103,7 @@ from digiquant.dashboard.tenancy import (
 )
 from digiquant.vault.envelope import ApiKeyCredential, MasterKey, fingerprint
 
-from tests.dq.olympus.overlay._sealed import sealed_openai
+from tests.dq.dashboard.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 
@@ -262,9 +262,9 @@ class _ChainQuery:
 class ChainFakeSupabase:
     """Store-backed PostgREST stand-in (external boundary only).
 
-    Extends the kairos / notify / brokers fake patterns into one client so the
+    Extends the execution / notify / brokers fake patterns into one client so the
     whole composition path shares one in-memory DB. Reads and writes hit the
-    same ``tables`` dict (unlike atlas ``FakeSupabaseClient``'s canned/store
+    same ``tables`` dict (unlike research ``FakeSupabaseClient``'s canned/store
     split — that courtesy is house-fixture-only and wrong for a chain proof).
     """
 
@@ -541,7 +541,7 @@ def _emit_pending_order_chain(
     commit = PortfolioCommit(
         id=commit_id,
         run_date=_RUN,
-        policy_version_id="hermes-h8-sizing-chain",
+        policy_version_id="portfolio-h8-sizing-chain",
         effective_at=stamp,
         recorded_at=stamp,
         **ws_kw,

@@ -1,4 +1,4 @@
-"""Contract tests for migration 075, private Olympus ProfileConfig schema (#2609)."""
+"""Contract tests for migration 075, private dashboard ProfileConfig schema (#2609)."""
 
 from __future__ import annotations
 

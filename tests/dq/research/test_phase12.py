@@ -30,7 +30,7 @@ from digiquant.research.phases.phase2_institutional import (
     InstitutionalFlowsReport,
     build_phase2,
 )
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from pydantic import BaseModel
 
 
@@ -141,14 +141,14 @@ class TestBiasNormalization:
 @pytest.mark.unit
 class TestPhase1AltData:
     def test_fan_out_produces_all_segments(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase1()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase1()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         # All segment slugs present.
         assert set(final.phase1_outputs.keys()) == {
@@ -168,14 +168,14 @@ class TestPhase1AltData:
 @pytest.mark.unit
 class TestPhase2Institutional:
     def test_fan_out_produces_two_segments(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase2()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase2()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert set(final.phase2_outputs.keys()) == {
             "inst-institutional-flows",
@@ -190,16 +190,16 @@ class TestChainedPhases:
     def test_phase1_then_phase2_sequential(self) -> None:
         """Phases run sequentially; phase 2 starts only after all of phase 1."""
         compiled = build_pipeline(
-            AtlasResearchState,
+            ResearchState,
             [build_phase1(), build_phase2()],
         )
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch_fake_completion,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert len(final.phase1_outputs) == 6
         assert len(final.phase2_outputs) == 2

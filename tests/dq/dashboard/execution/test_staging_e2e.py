@@ -1,4 +1,4 @@
-"""Kairos staging E2E harness — loud fail on missing vendor secrets.
+"""execution staging E2E harness — loud fail on missing vendor secrets.
 
 Unit tests always exercise the inventory (no network). The ``staging_e2e``
 marked test refuses fakes: if required secrets are empty it ``pytest.fail``s
@@ -6,7 +6,7 @@ with named missing keys; when secrets are present it probes core Edge
 Functions (checkout past PRICE_NOT_CONFIGURED, webhook past
 STRIPE_NOT_CONFIGURED) and documents remaining live hops.
 
-Not a substitute for paper-fakes ``tests/integration/test_kairos_tenancy_chain.py``.
+Not a substitute for paper-fakes ``tests/integration/test_execution_tenancy_chain.py``.
 """
 
 from __future__ import annotations
@@ -40,10 +40,10 @@ from digiquant.execution.staging_e2e import (
     run_staging_e2e,
 )
 from digiquant.execution.staging_secrets import (
-    KAIROS_STAGING_OPTIONAL_SECRETS,
-    KAIROS_STAGING_REQUIRED_SECRETS,
+    STAGING_OPTIONAL_SECRETS,
+    STAGING_REQUIRED_SECRETS,
     format_missing_secrets_failure,
-    missing_kairos_staging_secrets,
+    missing_execution_staging_secrets,
 )
 
 CORE_FUNCTIONS_BASE = (
@@ -54,7 +54,7 @@ CORE_FUNCTIONS_BASE = (
 @pytest.mark.unit
 def test_staging_secret_inventory_lists_vendor_blockers() -> None:
     """Inventory must name every vendor secret that blocks EPIC staging E2E."""
-    required = set(KAIROS_STAGING_REQUIRED_SECRETS)
+    required = set(STAGING_REQUIRED_SECRETS)
     assert "STRIPE_SECRET_KEY" in required
     assert "STRIPE_WEBHOOK_SECRET" in required
     assert "STRIPE_PRICE_BRIEF_MONTHLY" in required
@@ -66,15 +66,15 @@ def test_staging_secret_inventory_lists_vendor_blockers() -> None:
     assert "ALPACA_OAUTH_CLIENT_ID" in required
     assert "ALPACA_OAUTH_CLIENT_SECRET" in required
     # Optional must not silently satisfy required.
-    assert not set(KAIROS_STAGING_OPTIONAL_SECRETS) & required
+    assert not set(STAGING_OPTIONAL_SECRETS) & required
 
 
 @pytest.mark.unit
 def test_missing_secrets_reports_names_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in KAIROS_STAGING_REQUIRED_SECRETS:
+    for name in STAGING_REQUIRED_SECRETS:
         monkeypatch.delenv(name, raising=False)
-    missing = missing_kairos_staging_secrets()
-    assert missing == list(KAIROS_STAGING_REQUIRED_SECRETS)
+    missing = missing_execution_staging_secrets()
+    assert missing == list(STAGING_REQUIRED_SECRETS)
     msg = format_missing_secrets_failure(missing)
     assert "STRIPE_SECRET_KEY" in msg
     assert "MAILGUN_API_KEY" in msg
@@ -86,21 +86,21 @@ def test_missing_secrets_reports_names_only(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 def test_missing_secrets_empty_when_all_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in KAIROS_STAGING_REQUIRED_SECRETS:
+    for name in STAGING_REQUIRED_SECRETS:
         monkeypatch.setenv(name, f"test-placeholder-{name}")
-    assert missing_kairos_staging_secrets() == []
+    assert missing_execution_staging_secrets() == []
 
 
 @pytest.mark.unit
 def test_empty_and_placeholder_values_count_as_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    for name in KAIROS_STAGING_REQUIRED_SECRETS:
+    for name in STAGING_REQUIRED_SECRETS:
         monkeypatch.setenv(name, "placeholder")
     monkeypatch.setenv("STRIPE_SECRET_KEY", "")
     monkeypatch.setenv("MAILGUN_API_KEY", "EMPTY")
     monkeypatch.setenv("NOTIFY_FROM", "null")
-    missing = missing_kairos_staging_secrets()
+    missing = missing_execution_staging_secrets()
     assert "STRIPE_SECRET_KEY" in missing
     assert "MAILGUN_API_KEY" in missing
     assert "NOTIFY_FROM" in missing
@@ -201,7 +201,7 @@ def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
     assert "POST /settings/access/redeem-invite http=404" in blob
     # Path-contract / redeem-invite misses must still name remaining hops.
     # Live 2026-09-01: Observer JWT Settings GETs are 200 while app-urls pin
-    # /olympus and redeem-invite 404s — hiding hops behind exit 3 hid E2E state.
+    # /dashboard and redeem-invite 404s — hiding hops behind exit 3 hid E2E state.
     assert "remaining hop product-state" in blob
     assert "blocker=plan_tier_not_studio" in blob
     assert "blocker=overlay_not_succeeded" in blob
@@ -755,7 +755,7 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
         {"url": "https://checkout.stripe.test/cs_test"},
     )
     fakes[("POST", "/stripe-webhook")] = (wh_http, wh_body)
-    environ = {name: f"test-placeholder-{name}" for name in KAIROS_STAGING_REQUIRED_SECRETS}
+    environ = {name: f"test-placeholder-{name}" for name in STAGING_REQUIRED_SECRETS}
     environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
     logs: list[str] = []
     fake = _FakeHttp(fakes)
@@ -839,18 +839,18 @@ def _http_json(
 
 
 @pytest.mark.staging_e2e
-def test_kairos_core_staging_e2e_refuses_fakes() -> None:
+def test_execution_core_staging_e2e_refuses_fakes() -> None:
     """Live core E2E gate — fails with named missing secrets; never paper-fakes.
 
     Run explicitly::
 
-        pytest -m staging_e2e tests/dq/dashboard/kairos/test_staging_e2e.py
+        pytest -m staging_e2e tests/dq/dashboard/execution/test_staging_e2e.py
 
     Or::
 
         PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
     """
-    missing = missing_kairos_staging_secrets()
+    missing = missing_execution_staging_secrets()
     if missing:
         pytest.fail(format_missing_secrets_failure(missing))
 

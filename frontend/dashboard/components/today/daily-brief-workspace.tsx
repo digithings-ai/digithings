@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import type {
   ActionableItem,
-  AtlasRunDiagnostics,
+  ResearchRunDiagnostics,
   DashboardPositionEvent,
   Position,
   RebalanceAction,
@@ -132,7 +132,7 @@ export interface DailyBriefWorkspaceProps {
   /** `undefined` while loading, `null` when the public health view has no row. */
   runHealth: BriefRunHealth | null | undefined;
   /** Recent run diagnostics for the Pipeline Health week bar (optional). */
-  runDiagnostics?: AtlasRunDiagnostics[];
+  runDiagnostics?: ResearchRunDiagnostics[];
   /** All position dates, including unpublished rows newer than the snapshot. */
   positionDates?: string[];
   /** Test override for house book gates; production reads the session. */

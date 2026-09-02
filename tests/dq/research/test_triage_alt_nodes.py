@@ -19,7 +19,7 @@ from typing import Any  # score:allow untyped any — used for snapshot/injectio
 import pytest
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
@@ -52,7 +52,7 @@ def _delta_state(
     onchain_prior: dict[str, Any] | None,
     run_date: date = date(2026, 4, 27),
     baseline_date: date = date(2026, 4, 26),
-) -> AtlasResearchState:
+) -> ResearchState:
     """Build a delta-run state with the current + prior onchain injections set.
 
     ``onchain_current`` lands in ``data_layer.market_context`` (what preflight
@@ -66,7 +66,7 @@ def _delta_state(
     snapshot: dict[str, Any] = {"bias": "neutral"}
     if onchain_prior is not None:
         snapshot["onchain_positioning"] = onchain_prior
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=baseline_date,
@@ -89,7 +89,7 @@ def _delta_state(
     )
 
 
-def _decision(state: AtlasResearchState, segment: str):
+def _decision(state: ResearchState, segment: str):
     return next(d for d in evaluate(state).decisions if d.segment == segment)
 
 
@@ -129,7 +129,7 @@ class TestOnchainTriage:
 class TestAiPortfoliosTriage:
     def test_baseline_run_triages_mandatory_segments(self) -> None:
         # Daily cadence always triages; mandatory tiers still regenerate on baseline.
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         result = evaluate(state)
         assert result.decisions
         macro = next(d for d in result.decisions if d.segment == "macro")

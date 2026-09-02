@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * Pipeline — the olympus dashboard's workflow visualization promoted from the
+ * Pipeline — the dashboard's workflow visualization promoted from the
  * design reference (effects/pipeline). Stages flow left→right, a `parallel`
  * column fans out into a dashed group, each node carries its diagnostics
  * (wall time · tokens · model), and selecting a node opens its inputs/outputs

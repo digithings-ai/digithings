@@ -198,7 +198,7 @@ def _criteria(
         content_hash="",
         effective_at=_TS - timedelta(days=1),
         recorded_at=_TS,
-        author="olympus-governance",
+        author="dashboard-governance",
         rationale="shadow evidence gate",
         supersedes_version_id=None,
     )

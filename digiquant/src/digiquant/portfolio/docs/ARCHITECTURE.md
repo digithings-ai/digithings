@@ -1,10 +1,10 @@
-# Hermes — architecture
+# portfolio — architecture
 
-> Thesis-aware portfolio loop. Consumes Atlas `DigestPayload`; produces analyst payloads,
+> Thesis-aware portfolio loop. Consumes research `DigestPayload`; produces analyst payloads,
 > deliberation summaries, PM direction memo, sized book, and terminal booking via H9.
 >
-> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Canonical topology:
-> [ADR-0020](../../../../../docs/adr/0020-olympus-mvp-daily-delta.md) · Spec §13.2:
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) · Canonical topology:
+> [ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md) · Spec §13.2:
 > [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 
 ---
@@ -14,14 +14,14 @@
 Production cron invokes `python -m digiquant.portfolio.chain --cadence daily`:
 
 ```
-preflight + preflight_reflect (Atlas)
-  → triage (Atlas A1)
-  → phases 1–5 segments + phase6 + phase7 digest (Atlas A2–A4)
-  → Hermes H1–H9 (thesis-first)
-  → publish_phase (Atlas research artifacts only)
+preflight + preflight_reflect (research)
+  → triage (research A1)
+  → phases 1–5 segments + phase6 + phase7 digest (research A2–A4)
+  → portfolio H1–H9 (thesis-first)
+  → publish_phase (research artifacts only)
 ```
 
-Hermes terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_history`,
+portfolio terminal persist is **H9 `commit_run`** (in-graph): `positions`, `nav_history`,
 `theses` / `thesis_vehicles` sync, portfolio brief (weights from H8), `decision_log`
 append. Book/ledger writes stamp house `workspace_id` (migration 097) while keeping
 date-only upsert conflict targets until cutover 113. Phase 9 evolution LLM is **not**
@@ -29,7 +29,7 @@ on the daily path; beliefs distillation is a **daily short fold** after
 publish (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG` selects
 the full rewrite). Empty-lesson days still publish a same-date `beliefs` document.
 
-House CLI close-out (`cli_main`, not `run_atlas_then_hermes`): after a non-retry
+House CLI close-out (`cli_main`, not `run_research_then_portfolio`): after a non-retry
 exit, fail-soft K5 `dispatch_house_notifications_after_chain` attempts today's
 digest (`force_digest=True`). Overlay nested chain skips this so overlay jobs
 cannot send house mail. Missing Mailgun env logs and returns.
@@ -40,24 +40,24 @@ cannot send house mail. Missing Mailgun env logs and returns.
 
 | Step | Node | Module | Edit behavior | Output |
 |------|------|--------|---------------|--------|
-| **H1** | `hermes/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_hermes` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
-| **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
-| **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
-| **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
-| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `HermesGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
-| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
-| **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
-| **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
-| **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
+| **H1** | `portfolio/thesis/market-review` | `phases/h1_thesis_review.py` | `edit` active market theses | `theses` rows + `documents.document_key=thesis/thesis-review`. Consumes `digest_briefing_for_portfolio` (`date` / `body` / `regime_label`), not DigestSnapshot JSON findings. |
+| **H2** | `portfolio/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
+| **H3** | `portfolio/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
+| **H4** | `portfolio/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget**; publishes `documents.document_key=opportunity-screener` (`doc_type` `opportunity_screen`) |
+| **H5** | `portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `PortfolioGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
+| **H6** | `portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
+| **H7** | `portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
+| **H8** | `portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_portfolio.sized_book` (sole weight owner; calibrated μ/σ × PM confidence) |
+| **H9** | `portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
-**Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `hermes/allocation_contracts.py`
+**Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `portfolio/allocation_contracts.py`
 defines frozen `PreTradeRiskReport` (metric leaves with provenance or typed
 unavailability; binding constraints / altered / rejected targets). SHA-256 helpers
-live in `hermes/allocation_hashes.py`. Deterministic builders in
-`hermes/pretrade_risk.py` populate variance/MRC/CRC, concentration, turnover,
+live in `portfolio/allocation_hashes.py`. Deterministic builders in
+`portfolio/pretrade_risk.py` populate variance/MRC/CRC, concentration, turnover,
 cost/liquidity, and forecast-quality leaves from exact WP6 covariance + caller-
 supplied vols and WP7 observational scalars — never re-estimating inputs or
-mutating weights. H8 attaches the report to `phase_hermes.pre_trade_risk_report`
+mutating weights. H8 attaches the report to `phase_portfolio.pre_trade_risk_report`
 (and stamps `pre_trade_risk_report_hash` on the sized book) **only after** the
 final control shell (carry → cadence → backstop → grid → final caps); report
 identity equals the final book fingerprint (same extractor as H9:
@@ -65,19 +65,19 @@ identity equals the final book fingerprint (same extractor as H9:
 the sized book. H9 (`commit_run`) validates report identity under
 `OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
 append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
-(migration `083`, via `atlas/pretrade_risk_registry.py` +
+(migration `083`, via `research/pretrade_risk_registry.py` +
 `commit_io.validate_pretrade_risk_report` /
 `persist_validated_pretrade_risk_report`). Enforce rejects missing/unknown/
 fingerprint or bundle-hash mismatch before booking; shadow records status
 without blocking (covered by unit tests; #2824). H9 never recomputes the report.
 
-**Shadow allocation artifact (#2758 / WP10.1):** `hermes/shadow_artifact.py` defines
+**Shadow allocation artifact (#2758 / WP10.1):** `portfolio/shadow_artifact.py` defines
 frozen `ShadowAllocationArtifact` — exact `AllocationInputBundle`, incumbent final
 book weights, `PreTradeRiskReport`, and minimal H9 commit metadata with a SHA-256
 `artifact_content_hash`. Canonical JSON bytes are written via temp + `os.replace`
 under `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
 `OLYMPUS_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
-`maybe_export_shadow_allocation_artifact` after Hermes returns (fail-soft; never
+`maybe_export_shadow_allocation_artifact` after portfolio returns (fail-soft; never
 reruns or mutates H8/H9). The module must not import challenger optimizer, replay,
 or broker surfaces. `pipeline-digiquant.yml` uploads `shadow-allocation-*.json` with
 other run artifacts.
@@ -87,14 +87,14 @@ other run artifacts.
 only. It declares `permissions: contents: read` + `actions: read`, never
 `secrets: inherit`, and never production Supabase / provider / broker /
 checkpointer secrets. Producer trust is gated to workflow
-`Pipeline: Olympus research` on `main`.
+`Pipeline: dashboard research` on `main`.
 `digiquant/scripts/research/check_allocation_shadow_isolation.py` statically rejects
 forbidden imports (Supabase, H9 commit I/O, network clients, live Nautilus,
 brokers), write permissions, secret references, untrusted source/branch/schema/hash,
 and non-file sinks; results are written as a local JSON report artifact only.
-Disable the workflow to roll back; the production Hermes graph is unaffected.
+Disable the workflow to roll back; the production portfolio graph is unaffected.
 
-**Solver-free robust challenger (#2770 / WP10.3):** `hermes/shadow_optimizer.py`
+**Solver-free robust challenger (#2770 / WP10.3):** `portfolio/shadow_optimizer.py`
 evaluates the robust objective
 \(J(w)=\hat\mu^\top w-\kappa\|D_\mu w\|_2-\frac{\lambda}{2}w^\top\Sigma w-C(w-w_0)-\gamma\|w-w_0\|_1\)
 via deterministic coordinate search (one grid quantum donor→receiver, including
@@ -104,7 +104,7 @@ Abstains on missing covariance/cost bindings, degraded calibrated inputs, or an
 infeasible seed. Shadow-only — never imported by `chain.py`, H8, or H9; no
 SciPy/CVXPY; no production runtime flag.
 
-**Shared-cash Nautilus portfolio replay (#2784 / WP10.4):** `olympus/replay/`
+**Shared-cash Nautilus portfolio replay (#2784 / WP10.4):** `dashboard/replay/`
 (`models.py`, `nautilus_portfolio.py`, `worker.py`) replays synchronized target
 books in one Nautilus account with shared cash and real fills/costs. Spawned
 workers use JSON request/result I/O; child crash/timeout is typed inconclusive
@@ -112,7 +112,7 @@ with no fallback. Never calls `_run_multi_symbol_backtest`; never a production
 booking path.
 
 **Paired shadow comparison evidence (#2799 / WP10.5):**
-`olympus/replay/allocation_comparison.py` compares incumbent vs challenger
+`dashboard/replay/allocation_comparison.py` compares incumbent vs challenger
 WP10.4 arms under an identical observed manifest (data/cost/execution hashes).
 Versioned criteria live in `replay/shadow_criteria/v1.json` (no activation hook).
 CLI `compare_allocation_shadow.py` freezes criteria first, then writes an
@@ -124,7 +124,7 @@ Never wired into production H8/H9; no auto-promotion or config write.
 `tests/dq/portfolio/test_phase2_allocation_contracts.py` and
 `phase2_e2e_fixtures.py` lock Gate 2 composition for WP8–WP10 (calibrated H8,
 PreTradeRiskReport identity, shadow isolation + comparison) without enabling
-challenger selection or changing Hermes graph topology.
+challenger selection or changing portfolio graph topology.
 
 **Phase 3 lock surface (#3019 / Integration 3.1):**
 `tests/dq/portfolio/test_phase3_research_contracts.py` and
@@ -142,7 +142,7 @@ theses only. It does not mint rows for LLM-invented ids, and it skips
 vehicle-shaped ids (`vehicle-{ticker}` and the live typo `veicle-{ticker}`).
 Those ghosts landed in the house register on 2026-08-31 / 2026-09-01 as
 `thesis_kind` null + price-technicals notes, then ranked as market theses
-26–28 on the olympus list. H5 owns canonical `vehicle-{ticker}` rows;
+26–28 on the dashboard list. H5 owns canonical `vehicle-{ticker}` rows;
 `splitTheses` on the dashboard also routes vehicle-shaped ids out of the
 market spine even when `thesis_kind` is null.
 
@@ -175,8 +175,8 @@ historical rows stay as-was and the frontend derives the hierarchy from
 self-referential link (`linked == thesis_id`), neutralizing the ~140 legacy
 self-refs at the single write chokepoint.
 
-Graph builder: `graph.build_hermes_phases_thesis()` → `build_hermes_graph()`.
-Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
+Graph builder: `graph.build_portfolio_phases_thesis()` → `build_portfolio_graph()`.
+Legacy `build_portfolio_phases` aliases the thesis path. **Removed from graph:** 4-axis 7C,
 `phase7cd_debate`, risk debaters, `portfolio_materialize`, phase9 evolution on daily path.
 
 ---
@@ -185,7 +185,7 @@ Legacy `build_hermes_phases` aliases the thesis path. **Removed from graph:** 4-
 
 `_h4_node` calls `budget_controller.assess_budget(state, client, static_cap)` to size the
 analyst roster instead of relying solely on the static `ATLAS_MAX_ANALYSTS`. A deterministic
-classifier (`budget_controller.py`) maps three signals Atlas already produces — VIX
+classifier (`budget_controller.py`) maps three signals research already produces — VIX
 term-structure state, market breadth (`pct_above_50dma`), and cross-sectional return
 dispersion derived for free from `state.price_deltas` — to a regime:
 
@@ -198,8 +198,8 @@ The result feeds `compute_focus_roster(..., adaptive_max_analysts=budget, min_ne
 always (the adaptive budget only tightens, never increases spend); *fail-soft* — any missing
 signal, absent client, or reader error degrades to the static cap and logs (never raises).
 Env knobs: `ATLAS_MAX_ANALYSTS` (the cap/baseline, read only through
-`roster_cap.configured_max_analysts()`), `ATLAS_BUDGET_STRESS_FLOOR` (default 3),
-`ATLAS_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
+`roster_cap.configured_max_analysts()`), `RESEARCH_BUDGET_STRESS_FLOOR` (default 3),
+`RESEARCH_BUDGET_DISPERSION_HI` (default 0.015). Deferred (cost-/measurement-gated): budget > cap
 in dispersion regimes, a dedicated cross-asset dispersion metric, and the `dispatch_outcomes`
 feedback table (Stage 4).
 
@@ -240,7 +240,7 @@ theses as the budget allows before deepening any one. At `ATLAS_MAX_ANALYSTS=30`
 thesis map are sized for different worlds; this makes the cap real without resolving that.
 
 Width is recorded in the `atlas_run_diagnostics.breakdown` jsonb (no migration) by
-`hermes/roster_diagnostics.roster_breakdown` — `width`, `by_reason`, `theses_covered`,
+`portfolio/roster_diagnostics.roster_breakdown` — `width`, `by_reason`, `theses_covered`,
 `excluded`, `max_analysts`, `over_cap`. Its absence is why the breach went unnoticed for
 the pipeline's whole observed lifetime.
 
@@ -307,7 +307,7 @@ WP11.4+ (durable lineage round trip) still open — WP11 incomplete.
 
 ### Research attention after H4 — WP13.4 (#2930)
 
-After H4 materializes `focus_roster`, `hermes/research_attention.py` invokes
+After H4 materializes `focus_roster`, `portfolio/research_attention.py` invokes
 `plan_research_attention` over ticker targets only (helper at H4 end — not a graph
 node). Modes reuse `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default
 `shadow`). The planner cannot mutate roster width/order or consume the exploration
@@ -318,7 +318,7 @@ floor; H4 output is byte-identical across modes.
 | H5 | `carry` → skip provider; `metric_patch` → deterministic structured patch; `deep_refresh` → force full; `challenge`/`section_patch` → incumbent edit path |
 | H6 | Re-route after H5 features: `challenge` runs deliberation; other modes carry with `attention_carry` |
 
-Plan persists to `hermes_research_attention_plan` + shared `AttentionStore`.
+Plan persists to `portfolio_research_attention_plan` + shared `AttentionStore`.
 Coexists with WP11.3 `H6Selection` — attention enforce takes precedence when both
 apply. Rollback: `off`/`shadow`.
 
@@ -335,7 +335,7 @@ state.
 ### Bounded missing-fact amendment — WP11.4 (#2908)
 
 H6 no longer runs generic ``live_search`` web grounding. When the PM names exactly
-one missing fact via ``MissingFactProposal`` on ``DeliberationPmTurn``, Hermes may
+one missing fact via ``MissingFactProposal`` on ``DeliberationPmTurn``, portfolio may
 attempt a single targeted ``query_research`` fetch (blinded by ``source_kind``) and
 append ``MissingFactRequest`` + ``EvidenceBundleAmendment`` through
 ``research_retrieval/h6_amendment.py``. Policy cap: one amendment per base bundle;
@@ -373,8 +373,8 @@ Consequences of `llm_failure`, all downstream of the flag:
   it *larger*. Correlation de-dup can still drop a capped leg in favour of a challenged one
   — intended. The book note names every capped position.
 
-The `PhaseError` shape (`phase="hermes_h6_deliberation"`, message prefix `deliberation LLM
-failed`) is unchanged — Atlas's Hermes-density degraded gate counts phases, not messages.
+The `PhaseError` shape (`phase="portfolio_h6_deliberation"`, message prefix `deliberation LLM
+failed`) is unchanged — research's portfolio-density degraded gate counts phases, not messages.
 Not yet propagated: `supabase_io._slim_deliberation_summary` drops `carry_reason`, so a
 crash carry looks benign to the *next* day's fingerprint-skip carry.
 
@@ -382,14 +382,14 @@ crash carry looks benign to the *next* day's fingerprint-skip carry.
 
 ## LLM-node fail-soft (#1665)
 
-Every hermes LLM call site (H1–H3 via `thesis_common`, H5 via `portfolio_common`, H6
+Every portfolio LLM call site (H1–H3 via `thesis_common`, H5 via `portfolio_common`, H6
 deliberation turns, H7 memo, 7D debate/PM, phase 9 evolution) is wrapped: a
 research-agent output failure (JSONDecodeError / ValidationError / empty body after
 digillm's retries) degrades **that node** with a node-level `PhaseError` and a
 phase-appropriate fallback — H7 carries the prior memo re-dated (held names it misses
 are covered by the #1649 carry), H6 carries the analyst stance, H5/thesis skip the
 item, 7D empties the debate arm, legacy PM skips (H8 prefers the H7 memo anyway).
-`chain/hermes` (`phase="chain"`) errors can therefore only come from infra
+`chain/portfolio` (`phase="chain"`) errors can therefore only come from infra
 (checkpointer/graph), never LLM output. Rationale: three runs in two days
 (2026-07-21/22) died run-fatal on one flaky parse, and each outer retry re-runs the
 whole chain at ~$1.2–3.6 — the pipeline must complete (and commit) on the first
@@ -439,7 +439,7 @@ was silently frozen from 2026-06-26 while runs still reported `ok:true`.
 **Commit is observable.** A book H8 materializes but H9 does not persist (coherence
 fail-closed, idempotency conflict, or a no-manifest skip) is now a **degraded** run:
 `diagnostics.summarize_run` computes `(book_materialized, book_committed)` from
-`phase_hermes.sized_book` / `commit_manifest` (a manifest with status `committed`/`noop`
+`phase_portfolio.sized_book` / `commit_manifest` (a manifest with status `committed`/`noop`
 counts as committed) and forces `degraded` when materialized-but-not-committed — a state an
 H9 `PhaseError` can't trigger on its own. Both flags are emitted structurally in the
 `atlas_run_diagnostics.breakdown` (truncation-proof) and in the chain CLI summary alongside
@@ -449,7 +449,7 @@ the 2000-char cap. `chain._retry_worthy` keys the #809 good-book guard on `book_
 
 ### Same-date idempotency and orphan pruning (#1744)
 
-**The idempotency key is the run *date*, never `run_id`.** `AtlasResearchState.run_id`
+**The idempotency key is the run *date*, never `run_id`.** `ResearchState.run_id`
 is `Field(default_factory=uuid4)` — a fresh UUID per process — so CI's outer retry always
 presents a new id and a `run_id`-keyed manifest lookup structurally *cannot* see what an
 earlier attempt on the same date wrote. Prod 2026-06-24 carries **three** `commit-run/`
@@ -499,7 +499,7 @@ silent orphan in a published performance series, which is the defect this closes
 | Writer | When | Owns |
 |---|---|---|
 | H9 `commit_io.book_portfolio` | commit time, ~12:00–14:00 UTC | the **provisional** row: NAV as of the latest close available *before* `run_date`, plus `cash_pct` / `invested_pct`, which H9 alone owns |
-| `scripts/atlas/refresh_performance_metrics.py` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: restated against that date's settled close |
+| `digiquant/scripts/research/refresh_performance_metrics.py` | evening cron, ~22:00–23:00 UTC | the **authoritative** NAV: restated against that date's settled close |
 
 **The evening restatement is a correction, not corruption.** Reading a manifest NAV and a
 `nav_history` NAV that differ for the same date is expected: the manifest is a commit-time
@@ -522,7 +522,7 @@ the weights and the window are the same row set by construction. Anchoring on
 to a **bookless** date — which is exactly what `--fill-calendar-through` does, and why the
 anchor is the book, not the NAV row.
 
-`atlas.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
+`research.supabase_io.query_price_deltas` is deliberately left alone: it is a one-trading-day
 triage signal shared with the rule evaluators, and every rule threshold is calibrated
 against that meaning.
 <!-- #1766 -->
@@ -536,15 +536,15 @@ proposing a backfill. Verified against the live `core` project on 2026-08-01:
   post-gap book: 07-17.
 - 22 `atlas_run_diagnostics` rows cover that window and **18 of them report `status='ok'`**.
   All 18 carry the H9 coherence check (1) failure in `error_summary`:
-  `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from book and not
+  `portfolio_h9_commit_run/portfolio/commit-run: held ticker <T> missing from book and not
   flat in H7` (EWT on most dates; EWT, IJR, UUP and TLT by 07-16). Grep production for **that
   message**, not for the word "coherence" — the literal string `coherence` appears in zero rows,
   and no `error_summary` in the window comes close to the 2000-char cap, so nothing was
   truncated. This is check (1) at the top of this section reporting a frozen commit under an
   `ok` verdict, which is exactly the lie the degraded gate above now prevents.
 
-**Fixed 2026-07-17** by `40312d82` "restore Hermes H4–H9 commits" (PR #1565, branch
-`task/1555-hermes-restoration`), then hardened 07-22 by the memo-unaddressed held carry
+**Fixed 2026-07-17** by `40312d82` "restore portfolio H4–H9 commits" (PR #1565, branch
+`task/1555-portfolio-restoration`), then hardened 07-22 by the memo-unaddressed held carry
 (`b84a4d73`) and the final-book continuity backstop (`1dc93db3`). `positions` resumes on
 2026-07-17, the same date. Of the 18 diagnostics rows from 07-17 onward that carry a **non-null**
 `book_committed`, `book_committed = true` holds exactly when `positions` has rows for that
@@ -566,7 +566,7 @@ this book gap.)
    single-day refresh (`:584-590`). It provably cannot reach a hole that sits *behind*
    `max(positions.date)`, and `carry_forward_positions` (`:109-146`) is only ever called from
    that forward walk. See the "Limitation" note in
-   [`atlas/docs/RUNBOOK.md`](../../atlas/docs/RUNBOOK.md), which has said so since before the gap.
+   [`research/docs/RUNBOOK.md`](../../research/docs/RUNBOOK.md), which has said so since before the gap.
 
 Two consequences a future reader must not "fix" by accident. First, the sparseness of
 `positions` / `nav_history` **is the signal** that a book failed to commit; densifying the
@@ -590,11 +590,11 @@ looks unexplained, it is explained: read up, not sideways into a backfill.
 
 ```mermaid
 flowchart TB
-  subgraph Atlas["Atlas A0–A4"]
+  subgraph research["research A0–A4"]
     dig["phase7 digest"]
   end
 
-  subgraph Hermes["Hermes H1–H9"]
+  subgraph portfolio["portfolio H1–H9"]
     H1["H1 thesis review"]
     H2["H2 exploration"]
     H3["H3 vehicle map"]
@@ -614,7 +614,7 @@ flowchart TB
 
 ## Grounding and blinding
 
-Hermes H1–H7 use `build_grounding` / `build_thesis_grounding` with phase-scoped tool
+portfolio H1–H7 use `build_grounding` / `build_thesis_grounding` with phase-scoped tool
 blinding (`query_research`, `query_data`, `query_portfolio` per spec §6.1). Prior analyst
 and thesis context loads via preflight + on-demand `fetch_prior_document`.
 
@@ -623,15 +623,15 @@ and thesis context loads via preflight + on-demand `fetch_prior_document`.
 ## Related docs
 
 - [`AGENTS.md`](AGENTS.md) — extension checklist
-- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
-- Atlas handoff: [`atlas/docs/agentic/ARCHITECTURE.md`](../../atlas/docs/agentic/ARCHITECTURE.md)
+- [`PORTFOLIO_SUBGRAPH.md`](PORTFOLIO_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped as H1–H9)
+- research handoff: [`research/docs/agentic/ARCHITECTURE.md`](../../research/docs/agentic/ARCHITECTURE.md)
 
 ---
 
 <!-- #1736 -->
 ## Chain-level failure containment (#1736 / #1737 / #1733)
 
-`chain.run_atlas_then_hermes` writes the `atlas_run_diagnostics` row from a `finally` block,
+`chain.run_research_then_portfolio` writes the `atlas_run_diagnostics` row from a `finally` block,
 so anything that can reach that block with an error-free state becomes an invisible failure.
 Three holes are closed:
 
@@ -643,19 +643,19 @@ Three holes are closed:
    which degrades the run. Overlay nested chain **skips** the fold
    (`skip_overlay_shared_register`): `decision_log` has no `workspace_id`, and stamping
    `beliefs_folded_at` by id would consume house lessons. Overlay `workspace_id` is
-   seeded onto `initial_state` from the preflight config loader so a fail-soft Atlas
+   seeded onto `initial_state` from the preflight config loader so a fail-soft research
    crash cannot fold as house.
 2. **A terminating crash is recorded before the row is written.** `except BaseException:
    _record_chain_error(state, "terminal", exc); raise` sits between the body and the
    `finally`. This catches SystemExit / KeyboardInterrupt / a job timeout's SIGTERM — none of
    which `_safe_invoke_graph`'s `except Exception` sees. The exception is re-raised untouched,
    so the exit code and CI's view of the job are unchanged.
-3. **Hermes reasoning failures are counted, not just logged.** H6 degrades one ticker per
+3. **portfolio reasoning failures are counted, not just logged.** H6 degrades one ticker per
    failure and carries the analyst stance forward, so 31 of 39 dead deliberations left every
-   segment "fresh" and the run "ok". `diagnostics._hermes_deliberation_health` counts errors
-   in the five Hermes phases (`phase_hermes`, `hermes_h6_deliberation`,
-   `hermes_h7_pm_direction`, `phase7d_pm`, `phase9_evolution`) over
-   `phase_hermes.deliberation_summaries`. `hermes_h9_commit_run` is **excluded** — it is
+   segment "fresh" and the run "ok". `diagnostics._portfolio_deliberation_health` counts errors
+   in the five portfolio phases (`phase_portfolio`, `portfolio_h6_deliberation`,
+   `portfolio_h7_pm_direction`, `phase7d_pm`, `phase9_evolution`) over
+   `phase_portfolio.deliberation_summaries`. `portfolio_h9_commit_run` is **excluded** — it is
    already gated by #1555 and must not be double-counted.
 
 **Adding a `breakdown` key?** Do not edit `diagnostics._segment_counts`. Write a contributor

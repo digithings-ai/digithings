@@ -12,7 +12,7 @@ from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
 from digiquant.research.phases.phase_monthly import MonthlyDigest, build_phase_monthly
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
@@ -26,7 +26,7 @@ def _delta_state(
     *,
     bias_by_segment: dict[str, str] | None = None,
     price_deltas: dict[str, float] | None = None,
-) -> AtlasResearchState:
+) -> ResearchState:
     """Build a delta-run state with per-segment bias baked in.
 
     ``bias_by_segment`` (if given) populates snapshot.bias_by_segment so the
@@ -40,7 +40,7 @@ def _delta_state(
     snap: dict[str, Any] = {"bias": "neutral"}
     if bias_by_segment is not None:
         snap["bias_by_segment"] = dict(bias_by_segment)
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=baseline_date,
@@ -100,7 +100,7 @@ def _quiet_bias_for_all_segments() -> dict[str, str]:
 @pytest.mark.unit
 class TestTriage:
     def test_baseline_run_evaluates_decisions(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             data_layer=DataLayerSnapshot(
@@ -117,7 +117,7 @@ class TestTriage:
 
     def test_delta_run_without_baseline_date_infers_prior_day(self) -> None:
         """Daily cadence resolves baseline from run_date - 1 when unset (#930)."""
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
+        state = ResearchState(run_type="delta", run_date=date(2026, 4, 27))
         result = evaluate(state)
         assert result.baseline_date == date(2026, 4, 26)
 
@@ -421,7 +421,7 @@ class TestTriagePhaseNode:
         from digiquant.research.phases.triage_phase import build_triage_node
 
         node = build_triage_node(deps=None)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         out = node(state)
         assert "triage" in out
         assert out["triage"].decisions
@@ -447,7 +447,7 @@ class TestTriagePhaseNode:
         the bonds segment carries while a sharp single-ETF mover regens."""
         from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 
-        from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+        from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
         # Bonds: TLT/IEF/SHY all flat. Commodities: GLD up 1.2% (above 0.5%).
         rows = [
@@ -482,7 +482,7 @@ class TestTriagePhaseNode:
         """price_history empty → empty deltas → conservative regen everywhere."""
         from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 
-        from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+        from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(canned_reads={"price_history": []})
         node = build_triage_node(TriageDeps(client=client))
@@ -540,8 +540,8 @@ class TestTriageIntegrationWithPhaseNode:
 @pytest.mark.unit
 class TestMonthlySynthesis:
     def test_monthly_node_produces_digest(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase_monthly()])
-        state = AtlasResearchState(run_type="monthly", run_date=date(2026, 4, 30))
+        compiled = build_pipeline(ResearchState, [build_phase_monthly()])
+        state = ResearchState(run_type="monthly", run_date=date(2026, 4, 30))
 
         payload = {
             "segment": "monthly-digest",
@@ -575,7 +575,7 @@ class TestMonthlySynthesis:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase7_digest is not None
         assert "month_over_month_regime_delta" in final.phase7_digest
 
@@ -586,8 +586,8 @@ class TestMonthlySynthesis:
 @pytest.mark.unit
 class TestPhase9Evolution:
     def test_artifacts_emitted(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase9()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase9()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         state.phase7_digest = {"bias": "neutral"}
 
         payload = {
@@ -632,5 +632,5 @@ class TestPhase9Evolution:
         # exist after invocation.
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase9_evolution is not None

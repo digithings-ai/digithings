@@ -41,7 +41,7 @@ from digiquant.portfolio.models.risk_policy import CovarianceSnapshot, RiskPolic
 from digiquant.dashboard.temporal import require_utc_datetime
 
 _CASH = "CASH"
-# Common Hermes forecast horizon (trading sessions). Used as shadow fill when H6
+# Common portfolio forecast horizon (trading sessions). Used as shadow fill when H6
 # did not attach an effective forecast for every H7 roster ticker.
 DEFAULT_FORECAST_HORIZON_SESSIONS = 21
 
@@ -327,8 +327,8 @@ def assemble_allocation_input_bundle(
 
 
 def _horizons_from_state(state: Any) -> dict[str, int]:
-    hermes = getattr(state, "phase_hermes", None)
-    summaries = getattr(hermes, "deliberation_summaries", None) or {}
+    portfolio = getattr(state, "phase_portfolio", None)
+    summaries = getattr(portfolio, "deliberation_summaries", None) or {}
     out: dict[str, int] = {}
     for ticker, summary in summaries.items():
         if not isinstance(summary, dict):
@@ -346,8 +346,8 @@ def _horizons_from_state(state: Any) -> dict[str, int]:
 
 
 def _calibrated_from_state(state: Any) -> dict[str, CalibratedForecast]:
-    hermes = getattr(state, "phase_hermes", None)
-    raw_map = getattr(hermes, "calibrated_forecasts", None) or {}
+    portfolio = getattr(state, "phase_portfolio", None)
+    raw_map = getattr(portfolio, "calibrated_forecasts", None) or {}
     out: dict[str, CalibratedForecast] = {}
     for ticker, payload in raw_map.items():
         if not isinstance(payload, dict):
@@ -381,8 +381,8 @@ def _prior_weights_from_state(state: Any) -> tuple[dict[str, float], float]:
 
 
 def _cost_hashes_from_state(state: Any) -> dict[str, str]:
-    hermes = getattr(state, "phase_hermes", None)
-    estimates = getattr(hermes, "action_cost_estimates", None) or {}
+    portfolio = getattr(state, "phase_portfolio", None)
+    estimates = getattr(portfolio, "action_cost_estimates", None) or {}
     by_symbol: dict[str, str] = {}
     for payload in estimates.values():
         if not isinstance(payload, dict):
@@ -405,8 +405,8 @@ def assemble_allocation_input_bundle_from_state(
 
     Never raises into the sizing path: incomplete memo / missing policy → ``None``.
     """
-    hermes = getattr(state, "phase_hermes", None)
-    memo_raw = getattr(hermes, "pm_direction_memo", None)
+    portfolio = getattr(state, "phase_portfolio", None)
+    memo_raw = getattr(portfolio, "pm_direction_memo", None)
     if memo_raw is None:
         return None
     memo = (
@@ -415,7 +415,7 @@ def assemble_allocation_input_bundle_from_state(
         else PMDirectionMemo.model_validate(memo_raw)
     )
     if risk_policy is None:
-        raw_policy = getattr(hermes, "risk_policy", None)
+        raw_policy = getattr(portfolio, "risk_policy", None)
         if not isinstance(raw_policy, dict):
             return None
         try:
@@ -423,7 +423,7 @@ def assemble_allocation_input_bundle_from_state(
         except Exception:
             return None
     if covariance is None:
-        raw_cov = getattr(hermes, "covariance_snapshot", None)
+        raw_cov = getattr(portfolio, "covariance_snapshot", None)
         if isinstance(raw_cov, dict):
             try:
                 covariance = CovarianceSnapshot.model_validate(raw_cov)

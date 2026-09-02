@@ -410,7 +410,7 @@ def test_export_from_state_and_maybe_export(
             "source_run_id": "run-2758",
         },
     )
-    state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_hermes=phase)
+    state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_portfolio=phase)
     built = build_shadow_artifact_from_state(state)
     assert built is not None
     assert built.artifact_content_hash == artifact.artifact_content_hash
@@ -437,7 +437,7 @@ def test_export_failure_does_not_raise(
             "source_run_id": "run-2758",
         },
     )
-    state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_hermes=phase)
+    state = SimpleNamespace(run_id="run-2758", run_date=_SESSION, phase_portfolio=phase)
     monkeypatch.setenv("OLYMPUS_SHADOW_ARTIFACT_MODE", "export")
     # Point at a file path so mkdir/write fails closed without raising to caller.
     blocker = tmp_path / "not-a-dir"
@@ -453,7 +453,7 @@ def test_mode_off_skips_export(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_ineligible_state_skips() -> None:
-    assert build_shadow_artifact_from_state(SimpleNamespace(phase_hermes=None)) is None
+    assert build_shadow_artifact_from_state(SimpleNamespace(phase_portfolio=None)) is None
     phase = SimpleNamespace(
         allocation_input_bundle={"incomplete": True},
         pre_trade_risk_report=None,
@@ -461,7 +461,7 @@ def test_ineligible_state_skips() -> None:
     )
     assert (
         build_shadow_artifact_from_state(
-            SimpleNamespace(run_id="r", run_date=_SESSION, phase_hermes=phase)
+            SimpleNamespace(run_id="r", run_date=_SESSION, phase_portfolio=phase)
         )
         is None
     )
@@ -496,8 +496,8 @@ def test_shadow_artifact_and_chain_import_guard() -> None:
         / "digiquant"
         / "src"
         / "digiquant"
-        / "olympus"
-        / "hermes"
+        / "dashboard"
+        / "portfolio"
         / "chain.py"
     )
     for path in (shadow_path, chain_path):

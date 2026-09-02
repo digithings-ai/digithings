@@ -1,4 +1,4 @@
-"""Kairos broker-mirror sync cron — paper Alpaca OAuth only (K4).
+"""execution broker-mirror sync cron — paper Alpaca OAuth only (K4).
 
 Production entry: ``python -m digiquant.execution.sync_cron``. House and
 system workspaces, live env rows, and inactive connections are never synced.
@@ -47,7 +47,7 @@ class SyncTarget(BaseModel):
     fingerprint: str = Field(pattern=r"^[0-9a-f]{8}$")
 
 
-class KairosSyncHold(BaseModel):
+class ExecutionSyncHold(BaseModel):
     """A connection considered then held without adapter construction."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -77,7 +77,7 @@ def parse_connection_row(row: dict[str, object]) -> SyncTarget | None:
         return None
 
 
-def kairos_sync_targets(rows: Sequence[SyncTarget]) -> tuple[SyncTarget, ...]:
+def execution_sync_targets(rows: Sequence[SyncTarget]) -> tuple[SyncTarget, ...]:
     """Active paper connections on non-house/system workspaces."""
     reserved = reserved_sync_workspace_ids()
     return tuple(
@@ -89,9 +89,9 @@ def kairos_sync_targets(rows: Sequence[SyncTarget]) -> tuple[SyncTarget, ...]:
     )
 
 
-def plan_kairos_sync(
+def plan_execution_sync(
     rows: Sequence[SyncTarget],
-) -> tuple[tuple[SyncTarget, ...], tuple[KairosSyncHold, ...]]:
+) -> tuple[tuple[SyncTarget, ...], tuple[ExecutionSyncHold, ...]]:
     """Split paper-active non-reserved targets into Alpaca OAuth vs held.
 
     Alpaca ``auth_kind=api_key`` is listed then held — polling that row cannot
@@ -99,11 +99,11 @@ def plan_kairos_sync(
     session from cron).
     """
     runnable: list[SyncTarget] = []
-    held: list[KairosSyncHold] = []
-    for row in kairos_sync_targets(rows):
+    held: list[ExecutionSyncHold] = []
+    for row in execution_sync_targets(rows):
         if row.broker is Broker.IBKR:
             held.append(
-                KairosSyncHold(
+                ExecutionSyncHold(
                     connection_id=row.connection_id,
                     workspace_id=row.workspace_id,
                     reason=IBKR_HOLD_REASON,
@@ -112,7 +112,7 @@ def plan_kairos_sync(
             continue
         if row.auth_kind is AuthKind.API_KEY:
             held.append(
-                KairosSyncHold(
+                ExecutionSyncHold(
                     connection_id=row.connection_id,
                     workspace_id=row.workspace_id,
                     reason=ALPACA_API_KEY_HOLD_REASON,
@@ -123,7 +123,7 @@ def plan_kairos_sync(
     return tuple(runnable), tuple(held)
 
 
-def missing_kairos_sync_env_names(environ: Mapping[str, str] | None = None) -> list[str]:
+def missing_execution_sync_env_names(environ: Mapping[str, str] | None = None) -> list[str]:
     """Store env *names* that are empty. Never returns values."""
     env = os.environ if environ is None else environ
     aliases = {
@@ -140,20 +140,20 @@ def missing_kairos_sync_env_names(environ: Mapping[str, str] | None = None) -> l
     return missing
 
 
-def missing_kairos_sync_apply_env_names(environ: Mapping[str, str] | None = None) -> list[str]:
+def missing_execution_sync_apply_env_names(environ: Mapping[str, str] | None = None) -> list[str]:
     """Store + vault names required to unseal and poll. Never returns values."""
     env = os.environ if environ is None else environ
-    missing = missing_kairos_sync_env_names(env)
+    missing = missing_execution_sync_env_names(env)
     if not (env.get(MASTER_KEY_ENV) or "").strip():
         missing.append(MASTER_KEY_ENV)
     return missing
 
 
-def format_kairos_sync_not_configured(missing: Sequence[str]) -> str:
+def format_execution_sync_not_configured(missing: Sequence[str]) -> str:
     return "KAIROS_SYNC_NOT_CONFIGURED: " + ", ".join(missing)
 
 
-def load_kairos_sync_targets(client: object) -> list[SyncTarget]:
+def load_execution_sync_targets(client: object) -> list[SyncTarget]:
     """Select fingerprint columns only — ciphertext never leaves PostgREST here."""
     result = client.table("broker_connections").select(_FINGERPRINT_SELECT).execute()
     data = getattr(result, "data", result)
@@ -206,8 +206,8 @@ def _load_rows(
     if load_targets is not None:
         return list(load_targets())
     if missing:
-        return format_kairos_sync_not_configured(missing)
-    return load_kairos_sync_targets(_supabase_client_from_env(environ))
+        return format_execution_sync_not_configured(missing)
+    return load_execution_sync_targets(_supabase_client_from_env(environ))
 
 
 def _supabase_client_from_env(environ: Mapping[str, str]) -> object:
@@ -227,15 +227,15 @@ def _filter_connection_id(
     try:
         wanted = UUID(connection_id)
     except ValueError:
-        return "kairos sync: connection not found"
+        return "execution sync: connection not found"
     selected = [row for row in loaded if row.connection_id == wanted]
     if not selected:
-        return "kairos sync: connection not found"
+        return "execution sync: connection not found"
     row = selected[0]
     if row.workspace_id in reserved_sync_workspace_ids():
-        return "kairos sync: connection workspace is reserved (house/system)"
+        return "execution sync: connection workspace is reserved (house/system)"
     if row.env is ConnectionEnv.LIVE:
-        return "kairos sync: live env is not authorized"
+        return "execution sync: live env is not authorized"
     if row.auth_kind is AuthKind.API_KEY:
         return (
             f"ALPACA_API_KEY_SYNC_HELD: {row.connection_id} "
@@ -244,7 +244,7 @@ def _filter_connection_id(
     return selected
 
 
-def _hold_count(held: Sequence[KairosSyncHold], reason: str) -> int:
+def _hold_count(held: Sequence[ExecutionSyncHold], reason: str) -> int:
     return sum(1 for item in held if item.reason == reason)
 
 
@@ -253,10 +253,10 @@ def _log_dry_run(
     *,
     loaded: Sequence[SyncTarget],
 ) -> None:
-    runnable, held = plan_kairos_sync(loaded)
+    runnable, held = plan_execution_sync(loaded)
     log(
-        f"kairos sync dry-run considered={len(loaded)} "
-        f"targets={len(kairos_sync_targets(loaded))} "
+        f"execution sync dry-run considered={len(loaded)} "
+        f"targets={len(execution_sync_targets(loaded))} "
         f"runnable={len(runnable)} "
         f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
         f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
@@ -277,16 +277,16 @@ def main(
     args = _parse_args(argv)
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
     env = os.environ if environ is None else environ
-    missing_store = missing_kairos_sync_env_names(env)
+    missing_store = missing_execution_sync_env_names(env)
     if args.check:
         if missing_store:
-            err(format_kairos_sync_not_configured(missing_store))
+            err(format_execution_sync_not_configured(missing_store))
             return 2
-        log("kairos sync: store env present (names only; poll not attempted)")
+        log("execution sync: store env present (names only; poll not attempted)")
         return 0
     if not args.dry_run and not args.all and not args.connection_id:
         err(
-            "kairos sync: pass --dry-run, --connection-id, or --all "
+            "execution sync: pass --dry-run, --connection-id, or --all "
             "(refusing implicit broker polls)"
         )
         return 2
@@ -310,22 +310,22 @@ def main(
         _log_dry_run(log, loaded=loaded)
         return 0
 
-    runnable, held = plan_kairos_sync(loaded)
+    runnable, held = plan_execution_sync(loaded)
     if sync_batch is not None:
         synced = sync_batch(runnable)
         log(
-            f"kairos sync runnable={len(runnable)} synced={synced} "
+            f"execution sync runnable={len(runnable)} synced={synced} "
             f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
             f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
         )
         return 0
-    apply_missing = missing_kairos_sync_apply_env_names(env)
+    apply_missing = missing_execution_sync_apply_env_names(env)
     if apply_missing:
-        err(format_kairos_sync_not_configured(apply_missing))
+        err(format_execution_sync_not_configured(apply_missing))
         return 2
     synced = _production_sync_batch(runnable, environ=env)
     log(
-        f"kairos sync runnable={len(runnable)} synced={synced} "
+        f"execution sync runnable={len(runnable)} synced={synced} "
         f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
         f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
     )
@@ -394,15 +394,15 @@ if __name__ == "__main__":
 __all__ = [
     "ALPACA_API_KEY_HOLD_REASON",
     "IBKR_HOLD_REASON",
-    "KairosSyncHold",
+    "ExecutionSyncHold",
     "SyncTarget",
-    "format_kairos_sync_not_configured",
-    "kairos_sync_targets",
-    "load_kairos_sync_targets",
+    "format_execution_sync_not_configured",
+    "execution_sync_targets",
+    "load_execution_sync_targets",
     "main",
-    "missing_kairos_sync_apply_env_names",
-    "missing_kairos_sync_env_names",
+    "missing_execution_sync_apply_env_names",
+    "missing_execution_sync_env_names",
     "parse_connection_row",
-    "plan_kairos_sync",
+    "plan_execution_sync",
     "reserved_sync_workspace_ids",
 ]

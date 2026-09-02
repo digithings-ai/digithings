@@ -11,14 +11,14 @@ import polars as pl
 import pytest
 from digiquant.research import risk_policy_registry as rpr
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 pytestmark = pytest.mark.unit
 
@@ -84,28 +84,28 @@ class RiskRegistryFake(FakeSupabaseClient):
 
 def _artifacts():
     corr = pl.DataFrame({"a": ["SPY", "TLT"], "b": ["TLT", "SPY"], "corr": [0.5, 0.5]})
-    state = AtlasResearchState(
+    state = ResearchState(
         run_id=RUN_ID,
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
         knowledge_cutoff_at=TS,
         prior_context=PriorContext(),
-        config=AtlasConfigBundle(preferences={}),
+        config=ResearchConfigBundle(preferences={}),
     )
     return resolve_h8_risk_artifacts(state=state, pm_tickers=["SPY", "TLT"], corr=corr)
 
 
-def _state_with_artifacts() -> AtlasResearchState:
+def _state_with_artifacts() -> ResearchState:
     bundle = _artifacts()
-    return AtlasResearchState(
+    return ResearchState(
         run_id=RUN_ID,
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
         knowledge_cutoff_at=TS,
         prior_context=PriorContext(),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             risk_policy=bundle.policy.model_dump(mode="json"),
             covariance_snapshot=bundle.covariance_snapshot.model_dump(mode="json"),
         ),
@@ -184,7 +184,7 @@ def test_get_risk_policy_respects_cutoff() -> None:
 
 def test_persist_from_state_empty_is_ok() -> None:
     client = RiskRegistryFake()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_id=RUN_ID,
         run_type="delta",
         run_date=RUN_DATE,

@@ -17,14 +17,14 @@ replayable chain:
         -> HoldingLot (position lot opened/closed by a PaperExecution)
 
 Scope — contracts and schema only. This module does not change H7/H8/H9 ownership and
-does not touch any live-trading or broker path. ``hermes/writers/commit_io.py`` (H9)
+does not touch any live-trading or broker path. ``portfolio/writers/commit_io.py`` (H9)
 remains the sole authoritative writer of the ``positions`` **book** — the portfolio's
 official state. That is a narrower claim than "the only writer of these tables": since
-#2420 (Task 2.4) ``hermes/writers/execution_io.py`` appends ``PaperExecution`` and
+#2420 (Task 2.4) ``portfolio/writers/execution_io.py`` appends ``PaperExecution`` and
 ``HoldingLot`` rows for the day's fills, which records what an order *did* rather than
 what the portfolio *is*, and it neither writes nor rewrites the book.
 
-Since #2418 these models are **no longer dark**: ``hermes/writers/ledger_io.py`` appends
+Since #2418 these models are **no longer dark**: ``portfolio/writers/ledger_io.py`` appends
 the first five links of the chain (including ``TargetAdjustment`` since #2768) from
 every H9 run that actually commits, unless the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch
 is off (see ``digiquant/ARCHITECTURE.md``), and ``execution_io.py`` appends the last two.
@@ -51,7 +51,7 @@ Style mirrors ``digillm/src/digillm/telemetry.py``: one closed ``StrEnum`` per
 vocabulary, a frozen/strict base (``extra="forbid"``, ``frozen=True``), UTC-only
 ``AwareDatetime`` fields, and a business-rule ``model_validator(mode="after")`` on each
 concrete record — deliberately not the looser, mutable, ``Literal``-union style of
-``hermes/models/deliberation.py``.
+``portfolio/models/deliberation.py``.
 """
 
 from __future__ import annotations
@@ -134,7 +134,7 @@ class TargetAdjustmentType(StrEnum):
     ``CAP``, ``ROUNDING``, and ``CARRY`` are the original (#2415) coarse-grained
     values and remain for backward compatibility with existing persisted rows
     and tests. The remaining members are the 12 canonical H8 adjustment reasons
-    defined by ``hermes.sizing_events.SizingAdjustmentType`` (#2417), added here
+    defined by ``portfolio.sizing_events.SizingAdjustmentType`` (#2417), added here
     as an additive superset so a persisted ``TargetAdjustment`` row can carry the
     same fine-grained reason an in-memory ``SizingAdjustment`` event carries,
     without a breaking rename of the coarse legacy values.
@@ -154,7 +154,7 @@ class TargetAdjustmentType(StrEnum):
     CARRY = "carry"
 
     # The 12 canonical H8 adjustment reasons (#2417), mirrored from
-    # ``hermes.sizing_events.SizingAdjustmentType``. CHECK-constrained by
+    # ``portfolio.sizing_events.SizingAdjustmentType``. CHECK-constrained by
     # migration 095 (069 originally allowed only cap/rounding/carry).
     CONVICTION_FLOOR = "conviction_floor"
     SINGLE_NAME_CAP = "single_name_cap"

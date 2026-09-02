@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ─── FROZEN ─────────────────────────────────────────────────────────────────
-# Superseded by ``digiquant/src/digiquant/olympus/atlas/supabase_io.py::
-# publish_daily_snapshot``, called from Phase 7 of the Atlas sub-graph
+# Superseded by ``digiquant/src/digiquant/research/supabase_io.py::
+# publish_daily_snapshot``, called from Phase 7 of the research sub-graph
 # (issue #176). Kept for manual-backfill operator use only.
 #
 # Do not extend this file. New digest-materialization logic lives in

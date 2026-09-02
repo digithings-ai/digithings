@@ -23,7 +23,7 @@ from digiquant.research.phases._node_factory import (
     build_segment_node,
 )
 from digiquant.research.segments import SegmentReport
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 
 class _MinimalReport(SegmentReport):
@@ -57,8 +57,8 @@ _SPEC_FALLBACK = SegmentNodeSpec(
 )
 
 
-def _state() -> AtlasResearchState:
-    return AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 20))
+def _state() -> ResearchState:
+    return ResearchState(run_type="baseline", run_date=date(2026, 6, 20))
 
 
 def _fake_completion(_model: str, messages: list[dict[str, Any]], **_: Any) -> str:

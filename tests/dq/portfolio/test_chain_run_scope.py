@@ -11,26 +11,26 @@ from datetime import date
 from typing import Any
 
 import pytest
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.portfolio import chain as chain_mod
 
 pytestmark = pytest.mark.unit
 
 
-def _atlas_input() -> AtlasInput:
-    return AtlasInput(cadence="weekly", run_date=date(2026, 6, 20))
+def _research_input() -> ResearchInput:
+    return ResearchInput(cadence="weekly", run_date=date(2026, 6, 20))
 
 
 def test_resolve_run_id_prefers_github_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GITHUB_RUN_ID", "99")
-    assert chain_mod.resolve_run_id(_atlas_input()) == "99"
+    assert chain_mod.resolve_run_id(_research_input()) == "99"
 
 
 def test_resolve_run_id_falls_back_to_a_self_labelled_local_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
-    resolved = chain_mod.resolve_run_id(_atlas_input())
+    resolved = chain_mod.resolve_run_id(_research_input())
     assert resolved == "weekly-2026-06-20-local"
     # `-local` is a suffix no GitHub run id can carry, so an off-CI run can never be joined
     # to a CI run by mistake.
@@ -49,13 +49,13 @@ def _capture_start(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
 
 def _run_beliefs_only(monkeypatch: pytest.MonkeyPatch, deps: Any) -> None:
-    """Drive the shortest path through run_atlas_then_hermes that still calls _usage.start()."""
+    """Drive the shortest path through run_research_then_portfolio that still calls _usage.start()."""
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
     monkeypatch.setattr(chain_mod, "_write_diagnostics_row", lambda *a, **k: None, raising=False)
-    # `daily` is the only cadence AtlasResearchState accepts; the run must reach _usage.start().
-    atlas_input = AtlasInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
+    # `daily` is the only cadence ResearchState accepts; the run must reach _usage.start().
+    research_input = ResearchInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
     try:
-        chain_mod.run_atlas_then_hermes(atlas_input=atlas_input, deps=deps)
+        chain_mod.run_research_then_portfolio(research_input=research_input, deps=deps)
     except Exception:
         # The run may fail-soft further down; the assertion is only about what start() got.
         pass
@@ -64,8 +64,8 @@ def _run_beliefs_only(monkeypatch: pytest.MonkeyPatch, deps: Any) -> None:
 def test_run_scope_uses_the_diagnostics_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = _capture_start(monkeypatch)
     deps = chain_mod.ChainDeps(
-        atlas=None,
-        hermes=None,
+        research=None,
+        portfolio=None,
         diagnostics=chain_mod.DiagnosticsDeps(client=None, run_id="gha-1978"),
     )
     _run_beliefs_only(monkeypatch, deps)
@@ -79,9 +79,9 @@ def test_manage_usage_false_does_not_start_or_reset(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(chain_mod._usage, "start", lambda **k: seen_start.append(k))
     monkeypatch.setattr(chain_mod._usage, "reset", lambda: seen_reset.append(1))
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
-    deps = chain_mod.ChainDeps(atlas=None, hermes=None)
-    atlas_input = AtlasInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
-    chain_mod.run_atlas_then_hermes(atlas_input=atlas_input, deps=deps, manage_usage=False)
+    deps = chain_mod.ChainDeps(research=None, portfolio=None)
+    research_input = ResearchInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
+    chain_mod.run_research_then_portfolio(research_input=research_input, deps=deps, manage_usage=False)
     assert seen_start == []
     assert seen_reset == []
 
@@ -90,7 +90,7 @@ def test_run_scope_is_unavailable_without_diagnostics_deps(monkeypatch: pytest.M
     seen = _capture_start(monkeypatch)
     # diagnostics defaults to None for library and test callers. Unavailable, never fabricated:
     # such a run also writes no diagnostics row, so there is nothing to reconcile against.
-    deps = chain_mod.ChainDeps(atlas=None, hermes=None)
+    deps = chain_mod.ChainDeps(research=None, portfolio=None)
     _run_beliefs_only(monkeypatch, deps)
     assert seen == {"run_id": None}
 
@@ -98,9 +98,9 @@ def test_run_scope_is_unavailable_without_diagnostics_deps(monkeypatch: pytest.M
 def test_fanout_ticker_reads_back_the_send_cursor() -> None:
     """The H5/H6 discriminator is the cursor `with_fanout_ticker` injected — nothing parsed."""
     from digiquant.portfolio.focus_roster import fanout_ticker, with_fanout_ticker
-    from digiquant.portfolio.state import HermesState
+    from digiquant.portfolio.state import PortfolioState
 
-    state = HermesState(run_type="delta", run_date=date(2026, 6, 20))
+    state = PortfolioState(run_type="delta", run_date=date(2026, 6, 20))
     assert fanout_ticker(state) is None, "no cursor means no key, never a fabricated one"
     assert fanout_ticker(with_fanout_ticker(state, "GLD")) == "GLD"
 

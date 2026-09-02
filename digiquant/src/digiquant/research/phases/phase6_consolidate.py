@@ -8,7 +8,7 @@ from typing import Any  # score:allow untyped any — used for JSON-derived dict
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Phase6BiasRow,
     refresh_scope_forces_full,
 )
@@ -35,7 +35,7 @@ _BIAS_ROW_KEYS: tuple[str, ...] = (
 )
 
 
-def _bias_of(state: AtlasResearchState, field: str, key: str) -> str:
+def _bias_of(state: ResearchState, field: str, key: str) -> str:
     container = getattr(state, field, None)
     if not container:
         return ""
@@ -46,13 +46,13 @@ def _bias_of(state: AtlasResearchState, field: str, key: str) -> str:
     return str(body.get("internal_bias") or body.get("bias") or "")
 
 
-def _macro_regime_label(state: AtlasResearchState) -> str:
+def _macro_regime_label(state: ResearchState) -> str:
     if state.phase3_output is None or state.phase3_output.payload.source != "today":
         return ""
     return str(state.phase3_output.payload.body.get("regime_label") or "")  # type: ignore[union-attr]
 
 
-def _vix_level(state: AtlasResearchState) -> float | None:
+def _vix_level(state: ResearchState) -> float | None:
     options = state.phase1_outputs.get("alt-options-derivatives")
     if options is None or options.payload.source != "today":
         return None
@@ -63,7 +63,7 @@ def _vix_level(state: AtlasResearchState) -> float | None:
         return None
 
 
-def _fed_odds_compact(state: AtlasResearchState) -> dict[str, Any] | None:
+def _fed_odds_compact(state: ResearchState) -> dict[str, Any] | None:
     """Extract a compact fed_odds summary from the preflight market_context."""
     full = state.data_layer.market_context.get("fed_odds")
     if not isinstance(full, dict) or not full:
@@ -81,12 +81,12 @@ def _fed_odds_compact(state: AtlasResearchState) -> dict[str, Any] | None:
     return out
 
 
-def _onchain_positioning_compact(state: AtlasResearchState) -> dict[str, Any] | None:
+def _onchain_positioning_compact(state: ResearchState) -> dict[str, Any] | None:
     compact = state.data_layer.market_context.get("onchain_positioning")
     return compact if isinstance(compact, dict) and compact else None
 
 
-def _prior_snapshot_date(state: AtlasResearchState) -> date | None:
+def _prior_snapshot_date(state: ResearchState) -> date | None:
     if not state.prior_context.last_snapshots:
         return None
     snap_row = state.prior_context.last_snapshots[0]
@@ -98,7 +98,7 @@ def _prior_snapshot_date(state: AtlasResearchState) -> date | None:
     return None
 
 
-def _prior_bias_row(state: AtlasResearchState) -> dict[str, Any] | None:
+def _prior_bias_row(state: ResearchState) -> dict[str, Any] | None:
     if not state.prior_context.last_snapshots:
         return None
     snap = state.prior_context.last_snapshots[0].get("snapshot") or {}
@@ -109,7 +109,7 @@ def _prior_bias_row(state: AtlasResearchState) -> dict[str, Any] | None:
 
 
 class _BiasPriorLoader:
-    def __init__(self, state: AtlasResearchState) -> None:
+    def __init__(self, state: ResearchState) -> None:
         self._state = state
 
     def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
@@ -125,7 +125,7 @@ class _BiasPriorLoader:
         )
 
 
-def _digest_triage_signal(state: AtlasResearchState) -> TriageSignal | None:
+def _digest_triage_signal(state: ResearchState) -> TriageSignal | None:
     if state.triage is None:
         return None
     if state.triage.decisions and all(d.decision == "carry" for d in state.triage.decisions):
@@ -133,7 +133,7 @@ def _digest_triage_signal(state: AtlasResearchState) -> TriageSignal | None:
     return TriageSignal(mode="stale")
 
 
-def _recompute_bias_row(state: AtlasResearchState) -> Phase6BiasRow:
+def _recompute_bias_row(state: ResearchState) -> Phase6BiasRow:
     return {
         "date": state.run_date.isoformat(),
         "run_type": state.run_type,
@@ -156,7 +156,7 @@ def _recompute_bias_row(state: AtlasResearchState) -> Phase6BiasRow:
 
 def _bias_row_document_patch(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     prior_row: dict[str, Any],
     new_row: Phase6BiasRow,
 ) -> DocumentPatch | None:
@@ -187,7 +187,7 @@ def _bias_row_document_patch(
     )
 
 
-def _phase6_node(state: AtlasResearchState) -> dict[str, Any]:
+def _phase6_node(state: ResearchState) -> dict[str, Any]:
     """Assemble the daily_snapshots bias row from phases 1–5."""
     mode = resolve_edit_mode(
         artifact_key=("digest", "digest"),

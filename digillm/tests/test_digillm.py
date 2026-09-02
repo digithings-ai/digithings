@@ -1959,7 +1959,7 @@ class _PersonNested(BaseModel):
 
 def test_structured_completion_strict_schema_forces_required_through_nested_defs() -> None:
     """#2353 claims recursive required-forcing through $defs/items/anyOf. Flat
-    optional coverage alone would miss nested Atlas/digest schemas that still
+    optional coverage alone would miss nested research/digest schemas that still
     400 on OpenAI-family providers when a child property is omitted from
     required."""
     captured: dict[str, Any] = {}

@@ -3,7 +3,7 @@
 Runs under the pinned knowledge cutoff before WP14 context compile:
 pin cutoff → mature prior outcomes → compile/pin lesson → WP14 prerequisites.
 
-No new Atlas graph node — invoked from :mod:`phases.preflight` only.
+No new research graph node — invoked from :mod:`phases.preflight` only.
 """
 
 from __future__ import annotations
@@ -226,7 +226,7 @@ def pin_outcome_lesson_for_preflight(
 def outcome_lesson_preflight_update(
     result: OutcomeMaturationResult,
 ) -> dict[str, Any]:
-    """Map maturation result to AtlasResearchState preflight fields."""
+    """Map maturation result to ResearchState preflight fields."""
     if result.status == "skipped":
         return {}
     if result.status == "pinned" and result.pin is not None:

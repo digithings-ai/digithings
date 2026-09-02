@@ -42,7 +42,7 @@ def _corr_map(frame: pl.DataFrame) -> dict[tuple[str, str], float]:
     return {(r["a"], r["b"]): r["corr"] for r in frame.to_dicts()}
 
 
-# ── FakeSupabaseClient (mirrors the atlas/test_supabase_io version, minimal) ─
+# ── FakeSupabaseClient (mirrors the research/test_supabase_io version, minimal) ─
 
 
 @dataclass

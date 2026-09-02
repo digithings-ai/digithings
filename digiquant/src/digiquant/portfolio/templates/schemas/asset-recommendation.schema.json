@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Asset Recommendation",
+  "title": "digiquant-research Asset Recommendation",
   "description": "Per-ticker analyst report used in deliberation/PM pipeline. JSON source of truth; markdown is derived.",
   "type": "object",
   "additionalProperties": false,

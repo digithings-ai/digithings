@@ -25,8 +25,8 @@ from digiquant.research.phases.phase7_synthesis import (
     build_phase7,
 )
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,
     DataLayerSnapshot,
     SegmentPayload,
@@ -34,7 +34,7 @@ from digiquant.research.state import (
 )
 from digiquant.research.testing.simulator import parse_schema_name
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -44,12 +44,12 @@ def _slot(slug: str, bias: str = "bullish", **extra: Any) -> SegmentSlot:
     return SegmentSlot(payload=SegmentPayload(segment=slug, body=body, as_of=date(2026, 4, 26)))
 
 
-def _base_state(regime_label: str = "Risk-on / Policy easing") -> AtlasResearchState:
+def _base_state(regime_label: str = "Risk-on / Policy easing") -> ResearchState:
     """Minimal state seeded through phase 5 with an optional regime_label in phase3."""
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
     state.phase1_outputs = {
         "alt-cta-positioning": _slot("alt-cta-positioning", bias="neutral"),
@@ -131,7 +131,7 @@ class TestDigestSnapshotField:
 class TestRegimeLabelBackfill:
     def test_backfill_from_phase3_when_llm_emits_empty(self) -> None:
         """When LLM returns regime_label='', we backfill from phase3 body."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _base_state(regime_label="Neutral / Rate plateau")
 
         with patch(
@@ -139,7 +139,7 @@ class TestRegimeLabelBackfill:
             return_value=_digest_json(regime_label=""),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert final.phase7_digest is not None
         # LLM gave empty string → deterministic backfill from phase3.
@@ -147,7 +147,7 @@ class TestRegimeLabelBackfill:
 
     def test_llm_emitted_regime_label_preserved(self) -> None:
         """When LLM emits a non-empty regime_label, it is preserved as-is."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _base_state(regime_label="Risk-on / Policy easing")
 
         with patch(
@@ -155,7 +155,7 @@ class TestRegimeLabelBackfill:
             return_value=_digest_json(regime_label="Risk-on / Early recovery"),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert final.phase7_digest is not None
         # LLM supplied a non-empty value → keep it.
@@ -163,7 +163,7 @@ class TestRegimeLabelBackfill:
 
     def test_backfill_falls_back_to_empty_when_phase3_absent(self) -> None:
         """No phase3 output → regime_label stays empty string (no crash)."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _base_state()
         state.phase3_output = None  # no macro phase this run
 
@@ -172,19 +172,19 @@ class TestRegimeLabelBackfill:
             return_value=_digest_json(regime_label=""),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert final.phase7_digest is not None
         assert final.phase7_digest["regime_label"] == ""
 
     def test_regime_label_from_phase3_helper_returns_empty_on_none(self) -> None:
         """Unit-test the private helper directly."""
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         assert _regime_label_from_phase3(state) == ""
 
     def test_regime_label_from_phase3_helper_skips_carry_slots(self) -> None:
         """Carry slots (source='carried') must not feed the backfill."""
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         # Simulate a carry slot: SegmentSlot with a Carried payload (delta run carry-forward).
         state.phase3_output = SegmentSlot(
             payload=Carried(
@@ -241,7 +241,7 @@ class TestFedOddsWiring:
         )
         return PreflightDeps(
             client=client,
-            config_loader=AtlasConfigBundle,
+            config_loader=ResearchConfigBundle,
         )
 
     def test_fed_odds_populated_in_market_context(self) -> None:
@@ -250,7 +250,7 @@ class TestFedOddsWiring:
 
         deps = self._preflight_deps(_fed_odds_rows())
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 16))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 6, 16))
         out = node(state)
         mc = out["data_layer"].market_context
         assert "fed_odds" in mc, "fed_odds must appear in market_context when rows exist"
@@ -262,7 +262,7 @@ class TestFedOddsWiring:
 
         deps = self._preflight_deps([])
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 16))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 6, 16))
         out = node(state)
         # Empty result from get_fed_rate_probabilities → fed_odds not added to market_context.
         assert "fed_odds" not in out["data_layer"].market_context
@@ -274,7 +274,7 @@ class TestFedOddsWiring:
 
         deps = self._preflight_deps([])
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 16))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 6, 16))
 
         with patch.object(
             pf_mod,
@@ -299,9 +299,9 @@ class TestFedOddsWiring:
             market_context={"fed_odds": fed_odds_payload},
         )
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         row = final.phase6_bias_row
         assert row is not None
@@ -315,9 +315,9 @@ class TestFedOddsWiring:
         # data_layer with empty market_context (default).
         state.data_layer = DataLayerSnapshot(market_context={})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         row = final.phase6_bias_row
         assert row is not None
@@ -334,7 +334,7 @@ class TestFedOddsWiring:
         }
         state.data_layer = DataLayerSnapshot(market_context={"fed_odds": fed_odds_payload})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         captured_inputs: list[dict[str, Any]] = []
 
         def fake_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:

@@ -13,7 +13,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.portfolio.phases.phase7d_pm import _load_pm_skill, _pm_node
 from digiquant.portfolio.skills import SkillNotFoundError
 
@@ -73,14 +73,14 @@ class TestLoadPmSkill:
 # ── node decision contract ───────────────────────────────────────────────────
 
 
-def _pm_state() -> AtlasResearchState:
-    state = AtlasResearchState(
+def _pm_state() -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 6, 13),
-        config=AtlasConfigBundle(watchlist=["SPY", "GLD"]),
+        config=ResearchConfigBundle(watchlist=["SPY", "GLD"]),
     )
     state.phase6_bias_row = {"date": "2026-06-13", "equity_bias": "neutral"}
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts={
             "SPY": {
                 "ticker": "SPY",

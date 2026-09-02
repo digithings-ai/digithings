@@ -5,7 +5,7 @@ access resolves through manifest legacy refs; enforce mode rejects un-pinned cal
 and latest-date fallbacks.
 
 Group A book reads (`positions`, `nav_history`, `portfolio_metrics`) are
-house-scoped so an overlay same-calendar row cannot leak into Olympus pages.
+house-scoped so an overlay same-calendar row cannot leak into dashboard pages.
 House document lookups (`query_research` / `_query_documents_row`) likewise
 default to the house ``workspace_id``.
 """
@@ -228,7 +228,7 @@ def _query_digest_row(
 
 
 def _eq_house(query: Any) -> Any:
-    """Olympus pages / research tools read the house book, never overlay same-date rows."""
+    """dashboard pages / research tools read the house book, never overlay same-date rows."""
     return query.eq("workspace_id", str(house_workspace_id()))
 
 
@@ -341,7 +341,7 @@ def query_research(
     document_key: str | None = None,
     as_of_date: date | None = None,
     segment: str | None = None,
-    phase: RetrievalPhase = "atlas_edit",
+    phase: RetrievalPhase = "research_edit",
     cache: ResearchCache | None = None,
     retrieval_pin: RetrievalQueryPin | None = None,
 ) -> dict[str, Any]:

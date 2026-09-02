@@ -28,7 +28,7 @@ from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
 from digiquant.dashboard.research_corpus import ResearchCorpusStore
 from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 
-from tests.dq.olympus.overlay._sealed import sealed_openai
+from tests.dq.dashboard.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 

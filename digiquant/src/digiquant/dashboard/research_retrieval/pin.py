@@ -1,7 +1,7 @@
 """Preflight research-state pin (#2863 / WP12.3).
 
 Select one exact :class:`ResearchStatePin` per run/attempt and carry it for the
-whole Atlas/Hermes invocation (including resume). Uses
+whole research/portfolio invocation (including resume). Uses
 :class:`ResearchStateStore` selection/pin APIs only — never ``load_latest`` and
 never redefines WP12.1 identity helpers.
 """

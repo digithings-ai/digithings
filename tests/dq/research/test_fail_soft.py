@@ -20,7 +20,7 @@ from digiquant.research.phases.phase5_equities import (
     build_phase5,
 )
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     PhaseError,
     SegmentPayload,
     SegmentSlot,
@@ -118,8 +118,8 @@ class TestRunSegmentFailSoft:
 class TestPhase5FailSoftIntegration:
     """Drive the real Phase 5 pipeline with an empty LLM body — it must NOT raise."""
 
-    def _seed(self) -> AtlasResearchState:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 6, 14))
+    def _seed(self) -> ResearchState:
+        state = ResearchState(run_type="baseline", run_date=date(2026, 6, 14))
         state.phase3_output = SegmentSlot(
             payload=SegmentPayload(
                 segment="macro",
@@ -139,7 +139,7 @@ class TestPhase5FailSoftIntegration:
         # Force the no-tools path so completion_text is the LLM seam we mock.
         monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
 
-        compiled = build_pipeline(AtlasResearchState, build_phase5())
+        compiled = build_pipeline(ResearchState, build_phase5())
         state = self._seed()
 
         # Empty body → json.loads("") raises → run_research_agent exhausts retries
@@ -150,7 +150,7 @@ class TestPhase5FailSoftIntegration:
         ):
             result = compiled.invoke(state)
 
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         # Equity + 11 sector memos all degraded to carried. No scorecard node.
         assert final.phase5_outputs["equity"].payload.source == "carried"

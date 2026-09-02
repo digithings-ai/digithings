@@ -261,7 +261,7 @@ def build_agent_prompt(ctx: dict) -> str:
     prior_d = ctx.get("prior_snapshot_date") or "none"
 
     lines = [
-        f"# digiquant-atlas — Backfill Research Session",
+        f"# digiquant-research — Backfill Research Session",
         f"",
         f"**Simulated date:** {as_of} ({dow})",
         f"**Run type:** {run_type}",

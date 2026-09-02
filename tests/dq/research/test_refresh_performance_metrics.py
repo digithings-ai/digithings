@@ -24,7 +24,7 @@ from uuid import uuid4
 import pytest
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -32,7 +32,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "refresh_performance_metrics.py"
 )
 
@@ -760,7 +760,7 @@ class TestResolveScheduledMetricsDate:
         assert "Do NOT pass --date 2026-07-30" in message
 
     def test_raises_when_book_is_one_day_stale(self) -> None:
-        # Prod run 30589621216 (2026-07-30): the Olympus run was cancelled after 4h so no
+        # Prod run 30589621216 (2026-07-30): the dashboard run was cancelled after 4h so no
         # 07-30 book existed; the cron re-stamped 07-29 and exited 0 with two green ticks.
         sb = self._positions_on("2026-07-28", "2026-07-29")
         with pytest.raises(_mod.StaleBookError) as excinfo:

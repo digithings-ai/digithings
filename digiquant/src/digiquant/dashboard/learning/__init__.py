@@ -1,4 +1,4 @@
-"""Olympus learning-loop helpers (beliefs distillation, spec §11.1)."""
+"""dashboard learning-loop helpers (beliefs distillation, spec §11.1)."""
 
 from digiquant.dashboard.learning.beliefs_distillation import (
     BeliefsDistillationDeps,

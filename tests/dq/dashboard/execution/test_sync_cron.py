@@ -1,4 +1,4 @@
-"""Unit tests for Kairos broker-mirror sync cron CLI (K4).
+"""Unit tests for execution broker-mirror sync cron CLI (K4).
 
 These tests inject fingerprints and a sync callback — they never unseal
 credentials or construct Alpaca/IBKR adapters.
@@ -16,14 +16,14 @@ from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, Conne
 from digiquant.execution.sync_cron import (
     ALPACA_API_KEY_HOLD_REASON,
     SyncTarget,
-    format_kairos_sync_not_configured,
-    kairos_sync_targets,
-    load_kairos_sync_targets,
+    format_execution_sync_not_configured,
+    execution_sync_targets,
+    load_execution_sync_targets,
     main,
-    missing_kairos_sync_apply_env_names,
-    missing_kairos_sync_env_names,
+    missing_execution_sync_apply_env_names,
+    missing_execution_sync_env_names,
     parse_connection_row,
-    plan_kairos_sync,
+    plan_execution_sync,
 )
 from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
@@ -56,7 +56,7 @@ def _target(
     )
 
 
-def test_kairos_sync_targets_drop_house_system_live_and_inactive() -> None:
+def test_execution_sync_targets_drop_house_system_live_and_inactive() -> None:
     kept = _target()
     rows = (
         _target(workspace_id=house_workspace_id()),
@@ -65,24 +65,24 @@ def test_kairos_sync_targets_drop_house_system_live_and_inactive() -> None:
         _target(status=ConnectionStatus.REVOKED, connection_id=UUID(int=4)),
         kept,
     )
-    targets = kairos_sync_targets(rows)
+    targets = execution_sync_targets(rows)
     assert [row.connection_id for row in targets] == [_CONN]
 
 
-def test_plan_kairos_sync_holds_ibkr() -> None:
+def test_plan_execution_sync_holds_ibkr() -> None:
     alpaca = _target()
     ibkr = _target(connection_id=_IBKR, broker=Broker.IBKR)
-    runnable, held = plan_kairos_sync((alpaca, ibkr))
+    runnable, held = plan_execution_sync((alpaca, ibkr))
     assert [row.connection_id for row in runnable] == [_CONN]
     assert len(held) == 1
     assert held[0].connection_id == _IBKR
     assert held[0].reason == "ibkr_requires_brokerage_session"
 
 
-def test_plan_kairos_sync_holds_alpaca_api_key() -> None:
+def test_plan_execution_sync_holds_alpaca_api_key() -> None:
     oauth = _target()
     api_key = _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)
-    runnable, held = plan_kairos_sync((oauth, api_key))
+    runnable, held = plan_execution_sync((oauth, api_key))
     assert [row.connection_id for row in runnable] == [_CONN]
     assert len(held) == 1
     assert held[0].connection_id == _API_KEY
@@ -109,11 +109,11 @@ def test_parse_connection_row_skips_invalid() -> None:
 
 
 def test_missing_env_names_are_canonical() -> None:
-    missing = missing_kairos_sync_env_names({})
+    missing = missing_execution_sync_env_names({})
     assert missing == ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]
-    apply_missing = missing_kairos_sync_apply_env_names({})
+    apply_missing = missing_execution_sync_apply_env_names({})
     assert "DIGIQUANT_VAULT_MASTER_KEY" in apply_missing
-    msg = format_kairos_sync_not_configured(apply_missing)
+    msg = format_execution_sync_not_configured(apply_missing)
     assert msg.startswith("KAIROS_SYNC_NOT_CONFIGURED:")
     assert "sk_test" not in msg
 
@@ -380,7 +380,7 @@ class _Client:
         return _Query(self._rows)
 
 
-def test_load_kairos_sync_targets_parses_valid_rows() -> None:
+def test_load_execution_sync_targets_parses_valid_rows() -> None:
     client = _Client(
         [
             {
@@ -395,6 +395,6 @@ def test_load_kairos_sync_targets_parses_valid_rows() -> None:
             {"id": "not-a-uuid", "broker": "alpaca"},
         ]
     )
-    loaded = load_kairos_sync_targets(client)
+    loaded = load_execution_sync_targets(client)
     assert len(loaded) == 1
     assert loaded[0].connection_id == _CONN

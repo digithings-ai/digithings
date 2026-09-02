@@ -183,8 +183,8 @@ def test_both_cron_jobs_are_scheduled_by_name(statements: str) -> None:
         )
 
 
-def test_cron_slots_avoid_the_olympus_and_prices_windows(statements: str) -> None:
-    """Olympus is 12:00 UTC (+4h); prices-live pg_cron fires 13:00-01:00 UTC."""
+def test_cron_slots_avoid_the_dashboard_and_prices_windows(statements: str) -> None:
+    """dashboard is 12:00 UTC (+4h); prices-live pg_cron fires 13:00-01:00 UTC."""
     schedules = re.findall(r"cron\.schedule\(\s*'[\w-]+',\s*'([^']+)'", statements)
     assert len(schedules) == 2, f"expected two schedules, got {schedules}"
     for spec in schedules:

@@ -23,7 +23,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-# Minimal Supabase stub — avoids importing atlas.state (Python 3.12-only syntax).
+# Minimal Supabase stub — avoids importing research.state (Python 3.12-only syntax).
 
 _RUN_DATE = date(2026, 6, 12)
 

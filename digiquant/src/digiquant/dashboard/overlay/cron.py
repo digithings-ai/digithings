@@ -3,7 +3,7 @@
 Production entry: ``python -m digiquant.dashboard.overlay``. House and system
 workspaces are never overlay targets. This module does not import ``byok`` /
 digillm so the digiquant-only CI lane can unit-test candidate selection.
-``--execute`` runs claimed jobs through the one Olympus graph (lazy import);
+``--execute`` runs claimed jobs through the one dashboard graph (lazy import);
 ``chain=None`` is refused.
 """
 
@@ -347,7 +347,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Run claimed jobs through the one Olympus graph (refuses chain=None)",
+        help="Run claimed jobs through the one dashboard graph (refuses chain=None)",
     )
     parser.add_argument("--workspace-id", default=None, help="Dispatch a single workspace id")
     parser.add_argument("--run-date", default=None, help="ISO date (default UTC today)")

@@ -13,8 +13,8 @@ export type PeriodStatusLoad =
 const PERIOD_LIMIT = 120;
 
 /**
- * Curated tip status for anon olympus (#2652 / migration 074).
- * Prefer this over raw `olympus_accounting_*` (service_role-only).
+ * Curated tip status for anon dashboard (#2652 / migration 074).
+ * Prefer this over raw `dashboard_accounting_*` (service_role-only).
  */
 export async function fetchPeriodStatusRows(): Promise<PeriodStatusLoad> {
   if (!supabase) return { kind: 'unconfigured' };

@@ -19,7 +19,7 @@ def _digigraph_importable() -> bool:
     not _digigraph_importable(),
     reason="digigraph runtime deps not installed (CI digiquant-test job)",
 )
-def test_hermes_pipeline_builder_shim_exports() -> None:
+def test_portfolio_pipeline_builder_shim_exports() -> None:
     from digiquant.portfolio import pipeline_builder as shim
 
     assert shim.NodeSpec is not None

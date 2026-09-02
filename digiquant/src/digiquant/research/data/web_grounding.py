@@ -4,11 +4,11 @@ For ``live_search`` segments, runs a read-only search pass and returns a cited
 summary injected into ``phase_inputs`` before the normal structured-output
 research call.
 
-Olympus grounding uses **web-search-capable models only** (Perplexity /
+dashboard grounding uses **web-search-capable models only** (Perplexity /
 ``:online``) via :func:`digigraph.model_config.get_grounding_model` — provider
 built-in search through :func:`digillm.openrouter_web_search`'s native branch.
 The Exa ``openrouter:web_search`` server-tool path stays available as a digillm
-toolkit fallback for non-native models; Olympus does not assemble Exa params.
+toolkit fallback for non-native models; dashboard does not assemble Exa params.
 
 Requires ``OPENROUTER_API_KEY``. Fails soft on error or missing key unless
 ``OLYMPUS_WEB_SEARCH=required``.
@@ -33,11 +33,11 @@ _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.ya
 _MAX_ALLOWED_DOMAINS = 5
 
 
-class OlympusWebSearchError(RuntimeError):
+class DashboardWebSearchError(RuntimeError):
     """Web grounding was required (``OLYMPUS_WEB_SEARCH=required``) but unavailable."""
 
 
-def olympus_web_search_required() -> bool:
+def dashboard_web_search_required() -> bool:
     """Return True when the run must fail if web grounding is unavailable."""
     return env_lookup(WEB_SEARCH).strip().lower() in (
         "required",
@@ -74,13 +74,13 @@ def _domains_for(segment: str, cfg: dict[str, Any]) -> list[str] | None:
 
 
 def _openrouter_web_search(model: str, query: str) -> tuple[str, list[str]] | None:
-    """Olympus grounding dispatch — native search models only (no Exa params)."""
+    """dashboard grounding dispatch — native search models only (no Exa params)."""
     if not model.startswith("openrouter/"):
         return None
     from digigraph.llm_client import openrouter_web_search
 
     # Do not pass engine=/max_results=/allowed_domains= — those only apply to the
-    # digillm Exa toolkit branch, which Olympus must not use (#2567).
+    # digillm Exa toolkit branch, which dashboard must not use (#2567).
     return openrouter_web_search(model, query)
 
 
@@ -101,15 +101,15 @@ def fetch_web_grounding(
         focus = (f"{scope} Prefer sources among: {', '.join(allowed)}.").strip()
     result = _openrouter_web_search(model, _build_query(segment, run_date, focus))
     if result is None:
-        if olympus_web_search_required():
-            raise OlympusWebSearchError(
+        if dashboard_web_search_required():
+            raise DashboardWebSearchError(
                 f"OLYMPUS_WEB_SEARCH=required but web search returned no results for {segment!r}"
             )
         return None
     summary, sources = result
     if not summary.strip():
-        if olympus_web_search_required():
-            raise OlympusWebSearchError(
+        if dashboard_web_search_required():
+            raise DashboardWebSearchError(
                 f"OLYMPUS_WEB_SEARCH=required but web search returned empty text for {segment!r}"
             )
         return None

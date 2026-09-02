@@ -109,34 +109,34 @@ FORBIDDEN_PHASE2_NODES = frozenset(
     }
 )
 
-HERMES_COMPILED_NODES = frozenset(
+PORTFOLIO_COMPILED_NODES = frozenset(
     {
-        "hermes/thesis/market-review",
-        "hermes/thesis/market-exploration",
-        "hermes/thesis/vehicle-map",
-        "hermes/thesis/opportunity-screener",
-        "hermes/portfolio/asset-analyst-worker",
-        "hermes/portfolio/deliberation-worker",
-        "hermes/portfolio/pm-direction",
-        "hermes/portfolio/risk-sizing",
-        "hermes/portfolio/commit-run",
+        "portfolio/thesis/market-review",
+        "portfolio/thesis/market-exploration",
+        "portfolio/thesis/vehicle-map",
+        "portfolio/thesis/opportunity-screener",
+        "portfolio/asset-analyst-worker",
+        "portfolio/deliberation-worker",
+        "portfolio/pm-direction",
+        "portfolio/risk-sizing",
+        "portfolio/commit-run",
     }
 )
 
 PRODUCTION_GUARD_PATHS = (
-    _REPO / "digiquant/src/digiquant/olympus/hermes/chain.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/phase7e_risk_sizing.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",
+    _REPO / "digiquant/src/digiquant/portfolio/chain.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+    _REPO / "digiquant/src/digiquant/portfolio/shadow_artifact.py",
 )
 
 CHALLENGER_MODULE_FRAGMENTS = frozenset(
     {
         "shadow_optimizer",
         "allocation_comparison",
-        "olympus.replay",
-        "olympus.replay.worker",
-        "olympus.replay.nautilus_portfolio",
+        "dashboard.replay",
+        "dashboard.replay.worker",
+        "dashboard.replay.nautilus_portfolio",
     }
 )
 
@@ -435,7 +435,7 @@ def phase2_comparison_report(
 ):
     """Paired incumbent/challenger comparison under a shared observed manifest."""
     criteria = load_shadow_criteria(
-        _REPO / "digiquant/src/digiquant/olympus/replay/shadow_criteria/v1.json"
+        _REPO / "digiquant/src/digiquant/dashboard/replay/shadow_criteria/v1.json"
     )
     inc_req = phase2_replay_request(request_id="inc-phase2")
     ch_req = phase2_replay_request(request_id="ch-phase2")
@@ -516,7 +516,7 @@ __all__ = [
     "CHALLENGER_MODULE_FRAGMENTS",
     "ComparisonStatus",
     "FORBIDDEN_PHASE2_NODES",
-    "HERMES_COMPILED_NODES",
+    "PORTFOLIO_COMPILED_NODES",
     "PHASE2_RUN_ID",
     "PHASE2_SESSION",
     "PRODUCTION_GUARD_PATHS",

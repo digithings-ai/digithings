@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Rebalance Decision",
+  "title": "digiquant-research Rebalance Decision",
   "description": "Portfolio manager decision artifact. JSON source of truth; used to materialize trade actions and proposed portfolio.",
   "type": "object",
   "additionalProperties": false,

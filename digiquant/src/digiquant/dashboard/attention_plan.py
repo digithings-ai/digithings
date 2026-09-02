@@ -29,7 +29,7 @@ from digiquant.dashboard.profile_config import (
     profile_config_version_id,
 )
 
-_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.attention_plan")
+_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.attention_plan")
 
 PlannerMode = Literal["off", "shadow"]
 AttentionAction = Literal["carry", "section_refresh", "deep_refresh"]

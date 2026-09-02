@@ -1,7 +1,7 @@
-"""Where a content freeze becomes visible (#1749, #1751) — the Atlas-side surfaces.
+"""Where a content freeze becomes visible (#1749, #1751) — the research-side surfaces.
 
 Split from ``tests/dq/dashboard/test_content_freeze_provenance.py``, which holds the pure
-``edit_mode`` half. These tests import Atlas phases, which pull ``digigraph`` →
+``edit_mode`` half. These tests import research phases, which pull ``digigraph`` →
 ``openai``, so they must live here: ``tests/dq/research/conftest.py`` gates collection on
 ``digigraph`` being importable, and the ``digiquant`` CI lane installs only
 ``digiquant[dev]``. A test importing ``_node_factory`` from ``tests/dq/dashboard/`` is a
@@ -23,7 +23,7 @@ from digiquant.research.phases._node_factory import EditSegmentResult, _delta_ro
 from digiquant.research.phases.phase7_synthesis import _slot_freshness
 from digiquant.research.snapshot import SegmentFreshness as ReadPathFreshness
 from digiquant.research.snapshot import SnapshotEnvelope
-from digiquant.research.state import AtlasResearchState, Carried, SegmentPayload
+from digiquant.research.state import ResearchState, Carried, SegmentPayload
 from digiquant.research.telemetry import CONTENT_FREEZE_KEY, content_freeze_breakdown
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.dashboard.edit_mode.content_identity import UNCHANGED_FLAG_KEY, UNCHANGED_SINCE_KEY
@@ -58,7 +58,7 @@ def _patch(ops: list[PatchOp]) -> DocumentPatch:
 
 @pytest.mark.unit
 class TestFreshnessBadge:
-    """#1749's badge half — the surface an Olympus user actually reads."""
+    """#1749's badge half — the surface an dashboard user actually reads."""
 
     def _payload(self, body: dict[str, object]) -> SegmentPayload:
         return SegmentPayload(segment="sector-healthcare", body=body, as_of=date(2026, 7, 31))
@@ -95,7 +95,7 @@ class TestReadPathAcceptsFrozen:
     """The hard coupling, and the one failure mode that would break reads of every row
     written after deploy.
 
-    ``atlas/snapshot.py`` is the READ-path validator and both it and ``DigestPayload`` are
+    ``research/snapshot.py`` is the READ-path validator and both it and ``DigestPayload`` are
     ``extra="forbid"``. A ``source`` value the writer emits but that ``Literal`` omits is a
     ValidationError every time the row is read back — not a soft ignore — so the writer's
     model and this one have to widen in the same change.
@@ -144,7 +144,7 @@ class TestFreezeTelemetry:
     def test_breakdown_reports_count_and_freeze_dates(self) -> None:
         """Values are the freeze DATES, not just a flag, so the row shows how long each
         segment has been stuck rather than merely that it is."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 7, 31),
             content_freezes={
@@ -158,14 +158,14 @@ class TestFreezeTelemetry:
 
     def test_no_key_when_nothing_froze(self) -> None:
         """Matches ``merge_fallback`` and ``circuit_breaker_skips``: absent, not zero."""
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 7, 31))
+        state = ResearchState(run_type="delta", run_date=date(2026, 7, 31))
         assert content_freeze_breakdown(state) == {}
 
     def test_a_checkpoint_written_before_this_field_existed_still_validates(self) -> None:
         """``chain.py`` resumes from a postgres checkpoint, so the first retry after deploy
         rehydrates a state dict with no ``content_freezes`` key. It must default, not raise."""
         pre_deploy = {"run_type": "delta", "run_date": "2026-07-31"}
-        state = AtlasResearchState.model_validate(pre_deploy)
+        state = ResearchState.model_validate(pre_deploy)
         assert state.content_freezes == {}
         assert content_freeze_breakdown(state) == {}
 

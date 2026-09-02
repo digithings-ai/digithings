@@ -18,7 +18,7 @@ from digiquant.research.cost_liquidity_registry import (
 )
 from digiquant.research.forecast_registry import persist_forecast_lineage_from_state
 from digiquant.research.risk_policy_registry import persist_h8_risk_snapshots_from_state
-from digiquant.research.state import PhaseError, PhaseHermesState
+from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.h9_cost_evidence import (
     build_cost_bundles_for_commit,
@@ -26,7 +26,7 @@ from digiquant.portfolio.h9_cost_evidence import (
 )
 from digiquant.portfolio.payloads import sized_book
 from digiquant.portfolio.sizing_events import SizingAdjustment
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.commit_io import (
     PreTradeRiskMode,
     book_portfolio,
@@ -35,7 +35,7 @@ from digiquant.portfolio.writers.commit_io import (
     manifest_commit_seq,
     persist_decision_log,
     persist_validated_pretrade_risk_report,
-    publish_hermes_documents,
+    publish_portfolio_documents,
     publish_portfolio_brief,
     resolve_prior_commit,
     save_commit_manifest,
@@ -47,8 +47,8 @@ from digiquant.portfolio.writers.ledger_io import LedgerAppend, append_commit_ch
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/portfolio/commit-run"
-PHASE_NAME = "hermes_h9_commit_run"
+NODE_ID = "portfolio/commit-run"
+PHASE_NAME = "portfolio_h9_commit_run"
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ def _phase_error(message: str) -> dict[str, Any]:
     }
 
 
-def _persist_risk_policy_registry(*, client: SupabaseClient, state: HermesState) -> dict[str, Any]:
+def _persist_risk_policy_registry(*, client: SupabaseClient, state: PortfolioState) -> dict[str, Any]:
     """Fail-soft H8 risk snapshot registry (#2698). Never raises into booking."""
     try:
         result = persist_h8_risk_snapshots_from_state(client=client, state=state)
@@ -105,7 +105,7 @@ def _persist_risk_policy_registry(*, client: SupabaseClient, state: HermesState)
 def _persist_cost_liquidity_registry(
     *,
     client: SupabaseClient,
-    state: HermesState,
+    state: PortfolioState,
     ledger: LedgerAppend | None,
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
     """Fail-soft action cost registry (#2709). Never raises into booking."""
@@ -186,7 +186,7 @@ def _persist_cost_liquidity_registry(
     )
 
 
-def _persist_forecast_registry(*, client: SupabaseClient, state: HermesState) -> dict[str, Any]:
+def _persist_forecast_registry(*, client: SupabaseClient, state: PortfolioState) -> dict[str, Any]:
     """Fail-soft prospective forecast lineage (#2663). Never raises into booking."""
     try:
         result = persist_forecast_lineage_from_state(client=client, state=state)
@@ -294,10 +294,10 @@ def _manifest_payload(
 def build_commit_run_node(deps: CommitRunDeps):
     """Return the H9 commit node bound to ``deps``."""
 
-    def commit_run(state: HermesState) -> dict[str, Any]:
+    def commit_run(state: PortfolioState) -> dict[str, Any]:
         book = sized_book(state)
         if book is None:
-            if state.phase_hermes.pm_direction_memo is not None:
+            if state.phase_portfolio.pm_direction_memo is not None:
                 return _phase_error(
                     "sized_book missing but H7 pm_direction_memo present — H8 risk sizing required"
                 )
@@ -363,7 +363,7 @@ def build_commit_run_node(deps: CommitRunDeps):
                 cost_liquidity_registry=cost_registry,
                 pretrade_risk_registry=pretrade_registry,
             )
-            return {"phase_hermes": PhaseHermesState(commit_manifest=manifest)}
+            return {"phase_portfolio": PhasePortfolioState(commit_manifest=manifest)}
 
         # A same-date commit with a DIFFERENT book reconciles last-writer-wins rather
         # than raising: 2026-06-24 carries three manifests with three fingerprints, so
@@ -394,7 +394,7 @@ def build_commit_run_node(deps: CommitRunDeps):
         registry = _persist_forecast_registry(client=deps.client, state=state)
         risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
         brief = publish_portfolio_brief(client=deps.client, state=state, book=book)
-        hermes_docs = publish_hermes_documents(client=deps.client, state=state)
+        portfolio_docs = publish_portfolio_documents(client=deps.client, state=state)
         n_decisions = persist_decision_log(client=deps.client, state=state)
 
         # Before ``save_commit_manifest``, deliberately. The manifest is what the next
@@ -462,14 +462,14 @@ def build_commit_run_node(deps: CommitRunDeps):
             cost_registry.get("cost_liquidity_registry_status"),
             pretrade_registry.get("pretrade_risk_registry_status"),
         )
-        phase_hermes = PhaseHermesState(
+        phase_portfolio = PhasePortfolioState(
             commit_manifest=manifest,
             liquidity_snapshots=cost_snapshots,
             action_cost_estimates=cost_estimates,
         )
         return {
-            "phase_hermes": phase_hermes,
-            "published": [brief, *hermes_docs],
+            "phase_portfolio": phase_portfolio,
+            "published": [brief, *portfolio_docs],
         }
 
     return commit_run
@@ -478,7 +478,7 @@ def build_commit_run_node(deps: CommitRunDeps):
 def build_h9_commit_run(deps: CommitRunDeps | None = None) -> PipelinePhase:
     """Wrap H9 into a single-node ``PipelinePhase``."""
 
-    def _noop(_state: HermesState) -> dict[str, Any]:
+    def _noop(_state: PortfolioState) -> dict[str, Any]:
         return {}
 
     node = build_commit_run_node(deps) if deps is not None else _noop

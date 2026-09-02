@@ -108,7 +108,7 @@ def _node(run_id: str = "gha-1", **over: Any) -> NodeRunRecord:
         **{
             "node_run_id": uuid4(),
             "run_id": run_id,
-            "node_name": "hermes/analyst",
+            "node_name": "portfolio/analyst",
             "outcome": NodeRunOutcome.SUCCEEDED,
             "started_at": START,
             "finished_at": END,
@@ -745,7 +745,7 @@ def test_artifacts_serialize_as_a_jsonb_array_of_references() -> None:
 
 
 def test_the_fanout_key_survives_to_the_row() -> None:
-    """Task 1.4's per-ticker discriminator is the join Olympus reads cost-by-name from."""
+    """Task 1.4's per-ticker discriminator is the join dashboard reads cost-by-name from."""
     client = _Client()
     _flush(client, node_runs=[_node(fanout_key="NVDA")])
     assert client.rows(pt.NODE_RUNS_TABLE)[0]["fanout_key"] == "NVDA"

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Pipeline Review",
+  "title": "digiquant-research Pipeline Review",
   "description": "Post-mortem review for Track A (research) or Track B (portfolio); may sync findings to GitHub Issues.",
   "type": "object",
   "additionalProperties": false,

@@ -6,7 +6,7 @@
 #            slug here (OpenRouter free roster rotates).
 #   test / medium / best → tier semantics; defaults below are local-dev fallbacks.
 #
-# Atlas/Hermes phase routing is centralized in config/digiquant_models.yaml
+# research/portfolio phase routing is centralized in config/digiquant_models.yaml
 # (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when
 # you need to pin a model for a single phase — frontier models (openai/*, anthropic/*,
 # GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime; see model_config.py.
@@ -31,8 +31,8 @@ phase_models:
   # tickers that hashed onto it failed json.loads at char 0 (DeliberationPmTurn /
   # DeliberationAnalystTurn). deepseek-v4-flash is the json/tool-reliable open-weight
   # model already in the pool; the trailing '-' makes this a prefix match for every
-  # per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
-  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash
+  # per-ticker slug (portfolio/deliberation-{ticker}) emitted by h6_deliberation.
+  portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash
   # #1559/#1622: pin Phase-7 master-digest. First pinned to deepseek-chat when the
   # ``reasoning`` pool hash landed on deepseek-r1, whose chain-of-thought output is not
   # reliably strict JSON (2026-07-18 delta digest JSONDecodeError → prior digest carried).

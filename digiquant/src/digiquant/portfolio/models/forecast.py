@@ -1,4 +1,4 @@
-"""Strict typed forecast contracts for Hermes H5+ (#2637 / WP4.2).
+"""Strict typed forecast contracts for portfolio H5+ (#2637 / WP4.2).
 
 Separates LLM-proposed economics (:class:`ForecastTerms`) from deterministic
 identity and audit metadata (:class:`ForecastAssessment`). Legacy

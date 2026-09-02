@@ -10,9 +10,9 @@ from datetime import date
 
 import pytest
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
 )
 from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
@@ -24,9 +24,9 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import (
 from digiquant.portfolio.sizing import SizingCaps, TickerRisk, size_portfolio
 from digiquant.portfolio.skills import load_skill_full
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
-from tests.dq.hermes.test_calibrated_sizing import _bundle
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+from tests.dq.portfolio.test_calibrated_sizing import _bundle
 
 pytestmark = pytest.mark.unit
 
@@ -244,11 +244,11 @@ def _run_h8_with_memo(
         "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=_SESSION,
         baseline_date=date(2026, 8, 28),
-        config=AtlasConfigBundle(
+        config=ResearchConfigBundle(
             preferences={
                 "max_single_etf_pct": 100,
                 "max_sector_pct": 100,
@@ -257,7 +257,7 @@ def _run_h8_with_memo(
                 "h8_sizing_input_mode": "calibrated",
             }
         ),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             pm_direction_memo=PMDirectionMemo(date=_SESSION, roster=roster, memo="m")
         ),
     )
@@ -270,7 +270,7 @@ def _run_h8_with_memo(
         }
     )
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    book = out["phase_hermes"].sized_book
+    book = out["phase_portfolio"].sized_book
     assert book is not None
     return {row["ticker"]: row["target_pct"] for row in book["recommended_portfolio"]}
 

@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
@@ -76,13 +76,13 @@ def _effective(
     )
 
 
-def _state(*, deliberation: dict | None = None) -> AtlasResearchState:
-    return AtlasResearchState(
+def _state(*, deliberation: dict | None = None) -> ResearchState:
+    return ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
         prior_context=PriorContext(),
-        phase_hermes=PhaseHermesState(deliberation_summaries=deliberation or {}),
+        phase_portfolio=PhasePortfolioState(deliberation_summaries=deliberation or {}),
     )
 
 
@@ -183,7 +183,7 @@ class TestH7SuccessPathBinding:
         ):
             out = _h7_node(state)
 
-        memo = out["phase_hermes"].pm_direction_memo
+        memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None
         assert memo.date == RUN_DATE
         row = memo.roster[0]

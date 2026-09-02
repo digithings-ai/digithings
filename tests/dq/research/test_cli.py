@@ -1,9 +1,9 @@
-"""Argparse smoke tests for the Atlas CLI.
+"""Argparse smoke tests for the research CLI.
 
 The GitHub Actions schedulers invoke this CLI; these tests protect the
 flag contract. Heavy behavior (graph compilation, Supabase calls) is
 covered elsewhere — here we only assert that flags parse + resolve into
-the right ``AtlasInput`` kwargs.
+the right ``ResearchInput`` kwargs.
 """
 
 from __future__ import annotations
@@ -223,21 +223,21 @@ def test_make_default_config_loader_returns_callable():
 
 def test_make_default_config_loader_cli_watchlist_takes_priority():
     from digiquant.research.graph import _make_default_config_loader
-    from digiquant.research.state import AtlasConfigBundle
+    from digiquant.research.state import ResearchConfigBundle
 
     loader = _make_default_config_loader(("AAPL", "MSFT"))
     result = loader()
-    assert isinstance(result, AtlasConfigBundle)
+    assert isinstance(result, ResearchConfigBundle)
     assert result.watchlist == ["AAPL", "MSFT"]
 
 
 def test_make_default_config_loader_reads_watchlist_md_when_no_cli():
     from digiquant.research.graph import _make_default_config_loader
-    from digiquant.research.state import AtlasConfigBundle
+    from digiquant.research.state import ResearchConfigBundle
 
     loader = _make_default_config_loader(())
     result = loader()
-    assert isinstance(result, AtlasConfigBundle)
+    assert isinstance(result, ResearchConfigBundle)
     assert "SPY" in result.watchlist
 
 
@@ -266,7 +266,7 @@ def test_parse_macro_series_yaml_nonempty():
 def test_parse_watchlist_md_missing_file(tmp_path, monkeypatch):
     import digiquant.research.graph as gmod
 
-    monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
+    monkeypatch.setattr(gmod, "_research_config_root", lambda: tmp_path)
     from digiquant.research.graph import _parse_watchlist_md
 
     assert _parse_watchlist_md() == []
@@ -275,7 +275,7 @@ def test_parse_watchlist_md_missing_file(tmp_path, monkeypatch):
 def test_parse_macro_series_yaml_missing_file(tmp_path, monkeypatch):
     import digiquant.research.graph as gmod
 
-    monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
+    monkeypatch.setattr(gmod, "_research_config_root", lambda: tmp_path)
     from digiquant.research.graph import _parse_macro_series_yaml
 
     assert _parse_macro_series_yaml() == []

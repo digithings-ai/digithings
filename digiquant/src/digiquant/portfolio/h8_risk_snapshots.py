@@ -14,7 +14,7 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     PolicyArtifactStatus,
@@ -40,7 +40,7 @@ class H8RiskArtifacts:
     covariance_snapshot: CovarianceSnapshot
 
 
-def _h8_effective_at(state: AtlasResearchState) -> datetime:
+def _h8_effective_at(state: ResearchState) -> datetime:
     cutoff = state.knowledge_cutoff_at
     if cutoff is not None:
         return require_utc_datetime(cutoff, field_name="knowledge_cutoff_at")
@@ -95,7 +95,7 @@ def _restamp_snapshot_unavailable(
 
 def _fail_closed_artifacts(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     pm_tickers: list[str],
     reason: str,
 ) -> H8RiskArtifacts:
@@ -122,7 +122,7 @@ def _fail_closed_artifacts(
 
 def resolve_h8_risk_artifacts(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     pm_tickers: list[str],
     corr: pl.DataFrame | None,
     observation_count: int | None = None,

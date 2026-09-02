@@ -1,9 +1,9 @@
-"""Unit tests for Atlas research-document ingest into digisearch.
+"""Unit tests for research-document ingest into digisearch.
 
 Validates the contract surfaced by ``digisearch.research_ingest`` and the
 ``search_strategies`` MCP tool: chunks land in the configured index with
 filterable metadata, repeats are idempotent, and the MCP tool returns typed
-hits filtered by Atlas-specific structured clauses.
+hits filtered by research-specific structured clauses.
 
 Tests stay backend-free — they rely on the in-memory stub gated by
 ``DIGISEARCH_ALLOW_STUB=1`` (set by ``tests/conftest.py``).
@@ -15,11 +15,11 @@ from datetime import date
 
 import pytest
 from digisearch.research_ingest import (
-    ATLAS_INDEX_NAME,
+    RESEARCH_INDEX_NAME,
     IndexedDocument,
-    fetch_atlas_row,
-    ingest_atlas_document,
-    ingest_atlas_payload,
+    fetch_research_row,
+    ingest_research_document,
+    ingest_research_payload,
 )
 from digisearch.research_search import search_strategies
 from digisearch.core.models import Query
@@ -28,22 +28,22 @@ from digisearch.search._stub import _stub_index
 
 
 @pytest.fixture(autouse=True)
-def _isolate_atlas_index(monkeypatch: pytest.MonkeyPatch) -> None:
+def _isolate_research_index(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use a per-test stub index so concurrent tests cannot interfere.
 
-    ``ATLAS_INDEX_NAME`` is module-evaluated from the env once per process;
+    ``RESEARCH_INDEX_NAME`` is module-evaluated from the env once per process;
     we clear and restore the matching slot in ``_stub_index`` around each
     test. Force ``DIGISEARCH_CHUNKER=token`` so these unit tests use
     Chonkie TokenChunker (character tokenizer) without downloading the
     semantic embedding model.
     """
     monkeypatch.setenv("DIGISEARCH_CHUNKER", "token")
-    _stub_index.pop(ATLAS_INDEX_NAME, None)
+    _stub_index.pop(RESEARCH_INDEX_NAME, None)
     yield
-    _stub_index.pop(ATLAS_INDEX_NAME, None)
+    _stub_index.pop(RESEARCH_INDEX_NAME, None)
 
 
-def _make_atlas_row(
+def _make_research_row(
     *,
     document_key: str = "technology",
     iso_date: str = "2026-04-21",
@@ -71,24 +71,24 @@ def _make_atlas_row(
 
 
 @pytest.mark.unit
-def test_ingest_atlas_document_creates_chunks() -> None:
-    """ingest_atlas_payload chunks the row and stamps Atlas metadata on each chunk."""
-    row = _make_atlas_row(
+def test_ingest_research_document_creates_chunks() -> None:
+    """ingest_research_payload chunks the row and stamps research metadata on each chunk."""
+    row = _make_research_row(
         content=(
             "Tech sector momentum remains positive heading into Q2 earnings. "
             "Mean-reversion signals are weak; trend followers dominate. " * 4
         )
     )
 
-    result = ingest_atlas_payload(row)
+    result = ingest_research_payload(row)
 
     assert isinstance(result, IndexedDocument)
     assert result.chunks_created >= 1
     assert result.document_key == "technology"
     assert result.date == "2026-04-21"
-    assert result.index_name == ATLAS_INDEX_NAME
+    assert result.index_name == RESEARCH_INDEX_NAME
 
-    chunks = _stub_index[ATLAS_INDEX_NAME]
+    chunks = _stub_index[RESEARCH_INDEX_NAME]
     assert len(chunks) == result.chunks_created
     first = chunks[0]
     assert first.metadata["doc_type"] == "Daily Digest"
@@ -103,9 +103,9 @@ def test_ingest_atlas_document_creates_chunks() -> None:
 @pytest.mark.unit
 def test_ingest_falls_back_to_payload_json_when_content_missing() -> None:
     """When the row has no markdown content, payload JSON becomes the chunk text."""
-    row = _make_atlas_row(content=None, payload={"bias": "long", "asset_class": "equities"})
-    result = ingest_atlas_payload(row)
-    chunks = _stub_index[ATLAS_INDEX_NAME]
+    row = _make_research_row(content=None, payload={"bias": "long", "asset_class": "equities"})
+    result = ingest_research_payload(row)
+    chunks = _stub_index[RESEARCH_INDEX_NAME]
     assert chunks
     # JSON dump is sorted-key for stable cache hits — both keys must appear.
     assert "asset_class" in chunks[0].content
@@ -116,14 +116,14 @@ def test_ingest_falls_back_to_payload_json_when_content_missing() -> None:
 @pytest.mark.unit
 def test_metadata_filter_by_date_range() -> None:
     """Range filter on date_ordinal returns only docs in the window."""
-    ingest_atlas_payload(
-        _make_atlas_row(document_key="tech-old", iso_date="2026-04-15", content="old tech research")
+    ingest_research_payload(
+        _make_research_row(document_key="tech-old", iso_date="2026-04-15", content="old tech research")
     )
-    ingest_atlas_payload(
-        _make_atlas_row(document_key="tech-new", iso_date="2026-04-25", content="new tech research")
+    ingest_research_payload(
+        _make_research_row(document_key="tech-new", iso_date="2026-04-25", content="new tech research")
     )
-    ingest_atlas_payload(
-        _make_atlas_row(
+    ingest_research_payload(
+        _make_research_row(
             document_key="tech-newest", iso_date="2026-04-26", content="newest tech research"
         )
     )
@@ -133,7 +133,7 @@ def test_metadata_filter_by_date_range() -> None:
         top_k=10,
         filters={"structured": [{"field": "date_ordinal", "op": "ge", "value": 20260420}]},
     )
-    resp = query_index(q, index_name=ATLAS_INDEX_NAME)
+    resp = query_index(q, index_name=RESEARCH_INDEX_NAME)
     keys = {r.chunk.metadata["document_key"] for r in resp.results}
     assert "tech-new" in keys
     assert "tech-newest" in keys
@@ -143,11 +143,11 @@ def test_metadata_filter_by_date_range() -> None:
 @pytest.mark.unit
 def test_metadata_filter_by_doc_type() -> None:
     """Equality filter on doc_type returns only the matching doc_type."""
-    ingest_atlas_payload(
-        _make_atlas_row(document_key="digest-row", doc_type="Daily Digest", content="digest body")
+    ingest_research_payload(
+        _make_research_row(document_key="digest-row", doc_type="Daily Digest", content="digest body")
     )
-    ingest_atlas_payload(
-        _make_atlas_row(document_key="delta-row", doc_type="Daily Delta", content="delta body")
+    ingest_research_payload(
+        _make_research_row(document_key="delta-row", doc_type="Daily Delta", content="delta body")
     )
 
     q = Query(
@@ -155,7 +155,7 @@ def test_metadata_filter_by_doc_type() -> None:
         top_k=10,
         filters={"structured": [{"field": "doc_type", "op": "eq", "value": "Daily Digest"}]},
     )
-    resp = query_index(q, index_name=ATLAS_INDEX_NAME)
+    resp = query_index(q, index_name=RESEARCH_INDEX_NAME)
     assert resp.results
     for hit in resp.results:
         assert hit.chunk.metadata["doc_type"] == "Daily Digest"
@@ -164,16 +164,16 @@ def test_metadata_filter_by_doc_type() -> None:
 @pytest.mark.unit
 def test_metadata_filter_by_sector() -> None:
     """Equality filter on sector returns only the matching ticker analyst doc."""
-    ingest_atlas_payload(
-        _make_atlas_row(
+    ingest_research_payload(
+        _make_research_row(
             document_key="analyst/AAPL",
             segment="analyst",
             sector="AAPL",
             content="aapl analyst note",
         )
     )
-    ingest_atlas_payload(
-        _make_atlas_row(
+    ingest_research_payload(
+        _make_research_row(
             document_key="analyst/MSFT",
             segment="analyst",
             sector="MSFT",
@@ -186,7 +186,7 @@ def test_metadata_filter_by_sector() -> None:
         top_k=10,
         filters={"structured": [{"field": "sector", "op": "eq", "value": "AAPL"}]},
     )
-    resp = query_index(q, index_name=ATLAS_INDEX_NAME)
+    resp = query_index(q, index_name=RESEARCH_INDEX_NAME)
     assert resp.results
     for hit in resp.results:
         assert hit.chunk.metadata["sector"] == "AAPL"
@@ -195,7 +195,7 @@ def test_metadata_filter_by_sector() -> None:
 @pytest.mark.unit
 def test_search_strategies_mcp_tool_returns_typed_results() -> None:
     """The MCP tool returns the documented dict shape for downstream agents."""
-    ingest_atlas_payload(_make_atlas_row(content="Crude oil bullish bias on supply tightness."))
+    ingest_research_payload(_make_research_row(content="Crude oil bullish bias on supply tightness."))
     hits = search_strategies(query="bullish bias", top_k=5)
     assert isinstance(hits, list)
     assert hits, "expected at least one hit for the seeded chunk"
@@ -212,14 +212,14 @@ def test_search_strategies_mcp_tool_returns_typed_results() -> None:
         assert isinstance(hit["doc_id"], str)
         assert isinstance(hit["score"], float)
         assert isinstance(hit["content_length"], int)
-        assert hit["metadata"]["source"] == "atlas"
+        assert hit["metadata"]["source"] == "research"
 
 
 @pytest.mark.unit
 def test_search_strategies_filters_by_run_type_and_date_range() -> None:
     """The MCP tool wires its keyword args into structured filters."""
-    ingest_atlas_payload(
-        _make_atlas_row(
+    ingest_research_payload(
+        _make_research_row(
             document_key="energy-baseline",
             iso_date="2026-04-22",
             run_type="baseline",
@@ -227,8 +227,8 @@ def test_search_strategies_filters_by_run_type_and_date_range() -> None:
             content="Energy baseline thesis",
         )
     )
-    ingest_atlas_payload(
-        _make_atlas_row(
+    ingest_research_payload(
+        _make_research_row(
             document_key="energy-delta",
             iso_date="2026-04-22",
             run_type="delta",
@@ -252,31 +252,31 @@ def test_search_strategies_filters_by_run_type_and_date_range() -> None:
 @pytest.mark.unit
 def test_idempotent_reingest_replaces_chunks() -> None:
     """Re-ingesting the same (date, document_key) row replaces — does not append."""
-    row = _make_atlas_row(content="First version of the technology digest body.")
-    first = ingest_atlas_payload(row)
-    chunk_count_after_first = len(_stub_index[ATLAS_INDEX_NAME])
+    row = _make_research_row(content="First version of the technology digest body.")
+    first = ingest_research_payload(row)
+    chunk_count_after_first = len(_stub_index[RESEARCH_INDEX_NAME])
 
     # Same row replayed → same chunk ids → upsert by replacement.
-    second = ingest_atlas_payload(row)
+    second = ingest_research_payload(row)
     assert second.doc_id == first.doc_id
-    assert len(_stub_index[ATLAS_INDEX_NAME]) == chunk_count_after_first
+    assert len(_stub_index[RESEARCH_INDEX_NAME]) == chunk_count_after_first
 
     # Same row but different content → still same doc_id, still no duplicates.
-    updated_row = _make_atlas_row(content="Second version with more detail. " * 8)
-    third = ingest_atlas_payload(updated_row)
+    updated_row = _make_research_row(content="Second version with more detail. " * 8)
+    third = ingest_research_payload(updated_row)
     assert third.doc_id == first.doc_id
-    chunks = _stub_index[ATLAS_INDEX_NAME]
+    chunks = _stub_index[RESEARCH_INDEX_NAME]
     # All chunks should belong to the single doc_id.
     assert {c.doc_id for c in chunks} == {first.doc_id}
 
 
 @pytest.mark.unit
-def test_ingest_atlas_payload_requires_natural_key() -> None:
+def test_ingest_research_payload_requires_natural_key() -> None:
     """Missing (date, document_key) raises before any side-effect."""
     with pytest.raises(ValueError):
-        ingest_atlas_payload({"date": "", "document_key": ""})
+        ingest_research_payload({"date": "", "document_key": ""})
     with pytest.raises(ValueError):
-        ingest_atlas_payload({"document_key": "x"})
+        ingest_research_payload({"document_key": "x"})
 
 
 # --- Supabase-aware path: in-memory fake client ---------------------------------
@@ -321,24 +321,24 @@ class _FakeSupabase:
 
 
 @pytest.mark.unit
-def test_fetch_atlas_row_filters_by_natural_key() -> None:
-    """fetch_atlas_row narrows by (date, document_key); returns None when absent."""
+def test_fetch_research_row_filters_by_natural_key() -> None:
+    """fetch_research_row narrows by (date, document_key); returns None when absent."""
     rows = [
-        _make_atlas_row(document_key="technology", iso_date="2026-04-21"),
-        _make_atlas_row(document_key="energy", iso_date="2026-04-21"),
+        _make_research_row(document_key="technology", iso_date="2026-04-21"),
+        _make_research_row(document_key="energy", iso_date="2026-04-21"),
     ]
     client = _FakeSupabase(rows)
-    found = fetch_atlas_row(client, "2026-04-21", "energy")
+    found = fetch_research_row(client, "2026-04-21", "energy")
     assert found is not None
     assert found["document_key"] == "energy"
-    assert fetch_atlas_row(client, date(2026, 4, 21), "missing-key") is None
+    assert fetch_research_row(client, date(2026, 4, 21), "missing-key") is None
 
 
 @pytest.mark.unit
-def test_ingest_atlas_document_via_client_then_search() -> None:
+def test_ingest_research_document_via_client_then_search() -> None:
     """End-to-end: fetch via fake Supabase → ingest → MCP search returns the doc."""
     rows = [
-        _make_atlas_row(
+        _make_research_row(
             document_key="macro",
             iso_date="2026-04-21",
             doc_type=None,
@@ -348,7 +348,7 @@ def test_ingest_atlas_document_via_client_then_search() -> None:
     ]
     client = _FakeSupabase(rows)
 
-    result = ingest_atlas_document(client, "2026-04-21", "macro")
+    result = ingest_research_document(client, "2026-04-21", "macro")
     assert result is not None
     assert result.document_key == "macro"
     assert result.chunks_created >= 1
@@ -364,9 +364,9 @@ def test_ingest_atlas_document_via_client_then_search() -> None:
 
 
 @pytest.mark.unit
-def test_ingest_atlas_document_returns_none_when_row_missing() -> None:
+def test_ingest_research_document_returns_none_when_row_missing() -> None:
     """Late triggers / publish failures → the indexer skips, doesn't raise."""
     client = _FakeSupabase(rows=[])
-    assert ingest_atlas_document(client, "2026-04-21", "missing-doc") is None
+    assert ingest_research_document(client, "2026-04-21", "missing-doc") is None
     # Index stays empty.
-    assert not _stub_index.get(ATLAS_INDEX_NAME)
+    assert not _stub_index.get(RESEARCH_INDEX_NAME)

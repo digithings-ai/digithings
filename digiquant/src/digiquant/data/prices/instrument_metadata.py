@@ -1,4 +1,4 @@
-"""Yahoo instrument metadata adapter for the canonical Olympus security master."""
+"""Yahoo instrument metadata adapter for the canonical dashboard security master."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def fetch_instrument_metadata(
                 instrument_type="CASH",
                 asset_class="CASH",
                 category="cash",
-                provider="olympus",
+                provider="dashboard",
                 provider_metadata={"resolution": "canonical"},
                 source_updated_at=datetime.now(timezone.utc),
             )

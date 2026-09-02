@@ -1,4 +1,4 @@
-"""Deterministic turnover / min-hold discipline for Hermes rebalance (#859 Phase D).
+"""Deterministic turnover / min-hold discipline for portfolio rebalance (#859 Phase D).
 
 Also hosts the mark-to-market drift + rebalancing-cadence logic (#955): the sizer's
 no-trade band must compare today's targets against the *drifted* current book, and a

@@ -1,6 +1,6 @@
 # Repository inventory (complete accounting)
 
-**Purpose:** Account for **every intentional path** in **digiquant-atlas** before digithings migration — what ships, what is local-only, and what must never be committed.
+**Purpose:** Account for **every intentional path** in **digiquant-research** before digithings migration — what ships, what is local-only, and what must never be committed.
 
 **Scope:** **Git-tracked** content (source of truth: `git ls-files`). **Gitignored** paths are listed separately with expected role.
 
@@ -94,7 +94,7 @@ One folder per slug; each has **`SKILL.md`** (or `README.md` for orchestrator/po
 
 | Item | Role |
 |------|------|
-| `PROJECT.md`, `PROJECT-PROMPT.md`, `README.md`, `SETUP-ATLAS-COWORK.md` | Operator briefing |
+| `PROJECT.md`, `PROJECT-PROMPT.md`, `README.md`, `SETUP-RESEARCH-COWORK.md` | Operator briefing |
 | `OPERATOR-COWORK.md`, `.example.md` | Local operator copies |
 | `tasks/*.md` | Modular scheduled/ad-hoc tasks (see `tasks/README.md`) |
 

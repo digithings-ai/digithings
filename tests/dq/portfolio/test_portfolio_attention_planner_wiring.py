@@ -1,4 +1,4 @@
-"""WP13.4 — Hermes research attention planner wiring (#2930)."""
+"""WP13.4 — portfolio research attention planner wiring (#2930)."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from digiquant.research.research_attention import (
     reset_attention_stores,
 )
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.models.analyst import AnalystPayload
@@ -25,7 +25,7 @@ from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportun
 from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
 from digiquant.portfolio.research_attention import (
     h4_phase_attention_update,
-    plan_hermes_research_attention,
+    plan_portfolio_research_attention,
     research_attention_h5_enforce_path,
     research_attention_h6_enforce_path,
     resolve_h6_attention_decision,
@@ -69,22 +69,22 @@ def _prior_analyst(ticker: str) -> dict[str, Any]:
     }
 
 
-def _state_with_roster(*, price_deltas: dict[str, float] | None = None) -> AtlasResearchState:
+def _state_with_roster(*, price_deltas: dict[str, float] | None = None) -> ResearchState:
     roster = [
         FocusRosterEntry(ticker="SPY", roster_reason="held"),
         FocusRosterEntry(ticker="QQQ", roster_reason="technical"),
     ]
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=RUN,
         baseline_date=PRIOR,
-        config=AtlasConfigBundle(watchlist=["SPY", "QQQ", "IWM"]),
+        config=ResearchConfigBundle(watchlist=["SPY", "QQQ", "IWM"]),
         prior_context=PriorContext(
             prior_book=[{"ticker": "SPY", "weight_pct": 10.0}],
             prior_analyst_by_ticker={"SPY": _prior_analyst("SPY"), "QQQ": _prior_analyst("QQQ")},
         ),
         price_deltas=price_deltas or {},
-        phase_hermes=PhaseHermesState(focus_roster=roster),
+        phase_portfolio=PhasePortfolioState(focus_roster=roster),
     )
 
 
@@ -100,13 +100,13 @@ def test_h4_builds_plan_after_roster_without_mutating_roster(
 ) -> None:
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster(price_deltas={"SPY": 0.001})
-    roster_before = [e.model_dump(mode="json") for e in state.phase_hermes.focus_roster]
+    roster_before = [e.model_dump(mode="json") for e in state.phase_portfolio.focus_roster]
     update = h4_phase_attention_update(state)
-    assert update.get("hermes_research_attention_plan") is not None
-    plan = AttentionPlan.model_validate(update["hermes_research_attention_plan"])
+    assert update.get("portfolio_research_attention_plan") is not None
+    plan = AttentionPlan.model_validate(update["portfolio_research_attention_plan"])
     assert plan.rollout_mode is AttentionRolloutMode.SHADOW
     assert {d.target_key for d in plan.decisions} == {"SPY", "QQQ"}
-    roster_after = [e.model_dump(mode="json") for e in state.phase_hermes.focus_roster]
+    roster_after = [e.model_dump(mode="json") for e in state.phase_portfolio.focus_roster]
     assert roster_before == roster_after
 
 
@@ -114,7 +114,7 @@ def test_plan_persists_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_roster()
     update = h4_phase_attention_update(state)
-    plan = AttentionPlan.model_validate(update["hermes_research_attention_plan"])
+    plan = AttentionPlan.model_validate(update["portfolio_research_attention_plan"])
     store = attention_store_for_run(str(state.run_id))
     persisted = store.load_plan(plan.plan_id)
     assert persisted.plan == plan
@@ -123,7 +123,7 @@ def test_plan_persists_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> No
 def test_off_mode_skips_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "off")
     state = _state_with_roster()
-    assert plan_hermes_research_attention(state) is None
+    assert plan_portfolio_research_attention(state) is None
     assert h4_phase_attention_update(state) == {}
 
 
@@ -160,12 +160,12 @@ def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> Non
             linked_market_thesis_id="demo-thesis",
         )
     ]
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=RUN,
-        config=AtlasConfigBundle(watchlist=["XYZ"]),
+        config=ResearchConfigBundle(watchlist=["XYZ"]),
         prior_context=PriorContext(prior_analyst_by_ticker={"XYZ": _prior_analyst("XYZ")}),
-        phase_hermes=PhaseHermesState(focus_roster=roster),
+        phase_portfolio=PhasePortfolioState(focus_roster=roster),
     )
     update = h4_phase_attention_update(state)
     state = state.model_copy(update=update)
@@ -196,22 +196,22 @@ def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_graph_node_order_unchanged() -> None:
-    from digiquant.portfolio.graph import build_hermes_phases_thesis
+    from digiquant.portfolio.graph import build_portfolio_phases_thesis
 
-    phases = build_hermes_phases_thesis(watchlist=["SPY"], held={"SPY"})
+    phases = build_portfolio_phases_thesis(watchlist=["SPY"], held={"SPY"})
     names = [p.name for p in phases]
-    assert names.index("hermes_h4_opportunity_screener") < names.index("hermes_h5_asset_analyst")
-    assert names.index("hermes_h5_asset_analyst") < names.index("hermes_h6_deliberation")
+    assert names.index("portfolio_h4_opportunity_screener") < names.index("portfolio_h5_asset_analyst")
+    assert names.index("portfolio_h5_asset_analyst") < names.index("portfolio_h6_deliberation")
     assert len(names) == len(set(names))
 
 
 def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
-    state = AtlasResearchState(
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
+    state = ResearchState(
         run_type="delta",
         run_date=RUN,
-        config=AtlasConfigBundle(watchlist=["SPY", "QQQ", "IWM"]),
+        config=ResearchConfigBundle(watchlist=["SPY", "QQQ", "IWM"]),
         prior_context=PriorContext(prior_book=[{"ticker": "SPY", "weight_pct": 5.0}]),
     )
     node = build_h4_opportunity_screener().nodes[0].run
@@ -220,22 +220,22 @@ def test_h4_node_plans_without_changing_roster(monkeypatch: pytest.MonkeyPatch) 
     reset_attention_stores()
     off_update = node(state.model_copy())
     off_roster = json.dumps(
-        [e.model_dump(mode="json") for e in off_update["phase_hermes"].focus_roster],
+        [e.model_dump(mode="json") for e in off_update["phase_portfolio"].focus_roster],
         sort_keys=True,
     )
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     reset_attention_stores()
     shadow_update = node(state.model_copy())
     shadow_roster = json.dumps(
-        [e.model_dump(mode="json") for e in shadow_update["phase_hermes"].focus_roster],
+        [e.model_dump(mode="json") for e in shadow_update["phase_portfolio"].focus_roster],
         sort_keys=True,
     )
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "enforce")
     reset_attention_stores()
     enforce_update = node(state.model_copy())
     enforce_roster = json.dumps(
-        [e.model_dump(mode="json") for e in enforce_update["phase_hermes"].focus_roster],
+        [e.model_dump(mode="json") for e in enforce_update["phase_portfolio"].focus_roster],
         sort_keys=True,
     )
     assert off_roster == shadow_roster == enforce_roster
-    assert enforce_update.get("hermes_research_attention_plan") is not None
+    assert enforce_update.get("portfolio_research_attention_plan") is not None

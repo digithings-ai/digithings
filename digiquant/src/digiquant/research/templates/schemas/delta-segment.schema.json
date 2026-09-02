@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Delta Segment",
+  "title": "digiquant-research Delta Segment",
   "description": "Delta ops for a segment update (Mon–Sat). Designed for deterministic application to a baseline snapshot.",
   "type": "object",
   "additionalProperties": false,

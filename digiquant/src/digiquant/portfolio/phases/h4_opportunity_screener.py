@@ -1,8 +1,8 @@
 """H4 — deterministic opportunity screener (focus roster).
 
-Builds ``state.phase_hermes.focus_roster``: prior-book holdings (#936) plus
+Builds ``state.phase_portfolio.focus_roster``: prior-book holdings (#936) plus
 thesis-mapped vehicles from H3 and technical opportunity candidates. Replaces
-``candidates.select_focus_tickers`` for the Hermes fan-out once H4 runs in-graph.
+``candidates.select_focus_tickers`` for the portfolio fan-out once H4 runs in-graph.
 """
 
 from __future__ import annotations
@@ -24,13 +24,13 @@ from digiquant.portfolio.budget_controller import assess_budget
 from digiquant.portfolio.candidates import holdings_from_prior_book, select_focus_tickers
 from digiquant.portfolio.research_attention import h4_phase_attention_update
 from digiquant.portfolio.roster_cap import capped_tickers, configured_max_analysts
-from digiquant.portfolio.state import HermesState
-from digiquant.dashboard.overlay.persist import hermes_document_key
+from digiquant.portfolio.state import PortfolioState
+from digiquant.dashboard.overlay.persist import portfolio_document_key
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/thesis/opportunity-screener"
-PHASE_NAME = "hermes_h4_opportunity_screener"
+NODE_ID = "portfolio/thesis/opportunity-screener"
+PHASE_NAME = "portfolio_h4_opportunity_screener"
 OPPORTUNITY_SCREENER_DOCUMENT_KEY = "opportunity-screener"
 OPPORTUNITY_SCREENER_PAYLOAD_DOC_TYPE = "opportunity_screen"
 
@@ -42,12 +42,12 @@ def _held_passes_gate(
 ) -> bool:
     """Return True if a held ticker should be dispatched to the focus roster.
 
-    Gate is disabled (always-analyze) when ``HERMES_HELD_GATE=off``.
+    Gate is disabled (always-analyze) when ``PORTFOLIO_HELD_GATE=off``.
     Otherwise, a held ticker passes when it has a linked thesis OR its absolute
-    price delta meets or exceeds the staleness threshold (``HERMES_HELD_STALENESS_DELTA``,
+    price delta meets or exceeds the staleness threshold (``PORTFOLIO_HELD_STALENESS_DELTA``,
     default 0.005 = 0.5%).
     """
-    if os.environ.get("HERMES_HELD_GATE", "on").strip().lower() == "off":
+    if os.environ.get("PORTFOLIO_HELD_GATE", "on").strip().lower() == "off":
         return True
     if linked_thesis_id:
         return True
@@ -55,7 +55,7 @@ def _held_passes_gate(
         # No delta signal at all this run (e.g. a baseline/monthly run, where price_deltas
         # is empty) — staleness is unjudgeable, so don't gate; keep full held coverage (#1017).
         return True
-    threshold = float(os.environ.get("HERMES_HELD_STALENESS_DELTA", "0.005"))
+    threshold = float(os.environ.get("PORTFOLIO_HELD_STALENESS_DELTA", "0.005"))
     return abs((price_deltas or {}).get(ticker, 0.0)) >= threshold
 
 
@@ -91,7 +91,7 @@ def thesis_priority_order(thesis_mappings: Iterable[tuple[str, str, str]]) -> li
     can only mean **breadth**: cover as many theses as the budget allows before
     deepening any one of them. Flat truncation would hand the whole budget to the first
     two or three theses and leave the rest with no coverage at all. The absence of a
-    conviction signal is a known limitation, recorded in ``hermes/docs/ARCHITECTURE.md``.
+    conviction signal is a known limitation, recorded in ``portfolio/docs/ARCHITECTURE.md``.
     """
     by_thesis: dict[str, list[str]] = {}
     for thesis_id, ticker, _rationale in thesis_mappings:
@@ -301,10 +301,10 @@ def preview_focus_roster_tickers(
 
 
 def _h4_node_factory(client: SupabaseClient | None):
-    def _h4_node(state: HermesState) -> dict[str, Any]:
+    def _h4_node(state: PortfolioState) -> dict[str, Any]:
         watchlist = list(state.config.watchlist)
         held = holdings_from_state(state)
-        mappings = extract_thesis_mappings(state.phase_hermes.thesis_vehicle_map)
+        mappings = extract_thesis_mappings(state.phase_portfolio.thesis_vehicle_map)
         static_cap = configured_max_analysts()
         budget, explore_floor, assessment = assess_budget(state, client, static_cap=static_cap)
         roster = compute_focus_roster(
@@ -341,7 +341,7 @@ def _h4_node_factory(client: SupabaseClient | None):
             ", ".join(e.ticker for e in excluded),
         )
         phase_update = {
-            "phase_hermes": state.phase_hermes.model_copy(
+            "phase_portfolio": state.phase_portfolio.model_copy(
                 update={"focus_roster": roster, "focus_roster_excluded": excluded}
             ),
         }
@@ -410,7 +410,7 @@ def _screener_markdown(document: dict[str, Any]) -> str:
 
 def _publish_screener_document(
     client: SupabaseClient,
-    state: HermesState,
+    state: PortfolioState,
     *,
     roster: list[FocusRosterEntry],
     excluded: list[ExcludedTicker],
@@ -420,7 +420,7 @@ def _publish_screener_document(
     workspace_id = state.config.workspace_id
     publish_document(
         client=client,
-        document_key=hermes_document_key(OPPORTUNITY_SCREENER_DOCUMENT_KEY, workspace_id),
+        document_key=portfolio_document_key(OPPORTUNITY_SCREENER_DOCUMENT_KEY, workspace_id),
         payload=document,
         doc_type=None,
         run_type=state.run_type,
@@ -433,7 +433,7 @@ def _publish_screener_document(
     )
 
 
-def holdings_from_state(state: HermesState) -> set[str]:
+def holdings_from_state(state: PortfolioState) -> set[str]:
     """Prior-book holdings from preflight ``prior_context.prior_book``."""
     return set(holdings_from_prior_book(state.prior_context.prior_book))
 

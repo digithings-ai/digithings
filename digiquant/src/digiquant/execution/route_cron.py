@@ -1,4 +1,4 @@
-"""Kairos order-intent route cron — Alpaca paper OAuth only (K4).
+"""execution order-intent route cron — Alpaca paper OAuth only (K4).
 
 Production entry: ``python -m digiquant.execution.route_cron``. Overlay
 books persist order intents; this CLI is the missing submit seam. House and
@@ -28,11 +28,11 @@ from digiquant.execution.sync_cron import (
     _hold_count,
     _load_rows,
     _supabase_client_from_env,
-    format_kairos_sync_not_configured,
-    kairos_sync_targets,
-    missing_kairos_sync_apply_env_names,
-    missing_kairos_sync_env_names,
-    plan_kairos_sync,
+    format_execution_sync_not_configured,
+    execution_sync_targets,
+    missing_execution_sync_apply_env_names,
+    missing_execution_sync_env_names,
+    plan_execution_sync,
     reserved_sync_workspace_ids,
 )
 
@@ -73,10 +73,10 @@ def _filter_route_connection_id(
     loaded: list[SyncTarget],
     connection_id: str,
 ) -> list[SyncTarget] | str:
-    """Same eligibility as sync; operator errors say ``kairos route``."""
+    """Same eligibility as sync; operator errors say ``execution route``."""
     selected = _filter_connection_id(loaded, connection_id)
     if isinstance(selected, str):
-        return selected.replace("kairos sync:", "kairos route:", 1)
+        return selected.replace("execution sync:", "execution route:", 1)
     return selected
 
 
@@ -86,11 +86,11 @@ def _log_dry_run(
     loaded: Sequence[SyncTarget],
     routing_on: bool,
 ) -> None:
-    runnable, held = plan_kairos_sync(loaded)
+    runnable, held = plan_execution_sync(loaded)
     flag = "true" if routing_on else "false"
     log(
-        f"kairos route dry-run routing_enabled={flag} considered={len(loaded)} "
-        f"targets={len(kairos_sync_targets(loaded))} "
+        f"execution route dry-run routing_enabled={flag} considered={len(loaded)} "
+        f"targets={len(execution_sync_targets(loaded))} "
         f"runnable={len(runnable)} "
         f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
         f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
@@ -115,22 +115,22 @@ def main(
         args_list = list(argv)
     joined = " ".join(args_list).lower()
     if "dispatch" in joined or "--apply" in joined:
-        err("kairos route: refuses workflow_dispatch / --apply")
+        err("execution route: refuses workflow_dispatch / --apply")
         return EXIT_REFUSED
     args = _parse_args(args_list)
     env = os.environ if environ is None else environ
     routing_on = routing_enabled_in(env)
-    missing_store = missing_kairos_sync_env_names(env)
+    missing_store = missing_execution_sync_env_names(env)
     if args.check:
         if missing_store:
-            err(format_kairos_sync_not_configured(missing_store))
+            err(format_execution_sync_not_configured(missing_store))
             return EXIT_NOT_CONFIGURED
         flag = "true" if routing_on else "false"
-        log(f"kairos route: store env present routing_enabled={flag}")
+        log(f"execution route: store env present routing_enabled={flag}")
         return 0
     if not args.dry_run and not args.all and not args.connection_id:
         err(
-            "kairos route: pass --dry-run, --connection-id, or --all "
+            "execution route: pass --dry-run, --connection-id, or --all "
             "(refusing implicit order submits)"
         )
         return EXIT_NOT_CONFIGURED
@@ -167,22 +167,22 @@ def main(
             err(loaded)
             return EXIT_ROUTING_DISABLED
 
-    runnable, held = plan_kairos_sync(loaded)
+    runnable, held = plan_execution_sync(loaded)
     if route_batch is not None:
         routed = route_batch(runnable)
         log(
-            f"kairos route routing_enabled=true runnable={len(runnable)} routed={routed} "
+            f"execution route routing_enabled=true runnable={len(runnable)} routed={routed} "
             f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
             f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
         )
         return 0
-    apply_missing = missing_kairos_sync_apply_env_names(env)
+    apply_missing = missing_execution_sync_apply_env_names(env)
     if apply_missing:
-        err(format_kairos_sync_not_configured(apply_missing))
+        err(format_execution_sync_not_configured(apply_missing))
         return EXIT_NOT_CONFIGURED
     routed = _production_route_batch(runnable, environ=env)
     log(
-        f"kairos route routing_enabled=true runnable={len(runnable)} routed={routed} "
+        f"execution route routing_enabled=true runnable={len(runnable)} routed={routed} "
         f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
         f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
     )

@@ -23,15 +23,15 @@ from digiquant.data.onchain.hyperdash import CohortPositioning, cohort_summary_t
 from digiquant.research.phases.phase6_consolidate import build_phase6
 from digiquant.research.phases.phase7_synthesis import build_phase7
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     DataLayerSnapshot,
     SegmentPayload,
     SegmentSlot,
 )
 from digiquant.research.testing.simulator import parse_schema_name
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 def _slot(slug: str, bias: str = "bullish", **extra: Any) -> SegmentSlot:
@@ -39,11 +39,11 @@ def _slot(slug: str, bias: str = "bullish", **extra: Any) -> SegmentSlot:
     return SegmentSlot(payload=SegmentPayload(segment=slug, body=body, as_of=date(2026, 4, 26)))
 
 
-def _base_state() -> AtlasResearchState:
-    state = AtlasResearchState(
+def _base_state() -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
     state.phase1_outputs = {
         "alt-options-derivatives": _slot("alt-options-derivatives", vix_level=14.5)
@@ -94,7 +94,7 @@ class TestPreflightOnchain:
                 "macro_series_observations": [],
             }
         )
-        return PreflightDeps(client=client, config_loader=AtlasConfigBundle)
+        return PreflightDeps(client=client, config_loader=ResearchConfigBundle)
 
     def test_populates_market_context_and_persists_rows(self) -> None:
         import digiquant.research.phases.preflight as pf_mod
@@ -102,7 +102,7 @@ class TestPreflightOnchain:
 
         deps = self._deps()
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch.object(pf_mod, "get_onchain_cohort_positioning", lambda: _canned_positioning()):
             out = node(state)
 
@@ -134,13 +134,13 @@ class TestPreflightOnchain:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+            config_loader=lambda: ResearchConfigBundle(workspace_id=str(overlay)),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
-            config=AtlasConfigBundle(workspace_id=str(overlay)),
+            config=ResearchConfigBundle(workspace_id=str(overlay)),
         )
         with patch.object(pf_mod, "get_onchain_cohort_positioning", lambda: _canned_positioning()):
             out = node(state)
@@ -154,7 +154,7 @@ class TestPreflightOnchain:
         from digiquant.research.phases.preflight import build_preflight_node
 
         node = build_preflight_node(self._deps())
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch.object(pf_mod, "get_onchain_cohort_positioning", CohortPositioning.empty):
             out = node(state)
         assert "onchain_positioning" not in out["data_layer"].market_context
@@ -167,7 +167,7 @@ class TestPreflightOnchain:
             raise OSError("hyperdash unreachable")
 
         node = build_preflight_node(self._deps())
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch.object(pf_mod, "get_onchain_cohort_positioning", _boom):
             out = node(state)  # must not raise
         assert "onchain_positioning" not in out["data_layer"].market_context
@@ -180,9 +180,9 @@ class TestOnchainBiasRow:
         compact = _canned_positioning().compact_summary()
         state.data_layer = DataLayerSnapshot(market_context={"onchain_positioning": compact})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         row = final.phase6_bias_row
         assert row is not None
@@ -192,9 +192,9 @@ class TestOnchainBiasRow:
     def test_none_when_market_context_empty(self) -> None:
         state = _base_state()
         state.data_layer = DataLayerSnapshot(market_context={})
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase6_bias_row is not None
         assert final.phase6_bias_row["onchain_positioning"] is None
 
@@ -203,7 +203,7 @@ class TestOnchainBiasRow:
         compact = _canned_positioning().compact_summary()
         state.data_layer = DataLayerSnapshot(market_context={"onchain_positioning": compact})
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         captured: list[dict[str, Any]] = []
 
         def fake_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:

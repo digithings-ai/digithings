@@ -16,9 +16,9 @@ from digiquant.research.phases.preflight import (
     _market_context_tickers,
     build_preflight_node,
 )
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -96,10 +96,10 @@ class TestPreflightInjection:
     def test_preflight_populates_market_context(self) -> None:
         deps = PreflightDeps(
             client=_client(),
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"], macro_series=["DGS10"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"], macro_series=["DGS10"]),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=RUN_DATE)
+        state = ResearchState(run_type="baseline", run_date=RUN_DATE)
 
         out = node(state)
 
@@ -131,10 +131,10 @@ class TestPreflightInjection:
                     "macro_series_observations": [{"obs_date": "2026-06-11"}],
                 }
             ),
-            config_loader=lambda: AtlasConfigBundle(macro_series=["DGS10"]),
+            config_loader=lambda: ResearchConfigBundle(macro_series=["DGS10"]),
         )
         node = build_preflight_node(deps)
-        out = node(AtlasResearchState(run_type="baseline", run_date=RUN_DATE))
+        out = node(ResearchState(run_type="baseline", run_date=RUN_DATE))
 
         # Freshness metadata survives; market_context degrades to empty.
         assert out["data_layer"].price_technicals_latest == date(2026, 6, 11)

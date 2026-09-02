@@ -1,6 +1,6 @@
 # Skills catalog
 
-> **Graph-loaded skills only.** This catalog lists skills that are wired into the Atlas/Hermes LangGraph pipeline. Retired human-session wrappers (orchestrator, daily-delta, weekly-baseline, premarket-pulse, data-fetch, mcp-data-fetch, earnings, sector-rotation, sector-heatmap, asset-analyst, profile-setup, research-library, research-daily, deep-dive, github-workflow, market-thesis-exploration, opportunity-screener, deliberation, thesis, thesis-tracker, thesis-vehicle-map) have been removed. If this page drifts, the filesystem is authoritative: `ls skills/ | wc -l`.
+> **Graph-loaded skills only.** This catalog lists skills that are wired into the research/portfolio LangGraph pipeline. Retired human-session wrappers (orchestrator, daily-delta, weekly-baseline, premarket-pulse, data-fetch, mcp-data-fetch, earnings, sector-rotation, sector-heatmap, asset-analyst, profile-setup, research-library, research-daily, deep-dive, github-workflow, market-thesis-exploration, opportunity-screener, deliberation, thesis, thesis-tracker, thesis-vehicle-map) have been removed. If this page drifts, the filesystem is authoritative: `ls skills/ | wc -l`.
 
 ---
 
@@ -65,7 +65,7 @@
 
 ---
 
-## Hermes skills
+## portfolio skills
 
 | Slug | Role |
 |------|------|

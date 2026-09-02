@@ -19,7 +19,7 @@ from datetime import date
 
 import pytest
 from digiquant.research.diagnostics import _row, summarize_run
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.portfolio.chain import OUTER_ATTEMPT_ENV, DiagnosticsDeps, _outer_attempt
 
 pytestmark = pytest.mark.unit
@@ -54,7 +54,7 @@ class TestOuterAttemptFromEnv:
 
 class TestTheRowCarriesTheAttempt:
     def _row_for(self, *, attempt: int) -> dict[str, object]:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 7, 19))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 7, 19))
         return _row(
             run_id="29688378908",
             run_type="baseline",
@@ -85,7 +85,7 @@ class TestTheRowCarriesTheAttempt:
     def test_the_default_is_one_so_every_caller_is_safe(self) -> None:
         """``_row`` has other callers and tests; none of them should have to know about
         attempts, and none should silently produce the legacy 0 sentinel."""
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 7, 31))
+        state = ResearchState(run_type="delta", run_date=date(2026, 7, 31))
         row = _row(
             run_id="r",
             run_type="delta",

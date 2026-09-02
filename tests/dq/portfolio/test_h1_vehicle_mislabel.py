@@ -3,7 +3,7 @@
 House rows on 2026-08-31 / 2026-09-01 used thesis_id ``veicle-{EWG,GLD,XLB}``
 (missing the 'h' in vehicle), ``thesis_kind`` null, and price-technicals notes.
 ``persist_thesis_review`` upserted whatever the LLM emitted, so those ghosts
-landed in the olympus thesis list as market views 26–28.
+landed in the dashboard thesis list as market views 26–28.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from digiquant.portfolio.writers.thesis_io import (
     vehicle_shaped_ticker,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

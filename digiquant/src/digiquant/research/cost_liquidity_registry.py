@@ -399,11 +399,11 @@ def get_action_cost_outcome(
 
 
 def collect_risk_policy_from_state(state: Any) -> RiskPolicy | None:
-    """Extract resolved risk policy from Hermes phase state."""
-    hermes = getattr(state, "phase_hermes", None)
-    if hermes is None:
+    """Extract resolved risk policy from portfolio phase state."""
+    portfolio = getattr(state, "phase_portfolio", None)
+    if portfolio is None:
         return None
-    raw = getattr(hermes, "risk_policy", None)
+    raw = getattr(portfolio, "risk_policy", None)
     if not isinstance(raw, dict):
         return None
     try:
@@ -449,7 +449,7 @@ def persist_action_cost_estimates_for_commit(
 def collect_cost_artifacts_from_bundles(
     bundles: list[CostLiquidityBundle],
 ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-    """Serialize bundles for typed Hermes state attachment."""
+    """Serialize bundles for typed portfolio state attachment."""
     snapshots: dict[str, dict[str, Any]] = {}
     estimates: dict[str, dict[str, Any]] = {}
     for bundle in bundles:

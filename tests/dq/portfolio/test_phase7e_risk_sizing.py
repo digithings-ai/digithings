@@ -14,10 +14,10 @@ from datetime import date, timedelta
 import polars as pl
 import pytest
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     ExcludedTicker,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
@@ -38,7 +38,7 @@ from digiquant.portfolio.turnover import (
     hold_drifted_book,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -61,12 +61,12 @@ def _state(
     preferences: dict | None = None,
     *,
     use_memo: bool = True,
-) -> AtlasResearchState:
-    state = AtlasResearchState(
+) -> ResearchState:
+    state = ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences=preferences or {}),
+        config=ResearchConfigBundle(preferences=preferences or {}),
     )
     analysts_dict = analysts or {}
     debates_dict = debates or {}
@@ -80,7 +80,7 @@ def _state(
             ],
             memo="PM notes.",
         )
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             pm_direction_memo=memo,
             asset_analysts=analysts_dict,
             deliberation_summaries=debates_dict,
@@ -91,7 +91,7 @@ def _state(
             "actions": actions or [],
             "notes": "PM notes.",
         }
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts=analysts_dict,
             deliberation_summaries=debates_dict,
         )
@@ -102,12 +102,12 @@ def _tech_rows(vols: dict[str, float], on: str = "2026-06-12") -> list[dict]:
     return [{"ticker": t, "date": on, "hist_vol_21": v, "atr_pct": None} for t, v in vols.items()]
 
 
-def _run(state: AtlasResearchState, client: FakeSupabaseClient | None = None) -> dict | None:
+def _run(state: ResearchState, client: FakeSupabaseClient | None = None) -> dict | None:
     client = client or FakeSupabaseClient()
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    phase_hermes = out.get("phase_hermes")
-    if phase_hermes is not None:
-        return phase_hermes.sized_book
+    phase_portfolio = out.get("phase_portfolio")
+    if phase_portfolio is not None:
+        return phase_portfolio.sized_book
     return out.get("phase7d_rebalance")
 
 
@@ -120,7 +120,7 @@ def _weights(rebal: dict) -> dict[str, float]:
 
 def test_no_op_when_pm_never_ran() -> None:
     state = _state([])
-    state.phase_hermes = PhaseHermesState()
+    state.phase_portfolio = PhasePortfolioState()
     assert build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state) == {}
 
 
@@ -315,12 +315,12 @@ class TestUnchallengedCarryIsLowConfidence:
 
 def test_memo_conviction_rank_orders_weights() -> None:
     # H7 path: rank 1 (AAA) outweighs rank 2 (BBB) with equal analyst conviction.
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
-        config=AtlasConfigBundle(preferences=_RELAXED),
+        config=ResearchConfigBundle(preferences=_RELAXED),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         pm_direction_memo=PMDirectionMemo(
             date=RUN_DATE,
             roster=[
@@ -377,13 +377,13 @@ def _memo_state(
     *,
     analysts: dict[str, dict[str, object]] | None = None,
     preferences: dict | None = None,
-) -> AtlasResearchState:
-    state = AtlasResearchState(
+) -> ResearchState:
+    state = ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
-        config=AtlasConfigBundle(preferences=preferences or _RELAXED),
+        config=ResearchConfigBundle(preferences=preferences or _RELAXED),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster, memo="PM notes."),
         asset_analysts=analysts or {},
     )
@@ -619,11 +619,11 @@ def test_sizing_error_keeps_pm_book(monkeypatch: pytest.MonkeyPatch) -> None:
     # Legacy path: no rebalance update when sizing fails; WP6.3 may still attach audit snapshots.
     out = build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state)
     assert out.get("phase7d_rebalance") is None
-    hermes = out.get("phase_hermes")
-    if hermes is not None:
-        assert hermes.sized_book is None
-        assert hermes.risk_policy is not None
-        assert hermes.covariance_snapshot is not None
+    portfolio = out.get("phase_portfolio")
+    if portfolio is not None:
+        assert portfolio.sized_book is None
+        assert portfolio.risk_policy is not None
+        assert portfolio.covariance_snapshot is not None
     else:
         assert out == {}
 
@@ -758,13 +758,13 @@ class TestHeldContinuityBackstop:
     regardless of which upstream crack fired.
     """
 
-    def _held_state(self, *, flat: bool = False, with_weight: bool = True) -> AtlasResearchState:
+    def _held_state(self, *, flat: bool = False, with_weight: bool = True) -> ResearchState:
         prior_book = [{"ticker": "DBO", "weight_pct": 7.5 if with_weight else None}]
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             baseline_date=date(2026, 6, 9),
-            config=AtlasConfigBundle(preferences={}),
+            config=ResearchConfigBundle(preferences={}),
             prior_context=PriorContext(prior_book=prior_book),
         )
         roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
@@ -774,7 +774,7 @@ class TestHeldContinuityBackstop:
             # The exact 2026-07-22 shape: PM addressed the held name as long,
             # but sizing dropped it (weight absent from the final dict).
             roster.append(TickerDirection(ticker="DBO", direction="long", conviction_rank=2))
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
         )
         return state
@@ -939,15 +939,15 @@ def test_held_carry_weights_direct_call_returns_drifted_weight_only() -> None:
     # warranted) depends on the caller's own sized-dict check, exercised below in
     # ``TestCarryLoopEventEmission``.
     prior_book = [{"ticker": "DBO", "weight_pct": 7.5}]
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences={}),
+        config=ResearchConfigBundle(preferences={}),
         prior_context=PriorContext(prior_book=prior_book),
     )
     roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
     )
     assert phase7e_risk_sizing._held_carry_weights(state) == {"DBO": 7.5}
@@ -966,18 +966,18 @@ class TestCarryLoopEventEmission:
     ``sized`` before the carry loop runs).
     """
 
-    def _gated_state(self, *, memo_addressed: bool) -> AtlasResearchState:
-        state = AtlasResearchState(
+    def _gated_state(self, *, memo_addressed: bool) -> ResearchState:
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             baseline_date=date(2026, 6, 9),
-            config=AtlasConfigBundle(preferences=dict(_RELAXED)),
+            config=ResearchConfigBundle(preferences=dict(_RELAXED)),
             prior_context=PriorContext(prior_book=[{"ticker": "DBO", "weight_pct": 7.5}]),
         )
         roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
         if memo_addressed:
             roster.append(TickerDirection(ticker="DBO", direction="long", conviction_rank=2))
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster),
             focus_roster_excluded=[ExcludedTicker(ticker="DBO", reason="stale")],
         )
@@ -1237,7 +1237,7 @@ class TestValidateH8LineageCallSite:
         )
         with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
             out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-        rebal = out["phase_hermes"].sized_book
+        rebal = out["phase_portfolio"].sized_book
         assert "SPY" in _weights(rebal)
         assert "H8 lineage validation failed" not in caplog.text
 
@@ -1302,7 +1302,7 @@ def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
 
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
-    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+    from tests.dq.portfolio.incumbent_risk_fixtures import load_incumbent_risk_fixture
 
     golden = load_incumbent_risk_fixture()
     memo = PMDirectionMemo(
@@ -1341,7 +1341,7 @@ def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
     """Representative H8 end-state under default ``SizingCaps`` stays golden."""
     from digiquant.portfolio.sizing import TickerRisk, size_portfolio
 
-    from tests.dq.hermes.incumbent_risk_fixtures import (
+    from tests.dq.portfolio.incumbent_risk_fixtures import (
         assert_book_matches_golden,
         load_incumbent_risk_fixture,
         sizing_result_snapshot,
@@ -1375,12 +1375,12 @@ def test_h8_attaches_risk_snapshots_without_changing_book() -> None:
     )
     baseline = _weights(_run(state, client))
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    hermes = out["phase_hermes"]
-    assert hermes.risk_policy is not None
-    assert hermes.covariance_snapshot is not None
-    assert hermes.risk_policy["status"] in (
+    portfolio = out["phase_portfolio"]
+    assert portfolio.risk_policy is not None
+    assert portfolio.covariance_snapshot is not None
+    assert portfolio.risk_policy["status"] in (
         PolicyArtifactStatus.AVAILABLE.value,
         PolicyArtifactStatus.DEGRADED.value,
         PolicyArtifactStatus.UNAVAILABLE.value,
     )
-    assert _weights(hermes.sized_book) == baseline
+    assert _weights(portfolio.sized_book) == baseline

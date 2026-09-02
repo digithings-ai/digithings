@@ -1,4 +1,4 @@
-"""Durable append-only writer for Olympus provider telemetry (#1979, Task 1.5).
+"""Durable append-only writer for dashboard provider telemetry (#1979, Task 1.5).
 
 Drains one run's in-process telemetry buffers from ``digigraph.usage`` and appends them to the
 private ledger migration ``067_olympus_provider_telemetry.sql`` created: ``olympus_node_runs``,
@@ -34,7 +34,7 @@ Two gates decide whether a provider call is attributed or orphaned:
    it, no node runs and no logical calls are produced *at the source* — but physical attempts
    still are, because ``_emit_attempt`` guards only on a missing observer.
 2. The call must originate inside a ``build_pipeline`` node, since only ``_instrumented`` opens
-   a node scope. Atlas phases, Hermes phases, and the publish terminal phase all qualify. The
+   a node scope. research phases, portfolio phases, and the publish terminal phase all qualify. The
    beliefs-distillation fold does not: ``chain.py`` calls it directly, outside any graph. When
    the fold calls an LLM (daily short fold with new lessons, or a full rewrite), those provider
    calls are orphaned. Empty-lesson carry-forward makes no provider call.

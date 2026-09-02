@@ -262,13 +262,13 @@ def shadow_artifact_filename(*, session_date: date, run_id: str) -> str:
 
 
 def build_shadow_artifact_from_state(state: Any) -> ShadowAllocationArtifact | None:
-    """Build from completed Hermes state, or ``None`` when ineligible.
+    """Build from completed portfolio state, or ``None`` when ineligible.
 
     Never raises for missing slots — callers treat ``None`` as skip.
     """
-    phase = getattr(state, "phase_hermes", None)
+    phase = getattr(state, "phase_portfolio", None)
     if phase is None and isinstance(state, dict):
-        phase = state.get("phase_hermes")
+        phase = state.get("phase_portfolio")
     if phase is None:
         return None
 

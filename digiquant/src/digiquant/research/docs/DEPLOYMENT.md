@@ -1,33 +1,33 @@
-# Atlas — Deployment & Scheduling
+# research — Deployment & Scheduling
 
-This document covers the GitHub Actions scheduler that drives the Olympus daily pipeline,
+This document covers the GitHub Actions scheduler that drives the dashboard daily pipeline,
 the secrets it needs, how to test locally, and rollback / monitoring procedures.
 
 Companion workflows (in `.github/workflows/`):
 
 A single workflow, `pipeline-digiquant.yml`, drives all scheduled research + portfolio runs. The
 `resolve` job sets `refresh_scope` (Sunday → `all`, weekdays → `none`); the `run` job
-executes the unified Atlas+Hermes pipeline via
+executes the unified research+portfolio pipeline via
 `python -m digiquant.portfolio.chain --cadence daily`.
 
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
 | `pipeline-digiquant.yml` | `cron '17 9/10/11/12 * * *'` (off-peak UTC retries) | Sunday → `all`; else `none` | 240 min |
 | `pipeline-digiquant.yml` | `repository_dispatch` `olympus-daily` | same as schedule | 240 min |
-| `pipeline-digiquant.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
-| Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
-| `test-research-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-digiquant.yml` | unit tests + ruff | 15 min |
+| `pipeline-digiquant.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `portfolio` \| `digest` \| `beliefs` | 240 min |
+| execution cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/execution-tenancy/execution-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`portfolio.chain` | n/a (probe) | 10 min |
+| `test-research-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/dashboard/{research,portfolio}/**`, `tests/dq/{research,portfolio}/**`, or `pipeline-digiquant.yml` | unit tests + ruff | 15 min |
 | `ci.yml` → `actionlint` job | `push` / `pull_request` touching `.github/workflows/**` | `actionlint` over **every** workflow | 5 min |
 
-**Removed (historical):** separate `atlas-baseline.yml` / `atlas-delta.yml` /
-`atlas-monthly.yml` and `run_type=baseline|delta|monthly` cron semantics — superseded by
+**Removed (historical):** separate `research-baseline.yml` / `research-delta.yml` /
+`research-monthly.yml` and `run_type=baseline|delta|monthly` cron semantics — superseded by
 one daily graph ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
 Non-secret tunables (OpenRouter routing, analyst cap, feature flags,
 checkpointer, tracing) live in `.github/digiquant-pipeline.yml` and are loaded
 into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 
-## Olympus environment variables
+## dashboard environment variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -42,7 +42,7 @@ Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 ## Required repo secrets
 
 Set once per repository — the schedulers reference them by name. Prefer
-GitHub **environment** secrets (`environment: atlas-prod`) when you're
+GitHub **environment** secrets (`environment: research-prod`) when you're
 ready to gate production runs behind a reviewer.
 
 **Always pipe secret values via stdin** (`--body-file -`) — `--body "<value>"`
@@ -172,7 +172,7 @@ A run can fail in two shapes:
    partial writes. Remediation: re-run the workflow once the fix is
    merged, or revert the offending commit and let the next cron tick.
 2. **Crashed mid-pipeline** (half-written `documents`, a stray
-   `daily_snapshots` row). Atlas/Hermes writes are idempotent per `(date,
+   `daily_snapshots` row). research/portfolio writes are idempotent per `(date,
    document_key)` / `source_run_id` — re-running the same `run_date` will
    overwrite partial rows. If rollback is still required:
 
@@ -196,7 +196,7 @@ A run can fail in two shapes:
 ## Failure issue convention
 
 The pipeline opens (or comments on) a single rolling issue titled
-`olympus-<kind>-failure`, with the failing run's date, run URL, and last 200 log lines.
+`dashboard-<kind>-failure`, with the failing run's date, run URL, and last 200 log lines.
 
 ## Cost monitoring
 

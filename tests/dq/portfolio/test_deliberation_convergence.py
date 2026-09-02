@@ -1,4 +1,4 @@
-"""H6 deliberation convergence tests (Olympus #930 PR 4b)."""
+"""H6 deliberation convergence tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.focus_roster import with_fanout_ticker
@@ -33,13 +33,13 @@ from digiquant.portfolio.phases.h6_deliberation import (
 )
 
 
-def _state() -> AtlasResearchState:
-    state = AtlasResearchState(
+def _state() -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 6, 20),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")],
         asset_analysts={
             "AAPL": {
@@ -59,7 +59,7 @@ def _state() -> AtlasResearchState:
 class TestDeliberationConvergence:
     def test_pm_challenge_then_analyst_converges(self) -> None:
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         calls: list[str] = []
 
@@ -90,8 +90,8 @@ class TestDeliberationConvergence:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert calls == ["DeliberationPmTurn", "DeliberationAnalystTurn"]
 
@@ -100,7 +100,7 @@ class TestDeliberationConvergence:
     ) -> None:
         monkeypatch.setenv("ATLAS_DELIBERATION_MAX_ROUNDS", "1")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -130,8 +130,8 @@ class TestDeliberationConvergence:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert summary["escalated"] is True
         assert summary["cap_reason"] == "max_rounds"
@@ -148,7 +148,7 @@ class TestDeliberationConvergence:
         # default floor is 2, exercised by the test below.)
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "1")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         calls: list[str] = []
 
@@ -183,7 +183,7 @@ class TestDeliberationConvergence:
         # no more round-1 rubber-stamp (#945).
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         calls: list[str] = []
 
@@ -211,9 +211,9 @@ class TestDeliberationConvergence:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(_state())
-        final = AtlasResearchState.model_validate(result)
+        final = ResearchState.model_validate(result)
         assert "DeliberationAnalystTurn" in calls  # the floor forced an analyst response
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert len(summary["transcript"]) >= 2  # PM challenge + analyst response
 
@@ -222,7 +222,7 @@ class TestDeliberationConvergence:
         # rounds_count into the persisted document shape — the audit found them stripped
         # before the write, leaving zero observability (#945).
         state = _state()
-        state.phase_hermes.deliberation_summaries = {
+        state.phase_portfolio.deliberation_summaries = {
             "AAPL": DeliberationSummary(
                 ticker="AAPL",
                 converged=True,
@@ -255,7 +255,7 @@ class TestDeliberationFailureCarry:
     """
 
     @staticmethod
-    def _run_h6(state: AtlasResearchState) -> dict[str, Any]:
+    def _run_h6(state: ResearchState) -> dict[str, Any]:
         # Drives the production fan-out worker directly: this exercises the carry
         # construction without standing up the LLM plumbing the loop tests need.
         return build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
@@ -267,15 +267,15 @@ class TestDeliberationFailureCarry:
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
             out = self._run_h6(_state())
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["carry_reason"] == "llm_failure"
         # No PM challenge ran, so there is no debate to have converged.
         assert summary["converged"] is False
         assert summary["transcript"] == []
         assert summary["selection_reason"]  # WP11.3 provenance on failure path
-        # The PhaseError shape the Atlas Hermes-density gate counts stays untouched.
-        assert out["errors"][0].phase == "hermes_h6_deliberation"
+        # The PhaseError shape the research portfolio-density gate counts stays untouched.
+        assert out["errors"][0].phase == "portfolio_h6_deliberation"
         assert out["errors"][0].message.startswith("deliberation LLM failed")
 
     def test_fingerprint_skip_carry_is_labelled_benign(self) -> None:
@@ -291,7 +291,7 @@ class TestDeliberationFailureCarry:
         )
         with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
             out = self._run_h6(state)
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["carry_reason"] == "fingerprint_skip"
         # The prior debate did converge; nothing moved, so it still stands (#925).
@@ -300,7 +300,7 @@ class TestDeliberationFailureCarry:
 
     def test_crash_carry_publishes_no_bear_thesis(self) -> None:
         state = _state()
-        state.phase_hermes.deliberation_summaries = {
+        state.phase_portfolio.deliberation_summaries = {
             "AAPL": DeliberationSummary(
                 ticker="AAPL",
                 converged=False,
@@ -321,7 +321,7 @@ class TestDeliberationFailureCarry:
 
     def test_benign_carry_keeps_the_mirrored_bear_fallback(self) -> None:
         state = _state()
-        state.phase_hermes.deliberation_summaries = {
+        state.phase_portfolio.deliberation_summaries = {
             "AAPL": DeliberationSummary(
                 ticker="AAPL",
                 conclusion="prior agreement",
@@ -337,7 +337,7 @@ class TestDeliberationFailureCarry:
         # H6 has no bull/bear fields — remapping both to conclusion made the document
         # look two-sided while the real debate lived only under rounds/transcript.
         state = _state()
-        state.phase_hermes.deliberation_summaries = {
+        state.phase_portfolio.deliberation_summaries = {
             "DBO": DeliberationSummary(
                 ticker="DBO",
                 converged=True,
@@ -377,7 +377,7 @@ class TestH6SelectionWiring:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
         monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         calls: list[str] = []
 
@@ -417,8 +417,8 @@ class TestH6SelectionWiring:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["converged"] is True
         assert summary["selection_reason"] == "decision_boundary"
         assert summary["h6_selection"]["budget"]["min_rounds"] >= 2
@@ -435,7 +435,7 @@ class TestH6SelectionWiring:
             side_effect=RuntimeError("provider unavailable"),
         ):
             out = build_h6_from_state().worker.run(with_fanout_ticker(_state(), "AAPL"))
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "llm_failure"
         assert summary["converged"] is False
         assert summary["selection_reason"] == "decision_boundary"

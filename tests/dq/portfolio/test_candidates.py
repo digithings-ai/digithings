@@ -1,4 +1,4 @@
-"""Unit tests for the deterministic Hermes focus-list selection (#696)."""
+"""Unit tests for the deterministic portfolio focus-list selection (#696)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from digiquant.portfolio.candidates import (
     select_focus_tickers,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

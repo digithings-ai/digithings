@@ -91,7 +91,7 @@ def capped_tickers(
         # new-candidate slots on top (the pre-#1767 behaviour) compounds a breach that
         # is already forced — raising ATLAS_MAX_ANALYSTS is the operator's lever.
         logger.warning(
-            "Hermes roster cap: %d held tickers meet or exceed ATLAS_MAX_ANALYSTS=%d; "
+            "portfolio roster cap: %d held tickers meet or exceed ATLAS_MAX_ANALYSTS=%d; "
             "keeping ALL held (over budget) so no prior-book holding is dropped (#936), "
             "and reserving NO new-candidate slots — the cap is never widened beyond the "
             "book (#1767). Raise ATLAS_MAX_ANALYSTS to restore exploration: %s",
@@ -105,7 +105,7 @@ def capped_tickers(
     kept_candidates = _ranked_candidates(candidates, candidate_priority)[:budget]
     if min_new > budget:
         logger.info(
-            "Hermes roster cap: explore floor min_new=%d exceeds the %d candidate slots "
+            "portfolio roster cap: explore floor min_new=%d exceeds the %d candidate slots "
             "left under ATLAS_MAX_ANALYSTS=%d; clamped to %d (#1767 — the floor never "
             "widens the cap).",
             min_new,
@@ -116,7 +116,7 @@ def capped_tickers(
     kept = set(held_in_order) | set(kept_candidates)
     prioritised = len(kept_candidates) - len(set(kept_candidates) - set(candidate_priority))
     logger.info(
-        "Hermes roster capped to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d): %d held + "
+        "portfolio roster capped to %d/%d tickers (ATLAS_MAX_ANALYSTS=%d): %d held + "
         "%d candidates (%d of them prioritised)",
         len(kept),
         len(tickers),

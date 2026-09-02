@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Research Delta (Track A)",
+  "title": "digiquant-research Research Delta (Track A)",
   "description": "Positioning-blind research append for Supabase documents. Publish with document_key research-delta/{RUN_SUFFIX}.json (unique per run). No portfolio weights or user preferences.",
   "type": "object",
   "additionalProperties": false,

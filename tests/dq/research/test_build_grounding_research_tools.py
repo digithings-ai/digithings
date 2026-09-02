@@ -1,4 +1,4 @@
-"""build_grounding wiring for RESEARCH_TOOLS (Olympus #930)."""
+"""build_grounding wiring for RESEARCH_TOOLS (dashboard #930)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from digiquant.dashboard.research_retrieval import RESEARCH_TOOLS
 @pytest.mark.unit
 def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
 
     tools, execute_tool, _grounding = _node_factory.build_grounding(
         use_data_tools=False,
@@ -31,7 +31,7 @@ def test_build_grounding_includes_research_tools(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.unit
 def test_build_grounding_h5_blinds_portfolio_tool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", lambda: object())
+    monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
 
     tools, _execute, _ = _node_factory.build_grounding(
         use_data_tools=False,

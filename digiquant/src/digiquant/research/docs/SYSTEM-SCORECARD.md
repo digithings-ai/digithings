@@ -1,4 +1,4 @@
-# digiquant-atlas — System Scorecard & Improvement Plan
+# digiquant-research — System Scorecard & Improvement Plan
 
 > **Scored**: April 7, 2026 (updated — session 5).
 > Covers all layers: shell scripts (21), Python ETL (8), frontend (17 files, Next.js 15 + TypeScript), Supabase (5 migrations), config (7), skill files (43), templates (13).

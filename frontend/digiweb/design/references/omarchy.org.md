@@ -18,7 +18,7 @@ Omarchy is **mono-everything utilitarian with personality**. One font (JetBrains
 
 | Pattern | Omarchy does | Digiweb adopt / adapt / avoid |
 |---------|--------------|-------------------------------|
-| Mono as the whole voice | JetBrains Mono for body + UI | **Adapt** — already have `terminal` type suite; good for olympus / digichat |
+| Mono as the whole voice | JetBrains Mono for body + UI | **Adapt** — already have `terminal` type suite; good for dashboard / digichat |
 | Light weight on dark | weight 300 body | **Adopt** for dense dashboards |
 | Terminal link colors | Cyan links, blue body | **Avoid** as default brand — keep phosphor teal / ink hierarchy |
 | Centered icon CTA grid | Soft rounded blue pills | **Avoid** rounded multi-CTA grids (fights “one loud thing”) |

@@ -1,4 +1,4 @@
-"""Contract tests for migration 076, private Olympus research corpus (#2613)."""
+"""Contract tests for migration 076, private dashboard research corpus (#2613)."""
 
 from __future__ import annotations
 

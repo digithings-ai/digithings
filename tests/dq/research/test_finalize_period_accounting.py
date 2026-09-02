@@ -1,4 +1,4 @@
-"""Unit tests for Olympus EOD accounting persistence (#2597, Task 3.2).
+"""Unit tests for dashboard EOD accounting persistence (#2597, Task 3.2).
 
 Covers: idempotent exact retry; provisional H9 never selected as final;
 incomplete marks remain non-final; restatement supersedes; metrics consume
@@ -39,7 +39,7 @@ from digiquant.dashboard.accounting.models import (
     QualityReason,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 pytestmark = pytest.mark.unit
 
@@ -272,7 +272,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "refresh_performance_metrics.py"
 )
 
@@ -341,7 +341,7 @@ _FINALIZE = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "finalize_period_accounting.py"
 )
 

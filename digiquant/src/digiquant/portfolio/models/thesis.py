@@ -1,4 +1,4 @@
-"""Pydantic contracts for thesis-track Hermes phases (H1–H4)."""
+"""Pydantic contracts for thesis-track portfolio phases (H1–H4)."""
 
 from __future__ import annotations
 

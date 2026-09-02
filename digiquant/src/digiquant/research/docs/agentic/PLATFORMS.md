@@ -1,6 +1,6 @@
 # Platform Setup Guide
 
-How to configure each AI platform to work with digiquant-atlas.
+How to configure each AI platform to work with digiquant-research.
 
 ## GitHub Copilot (VS Code)
 
@@ -31,7 +31,7 @@ applyTo: "**"
 Claude Code auto-discovers `CLAUDE.md` in the current directory when you run `claude` from the repo root. No setup required — just run:
 
 ```bash
-cd /path/to/digiquant-atlas
+cd /path/to/digiquant-research
 claude
 ```
 

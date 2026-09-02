@@ -14,7 +14,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from digiquant.research.dashboard_digest import portfolio_preferences_static
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.research.supabase_io import (
     SupabaseClient,
     load_prior_book,
@@ -47,7 +47,7 @@ from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
-_PORTFOLIO_JSON = Path(__file__).resolve().parents[2] / "atlas" / "config" / "portfolio.json"
+_PORTFOLIO_JSON = Path(__file__).resolve().parents[2] / "research" / "config" / "portfolio.json"
 RecoveryStatus = Literal["dry_run", "committed", "already_committed", "no_book", "conflict"]
 # Booking skips a CASH positions row at or below this percent; the chain still
 # writes an approved CASH target. Match must not treat that skip as a conflict.
@@ -138,14 +138,14 @@ def _recovery_state(
     source_run_id: UUID,
     current_weights: dict[str, float],
     workspace_id: str | None,
-) -> AtlasResearchState:
+) -> ResearchState:
     prefs: dict[str, object] = dict(portfolio_preferences_static(_PORTFOLIO_JSON))
     prefs["current_weights"] = current_weights
-    return AtlasResearchState(
+    return ResearchState(
         run_id=source_run_id,
         run_type="delta",
         run_date=run_date,
-        config=AtlasConfigBundle(preferences=prefs, workspace_id=workspace_id),
+        config=ResearchConfigBundle(preferences=prefs, workspace_id=workspace_id),
     )
 
 
@@ -154,7 +154,7 @@ def _new_recovery_state(
     client: SupabaseClient,
     run_date: date,
     workspace_id: str | None,
-) -> tuple[UUID, AtlasResearchState]:
+) -> tuple[UUID, ResearchState]:
     source_run_id = uuid4()
     return source_run_id, _recovery_state(
         run_date=run_date,
@@ -204,7 +204,7 @@ def _prior_manifest_fingerprints(manifests: list[dict[str, object]]) -> list[str
 def _write_recovery_manifest(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     weights: dict[str, float],
     cash_pct: float,
     nav: float,

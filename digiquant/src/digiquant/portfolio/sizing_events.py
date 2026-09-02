@@ -1,5 +1,5 @@
 """In-memory reason-coded adjustment events for the H8 sizing pipeline
-(#2417, Olympus WP2 Task 2.2, OLY-REV-009), handed to H9 for durable persistence
+(#2417, dashboard WP2 Task 2.2, OLY-REV-009), handed to H9 for durable persistence
 (#2768).
 
 These events remain a deliberately separate type from the persisted portfolio-lineage

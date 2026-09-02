@@ -1,14 +1,14 @@
 """Generic research-agent node for sub-graphs.
 
-A phase node in an Atlas-style pipeline is "research this scope, produce
+A phase node in an research-style pipeline is "research this scope, produce
 a validated structured output." The *how* (analyst persona, materiality
 filter, citation discipline) lives in this module. The *what* (which sector,
 which data sources, which output schema) is injected per call as
 ``skill_text`` + ``output_model``.
 
-This lets sub-graphs — notably digiquant Atlas (#176/#177) — compose research
+This lets sub-graphs — notably digiquant research (#176/#177) — compose research
 pipelines from declarative phase configs without re-authoring a prompt per
-segment. The module stays generic: no Atlas-specific vocabulary here.
+segment. The module stays generic: no research-specific vocabulary here.
 
 The existing ``digigraph.graph.research`` node is the RAG/tool-loop research
 node invoked by the digigraph supervisor; it is a different concern and is
@@ -325,7 +325,7 @@ def run_research_agent(
         )
         return result
 
-    # Pre-LLM compaction (#399): Atlas phases can ship large phase_inputs / prior
+    # Pre-LLM compaction (#399): research phases can ship large phase_inputs / prior
     # briefs in ``messages``. Do **not** wrap ``execute_tool`` with
     # ``wrap_execute_tool_for_tier1`` — same-turn stubbing hid tool results from
     # the model (digillm already caps via ``DIGI_TOOL_MESSAGE_MAX_CHARS``).
@@ -397,7 +397,7 @@ def run_research_agent(
                         # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
                         # i.e. only once a prior attempt already produced an unusable body. If the
                         # enforced retry itself fails at the provider we surface that ORIGINAL parse
-                        # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
+                        # error, so callers (research/portfolio fail-soft, which key off the parse error)
                         # see exactly the exception they would have seen before this change. Bare
                         # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
                         # prior error", which a narrower tuple would not deliver — an un-enumerated

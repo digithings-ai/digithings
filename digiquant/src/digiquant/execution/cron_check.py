@@ -1,4 +1,4 @@
-"""Combined loud-fail probe for Kairos production cron CLIs.
+"""Combined loud-fail probe for execution production cron CLIs.
 
 Runs overlay store check, broker-sync store check, route store check, and
 Mailgun check. Route ``--check`` never submits (kill switch still defaults
@@ -45,8 +45,8 @@ def run_cron_checks(
     """Assemble --check outcomes. Does not dispatch jobs or send mail."""
     rows = (
         CronCheckResult(name="overlay", exit_code=overlay_rc),
-        CronCheckResult(name="kairos_sync", exit_code=sync_rc),
-        CronCheckResult(name="kairos_route", exit_code=route_rc),
+        CronCheckResult(name="execution_sync", exit_code=sync_rc),
+        CronCheckResult(name="execution_route", exit_code=route_rc),
         CronCheckResult(name="mailgun", exit_code=mailgun_rc),
     )
     failed = tuple(row.name for row in rows if row.exit_code != 0)
@@ -58,7 +58,7 @@ def cron_check_exit_code(report: CronCheckReport) -> int:
 
 
 def format_cron_check_failure(failed: Sequence[str]) -> str:
-    return "KAIROS_CRON_CHECK: " + ", ".join(failed)
+    return "EXECUTION_CRON_CHECK: " + ", ".join(failed)
 
 
 def mailgun_check_exit_code(environ: Mapping[str, str] | None = None) -> int:
@@ -91,7 +91,7 @@ def main(
     if report.failed:
         err(format_cron_check_failure(report.failed))
         return cron_check_exit_code(report)
-    log("kairos cron check: overlay, sync, route, mailgun env present (names only)")
+    log("execution cron check: overlay, sync, route, mailgun env present (names only)")
     return 0
 
 

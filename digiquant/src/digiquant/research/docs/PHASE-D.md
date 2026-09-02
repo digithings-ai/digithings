@@ -1,6 +1,6 @@
 # Phase D — free-source ingestion replaces paid agentic search
 
-> **Superseded (2026-06):** Olympus web grounding now uses OpenRouter
+> **Superseded (2026-06):** dashboard web grounding now uses OpenRouter
 > `openrouter:web_search` (Exa engine) via `OPENROUTER_API_KEY` only — see
 > `config/digiquant_models.yaml` `grounding_model` and `RUNBOOK.md`. The xAI
 > cost baseline below is historical context for Phase D ingestion work.

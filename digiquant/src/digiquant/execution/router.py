@@ -1,7 +1,7 @@
 """Order-intent router: submit approved intents to an external venue (K4).
 
 Builds a :class:`~digiquant.brokers.contracts.BrokerOrderRequest` from a pending
-Hermes :class:`~digiquant.portfolio.models.portfolio_ledger.OrderIntent`,
+portfolio :class:`~digiquant.portfolio.models.portfolio_ledger.OrderIntent`,
 submits via a :class:`~digiquant.brokers.base.BrokerAdapter`, and appends one
 ``broker_orders`` row with a deterministic id. Retries collide on the primary
 key — never duplicate.
@@ -244,7 +244,7 @@ def _scope_ledger_rows_to_workspace(
     foreign = len(pending) - len(own_pending)
     if foreign:
         logger.warning(
-            "kairos router scoped out %d foreign-workspace pending intent(s); "
+            "execution router scoped out %d foreign-workspace pending intent(s); "
             "connection workspace_id=%s",
             foreign,
             expected,
@@ -389,7 +389,7 @@ def route_pending_orders(
         except (InconsistentOrderChainError, ValueError) as exc:
             result.refused.append((order_key, str(exc)))
             logger.warning(
-                "kairos router refused order_intent_id=%s: %s",
+                "execution router refused order_intent_id=%s: %s",
                 order_key,
                 exc,
             )

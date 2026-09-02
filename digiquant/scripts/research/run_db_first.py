@@ -166,7 +166,7 @@ def _print_agent_prompt(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="DB-first daily entrypoint for digiquant-atlas.")
+    ap = argparse.ArgumentParser(description="DB-first daily entrypoint for digiquant-research.")
     ap.add_argument("--date", default=_iso_today(), help="YYYY-MM-DD (default: today)")
     ap.add_argument("--baseline", action="store_true", help="Force baseline mode")
     ap.add_argument("--delta", action="store_true", help="Force delta mode")

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Document Delta",
+  "title": "digiquant-research Document Delta",
   "description": "Per-document weekday patch against the prior materialized research JSON. Publish with a unique document_key under document-deltas/\u2026",
   "type": "object",
   "additionalProperties": false,

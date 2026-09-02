@@ -1,7 +1,7 @@
-"""Atlas sub-graph state model (Pydantic — see ADR-0008).
+"""research sub-graph state model (Pydantic — see ADR-0008).
 
 Per-phase segment outputs live in phase modules and slot into
-``AtlasResearchState`` via ``SegmentPayload | Carried``.
+``ResearchState`` via ``SegmentPayload | Carried``.
 """
 
 from __future__ import annotations
@@ -119,9 +119,9 @@ RunType = Literal["baseline", "delta", "monthly"]
 """Legacy storage label for ``daily_snapshots.run_type``; derived from ``refresh_scope``."""
 
 Cadence = Literal["daily"]
-"""Olympus v1 operator cadence — single daily graph topology."""
+"""dashboard v1 operator cadence — single daily graph topology."""
 
-RefreshScope = Literal["none", "all", "segments", "hermes", "digest", "beliefs"]
+RefreshScope = Literal["none", "all", "segments", "portfolio", "digest", "beliefs"]
 """Operator override forcing full rewrites for matching artifact classes."""
 
 
@@ -182,7 +182,7 @@ class SegmentSlot(BaseModel):
     payload: SegmentPayload | Carried = Field(discriminator="source")
 
 
-class AtlasConfigBundle(BaseModel):
+class ResearchConfigBundle(BaseModel):
     """Static per-run config. Frozen so the LLM cache key stays stable across phases."""
 
     model_config = ConfigDict(frozen=True)
@@ -218,7 +218,7 @@ class AtlasConfigBundle(BaseModel):
 
 
 class PriorContext(BaseModel):
-    """Pre-flight load from Supabase. Frozen — same caching rationale as AtlasConfigBundle."""
+    """Pre-flight load from Supabase. Frozen — same caching rationale as ResearchConfigBundle."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -231,13 +231,13 @@ class PriorContext(BaseModel):
         default_factory=list,
         description=(
             "Non-terminal ``theses`` rows from the latest booked date before ``run_date``. "
-            "Hermes phase-0 entry (thesis review) consumes these until Wave-2 h1–h4 land."
+            "portfolio phase-0 entry (thesis review) consumes these until Wave-2 h1–h4 land."
         ),
     )
     decision_lessons: list[dict[str, Any]] = Field(
         default_factory=list,
         description=(
-            "Resolved Atlas Phase 9 decisions with their LLM reflections. Loaded by the "
+            "Resolved research Phase 9 decisions with their LLM reflections. Loaded by the "
             "preflight node from ``decision_log`` — last 5 same-ticker per watchlist member "
             "plus 3 cross-ticker rows ordered by run_date desc. Phase 7D PM reads these to "
             "anchor the next decision against past calls. Empty list on first run."
@@ -467,7 +467,7 @@ class PhaseError(BaseModel):
 
 
 class FocusRosterEntry(BaseModel):
-    """One ticker on the Hermes H4 focus roster."""
+    """One ticker on the portfolio H4 focus roster."""
 
     ticker: str
     roster_reason: Literal["thesis_mapped", "technical", "held", "momentum", "other"]
@@ -482,8 +482,8 @@ class ExcludedTicker(BaseModel):
     reason: str
 
 
-class PhaseHermesState(BaseModel):
-    """Thesis-first Hermes slots (H1–H9)."""
+class PhasePortfolioState(BaseModel):
+    """Thesis-first portfolio slots (H1–H9)."""
 
     thesis_review: dict[str, Any] | None = None
     market_thesis_exploration: dict[str, Any] | None = None
@@ -539,19 +539,19 @@ class PhaseHermesState(BaseModel):
         description="order_intent_id → ActionCostEstimate dump (H9 attach)",
     )
     pm_direction_memo: Any | None = (
-        None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
+        None  # PMDirectionMemo JSON; typed in portfolio.models.pm_direction
     )
     sized_book: RebalancePayload | None = None
     commit_manifest: dict[str, Any] | None = None
 
 
-def _merge_phase_hermes(
-    left: PhaseHermesState | None,
-    right: PhaseHermesState | None,
-) -> PhaseHermesState:
-    """Reducer for parallel H5/H6 writes into nested ``phase_hermes`` slots."""
+def _merge_phase_portfolio(
+    left: PhasePortfolioState | None,
+    right: PhasePortfolioState | None,
+) -> PhasePortfolioState:
+    """Reducer for parallel H5/H6 writes into nested ``phase_portfolio`` slots."""
     if not left:
-        return right or PhaseHermesState()
+        return right or PhasePortfolioState()
     if not right:
         return left
     merged = left.model_copy(deep=True)
@@ -612,8 +612,8 @@ def _merge_phase_hermes(
     return merged
 
 
-class AtlasResearchState(BaseModel):
-    """Sub-graph state. See ``docs/plans/atlas-digigraph-migration.md`` for field rationale.
+class ResearchState(BaseModel):
+    """Sub-graph state. See ``docs/plans/research-digigraph-migration.md`` for field rationale.
 
     Field grouping:
     - Run metadata (run_id, run_type, dates).
@@ -637,7 +637,7 @@ class AtlasResearchState(BaseModel):
     knowledge_cutoff_at: AwareDatetime | None = Field(
         default=None,
         description=(
-            "Timezone-aware UTC instant pinned before initial Atlas/Hermes state. "
+            "Timezone-aware UTC instant pinned before initial research/portfolio state. "
             "Registry reads require known_at <= this cutoff. Optional for legacy "
             "checkpoints only — new readers fail closed when missing."
         ),
@@ -708,7 +708,7 @@ class AtlasResearchState(BaseModel):
             )
         return value
 
-    config: AtlasConfigBundle = Field(default_factory=AtlasConfigBundle)
+    config: ResearchConfigBundle = Field(default_factory=ResearchConfigBundle)
     prior_context: PriorContext = Field(default_factory=PriorContext)
     data_layer: DataLayerSnapshot = Field(default_factory=DataLayerSnapshot)
 
@@ -737,14 +737,14 @@ class AtlasResearchState(BaseModel):
     phase7d_risk_debate: RiskDebatePayload | None = None
     phase7d_rebalance: RebalancePayload | None = None
     phase9_evolution: Phase9EvolutionPayload | None = None
-    phase_hermes: Annotated[PhaseHermesState, _merge_phase_hermes] = Field(
-        default_factory=PhaseHermesState
+    phase_portfolio: Annotated[PhasePortfolioState, _merge_phase_portfolio] = Field(
+        default_factory=PhasePortfolioState
     )
 
     # Transient per-Send fan-out cursor: a ``FanOutPhase`` dispatch (the H5/H6 per-ticker map)
     # sets this on the state copy it hands each parallel worker, so the worker knows which
     # ticker it owns. Workers never write it back, so the merged graph state keeps it None.
-    hermes_fanout_ticker: str | None = None
+    portfolio_fanout_ticker: str | None = None
 
     # Optional user-supplied prompt for a one-off custom research run (#313).
     # When set, Phase 7 synthesis includes the prompt as additional context
@@ -758,8 +758,8 @@ class AtlasResearchState(BaseModel):
     # WP13.3 (#2926): deterministic research attention plan built at triage end.
     # Stored as JSON-compatible dump; validate via research_attention helpers.
     research_attention_plan: dict[str, Any] | None = None
-    # WP13.4 (#2930): post-H4 Hermes ticker attention plan — roster is already fixed.
-    hermes_research_attention_plan: dict[str, Any] | None = None
+    # WP13.4 (#2930): post-H4 portfolio ticker attention plan — roster is already fixed.
+    portfolio_research_attention_plan: dict[str, Any] | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta
     # runs (empty dict on baseline / monthly). Frozen-by-convention: the
@@ -780,7 +780,7 @@ class AtlasResearchState(BaseModel):
     # right call for run health but left the event completely unobservable — a segment that
     # paid for a patch call AND a full regeneration is byte-identical in
     # ``atlas_run_diagnostics`` to one that merged cleanly. Non-gating telemetry: written
-    # here, surfaced via ``atlas.telemetry.merge_fallback_breakdown``, never read by a gate.
+    # here, surfaced via ``research.telemetry.merge_fallback_breakdown``, never read by a gate.
     # Right-wins reducer (like ``document_deltas``, not ``_merge_segment_dict``): parallel
     # fan-out nodes each write their own slug, and a duplicate slug is not a wiring bug
     # worth failing a run over.
@@ -794,7 +794,7 @@ class AtlasResearchState(BaseModel):
     # freeze was previously discoverable only by hashing payloads in SQL after the fact — which
     # is how the #1559 digest freeze went unnoticed. Non-gating telemetry, same contract as
     # ``merge_fallbacks``: written by edit-mode nodes, surfaced via
-    # ``atlas.telemetry.content_freeze_breakdown``, never read by a gate. Right-wins reducer for
+    # ``research.telemetry.content_freeze_breakdown``, never read by a gate. Right-wins reducer for
     # the same reason — one slug per fan-out node.
     content_freezes: Annotated[dict[str, str], _merge_right_wins_dict] = Field(
         default_factory=dict,

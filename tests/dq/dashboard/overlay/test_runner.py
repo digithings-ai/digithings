@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.portfolio.writers.commit_io import (
     OVERLAY_MANIFEST_PREFIX,
     book_portfolio,
@@ -44,8 +44,8 @@ from digiquant.dashboard.tenancy import (
     house_workspace_id,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.olympus.overlay._sealed import sealed_openai
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.dashboard.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 
@@ -130,7 +130,7 @@ def test_pin_seam_threads_version_and_workspace() -> None:
 
 def test_house_config_workspace_id_absent_is_none() -> None:
     """House default (workspace param absent) stays byte-identical at the pin seam."""
-    bundle = AtlasConfigBundle(watchlist=["SPY"])
+    bundle = ResearchConfigBundle(watchlist=["SPY"])
     assert bundle.workspace_id is None
     assert bundle.profile_config_version_id is None
 
@@ -302,13 +302,13 @@ def test_load_commit_manifests_house_uuid_ignores_overlay(
     assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
 
 
-def _book_state(*, workspace_id: str | None = None) -> AtlasResearchState:
-    state = AtlasResearchState(
+def _book_state(*, workspace_id: str | None = None) -> ResearchState:
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 30),
-        config=AtlasConfigBundle(workspace_id=workspace_id),
+        config=ResearchConfigBundle(workspace_id=workspace_id),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         sized_book={
             "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
             "actions": [],

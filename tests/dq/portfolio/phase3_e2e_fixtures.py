@@ -55,7 +55,7 @@ from digiquant.dashboard.research_retrieval.tools import (
     persist_pre_call_role_manifest,
 )
 
-from tests.dq.olympus.test_context_compiler import _belief, _evidence
+from tests.dq.dashboard.test_context_compiler import _belief, _evidence
 
 PHASE3_RUN_ID = "run-phase3-3019"
 PHASE3_SESSION = date(2026, 8, 26)
@@ -83,21 +83,21 @@ FORBIDDEN_PHASE3_NODES = frozenset(
     }
 )
 
-HERMES_COMPILED_NODES = frozenset(
+PORTFOLIO_COMPILED_NODES = frozenset(
     {
-        "hermes/thesis/market-review",
-        "hermes/thesis/market-exploration",
-        "hermes/thesis/vehicle-map",
-        "hermes/thesis/opportunity-screener",
-        "hermes/portfolio/asset-analyst-worker",
-        "hermes/portfolio/deliberation-worker",
-        "hermes/portfolio/pm-direction",
-        "hermes/portfolio/risk-sizing",
-        "hermes/portfolio/commit-run",
+        "portfolio/thesis/market-review",
+        "portfolio/thesis/market-exploration",
+        "portfolio/thesis/vehicle-map",
+        "portfolio/thesis/opportunity-screener",
+        "portfolio/asset-analyst-worker",
+        "portfolio/deliberation-worker",
+        "portfolio/pm-direction",
+        "portfolio/risk-sizing",
+        "portfolio/commit-run",
     }
 )
 
-ATLAS_COMPILED_NODES = frozenset(
+RESEARCH_COMPILED_NODES = frozenset(
     {
         "preflight",
         "triage",
@@ -115,10 +115,10 @@ ATLAS_COMPILED_NODES = frozenset(
 )
 
 PRODUCTION_GUARD_PATHS = (
-    _REPO / "digiquant/src/digiquant/olympus/hermes/chain.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/graph.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/h5_asset_analyst.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/h6_deliberation.py",
+    _REPO / "digiquant/src/digiquant/portfolio/chain.py",
+    _REPO / "digiquant/src/digiquant/portfolio/graph.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/h5_asset_analyst.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py",
 )
 
 ENFORCE_PROMOTION_FRAGMENTS = frozenset(
@@ -515,10 +515,10 @@ def run_phase3_composition() -> dict[str, Any]:
 
 
 __all__ = [
-    "ATLAS_COMPILED_NODES",
+    "RESEARCH_COMPILED_NODES",
     "ENFORCE_PROMOTION_FRAGMENTS",
     "FORBIDDEN_PHASE3_NODES",
-    "HERMES_COMPILED_NODES",
+    "PORTFOLIO_COMPILED_NODES",
     "PHASE3_CUTOFF",
     "PHASE3_RUN_ID",
     "PHASE3_SESSION",

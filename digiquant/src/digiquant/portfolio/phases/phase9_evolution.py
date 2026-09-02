@@ -34,7 +34,7 @@ from digiquant.research.decision_log import persist_pending
 from digiquant.research.phases._node_factory import _shared_context
 from digiquant.research.state import PhaseError
 from digiquant.research.supabase_io import SupabaseClient
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
 
@@ -134,7 +134,7 @@ class Phase9Deps:
 
 def _phase9_node_factory(
     deps: Phase9Deps | None,
-) -> Callable[[HermesState], dict[str, Any]]:
+) -> Callable[[PortfolioState], dict[str, Any]]:
     """Build the Phase 9 node bound to ``deps``.
 
     Returns a closure that:
@@ -149,7 +149,7 @@ def _phase9_node_factory(
     a hard failure that loses the whole evolution snapshot.
     """
 
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         # ── Phase A: decision-log persistence (non-LLM, Supabase write) ─
         if deps is not None:
             try:

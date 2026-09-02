@@ -43,7 +43,7 @@ from digiquant.vault.envelope import (
     seal_credential,
 )
 
-from tests.dq.olympus.overlay._sealed import sealed_openai
+from tests.dq.dashboard.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 

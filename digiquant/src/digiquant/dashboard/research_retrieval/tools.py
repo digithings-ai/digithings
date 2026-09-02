@@ -1,4 +1,4 @@
-"""LLM tool definitions for Olympus retrieval (spec §6.1).
+"""LLM tool definitions for dashboard retrieval (spec §6.1).
 
 WP14.4 binds drill-down dispatchers to compiled context manifests and persists
 pre-call manifest rows plus WP1 token linkage telemetry.

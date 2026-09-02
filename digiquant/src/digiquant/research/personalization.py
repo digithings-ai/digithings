@@ -1,10 +1,10 @@
 """Personalize a SnapshotEnvelope for a logged-in user.
 
-This module turns the global Atlas digest into a per-user view by applying
+This module turns the global research digest into a per-user view by applying
 :class:`digiquant.profiles.investment_profile.InvestmentProfile` and
 :class:`digiquant.profiles.asset_preferences.AssetPreferences` to a
 :class:`digiquant.research.snapshot.SnapshotEnvelope`. It is the read-time helper
-the Atlas BFF / dashboard calls before rendering — the upstream pipeline still
+the research BFF / dashboard calls before rendering — the upstream pipeline still
 writes one canonical row per day to ``daily_snapshots`` (Phase 7), and this
 function adapts that row for the calling user.
 
@@ -65,7 +65,7 @@ Anonymous (both ``profile`` and ``preferences`` are ``None``)
     ``strict`` drops items whose ``label`` or ``rationale`` (lower-cased)
     contains an excluded sector substring. ``tilt`` and ``none`` are
     pass-through here — ``tilt`` is intended to drive *weighting* in
-    Hermes / Kairos, not visibility in Atlas.
+    portfolio / execution, not visibility in research.
 
 Performance
 -----------
@@ -134,7 +134,7 @@ def personalize_snapshot(
     Parameters
     ----------
     envelope
-        The Atlas snapshot envelope, typically loaded from
+        The research snapshot envelope, typically loaded from
         ``daily_snapshots`` via :meth:`SnapshotEnvelope.from_supabase_row`.
     profile
         Optional investment profile. ``None`` = anonymous user.

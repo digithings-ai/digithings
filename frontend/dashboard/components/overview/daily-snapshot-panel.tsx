@@ -125,7 +125,7 @@ function RenderResult({
 }
 
 /**
- * Loading-grammar ruling (#1548): olympus wears ONE loading grammar — the
+ * Loading-grammar ruling (#1548): dashboard wears ONE loading grammar — the
  * @digithings/web sk-* shimmer sweep. The previous animate-pulse opacity bars
  * here adopt the shimmer as a deliberate upgrade (no `pulse` dress was added
  * to the Skeleton primitive); reduced-motion still degrades to a static tint.

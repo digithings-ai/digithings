@@ -1,4 +1,4 @@
-"""Unit tests for Kairos broker mirror sync (K4)."""
+"""Unit tests for execution broker mirror sync (K4)."""
 
 # score:allow untyped any
 # Fake PostgREST rows are heterogeneous dicts matching Supabase payloads.
@@ -375,7 +375,7 @@ def test_sync_module_has_no_upsert() -> None:
     from pathlib import Path
 
     text = (
-        Path(__file__).resolve().parents[4] / "digiquant/src/digiquant/olympus/kairos/sync.py"
+        Path(__file__).resolve().parents[4] / "digiquant/src/digiquant/execution/sync.py"
     ).read_text(encoding="utf-8")
     assert ".upsert(" not in text
 

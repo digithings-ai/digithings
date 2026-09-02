@@ -7,14 +7,14 @@ import digiquant.research.data.web_grounding as wg
 import digiquant.research.phases.phase3_macro as p3
 import pytest
 from digiquant.research.phases import _node_factory
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
 
-def _state() -> AtlasResearchState:
-    return AtlasResearchState(
+def _state() -> ResearchState:
+    return ResearchState(
         run_type="baseline",
         run_date=date(2026, 6, 8),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
 
 
@@ -22,9 +22,9 @@ def _run_macro_node_capturing(monkeypatch, *, enabled: bool, grounding: dict | N
     """Build the real macro node with its spec flags forced on, capturing the
     kwargs passed to run_research_agent."""
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1" if enabled else "0")
-    _node_factory._atlas_data_client.cache_clear()
+    _node_factory._research_data_client.cache_clear()
     # Avoid a real Supabase connection + a real web_search call in the unit test.
-    monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
+    monkeypatch.setattr(_node_factory, "_research_data_client", object)
     monkeypatch.setattr(wg, "fetch_web_grounding", lambda **_k: grounding)
 
     # Force both flags on the spec the node closes over (frozen dataclass → replace).

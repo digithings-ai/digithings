@@ -1,7 +1,7 @@
-# digiquant-atlas — System Architecture
+# digiquant-research — System Architecture
 
 > **Last updated**: 2026-06-20  
-> **Pipeline version**: v4 — daily Olympus graph (Atlas A0–A4 → Hermes H1–H9) with edit-mode continuity  
+> **Pipeline version**: v4 — daily dashboard graph (research A0–A4 → portfolio H1–H9) with edit-mode continuity  
 > **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 
 ---
@@ -15,7 +15,7 @@
 | Daily cadence + refresh_scope | [`WORKFLOWS.md`](WORKFLOWS.md) |
 | Skill index (filesystem source of truth) | [`SKILLS-CATALOG.md`](SKILLS-CATALOG.md) |
 | IDE / Copilot / Cursor setup | [`PLATFORMS.md`](PLATFORMS.md) |
-| Hermes H1–H9 topology | [`hermes/docs/ARCHITECTURE.md`](../../../hermes/docs/ARCHITECTURE.md) |
+| portfolio H1–H9 topology | [`portfolio/docs/ARCHITECTURE.md`](../../../portfolio/docs/ARCHITECTURE.md) |
 | Dated health / score snapshot | [`../SYSTEM-SCORECARD.md`](../SYSTEM-SCORECARD.md) |
 
 ---
@@ -27,7 +27,7 @@
 | Track | What | Task entry points |
 |-------|------|-------------------|
 | **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.portfolio.chain --cadence daily` |
-| **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
+| **Portfolio (Track B)** | Thesis-first portfolio H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
 | **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); daily beliefs short fold | `--refresh-scope beliefs` (full rewrite) |
 
 **Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
@@ -35,13 +35,13 @@ synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per ar
 
 The **9-phase tables** below are a **reference map** of segment skills. **Authoritative runtime
 order** is the LangGraph pipeline: A0 preflight → A1 triage → A2 segments → A3 consolidate →
-A4 digest → Hermes H1–H9.
+A4 digest → portfolio H1–H9.
 
 ---
 
 ## Overview
 
-digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and
+digiquant-research is an AI-orchestrated daily market intelligence system. Agents load config and
 prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages (or `*-edit.md`
 when `resolve_edit_mode` returns `edit`), and publish structured JSON to **`daily_snapshots`**
 and **`documents`**.
@@ -60,12 +60,12 @@ Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a se
 
 ---
 
-## Atlas → Hermes handoff
+## research → portfolio handoff
 
-Atlas terminates at `phase7_synthesis` (`DigestPayload`). Hermes reads only `DigestPayload`
-from Atlas runtime ([ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md)).
+research terminates at `phase7_synthesis` (`DigestPayload`). portfolio reads only `DigestPayload`
+from research runtime ([ADR-0015](../../../../../../docs/adr/0015-research-vs-portfolio.md)).
 
-Retrieval tools (Hermes grounding): `query_research`, `query_data`, `query_portfolio` with
+Retrieval tools (portfolio grounding): `query_research`, `query_data`, `query_portfolio` with
 phase-scoped blinding (spec §6.1).
 
 ---
@@ -113,7 +113,7 @@ Before any phase executes, the agent performs a structured context load:
 6. **Pin research state (#2863 / WP12.3)** — when a `ResearchStateStore` is
    wired, preflight selects one exact `ResearchStatePin` (optional explicit
    `requested_research_state_version_id`, else cutoff-bound `select_state_as_of`
-   + `pin_state_for_run`) onto `AtlasResearchState.research_state_pin`. Resume
+   + `pin_state_for_run`) onto `ResearchState.research_state_pin`. Resume
    reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
    documents shadow-only. Never re-select / `load_latest` after the pin.
 6b. **Ticker evidence bundles (#2844 / WP11.1–WP11.5)** — typed H5
@@ -126,7 +126,7 @@ Before any phase executes, the agent performs a structured context load:
    wire deterministic H6 selection + bounded missing-fact supplements; WP11.5
    (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
    amendments survive store serialize/reload across the H5→H6 boundary.
-   Optional `HermesGraphDeps.evidence_bundle_store`; default graph leaves it
+   Optional `PortfolioGraphDeps.evidence_bundle_store`; default graph leaves it
    unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
 
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
@@ -280,8 +280,8 @@ directly.
 ### Phase 7 — Master Synthesis (stitched markdown briefing)
 
 > Research-only synthesis. Subsection agents write topical markdown; a stitcher
-> assembles one long analyst-entry briefing. **No portfolio positioning** — that is Hermes's
-> domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
+> assembles one long analyst-entry briefing. **No portfolio positioning** — that is portfolio's
+> domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-research-vs-portfolio.md).
 
 **Canonical output:** one `digest` / `digest-delta` document whose `body` is the stitched
 markdown. Thin envelope: `date`, `regime_label`, `sources`, `segment_freshness`.
@@ -302,7 +302,7 @@ reads only its upstream memos plus the last **two full** digest briefing bodies
 5. **US equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
 6. **Watchlist / risk radar** — evidence-based items to monitor; no trade verbs
 
-H1/H2 consume `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
+H1/H2 consume `digest_briefing_for_portfolio` (`date` / `body` / `regime_label` only).
 
 **Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Subsection agents slim their upstream memo bodies under `_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS`. The stitcher sees subsections + two full prior briefing bodies (capped at `_DIGEST_PRIOR_BODY_MAX`, not 300 chars). `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`).
 
@@ -389,11 +389,11 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the Atlas frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the research frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
-After every baseline / delta run, the LangGraph pipeline writes one row to **`daily_snapshots`** via `digiquant_atlas.supabase_io.publish_daily_snapshot` (PR #441). That row is the canonical artifact — there is **no** separate static JSON published anywhere else. Columns we care about:
+After every baseline / delta run, the LangGraph pipeline writes one row to **`daily_snapshots`** via `digiquant.research.supabase_io.publish_daily_snapshot` (PR #441). That row is the canonical artifact — there is **no** separate static JSON published anywhere else. Columns we care about:
 
 | Column | Type | Notes |
 |---|---|---|
@@ -417,7 +417,7 @@ So the frontend uses the Supabase **anon** key — no service-role key client-si
 
 ### Envelope schema
 
-The wire-level contract is **[`digiquant.research.SnapshotEnvelope`](../../../../digiquant/src/digiquant/olympus/atlas/snapshot.py)** — a Pydantic v2 model wrapping the Phase 7 digest with run-level metadata. The exported JSON Schema lives at [`digiquant/docs/schemas/research_snapshot.v1.json`](../../../../digiquant/docs/schemas/research_snapshot.v1.json) and is regenerated by `scripts/export_research_snapshot_schema.py`.
+The wire-level contract is **[`digiquant.research.SnapshotEnvelope`](../../../../digiquant/src/digiquant/research/snapshot.py)** — a Pydantic v2 model wrapping the Phase 7 digest with run-level metadata. The exported JSON Schema lives at [`digiquant/docs/schemas/research_snapshot.v1.json`](../../../../digiquant/docs/schemas/research_snapshot.v1.json) and is regenerated by `scripts/export_research_snapshot_schema.py`.
 
 ```text
 SnapshotEnvelope
@@ -439,15 +439,15 @@ The envelope is `extra="forbid"` end-to-end, so a frontend validator catches dri
 
 ### DigestPayload duality (don't import the app from the lib)
 
-`digiquant_atlas` (under `apps/`) depends on `digiquant` and `digigraph`. To keep the import direction correct (apps → libs, never libs → apps), `digiquant.research.snapshot.DigestPayload` is a **mirror** of `digiquant_atlas.phases.phase7_synthesis.DigestSnapshot`. A parity test (`tests/dq/research/test_snapshot.py::TestParityWithPipelineDigest`) imports both classes when the pipeline package is available and asserts field-name equality; drift fails loud.
+`digiquant.research` depends on `digiquant` and `digigraph`. To keep the import direction correct (apps → libs, never libs → apps), `digiquant.research.snapshot.DigestPayload` is a **mirror** of `digiquant.research.phases.phase7_synthesis.DigestSnapshot`. A parity test (`tests/dq/research/test_snapshot.py::TestParityWithPipelineDigest`) imports both classes when the pipeline package is available and asserts field-name equality; drift fails loud.
 
 ### Schema versioning policy
 
-Bump `digiquant.research.snapshot.SCHEMA_VERSION` and ship a sibling `atlas_snapshot.v{N}.json` whenever fields are added/removed/renamed or semantics change. Frontend consumers branch on `envelope.schema_version`. The previous version's schema file stays committed for grace-period rollouts.
+Bump `digiquant.research.snapshot.SCHEMA_VERSION` and ship a sibling `research_snapshot.v{N}.json` whenever fields are added/removed/renamed or semantics change. Frontend consumers branch on `envelope.schema_version`. The previous version's schema file stays committed for grace-period rollouts.
 
 ### Personalization (read-time, additive)
 
-The pipeline writes one canonical `daily_snapshots` row per day — *not* a per-user view. Per-user filtering and ranking happens at read time via [`digiquant.research.personalize_snapshot`](../../../../digiquant/src/digiquant/olympus/atlas/personalization.py). Issue [#312](https://github.com/digithings-ai/digithings/issues/312).
+The pipeline writes one canonical `daily_snapshots` row per day — *not* a per-user view. Per-user filtering and ranking happens at read time via [`digiquant.research.personalize_snapshot`](../../../../digiquant/src/digiquant/research/personalization.py). Issue [#312](https://github.com/digithings-ai/digithings/issues/312).
 
 ```
 SnapshotEnvelope ──┐
@@ -461,7 +461,7 @@ Behavior:
 - **`AssetPreferences.excluded_tickers`**: drops items in `actionable_summary`, `risk_radar`, `material_findings` whose label/rationale/trigger/summary mention an excluded ticker (word-boundary uppercase regex; coarse but documented — "USA"/"UK" can collide).
 - **`AssetPreferences.custom_universe`**: stable-partitions `actionable_summary` so items mentioning a custom-universe ticker move to the front; positional moves are reported in `rank_changes`.
 - **`InvestmentProfile.risk_tolerance`**: `conservative` drops `actionable_summary` items with `priority < 3`; `moderate` / `aggressive` keep all.
-- **`InvestmentProfile.esg_preference == "strict"`**: drops items whose label/rationale/trigger/summary contain any `excluded_sectors` substring (lower-cased contains-match). `tilt` / `none` are pass-through here — `tilt` drives weighting downstream in Hermes/Kairos, not visibility in Atlas.
+- **`InvestmentProfile.esg_preference == "strict"`**: drops items whose label/rationale/trigger/summary contain any `excluded_sectors` substring (lower-cased contains-match). `tilt` / `none` are pass-through here — `tilt` drives weighting downstream in portfolio/execution, not visibility in research.
 
 `schema_version` does **not** bump — personalization is additive and consumed via the sibling `PersonalizedSnapshot` dataclass, keeping the wire envelope contract immutable. Performance budget: < 100 ms per snapshot (issue req); CI assertion at 200 ms for runner variance.
 
@@ -469,7 +469,7 @@ Behavior:
 
 ## Run Checkpoint / Resume (#665)
 
-A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `DIGI_CHECKPOINTER_POSTGRES_URI` are set, the chain compiles Atlas and Hermes with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::atlas` and `{run_id}::hermes` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
+A failed or interrupted run (e.g. provider outage, credit exhaustion) can **resume from the last completed node** instead of re-running the whole pipeline. When `DIGI_CHECKPOINTER=postgres` + `DIGI_CHECKPOINTER_POSTGRES_URI` are set, the chain compiles research and portfolio with a LangGraph **PostgresSaver** and runs them under **distinct per-graph threads** — `{run_id}::research` and `{run_id}::portfolio` (never one shared thread; their state schemas differ). Each node (per-segment, per-(axis,ticker) analyst, per-(round,ticker) debater) is a checkpoint boundary, so resume re-runs only incomplete nodes. Publish is **not** checkpointed (cheap + idempotent upserts).
 
 - **Automatic within a run:** the workflow's 3× outer retry reuses the same `GITHUB_RUN_ID`, so attempt 2 finds attempt 1's checkpoint and continues from the failure point.
 - **Cross-dispatch:** re-dispatch with `--resume-run-id <prior GITHUB_RUN_ID>` (a `resume_run_id` workflow input) to continue a previously-dead run.
@@ -488,7 +488,7 @@ Supabase is the system's long-term intelligence layer. Research continuity acros
 
 **Research continuity protocol:**
 - Query Supabase at session start — retrieve last 3 entries per relevant segment for trend identification (handled by `phases/preflight.py` → `load_prior_context`)
-- Publish new documents at session end via the terminal `phases/publish_phase.py` (replaces legacy `publish_document.py` / `materialize_snapshot.py` scripts when running inside the LangGraph pipeline). Fail-soft extras: `inputs` and `bias-row` via `olympus.atlas.inspectable_io` (no LLM).
+- Publish new documents at session end via the terminal `phases/publish_phase.py` (replaces legacy `publish_document.py` / `materialize_snapshot.py` scripts when running inside the LangGraph pipeline). Fail-soft extras: `inputs` and `bias-row` via `dashboard.research.inspectable_io` (no LLM).
 - Append-only semantics preserved in Supabase via unique `(date, document_key)` keys on `documents`
 - Creates compounding intelligence — each session builds on all prior research in every domain
 
@@ -542,7 +542,7 @@ preflight (freshness probe; no pre-loaded values)
   ↓ existing publish path (documents + daily_snapshot) — unchanged
 ```
 
-- **Two data tools, one query layer** (`olympus/atlas/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
+- **Two data tools, one query layer** (`dashboard/research/data/queries.py`): exposed both in-process (`data/tools.py` → `DATA_TOOLS` + dispatcher, consumed by `build_grounding` in `phases/_node_factory.py`) and over MCP (`digiquant_get_price_technicals` / `digiquant_get_macro_series` in `mcp_server.py`).
 - **Per-phase flags** on `SegmentNodeSpec`: `use_data_tools` (macro, asset-classes, equity, sectors) and `live_search` (macro, all alt-/inst-, international). Equity/sector nodes are bespoke and call `build_grounding` directly.
 - **Web grounding** (`data/web_grounding.py` → `digigraph.llm_client.openrouter_web_search`):
   a read-only **pre-pass** on a **web-search-capable** model from
@@ -550,7 +550,7 @@ preflight (freshness probe; no pre-loaded values)
   Domain preferences from `config/search_domains.yaml` are folded into the
   natural-language query (native search has no Exa allowlist tool params).
   The digillm Exa `openrouter:web_search` server tool remains a **toolkit**
-  fallback for non-native models and is **not** used by Olympus (#2567).
+  fallback for non-native models and is **not** used by dashboard (#2567).
   Any search error degrades to ungrounded research (no crash).
 - **Env gate**: `ATLAS_DATA_TOOLS` (default on; set `0`/`false` to disable all tool grounding). If Supabase is unavailable, `build_grounding` degrades to tool-less rather than crashing the phase.
 
@@ -588,7 +588,7 @@ Supabase (documents, daily_snapshots, price_history, …)
 ## Repository structure
 
 ```
-digiquant-atlas/
+digiquant-research/
   AGENTS.md, CLAUDE.md, RUNBOOK.md, CLAUDE_PROJECT_INSTRUCTIONS.md
   config/                    Watchlist, portfolio, preferences, macro_series.yaml, …
   skills/<slug>/SKILL.md     Orchestrator, daily-delta, weekly-baseline, sectors, …
@@ -614,7 +614,7 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 
 ## LLM Routing — OpenRouter capability tiers
 
-*Current since Jun 2026 (#859, #980, #998): every phase LLM call routes through **OpenRouter** via capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml), selected by `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configolympus_modelsyaml). Historical per-phase budgets: [`docs/atlas/token-budget.md`](../../../../../../docs/atlas/token-budget.md).*
+*Current since Jun 2026 (#859, #980, #998): every phase LLM call routes through **OpenRouter** via capability pools in [`config/digiquant_models.yaml`](../../../../../../config/digiquant_models.yaml), selected by `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml). Historical per-phase budgets: [`docs/research/token-budget.md`](../../../../../../docs/research/token-budget.md).*
 
 The default `cheap` tier is **open-weight models only** — frontier models (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime (`digigraph.model_config.is_flagship_openrouter_model`), a guard added after a bare-Auto-Router delta run landed on GPT-5.5 and cost $11.95.
 
@@ -629,17 +629,17 @@ Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capabili
 | **reasoning** | `deepseek/deepseek-v4-flash` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
 | **web search** (grounding pre-pass only) | `perplexity/sonar`, `deepseek-v4-flash:online`, `llama-4-maverick:online` | live-search grounding; never phase/tool calls |
 
-Pools rebalanced in #2368 (2026-08-14, grok-4.6 added 2026-08-15; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` on cheap; `grok-4.3` (untouched by #2368; `grok-4.6` is the current xAI flagship but reserved for quality), `gpt-5.6-luna`, `gemini-3.7-flash`, and `deepseek-v4-pro` on balanced; `grok-4.6`/`gpt-5.6-sol`/`claude-sonnet-5`/`deepseek-v4-pro` on quality. `deepseek-chat` is retired from every Olympus pool — within Olympus every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
+Pools rebalanced in #2368 (2026-08-14, grok-4.6 added 2026-08-15; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` on cheap; `grok-4.3` (untouched by #2368; `grok-4.6` is the current xAI flagship but reserved for quality), `gpt-5.6-luna`, `gemini-3.7-flash`, and `deepseek-v4-pro` on balanced; `grok-4.6`/`gpt-5.6-sol`/`claude-sonnet-5`/`deepseek-v4-pro` on quality. `deepseek-chat` is retired from every dashboard pool — within dashboard every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_digiquant_pools.py`, which CI runs on any PR touching the routing configs (`validate-digiquant-pools.yml`).
 
 > **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `openrouter/deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
 
 ### Observed token volume
 
-From `atlas_run_diagnostics` (runs since 2026-06-15): **delta ≈ 1.3M total tokens/run** (~73 LLM calls, ≈ $0.43) and **baseline ≈ 340k** (~33 calls, ≈ $0.13). The old "~113k tokens/run" figure was the 2026-04 free-tier estimate and predates the Hermes fan-outs and web-grounding pre-passes.
+From `atlas_run_diagnostics` (runs since 2026-06-15): **delta ≈ 1.3M total tokens/run** (~73 LLM calls, ≈ $0.43) and **baseline ≈ 340k** (~33 calls, ≈ $0.13). The old "~113k tokens/run" figure was the 2026-04 free-tier estimate and predates the portfolio fan-outs and web-grounding pre-passes.
 
 ### How routing works
 
-Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-digest`, `hermes/portfolio/deliberation-NVDA`) to `run_research_agent`. The model resolves in this priority order (`digigraph/src/digigraph/model_config.py`):
+Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-digest`, `portfolio/deliberation-NVDA`) to `run_research_agent`. The model resolves in this priority order (`digigraph/src/digigraph/model_config.py`):
 
 ```
 1. Explicit model= kwarg  (test overrides, never set in production)
@@ -657,7 +657,7 @@ Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-diges
 phase_models:
   # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
   # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
-  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash   # trailing '-' = prefix match
+  portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash   # trailing '-' = prefix match
   # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
   # removes the #1559 64k synthesis ceiling (#1622).
   master-digest: openrouter/deepseek/deepseek-v4-flash
@@ -677,14 +677,14 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_
 On the live thesis-first path the cap is applied once, in H4 (`roster_cap.capped_tickers`),
 and since #1767 it is actually enforced — the prior book is the only sanctioned overshoot
 and thesis vehicles are prioritised within it. See
-`hermes/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
+`portfolio/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
 
 This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
 
 **Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
 (every scheduled workflow), `resolve_cli_inputs` falls back to
-`config/watchlist.md` — both the Atlas graph and the Hermes 7C/7CD fan-out are
-compiled from `AtlasInput.watchlist`, and an empty tuple silently skipped every
+`config/watchlist.md` — both the research graph and the portfolio 7C/7CD fan-out are
+compiled from `ResearchInput.watchlist`, and an empty tuple silently skipped every
 analyst/debate node. An explicit `--watchlist` still overrides the file, and an
 empty file still disables the fan-out. Cost note: with the fallback active, a
 delta run adds `min(len(watchlist), ATLAS_MAX_ANALYSTS) × 4` analyst calls plus
@@ -716,19 +716,19 @@ Tier-wide changes belong in `config/digiquant_models.yaml` (capability pools per
 | `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
-`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_olympus_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
+`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_digiquant_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
 
 ---
 
 ## digigraph Sub-graph Orchestration (issue #176, ADR-0009)
 
 The 9-phase pipeline described above is now orchestrated by a digigraph
-sub-graph in `digiquant/src/digiquant/olympus/atlas/`. Skill files in
+sub-graph in `digiquant/src/digiquant/research/`. Skill files in
 `skills/<slug>/SKILL.md` remain the authoritative "what to research"
 instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
-Entry point: `digiquant_atlas.graph.build_atlas_graph` plus `AtlasInput`.
+Entry point: `digiquant.research.graph.build_research_graph` plus `ResearchInput`.
 digiclaw (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
@@ -749,22 +749,22 @@ now flows through the sub-graph.
 
 ---
 
-## Hermes sub-graph (portfolio deliberation)
+## portfolio sub-graph (portfolio deliberation)
 
-Hermes owns **positioning** — thesis lifecycle, vehicle mapping, analyst
-deliberation, PM allocation, risk sizing, and book materialization. Atlas's
+portfolio owns **positioning** — thesis lifecycle, vehicle mapping, analyst
+deliberation, PM allocation, risk sizing, and book materialization. research's
 Phase 7 digest is **research-only** (no `thesis_tracker`, no
 `portfolio_recommendations` on new runs). See
-[ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
+[ADR-0015](../../../../../../docs/adr/0015-research-vs-portfolio.md).
 
 ### Boundary diagram
 
 ```mermaid
 flowchart LR
-  subgraph Atlas["Atlas"]
+  subgraph research["research"]
     A7["phase7_synthesis<br/>(research digest)"]
   end
-  subgraph Hermes["Hermes"]
+  subgraph portfolio["portfolio"]
     H["h1–h4 thesis pipeline<br/>(planned, not wired)"]
     C["phase7c analysts"]
     D["phase7d PM"]
@@ -785,11 +785,11 @@ flowchart LR
 | Thesis rows | Written when theses are proposed/mapped (h1–h3) | Written post-PM in `portfolio_materialize._upsert_theses` (one row per held ticker) |
 | Analyst linkage | Per-ticker analysis tied to `source_thesis_ids` | `AnalystPayload.thesis` is per-axis rationale text only — no thesis_id FK |
 
-The **live** Hermes graph is documented in
-[`hermes/docs/README.md`](../../hermes/docs/README.md). The **planned** seven-phase
+The **live** portfolio graph is documented in
+[`portfolio/docs/README.md`](../../portfolio/docs/README.md). The **planned** seven-phase
 expansion (h1 thesis review through h7 PM memo) remains in
-[`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) and
-[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md) for reference; wiring h1–h4
+[`PORTFOLIO_SUBGRAPH.md`](../../portfolio/PORTFOLIO_SUBGRAPH.md) and
+[`WAVE2_UNIT_SPECS.md`](../../portfolio/WAVE2_UNIT_SPECS.md) for reference; wiring h1–h4
 is a separate follow-up ([#924](https://github.com/digithings-ai/digithings/issues/924)) from book-continuity work (#859).
 
 Persistence lands in both `documents` (full payload) and the first-class

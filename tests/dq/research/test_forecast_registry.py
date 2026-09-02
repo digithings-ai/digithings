@@ -9,7 +9,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 import pytest
 from digiquant.research import forecast_registry as fr
-from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchState, PhasePortfolioState
 from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
@@ -20,7 +20,7 @@ from digiquant.portfolio.models.forecast import (
     materialize_forecast_amendment,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 pytestmark = pytest.mark.unit
 
@@ -274,11 +274,11 @@ def test_collect_and_persist_from_state() -> None:
         effective_at=TS,
         known_at=TS,
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=TS.date(),
         baseline_date=TS.date(),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             asset_analysts={
                 "SPY": {
                     "ticker": "SPY",

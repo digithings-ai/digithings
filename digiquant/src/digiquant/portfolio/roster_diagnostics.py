@@ -9,9 +9,9 @@ not just fixed — otherwise the next regression is equally undetectable.
 Width folds into the existing ``breakdown`` jsonb rather than a new column, following the
 ``_row`` precedent: **no migration**.
 
-This module is a *pure* ``Callable[[AtlasResearchState], dict[str, Any]]`` matching the
+This module is a *pure* ``Callable[[ResearchState], dict[str, Any]]`` matching the
 ``_BREAKDOWN_CONTRIBUTORS`` seam that PR #1774 lands in
-``atlas/diagnostics.py::_segment_counts``. It deliberately imports **nothing** from
+``research/diagnostics.py::_segment_counts``. It deliberately imports **nothing** from
 ``diagnostics.py``: the seam is not on ``develop`` yet, and #1774 owns that file. Once
 #1774 has landed, wiring this up is a single line there —
 
@@ -27,13 +27,13 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: jsonb breakdown payload
 )
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.portfolio.roster_cap import configured_max_analysts
 
 BREAKDOWN_KEY = "roster"
 
 
-def roster_breakdown(state: AtlasResearchState) -> dict[str, Any]:
+def roster_breakdown(state: ResearchState) -> dict[str, Any]:
     """``{"roster": {...}}`` — H4 focus-roster width by reason, plus the cap in force.
 
     ``over_cap`` compares width against the **static** ``ATLAS_MAX_ANALYSTS``, not the
@@ -45,9 +45,9 @@ def roster_breakdown(state: AtlasResearchState) -> dict[str, Any]:
     run-summary path, and a contributor must never be the reason a diagnostics row goes
     unwritten. Mirrors the ``getattr`` idiom ``diagnostics._book_status`` already uses.
     """
-    phase_hermes = getattr(state, "phase_hermes", None)
-    roster = list(getattr(phase_hermes, "focus_roster", None) or [])
-    excluded = list(getattr(phase_hermes, "focus_roster_excluded", None) or [])
+    phase_portfolio = getattr(state, "phase_portfolio", None)
+    roster = list(getattr(phase_portfolio, "focus_roster", None) or [])
+    excluded = list(getattr(phase_portfolio, "focus_roster_excluded", None) or [])
     by_reason: dict[str, int] = {}
     theses: set[str] = set()
     for entry in roster:

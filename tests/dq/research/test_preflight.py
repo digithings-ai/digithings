@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 from digiquant.data.prices import refresh as refresh_mod
 from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 @pytest.mark.unit
@@ -36,10 +36,10 @@ class TestPreflight:
         client = self._client_with_fresh_data(date(2026, 4, 25))
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY", "QQQ"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY", "QQQ"]),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=run_date)
+        state = ResearchState(run_type="baseline", run_date=run_date)
 
         out = node(state)
 
@@ -53,10 +53,10 @@ class TestPreflight:
         client = self._client_with_fresh_data(date(2026, 4, 25))
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
+        state = ResearchState(run_type="delta", run_date=date(2026, 4, 27))
         out = node(state)
         assert "config" in out
 
@@ -66,11 +66,11 @@ class TestPreflight:
         client = self._client_with_fresh_data(date(2026, 4, 20))
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
             price_staleness_days=3,
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=run_date)
+        state = ResearchState(run_type="baseline", run_date=run_date)
         out = node(state)
         assert out["data_layer"].fallback_used == "scripts"
 
@@ -78,7 +78,7 @@ class TestPreflight:
         client = self._client_with_fresh_data(date(2026, 4, 20))  # 6 days stale
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"]),
             price_staleness_days=3,
         )
         return client, deps
@@ -89,7 +89,7 @@ class TestPreflight:
         _client, deps = self._stale_deps()
         with patch.object(refresh_mod, "recompute_technicals_from_history") as recompute:
             out = build_preflight_node(deps)(
-                AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
             )
         recompute.assert_not_called()
         assert out["data_layer"].fallback_used == "scripts"
@@ -110,7 +110,7 @@ class TestPreflight:
             refresh_mod, "recompute_technicals_from_history", side_effect=_fake_recompute
         ):
             out = build_preflight_node(deps)(
-                AtlasResearchState(run_type="baseline", run_date=run_date)
+                ResearchState(run_type="baseline", run_date=run_date)
             )
         # Refresh brought it current → fallback cleared back to supabase.
         assert out["data_layer"].fallback_used == "supabase"
@@ -125,7 +125,7 @@ class TestPreflight:
             side_effect=RuntimeError("supabase down"),
         ):
             out = build_preflight_node(deps)(
-                AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+                ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
             )
         # Refresh failed → keep the stale data + the scripts signal (never crashes preflight).
         assert out["data_layer"].fallback_used == "scripts"
@@ -142,10 +142,10 @@ class TestPreflight:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=run_date)
+        state = ResearchState(run_type="baseline", run_date=run_date)
         out = node(state)
         assert out["data_layer"].fallback_used == "none"
         assert out["data_layer"].price_technicals_latest is None
@@ -166,10 +166,10 @@ class TestPreflight:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"]),
         )
         out = build_preflight_node(deps)(
-            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+            ResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
         )
         assert out["config"].preferences["current_weights"] == {"SHY": 30.0, "CASH": 70.0}
         assert out["prior_context"].prior_book[0]["ticker"] == "SHY"
@@ -196,10 +196,10 @@ class TestPreflight:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SHY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SHY"]),
         )
         out = build_preflight_node(deps)(
-            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+            ResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
         )
         weights = out["config"].preferences["current_weights"]
         # SHY value 30*1.10=33 vs CASH 70, NAV 103 → SHY ~32.04%, CASH ~67.96%.
@@ -241,10 +241,10 @@ class TestPreflight:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"]),
         )
         out = build_preflight_node(deps)(
-            AtlasResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
+            ResearchState(run_type="delta", run_date=run_date, baseline_date=date(2026, 6, 17))
         )
         pc = out["prior_context"]
         assert pc.prior_analyst_by_ticker["SHY"]["stance"] == "hold"
@@ -262,8 +262,8 @@ class TestPreflight:
                 "positions": [],
             }
         )
-        deps = PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle())
-        out = build_preflight_node(deps)(AtlasResearchState(run_type="baseline", run_date=run_date))
+        deps = PreflightDeps(client=client, config_loader=lambda: ResearchConfigBundle())
+        out = build_preflight_node(deps)(ResearchState(run_type="baseline", run_date=run_date))
         assert "current_weights" not in out["config"].preferences
         assert out["prior_context"].prior_book == []
 
@@ -295,10 +295,10 @@ class TestPreflightDataStarvation:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY", "QQQ"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY", "QQQ"]),
         )
         return build_preflight_node(deps)(
-            AtlasResearchState(run_type="baseline", run_date=run_date)
+            ResearchState(run_type="baseline", run_date=run_date)
         )
 
     # ── (a) price_basket_gap ──────────────────────────────────────────────
@@ -576,11 +576,11 @@ class TestResearchStatePreflightPin:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"]),
             research_state_store=None,
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
@@ -624,13 +624,13 @@ class TestResearchStatePreflightPin:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["SPY"]),
             research_state_store=store,
             research_state_attempt_id="attempt-1",
         )
         node = build_preflight_node(deps)
         cutoff = ts + timedelta(minutes=1)
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             knowledge_cutoff_at=cutoff,
@@ -752,7 +752,7 @@ class TestResearchStatePreflightPin:
         store.append_state_version(child)
 
         # Resume: checkpoint dump kept; store pin still the root (no re-select).
-        resume_state = AtlasResearchState(
+        resume_state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             knowledge_cutoff_at=cutoff,
@@ -784,14 +784,14 @@ class TestResearchStatePreflightPin:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
             research_state_store=store,
             research_state_attempt_id="1",
         )
         node = build_preflight_node(deps)
         missing = uuid4()
         out = node(
-            AtlasResearchState(
+            ResearchState(
                 run_type="baseline",
                 run_date=date(2026, 4, 26),
                 knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
@@ -816,13 +816,13 @@ class TestResearchStatePreflightPin:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
             research_state_store=store,
             research_state_attempt_id="2",
         )
         node = build_preflight_node(deps)
         out = node(
-            AtlasResearchState(
+            ResearchState(
                 run_type="baseline",
                 run_date=date(2026, 4, 26),
                 knowledge_cutoff_at=ts + timedelta(minutes=1),
@@ -879,13 +879,13 @@ class TestResearchStatePreflightPin:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(),
+            config_loader=lambda: ResearchConfigBundle(),
             research_state_store=store,
             research_state_attempt_id="fail-closed-child",
         )
         node = build_preflight_node(deps)
         out = node(
-            AtlasResearchState(
+            ResearchState(
                 run_type="baseline",
                 run_date=date(2026, 4, 26),
                 knowledge_cutoff_at=ts + timedelta(hours=2),

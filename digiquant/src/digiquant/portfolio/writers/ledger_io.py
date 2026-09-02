@@ -39,7 +39,7 @@ from typing import (
 )
 from uuid import UUID, uuid4
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.envcompat import PORTFOLIO_LEDGER, env_lookup
 from digiquant.portfolio.models.portfolio_ledger import (
@@ -90,7 +90,7 @@ _CLOSE_LOOKBACK_DAYS = 14
 _CLOSE_ROW_BUDGET = 900
 _CLOSE_TICKER_BATCH = max(1, _CLOSE_ROW_BUDGET // (_CLOSE_LOOKBACK_DAYS + 1))
 _QUANTUM = Decimal("0.000001")
-_POLICY_PREFIX = "hermes-h8-sizing"
+_POLICY_PREFIX = "portfolio-h8-sizing"
 
 
 def ledger_enabled() -> bool:
@@ -261,10 +261,10 @@ def _frozen_symbols(*, client: SupabaseClient, order_rows: list[dict[str, Any]])
     return frozen
 
 
-def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
+def _prior_weights(state: ResearchState) -> dict[str, float]:
     """Mark-to-market prior book weights, in percent.
 
-    The same source ``h7_pm_direction`` and ``phase7d_pm`` read. Atlas preflight
+    The same source ``h7_pm_direction`` and ``phase7d_pm`` read. research preflight
     derives it from ``load_prior_book(client, run_date)`` and drifts it by price moves
     since the prior book date (#955), which is the baseline H8 sized its targets
     against — so measuring the ledger's share deltas against it, rather than re-reading
@@ -361,7 +361,7 @@ def _order_quantity_for_move(
     return _shares(delta_pct=target_pct - prior_pct, nav=nav, close=close)
 
 
-def _policy_version_id(state: AtlasResearchState) -> str:
+def _policy_version_id(state: ResearchState) -> str:
     """Stable identifier for the sizing policy this commit was produced under.
 
     ``SizingCaps`` is frozen, so a digest over its fields is a faithful fingerprint:
@@ -409,7 +409,7 @@ def _pct_adjustments_by_symbol(
 def append_commit_chain(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     weights: dict[str, float],
     cash_pct: float,
     nav: float,

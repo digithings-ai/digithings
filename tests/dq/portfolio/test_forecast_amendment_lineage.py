@@ -8,7 +8,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.state import AtlasConfigBundle, FocusRosterEntry, PriorContext
+from digiquant.research.state import ResearchConfigBundle, FocusRosterEntry, PriorContext
 from digiquant.portfolio.focus_roster import with_fanout_ticker
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
@@ -73,16 +73,16 @@ def _assessment() -> ForecastAssessment:
 
 
 def _state(*, assessment: ForecastAssessment | None = None) -> Any:
-    from digiquant.research.state import AtlasResearchState, PhaseHermesState
+    from digiquant.research.state import ResearchState, PhasePortfolioState
 
     fa = assessment or _assessment()
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=_TS.date(),
         knowledge_cutoff_at=_TS,
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=PriorContext(),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             focus_roster=[
                 FocusRosterEntry(
                     ticker="AAPL",
@@ -139,7 +139,7 @@ class TestH6ForecastLineageCarry:
         )
         with patch.object(h6_deliberation, "deliberation_skip_signal", return_value=True):
             out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "fingerprint_skip"
         assert summary["effective_forecast_id"] == str(prior_eff.effective_id)
         assert summary["amendment_id"] == str(prior_eff.amendment_id)
@@ -150,18 +150,18 @@ class TestH6ForecastLineageCarry:
         assert summary.get("forecast_amendment") is not None
         assert summary["forecast_amendment"]["amendment_id"] == str(amendment.amendment_id)
         from digiquant.research.forecast_registry import collect_lineage_from_state
-        from digiquant.research.state import AtlasResearchState, PhaseHermesState
+        from digiquant.research.state import ResearchState, PhasePortfolioState
 
-        collected_state = AtlasResearchState(
+        collected_state = ResearchState(
             run_type="delta",
             run_date=_TS.date(),
             knowledge_cutoff_at=_TS,
-            phase_hermes=out["phase_hermes"],
+            phase_portfolio=out["phase_portfolio"],
         )
         # H5 assessment still on the input state path for registry; attach for collect.
-        collected_state.phase_hermes = PhaseHermesState(
-            asset_analysts=state.phase_hermes.asset_analysts,
-            deliberation_summaries=out["phase_hermes"].deliberation_summaries,
+        collected_state.phase_portfolio = PhasePortfolioState(
+            asset_analysts=state.phase_portfolio.asset_analysts,
+            deliberation_summaries=out["phase_portfolio"].deliberation_summaries,
         )
         _assessments, amendments = collect_lineage_from_state(collected_state)
         assert len(amendments) == 1
@@ -176,7 +176,7 @@ class TestH6ForecastLineageCarry:
             side_effect=ValueError("boom"),
         ):
             out = build_h6_from_state().worker.run(with_fanout_ticker(state, "AAPL"))
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["carry_reason"] == "llm_failure"
         assert summary["base_forecast_id"] == str(base.forecast_id)
         assert summary["effective_forecast_id"] == str(base.forecast_id)
@@ -186,7 +186,7 @@ class TestH6ForecastLineageCarry:
 
 def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
     """Published debate shape must retain the amendment dump for registry retry."""
-    from digiquant.research.state import AtlasResearchState, PhaseHermesState
+    from digiquant.research.state import ResearchState, PhasePortfolioState
     from digiquant.portfolio.payloads import deliberation_summaries
 
     base = _assessment()
@@ -199,10 +199,10 @@ def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
         effective_at=_TS,
         known_at=_TS,
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=_TS.date(),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             deliberation_summaries={
                 "AAPL": {
                     "ticker": "AAPL",

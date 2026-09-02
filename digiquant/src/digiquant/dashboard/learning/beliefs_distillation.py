@@ -1,6 +1,6 @@
-"""Daily beliefs blob distillation (Olympus WP-I / spec §11.1).
+"""Daily beliefs blob distillation (dashboard WP-I / spec §11.1).
 
-Phase 9 evolution LLM (9A–9C) is **not** on the daily Hermes graph — H9
+Phase 9 evolution LLM (9A–9C) is **not** on the daily portfolio graph — H9
 ``commit_run`` owns terminal persist. This module folds resolved ``decision_log``
 lessons into a same-date ``documents`` row (``document_key=beliefs``,
 ``doc_type=Beliefs``) on every house chain:
@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from digigraph.graph.pipeline_builder import PipelinePhase
 
 from digiquant.research.decision_log import fetch_recent_lessons
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.research.state import RefreshScope
 from digiquant.research.supabase_io import (
     SupabaseClient,
@@ -41,7 +41,7 @@ from digiquant.research.supabase_io import (
     query_unfolded_resolved_decisions,
 )
 from digiquant.dashboard.envcompat import BELIEFS_BACKLOG, env_lookup
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
@@ -274,8 +274,8 @@ class BeliefsDistillationDeps:
 
 def _beliefs_node_factory(
     deps: BeliefsDistillationDeps,
-) -> Callable[[HermesState], dict[str, Any]]:
-    def _node(state: HermesState) -> dict[str, Any]:
+) -> Callable[[PortfolioState], dict[str, Any]]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         if skip_overlay_shared_register(state.config.workspace_id):
             return {}
         fold_mode = resolve_beliefs_fold_mode(
@@ -297,12 +297,12 @@ def _beliefs_node_factory(
 def build_beliefs_distillation_phase(
     deps: BeliefsDistillationDeps | None = None,
 ) -> "PipelinePhase":
-    """Optional Hermes phase — daily short fold; full rewrite on trigger."""
+    """Optional portfolio phase — daily short fold; full rewrite on trigger."""
     from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
     if deps is None:
 
-        def _noop(_state: HermesState) -> dict[str, Any]:
+        def _noop(_state: PortfolioState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(
@@ -324,7 +324,7 @@ def build_beliefs_distillation_phase(
 def run_beliefs_distillation_if_triggered(
     *,
     client: SupabaseClient,
-    atlas_input: AtlasInput,
+    research_input: ResearchInput,
     run_type: str,
     workspace_id: UUID | str | None = None,
 ) -> bool:
@@ -333,7 +333,7 @@ def run_beliefs_distillation_if_triggered(
         return False
     backlog = count_unfolded_resolved_decisions(client)
     fold_mode = resolve_beliefs_fold_mode(
-        refresh_scope=atlas_input.refresh_scope, backlog_count=backlog
+        refresh_scope=research_input.refresh_scope, backlog_count=backlog
     )
 
     lessons: list[dict[str, Any]] | None = None
@@ -341,8 +341,8 @@ def run_beliefs_distillation_if_triggered(
         try:
             lessons = fetch_recent_lessons(
                 client=client,
-                run_date=atlas_input.run_date,
-                watchlist=atlas_input.watchlist,
+                run_date=research_input.run_date,
+                watchlist=research_input.watchlist,
                 same_ticker_limit=50,
                 cross_ticker_limit=50,
             )
@@ -352,7 +352,7 @@ def run_beliefs_distillation_if_triggered(
 
     return distill_beliefs(
         client=client,
-        run_date=atlas_input.run_date,
+        run_date=research_input.run_date,
         run_type=run_type,
         lessons=lessons,
         workspace_id=workspace_id,

@@ -1,10 +1,10 @@
-# Endpoint capability smoke check for the Olympus OpenRouter model pools (#1622).
+# Endpoint capability smoke check for the dashboard OpenRouter model pools (#1622).
 #
 # Runs on every PR touching the routing configs so a pool/pin change cannot merge with a
 # slug whose serving endpoints reject function tools or strict json_schema (#987, #1006),
 # or whose capable endpoints cap below the #1559 synthesis context floor (64k).
 # Live calls use max_tokens=2000 — a full sweep costs on the order of a few cents.
-name: "Validate: Olympus model pools"
+name: "Validate: digiquant model pools"
 
 on:
   pull_request:

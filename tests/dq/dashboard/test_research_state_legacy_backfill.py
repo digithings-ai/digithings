@@ -37,7 +37,7 @@ _PROV = TypedProvenance(
     source_run_id="run-backfill",
     attempt_id="1",
     artifact_id="art-backfill",
-    writer_role="olympus",
+    writer_role="dashboard",
 )
 _DEFAULT_PAYLOAD = {"title": "macro", "body": "legacy prose"}
 

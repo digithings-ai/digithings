@@ -1,4 +1,4 @@
-"""Workspace tenancy contracts (T0, Kairos + tenancy program, #5-T0).
+"""Workspace tenancy contracts (T0, execution + tenancy program, #5-T0).
 
 Multi-tenant privacy boundary: every private row (positions, fills, ledger, accounting,
 overlay profile config, …) is scoped to a ``workspace_id``. Exactly one workspace has
@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # Fixed namespace for every deterministic id this module mints. Mirrors
 # ``profile_config._PROFILE_VERSION_NS`` / migration 075's house seed comment — any
 # stable literal works here, it only needs to never change between deploys.
-_TENANCY_NAMESPACE = uuid5(NAMESPACE_URL, "digithings.olympus.tenancy")
+_TENANCY_NAMESPACE = uuid5(NAMESPACE_URL, "digithings.dashboard.tenancy")
 
 SYSTEM_WORKSPACE_SLUG = "system"
 HOUSE_WORKSPACE_SLUG = "house"
@@ -96,7 +96,7 @@ def house_workspace_id() -> UUID:
     ``opening_snapshot``, ``accounting.io``, ``commit_io``, ``execute_at_open``) stamps
     this id on rows it does not otherwise have a workspace for. It is a regular
     ``type='user'`` row, not the system workspace — the house *book* is user-private
-    data, even though the house *research* (Atlas corpus) is shared under the system
+    data, even though the house *research* (research corpus) is shared under the system
     workspace.
     """
     return workspace_id_for_slug(HOUSE_WORKSPACE_SLUG)

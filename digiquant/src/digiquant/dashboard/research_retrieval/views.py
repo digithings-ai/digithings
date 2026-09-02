@@ -81,7 +81,7 @@ def _front_matter(
 ) -> list[str]:
     return [
         "---",
-        f"olympus_research_view: {kind.value}",
+        f"dashboard_research_view: {kind.value}",
         f"view_schema_version: {view_schema_version}",
         f"state_version_id: {state_version_id}",
         f"state_content_hash: {state_content_hash}",

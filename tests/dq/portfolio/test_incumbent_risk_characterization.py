@@ -31,7 +31,7 @@ from digiquant.portfolio.sizing import (
     size_portfolio,
 )
 
-from tests.dq.hermes.incumbent_risk_fixtures import (
+from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,
     dataclass_matches_fixture,
     load_incumbent_risk_fixture,

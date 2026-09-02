@@ -738,7 +738,7 @@ _LINEAGE_SCENARIOS: dict[str, dict] = {
 
 
 def test_incumbent_default_caps_match_golden_fixture() -> None:
-    from tests.dq.hermes.incumbent_risk_fixtures import (
+    from tests.dq.portfolio.incumbent_risk_fixtures import (
         dataclass_matches_fixture,
         load_incumbent_risk_fixture,
     )

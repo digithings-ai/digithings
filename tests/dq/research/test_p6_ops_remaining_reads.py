@@ -15,7 +15,7 @@ from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
-_SCRIPTS = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "atlas"
+_SCRIPTS = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research"
 _HOUSE = str(house_workspace_id())
 _OVERLAY = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 

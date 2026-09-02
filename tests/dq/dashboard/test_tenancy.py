@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.dashboard.tenancy (T0, Kairos + tenancy program)."""
+"""Unit tests for digiquant.dashboard.tenancy (T0, execution + tenancy program)."""
 
 from __future__ import annotations
 

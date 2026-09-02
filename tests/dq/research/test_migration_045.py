@@ -1,7 +1,7 @@
 """Unit tests for migration 045 (PM Direction Memo doc_type — #1005).
 
 #930 introduced a new ``documents`` artifact published with
-``doc_type="PM Direction Memo"`` (``commit_io.publish_hermes_documents``), but no
+``doc_type="PM Direction Memo"`` (``commit_io.publish_portfolio_documents``), but no
 migration ever added that value to the ``chk_documents_doc_type`` CHECK constraint
 (latest before 045 was 043, which only permits the legacy ``"PM Allocation Memo"``).
 The mismatch was masked by the date-serialization crash (#993/#994); once that was
@@ -25,8 +25,7 @@ COMMIT_IO = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "portfolio"
     / "writers"
     / "commit_io.py"
 )
@@ -35,8 +34,7 @@ SUPABASE_IO = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "atlas"
+    / "research"
     / "supabase_io.py"
 )
 

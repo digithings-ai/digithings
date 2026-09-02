@@ -1,8 +1,8 @@
-"""Hermes-side JSON-Schema loader.
+"""portfolio-side JSON-Schema loader.
 
 Mirrors :mod:`digiquant.research.schemas` but resolves paths under
-``digiquant/src/digiquant/olympus/hermes/templates/``. Each engine's ``load_schema()`` only finds
-its own templates. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
+``digiquant/src/digiquant/portfolio/templates/``. Each engine's ``load_schema()`` only finds
+its own templates. See [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md).
 """
 
 from __future__ import annotations
@@ -27,20 +27,20 @@ __all__ = [
 
 
 def _templates_root() -> Path:
-    """Return ``digiquant/src/digiquant/olympus/hermes/templates/``.
+    """Return ``digiquant/src/digiquant/portfolio/templates/``.
 
-    Templates ship with the Hermes package — see #486.
+    Templates ship with the portfolio package — see #486.
     """
     return Path(__file__).resolve().parent / "templates"
 
 
 def _schema_path(name: str) -> Path:
-    """Resolve a logical name to a Hermes-side template path.
+    """Resolve a logical name to a portfolio-side template path.
 
     Order of precedence:
     1. ``templates/schemas/<name>.schema.json`` — most schemas live here.
     2. ``templates/<name>-schema.json`` — top-level schemas (kept flat for
-       historical reasons; tolerated for symmetry with Atlas's loader).
+       historical reasons; tolerated for symmetry with research's loader).
     """
     nested = _templates_root() / "schemas" / f"{name}.schema.json"
     if nested.is_file():
@@ -64,7 +64,7 @@ def validate_payload(name: str, payload: dict[str, Any]) -> None:
 
 
 def list_schema_names() -> list[str]:
-    """Return every schema name discoverable under ``hermes/templates/``. Sorted."""
+    """Return every schema name discoverable under ``portfolio/templates/``. Sorted."""
     root = _templates_root()
     names: set[str] = set()
     nested = root / "schemas"

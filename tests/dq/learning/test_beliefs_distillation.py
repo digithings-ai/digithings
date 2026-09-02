@@ -1,4 +1,4 @@
-"""Beliefs distillation — on-demand learning loop (Olympus #930, spec §11.1)."""
+"""Beliefs distillation — on-demand learning loop (dashboard #930, spec §11.1)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from digiquant.research.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
 )
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.dashboard.learning.beliefs_distillation import (
     DAILY_BELIEFS_MAX_TOKENS,
     DEFAULT_BELIEFS_BACKLOG,
@@ -23,7 +23,7 @@ from digiquant.dashboard.learning.beliefs_distillation import (
     should_distill_beliefs,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 def _resolved_row(*, row_id: str, folded: bool = False) -> dict[str, Any]:
@@ -261,7 +261,7 @@ class TestBeliefsDistillation:
     def test_chain_entry_daily_short_fold_writes_without_backlog(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.research.graph import AtlasInput
+        from digiquant.research.graph import ResearchInput
         from digiquant.dashboard.learning import beliefs_distillation as mod
 
         client = FakeSupabaseClient(canned_reads={"decision_log": []})
@@ -272,7 +272,7 @@ class TestBeliefsDistillation:
         monkeypatch.setattr(mod, "_run_beliefs_llm", _must_not_call_llm)
         written = mod.run_beliefs_distillation_if_triggered(
             client=client,
-            atlas_input=AtlasInput(
+            research_input=ResearchInput(
                 run_date=date(2026, 4, 26),
                 refresh_scope="none",
                 watchlist=("AAPL",),
@@ -288,20 +288,20 @@ class TestBeliefsDistillation:
 
 @pytest.mark.unit
 class TestPreflightReflectDaily:
-    def test_atlas_graph_includes_preflight_reflect_when_wired(self) -> None:
-        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+    def test_research_graph_includes_preflight_reflect_when_wired(self) -> None:
+        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
         from digiquant.research.phases.preflight import PreflightDeps
-        from digiquant.research.state import AtlasConfigBundle
+        from digiquant.research.state import ResearchConfigBundle
 
         client = FakeSupabaseClient()
-        deps = AtlasGraphDeps(
+        deps = ResearchGraphDeps(
             preflight=PreflightDeps(
                 client=client,
-                config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+                config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
             ),
             preflight_reflect=PreflightReflectDeps(client=client),
         )
-        graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+        graph = build_research_graph(deps=deps, watchlist=("AAPL",))
         names = set(graph.get_graph().nodes.keys())
         assert "preflight-reflect" in names
         assert "learning/beliefs-distillation" not in names
@@ -323,7 +323,7 @@ class TestPreflightReflectDaily:
 
         client = FakeSupabaseClient()
         node = build_preflight_reflect_node(PreflightReflectDeps(client=client))
-        node(AtlasResearchState(run_type="delta", run_date=date(2026, 4, 26)))
+        node(ResearchState(run_type="delta", run_date=date(2026, 4, 26)))
         assert called["resolve"] == 1
 
 
@@ -332,40 +332,40 @@ class TestChainBeliefsWiring:
     def test_refresh_scope_beliefs_runs_distillation_only(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.research.graph import AtlasInput
+        from digiquant.research.graph import ResearchInput
         from digiquant.portfolio import chain as chain_mod
 
-        calls: dict[str, int] = {"beliefs": 0, "atlas": 0}
+        calls: dict[str, int] = {"beliefs": 0, "research": 0}
 
         def _stub_beliefs(**_kw: Any) -> bool:
             calls["beliefs"] += 1
             return True
 
-        def _stub_atlas(*_a: Any, **_k: Any) -> Any:
-            calls["atlas"] += 1
+        def _stub_research(*_a: Any, **_k: Any) -> Any:
+            calls["research"] += 1
             return object()
 
         monkeypatch.setattr(chain_mod, "run_beliefs_distillation_if_triggered", _stub_beliefs)
-        monkeypatch.setattr(chain_mod, "build_atlas_graph", _stub_atlas)
+        monkeypatch.setattr(chain_mod, "build_research_graph", _stub_research)
 
         from digiquant.research.testing.simulator import simulated_pipeline
 
         with simulated_pipeline(watchlist=("AAPL",)) as run:
-            chain_mod.run_atlas_then_hermes(
-                atlas_input=AtlasInput(
+            chain_mod.run_research_then_portfolio(
+                research_input=ResearchInput(
                     run_date=date(2026, 4, 26),
                     refresh_scope="beliefs",
                     watchlist=("AAPL",),
                 ),
-                deps=chain_mod.ChainDeps(atlas=run.deps, hermes=run.hermes_deps),
+                deps=chain_mod.ChainDeps(research=run.deps, portfolio=run.portfolio_deps),
             )
 
         assert calls["beliefs"] == 1
-        assert calls["atlas"] == 0
+        assert calls["research"] == 0
 
-    def test_daily_hermes_graph_excludes_phase9_evolution(self) -> None:
-        from digiquant.portfolio.graph import build_hermes_phases_thesis
+    def test_daily_portfolio_graph_excludes_phase9_evolution(self) -> None:
+        from digiquant.portfolio.graph import build_portfolio_phases_thesis
 
-        names = [p.name for p in build_hermes_phases_thesis(watchlist=["AAPL"])]
+        names = [p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"])]
         assert "phase9_evolution" not in names
         assert "beliefs_distillation" not in names

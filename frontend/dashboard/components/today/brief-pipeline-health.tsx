@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
 import { unpublishedBookNote } from '@/lib/dashboard-ssot';
@@ -115,7 +115,7 @@ function buildAriaLabel(ep: RunEpisode): string {
 /** Compact summary tiles — only emit optional ops stats when the row actually has them. */
 export function buildLatestRunCards(
   runHealth: BriefRunHealth,
-  latestDiag: AtlasRunDiagnostics | null
+  latestDiag: ResearchRunDiagnostics | null
 ): Array<{ label: string; value: string }> {
   const cards: Array<{ label: string; value: string }> = [
     {
@@ -165,7 +165,7 @@ function WeekBar({
   onPrev,
   onNext,
 }: {
-  diagnostics: AtlasRunDiagnostics[];
+  diagnostics: ResearchRunDiagnostics[];
   weekStart: string;
   canGoNext: boolean;
   onPrev: () => void;
@@ -251,7 +251,7 @@ function WeekBar({
 
 export type BriefPipelineHealthProps = {
   runHealth: BriefRunHealth | null | undefined;
-  diagnostics: AtlasRunDiagnostics[];
+  diagnostics: ResearchRunDiagnostics[];
   snapshotDate?: string | null;
   positionDates?: readonly string[];
   now?: Date;

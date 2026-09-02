@@ -1,4 +1,4 @@
-"""Pydantic models for Olympus edit-mode continuity (spec §5.2)."""
+"""Pydantic models for dashboard edit-mode continuity (spec §5.2)."""
 
 from __future__ import annotations
 

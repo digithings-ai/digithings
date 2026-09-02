@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from 'vitest';
-import type { Thesis, Position, AtlasRunDiagnostics } from './types';
+import type { Thesis, Position, ResearchRunDiagnostics } from './types';
 
 describe('widened domain types (F1)', () => {
   it('Thesis carries the six widened fields', () => {
@@ -17,8 +17,8 @@ describe('widened domain types (F1)', () => {
     expectTypeOf<Position>().toHaveProperty('horizon_days');
     expectTypeOf<Position>().toHaveProperty('sector_bucket');
   });
-  it('AtlasRunDiagnostics carries run economics', () => {
-    expectTypeOf<AtlasRunDiagnostics>().toHaveProperty('est_cost_usd');
-    expectTypeOf<AtlasRunDiagnostics>().toHaveProperty('cached_tokens');
+  it('ResearchRunDiagnostics carries run economics', () => {
+    expectTypeOf<ResearchRunDiagnostics>().toHaveProperty('est_cost_usd');
+    expectTypeOf<ResearchRunDiagnostics>().toHaveProperty('cached_tokens');
   });
 });

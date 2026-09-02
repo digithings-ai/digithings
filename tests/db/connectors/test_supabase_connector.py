@@ -40,7 +40,7 @@ class _FakeQuery:
     """Records calls and returns canned rows, honouring eq/gte/lte/in_/order/limit.
 
     Filters are applied for real (not no-ops) so a connector that forgets a
-    filter breaks loudly — same philosophy as the Atlas supabase_io fake.
+    filter breaks loudly — same philosophy as the research supabase_io fake.
     """
 
     table_name: str

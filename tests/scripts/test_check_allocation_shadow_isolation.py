@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "atlas" / "check_allocation_shadow_isolation.py"
+_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "check_allocation_shadow_isolation.py"
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-allocation-shadow.yml"
 
 pytestmark = pytest.mark.unit
@@ -39,11 +39,11 @@ def _codes(findings: list[Any]) -> set[str]:
 
 def _minimal_good_workflow() -> str:
     return """
-name: "Pipeline: Olympus allocation shadow"
+name: "Pipeline: allocation shadow"
 on:
   workflow_run:
     workflows:
-      - "Pipeline: Olympus research"
+      - "Pipeline: dashboard research"
     types:
       - completed
     branches:
@@ -103,7 +103,7 @@ class TestWorkflowIsolation:
 
     def test_rejects_untrusted_source_workflow(self, iso: ModuleType) -> None:
         bad = _minimal_good_workflow().replace(
-            '"Pipeline: Olympus research"',
+            '"Pipeline: dashboard research"',
             '"Pipeline: Digiquant prices"',
         )
         assert "untrusted_source" in _codes(iso.check_workflow_text(bad))
@@ -136,7 +136,7 @@ class TestWorkflowIsolation:
         assert 'gh api "repos/${REPO}/actions/runs/${source_run_id}"' in text
         assert "untrusted producer workflow" in text
         # The pre-fix anti-pattern: assign trusted label without API lookup.
-        assert 'source_workflow="Pipeline: Olympus research"' not in text
+        assert 'source_workflow="Pipeline: dashboard research"' not in text
         assert "TRUSTED_WORKFLOW=" in text
         assert "BRANCH_DISPATCH" in text
 
@@ -207,7 +207,7 @@ class TestArtifactTrustGates:
     def test_accepts_trusted_metadata_without_full_model(self, iso: ModuleType) -> None:
         findings = iso.check_artifact_trust(
             {"schema_version": "1.0", "artifact_content_hash": "a" * 64},
-            source_workflow="Pipeline: Olympus research",
+            source_workflow="Pipeline: dashboard research",
             source_branch="main",
             require_hash=False,
         )

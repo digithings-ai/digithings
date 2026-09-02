@@ -1,6 +1,6 @@
 # Pipeline Evolution Changelog
 
-> This document tracks every approved improvement to the digiquant-atlas pipeline.
+> This document tracks every approved improvement to the digiquant-research pipeline.
 > Each entry records what changed, why, and the measurable impact expected.
 > This file is maintained by the daily digest's Phase 9 self-improvement loop.
 

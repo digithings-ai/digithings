@@ -1,4 +1,4 @@
-"""Atlas pipeline simulation harness.
+"""research pipeline simulation harness.
 
 Use ``simulated_pipeline()`` from your tests to run the full LangGraph
 pipeline end-to-end without touching the real LLM provider or Supabase.

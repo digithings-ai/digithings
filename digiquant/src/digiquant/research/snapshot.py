@@ -1,7 +1,7 @@
-"""Atlas daily snapshot envelope — frontend-consumable schema.
+"""research daily snapshot envelope — frontend-consumable schema.
 
 This module defines :class:`SnapshotEnvelope`, the Pydantic v2 contract the
-Atlas frontend (and any other consumer) uses to validate a row read from the
+research frontend (and any other consumer) uses to validate a row read from the
 Supabase ``daily_snapshots`` table. The envelope wraps the digest payload
 (produced by :class:`digiquant.research.phases.phase7_synthesis.DigestSnapshot`)
 with run-level metadata (``schema_version``, ``run_date``, ``run_type``,
@@ -23,7 +23,7 @@ parity — drift fails loud rather than silently. Historical JSON slots are
 
 Read path (Option A — see PR #441 follow-up)
 --------------------------------------------
-1. The Atlas pipeline writes a row to ``daily_snapshots`` via
+1. The research pipeline writes a row to ``daily_snapshots`` via
    ``digiquant.research.supabase_io.publish_daily_snapshot``.
 2. The frontend (or any consumer) reads that row directly using the Supabase
    anon key under the ``anon_read`` RLS policy installed by migration 011.
@@ -53,7 +53,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.research.segments import compose_legacy_digest_body
 
 # Bump when fields are added/removed/renamed or semantics change.
-# The on-disk schema export lives at ``digiquant/docs/schemas/atlas_snapshot.v{N}.json``.
+# The on-disk schema export lives at ``digiquant/docs/schemas/research_snapshot.v{N}.json``.
 SCHEMA_VERSION: int = 1
 
 

@@ -24,7 +24,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
     paper_execution_id,
 )
 
-from tests.dq.hermes.test_portfolio_ledger import _ts, make_commit, make_decision
+from tests.dq.portfolio.test_portfolio_ledger import _ts, make_commit, make_decision
 
 pytestmark = pytest.mark.unit
 

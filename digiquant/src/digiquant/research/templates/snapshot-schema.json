@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Daily Snapshot",
+  "title": "digiquant-research Daily Snapshot",
   "description": "Structured sidecar written by the agent alongside DIGEST.md. Used by update-tearsheet.py to push data to Supabase.",
   "type": "object",
   "required": ["schema_version", "date", "run_type", "regime", "positions", "theses", "market_data", "segment_biases", "actionable", "risks"],

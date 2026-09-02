@@ -52,7 +52,7 @@ def test_missing_pair_uses_buckets_not_full_correlation() -> None:
 
 def test_incumbent_bucket_correlations_match_golden_fixture() -> None:
     """WP6.1 (#2687): freeze asset-class bucket fallback table."""
-    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+    from tests.dq.portfolio.incumbent_risk_fixtures import load_incumbent_risk_fixture
 
     golden = load_incumbent_risk_fixture()["bucket_correlations"]
     assert _bucket_corr("EQUITY", "FIXED_INCOME") == golden["equity_bond"]

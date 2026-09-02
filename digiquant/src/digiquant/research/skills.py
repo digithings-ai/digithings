@@ -1,6 +1,6 @@
 """Skill-file loader.
 
-A skill is a ``skills/<slug>/SKILL.md`` under ``digiquant/src/digiquant/olympus/atlas/skills/``.
+A skill is a ``skills/<slug>/SKILL.md`` under ``digiquant/src/digiquant/research/skills/``.
 The file has YAML frontmatter (``name``, ``description``) followed by Markdown
 instructions. Only the Markdown body is relevant at inference time; the
 frontmatter exists for human catalog tooling.
@@ -30,11 +30,11 @@ class SkillNotFoundError(FileNotFoundError):
     """
 
 
-def _atlas_data_root() -> Path:
-    """Return the directory holding Atlas skills + templates + config.
+def _research_data_root() -> Path:
+    """Return the directory holding research skills + templates + config.
 
-    Skills, templates, and config live alongside the Atlas package code
-    (``digiquant/src/digiquant/olympus/atlas/{skills,templates,config}/``) so they
+    Skills, templates, and config live alongside the research package code
+    (``digiquant/src/digiquant/research/{skills,templates,config}/``) so they
     ship inside the wheel via ``[tool.setuptools.package-data]``. See
     [#486](https://github.com/digithings-ai/digithings/issues/486).
     """
@@ -42,11 +42,11 @@ def _atlas_data_root() -> Path:
 
 
 def _skill_path(slug: str) -> Path:
-    return _atlas_data_root() / "skills" / slug / "SKILL.md"
+    return _research_data_root() / "skills" / slug / "SKILL.md"
 
 
 def _skill_edit_path(slug: str) -> Path:
-    return _atlas_data_root() / "skills" / slug / f"{slug}-edit.md"
+    return _research_data_root() / "skills" / slug / f"{slug}-edit.md"
 
 
 # Limits the DocumentPatch schema enforces but that none of the 17 *-edit.md
@@ -214,7 +214,7 @@ def load_skill(slug: str) -> str:
 def load_skill_edit(slug: str) -> str:
     """Return the Markdown body of ``skills/<slug>/<slug>-edit.md``.
 
-    Used by Atlas edit-mode nodes (spec §5.6). Separate cache from
+    Used by research edit-mode nodes (spec §5.6). Separate cache from
     :func:`load_skill` so full and edit variants can coexist.
 
     :data:`EDIT_SCHEMA_CONSTRAINTS` is appended to every edit skill (#1740), and
@@ -245,7 +245,7 @@ def load_skill_with_frontmatter(slug: str) -> tuple[dict[str, object], str]:
 
 def list_skill_slugs() -> list[str]:
     """Return every slug for which ``skills/<slug>/SKILL.md`` exists. Sorted."""
-    root = _atlas_data_root() / "skills"
+    root = _research_data_root() / "skills"
     if not root.is_dir():
         return []
     return sorted(p.name for p in root.iterdir() if p.is_dir() and (p / "SKILL.md").is_file())

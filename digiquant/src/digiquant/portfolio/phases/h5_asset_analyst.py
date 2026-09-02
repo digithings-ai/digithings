@@ -10,7 +10,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 
-from digiquant.research.state import PhaseHermesState
+from digiquant.research.state import PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.edit_mode import artifact_document_key
 from digiquant.portfolio.focus_roster import (
@@ -24,7 +24,7 @@ from digiquant.portfolio.phases.portfolio_common import (
     run_asset_analyst_llm,
 )
 from digiquant.portfolio.roster_cap import capped_tickers
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.analyst_io import upsert_analyst_coverage
 from digiquant.portfolio.writers.thesis_io import upsert_vehicle_thesis_from_analyst
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
@@ -32,7 +32,7 @@ from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, Re
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/portfolio/asset-analyst"
+NODE_ID = "portfolio/asset-analyst"
 
 _EXPLORATORY_REASONS = frozenset({"technical", "momentum", "other"})
 
@@ -45,13 +45,13 @@ def _should_backfill_vehicle_thesis(entry: dict[str, Any]) -> bool:
     return entry.get("roster_reason") in _EXPLORATORY_REASONS
 
 
-PHASE_NAME = "hermes_h5_asset_analyst"
+PHASE_NAME = "portfolio_h5_asset_analyst"
 
 
-def _roster_entry_map(state: HermesState) -> dict[str, dict[str, Any]]:
+def _roster_entry_map(state: PortfolioState) -> dict[str, dict[str, Any]]:
     return {
         entry.ticker.upper(): entry.model_dump(mode="json")
-        for entry in state.phase_hermes.focus_roster
+        for entry in state.phase_portfolio.focus_roster
     }
 
 
@@ -61,7 +61,7 @@ def _h5_node_factory(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ):
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
             return {}
         roster = _roster_entry_map(state)
@@ -74,9 +74,9 @@ def _h5_node_factory(
             evidence_bundle_store=evidence_bundle_store,
             research_state_store=research_state_store,
         )
-        hermes_update = PhaseHermesState()
+        portfolio_update = PhasePortfolioState()
         if evidence_bundle is not None:
-            hermes_update = PhaseHermesState(
+            portfolio_update = PhasePortfolioState(
                 ticker_evidence_bundles={
                     ticker.upper(): evidence_bundle.model_dump(mode="json"),
                 }
@@ -91,7 +91,7 @@ def _h5_node_factory(
                     ticker,
                     len(errors),
                 )
-            return {"phase_hermes": hermes_update}
+            return {"phase_portfolio": portfolio_update}
         if errors:
             logger.warning("H5 %s completed with %d recoverable errors", ticker, len(errors))
         doc_key = artifact_document_key(analyst_artifact_key(ticker))
@@ -116,7 +116,7 @@ def _h5_node_factory(
                 )
         analysts = {ticker: payload.model_dump(mode="json")}
         return {
-            "phase_hermes": hermes_update.model_copy(
+            "phase_portfolio": portfolio_update.model_copy(
                 update={"asset_analysts": analysts},
             )
         }
@@ -135,7 +135,7 @@ def build_h5_asset_analyst(
     capped = capped_tickers(tickers, held=held)
     if not capped:
 
-        def _noop(_state: HermesState) -> dict[str, Any]:
+        def _noop(_state: PortfolioState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(
@@ -163,13 +163,13 @@ def build_h5_from_state(
     """Runtime roster fan-out — one parallel ``Send`` worker per H4 ``focus_roster`` ticker.
 
     The roster is computed at run time by H4 (so it can't be a compile-time per-ticker phase);
-    ``FanOutPhase`` maps each ticker to a concurrent worker invocation and the ``phase_hermes``
+    ``FanOutPhase`` maps each ticker to a concurrent worker invocation and the ``phase_portfolio``
     reducer merges their analyst payloads. This replaces the prior single node that looped the
     tickers serially — N analyst LLM calls now run in parallel instead of back-to-back.
     """
 
-    def _worker(state: HermesState) -> dict[str, Any]:
-        ticker = state.hermes_fanout_ticker
+    def _worker(state: PortfolioState) -> dict[str, Any]:
+        ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
         return _h5_node_factory(ticker, client, evidence_bundle_store, research_state_store)(state)

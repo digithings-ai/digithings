@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATION_PATH = (
     REPO_ROOT / "digiquant" / "supabase" / "migrations" / "058_portfolio_metrics_percent_scale.sql"
 )
-ATLAS_SCRIPTS = REPO_ROOT / "digiquant" / "scripts" / "atlas"
+RESEARCH_SCRIPTS = REPO_ROOT / "digiquant" / "scripts" / "research"
 
 # A 21-point NAV series (>= _MIN_NAV_HISTORY_ROWS) shaped like the live one: base 100, a
 # mild run-up, a ~1.3% peak-to-trough dip, a partial recovery.
@@ -74,8 +74,8 @@ def statements(sql: str) -> str:
 @pytest.fixture(scope="module")
 def tearsheet() -> ModuleType:
     """``digiquant/scripts/research/update_tearsheet.py``, imported the way test_etl.py does."""
-    if str(ATLAS_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(ATLAS_SCRIPTS))
+    if str(RESEARCH_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(RESEARCH_SCRIPTS))
     return importlib.import_module("update_tearsheet")
 
 

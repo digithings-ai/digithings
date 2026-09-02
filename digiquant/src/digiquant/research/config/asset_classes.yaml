@@ -1,7 +1,7 @@
 # Asset-class buckets for the WHOLE book — the non-equity sleeves that GICS
 # `sectors.yaml` does not cover, plus the broad-equity / international / cash sleeves.
 #
-# Consumed by `olympus/hermes/sector_map.py`. Equity single-names and GICS sector
+# Consumed by `dashboard/portfolio/sector_map.py`. Equity single-names and GICS sector
 # ETFs (XLK, XLV, …) are bucketed from `sectors.yaml`; this file covers everything
 # else. Tickers are matched case-insensitively. Lists need not be exhaustive — an
 # unlisted ticker resolves to the "unknown" bucket (a conservative default that the

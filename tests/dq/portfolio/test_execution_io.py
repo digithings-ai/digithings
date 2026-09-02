@@ -38,7 +38,7 @@ from digiquant.portfolio.writers.ledger_io import (
     REQUESTED_TARGETS,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -514,7 +514,7 @@ class TestResidualIsMeasured:
     """``prior_quantity`` and ``residual_quantity`` are what name the projected event.
 
     `execute_at_open.py` calls a sell EXIT when the residual is zero and a buy OPEN when
-    the prior is zero — the event names in Olympus's Activity table are these two numbers
+    the prior is zero — the event names in dashboard's Activity table are these two numbers
     and nothing else. So they are part of this module's contract, not incidental fields:
     the residual is read back out of the mutated lineages after the close, never computed
     as ``prior - quantity``, and the difference is visible whenever a sell asks for more
@@ -1125,13 +1125,13 @@ class TestSoleAuthority:
         return sorted(out.split())
 
     def test_only_execution_io_names_the_fill_tables(self) -> None:
-        writers = "digiquant/src/digiquant/olympus/hermes/writers"
+        writers = "digiquant/src/digiquant/portfolio/writers"
         # ``ledger_io`` declares the paper_executions name because H9 reads it to decide
         # whether a symbol is already filled and therefore frozen. Reading is fine; it
         # never inserts there, which ``test_h9_is_the_only_ledger_writer`` pins from the
         # other side.
         assert self._files_naming("portfolio_ledger_paper_executions") == [
-            "digiquant/src/digiquant/olympus/atlas/cost_liquidity_registry.py",
+            "digiquant/src/digiquant/research/cost_liquidity_registry.py",
             f"{writers}/execution_io.py",
             f"{writers}/ledger_io.py",
         ]
@@ -1152,5 +1152,5 @@ class TestSoleAuthority:
         """
         assert self._files_naming("execute_pending_orders(") == [
             "digiquant/scripts/research/execute_at_open.py",
-            "digiquant/src/digiquant/olympus/hermes/writers/execution_io.py",
+            "digiquant/src/digiquant/portfolio/writers/execution_io.py",
         ]

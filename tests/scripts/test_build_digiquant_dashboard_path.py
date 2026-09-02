@@ -75,7 +75,7 @@ def test_settings_kicker_is_dashboard_not_olympus() -> None:
 def test_public_app_urls_ok_pins_dashboard_not_olympus() -> None:
     """Live EF still returns /olympus until Pages+EF cutover; the hop must not accept it."""
     text = (
-        REPO_ROOT / "digiquant" / "src" / "digiquant" / "olympus" / "kairos" / "staging_e2e.py"
+        REPO_ROOT / "digiquant" / "src" / "digiquant" / "execution" / "staging_e2e.py"
     ).read_text(encoding="utf-8")
     assert 'f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/brokers/callback"' in text
     assert 'f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/"' in text

@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 _REPO = Path(__file__).resolve().parents[3]
 _WORKFLOW = _REPO / ".github" / "workflows" / "pipeline-digiquant.yml"
-_AT_OPEN = _REPO / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
+_AT_OPEN = _REPO / "digiquant" / "scripts" / "research" / "execute_at_open.py"
 
 
 def test_httpx_timeout_constants() -> None:

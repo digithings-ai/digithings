@@ -13,7 +13,7 @@ Step-by-step procedures for every recurring workflow.
 
 **Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt.
 
-**Olympus daily pipeline:** `.github/workflows/pipeline-digiquant.yml` — `python -m digiquant.portfolio.chain --cadence daily` (Sunday `refresh_scope=all`).
+**dashboard daily pipeline:** `.github/workflows/pipeline-digiquant.yml` — `python -m digiquant.portfolio.chain --cadence daily` (Sunday `refresh_scope=all`).
 
 **Co-work / operator** runs ([`RUNBOOK.md`](../../RUNBOOK.md)): research + portfolio JSON → `run_db_first.py` → Supabase. Cowork setup: [`cowork/README.md`](../../cowork/README.md), project prompt [`cowork/PROJECT-PROMPT.md`](../../cowork/PROJECT-PROMPT.md), task list [`cowork/tasks/README.md`](../../cowork/tasks/README.md).
 
@@ -33,7 +33,7 @@ Step-by-step procedures for every recurring workflow.
 ```
 
 ```bash
-# 2. Run the unified daily chain (Atlas A0–A4 → Hermes H1–H9 → commit_run)
+# 2. Run the unified daily chain (research A0–A4 → portfolio H1–H9 → commit_run)
 python -m digiquant.portfolio.chain --cadence daily
 #    Sunday full refresh: --refresh-scope all (cron sets this automatically)
 #    Beliefs only: --refresh-scope beliefs
@@ -90,7 +90,7 @@ Synthesize into snapshot JSON and publish via `scripts/materialize_snapshot.py` 
 
 ## Weekly Rollup (optional operator)
 
-**Runs**: Friday evening or Sunday (filesystem rollup prompt only — **not** a separate Olympus cron graph).
+**Runs**: Friday evening or Sunday (filesystem rollup prompt only — **not** a separate dashboard cron graph).
 **Purpose**: Synthesize the week's research into one narrative
 
 ```bash
@@ -113,7 +113,7 @@ If your operator workflow commits weekly rollups, publish per RUNBOOK; otherwise
 
 > **Superseded (#930).** No `monthly` run type or month-end synthesis graph on the daily chain.
 > Month-over-month views are UI aggregation over stored daily artifacts. The script below
-> remains for optional operator prompts only — do not schedule as an Olympus cron.
+> remains for optional operator prompts only — do not schedule as an dashboard cron.
 
 **Runs**: Last day of month (optional, manual)
 **Purpose**: Key themes, sector rotation, thesis evolution
@@ -144,7 +144,7 @@ Publish monthly synthesis via RUNBOOK; avoid relying on `data/agent-cache/monthl
 
 **Manual prompt:**
 ```
-Build a research thesis using the Hermes pipeline (thesis management is now handled by portfolio-manager and pm-rebalance-decision skills).
+Build a research thesis using the portfolio pipeline (thesis management is now handled by portfolio-manager and pm-rebalance-decision skills).
 Build a new research thesis for: [TOPIC/TICKER/THEME]
 Read config/preferences.md for context on trading style.
 Query Supabase daily_snapshots and documents for existing research on the relevant domain.

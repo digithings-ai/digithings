@@ -1,4 +1,4 @@
-"""Combined Kairos cron --check probe."""
+"""Combined execution cron --check probe."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from digiquant.execution.cron_check import (
     main,
     run_cron_checks,
 )
-from digiquant.execution.sync_cron import missing_kairos_sync_env_names
+from digiquant.execution.sync_cron import missing_execution_sync_env_names
 from digiquant.dashboard.overlay.cron import missing_overlay_cron_env_names
 
 pytestmark = pytest.mark.unit
@@ -35,10 +35,10 @@ def test_run_cron_checks_all_green() -> None:
 
 def test_run_cron_checks_names_failures() -> None:
     report = run_cron_checks(overlay_rc=2, sync_rc=0, route_rc=3, mailgun_rc=2)
-    assert report.failed == ("overlay", "kairos_route", "mailgun")
+    assert report.failed == ("overlay", "execution_route", "mailgun")
     assert cron_check_exit_code(report) == 2
     msg = format_cron_check_failure(report.failed)
-    assert msg == "KAIROS_CRON_CHECK: overlay, kairos_route, mailgun"
+    assert msg == "EXECUTION_CRON_CHECK: overlay, execution_route, mailgun"
     assert "key-placeholder" not in msg
 
 
@@ -47,17 +47,17 @@ def test_main_empty_env_exits_2() -> None:
     rc = main([], environ={}, log=lambda _m: None, log_err=err.append)
     assert rc == 2
     blob = "\n".join(err)
-    assert "KAIROS_CRON_CHECK:" in blob
+    assert "EXECUTION_CRON_CHECK:" in blob
     assert "overlay" in blob
-    assert "kairos_sync" in blob
-    assert "kairos_route" in blob
+    assert "execution_sync" in blob
+    assert "execution_route" in blob
     assert "mailgun" in blob
     assert "OVERLAY_STORE_NOT_CONFIGURED" in blob
     assert "KAIROS_SYNC_NOT_CONFIGURED" in blob
     assert "KAIROS_ROUTING_DISABLED" not in blob
     assert "MAILGUN_NOT_CONFIGURED" in blob
     assert missing_overlay_cron_env_names({})
-    assert missing_kairos_sync_env_names({})
+    assert missing_execution_sync_env_names({})
     assert missing_mailgun_env_names({})
 
 

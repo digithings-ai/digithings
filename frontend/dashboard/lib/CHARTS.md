@@ -13,9 +13,9 @@ the scaffold itself lives in `@digithings/web` (the finance-charts family's
 disposal guard, `toLineData`/`timeToISO` adapters, `useChartTip`/
 `ChartTipShell` tooltip plumbing, `chartChromeOptions` token chrome shared
 with `useFinanceChart`); `lib/lw-chart.tsx` here is a thin adapter binding
-that scaffold to olympus's ChartColors — every color continues to come from
+that scaffold to dashboard's ChartColors — every color continues to come from
 `lib/chart-colors.ts` (the single sanctioned color source, #1402), which
-stays olympus-local (fixed categorical/benchmark hues are app vocabulary,
+stays dashboard-local (fixed categorical/benchmark hues are app vocabulary,
 not package surface).
 
 ## Classification

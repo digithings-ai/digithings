@@ -1,7 +1,7 @@
 """WP16.5 — purged and embargoed walk-forward fold builder (#2995).
 
 Produces deterministic non-overlapping training/calibration/evaluation roles with
-purge and embargo for Olympus policy replay. Versioned schedule parameters;
+purge and embargo for dashboard policy replay. Versioned schedule parameters;
 undersampled history fails with ``insufficient_history`` — never silent drop.
 """
 

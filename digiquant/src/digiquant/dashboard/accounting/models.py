@@ -7,7 +7,7 @@ P&L, and daily attribution:
     opening holdings/cash + fills/costs + closing marks (+ optional corporate actions)
         -> AccountingPeriod (equity, ticker net PnL, cash PnL, contributions, residual, status)
 
-Style mirrors ``hermes.models.portfolio_ledger``: frozen/strict models, closed ``StrEnum``
+Style mirrors ``portfolio.models.portfolio_ledger``: frozen/strict models, closed ``StrEnum``
 vocabularies, ``Decimal`` for every money/quantity/price field (``allow_inf_nan=False``),
 and UTC-only ``AwareDatetime`` where a clock time is required. Scope is contracts only —
 ``engine.py`` is the pure calculator; Task 3.2 owns persistence.

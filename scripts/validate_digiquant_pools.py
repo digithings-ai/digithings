@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Endpoint capability smoke check for the Olympus OpenRouter model pools (#1622).
+"""Endpoint capability smoke check for the dashboard OpenRouter model pools (#1622).
 
 Model-page capability claims are not sufficient: a slug's *serving endpoints* must
 actually accept function tools and strict ``json_schema``, or phase calls 404 or come
@@ -91,15 +91,15 @@ _JSON_SCHEMA = {
 
 
 def collect_pool_slugs(config_dir: Path) -> list[str]:
-    """Distinct bare OpenRouter slugs from olympus phase pools + model_modes pins.
+    """Distinct bare OpenRouter slugs from dashboard phase pools + model_modes pins.
 
     ``web_search_models`` are excluded: those are ``:online``/native-search variants used
     only by the grounding pre-pass and are never routed to tool or structured-output
     phases (they would legitimately fail this check).
     """
     slugs: set[str] = set()
-    olympus = yaml.safe_load((config_dir / "digiquant_models.yaml").read_text()) or {}
-    for tier in (olympus.get("tiers") or {}).values():
+    dashboard = yaml.safe_load((config_dir / "digiquant_models.yaml").read_text()) or {}
+    for tier in (dashboard.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             for model in pool or []:
                 slugs.add(_bare_slug(model))

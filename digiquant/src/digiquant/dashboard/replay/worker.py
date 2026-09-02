@@ -54,7 +54,7 @@ def run_portfolio_replay_isolated(
     proc = _SPAWN_CTX.Process(
         target=_worker_entry,
         args=(str(req_path), str(res_path)),
-        name=f"olympus-replay-{request.request_id}",
+        name=f"dashboard-replay-{request.request_id}",
     )
     proc.start()
     proc.join(timeout=timeout_s)
@@ -173,7 +173,7 @@ def _write_result(path: Path, result: PortfolioReplayResult) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI: ``python -m digiquant.dashboard.replay.worker --request X --result Y``."""
-    parser = argparse.ArgumentParser(description="Olympus shared-cash portfolio replay worker")
+    parser = argparse.ArgumentParser(description="dashboard shared-cash portfolio replay worker")
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
     args = parser.parse_args(argv)

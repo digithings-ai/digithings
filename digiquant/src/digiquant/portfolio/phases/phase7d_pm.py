@@ -35,12 +35,12 @@ from digiquant.research.phases._node_factory import (
 from digiquant.research.state import PhaseError
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 
 logger = logging.getLogger(__name__)
 
 
-def _pm_tools(state: HermesState, *, segment: str = "pm-rebalance"):
+def _pm_tools(state: PortfolioState, *, segment: str = "pm-rebalance"):
     """Full-scope query_data + computed tools for the PM. As the decision-maker it MAY
     read the book (positions/nav_history/theses) for rebalance + sizing context — it is
     not blinded like the analysts/debaters."""
@@ -52,7 +52,7 @@ def _pm_tools(state: HermesState, *, segment: str = "pm-rebalance"):
     )
 
 
-def _risk_tools(state: HermesState, *, segment: str):
+def _risk_tools(state: PortfolioState, *, segment: str):
     """Market-data-scoped tools for the risk debaters (blinded to the book)."""
     return build_grounding(
         use_data_tools=True,
@@ -102,7 +102,7 @@ class RiskDebateSummary(BaseModel):
     key_tension: str = Field()
 
 
-def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
+def _build_risk_phase_inputs(state: PortfolioState, role: str) -> dict[str, Any]:
     """Common inputs for both debater nodes.
 
     Both debaters read the same upstream context (analyst payloads + bias
@@ -119,7 +119,7 @@ def _build_risk_phase_inputs(state: HermesState, role: str) -> dict[str, Any]:
     }
 
 
-def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
+def _risk_aggressive_node(state: PortfolioState) -> dict[str, Any]:
     """Argues the growth/upside case for the proposed rebalance.
 
     One LLM call. The output is a ``RiskCase`` whose text seeds the
@@ -182,7 +182,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     }
 
 
-def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
+def _risk_conservative_node(state: PortfolioState) -> dict[str, Any]:
     """Argues the capital-preservation case + synthesizes the debate.
 
     Reads ``state.phase7d_risk_debate.aggressive_case`` written by the
@@ -246,14 +246,14 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     return {"phase7d_risk_debate": result.model_dump(mode="json")}
 
 
-def _prior_rebalance_payload(state: HermesState) -> dict[str, Any]:
+def _prior_rebalance_payload(state: PortfolioState) -> dict[str, Any]:
     """Latest published pm-rebalance document body, if any."""
     row = (state.prior_context.latest_segments or {}).get("pm-rebalance") or {}
     payload = row.get("payload") if isinstance(row, dict) else {}
     return dict(payload) if isinstance(payload, dict) else {}
 
 
-def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
+def _prior_analyst_gaps(state: PortfolioState) -> dict[str, dict[str, Any]]:
     """Held tickers with no fresh analyst output — carry slim prior summaries."""
     held = set(holdings_from_prior_book(state.prior_context.prior_book))
     gaps = held - set(analyst_payloads(state).keys())
@@ -261,7 +261,7 @@ def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
     return {ticker: dict(by_ticker[ticker]) for ticker in gaps if ticker in by_ticker}
 
 
-def _pm_node(state: HermesState) -> dict[str, Any]:
+def _pm_node(state: PortfolioState) -> dict[str, Any]:
     """Single LLM call that does clean-slate + comparison in one pass.
 
     Splitting into two LLM calls was considered; folded into one because
@@ -378,7 +378,7 @@ def _load_pm_skill(loader: Any) -> str:
     raise RuntimeError(f"no PM skill found; tried {tried}")
 
 
-def _current_weights_from_config(state: HermesState) -> dict[str, float]:
+def _current_weights_from_config(state: PortfolioState) -> dict[str, float]:
     """Pull current portfolio weights from state.config.preferences."""
     raw = state.config.preferences.get("current_weights") or {}
     if not isinstance(raw, dict):

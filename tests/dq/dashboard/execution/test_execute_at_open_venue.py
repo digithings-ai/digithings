@@ -1,4 +1,4 @@
-"""execute_at_open Kairos venue-dispatch seam (K4 review probes)."""
+"""execute_at_open execution venue-dispatch seam (K4 review probes)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[4] / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
+    Path(__file__).resolve().parents[4] / "digiquant" / "scripts" / "research" / "execute_at_open.py"
 )
 
 
@@ -20,7 +20,7 @@ def _load() -> Any:
     spec = importlib.util.spec_from_file_location("execute_at_open_k4", _SCRIPT)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
-    # Avoid colliding with the atlas test module name if both load in one session.
+    # Avoid colliding with the research test module name if both load in one session.
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     return mod

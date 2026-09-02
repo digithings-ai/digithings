@@ -11,13 +11,13 @@
  * weight column) — so the weights and the positions read as a single table, not
  * a separate allocation panel above it. A local table because SortableTable
  * tones a whole column, but each leg carries its own sign, so per-row money
- * colors need per-cell tone (the same call olympus's AllocationsPositionsTable
+ * colors need per-cell tone (the same call dashboard's AllocationsPositionsTable
  * documents in lib/TABLES.md). Money colors (--up/--down via text-up/text-down)
  * mark P&L direction only; the weight bar wears the module accent (a share, not
  * a return).
  *
  * Data facts this markup is built on (verified against the live views + the
- * writer, digiquant/src/digiquant/olympus/hermes/portfolio_materialize.py):
+ * writer, digiquant/src/digiquant/portfolio/portfolio_materialize.py):
  *   - NAV is a base-100 normalized paper index (that file: "NAV is a base-100
  *     normalized index", _SEED_NAV = 100.0). It is an internal valuation
  *     anchor only — headlines lead with percentage returns, never the index.

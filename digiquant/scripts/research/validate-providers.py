@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Atlas provider validation — run before triggering a real pipeline run.
+research provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
@@ -17,7 +17,7 @@ Checks (in order):
   6. Graph compiles cleanly — dry-run for both baseline and delta
 
 Usage:
-  python scripts/validate-providers.py          # from repo root or atlas dir
+  python scripts/validate-providers.py          # from repo root or research dir
   python scripts/validate-providers.py --skip-llm  # env-var + DB check only
   python scripts/validate-providers.py --skip-db   # env-var + LLM check only
 
@@ -74,8 +74,8 @@ def check(label: str, passed: bool, detail: str = "") -> bool:
 
 # ── resolve repo / package root ────────────────────────────────────────────────
 _here = Path(__file__).resolve().parent
-_atlas_dir = _here.parent  # digiquant/
-_repo_root = _atlas_dir.parent.parent  # repo root
+_research_dir = _here.parent  # digiquant/
+_repo_root = _research_dir.parent.parent  # repo root
 
 
 def _ensure_importable() -> None:
@@ -118,7 +118,7 @@ def check_env_vars() -> bool:
 # "the most popular model for that task" — openrouter.ai/docs/features/model-routing), not a
 # connectivity probe, and a bare "ok" ping carries no response_format/tools — so it never
 # triggered digillm's provider.require_parameters guard (client.py: forced ON for
-# response_format/tools requests) even when routed through digillm. Every real Olympus phase
+# response_format/tools requests) even when routed through digillm. Every real dashboard phase
 # already routes on a PINNED model (RUNBOOK.md "OpenRouter model tiers" — never bare auto),
 # and the daily-failure pattern since 2026-08-11 (#1633) was this exact bare ping hard-failing
 # preflight while check 3 below — the only other check that deliberately exercises
@@ -149,7 +149,7 @@ def check_env_vars() -> bool:
 # enough headroom" so much as an arbitrary bet against a provider-controlled quantity — any
 # finite number just moves the tail, it doesn't remove it.
 #
-# Root-cause fix: don't cap it. Every real Olympus phase call already runs with
+# Root-cause fix: don't cap it. Every real dashboard phase call already runs with
 # ``max_tokens=None`` (see ``digigraph/src/digigraph/graph/research_agent.py::run_research_agent``,
 # the same completion path ``check_openrouter_structured`` above calls) and has never shown this
 # failure mode — the bug was never "these providers need N tokens," it was "an artificial
@@ -179,9 +179,9 @@ def _configure_preflight_environment() -> None:
         str(_PREFLIGHT_EMPTY_RETRY_MAX),
     )
     _ensure_importable()
-    from digigraph.model_config import apply_olympus_openrouter_env
+    from digigraph.model_config import apply_digiquant_openrouter_env
 
-    apply_olympus_openrouter_env()
+    apply_digiquant_openrouter_env()
 
 
 def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
@@ -218,9 +218,9 @@ def check_openrouter_structured() -> bool:
     """Validate structured-output routing on ``openrouter/auto`` via the real digillm path.
 
     Requires ``_configure_preflight_environment()`` first so ``OPENROUTER_ALLOWED_MODELS``
-    matches production (``apply_olympus_openrouter_env``). With the pool constrained, digillm
+    matches production (``apply_digiquant_openrouter_env``). With the pool constrained, digillm
     attaches the ``auto-router`` plugin and omits ``require_parameters`` — the same request
-    shape Hermes chain startup uses. A plain ping (check 2) cannot catch json_schema routing
+    shape portfolio chain startup uses. A plain ping (check 2) cannot catch json_schema routing
     failures (#790/#802); a mis-set allowed-models pool or compound restriction fails here."""
     print(_bold("\n3. OpenRouter structured-output routing (digillm path)"))
     if not os.environ.get("OPENROUTER_API_KEY", "").strip():
@@ -278,13 +278,13 @@ def check_openrouter_function_tools() -> bool:
         return check("Function-tool smoke test", False, "OPENROUTER_API_KEY not set")
     try:
         _ensure_importable()
-        from digigraph.model_config import _load_olympus_models, get_olympus_tier
+        from digigraph.model_config import _load_digiquant_models, get_digiquant_tier
         from digillm.client import completion
 
         from digiquant.research.data.tools import DATA_TOOLS
 
-        tier = get_olympus_tier()
-        tier_cfg = _load_olympus_models().tiers.get(tier)
+        tier = get_digiquant_tier()
+        tier_cfg = _load_digiquant_models().tiers.get(tier)
         if tier_cfg is None:
             return check("Function-tool smoke test", False, f"unknown tier {tier!r}")
         # Distinct models across all phase (function-tool) pools, order preserved.
@@ -320,7 +320,7 @@ def check_openrouter_function_tools() -> bool:
                 # so OpenRouter can transparently substitute a working pool member and still
                 # return real content even when `model` itself would have been rejected for
                 # tool use. That's the exact :online "No endpoints found" regression this
-                # check exists to catch — but the SAME env var is set on the real "Run Olympus
+                # check exists to catch — but the SAME env var is set on the real "Run dashboard
                 # research pipeline" step, so a real run tolerates the identical substitution;
                 # substitution here does not predict a broken run. It's also the documented,
                 # EXPECTED trigger for ordinary transient provider load-shedding
@@ -364,13 +364,13 @@ def check_openrouter_function_tools() -> bool:
 
 
 def check_openrouter_web_search() -> bool:
-    """Validate Olympus native web grounding (built-in search on ``get_grounding_model``).
+    """Validate dashboard native web grounding (built-in search on ``get_grounding_model``).
 
     Production pools are perplexity/``:online`` only (#2567) — this exercises the
     digillm **native** branch used by ``fetch_web_grounding``, not the Exa
     ``openrouter:web_search`` toolkit fallback.
     """
-    print(_bold("\n4. OpenRouter web search (Olympus native grounding)"))
+    print(_bold("\n4. OpenRouter web search (dashboard native grounding)"))
     if not os.environ.get("OPENROUTER_API_KEY", "").strip():
         return check("Web search ping", False, "OPENROUTER_API_KEY not set")
     try:
@@ -383,7 +383,7 @@ def check_openrouter_web_search() -> bool:
             return check(
                 f"Web search ({model})",
                 False,
-                "grounding model is not web-search-capable (Olympus requires native search)",
+                "grounding model is not web-search-capable (dashboard requires native search)",
             )
         t0 = time.monotonic()
         result = openrouter_web_search(model, "latest US CPI headline release")
@@ -474,7 +474,7 @@ def check_dry_run(run_type: str) -> bool:
         cmd,
         capture_output=True,
         text=True,
-        cwd=str(_atlas_dir),
+        cwd=str(_research_dir),
         env=env,
     )
     elapsed = time.monotonic() - t0
@@ -492,11 +492,11 @@ def check_dry_run(run_type: str) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate Atlas providers and graph compilation before a real run.",
+        description="Validate research providers and graph compilation before a real run.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Tip: load your local env before running:
-              export $(grep -v '^#' digiquant/src/digiquant/olympus/atlas/config/supabase.env | xargs)
+              export $(grep -v '^#' digiquant/src/digiquant/research/config/supabase.env | xargs)
               export OPENROUTER_API_KEY=...
         """),
     )
@@ -505,7 +505,7 @@ def main() -> int:
     parser.add_argument("--skip-dry-run", action="store_true", help="Skip graph dry-run")
     args = parser.parse_args()
 
-    print(_bold("Atlas provider validation"))
+    print(_bold("research provider validation"))
     print("─" * 48)
 
     _configure_preflight_environment()

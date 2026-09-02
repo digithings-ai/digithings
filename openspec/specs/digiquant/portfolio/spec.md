@@ -1,4 +1,4 @@
-# digiquant / Hermes — Spec
+# digiquant / portfolio — Spec
 
 **Sub-graph of digiquant (port 8001)**  
 **Role:** Market data ingestion, signal generation, and strategy registry sub-graph.
@@ -12,7 +12,7 @@
 ## Invariants
 
 - Polars-only for all data manipulation
-- Hermes lives at `digiquant/src/digiquant/olympus/hermes/`
+- portfolio lives at `digiquant/src/digiquant/portfolio/`
 - Signal computation is stateless — no side effects beyond logging
 - Strategy configs are Pydantic v2 models; never raw dicts
 

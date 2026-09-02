@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
 from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
 from digiquant.portfolio.writers.thesis_io import (
@@ -16,7 +16,7 @@ from digiquant.portfolio.writers.thesis_io import (
     normalize_thesis_status,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 @pytest.mark.unit
@@ -69,10 +69,10 @@ class TestThesisIoInvalidationHits:
 @pytest.mark.unit
 class TestH1ThesisReviewInvalidation:
     def test_h1_node_marks_challenged_on_invalidation_hit(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["GLD"]),
+            config=ResearchConfigBundle(watchlist=["GLD"]),
             prior_context=PriorContext(
                 active_theses=[
                     {
@@ -86,7 +86,7 @@ class TestH1ThesisReviewInvalidation:
         )
         client = FakeSupabaseClient()
         compiled = build_pipeline(
-            AtlasResearchState,
+            ResearchState,
             [build_h1_thesis_review(client=client)],
         )
 
@@ -111,8 +111,8 @@ class TestH1ThesisReviewInvalidation:
             ):
                 result = compiled.invoke(state)
 
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
-        body = final.phase_hermes.thesis_review
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
+        body = final.phase_portfolio.thesis_review
         assert body is not None
         reviewed = body.get("body", body).get("reviewed_theses", [])
         geo = next(r for r in reviewed if r["thesis_id"] == "geo-gold")

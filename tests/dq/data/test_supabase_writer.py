@@ -19,7 +19,7 @@ from digiquant.data.prices.supabase_writer import (
 )
 from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 
-# ─── Fake Supabase (ports the Atlas pattern) ───────────────────────────
+# ─── Fake Supabase (ports the research pattern) ───────────────────────────
 
 
 @dataclass
@@ -76,7 +76,7 @@ def _ohlcv_df(n: int = 5, symbol: str = "SPY") -> pl.DataFrame:
 
 
 @pytest.mark.unit
-def test_ohlcv_to_price_history_rows_produces_atlas_schema() -> None:
+def test_ohlcv_to_price_history_rows_produces_research_schema() -> None:
     df = _ohlcv_df(3)
     rows = ohlcv_to_price_history_rows(df, "SPY")
     assert len(rows) == 3
@@ -305,7 +305,7 @@ def test_upsert_price_technicals_round_trip() -> None:
     res = upsert_price_technicals(client, rows)
     assert res.rows == 1
     stored = client.store["price_technicals"][0]
-    # Schema parity: Atlas reader expects at minimum `date` + `ticker`.
+    # Schema parity: research reader expects at minimum `date` + `ticker`.
     assert stored["date"] == "2025-01-01" and stored["ticker"] == "SPY"
     for col in TECHNICAL_COLUMNS:
         assert col in stored

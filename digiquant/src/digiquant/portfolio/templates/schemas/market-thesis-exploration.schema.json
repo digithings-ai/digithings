@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Market Thesis Exploration",
+  "title": "digiquant-research Market Thesis Exploration",
   "description": "Track B Phase 1 \u2014 market-facing theses from research only (no portfolio weights or user mandate). Prefer document_delta when refining the same dated exploration doc.",
   "type": "object",
   "additionalProperties": false,

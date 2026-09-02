@@ -15,19 +15,19 @@ from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
     run_thesis_phase_llm,
 )
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.thesis_io import persist_thesis_vehicle_map
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/thesis/vehicle-map"
-PHASE_NAME = "hermes_h3_vehicle_map"
+NODE_ID = "portfolio/thesis/vehicle-map"
+PHASE_NAME = "portfolio_h3_vehicle_map"
 ARTIFACT_KEY = ("thesis", "vehicle-map")
 DOC_TYPE = "thesis_vehicle_map"
 
 
-def _run_h3_llm(state: HermesState) -> ThesisVehicleMapOutput:
+def _run_h3_llm(state: PortfolioState) -> ThesisVehicleMapOutput:
     vehicle_map, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="thesis-vehicle-map",
@@ -39,8 +39,8 @@ def _run_h3_llm(state: HermesState) -> ThesisVehicleMapOutput:
             "doc_type": DOC_TYPE,
             "segment": NODE_ID,
             "watchlist": list(state.config.watchlist),
-            "thesis_review": state.phase_hermes.thesis_review,
-            "market_thesis_exploration": state.phase_hermes.market_thesis_exploration,
+            "thesis_review": state.phase_portfolio.thesis_review,
+            "market_thesis_exploration": state.phase_portfolio.market_thesis_exploration,
             "meta": {"source_exploration_key": "market-thesis-exploration"},
         },
         # Baseline runs publish `digest`, delta runs publish `digest-delta`
@@ -56,7 +56,7 @@ def _run_h3_llm(state: HermesState) -> ThesisVehicleMapOutput:
 
 
 def _h3_node_factory(client: SupabaseClient | None):
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         vehicle_map = _run_h3_llm(state)
         document = build_thesis_document(
             doc_type=DOC_TYPE,
@@ -76,7 +76,7 @@ def _h3_node_factory(client: SupabaseClient | None):
                 workspace_id=state.config.workspace_id,
             )
         return {
-            "phase_hermes": state.phase_hermes.model_copy(update={"thesis_vehicle_map": document}),
+            "phase_portfolio": state.phase_portfolio.model_copy(update={"thesis_vehicle_map": document}),
         }
 
     return _node

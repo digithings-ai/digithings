@@ -9,11 +9,11 @@ from uuid import UUID, uuid4
 
 import pytest
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     ExcludedTicker,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
@@ -39,7 +39,7 @@ from digiquant.portfolio.writers.ledger_io import (
 )
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -67,7 +67,7 @@ def _state(
     pm_memo: PMDirectionMemo | None = None,
     preferences: dict | None = None,
     run_id: UUID = _SOURCE_RUN_ID,
-) -> AtlasResearchState:
+) -> ResearchState:
     # Prior-book holdings make a name "held" without putting it in the roster — the
     # real shape of a gated-out held position (held in the book, excluded from H5).
     # PriorContext is frozen, so it must be built at construction time.
@@ -76,17 +76,17 @@ def _state(
         if prior_book_held
         else PriorContext()
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_id=run_id,
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 6, 9),
         prior_context=prior_context,
-        config=AtlasConfigBundle(preferences=preferences or {}),
+        config=ResearchConfigBundle(preferences=preferences or {}),
     )
     roster = [FocusRosterEntry(ticker=t, roster_reason="held") for t in held]
     excluded_ledger = [ExcludedTicker(ticker=t, reason=excluded_reason) for t in excluded]
-    hermes_fields: dict = dict(
+    portfolio_fields: dict = dict(
         focus_roster=roster,
         focus_roster_excluded=excluded_ledger,
         asset_analysts=analysts
@@ -108,12 +108,12 @@ def _state(
         ),
     )
     if with_sized_book:
-        hermes_fields["sized_book"] = sized_book if sized_book is not None else _sized_book()
-    state.phase_hermes = PhaseHermesState(**hermes_fields)
+        portfolio_fields["sized_book"] = sized_book if sized_book is not None else _sized_book()
+    state.phase_portfolio = PhasePortfolioState(**portfolio_fields)
     return state
 
 
-def _run(client: FakeSupabaseClient, state: AtlasResearchState) -> dict:
+def _run(client: FakeSupabaseClient, state: ResearchState) -> dict:
     node = build_commit_run_node(CommitRunDeps(client=client))
     return node(state)
 
@@ -172,7 +172,7 @@ class TestCommitRunBooking:
         # theses clipped at ~1200 chars mid-word with no risks — that was the *deployed*
         # old model; the thesis-first AnalystPayload carries the full thesis + risks, and
         # this test pins that the persistence path never re-introduces a clip.
-        from digiquant.portfolio.writers.commit_io import publish_hermes_documents
+        from digiquant.portfolio.writers.commit_io import publish_portfolio_documents
 
         long_thesis = "SPY rides broad risk-on participation with constructive breadth. " * 40
         assert len(long_thesis) > 1200
@@ -189,7 +189,7 @@ class TestCommitRunBooking:
                 }
             },
         )
-        publish_hermes_documents(client=client, state=state)
+        publish_portfolio_documents(client=client, state=state)
 
         analyst_doc = next(
             r for r in client.store["documents"] if r.get("document_key") == "analyst/SPY"
@@ -220,7 +220,7 @@ class TestCommitRunCoherence:
             pm_memo=memo,
         )
         out = _run(client, state)
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "committed"
         assert "IJR" not in {
             r["ticker"] for r in client.store.get("positions", []) if r["ticker"] != "CASH"
@@ -314,7 +314,7 @@ class TestCommitRunCoherence:
         )
         out = _run(client, state)
         assert not out.get("errors"), out.get("errors")
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "committed"
 
     def test_non_held_excluded_ticker_still_fails_closed(self) -> None:
@@ -367,8 +367,8 @@ class TestCommitRunIdempotency:
         pos_count_1 = len(client.store.get("positions", []))
         second = node(state)
         pos_count_2 = len(client.store.get("positions", []))
-        first_manifest = (first.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
-        second_manifest = (second.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        first_manifest = (first.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
+        second_manifest = (second.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert first_manifest.get("status") == "committed"
         assert second_manifest.get("status") == "noop"
         assert pos_count_2 == pos_count_1
@@ -376,7 +376,7 @@ class TestCommitRunIdempotency:
     def test_fresh_run_id_same_date_same_book_is_noop(self) -> None:
         """#1744: the retry shape the old run_id-keyed guard structurally could not see.
 
-        ``AtlasResearchState.run_id`` defaults to ``uuid4()``, so CI's outer retry
+        ``ResearchState.run_id`` defaults to ``uuid4()``, so CI's outer retry
         always presents a new id. Keyed on run_id the guard never fired and the
         second attempt re-booked the whole date; keyed on the date it is a no-op.
         """
@@ -386,7 +386,7 @@ class TestCommitRunIdempotency:
         docs_after_first = len(client.store.get("documents", []))
 
         retry = node(_state(run_id=UUID("11111111-2222-3333-4444-555555555555")))
-        manifest = (retry.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (retry.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "noop", (
             "a fresh run_id on the same date with the same book must not re-book"
         )
@@ -409,8 +409,8 @@ class TestCommitRunIdempotency:
         second = node(_state(sized_book=_sized_book(80.0)))
 
         assert not second.get("errors"), second.get("errors")
-        first_manifest = (first.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
-        second_manifest = (second.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        first_manifest = (first.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
+        second_manifest = (second.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert second_manifest.get("status") == "committed"
         assert second_manifest.get("commit_seq") == first_manifest["commit_seq"] + 1
         assert second_manifest.get("supersedes") == [first_manifest["weights_fingerprint"]]
@@ -516,7 +516,7 @@ class TestCommitRunIdempotency:
         result = node(state)
         assert result.get("errors")
         err = result["errors"][0]
-        assert err.phase == "hermes_h9_commit_run"
+        assert err.phase == "portfolio_h9_commit_run"
         assert "sized_book" in err.message.lower()
         assert "positions" not in client.store
 
@@ -551,7 +551,7 @@ class TestOrphanPositionPruning:
         assert not out.get("errors"), out.get("errors")
         tickers = {r["ticker"] for r in client.store["positions"]}
         assert tickers == {"SPY"}, f"orphan row survived the re-commit: {tickers}"
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("pruned_tickers") == ["XLF"]
 
     def test_stale_cash_row_is_deleted_when_re_commit_is_fully_invested(self) -> None:
@@ -809,7 +809,7 @@ class TestMemoUnaddressedHeldCarry:
         )
         out = _run(client, state)
         assert not out.get("errors"), out.get("errors")
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "committed"
 
     def test_memo_omitted_held_name_without_analyst_doc_still_commits(self) -> None:
@@ -830,7 +830,7 @@ class TestMemoUnaddressedHeldCarry:
         )
         out = _run(client, state)
         assert not out.get("errors"), out.get("errors")
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "committed"
 
     def test_memo_flat_held_name_is_addressed_not_carried(self) -> None:
@@ -857,7 +857,7 @@ class TestMemoUnaddressedHeldCarry:
         assert "TLT" not in carried_held_tickers(state)
         out = _run(client, state)
         assert not out.get("errors"), out.get("errors")
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "committed"
 
     def test_carried_set_is_held_only_and_sizing_carries_drifted_weight(self) -> None:
@@ -976,7 +976,7 @@ class TestCommitChainLedger:
         # nav 100 (seed), +100% of nav at a 100.0 close = 1 share.
         assert float(order["quantity"]) == pytest.approx(1.0)
 
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest["ledger_commit_id"] == _rows(client, _COMMITS)[0]["id"]
 
     def test_ledger_rows_are_inserted_never_upserted(self) -> None:
@@ -1011,9 +1011,9 @@ class TestCommitChainLedger:
         # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
         # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
-            "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
-            "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
-            "digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py",
+            "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+            "digiquant/src/digiquant/portfolio/writers/ledger_io.py",
+            "digiquant/src/digiquant/portfolio/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
 
     def test_identical_same_date_fingerprint_appends_nothing(self) -> None:
@@ -1025,7 +1025,7 @@ class TestCommitChainLedger:
 
         out = _run(client, _state(run_id=UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")))
 
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("status") == "noop"
         assert {t: len(_rows(client, t)) for t in _LEDGER_TABLES} == before
 
@@ -1107,7 +1107,7 @@ class TestCommitChainLedger:
         # policy_version_id, supersedes_id, effective_at, recorded_at) and
         # ``PortfolioCommit`` is extra="forbid" — so the skip is recorded where a reader
         # can see it, the manifest. Invariant 12: the gap must be visible, not silent.
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest["ledger_frozen_symbols"] == ["SPY"]
 
     def test_orphan_pruning_still_converges_with_the_ledger_on(self) -> None:
@@ -1158,7 +1158,7 @@ class TestCommitChainLedger:
         assert all(not _rows(client, t) for t in _LEDGER_TABLES)
         assert not _rows(client, _ADJUSTMENTS)
         assert {r["ticker"] for r in _rows(client, "positions")} == {"SPY"}
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("ledger_commit_id") is None
 
 
@@ -1431,7 +1431,7 @@ class TestLedgerIoMutationPins:
             ),
         )
         assert not out.get("errors"), out.get("errors")
-        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        manifest = (out.get("phase_portfolio") or PhasePortfolioState()).commit_manifest or {}
         assert manifest.get("ledger_unpriced_symbols") == ["AAPL"]
         assert [r["symbol"] for r in _rows(client, _ORDERS)] == ["SPY"]
         assert {r["symbol"] for r in _rows(client, _APPROVED)} >= {"SPY", "AAPL", "CASH"}
@@ -1443,7 +1443,7 @@ class TestLedgerIoMutationPins:
             {
                 "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 "run_date": RUN_DATE.isoformat(),
-                "policy_version_id": "hermes-h8-sizing/x/deadbeef0001",
+                "policy_version_id": "portfolio-h8-sizing/x/deadbeef0001",
                 "supersedes_id": None,
                 "effective_at": "2026-06-12T00:00:00+00:00",
                 "recorded_at": "2026-06-12T01:00:00+00:00",
@@ -1451,7 +1451,7 @@ class TestLedgerIoMutationPins:
             {
                 "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
                 "run_date": RUN_DATE.isoformat(),
-                "policy_version_id": "hermes-h8-sizing/x/deadbeef0002",
+                "policy_version_id": "portfolio-h8-sizing/x/deadbeef0002",
                 "supersedes_id": None,
                 "effective_at": "2026-06-12T00:00:00+00:00",
                 "recorded_at": "2026-06-12T02:00:00+00:00",
@@ -1585,7 +1585,7 @@ def _multi_analysts(*tickers: str) -> dict:
 class TestLedgerRowsSatisfyMigration069:
     """Guard the seam between migration 069's CHECKs and the models that mirror them.
 
-    The models in ``hermes.models.portfolio_ledger`` hand-mirror this DDL:
+    The models in ``portfolio.models.portfolio_ledger`` hand-mirror this DDL:
     ``Weight`` repeats ``BETWEEN 0 AND 1``, ``Symbol`` repeats ``length(symbol)
     BETWEEN 1 AND 20``, ``_ACTION_REASONS`` repeats the action/reason pairing CHECK.
     A mirror can drift **loose** — widen the Python side, or narrow the SQL side
@@ -1924,7 +1924,7 @@ class TestForecastRegistryInH9:
         return assessment.model_dump(mode="json")
 
     def test_books_once_and_persists_assessment(self) -> None:
-        from tests.dq.atlas.test_forecast_registry import RegistryFake
+        from tests.dq.research.test_forecast_registry import RegistryFake
 
         client = RegistryFake()
         state = _state(
@@ -1941,7 +1941,7 @@ class TestForecastRegistryInH9:
             }
         )
         out = _run(client, state)
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["forecast_registry_status"] == "ok"
         assert manifest["forecast_registry_assessments_written"] == 1
@@ -1971,7 +1971,7 @@ class TestForecastRegistryInH9:
 
         monkeypatch.setattr(h9, "persist_forecast_lineage_from_state", boom)
         out = _run(client, state)
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["forecast_registry_status"] == "degraded"
         positions_after = list(client.store.get("positions", []))
@@ -1979,7 +1979,7 @@ class TestForecastRegistryInH9:
 
         # Re-run same book: noop path — must not create a second book.
         out2 = _run(client, state)
-        assert out2["phase_hermes"].commit_manifest["status"] == "noop"
+        assert out2["phase_portfolio"].commit_manifest["status"] == "noop"
         assert len(client.store.get("positions", [])) == len(positions_after)
 
 
@@ -1990,7 +1990,7 @@ class TestRiskPolicyRegistryH9:
         import polars as pl
         from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
-        from tests.dq.atlas.test_risk_policy_registry import RiskRegistryFake
+        from tests.dq.research.test_risk_policy_registry import RiskRegistryFake
 
         client = RiskRegistryFake()
         state = _state()
@@ -1999,7 +1999,7 @@ class TestRiskPolicyRegistryH9:
             pm_tickers=["SPY"],
             corr=pl.DataFrame({"a": ["SPY"], "b": ["SPY"], "corr": [1.0]}),
         )
-        state.phase_hermes = state.phase_hermes.model_copy(
+        state.phase_portfolio = state.phase_portfolio.model_copy(
             update={
                 "risk_policy": bundle.policy.model_dump(mode="json"),
                 "covariance_snapshot": bundle.covariance_snapshot.model_dump(mode="json"),
@@ -2007,7 +2007,7 @@ class TestRiskPolicyRegistryH9:
         )
         state.knowledge_cutoff_at = datetime(2026, 6, 12, 21, 0, tzinfo=UTC)
         out = _run(client, state)
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["schema_version"] == "1.6"
         assert manifest["risk_policy_registry_status"] == "ok"
@@ -2025,7 +2025,7 @@ class TestRiskPolicyRegistryH9:
 
         monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
         out = _run(client, state)
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["risk_policy_registry_status"] == "degraded"
         assert client.store.get("positions", [])
@@ -2051,7 +2051,7 @@ class TestCostLiquidityRegistryH9Noop:
 
         monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
         out1 = _run(client, state)
-        manifest1 = out1["phase_hermes"].commit_manifest
+        manifest1 = out1["phase_portfolio"].commit_manifest
         assert manifest1["status"] == "committed"
         commit_id = manifest1.get("ledger_commit_id")
         assert commit_id, "first commit must mint ledger_commit_id for noop retry"
@@ -2059,7 +2059,7 @@ class TestCostLiquidityRegistryH9Noop:
         assert captured[0].commit_id == commit_id
 
         out2 = _run(client, state)
-        manifest2 = out2["phase_hermes"].commit_manifest
+        manifest2 = out2["phase_portfolio"].commit_manifest
         assert manifest2["status"] == "noop"
         assert len(captured) >= 2
         noop_ledger = captured[-1]
@@ -2078,7 +2078,7 @@ class TestCostLiquidityRegistryH9Noop:
 
         client = FakeSupabaseClient()
         state = _state()
-        book = state.phase_hermes.sized_book
+        book = state.phase_portfolio.sized_book
         assert book is not None
         weights = weights_from_sized_book(book)
         fp = weights_fingerprint(weights)
@@ -2115,7 +2115,7 @@ class TestCostLiquidityRegistryH9Noop:
 
         monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
         out = _run(client, state)
-        assert out["phase_hermes"].commit_manifest["status"] == "noop"
+        assert out["phase_portfolio"].commit_manifest["status"] == "noop"
         assert captured == [None]
 
 
@@ -2142,13 +2142,13 @@ class TestPreTradeRiskH9:
         )
         return report.model_dump(mode="json")
 
-    def _state_with_report(self, report: dict | None = None) -> AtlasResearchState:
+    def _state_with_report(self, report: dict | None = None) -> ResearchState:
         state = _state()
         payload = report if report is not None else self._spy_report_payload()
-        book = dict(state.phase_hermes.sized_book or {})
+        book = dict(state.phase_portfolio.sized_book or {})
         book["pre_trade_risk_report_hash"] = payload["report_content_hash"]
         book["allocation_input_bundle_hash"] = payload["allocation_input_bundle_hash"]
-        state.phase_hermes = state.phase_hermes.model_copy(
+        state.phase_portfolio = state.phase_portfolio.model_copy(
             update={
                 "sized_book": book,
                 "pre_trade_risk_report": payload,
@@ -2164,7 +2164,7 @@ class TestPreTradeRiskH9:
 
         from digiquant.research import pretrade_risk_registry as ptr
 
-        from tests.dq.atlas.test_supabase_io import _FakeQuery, _FakeResponse
+        from tests.dq.research.test_supabase_io import _FakeQuery, _FakeResponse
 
         @dataclass
         class _MergingQuery(_FakeQuery):
@@ -2229,7 +2229,7 @@ class TestPreTradeRiskH9:
         client = FakeSupabaseClient()
         out = _run(client, _state())
         assert "errors" not in out
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
         assert manifest["pretrade_risk_registry_reason"] == "missing_pre_trade_risk_report"
@@ -2239,12 +2239,12 @@ class TestPreTradeRiskH9:
         monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "shadow")
         client = FakeSupabaseClient()
         state = _state()
-        state.phase_hermes = state.phase_hermes.model_copy(
+        state.phase_portfolio = state.phase_portfolio.model_copy(
             update={"pre_trade_risk_report": {"not": "a report"}}
         )
         out = _run(client, state)
         assert "errors" not in out
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
         assert "unknown_pre_trade_risk_report" in str(manifest["pretrade_risk_registry_reason"])
@@ -2254,7 +2254,7 @@ class TestPreTradeRiskH9:
         monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
         client = FakeSupabaseClient()
         state = _state()
-        state.phase_hermes = state.phase_hermes.model_copy(
+        state.phase_portfolio = state.phase_portfolio.model_copy(
             update={"pre_trade_risk_report": {"not": "a report"}}
         )
         out = _run(client, state)
@@ -2268,13 +2268,13 @@ class TestPreTradeRiskH9:
         report = self._spy_report_payload()
         # Attach a valid SPY report to a different book.
         state = _state(sized_book=_sized_book(spy_pct=50.0))
-        book = dict(state.phase_hermes.sized_book or {})
+        book = dict(state.phase_portfolio.sized_book or {})
         book["recommended_portfolio"] = [
             {"ticker": "SPY", "target_pct": 50.0},
             {"ticker": "TLT", "target_pct": 50.0},
         ]
         book["pre_trade_risk_report_hash"] = report["report_content_hash"]
-        state.phase_hermes = state.phase_hermes.model_copy(
+        state.phase_portfolio = state.phase_portfolio.model_copy(
             update={
                 "sized_book": book,
                 "pre_trade_risk_report": report,
@@ -2308,7 +2308,7 @@ class TestPreTradeRiskH9:
         client = self._merging_client()
         state = self._state_with_report()
         out = _run(client, state)
-        manifest = out["phase_hermes"].commit_manifest
+        manifest = out["phase_portfolio"].commit_manifest
         assert manifest["status"] == "committed"
         assert manifest["schema_version"] == "1.6"
         assert manifest["pretrade_risk_registry_status"] == "ok"
@@ -2327,8 +2327,8 @@ class TestPreTradeRiskH9:
         _run(client, state)
         assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
         out2 = _run(client, state)
-        assert out2["phase_hermes"].commit_manifest["status"] == "noop"
-        assert out2["phase_hermes"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
+        assert out2["phase_portfolio"].commit_manifest["status"] == "noop"
+        assert out2["phase_portfolio"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
         assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
 
     def test_append_only_no_upsert_or_update(self, monkeypatch) -> None:

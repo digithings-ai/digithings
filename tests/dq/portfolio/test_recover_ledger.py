@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.portfolio.writers.commit_io import weights_fingerprint
 from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
@@ -199,11 +199,11 @@ class TestRecoverLedgerFromBook:
         assert commits[0]["workspace_id"] == HOUSE
         assert commits[0]["run_date"] == RUN_DATE.isoformat()
         default_policy = _policy_version_id(
-            AtlasResearchState(
+            ResearchState(
                 run_id=uuid4(),
                 run_type="delta",
                 run_date=RUN_DATE,
-                config=AtlasConfigBundle(preferences={"current_weights": {}}),
+                config=ResearchConfigBundle(preferences={"current_weights": {}}),
             )
         )
         assert commits[0]["policy_version_id"] != default_policy
@@ -605,11 +605,11 @@ class TestRecoverLedgerFromBook:
             current_weights={"FXI": 9.8561},
             workspace_id=None,
         )
-        default = AtlasResearchState(
+        default = ResearchState(
             run_id=uuid4(),
             run_type="delta",
             run_date=RUN_DATE,
-            config=AtlasConfigBundle(preferences={"current_weights": {"FXI": 9.8561}}),
+            config=ResearchConfigBundle(preferences={"current_weights": {"FXI": 9.8561}}),
         )
         assert _policy_version_id(hydrated) != _policy_version_id(default)
 

@@ -1,4 +1,4 @@
-"""DB-pinable Olympus ProfileConfig (Track B / #2609).
+"""DB-pinable dashboard ProfileConfig (Track B / #2609).
 
 The digithings-owned **house** profile is the immutable always-on default run.
 User overlays are additional ProfileConfig versions that may request different
@@ -18,7 +18,7 @@ from digiquant.profiles.asset_preferences import AssetPreferences
 from digiquant.profiles.investment_profile import InvestmentProfile
 
 HOUSE_PROFILE_KEY = "house"
-_PROFILE_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.profile_config")
+_PROFILE_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.profile_config")
 
 
 class ProfileConfigMissingError(LookupError):
@@ -31,7 +31,7 @@ def profile_config_version_id(profile_key: str, schema_version: int = 1) -> UUID
 
 
 class ProfileConfig(BaseModel):
-    """Versioned investment overlay pin for Atlas/Hermes preflight.
+    """Versioned investment overlay pin for research/portfolio preflight.
 
     ``is_house_default`` rows own the digithings house run identity. Overlay
     rows must use a non-house ``profile_key`` and never set ``is_house_default``.

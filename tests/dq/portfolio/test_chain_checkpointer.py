@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("openai")  # chain -> atlas.graph -> digigraph.llm needs openai
+pytest.importorskip("openai")  # chain -> research.graph -> digigraph.llm needs openai
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.portfolio import chain
 from digiquant.dashboard.temporal import KnowledgeCutoffError, require_knowledge_cutoff_at
 
@@ -48,13 +48,13 @@ def test_acquire_degrades_to_none_on_init_failure(monkeypatch):
 def test_resume_preserves_checkpointed_knowledge_cutoff() -> None:
     """Resuming invoke(None) keeps the checkpoint cutoff — no wall-clock re-pin."""
     pinned = datetime(2026, 4, 26, 8, 0, 0, tzinfo=UTC)
-    checkpointed = AtlasResearchState(
+    checkpointed = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
         knowledge_cutoff_at=pinned,
     )
     # Fresh state that would re-pin a different cutoff if resume wrongly used it.
-    fresh = AtlasResearchState(
+    fresh = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
         knowledge_cutoff_at=datetime(2026, 4, 26, 23, 59, 59, tzinfo=UTC),
@@ -69,12 +69,12 @@ def test_resume_preserves_checkpointed_knowledge_cutoff() -> None:
         fresh,
         checkpointer,
         thread_base="run-abc",
-        suffix="atlas",
+        suffix="research",
     )
 
     graph.invoke.assert_called_once_with(
         None,
-        {"configurable": {"thread_id": "run-abc::atlas"}},
+        {"configurable": {"thread_id": "run-abc::research"}},
     )
     assert require_knowledge_cutoff_at(result) == pinned
     assert result.knowledge_cutoff_at != fresh.knowledge_cutoff_at
@@ -83,7 +83,7 @@ def test_resume_preserves_checkpointed_knowledge_cutoff() -> None:
 @pytest.mark.unit
 def test_resume_missing_cutoff_fails_closed_for_readers() -> None:
     """Legacy checkpoint without cutoff must not invent now() for new readers."""
-    legacy = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+    legacy = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
     assert legacy.knowledge_cutoff_at is None
 
     checkpointer = SimpleNamespace(get_tuple=MagicMock(return_value=object()))
@@ -92,14 +92,14 @@ def test_resume_missing_cutoff_fails_closed_for_readers() -> None:
 
     result = chain._invoke_resumable(
         graph,
-        AtlasResearchState(
+        ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, 0, tzinfo=UTC),
         ),
         checkpointer,
         thread_base="run-legacy",
-        suffix="hermes",
+        suffix="portfolio",
     )
 
     with pytest.raises(KnowledgeCutoffError, match="no now\\(\\) fallback"):
@@ -118,14 +118,14 @@ def test_resume_preserves_checkpointed_research_state_pin() -> None:
         "requested_as_of": pinned_cutoff.isoformat().replace("+00:00", "Z"),
         "pinned_at": pinned_cutoff.isoformat().replace("+00:00", "Z"),
     }
-    checkpointed = AtlasResearchState(
+    checkpointed = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
         knowledge_cutoff_at=pinned_cutoff,
         research_state_pin=pin_dump,
         research_state_status="pinned",
     )
-    fresh = AtlasResearchState(
+    fresh = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
         knowledge_cutoff_at=datetime(2026, 4, 26, 23, 59, 59, tzinfo=UTC),
@@ -142,12 +142,12 @@ def test_resume_preserves_checkpointed_research_state_pin() -> None:
         fresh,
         checkpointer,
         thread_base="run-abc",
-        suffix="atlas",
+        suffix="research",
     )
 
     graph.invoke.assert_called_once_with(
         None,
-        {"configurable": {"thread_id": "run-abc::atlas"}},
+        {"configurable": {"thread_id": "run-abc::research"}},
     )
     assert result.research_state_status == "pinned"
     assert result.research_state_pin == pin_dump

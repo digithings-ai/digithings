@@ -1,11 +1,11 @@
-"""CI simulator gates for Olympus #930 (plan: ci/simulator-gates).
+"""CI simulator gates for dashboard #930 (plan: ci/simulator-gates).
 
 Gate thresholds (spec §12.2 / §16 ``test_quiet_day``) — re-baselined 2026-06-20:
 - ``QUIET_DAY_LLM_BUDGET`` ≤ 22 LLM calls on a quiet δ day (includes 11× ``SectorReport``
   from phase5 sector bypass until #929 triage wiring lands).
 - ``QUIET_DAY_MIN_PATCH_RATIO`` ≥ 0.10 — patch calls are a minority until phase5 respects
   triage carry; numerator still gates mandatory δ ``DocumentPatch`` paths.
-- Hermes quiet path: H1 thesis review runs; a quiet, unlinked held name is gated out of
+- portfolio quiet path: H1 thesis review runs; a quiet, unlinked held name is gated out of
   H5 (Stage 1b staleness gate, #1030) and carried by commit-run, not re-analyzed; H6
   deliberation skipped when analyst stance is unchanged.
 """
@@ -20,7 +20,7 @@ from typing import Iterator
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.research.testing import simulated_pipeline
 from digiquant.research.testing.simulator import (
     QUIET_DAY_LLM_BUDGET,
@@ -32,7 +32,7 @@ from digiquant.research.testing.simulator import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
+_PIPELINE_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
 
 
 @contextmanager
@@ -54,7 +54,7 @@ def _stub_quiet_onchain() -> Iterator[None]:
         yield
 
 
-_HERMES_THESIS_SCHEMAS = frozenset(
+_PORTFOLIO_THESIS_SCHEMAS = frozenset(
     {
         "ThesisReviewOutput",
         "MarketThesisExplorationOutput",
@@ -68,7 +68,7 @@ class TestLlmCallTelemetry:
     def test_simulated_pipeline_records_schema_per_llm_call(self) -> None:
         with simulated_pipeline(watchlist=("AAPL",), publish=False) as run:
             run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
@@ -88,7 +88,7 @@ class TestLlmCallTelemetry:
 
 @pytest.mark.unit
 class TestQuietDayGates:
-    def test_quiet_day_llm_budget_and_hermes_path(self) -> None:
+    def test_quiet_day_llm_budget_and_portfolio_path(self) -> None:
         """Spec §16 ``test_quiet_day``: zero stale carry + held H5 edits + H1."""
         run_date = date(2026, 4, 26)
         watchlist = ("AAPL",)
@@ -104,7 +104,7 @@ class TestQuietDayGates:
             ) as run,
         ):
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="none",
                     run_date=run_date,
                     watchlist=watchlist,
@@ -124,7 +124,7 @@ class TestQuietDayGates:
             f"patch_calls={telemetry.patch_calls} total={telemetry.total_calls}"
         )
 
-        # Hermes: thesis track runs (H1 minimum). H6 may run ≤1 PM turn when held
+        # portfolio: thesis track runs (H1 minimum). H6 may run ≤1 PM turn when held
         # ticker price delta triggers H5 edit (2% move) even if deliberation summary carries.
         assert "ThesisReviewOutput" in telemetry.by_schema, "H1 thesis review must run daily"
         assert telemetry.by_schema.get("DeliberationPmTurn", 0) <= 1
@@ -137,8 +137,8 @@ class TestQuietDayGates:
         # and H9 commit-run carries the position rather than failing closed on a missing
         # analyst doc. (Pre-Stage-1b this path ran a cheap held-ticker H5 edit; the gate
         # eliminates that re-analysis as the anti-waste win.)
-        assert "AAPL" not in final.phase_hermes.asset_analysts
-        assert "AAPL" in {e.ticker for e in final.phase_hermes.focus_roster_excluded}
+        assert "AAPL" not in final.phase_portfolio.asset_analysts
+        assert "AAPL" in {e.ticker for e in final.phase_portfolio.focus_roster_excluded}
 
         # Gate: edit-mode patch calls for mandatory δ segments (macro/crypto/equity).
         assert telemetry.by_schema.get("DocumentPatch", 0) >= 3
@@ -147,7 +147,7 @@ class TestQuietDayGates:
         sector_full = telemetry.by_schema.get("SectorReport", 0)
         assert sector_full <= 11, f"unexpected sector fan-out: {sector_full}"
 
-        # Atlas mandatory segments must not emit full schemas on quiet δ (edit path only).
+        # research mandatory segments must not emit full schemas on quiet δ (edit path only).
         full_mandatory = sum(
             telemetry.by_schema.get(schema, 0)
             for schema in ("MacroRegimeReport", "CryptoReport", "EquityOverviewReport")
@@ -168,7 +168,7 @@ class TestThreeDayContinuityScaffold:
         # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in pipeline-digiquant.yml).
         with _stub_quiet_onchain(), simulated_pipeline(watchlist=watchlist, publish=True) as run1:
             run1.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=day1,
                     watchlist=watchlist,
@@ -192,7 +192,7 @@ class TestThreeDayContinuityScaffold:
                 replace_canned_defaults=True,
             ) as run2,
         ):
-            run2.invoke(AtlasInput(refresh_scope="none", run_date=day2, watchlist=watchlist))
+            run2.invoke(ResearchInput(refresh_scope="none", run_date=day2, watchlist=watchlist))
             telemetry2 = run2.llm_telemetry()
             day2_store = client_store_to_canned_extras(run2.client)
 
@@ -214,7 +214,7 @@ class TestThreeDayContinuityScaffold:
                 replace_canned_defaults=True,
             ) as run3,
         ):
-            run3.invoke(AtlasInput(refresh_scope="none", run_date=day3, watchlist=watchlist))
+            run3.invoke(ResearchInput(refresh_scope="none", run_date=day3, watchlist=watchlist))
             telemetry3 = run3.llm_telemetry()
 
         assert telemetry3.total_calls <= QUIET_DAY_LLM_BUDGET
@@ -231,11 +231,11 @@ class TestThreeDayContinuityScaffold:
 
 
 @pytest.mark.unit
-class TestOlympusWorkflowDailyCadence:
+class TestWorkflowDailyCadence:
     """Verify ``pipeline-digiquant.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
 
-    def test_olympus_workflow_uses_daily_cadence_not_legacy_run_types(self) -> None:
-        text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")
+    def test_dashboard_workflow_uses_daily_cadence_not_legacy_run_types(self) -> None:
+        text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
         assert "--cadence daily" in text
         assert "--refresh-scope" in text
         assert "run_type=baseline" not in text
@@ -243,8 +243,8 @@ class TestOlympusWorkflowDailyCadence:
         assert "run_type=monthly" not in text
         assert '--run-type "monthly"' not in text
 
-    def test_olympus_workflow_schedule_is_daily(self) -> None:
-        text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")
+    def test_dashboard_workflow_schedule_is_daily(self) -> None:
+        text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
         assert 'cron: "17 9 * * *"' in text
         assert 'cron: "17 12 * * *"' in text
         assert 'cron: "0 12 * * *"' not in text

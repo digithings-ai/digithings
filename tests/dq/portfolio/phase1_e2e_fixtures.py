@@ -22,7 +22,7 @@ from digiquant.portfolio.models.forecast_calibration import (
     forecast_outcome_id,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 PHASE1_RUN_DATE = date(2026, 4, 26)
 PRIOR_KNOWN_AT = datetime(2026, 3, 1, 15, 0, tzinfo=UTC)

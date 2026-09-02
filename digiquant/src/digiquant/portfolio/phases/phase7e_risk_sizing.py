@@ -15,7 +15,7 @@ not used on that path. Missing bundle falls back to the characterized incumbent 
 **WP-H:** each long's sized weight is then scaled by H7 ``confidence`` (cash-first).
 Missing confidence uses :data:`H8_MISSING_CONFIDENCE_DEFAULT` (0.5), never 1.0.
 
-**H8 inside Hermes graph (PR 4c):** output lands in ``phase_hermes.sized_book``.
+**H8 inside portfolio graph (PR 4c):** output lands in ``phase_portfolio.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
 is present.
 """
@@ -31,7 +31,7 @@ from typing import Any  # score:allow untyped any — scored-lint: duck-typed Su
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.research.data.queries import get_return_correlations
-from digiquant.research.state import AtlasResearchState, PhaseHermesState, RebalancePayload
+from digiquant.research.state import ResearchState, PhasePortfolioState, RebalancePayload
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.allocation_contracts import (
     AllocationInputBundle,
@@ -386,7 +386,7 @@ def _verb(
 
 
 def _selection_rationale_by_ticker(
-    state: AtlasResearchState,
+    state: ResearchState,
     memo: PMDirectionMemo | None,
 ) -> dict[str, str]:
     """Per-ticker PM selection thesis for published rebalance actions (#2597).
@@ -402,7 +402,7 @@ def _selection_rationale_by_ticker(
                 continue
             out[row.ticker.strip().upper()] = narrative[:_MAX_ACTION_RATIONALE_LEN]
 
-    for entry in state.phase_hermes.focus_roster:
+    for entry in state.phase_portfolio.focus_roster:
         ticker = entry.ticker.strip().upper()
         if ticker in out:
             continue
@@ -511,7 +511,7 @@ def _rebuild_actions(
     return out
 
 
-def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
+def _held_carry_weights(state: ResearchState) -> dict[str, float]:
     """Prior (drifted) weights for deliberately carried held names (#1030, #1555, #1649).
 
     Two classes of held name must be carried at their current drifted weight or H9
@@ -551,7 +551,7 @@ def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
     return carry
 
 
-def _drifted_weight(state: AtlasResearchState, ticker: str) -> float | None:
+def _drifted_weight(state: ResearchState, ticker: str) -> float | None:
     """Current (mark-to-market) weight for *ticker*, falling back to the prior book."""
     current = _opt_float((state.config.preferences.get("current_weights") or {}).get(ticker))
     if current is not None and current > 0:
@@ -566,7 +566,7 @@ def _drifted_weight(state: AtlasResearchState, ticker: str) -> float | None:
 
 def _apply_held_continuity_backstop(
     sized: dict[str, float],
-    state: AtlasResearchState,
+    state: ResearchState,
     events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """FINAL-book held invariant (#1649): held ⇒ positive weight or explicit flat.
@@ -745,7 +745,7 @@ def _build_sized_book(
     pm_targets: dict[str, float],
     original_actions: list[Any],
     prior_notes: str,
-    state: AtlasResearchState,
+    state: ResearchState,
     deps: RiskSizingDeps,
 ) -> tuple[RebalancePayload | None, Any | None, Any | None]:
     """Run deterministic sizing; return None on no-op / fail-soft.
@@ -755,7 +755,7 @@ def _build_sized_book(
     from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
     caps = SizingCaps.from_preferences(state.config.preferences)
-    memo = state.phase_hermes.pm_direction_memo
+    memo = state.phase_portfolio.pm_direction_memo
     memo_obj: PMDirectionMemo | None = None
     if memo is not None:
         memo_obj = (
@@ -1022,7 +1022,7 @@ def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float],
     Uses the same extractor as H9 (`weights_from_sized_book`) so the report
     fingerprint equals the book H9 will validate and commit (#2824 / WP9 review).
     """
-    # Lazy import: commit_io pulls atlas/hermes writers; avoid module-cycle at import.
+    # Lazy import: commit_io pulls research/portfolio writers; avoid module-cycle at import.
     from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
     risky = weights_from_sized_book(sized_book)
@@ -1032,7 +1032,7 @@ def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float],
 
 
 def _prior_book_weights_for_report(
-    state: AtlasResearchState,
+    state: ResearchState,
     allocation_bundle: AllocationInputBundle | None,
 ) -> tuple[dict[str, float], float]:
     """Prior risky/cash for the report — prefer the exact bundle snapshot."""
@@ -1139,9 +1139,9 @@ def _forecast_quality_from_bundle(
     )
 
 
-def _cost_scalars_from_state(state: AtlasResearchState) -> CostLiquidityScalars | None:
+def _cost_scalars_from_state(state: ResearchState) -> CostLiquidityScalars | None:
     """Observational WP7 estimates already on state (typically empty until H9)."""
-    estimates = state.phase_hermes.action_cost_estimates or {}
+    estimates = state.phase_portfolio.action_cost_estimates or {}
     if not estimates:
         return None
     expected_costs: list[float] = []
@@ -1193,7 +1193,7 @@ def _sector_map_for_book(tickers: list[str]) -> dict[str, str]:
 
 def build_pretrade_risk_report_for_final_book(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     sized_book: RebalancePayload,
     allocation_bundle: AllocationInputBundle | None,
     risk_artifacts: Any | None,
@@ -1271,8 +1271,8 @@ def build_pretrade_risk_report_for_final_book(
 def build_risk_sizing_node(deps: RiskSizingDeps):
     """Return the Phase 7E / H8 enforcement node bound to ``deps``."""
 
-    def risk_sizing(state: AtlasResearchState) -> dict[str, Any]:
-        memo_raw = state.phase_hermes.pm_direction_memo
+    def risk_sizing(state: ResearchState) -> dict[str, Any]:
+        memo_raw = state.phase_portfolio.pm_direction_memo
         rebalance = state.phase7d_rebalance
         if memo_raw is None and rebalance is None:
             return {}
@@ -1305,7 +1305,7 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             deps=deps,
         )
 
-        def _hermes_shadow(**kwargs: Any) -> PhaseHermesState:
+        def _portfolio_shadow(**kwargs: Any) -> PhasePortfolioState:
             payload = dict(kwargs)
             if risk_artifacts is not None:
                 payload["risk_policy"] = risk_artifacts.policy.model_dump(mode="json")
@@ -1314,11 +1314,11 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 )
             if allocation_bundle is not None:
                 payload["allocation_input_bundle"] = allocation_bundle.model_dump(mode="json")
-            return PhaseHermesState(**payload)
+            return PhasePortfolioState(**payload)
 
         if sized_book is None:
             if risk_artifacts is not None or allocation_bundle is not None:
-                return {"phase_hermes": _hermes_shadow()}
+                return {"phase_portfolio": _portfolio_shadow()}
             return {}
 
         # #2417 §6: unexplained-delta lineage check, layered on top of (not inside)
@@ -1356,14 +1356,14 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
                 "pre_trade_risk_report_hash": report_payload.get("report_content_hash"),
             }
 
-        hermes_kwargs: dict[str, Any] = {"sized_book": sized_book}
+        portfolio_kwargs: dict[str, Any] = {"sized_book": sized_book}
         if report_payload is not None:
-            hermes_kwargs["pre_trade_risk_report"] = report_payload
-        hermes_update = _hermes_shadow(**hermes_kwargs)
+            portfolio_kwargs["pre_trade_risk_report"] = report_payload
+        portfolio_update = _portfolio_shadow(**portfolio_kwargs)
 
         if memo is not None:
-            return {"phase_hermes": hermes_update}
-        return {"phase7d_rebalance": sized_book, "phase_hermes": hermes_update}
+            return {"phase_portfolio": portfolio_update}
+        return {"phase7d_rebalance": sized_book, "phase_portfolio": portfolio_update}
 
     return risk_sizing
 
@@ -1371,8 +1371,8 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
 def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
     """Wrap the enforcement node into a single-node ``PipelinePhase`` (H8)."""
     return PipelinePhase(
-        name="hermes_h8_risk_sizing",
-        nodes=[NodeSpec(name="hermes/portfolio/risk-sizing", run=build_risk_sizing_node(deps))],
+        name="portfolio_h8_risk_sizing",
+        nodes=[NodeSpec(name="portfolio/risk-sizing", run=build_risk_sizing_node(deps))],
     )
 
 

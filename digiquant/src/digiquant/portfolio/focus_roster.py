@@ -2,36 +2,36 @@
 
 from __future__ import annotations
 
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 
 
-def ticker_in_focus_roster(state: HermesState, ticker: str) -> bool:
+def ticker_in_focus_roster(state: PortfolioState, ticker: str) -> bool:
     """Return whether *ticker* is on the H4 runtime roster (empty roster → allow all)."""
-    roster = state.phase_hermes.focus_roster
+    roster = state.phase_portfolio.focus_roster
     if not roster:
         return True
     want = ticker.strip().upper()
     return any(entry.ticker.upper() == want for entry in roster)
 
 
-def focus_roster_tickers(state: HermesState) -> list[str]:
+def focus_roster_tickers(state: PortfolioState) -> list[str]:
     """Tickers from H4 ``focus_roster`` in roster order."""
-    return [entry.ticker for entry in state.phase_hermes.focus_roster]
+    return [entry.ticker for entry in state.phase_portfolio.focus_roster]
 
 
-def fanout_ticker(state: HermesState) -> str | None:
+def fanout_ticker(state: PortfolioState) -> str | None:
     """Read back the per-Send cursor ``with_fanout_ticker`` injected.
 
     Telemetry label only — the fan-out discriminator recorded as ``NodeRunRecord.fanout_key``.
     It never affects dispatch, routing, or reducers.
     """
-    return state.hermes_fanout_ticker or None
+    return state.portfolio_fanout_ticker or None
 
 
-def with_fanout_ticker(state: HermesState, ticker: str) -> HermesState:
+def with_fanout_ticker(state: PortfolioState, ticker: str) -> PortfolioState:
     """Return a state copy carrying ``ticker`` as the per-Send fan-out cursor (H5/H6 map).
 
     Used as the ``with_item`` hook of a ``FanOutPhase``: each parallel worker receives this
-    copy and reads ``state.hermes_fanout_ticker`` to know which roster ticker it owns.
+    copy and reads ``state.portfolio_fanout_ticker`` to know which roster ticker it owns.
     """
-    return state.model_copy(update={"hermes_fanout_ticker": ticker})
+    return state.model_copy(update={"portfolio_fanout_ticker": ticker})

@@ -1,4 +1,4 @@
-"""Deterministic Hermes focus-list selection (#696).
+"""Deterministic portfolio focus-list selection (#696).
 
 Phase 7C/7CD per-ticker deliberation previously fanned out over the first
 ``ATLAS_MAX_ANALYSTS`` tickers of the watchlist — an arbitrary alphabetical
@@ -9,10 +9,10 @@ technical signals from ``price_technicals``. Zero LLM calls — one bulk
 Supabase read; thematic market coverage is unchanged (phases 1-6 research the
 whole market regardless).
 
-**Interim roster (not thesis-first):** the intended Hermes entry translates
-Atlas research into theses and maps vehicles per thesis before analysts run
-(h1–h4 in ``hermes/docs/HERMES_SUBGRAPH.md``). Until that pipeline is wired,
-this module supplies the Phase 7C fan-out list. See ``hermes/docs/ARCHITECTURE.md``.
+**Interim roster (not thesis-first):** the intended portfolio entry translates
+research into theses and maps vehicles per thesis before analysts run
+(h1–h4 in ``portfolio/docs/PORTFOLIO_SUBGRAPH.md``). Until that pipeline is wired,
+this module supplies the Phase 7C fan-out list. See ``portfolio/docs/ARCHITECTURE.md``.
 
 The score is intentionally legible (trend + momentum + strength − stretch),
 not a black box — it decides *where to spend deliberation*, never *what to
@@ -37,9 +37,9 @@ _DEFAULT_TOP_N = 5
 
 
 def _focus_top_n() -> int:
-    """Opportunity-candidate count (env ``HERMES_FOCUS_TOP_N``, default 5)."""
+    """Opportunity-candidate count (env ``PORTFOLIO_FOCUS_TOP_N``, default 5)."""
     try:
-        n = int(os.environ.get("HERMES_FOCUS_TOP_N", str(_DEFAULT_TOP_N)) or _DEFAULT_TOP_N)
+        n = int(os.environ.get("PORTFOLIO_FOCUS_TOP_N", str(_DEFAULT_TOP_N)) or _DEFAULT_TOP_N)
     except ValueError:
         return _DEFAULT_TOP_N
     return max(0, n)
@@ -47,9 +47,9 @@ def _focus_top_n() -> int:
 
 def load_portfolio_holdings() -> list[str]:
     """Tickers of current positions from ``config/portfolio.json`` ([] if absent)."""
-    from digiquant.research.graph import _atlas_config_root
+    from digiquant.research.graph import _research_config_root
 
-    path = _atlas_config_root() / "portfolio.json"
+    path = _research_config_root() / "portfolio.json"
     if not path.exists():
         return []
     try:
@@ -133,7 +133,7 @@ def select_focus_tickers(
             seen.add(ticker)
             candidates.append(ticker)
     if not candidates or n == 0:
-        logger.info("hermes focus list (%d): %s", len(holdings_list), ", ".join(holdings_list))
+        logger.info("portfolio focus list (%d): %s", len(holdings_list), ", ".join(holdings_list))
         return list(holdings_list)
     try:
         since = (run_date - timedelta(days=price_window_days)).isoformat()
@@ -161,5 +161,5 @@ def select_focus_tickers(
         logger.warning("focus scoring unavailable (%s); using watchlist head", exc)
         top = candidates[:n]
     focus = [*holdings_list, *top]
-    logger.info("hermes focus list (%d): %s", len(focus), ", ".join(focus))
+    logger.info("portfolio focus list (%d): %s", len(focus), ", ".join(focus))
     return focus

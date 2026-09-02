@@ -1,15 +1,15 @@
 """LangGraph orchestration: supervisor + sub-graph pattern (Phase 1+)."""
 
 from digigraph.graph.research_spike_subgraph import (
-    AtlasResearchState,
-    atlas_subgraph,
-    build_atlas_subgraph,
+    ResearchState,
+    research_subgraph,
+    build_research_subgraph,
 )
 from digigraph.graph.graph import build_workflow_graph
 
 __all__ = [
-    "AtlasResearchState",
-    "atlas_subgraph",
-    "build_atlas_subgraph",
+    "ResearchState",
+    "research_subgraph",
+    "build_research_subgraph",
     "build_workflow_graph",
 ]

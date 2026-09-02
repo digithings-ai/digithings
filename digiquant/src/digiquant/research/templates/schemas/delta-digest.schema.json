@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Delta Digest (Legacy)",
+  "title": "digiquant-research Delta Digest (Legacy)",
   "description": "Legacy markdown-style delta digest. Canonical weekday output is delta-request JSON ops; this schema is for transition/backfill only.",
   "type": "object",
   "additionalProperties": false,

@@ -1,4 +1,4 @@
-"""Unit tests for the canonical Olympus instrument metadata contract."""
+"""Unit tests for the canonical dashboard instrument metadata contract."""
 
 from datetime import datetime, timezone
 
@@ -31,7 +31,7 @@ def test_normalizes_symbol_and_serializes_provider_metadata() -> None:
     assert row["source_updated_at"] == "2026-07-20T00:00:00Z"
 
 
-def test_fallback_uses_deterministic_olympus_classification() -> None:
+def test_fallback_uses_deterministic_dashboard_classification() -> None:
     metadata = InstrumentMetadata.fallback(" tlt ")
 
     assert metadata.ticker == "TLT"

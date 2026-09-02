@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 # web_grounding imports digigraph.llm, which requires `openai` (a digigraph dep absent
-# in the digiquant-only CI job). Skip cleanly there; runs in atlas-graph-ci / locally.
+# in the digiquant-only CI job). Skip cleanly there; runs in research-graph-ci / locally.
 pytest.importorskip("openai")
 
 from digiquant.research.data import web_grounding
@@ -61,8 +61,8 @@ def test_unmapped_segment_falls_back_to_default_allowlist_in_query():
 
 
 @pytest.mark.unit
-def test_olympus_grounding_does_not_pass_exa_params():
-    """Olympus must not assemble engine=/max_results= for the digillm Exa toolkit (#2567)."""
+def test_dashboard_grounding_does_not_pass_exa_params():
+    """dashboard must not assemble engine=/max_results= for the digillm Exa toolkit (#2567)."""
     captured: dict = {}
 
     def _or_ws(model, query, **kwargs):
@@ -104,7 +104,7 @@ def test_fetch_web_grounding_none_on_empty_text():
 def test_fetch_web_grounding_raises_when_required(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_WEB_SEARCH", "required")
     with patch.object(web_grounding, "_openrouter_web_search", return_value=None):
-        with pytest.raises(web_grounding.OlympusWebSearchError):
+        with pytest.raises(web_grounding.DashboardWebSearchError):
             web_grounding.fetch_web_grounding(
                 model="openrouter/perplexity/sonar", segment="macro", run_date=date(2026, 6, 9)
             )

@@ -1,6 +1,6 @@
 """Authoritative-schema loader.
 
-JSON Schemas under ``digiquant/src/digiquant/olympus/atlas/templates/`` are the system of
+JSON Schemas under ``digiquant/src/digiquant/research/templates/`` are the system of
 record for segment payload shapes. Pydantic models in later commits are
 validated *against* these schemas — never re-authored from scratch.
 
@@ -26,9 +26,9 @@ class SchemaNotFoundError(FileNotFoundError):
 
 
 def _templates_root() -> Path:
-    """Return ``digiquant/src/digiquant/olympus/atlas/templates/``.
+    """Return ``digiquant/src/digiquant/research/templates/``.
 
-    Templates ship with the Atlas package so wheels carry them — see #486.
+    Templates ship with the research package so wheels carry them — see #486.
     """
     return Path(__file__).resolve().parent / "templates"
 

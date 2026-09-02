@@ -1,6 +1,6 @@
-"""Deterministic Atlas pipeline simulator (no live LLM, no live Supabase).
+"""Deterministic research pipeline simulator (no live LLM, no live Supabase).
 
-The simulator solves a concrete pain point: every full Atlas run hits LLM
+The simulator solves a concrete pain point: every full research run hits LLM
 endpoints 30+ times. Repeated end-to-end tests that exercise the
 orchestration logic — phase wiring, state reducers, publish routing,
 triage, delta carry-forward — should not pay that cost. They should
@@ -28,7 +28,7 @@ What this module provides:
 
 3. ``simulated_pipeline(...)`` — context manager that patches
    ``chat_completion`` for the duration, builds an
-   ``AtlasGraphDeps`` with the fake client wired through every seam
+   ``ResearchGraphDeps`` with the fake client wired through every seam
    (preflight, triage, publish, phase 9, preflight-reflect), and
    yields a ``SimulationRun`` with helpers for invoking the compiled
    graph and inspecting both the final state and the captured Supabase
@@ -62,29 +62,29 @@ from unittest.mock import patch
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 from digiquant.research.graph import (
-    AtlasGraphDeps,
-    AtlasInput,
-    build_atlas_graph,
+    ResearchGraphDeps,
+    ResearchInput,
+    build_research_graph,
     initial_state,
 )
 from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
 from digiquant.research.phases.publish_phase import PublishDeps
 from digiquant.research.phases.triage_phase import TriageDeps
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Phase7DigestPayload,
     Phase9EvolutionPayload,
     RebalancePayload,
     RiskDebatePayload,
 )
 from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
-# (11× SectorReport until #929 triage wiring) + digest + Hermes thesis track + held H5.
+# (11× SectorReport until #929 triage wiring) + digest + portfolio thesis track + held H5.
 QUIET_DAY_LLM_BUDGET = 22
 QUIET_DAY_MIN_PATCH_RATIO = 0.10
 PATCH_OUTPUT_SCHEMAS = frozenset({"DocumentPatch"})
@@ -447,7 +447,7 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "skip_reason": "simulator_default",
         "ops": [],
     },
-    # Hermes thesis track (H1–H3)
+    # portfolio thesis track (H1–H3)
     "ThesisReviewOutput": {
         "reviewed_theses": [],
         "new_candidate_theses": [],
@@ -693,7 +693,7 @@ def parse_schema_name(messages: list[dict[str, Any]]) -> str | None:
     """Extract the output-schema name from a prompt's OUTPUT_SCHEMA chunk.
 
     Returns ``None`` if the chunk is missing — callers should treat that
-    as a wiring bug (every Atlas LLM call goes through ``run_research_agent``
+    as a wiring bug (every research LLM call goes through ``run_research_agent``
     which always includes the chunk).
     """
     for msg in messages:
@@ -933,11 +933,11 @@ class SimulationRun:
     """
 
     client: FakeSupabaseClient
-    deps: AtlasGraphDeps
-    config_bundle: AtlasConfigBundle = field(default_factory=AtlasConfigBundle)
+    deps: ResearchGraphDeps
+    config_bundle: ResearchConfigBundle = field(default_factory=ResearchConfigBundle)
     captured_calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
-    # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
-    hermes_deps: Any = None
+    # portfolio-side deps + chain publish — populated by ``simulated_pipeline``.
+    portfolio_deps: Any = None
     publish_deps: Any = None
     evidence_bundle_store: EvidenceBundleStore | None = None
 
@@ -945,156 +945,156 @@ class SimulationRun:
         """Aggregate LLM call budget + patch-ratio telemetry for gate tests."""
         return llm_telemetry_from_calls(self.captured_calls)
 
-    def invoke(self, atlas_input: AtlasInput) -> AtlasResearchState:
-        """Run the full Atlas → Hermes chain to completion.
+    def invoke(self, research_input: ResearchInput) -> ResearchState:
+        """Run the full research → portfolio chain to completion.
 
-        Returns the final ``AtlasResearchState`` so tests can read every
+        Returns the final ``ResearchState`` so tests can read every
         ``phaseN_*`` field directly. The fake client's ``store`` carries
         every write; the canned reads carry every prior-context probe.
         """
         from digiquant.portfolio.chain import ChainDeps
-        from digiquant.portfolio.graph import HermesGraphDeps
+        from digiquant.portfolio.graph import PortfolioGraphDeps
 
         chain_deps = ChainDeps(
-            atlas=self.deps,
-            hermes=self.hermes_deps or HermesGraphDeps(),
+            research=self.deps,
+            portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=self.publish_deps,
         )
         # Re-bind initial_state to thread the test's config_bundle.
-        atlas_input_with_state = atlas_input
-        result = _invoke_with_config(atlas_input_with_state, chain_deps, self.config_bundle)
-        return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        research_input_with_state = research_input
+        result = _invoke_with_config(research_input_with_state, chain_deps, self.config_bundle)
+        return ResearchState.model_validate(result) if isinstance(result, dict) else result
 
-    def invoke_through_h5(self, atlas_input: AtlasInput) -> AtlasResearchState:
-        """Run Atlas + Hermes H1–H5 only (checkpoint boundary before H6)."""
+    def invoke_through_h5(self, research_input: ResearchInput) -> ResearchState:
+        """Run research + portfolio H1–H5 only (checkpoint boundary before H6)."""
         from digiquant.portfolio.chain import ChainDeps
-        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_phases_thesis
+        from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_phases_thesis
 
         chain_deps = ChainDeps(
-            atlas=self.deps,
-            hermes=self.hermes_deps or HermesGraphDeps(),
+            research=self.deps,
+            portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=None,
         )
-        state = _invoke_atlas_then_hermes_phases(
-            atlas_input,
+        state = _invoke_research_then_portfolio_phases(
+            research_input,
             chain_deps,
             self.config_bundle,
-            hermes_phases=build_hermes_phases_thesis(
-                watchlist=list(atlas_input.watchlist),
-                deps=chain_deps.hermes,
+            portfolio_phases=build_portfolio_phases_thesis(
+                watchlist=list(research_input.watchlist),
+                deps=chain_deps.portfolio,
             )[:5],
         )
-        return AtlasResearchState.model_validate(state) if isinstance(state, dict) else state
+        return ResearchState.model_validate(state) if isinstance(state, dict) else state
 
-    def invoke_hermes_from_h6(self, state: AtlasResearchState) -> AtlasResearchState:
-        """Resume Hermes from H6 onward using the wired deps (post-checkpoint)."""
+    def invoke_portfolio_from_h6(self, state: ResearchState) -> ResearchState:
+        """Resume portfolio from H6 onward using the wired deps (post-checkpoint)."""
         from digiquant.portfolio.chain import ChainDeps
-        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_phases_thesis
+        from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_phases_thesis
 
         chain_deps = ChainDeps(
-            atlas=self.deps,
-            hermes=self.hermes_deps or HermesGraphDeps(),
+            research=self.deps,
+            portfolio=self.portfolio_deps or PortfolioGraphDeps(),
             publish=self.publish_deps,
         )
-        resume = _invoke_hermes_phases_from(
+        resume = _invoke_portfolio_phases_from(
             state,
             chain_deps,
-            build_hermes_phases_thesis(
+            build_portfolio_phases_thesis(
                 watchlist=list(state.config.watchlist),
-                deps=chain_deps.hermes,
+                deps=chain_deps.portfolio,
             )[5:],  # H6–H9
         )
-        return AtlasResearchState.model_validate(resume) if isinstance(resume, dict) else resume
+        return ResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
 
 def _invoke_with_config(
-    atlas_input: AtlasInput,
+    research_input: ResearchInput,
     chain_deps: "ChainDeps",  # noqa: F821 — forward ref keeps simulator import-light
-    config_bundle: AtlasConfigBundle,
-) -> AtlasResearchState:
-    """Invoke ``run_atlas_then_hermes`` while threading a non-default config bundle.
+    config_bundle: ResearchConfigBundle,
+) -> ResearchState:
+    """Invoke ``run_research_then_portfolio`` while threading a non-default config bundle.
 
     The chain orchestrator builds state via :func:`initial_state` which
-    only consumes ``AtlasInput.watchlist``; tests sometimes need a richer
+    only consumes ``ResearchInput.watchlist``; tests sometimes need a richer
     bundle (extra preferences, macro_series). Re-derive state here with
     the supplied ``config_bundle`` and run the chain pieces directly.
     """
     from digigraph.graph.pipeline_builder import build_pipeline
 
-    from digiquant.research.graph import AtlasGraphDeps as _AGDeps
+    from digiquant.research.graph import ResearchGraphDeps as _AGDeps
     from digiquant.research.phases.publish_phase import build_publish_phase
 
-    atlas_deps_no_publish = _AGDeps(
-        preflight=chain_deps.atlas.preflight,
+    research_deps_no_publish = _AGDeps(
+        preflight=chain_deps.research.preflight,
         publish=None,
-        triage=chain_deps.atlas.triage,
-        preflight_reflect=chain_deps.atlas.preflight_reflect,
+        triage=chain_deps.research.triage,
+        preflight_reflect=chain_deps.research.preflight_reflect,
     )
-    state = initial_state(atlas_input, config=config_bundle)
-    atlas_graph = build_atlas_graph(
-        deps=atlas_deps_no_publish,
-        watchlist=atlas_input.watchlist,
+    state = initial_state(research_input, config=config_bundle)
+    research_graph = build_research_graph(
+        deps=research_deps_no_publish,
+        watchlist=research_input.watchlist,
     )
-    state = atlas_graph.invoke(state)
+    state = research_graph.invoke(state)
 
-    from digiquant.portfolio.graph import build_hermes_graph
+    from digiquant.portfolio.graph import build_portfolio_graph
 
-    hermes_graph = build_hermes_graph(watchlist=list(atlas_input.watchlist), deps=chain_deps.hermes)
-    state = hermes_graph.invoke(state)
+    portfolio_graph = build_portfolio_graph(watchlist=list(research_input.watchlist), deps=chain_deps.portfolio)
+    state = portfolio_graph.invoke(state)
 
     if chain_deps.publish is not None:
         publish_only = [build_publish_phase(chain_deps.publish)]
-        publish_graph = build_pipeline(AtlasResearchState, publish_only)
+        publish_graph = build_pipeline(ResearchState, publish_only)
         state = publish_graph.invoke(state)
     return state
 
 
-def _invoke_atlas_then_hermes_phases(
-    atlas_input: AtlasInput,
+def _invoke_research_then_portfolio_phases(
+    research_input: ResearchInput,
     chain_deps: "ChainDeps",  # noqa: F821
-    config_bundle: AtlasConfigBundle,
+    config_bundle: ResearchConfigBundle,
     *,
-    hermes_phases: list[Any],
-) -> AtlasResearchState:
-    """Run Atlas through phase 7, then a subset of Hermes phases."""
+    portfolio_phases: list[Any],
+) -> ResearchState:
+    """Run research through phase 7, then a subset of portfolio phases."""
     from digigraph.graph.pipeline_builder import build_pipeline
 
-    from digiquant.research.graph import AtlasGraphDeps as _AGDeps
+    from digiquant.research.graph import ResearchGraphDeps as _AGDeps
 
-    atlas_deps_no_publish = _AGDeps(
-        preflight=chain_deps.atlas.preflight,
+    research_deps_no_publish = _AGDeps(
+        preflight=chain_deps.research.preflight,
         publish=None,
-        triage=chain_deps.atlas.triage,
-        preflight_reflect=chain_deps.atlas.preflight_reflect,
+        triage=chain_deps.research.triage,
+        preflight_reflect=chain_deps.research.preflight_reflect,
     )
-    state = initial_state(atlas_input, config=config_bundle)
-    atlas_graph = build_atlas_graph(
-        deps=atlas_deps_no_publish,
-        watchlist=atlas_input.watchlist,
+    state = initial_state(research_input, config=config_bundle)
+    research_graph = build_research_graph(
+        deps=research_deps_no_publish,
+        watchlist=research_input.watchlist,
     )
-    state = atlas_graph.invoke(state)
-    if hermes_phases:
-        hermes_graph = build_pipeline(HermesState, hermes_phases)
-        state = hermes_graph.invoke(state)
+    state = research_graph.invoke(state)
+    if portfolio_phases:
+        portfolio_graph = build_pipeline(PortfolioState, portfolio_phases)
+        state = portfolio_graph.invoke(state)
     return state
 
 
-def _invoke_hermes_phases_from(
-    state: AtlasResearchState,
+def _invoke_portfolio_phases_from(
+    state: ResearchState,
     chain_deps: "ChainDeps",  # noqa: F821
-    hermes_phases: list[Any],
-) -> AtlasResearchState:
-    """Resume Hermes from an existing checkpointed state."""
+    portfolio_phases: list[Any],
+) -> ResearchState:
+    """Resume portfolio from an existing checkpointed state."""
     from digigraph.graph.pipeline_builder import build_pipeline
 
     from digiquant.research.phases.publish_phase import build_publish_phase
 
-    if hermes_phases:
-        hermes_graph = build_pipeline(HermesState, hermes_phases)
-        state = hermes_graph.invoke(state)
+    if portfolio_phases:
+        portfolio_graph = build_pipeline(PortfolioState, portfolio_phases)
+        state = portfolio_graph.invoke(state)
     if chain_deps.publish is not None:
         publish_only = [build_publish_phase(chain_deps.publish)]
-        publish_graph = build_pipeline(AtlasResearchState, publish_only)
+        publish_graph = build_pipeline(ResearchState, publish_only)
         state = publish_graph.invoke(state)
     return state
 
@@ -1130,10 +1130,10 @@ def simulated_pipeline(
         phase9 + reflect off (those require migrations 026/027). ``commit_run``
         wires H9 terminal portfolio booking (positions + NAV + brief).
     preferences
-        Merged into ``AtlasConfigBundle.preferences`` so tests can flip
+        Merged into ``ResearchConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
     evidence_bundle_store
-        Optional append-only H5/H6 bundle store. When set, Hermes H5/H6 wire
+        Optional append-only H5/H6 bundle store. When set, portfolio H5/H6 wire
         the store for publish/amendment persistence (WP11.5 durable tests).
     """
     client = seed_supabase_client(canned_extras, replace_defaults=replace_canned_defaults)
@@ -1141,10 +1141,10 @@ def simulated_pipeline(
     watchlist_list = list(watchlist)
     preferences_dict = dict(preferences or {})
 
-    deps = AtlasGraphDeps(
+    deps = ResearchGraphDeps(
         preflight=PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(
+            config_loader=lambda: ResearchConfigBundle(
                 watchlist=watchlist_list,
                 preferences=preferences_dict,
             ),
@@ -1153,11 +1153,11 @@ def simulated_pipeline(
         triage=TriageDeps(client=client) if triage else None,
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
-    from digiquant.portfolio.graph import HermesGraphDeps, ThesisGraphDeps
+    from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
     from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
-    hermes_deps = HermesGraphDeps(
+    portfolio_deps = PortfolioGraphDeps(
         phase9=Phase9Deps(client=client) if phase9 else None,
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
@@ -1165,7 +1165,7 @@ def simulated_pipeline(
         evidence_bundle_store=bundle_store,
     )
     publish_deps = PublishDeps(client=client) if publish else None
-    config_bundle = AtlasConfigBundle(
+    config_bundle = ResearchConfigBundle(
         watchlist=watchlist_list,
         preferences=preferences_dict,
     )
@@ -1174,7 +1174,7 @@ def simulated_pipeline(
         client=client,
         deps=deps,
         config_bundle=config_bundle,
-        hermes_deps=hermes_deps,
+        portfolio_deps=portfolio_deps,
         publish_deps=publish_deps,
         evidence_bundle_store=bundle_store,
     )
@@ -1188,7 +1188,7 @@ def simulated_pipeline(
         except SkillNotFoundError:
             return f"Simulator stub edit skill for {slug!r}. Return DocumentPatch JSON only."
 
-    def _simulator_hermes_load_skill_edit(slug: str) -> str:
+    def _simulator_portfolio_load_skill_edit(slug: str) -> str:
         from digiquant.portfolio.skills import SkillNotFoundError, load_skill_edit
 
         try:
@@ -1208,11 +1208,11 @@ def simulated_pipeline(
         ),
         patch(
             "digiquant.portfolio.phases.portfolio_common.load_skill_edit",
-            side_effect=_simulator_hermes_load_skill_edit,
+            side_effect=_simulator_portfolio_load_skill_edit,
         ),
         patch(
             "digiquant.portfolio.phases.thesis_common.load_skill_edit",
-            side_effect=_simulator_hermes_load_skill_edit,
+            side_effect=_simulator_portfolio_load_skill_edit,
         ),
     ):
         yield run

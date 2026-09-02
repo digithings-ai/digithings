@@ -1,11 +1,11 @@
-"""Atlas research subgraph — scaffolding spike (issue #146).
+"""research subgraph — scaffolding spike (issue #146).
 
 Minimal LangGraph StateGraph with three stub nodes (research → synthesize → persist)
 and a Pydantic v2 state model. Real LLM calls and DB persistence are intentionally
 out of scope for this spike; follow-up tasks under epic #10 will replace the stubs.
 
 This subgraph is *not* wired into the default supervisor — it is exposed only so
-parent graphs can invoke it once the rest of the Atlas epic lands.
+parent graphs can invoke it once the rest of the research epic lands.
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 
-class AtlasResearchState(BaseModel):
-    """State for the Atlas research subgraph.
+class ResearchState(BaseModel):
+    """State for the research subgraph.
 
     Populated progressively by the three nodes:
     - ``research_node`` fills ``sources`` and ``findings``.
@@ -33,7 +33,7 @@ class AtlasResearchState(BaseModel):
     persisted_id: str | None = None
 
 
-def research_node(state: AtlasResearchState) -> AtlasResearchState:
+def research_node(state: ResearchState) -> ResearchState:
     """STUB: emit one synthetic source + finding. No real LLM call in this spike."""
     return state.model_copy(
         update={
@@ -43,21 +43,21 @@ def research_node(state: AtlasResearchState) -> AtlasResearchState:
     )
 
 
-def synthesize_node(state: AtlasResearchState) -> AtlasResearchState:
+def synthesize_node(state: ResearchState) -> ResearchState:
     """STUB: trivial synthesis summarizing finding count."""
     return state.model_copy(
         update={"synthesis": f"Synthesized from {len(state.findings)} findings"}
     )
 
 
-def persist_node(state: AtlasResearchState) -> AtlasResearchState:
+def persist_node(state: ResearchState) -> ResearchState:
     """STUB: generate a UUID. No DB write in this spike."""
     return state.model_copy(update={"persisted_id": str(uuid.uuid4())})
 
 
-def build_atlas_subgraph():
-    """Compile the Atlas research subgraph: research → synthesize → persist."""
-    g: StateGraph[AtlasResearchState] = StateGraph(AtlasResearchState)
+def build_research_subgraph():
+    """Compile the research subgraph: research → synthesize → persist."""
+    g: StateGraph[ResearchState] = StateGraph(ResearchState)
     g.add_node("research", research_node)
     g.add_node("synthesize", synthesize_node)
     g.add_node("persist", persist_node)
@@ -68,5 +68,5 @@ def build_atlas_subgraph():
     return g.compile()
 
 
-# Compiled subgraph, importable by parent graphs once Atlas wiring lands.
-atlas_subgraph = build_atlas_subgraph()
+# Compiled subgraph, importable by parent graphs once research wiring lands.
+research_subgraph = build_research_subgraph()

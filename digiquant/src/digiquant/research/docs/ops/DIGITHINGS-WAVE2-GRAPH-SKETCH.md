@@ -1,14 +1,14 @@
-# Wave 2 — digigraph graph sketch (Atlas)
+# Wave 2 — digigraph graph sketch (research)
 
 This file is the **implementation anchor** for [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) **§ P1b — digigraph scheduled operations**. It does not replace the roadmap; it **narrows** how scheduled Cowork work becomes **LangGraph** runs inside **digigraph** (`digithings/digraph/`).
 
-**digithings on disk:** sibling repo `../digithings` (see roadmap). **digigraph** = LangGraph orchestration service; extend it with new compiled graphs or nodes that call Atlas.
+**digithings on disk:** sibling repo `../digithings` (see roadmap). **digigraph** = LangGraph orchestration service; extend it with new compiled graphs or nodes that call research.
 
 ---
 
 ## Principles
 
-1. **One publish path** — Nodes that persist state should prefer **subprocess or import** of existing Atlas entrypoints: `scripts/publish_document.py`, `scripts/materialize_snapshot.py`, `scripts/run_db_first.py`, `scripts/validate_db_first.py` ([`RUNBOOK.md`](../RUNBOOK.md), [`docs/ops/SCRIPTS.md`](SCRIPTS.md)).
+1. **One publish path** — Nodes that persist state should prefer **subprocess or import** of existing research entrypoints: `scripts/publish_document.py`, `scripts/materialize_snapshot.py`, `scripts/run_db_first.py`, `scripts/validate_db_first.py` ([`RUNBOOK.md`](../RUNBOOK.md), [`docs/ops/SCRIPTS.md`](SCRIPTS.md)).
 2. **LLM where the skill already assumes it** — Research segments match today’s **agent + skill** model; a graph can wrap **one prompt = one node** or a **research subgraph** (digigraph already has research patterns — see `digithings/digraph/ARCHITECTURE.md`).
 3. **Idempotency** — Schedule triggers include stable keys: `(graph_name, date, run_type)`; workers skip or no-op duplicate success for the same key.
 4. **Cowork becomes manual** — ``cowork/tasks/`` stay the **spec** for behavior and prompts until copied into graph node configs; **scheduled** jobs no longer depend on Cowork’s calendar.
@@ -19,9 +19,9 @@ This file is the **implementation anchor** for [MIGRATION-ROADMAP-DIGITHINGS.md]
 
 | Graph (conceptual name) | Replaces scheduled reliance on | Closes with |
 |---------------------------|---------------------------------|-------------|
-| **atlas-daily-research** | `recurring-scheduled-run.md` / `research-daily-delta.md` / `research-weekly-baseline.md` (branch by day) | Published digest + `run_db_first.py` → validated DB |
-| **atlas-postmortem-research** | `post-mortem-research-github.md` | `pipeline_review` published + optional `pipeline_review_to_github.py` |
-| **atlas-postmortem-portfolio** | `post-mortem-portfolio-github.md` | Same for Track B review payload |
+| **research-daily-research** | `recurring-scheduled-run.md` / `research-daily-delta.md` / `research-weekly-baseline.md` (branch by day) | Published digest + `run_db_first.py` → validated DB |
+| **research-postmortem-research** | `post-mortem-research-github.md` | `pipeline_review` published + optional `pipeline_review_to_github.py` |
+| **research-postmortem-portfolio** | `post-mortem-portfolio-github.md` | Same for Track B review payload |
 
 Optional later graphs: monthly synthesis, document-deltas fold, portfolio PM rebalance — same pattern, separate `graph_name` and schedule.
 
@@ -49,13 +49,13 @@ flowchart TD
 
 ## Node types
 
-| Node kind | Responsibility | Atlas touchpoints |
+| Node kind | Responsibility | research touchpoints |
 |-----------|----------------|-------------------|
-| **Router** | Sunday vs weekday vs month-end; mirrors [`scripts/run_db_first.py --dry-run`](../../../../../../scripts/atlas/run_db_first.py) hints | Config + date |
+| **Router** | Sunday vs weekday vs month-end; mirrors [`scripts/run_db_first.py --dry-run`](../../../../../../digiquant/scripts/research/run_db_first.py) hints | Config + date |
 | **Skill segment** | One phase = one skill package; prompt from [`skills/`](../../skills/) + ``cowork/tasks/`` | `validate_artifact.py`, `publish_document.py` |
 | **Materialize** | Digest snapshot row + digest document | `materialize_snapshot.py` |
 | **Operator close-out** | Metrics, execute-at-open, validation | `run_db_first.py` |
-| **Post-mortem publish** | `doc_type: pipeline_review` | `publish_document.py`, [`pipeline_review_to_github.py`](../../../../../../scripts/atlas/pipeline_review_to_github.py) |
+| **Post-mortem publish** | `doc_type: pipeline_review` | `publish_document.py`, [`pipeline_review_to_github.py`](../../../../../../digiquant/scripts/research/pipeline_review_to_github.py) |
 
 Avoid reimplementing SQL writes in TypeScript for Wave 2; keep Python authoritative.
 
@@ -65,18 +65,18 @@ Avoid reimplementing SQL writes in TypeScript for Wave 2; keep Python authoritat
 
 Mirror today’s operator machine; inject from digithings env or secrets store:
 
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (or name used in Atlas scripts)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (or name used in research scripts)
 - `CRON_SECRET` or internal auth for **trigger** endpoints only
 - Provider keys for LLM nodes (LiteLLM in digithings or BYOK later)
-- `ATLAS_ROOT` or monorepo path to **`scripts/`** if subprocess uses relative imports
+- `RESEARCH_ROOT` or monorepo path to **`scripts/`** if subprocess uses relative imports
 
-Document the exact variable names in the **digithings** deployment template when Wave 1 lands; keep `config/supabase.env` (Atlas repo) as the local operator reference.
+Document the exact variable names in the **digithings** deployment template when Wave 1 lands; keep `config/supabase.env` (research repo) as the local operator reference.
 
 ---
 
 ## digigraph extension (where code lives)
 
-Implementation belongs in **`digithings/digigraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow `digigraph/ARCHITECTURE.md` in the digithings repo). Atlas repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
+Implementation belongs in **`digithings/digigraph/`** (new graph module or registration in `orchestration/`, compiled graph in `graph/` — follow `digigraph/ARCHITECTURE.md` in the digithings repo). research repo **does not** need a second orchestrator; it keeps **skills + scripts + schemas**.
 
 ---
 

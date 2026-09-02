@@ -12,30 +12,30 @@ from unittest.mock import patch
 
 import pytest
 from digiquant.research import diagnostics
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.research.phases.preflight import PreflightDeps
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
     SegmentPayload,
     SegmentSlot,
 )
 from digiquant.portfolio.chain import (
     ChainDeps,
-    _coerce_atlas_state,
+    _coerce_research_state,
     _record_chain_error,
     _retry_worthy,
     _run_beliefs_fold,
     _run_terminal_phase,
-    run_atlas_then_hermes,
+    run_research_then_portfolio,
 )
 
 pytestmark = pytest.mark.unit
 
 
-def _state() -> AtlasResearchState:
-    return AtlasResearchState(
+def _state() -> ResearchState:
+    return ResearchState(
         run_type="delta", run_date=date(2026, 6, 12), baseline_date=date(2026, 6, 9)
     )
 
@@ -62,24 +62,24 @@ def test_terminal_phase_swallows_failure_and_records_error() -> None:
 
 def test_record_chain_error_appends_phase_error() -> None:
     state = _state()
-    _record_chain_error(state, "atlas", RuntimeError("graph crash"))
+    _record_chain_error(state, "research", RuntimeError("graph crash"))
     assert state.errors[-1].phase == "chain"
-    assert state.errors[-1].node == "atlas"
+    assert state.errors[-1].node == "research"
     assert "graph crash" in state.errors[-1].message
 
 
-def test_coerce_atlas_state_normalizes_langgraph_dict() -> None:
+def test_coerce_research_state_normalizes_langgraph_dict() -> None:
     state = _state()
-    state.config = AtlasConfigBundle(preferences={"debate_rounds": 3})
+    state.config = ResearchConfigBundle(preferences={"debate_rounds": 3})
     raw = state.model_dump(mode="json")
-    coerced = _coerce_atlas_state(raw)
-    assert isinstance(coerced, AtlasResearchState)
+    coerced = _coerce_research_state(raw)
+    assert isinstance(coerced, ResearchState)
     assert coerced.config.preferences.get("debate_rounds", 1) == 3
 
 
-def test_coerce_atlas_state_passthrough_model() -> None:
+def test_coerce_research_state_passthrough_model() -> None:
     state = _state()
-    assert _coerce_atlas_state(state) is state
+    assert _coerce_research_state(state) is state
 
 
 def test_retry_worthy_when_degraded_and_no_book() -> None:
@@ -93,7 +93,7 @@ def test_not_retry_worthy_when_book_committed() -> None:
     # NOT retry — re-running just burns the CI outer-loop's backoff sleeps on a good book.
     # The guard now keys on the commit manifest, not mere materialization.
     state = _state()
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
         commit_manifest={"status": "committed", "source_run_id": str(state.run_id)},
     )
@@ -105,7 +105,7 @@ def test_retry_worthy_when_book_materialized_but_uncommitted() -> None:
     # skip) is NOT durable work — it must retry. This is the exact shape of the 2026-06-26
     # freeze, which the old materialization-only guard wrongly treated as a good book.
     state = _state()
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
         commit_manifest=None,
     )
@@ -132,45 +132,45 @@ class _FakeClient:
 
 
 def _chain_deps() -> ChainDeps:
-    from digiquant.research.graph import AtlasGraphDeps
-    from digiquant.portfolio.graph import HermesGraphDeps
+    from digiquant.research.graph import ResearchGraphDeps
+    from digiquant.portfolio.graph import PortfolioGraphDeps
 
     return ChainDeps(
-        atlas=AtlasGraphDeps(
+        research=ResearchGraphDeps(
             preflight=PreflightDeps(client=_FakeClient(), config_loader=None)  # type: ignore[arg-type]
         ),
-        hermes=HermesGraphDeps(),
+        portfolio=PortfolioGraphDeps(),
     )
 
 
 def test_beliefs_failure_is_recorded_and_swallowed() -> None:
     # Beliefs distillation is an on-demand backlog fold, not a run deliverable. Before #1737
-    # both call sites were bare, so a failure here propagated out of run_atlas_then_hermes and
+    # both call sites were bare, so a failure here propagated out of run_research_then_portfolio and
     # killed a run whose book had already committed.
     state = _state()
     with patch(
         "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         side_effect=RuntimeError("beliefs LLM 500"),
     ):
-        _run_beliefs_fold(state, _chain_deps(), AtlasInput(run_date=state.run_date))
+        _run_beliefs_fold(state, _chain_deps(), ResearchInput(run_date=state.run_date))
     assert [(e.phase, e.node) for e in state.errors] == [("chain", "beliefs")]
     assert "beliefs LLM 500" in state.errors[0].message
 
 
 def test_beliefs_fold_skipped_without_a_client() -> None:
-    from digiquant.research.graph import AtlasGraphDeps
-    from digiquant.portfolio.graph import HermesGraphDeps
+    from digiquant.research.graph import ResearchGraphDeps
+    from digiquant.portfolio.graph import PortfolioGraphDeps
 
     state = _state()
     deps = ChainDeps(
-        atlas=AtlasGraphDeps(preflight=PreflightDeps(client=None, config_loader=None)),  # type: ignore[arg-type]
-        hermes=HermesGraphDeps(),
+        research=ResearchGraphDeps(preflight=PreflightDeps(client=None, config_loader=None)),  # type: ignore[arg-type]
+        portfolio=PortfolioGraphDeps(),
     )
     with patch(
         "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         side_effect=AssertionError("must not be called"),
     ):
-        _run_beliefs_fold(state, deps, AtlasInput(run_date=state.run_date))
+        _run_beliefs_fold(state, deps, ResearchInput(run_date=state.run_date))
     assert state.errors == []
 
 
@@ -192,16 +192,16 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
 
     deps = _chain_deps()
     deps = ChainDeps(
-        atlas=deps.atlas,
-        hermes=deps.hermes,
+        research=deps.research,
+        portfolio=deps.portfolio,
         diagnostics=DiagnosticsDeps(client=_FakeClient(), run_id="r1"),
     )
     with (
-        patch("digiquant.portfolio.chain.build_atlas_graph", side_effect=KeyboardInterrupt),
+        patch("digiquant.portfolio.chain.build_research_graph", side_effect=KeyboardInterrupt),
         patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(KeyboardInterrupt),
     ):
-        run_atlas_then_hermes(atlas_input=AtlasInput(run_date=date(2026, 6, 12)), deps=deps)
+        run_research_then_portfolio(research_input=ResearchInput(run_date=date(2026, 6, 12)), deps=deps)
 
     assert written["errors"] == [("chain", "terminal")]
     assert written["status"] == "failed"

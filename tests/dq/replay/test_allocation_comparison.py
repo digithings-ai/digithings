@@ -42,15 +42,15 @@ pytestmark = pytest.mark.unit
 
 _UTC = timezone.utc
 _REPO = Path(__file__).resolve().parents[3]
-_REPLAY_ROOT = _REPO / "digiquant" / "src" / "digiquant" / "olympus" / "replay"
+_REPLAY_ROOT = _REPO / "digiquant" / "src" / "digiquant" / "dashboard" / "replay"
 _COMPARISON = _REPLAY_ROOT / "allocation_comparison.py"
 _CRITERIA = _REPLAY_ROOT / "shadow_criteria" / "v1.json"
-_CLI = _REPO / "digiquant" / "scripts" / "atlas" / "compare_allocation_shadow.py"
+_CLI = _REPO / "digiquant" / "scripts" / "research" / "compare_allocation_shadow.py"
 _PRODUCTION_GUARD_PATHS = (
-    _REPO / "digiquant/src/digiquant/olympus/hermes/chain.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/phase7e_risk_sizing.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
-    _REPO / "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",
+    _REPO / "digiquant/src/digiquant/portfolio/chain.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/phase7e_risk_sizing.py",
+    _REPO / "digiquant/src/digiquant/portfolio/phases/h9_commit_run.py",
+    _REPO / "digiquant/src/digiquant/portfolio/shadow_artifact.py",
 )
 
 
@@ -528,7 +528,7 @@ def test_production_surfaces_do_not_import_comparison() -> None:
             if isinstance(node, ast.ImportFrom) and node.module:
                 assert "allocation_comparison" not in node.module
                 if "shadow_artifact" not in str(path):
-                    assert "olympus.replay" not in node.module
+                    assert "dashboard.replay" not in node.module
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     assert "allocation_comparison" not in alias.name

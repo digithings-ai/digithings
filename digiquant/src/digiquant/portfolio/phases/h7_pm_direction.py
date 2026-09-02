@@ -27,7 +27,7 @@ from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
 )
-from digiquant.research.state import PhaseError, PhaseHermesState
+from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.forecast_calibration import (
@@ -42,18 +42,18 @@ from digiquant.portfolio.models.pm_direction import (
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
 from digiquant.portfolio.skills import load_skill_full
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
 from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
-NODE_ID = "hermes/portfolio/pm-direction"
-PHASE_NAME = "hermes_h7_pm_direction"
+NODE_ID = "portfolio/pm-direction"
+PHASE_NAME = "portfolio_h7_pm_direction"
 ARTIFACT_KEY = ("pm", "direction-memo")
 
 logger = logging.getLogger(__name__)
 
 
-def _current_weights_from_config(state: HermesState) -> dict[str, float]:
+def _current_weights_from_config(state: PortfolioState) -> dict[str, float]:
     raw = state.config.preferences.get("current_weights") or {}
     if not isinstance(raw, dict):
         return {}
@@ -66,27 +66,27 @@ def _current_weights_from_config(state: HermesState) -> dict[str, float]:
     return out
 
 
-def _prior_direction_payload(state: HermesState) -> dict[str, Any]:
+def _prior_direction_payload(state: PortfolioState) -> dict[str, Any]:
     row = (state.prior_context.latest_segments or {}).get("pm-direction-memo") or {}
     payload = row.get("payload") if isinstance(row, dict) else {}
     return dict(payload) if isinstance(payload, dict) else {}
 
 
-def _prior_analyst_gaps(state: HermesState) -> dict[str, dict[str, Any]]:
+def _prior_analyst_gaps(state: PortfolioState) -> dict[str, dict[str, Any]]:
     held = set(holdings_from_prior_book(state.prior_context.prior_book))
     gaps = held - set(analyst_payloads(state).keys())
     by_ticker = state.prior_context.prior_analyst_by_ticker
     return {ticker: dict(by_ticker[ticker]) for ticker in gaps if ticker in by_ticker}
 
 
-def _focus_roster_tickers(state: HermesState) -> list[str]:
-    tickers = [entry.ticker for entry in state.phase_hermes.focus_roster if entry.ticker]
+def _focus_roster_tickers(state: PortfolioState) -> list[str]:
+    tickers = [entry.ticker for entry in state.phase_portfolio.focus_roster if entry.ticker]
     if tickers:
         return tickers
     return list(analyst_payloads(state).keys())
 
 
-def _prior_memo_fallback(state: HermesState) -> PMDirectionMemo | None:
+def _prior_memo_fallback(state: PortfolioState) -> PMDirectionMemo | None:
     """Parse the prior pm-direction memo for the H7 LLM-failure carry (#1665)."""
     payload = _prior_direction_payload(state)
     if not payload:
@@ -98,7 +98,7 @@ def _prior_memo_fallback(state: HermesState) -> PMDirectionMemo | None:
     return prior.model_copy(update={"date": state.run_date})
 
 
-def _bind_forecast_references(memo: PMDirectionMemo, state: HermesState) -> PMDirectionMemo:
+def _bind_forecast_references(memo: PMDirectionMemo, state: PortfolioState) -> PMDirectionMemo:
     """Attach authoritative ForecastReference per roster row from *this* run's map."""
     return bind_forecast_references(
         memo,
@@ -109,7 +109,7 @@ def _bind_forecast_references(memo: PMDirectionMemo, state: HermesState) -> PMDi
 def _load_cutoff_outcomes(
     *,
     client: SupabaseClient | None,
-    state: HermesState,
+    state: PortfolioState,
 ) -> list[ForecastOutcome]:
     cutoff = state.knowledge_cutoff_at
     if client is None or cutoff is None:
@@ -126,7 +126,7 @@ def _load_cutoff_outcomes(
 
 
 def _attach_shadow_calibration(
-    state: HermesState,
+    state: PortfolioState,
     *,
     client: SupabaseClient | None,
 ) -> ShadowCalibrationAttachment:
@@ -143,12 +143,12 @@ def _attach_shadow_calibration(
         return ShadowCalibrationAttachment(calibrations=(), calibrated_forecasts=())
 
 
-def _phase_hermes_with_shadow(
+def _phase_portfolio_with_shadow(
     *,
     memo: PMDirectionMemo | None,
     shadow: ShadowCalibrationAttachment,
-) -> PhaseHermesState:
-    return PhaseHermesState(
+) -> PhasePortfolioState:
+    return PhasePortfolioState(
         pm_direction_memo=memo,
         forecast_calibrations=shadow.calibration_dumps(),
         calibrated_forecasts=shadow.calibrated_forecast_dumps(),
@@ -156,7 +156,7 @@ def _phase_hermes_with_shadow(
 
 
 def _h7_node(
-    state: HermesState,
+    state: PortfolioState,
     *,
     client: SupabaseClient | None = None,
     research_state_store: ResearchStateStore | None = None,
@@ -252,12 +252,12 @@ def _h7_node(
             retryable=False,
         )
         return {
-            "phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow),
+            "phase_portfolio": _phase_portfolio_with_shadow(memo=memo, shadow=shadow),
             "errors": [err],
         }
     memo = result.model_copy(update={"date": state.run_date})
     memo = _bind_forecast_references(memo, state)
-    return {"phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow)}
+    return {"phase_portfolio": _phase_portfolio_with_shadow(memo=memo, shadow=shadow)}
 
 
 def build_h7_pm_direction(
@@ -267,7 +267,7 @@ def build_h7_pm_direction(
 ) -> PipelinePhase:
     """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
 
-    def _bound(state: HermesState) -> dict[str, Any]:
+    def _bound(state: PortfolioState) -> dict[str, Any]:
         return _h7_node(state, client=client, research_state_store=research_state_store)
 
     return PipelinePhase(

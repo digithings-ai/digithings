@@ -40,9 +40,9 @@ EXIT_APPLY_FAILED: int = 4
 EXIT_CHECKOUT_STALE: int = 5
 EXIT_LIVE_EF_STALE: int = 6
 MANAGEMENT_API_ORIGIN = "https://api.supabase.com"
-MANAGEMENT_API_USER_AGENT = "Mozilla/5.0 kairos-pages-dashboard-gate/1.0 (+digithings)"
+MANAGEMENT_API_USER_AGENT = "Mozilla/5.0 execution-pages-dashboard-gate/1.0 (+digithings)"
 
-_REPO_ROOT = Path(__file__).resolve().parents[5]
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 _SETTINGS_HANDLERS = (
     Path("digiquant") / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
 )
@@ -54,8 +54,8 @@ _ALPACA_DASHBOARD_RE = re.compile(
 _SETTINGS_DASHBOARD_RE = re.compile(
     r'export\s+const\s+SETTINGS_PATH\s*=\s*"/dashboard/settings/"\s*;'
 )
-_ALPACA_OLYMPUS_RE = re.compile(r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/')
-_SETTINGS_OLYMPUS_RE = re.compile(r'export\s+const\s+SETTINGS_PATH\s*=\s*"/olympus/')
+_ALPACA_DASHBOARD_LEGACY_RE = re.compile(r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/olympus/')
+_SETTINGS_DASHBOARD_LEGACY_RE = re.compile(r'export\s+const\s+SETTINGS_PATH\s*=\s*"/olympus/')
 
 DASHBOARD_PATHS: tuple[str, ...] = (
     "/dashboard/",
@@ -75,7 +75,7 @@ DASHBOARD_URL_FUNCTIONS: tuple[str, ...] = (
     "settings",
 )
 
-PROBE_USER_AGENT = "kairos-pages-dashboard-gate/1.0 (+digithings)"
+PROBE_USER_AGENT = "execution-pages-dashboard-gate/1.0 (+digithings)"
 _PROBE_HEADERS = {
     # Cloudflare 403s the default Python-urllib UA; curl from this VM gets
     # the real origin status (/olympus 200, /dashboard 404 as of 2026-09-01).
@@ -177,7 +177,7 @@ def _regex_in_code(source: str, pattern: re.Pattern[str]) -> bool:
 
 
 def app_url_bundle_ready(source: str, *, where: str) -> tuple[bool, str]:
-    """Executable ``/dashboard`` app-url pins; ``/olympus`` pins fail."""
+    """Executable ``/dashboard`` app-url pins; retired ``/olympus`` pins fail."""
     if not _regex_in_code(source, _ALPACA_DASHBOARD_RE):
         return (
             False,
@@ -188,15 +188,15 @@ def app_url_bundle_ready(source: str, *, where: str) -> tuple[bool, str]:
             False,
             f"pages dashboard gate: {where} does not pin /dashboard settings path",
         )
-    if _regex_in_code(source, _ALPACA_OLYMPUS_RE):
-        return False, f"pages dashboard gate: {where} still pins /olympus Alpaca callback"
-    if _regex_in_code(source, _SETTINGS_OLYMPUS_RE):
-        return False, f"pages dashboard gate: {where} still pins /olympus settings path"
+    if _regex_in_code(source, _ALPACA_DASHBOARD_LEGACY_RE):
+        return False, f"pages dashboard gate: {where} still pins retired Alpaca callback"
+    if _regex_in_code(source, _SETTINGS_DASHBOARD_LEGACY_RE):
+        return False, f"pages dashboard gate: {where} still pins retired settings path"
     return True, ""
 
 
 def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str]:
-    """Executable redeem-invite + ``/dashboard`` pins; ``/olympus`` pins fail."""
+    """Executable redeem-invite + ``/dashboard`` pins; retired ``/olympus`` pins fail."""
     where = "live settings bundle" if live else "checkout"
     extra = (
         " — deploy did not mount 112 redeem"

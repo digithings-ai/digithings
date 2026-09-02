@@ -11,7 +11,7 @@ import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.phases import phase5_equities
 from digiquant.research.sectors_config import load_sectors
-from digiquant.research.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant.research.state import ResearchState, SegmentPayload, SegmentSlot
 
 
 def _equity_payload() -> str:
@@ -80,9 +80,9 @@ def _dispatch(_model: str, messages: list[dict[str, Any]], **_: Any) -> str:
     raise AssertionError("unrecognized output schema in dispatch")
 
 
-def _seed_state_through_phase4() -> AtlasResearchState:
+def _seed_state_through_phase4() -> ResearchState:
     """Build state with macro + phase1 + phase4 populated so Phase 5 has inputs."""
-    state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+    state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
     state.phase3_output = SegmentSlot(
         payload=SegmentPayload(
             segment="macro",
@@ -122,7 +122,7 @@ class TestPhase5Topology:
 
     def test_equity_then_eleven_sector_memos_no_scorecard(self) -> None:
         compiled = build_pipeline(
-            AtlasResearchState,
+            ResearchState,
             [phase5_equities.build_phase5_equity(), phase5_equities.build_phase5_sectors()],
         )
         state = _seed_state_through_phase4()
@@ -131,7 +131,7 @@ class TestPhase5Topology:
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         # Equity slot + 11 sector memos. No rolled-up sector-scorecard document.
         assert "equity" in final.phase5_outputs
@@ -141,14 +141,14 @@ class TestPhase5Topology:
         assert "sector-scorecard" not in final.phase5_outputs
 
     def test_daily_phase5_run_does_not_emit_scorecard(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, phase5_equities.build_phase5())
+        compiled = build_pipeline(ResearchState, phase5_equities.build_phase5())
         state = _seed_state_through_phase4()
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert "sector-scorecard" not in final.phase5_outputs
         sector_slugs = {k for k in final.phase5_outputs if k.startswith("sector-")}
@@ -183,7 +183,7 @@ class TestPhase5Topology:
                     pass
             return _dispatch(_model, messages)
 
-        compiled = build_pipeline(AtlasResearchState, phase5_equities.build_phase5())
+        compiled = build_pipeline(ResearchState, phase5_equities.build_phase5())
         state = _seed_state_through_phase4()
         with patch(
             "digigraph.graph.research_agent.completion_text",

@@ -1397,7 +1397,7 @@
     "/v1/olympus/policy_comparison/{comparison_id}": {
       "get": {
         "description": "Fetch a comparison summary (artifact IDs / status only).",
-        "operationId": "v1_olympus_get_policy_comparison_v1_olympus_policy_comparison__comparison_id__get",
+        "operationId": "v1_dashboard_get_policy_comparison_v1_dashboard_policy_comparison__comparison_id__get",
         "parameters": [
           {
             "in": "path",
@@ -1415,7 +1415,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Get Policy Comparison V1 Olympus Policy Comparison  Comparison Id  Get",
+                  "title": "Response V1 dashboard Get Policy Comparison V1 dashboard Policy Comparison  Comparison Id  Get",
                   "type": "object"
                 }
               }
@@ -1433,7 +1433,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Get Policy Comparison",
+        "summary": "V1 dashboard Get Policy Comparison",
         "tags": [
           "v1"
         ]
@@ -1442,7 +1442,7 @@
     "/v1/olympus/policy_gate/evaluate": {
       "post": {
         "description": "Evaluate immutable gate criteria (eligibility only \u2014 never activates).",
-        "operationId": "v1_olympus_evaluate_policy_gate_v1_olympus_policy_gate_evaluate_post",
+        "operationId": "v1_dashboard_evaluate_policy_gate_v1_dashboard_policy_gate_evaluate_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1459,7 +1459,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Evaluate Policy Gate V1 Olympus Policy Gate Evaluate Post",
+                  "title": "Response V1 dashboard Evaluate Policy Gate V1 dashboard Policy Gate Evaluate Post",
                   "type": "object"
                 }
               }
@@ -1477,7 +1477,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Evaluate Policy Gate",
+        "summary": "V1 dashboard Evaluate Policy Gate",
         "tags": [
           "v1"
         ]
@@ -1486,7 +1486,7 @@
     "/v1/olympus/policy_gate/evaluations/{evaluation_id}": {
       "get": {
         "description": "Fetch a gate-evaluation summary (fail closed).",
-        "operationId": "v1_olympus_get_policy_gate_evaluation_v1_olympus_policy_gate_evaluations__evaluation_id__get",
+        "operationId": "v1_dashboard_get_policy_gate_evaluation_v1_dashboard_policy_gate_evaluations__evaluation_id__get",
         "parameters": [
           {
             "in": "path",
@@ -1504,7 +1504,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Get Policy Gate Evaluation V1 Olympus Policy Gate Evaluations  Evaluation Id  Get",
+                  "title": "Response V1 dashboard Get Policy Gate Evaluation V1 dashboard Policy Gate Evaluations  Evaluation Id  Get",
                   "type": "object"
                 }
               }
@@ -1522,7 +1522,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Get Policy Gate Evaluation",
+        "summary": "V1 dashboard Get Policy Gate Evaluation",
         "tags": [
           "v1"
         ]
@@ -1531,7 +1531,7 @@
     "/v1/olympus/policy_governance_decisions": {
       "post": {
         "description": "Record an authenticated human decision (DigiAuth principal \u2014 no MCP).",
-        "operationId": "v1_olympus_record_policy_governance_decision_v1_olympus_policy_governance_decisions_post",
+        "operationId": "v1_dashboard_record_policy_governance_decision_v1_olympus_policy_governance_decisions_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1548,7 +1548,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Record Policy Governance Decision V1 Olympus Policy Governance Decisions Post",
+                  "title": "Response V1 dashboard Record Policy Governance Decision V1 dashboard Policy Governance Decisions Post",
                   "type": "object"
                 }
               }
@@ -1566,7 +1566,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Record Policy Governance Decision",
+        "summary": "V1 dashboard Record Policy Governance Decision",
         "tags": [
           "v1"
         ]
@@ -1575,7 +1575,7 @@
     "/v1/olympus/policy_replay/run": {
       "post": {
         "description": "Register a policy replay run (summary IDs only \u2014 no activation).",
-        "operationId": "v1_olympus_run_policy_replay_v1_olympus_policy_replay_run_post",
+        "operationId": "v1_dashboard_run_policy_replay_v1_dashboard_policy_replay_run_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1592,7 +1592,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Run Policy Replay V1 Olympus Policy Replay Run Post",
+                  "title": "Response V1 dashboard Run Policy Replay V1 dashboard Policy Replay Run Post",
                   "type": "object"
                 }
               }
@@ -1610,7 +1610,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Run Policy Replay",
+        "summary": "V1 dashboard Run Policy Replay",
         "tags": [
           "v1"
         ]
@@ -1619,7 +1619,7 @@
     "/v1/olympus/policy_replay/{run_id}": {
       "get": {
         "description": "Fetch a policy replay run summary (fail closed).",
-        "operationId": "v1_olympus_get_policy_replay_v1_olympus_policy_replay__run_id__get",
+        "operationId": "v1_dashboard_get_policy_replay_v1_dashboard_policy_replay__run_id__get",
         "parameters": [
           {
             "in": "path",
@@ -1637,7 +1637,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response V1 Olympus Get Policy Replay V1 Olympus Policy Replay  Run Id  Get",
+                  "title": "Response V1 dashboard Get Policy Replay V1 dashboard Policy Replay  Run Id  Get",
                   "type": "object"
                 }
               }
@@ -1655,7 +1655,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "V1 Olympus Get Policy Replay",
+        "summary": "V1 dashboard Get Policy Replay",
         "tags": [
           "v1"
         ]

@@ -1,6 +1,6 @@
 # Pre-migration cleanup (lean repo before digithings)
 
-**Goal:** Reduce noise in **digiquant-atlas** so what you copy into **digithings** is **intentional**—runtime + operator tooling + docs—without deleting anything required for today’s pipeline.
+**Goal:** Reduce noise in **digiquant-research** so what you copy into **digithings** is **intentional**—runtime + operator tooling + docs—without deleting anything required for today’s pipeline.
 
 **After cleanup:** follow [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) (Wave 1 → Wave 2 digigraph → Wave 3 tenancy).
 
@@ -60,7 +60,7 @@ Treat “unreferenced” as **candidate only**—Python may import another scrip
 
 ## 4. Skills inventory (`skills/**/SKILL.md`)
 
-After WS4a deslop, the live graph skills are the segment skills (alt-data, macro, bonds, commodities, forex, crypto, international, equity, sector-research), plus digest, decision-reflector, monthly-synthesis, pipeline-evolution (Atlas); and technical-analyst, sentiment-analyst, news-analyst, fundamental-analyst, research-debate, research-manager, risk-aggressive, risk-conservative, pm-rebalance-decision, portfolio-manager, pm-allocation-memo (Hermes). Human-session wrappers (orchestrator, daily-delta, weekly-baseline, etc.) have been removed.
+After WS4a deslop, the live graph skills are the segment skills (alt-data, macro, bonds, commodities, forex, crypto, international, equity, sector-research), plus digest, decision-reflector, monthly-synthesis, pipeline-evolution (research); and technical-analyst, sentiment-analyst, news-analyst, fundamental-analyst, research-debate, research-manager, risk-aggressive, risk-conservative, pm-rebalance-decision, portfolio-manager, pm-allocation-memo (portfolio). Human-session wrappers (orchestrator, daily-delta, weekly-baseline, etc.) have been removed.
 
 | Stance | Detail |
 |--------|--------|

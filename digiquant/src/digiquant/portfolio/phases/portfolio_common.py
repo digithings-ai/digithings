@@ -1,4 +1,4 @@
-"""Shared helpers for H5/H6 portfolio-track Hermes nodes."""
+"""Shared helpers for H5/H6 portfolio-track portfolio nodes."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ from digiquant.portfolio.research_attention import (
     research_attention_h5_enforce_path,
 )
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
@@ -84,7 +84,7 @@ def _resolve_linked_thesis(
 
 
 class _TickerPriorLoader:
-    def __init__(self, state: HermesState, artifact_key: tuple[str, str]) -> None:
+    def __init__(self, state: PortfolioState, artifact_key: tuple[str, str]) -> None:
         self._state = state
         self._artifact_key = artifact_key
 
@@ -142,7 +142,7 @@ def prior_has_typed_forecast(body: dict[str, Any] | None) -> bool:
     return False
 
 
-def resolve_analyst_edit_mode(state: HermesState, ticker: str) -> EditMode:
+def resolve_analyst_edit_mode(state: PortfolioState, ticker: str) -> EditMode:
     artifact_key = analyst_artifact_key(ticker)
     prior = state.prior_context.prior_analyst_by_ticker.get(ticker)
     prior_stance = prior.get("stance") if isinstance(prior, dict) else None
@@ -159,7 +159,7 @@ def resolve_analyst_edit_mode(state: HermesState, ticker: str) -> EditMode:
         prior_loader=_TickerPriorLoader(state, artifact_key),
         triage=triage,
         force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="segment")
-        or state.refresh_scope == "hermes",
+        or state.refresh_scope == "portfolio",
     )
     if mode == "full":
         return mode
@@ -293,7 +293,7 @@ def materialize_forecast_assessment(
     )
 
 
-def _h5_price_anchor(_state: HermesState, _ticker: str) -> PriceAnchor:
+def _h5_price_anchor(_state: PortfolioState, _ticker: str) -> PriceAnchor:
     """H5 state carries pct deltas, not absolute marks — typed unavailability."""
     return PriceAnchor(
         status=PriceAnchorStatus.UNAVAILABLE,
@@ -318,7 +318,7 @@ def _skill_versions(mode: EditMode) -> tuple[str, str]:
     return prompt_version, artifact_version
 
 
-def _cutoff_or_run_date(state: HermesState) -> datetime:
+def _cutoff_or_run_date(state: PortfolioState) -> datetime:
     try:
         return require_knowledge_cutoff_at(state)
     except ValueError:
@@ -353,7 +353,7 @@ def _terms_from_body(body: dict[str, Any]) -> ForecastTerms | None:
 def _attach_forecast_lineage(
     *,
     payload: AnalystPayload,
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     mode: EditMode,
     phase_slug: str,
@@ -394,7 +394,7 @@ def _attach_forecast_lineage(
                 )
                 errors.append(
                     PhaseError(
-                        phase="phase_hermes",
+                        phase="phase_portfolio",
                         node=phase_slug,
                         message="forecast_unavailable: full H5 missing ForecastTerms",
                     )
@@ -438,7 +438,7 @@ def _h5_attempt_id() -> str:
 
 def _publish_base_bundle_before_provider(
     *,
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     phase_inputs: dict[str, Any],
     phase_slug: str,
@@ -484,12 +484,12 @@ def _publish_base_bundle_before_provider(
     return bundle
 
 
-def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase, segment: str = ""):
+def _portfolio_grounding(state: PortfolioState, *, phase: RetrievalPhase, segment: str = ""):
     return build_grounding(
         use_data_tools=True,
         live_search=True,
         run_date=state.run_date,
-        segment=segment or f"hermes/{phase}",
+        segment=segment or f"portfolio/{phase}",
         data_tool_tables=MARKET_DATA_TABLES,
         use_research_tools=True,
         research_phase=phase,
@@ -499,7 +499,7 @@ def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase, segment: 
 
 def run_asset_analyst_llm(
     *,
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     roster_entry: dict[str, Any],
     phase_slug: str,
@@ -683,7 +683,7 @@ def run_asset_analyst_llm(
             )
             errors.append(
                 PhaseError(
-                    phase="phase_hermes",
+                    phase="phase_portfolio",
                     node=phase_slug,
                     message=f"analyst LLM failed: {exc}"[:500],
                 )
@@ -701,7 +701,7 @@ def run_asset_analyst_llm(
             )
         except (MergeError, ValidationError) as exc:
             logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
-            errors.append(PhaseError(phase="phase_hermes", node=phase_slug, message=str(exc)[:500]))
+            errors.append(PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500]))
             body_raw = prior_body or {}
             payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
             enriched = _attach_forecast_lineage(
@@ -768,7 +768,7 @@ def run_asset_analyst_llm(
         )
         errors.append(
             PhaseError(
-                phase="phase_hermes", node=phase_slug, message=f"analyst LLM failed: {exc}"[:500]
+                phase="phase_portfolio", node=phase_slug, message=f"analyst LLM failed: {exc}"[:500]
             )
         )
         return None, None, errors, evidence_bundle

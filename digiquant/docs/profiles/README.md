@@ -5,7 +5,7 @@ Two companion schemas live in `digiquant.profiles`:
 - **`InvestmentProfile`** — slow-moving posture: risk tolerance, horizon, liquidity needs, base currency, tax jurisdiction, ESG stance, sector exclusions, experience level.
 - **`AssetPreferences`** — faster-moving asset choices: named watchlists, custom universe, hard ticker exclusions, sector exclusions.
 
-They are deliberately split: posture changes rarely (months/years), asset choices change frequently (days/weeks). Splitting simplifies cache invalidation and audit trails. Atlas / Hermes / Kairos consult both to filter idea generation, constrain deliberation, and shape portfolio construction.
+They are deliberately split: posture changes rarely (months/years), asset choices change frequently (days/weeks). Splitting simplifies cache invalidation and audit trails. research / portfolio / execution consult both to filter idea generation, constrain deliberation, and shape portfolio construction.
 
 The schemas are intentionally coarse. Per-portfolio limits (CVaR, factor caps, position-size rules) live on a policy object, not here. Tax detail (state, ISA, RRSP, PEA, etc.) is deferred to a future `TaxProfile`.
 
@@ -19,7 +19,7 @@ second graph or a replacement for the digithings house run.
 
 ## Why versioned
 
-Every model carries `schema_version: int = 1` independently. Storage layers (Supabase, Atlas runner state) persist these long-term, so adding or reshaping fields without a version field would silently corrupt older rows. The version field gives migrations a hook: on read, dispatch on `schema_version` and upgrade in place. The two models version independently — bumping `InvestmentProfile` to v2 does not require bumping `AssetPreferences`.
+Every model carries `schema_version: int = 1` independently. Storage layers (Supabase, research runner state) persist these long-term, so adding or reshaping fields without a version field would silently corrupt older rows. The version field gives migrations a hook: on read, dispatch on `schema_version` and upgrade in place. The two models version independently — bumping `InvestmentProfile` to v2 does not require bumping `AssetPreferences`.
 
 ## How to extend
 

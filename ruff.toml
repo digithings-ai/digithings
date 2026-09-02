@@ -9,7 +9,7 @@ target-version = "py312"
 #   apps/                       — downstream applications built on digithings.
 #   digiquant/scripts/research/    — legacy operator scripts (pandas/yfinance), exempted
 #                                 from the Polars-only policy. Migrated from
-#                                 apps/digiquant-atlas/scripts/ in issue #316; not
+#                                 digiquant/src/digiquant/research/scripts/ in issue #316; not
 #                                 actively maintained.
 #   .venv/                      — virtualenvs
 #   node_modules/               — JS deps

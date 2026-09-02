@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Deliberation Transcript",
+  "title": "digiquant-research Deliberation Transcript",
   "description": "PM/Analyst deliberation record. JSON source of truth; may contain markdown blocks for transcript readability.",
   "type": "object",
   "additionalProperties": false,

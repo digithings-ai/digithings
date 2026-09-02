@@ -197,7 +197,7 @@ class TestReader:
     def test_get_fed_rate_probabilities_nearest_meeting(self) -> None:
         from digiquant.research.data.queries import get_fed_rate_probabilities
 
-        from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+        from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(
             canned_reads={
@@ -235,7 +235,7 @@ class TestReader:
     def test_get_fed_rate_probabilities_empty_when_no_rows(self) -> None:
         from digiquant.research.data.queries import get_fed_rate_probabilities
 
-        from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+        from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
         client = FakeSupabaseClient(canned_reads={"macro_series_observations": []})
         assert get_fed_rate_probabilities(client=client, run_date=AS_OF) == {}

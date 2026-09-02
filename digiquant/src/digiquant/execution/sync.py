@@ -337,7 +337,7 @@ def sync_connection(
             budget.charge()
         except SyncBudgetExceeded:
             logger.warning(
-                "kairos sync connection_id=%s stopping status pull: %s",
+                "execution sync connection_id=%s stopping status pull: %s",
                 connection.id,
                 budget.used,
             )
@@ -363,7 +363,7 @@ def sync_connection(
         fills = adapter.list_fills(cursor.fills_since)
     except SyncBudgetExceeded:
         logger.warning(
-            "kairos sync connection_id=%s skipping fills: budget exhausted used=%s",
+            "execution sync connection_id=%s skipping fills: budget exhausted used=%s",
             connection.id,
             budget.used,
         )
@@ -395,7 +395,7 @@ def sync_connection(
             orphan_times.append(fill.executed_at)
             orphan_ids.append(fill.external_fill_id)
             logger.warning(
-                "kairos sync connection_id=%s could not link fill %s symbol=%s; "
+                "execution sync connection_id=%s could not link fill %s symbol=%s; "
                 "holding fills_since cursor so the orphan is re-read next cycle",
                 connection.id,
                 fill.external_fill_id,
@@ -426,7 +426,7 @@ def sync_connection(
         result.unlinked_fills_held_cursor = True
         result.unlinked_fill_ids = list(orphan_ids)
         logger.warning(
-            "kairos sync connection_id=%s held fills_since at %s due to %d unlinked "
+            "execution sync connection_id=%s held fills_since at %s due to %d unlinked "
             "fill(s); remedy: link mirror order rows or resolve symbol ambiguity",
             connection.id,
             advanced_since.isoformat(),
@@ -444,7 +444,7 @@ def sync_connection(
         budget.charge(2)
     except SyncBudgetExceeded:
         logger.warning(
-            "kairos sync connection_id=%s skipping snapshot: budget exhausted used=%s",
+            "execution sync connection_id=%s skipping snapshot: budget exhausted used=%s",
             connection.id,
             budget.used,
         )
@@ -469,7 +469,7 @@ def sync_connection(
 
     if diverged:
         logger.warning(
-            "kairos sync reconciliation diverged connection_id=%s report=%s",
+            "execution sync reconciliation diverged connection_id=%s report=%s",
             connection.id,
             report,
         )
@@ -510,7 +510,7 @@ def sync_connection(
         if "duplicate" not in str(exc).lower() and "unique" not in str(exc).lower():
             raise
         logger.info(
-            "kairos sync snapshot already present connection_id=%s as_of=%s",
+            "execution sync snapshot already present connection_id=%s as_of=%s",
             connection.id,
             as_of.isoformat(),
         )
@@ -595,7 +595,7 @@ def run_sync_batch(
 
         dispatch_execution_alerts(run_date=stamp.date())
     except Exception:
-        logger.warning("kairos sync: execution-alert dispatch skipped", exc_info=True)
+        logger.warning("execution sync: execution-alert dispatch skipped", exc_info=True)
 
     return results
 

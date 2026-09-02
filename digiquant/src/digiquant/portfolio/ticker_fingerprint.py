@@ -6,12 +6,12 @@ import hashlib
 import json
 
 from digiquant.dashboard.edit_mode.models import TriageSignal
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 
 DEFAULT_PRICE_QUIET_THRESHOLD = 0.015
 
 
-def news_hash_for_ticker(state: HermesState, ticker: str) -> str:
+def news_hash_for_ticker(state: PortfolioState, ticker: str) -> str:
     """Stable hash of digest/news signals relevant to *ticker*."""
     bias = state.phase6_bias_row if isinstance(state.phase6_bias_row, dict) else {}
     payload = {
@@ -25,7 +25,7 @@ def news_hash_for_ticker(state: HermesState, ticker: str) -> str:
 
 
 def price_move_quiet(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     *,
     threshold: float = DEFAULT_PRICE_QUIET_THRESHOLD,
@@ -37,7 +37,7 @@ def price_move_quiet(
 
 
 def ticker_triage_signal(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     *,
     current_stance: str | None,
@@ -61,7 +61,7 @@ def ticker_triage_signal(
 
 
 def deliberation_skip_signal(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     *,
     analyst_stance: str,

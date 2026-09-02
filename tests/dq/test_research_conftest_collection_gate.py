@@ -1,11 +1,11 @@
-"""Pins the atlas collection gate's scope (#2183).
+"""Pins the research collection gate's scope (#2183).
 
 `tests/dq/research/conftest.py` skips collection of files that need digigraph
 when the digiquant-only CI lane runs without it. This test exists so a
 future edit can't silently widen that skip back to a whole directory (as
 `data/test_*.py` used to) without a human noticing here first.
 
-Lives at `tests/dq/`, not `tests/dq/research/`, on purpose: the atlas conftest's
+Lives at `tests/dq/`, not `tests/dq/research/`, on purpose: the research conftest's
 own top-level `test_*.py` entry in `collect_ignore_glob` would otherwise
 sweep this file out of collection in exactly the digiquant-only lane it's
 meant to guard.
@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-ATLAS_DIR = Path(__file__).resolve().parent / "atlas"
-CONFTEST = ATLAS_DIR / "conftest.py"
+RESEARCH_DIR = Path(__file__).resolve().parent / "research"
+CONFTEST = RESEARCH_DIR / "conftest.py"
 
 
 def _collect_ignore_glob_literal() -> list[str]:
@@ -60,7 +60,7 @@ def test_the_gate_does_not_skip_the_whole_data_directory() -> None:
 @pytest.mark.unit
 def test_the_dead_phases_pattern_stays_removed() -> None:
     """`tests/dq/research/phases/` has never existed; the pattern matched nothing."""
-    assert not (ATLAS_DIR / "phases").is_dir()
+    assert not (RESEARCH_DIR / "phases").is_dir()
     assert "phases/test_*.py" not in _collect_ignore_glob_literal()
 
 
@@ -72,7 +72,7 @@ def test_the_two_digigraph_dependent_data_files_self_guard() -> None:
     without digigraph installed would error instead of skipping -- this would
     need the file-level glob back, not just a marker.
     """
-    data_dir = ATLAS_DIR / "data"
+    data_dir = RESEARCH_DIR / "data"
     for name in ("test_ai_portfolios.py", "test_web_grounding.py"):
         source = (data_dir / name).read_text(encoding="utf-8")
         assert 'pytest.importorskip("openai")' in source, (

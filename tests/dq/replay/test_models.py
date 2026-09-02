@@ -26,7 +26,7 @@ pytestmark = pytest.mark.unit
 
 _UTC = timezone.utc
 _REPLAY_ROOT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "olympus" / "replay"
+    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "dashboard" / "replay"
 )
 
 

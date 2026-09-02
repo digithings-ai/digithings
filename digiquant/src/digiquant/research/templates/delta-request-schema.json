@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Delta Request",
+  "title": "digiquant-research Delta Request",
   "description": "Token-minimizing weekday output: a small set of deterministic ops to apply to a baseline digest snapshot JSON. The compiler applies ops to the baseline snapshot and upserts a fully materialized snapshot for the target date.",
   "type": "object",
   "additionalProperties": false,

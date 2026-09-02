@@ -1,4 +1,4 @@
-"""Regression tests for the Atlas Activity repair script paths (#1928)."""
+"""Regression tests for the research Activity repair script paths (#1928)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-_SCRIPT_DIR = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "atlas"
+_SCRIPT_DIR = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research"
 
 
 def _load_script(name: str) -> ModuleType:

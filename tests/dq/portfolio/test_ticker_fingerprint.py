@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 from digiquant.portfolio.ticker_fingerprint import (
     deliberation_skip_signal,
     news_hash_for_ticker,
@@ -16,26 +16,26 @@ from digiquant.portfolio.ticker_fingerprint import (
 @pytest.mark.unit
 class TestTickerFingerprint:
     def test_no_prior_returns_none_for_full(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         assert ticker_triage_signal(state, "AAPL", current_stance=None, prior_stance=None) is None
 
     def test_quiet_price_and_stance_returns_skip(self) -> None:
         news = news_hash_for_ticker(
-            AtlasResearchState(
+            ResearchState(
                 run_type="delta",
                 run_date=date(2026, 6, 20),
-                config=AtlasConfigBundle(watchlist=["AAPL"]),
+                config=ResearchConfigBundle(watchlist=["AAPL"]),
             ),
             "AAPL",
         )
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(
                 prior_analyst_by_ticker={"AAPL": {"stance": "hold", "fingerprint_news_hash": news}}
             ),
@@ -49,10 +49,10 @@ class TestTickerFingerprint:
 
     def test_material_price_move_returns_stale(self) -> None:
         news = "deadbeef"
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(
                 prior_analyst_by_ticker={"AAPL": {"stance": "hold", "fingerprint_news_hash": news}}
             ),
@@ -65,10 +65,10 @@ class TestTickerFingerprint:
         assert signal.mode == "stale"
 
     def test_deliberation_skip_requires_prior_transcript(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(
                 prior_analyst_by_ticker={"AAPL": {"stance": "hold", "fingerprint_news_hash": "x"}}
             ),
@@ -79,17 +79,17 @@ class TestTickerFingerprint:
     def test_deliberation_skip_fires_with_slim_carry(self) -> None:
         """#925: a quiet held name with a slim prior-deliberation carry can skip H6."""
         news = news_hash_for_ticker(
-            AtlasResearchState(
+            ResearchState(
                 run_type="delta",
                 run_date=date(2026, 6, 20),
-                config=AtlasConfigBundle(watchlist=["AAPL"]),
+                config=ResearchConfigBundle(watchlist=["AAPL"]),
             ),
             "AAPL",
         )
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(
                 prior_analyst_by_ticker={"AAPL": {"stance": "hold", "fingerprint_news_hash": news}},
                 prior_deliberation_by_ticker={

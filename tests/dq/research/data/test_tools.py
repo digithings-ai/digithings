@@ -5,7 +5,7 @@ import json
 import pytest
 from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
-from tests.dq.atlas.data.test_queries import _FakeClient
+from tests.dq.research.data.test_queries import _FakeClient
 
 
 @pytest.mark.unit

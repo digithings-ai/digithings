@@ -1,4 +1,4 @@
-"""H5 edit-mode tests (Olympus #930 PR 4b)."""
+"""H5 edit-mode tests (dashboard #930 PR 4b)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
@@ -23,7 +23,7 @@ from digiquant.portfolio.models.analyst import AnalystPayload
 from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
 
 
-def _state(*, prior: dict[str, Any] | None = None) -> AtlasResearchState:
+def _state(*, prior: dict[str, Any] | None = None) -> ResearchState:
     prior_ctx = PriorContext(
         prior_analyst_by_ticker={"AAPL": prior} if prior else {},
         latest_segments={
@@ -44,14 +44,14 @@ def _state(*, prior: dict[str, Any] | None = None) -> AtlasResearchState:
         if prior
         else {},
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 6, 20),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=prior_ctx,
         price_deltas={"AAPL": 0.02},
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")]
     )
     return state
@@ -122,7 +122,7 @@ class TestAnalystEdit:
             }
         )
         compiled = build_pipeline(
-            AtlasResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
         )
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -144,8 +144,8 @@ class TestAnalystEdit:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result)
-        payload = AnalystPayload.model_validate(final.phase_hermes.asset_analysts["AAPL"])
+        final = ResearchState.model_validate(result)
+        payload = AnalystPayload.model_validate(final.phase_portfolio.asset_analysts["AAPL"])
         assert payload.stance == "buy"
         assert payload.thesis == "prior thesis"
         assert payload.forecast_assessment is not None
@@ -439,7 +439,7 @@ class TestH5ForecastMaterialization:
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
-                phase_slug="hermes/portfolio/asset-analyst-AAPL",
+                phase_slug="portfolio/asset-analyst-AAPL",
             )
         assert not errors
         assert payload is not None
@@ -527,7 +527,7 @@ class TestH5ForecastMaterialization:
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
-                phase_slug="hermes/portfolio/asset-analyst-AAPL",
+                phase_slug="portfolio/asset-analyst-AAPL",
             )
         assert payload is not None
         assert any("partial nested forecast" in e.message for e in errors)
@@ -542,7 +542,7 @@ class TestH5ForecastMaterialization:
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
         compiled = build_pipeline(
-            AtlasResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
         )
 
         def fake_missing_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -574,9 +574,9 @@ class TestH5ForecastMaterialization:
             "digigraph.graph.research_agent.completion_text", side_effect=fake_missing_forecast
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result)
+        final = ResearchState.model_validate(result)
         # Shadow rollout: retain analyst prose; do not fabricate assessment.
-        raw = final.phase_hermes.asset_analysts["AAPL"]
+        raw = final.phase_portfolio.asset_analysts["AAPL"]
         payload = AnalystPayload.model_validate(raw)
         assert payload.forecast is None
         assert payload.forecast_assessment is None
@@ -590,7 +590,7 @@ class TestH5ForecastMaterialization:
             update={"knowledge_cutoff_at": datetime(2026, 6, 20, 12, 0, tzinfo=UTC)}
         )
         compiled = build_pipeline(
-            AtlasResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h5_asset_analyst(["AAPL"], held={"AAPL"})]
         )
 
         def fake_with_forecast(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -616,8 +616,8 @@ class TestH5ForecastMaterialization:
             "digigraph.graph.research_agent.completion_text", side_effect=fake_with_forecast
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result)
-        raw = final.phase_hermes.asset_analysts["AAPL"]
+        final = ResearchState.model_validate(result)
+        raw = final.phase_portfolio.asset_analysts["AAPL"]
         payload = AnalystPayload.model_validate(raw)
         assert payload.forecast is not None
         assert payload.forecast_assessment is not None
@@ -642,17 +642,17 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
     run_id = uuid4()
     state_version = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
     cutoff = datetime(2026, 8, 26, 16, 0, tzinfo=UTC)
-    state = AtlasResearchState(
+    state = ResearchState(
         run_id=run_id,
         run_type="delta",
         run_date=cutoff.date(),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=PriorContext(),
         price_deltas={"AAPL": 0.01},
         knowledge_cutoff_at=cutoff,
         research_state_pin={"state_version_id": str(state_version)},
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")]
     )
 
@@ -698,7 +698,7 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
             state=state,
             ticker="AAPL",
             roster_entry={"ticker": "AAPL", "roster_reason": "held"},
-            phase_slug="hermes/portfolio/asset-analyst-AAPL",
+            phase_slug="portfolio/asset-analyst-AAPL",
             evidence_bundle_store=store,
         )
 
@@ -712,7 +712,7 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
         )
         == 1
     )
-    retained = PhaseHermesState(
+    retained = PhasePortfolioState(
         ticker_evidence_bundles={"AAPL": bundle.model_dump(mode="json")},
     )
     assert retained.asset_analysts == {}

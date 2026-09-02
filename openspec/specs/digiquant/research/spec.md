@@ -1,4 +1,4 @@
-# digiquant / Atlas — Spec
+# digiquant / research — Spec
 
 **Sub-graph of digiquant (port 8001)**  
 **Role:** Portfolio management, strategy optimization, and backtest orchestration sub-graph.
@@ -15,7 +15,7 @@
 
 - NautilusTrader is the only backtest/optimize engine — no custom loops
 - Polars-only for all data manipulation (never pandas)
-- Atlas lives at `digiquant/src/digiquant/olympus/atlas/` — the old `apps/digiquant-atlas/` path is dead
+- research lives at `digiquant/src/digiquant/research/` — the old `digiquant/src/digiquant/research/` path is dead
 - Never touch live-trading paths without explicit human approval
 
 ## Public API (via digiquant server)

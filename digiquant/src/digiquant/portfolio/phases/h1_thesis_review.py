@@ -9,7 +9,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.segments import digest_briefing_for_hermes
+from digiquant.research.segments import digest_briefing_for_portfolio
 from digiquant.research.supabase_io import SupabaseClient, publish_document
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
 from digiquant.portfolio.models.thesis import ThesisReviewOutput
@@ -17,24 +17,24 @@ from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
     run_thesis_phase_llm,
 )
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.thesis_io import (
     invalidation_hits_from_signals,
     merge_review_with_invalidation_hits,
     persist_thesis_review,
 )
-from digiquant.dashboard.overlay.persist import hermes_document_key, skip_overlay_shared_register
+from digiquant.dashboard.overlay.persist import portfolio_document_key, skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/thesis/market-review"
-PHASE_NAME = "hermes_h1_thesis_review"
+NODE_ID = "portfolio/thesis/market-review"
+PHASE_NAME = "portfolio_h1_thesis_review"
 ARTIFACT_KEY = ("thesis", "thesis-review")
 DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 DOC_TYPE = "Thesis Review"
 
 
-def _invalidation_hits_for_state(state: HermesState) -> dict[str, list[str]]:
+def _invalidation_hits_for_state(state: PortfolioState) -> dict[str, list[str]]:
     """Map active theses → fired invalidation criteria (from bias row signals)."""
     signals: dict[str, list[str]] | None = None
     bias = state.phase6_bias_row
@@ -77,13 +77,13 @@ def _thesis_review_markdown(document: dict[str, Any]) -> str:
 
 
 def _publish_thesis_review_document(
-    client: SupabaseClient, state: HermesState, document: dict[str, Any]
+    client: SupabaseClient, state: PortfolioState, document: dict[str, Any]
 ) -> None:
     date_str = state.run_date.isoformat()
     workspace_id = state.config.workspace_id
     publish_document(
         client=client,
-        document_key=hermes_document_key(DOCUMENT_KEY, workspace_id),
+        document_key=portfolio_document_key(DOCUMENT_KEY, workspace_id),
         payload=dict(document),
         doc_type=None,
         run_type=state.run_type,
@@ -96,7 +96,7 @@ def _publish_thesis_review_document(
     )
 
 
-def _run_h1_llm(state: HermesState) -> ThesisReviewOutput:
+def _run_h1_llm(state: PortfolioState) -> ThesisReviewOutput:
     review, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="thesis",
@@ -108,7 +108,7 @@ def _run_h1_llm(state: HermesState) -> ThesisReviewOutput:
             "doc_type": DOC_TYPE,
             "segment": NODE_ID,
             "active_theses": list(state.prior_context.active_theses),
-            "digest": digest_briefing_for_hermes(state.phase7_digest),
+            "digest": digest_briefing_for_portfolio(state.phase7_digest),
             "portfolio_performance": dict(state.prior_context.portfolio_performance),
         },
         context_keys=("digest", "digest-delta"),
@@ -121,7 +121,7 @@ def _run_h1_llm(state: HermesState) -> ThesisReviewOutput:
 
 
 def _h1_node_factory(client: SupabaseClient | None):
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         review = _run_h1_llm(state)
         hits = _invalidation_hits_for_state(state)
         review = merge_review_with_invalidation_hits(
@@ -151,7 +151,7 @@ def _h1_node_factory(client: SupabaseClient | None):
                     state.run_date,
                 )
         return {
-            "phase_hermes": state.phase_hermes.model_copy(update={"thesis_review": document}),
+            "phase_portfolio": state.phase_portfolio.model_copy(update={"thesis_review": document}),
         }
 
     return _node

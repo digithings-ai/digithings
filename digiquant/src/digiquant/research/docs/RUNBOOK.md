@@ -1,13 +1,13 @@
-# RUNBOOK — digiquant-atlas (DB-first, JSON-first)
+# RUNBOOK — digiquant-research (DB-first, JSON-first)
 
-This is the **single authoritative** run instruction for digiquant-atlas.
+This is the **single authoritative** run instruction for digiquant-research.
 
 ## Schedules: GitHub Actions vs Co-work
 
 | Layer | When | What runs | Supabase impact |
 |--------|------|-----------|-----------------|
 | **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) | `price_history`, `price_technicals`, **`macro_series_observations`** — **no** digest, no agent research |
-| **GitHub — Atlas metrics refresh** (`.github/workflows/pipeline-research-metrics.yml`) | **22:00 UTC, DAILY** — after the 21:00 EOD price ingest and the 12:00 Olympus book. Seven days a week since #1833: the book cron is daily, so a MON-SAT metrics cron left every Sunday book permanently unenriched (0 of N rows marked, not merely late). | [`finalize_period_accounting.py`](scripts/finalize_period_accounting.py) (shadow) → [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`current_book_lookback`** (legacy alias view: `position_attribution`); realized daily contribution only via **`daily_realized_attribution`** / finalized accounting |
+| **GitHub — research metrics refresh** (`.github/workflows/pipeline-research-metrics.yml`) | **22:00 UTC, DAILY** — after the 21:00 EOD price ingest and the 12:00 dashboard book. Seven days a week since #1833: the book cron is daily, so a MON-SAT metrics cron left every Sunday book permanently unenriched (0 of N rows marked, not merely late). | [`finalize_period_accounting.py`](scripts/finalize_period_accounting.py) (shadow) → [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`current_book_lookback`** (legacy alias view: `position_attribution`); realized daily contribution only via **`daily_realized_attribution`** / finalized accounting |
 | **Co-work / operator — research & portfolio** | Typically **pre-market** (e.g. 8:00 AM local) or per [`config/schedule.json`](config/schedule.json) | Agent validates + publishes JSON to Supabase (`materialize_snapshot.py`, `publish_document.py`, …) → operator runs [`run_db_first.py`](scripts/run_db_first.py) (optional disk checks → metrics → `execute_at_open.py` → [`validate_db_first.py`](scripts/validate_db_first.py)) | `daily_snapshots`, `documents`, `positions`, `theses`, `position_events`, etc. |
 
 ### Daily portfolio continuity (post-close)
@@ -16,7 +16,7 @@ The scheduled GitHub job (`pipeline-research-metrics.yml`, 22:00 UTC daily) runs
 
 1. Refreshes performance columns on **today's** `positions` book (same weights; closes from `price_history`), then updates `nav_history` and **`portfolio_metrics`** with `computed_from='refresh_script'` (or `refresh_script_insufficient_history` while `nav_history` has < 20 rows).
 2. **Does not overwrite** `portfolio_metrics` rows written by `update_tearsheet.py` (`computed_from='tearsheet'`); those get only their cumulative-return fields backfilled.
-3. **Stale-book guard (#1746).** If `max(positions.date)` is *before* today UTC, the Olympus book never materialized and there is nothing new to compute — the script prints the two dates and **exits 3**, writing nothing. It does **not** fall back to the latest existing date. That fallback was the original defect: `portfolio_metrics` is upserted `on_conflict='date'`, so 22 of 33 green runs (2026-06-22..07-31) silently re-stamped an older row's `generated_at` while its `as_of_date` never moved, and the dashboard served 2026-06-26 numbers for twenty days behind a 10/10-green cron. **A red metrics run with exit 3 is a correct upstream-book alarm, not a flake** — repair the Olympus run, then reprocess with `--date YYYY-MM-DD`.
+3. **Stale-book guard (#1746).** If `max(positions.date)` is *before* today UTC, the dashboard book never materialized and there is nothing new to compute — the script prints the two dates and **exits 3**, writing nothing. It does **not** fall back to the latest existing date. That fallback was the original defect: `portfolio_metrics` is upserted `on_conflict='date'`, so 22 of 33 green runs (2026-06-22..07-31) silently re-stamped an older row's `generated_at` while its `as_of_date` never moved, and the dashboard served 2026-06-26 numbers for twenty days behind a 10/10-green cron. **A red metrics run with exit 3 is a correct upstream-book alarm, not a flake** — repair the dashboard run, then reprocess with `--date YYYY-MM-DD`.
 
 **The daily cron deliberately does *not* pass `--fill-calendar-through`, and must not be changed to.** No workflow has ever passed it (this RUNBOOK previously claimed the price job did — it never did). Carry-forward would clone the prior book into every date where the book never materialized, which is precisely the absent-`positions` signal a missing-book detector reads; densifying it would make the failure undetectable rather than fixing it.
 
@@ -32,7 +32,7 @@ finalized accounting period, then the one-day `nav_history` return. It **never**
 `current_book_lookback` / legacy `position_attribution` — those rows are a **21-day trailing
 window** (`--window-days`, default 21) using today's weights and must not masquerade as
 realized period contribution (OLY-REV-007). Realized daily contribution is
-`daily_realized_attribution` (finalized `olympus_accounting_*` tip). Job order between
+`daily_realized_attribution` (finalized `dashboard_accounting_*` tip). Job order between
 metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **GitHub — manual “Daily Price Update”:** Uses the same steps as the weekday schedule — **`preload-history.py --supabase --supabase-sync`** (per ticker: gap-fill from latest `price_history` date through UTC today; tickers with no rows get a full-history pull, default **`--new-ticker-period max`**). No workflow inputs. For a one-off local run without Actions: `python3 scripts/preload-history.py --supabase --supabase-sync`.
@@ -41,14 +41,14 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **SEC / EDGAR (ad hoc, not in Supabase):** The watchlist is **ETF-heavy**, so batch filings ingest was low-signal. **Research / daily delta / deep dives** should **optionally** check **major operating companies** (8-K, 10-Q, 10-K, material items) when relevant to a sector, segment, or thesis — use [sec.gov](https://www.sec.gov/edgar) or the Cursor **`sec-edgar`** MCP (set **`SEC_EDGAR_USER_AGENT`** in [`config/mcp.secrets.env`](config/mcp.secrets.env); see [`.cursor/mcp.json`](.cursor/mcp.json)). No GitHub secret required for the daily price job.
 
-**Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-ATLAS-COWORK.md`](cowork/SETUP-ATLAS-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
+**Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-RESEARCH-COWORK.md`](cowork/SETUP-RESEARCH-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
 
-**Olympus daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). Sunday cron sets `refresh_scope=all` for operator full refresh; weekdays use edit-mode continuity (`skip`/`edit`/`full` per artifact). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
+**dashboard daily chain:** `python -m digiquant.portfolio.chain --cadence daily` (`.github/workflows/pipeline-digiquant.yml`). Sunday cron sets `refresh_scope=all` for operator full refresh; weekdays use edit-mode continuity (`skip`/`edit`/`full` per artifact). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
 ## Two tracks (research vs portfolio)
 
-- **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.portfolio.chain --cadence daily` through Atlas A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
-- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); Hermes H1–H9 produces thesis artifacts, deliberation, PM direction, sized book, and `commit_run` booking. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
+- **Track A — Generic research** (positioning-blind): macro, sectors, crypto, sentiment, etc. **Do not** load `config/preferences.md` or `config/investment-profile.md`. Each research run **ends** with the **`digest`** — `documents.digest` + materialized `daily_snapshots` for the date — as the **single overview** of all sub-segments (`python -m digiquant.portfolio.chain --cadence daily` through research A0–A4). Run [`run_db_first.py --skip-execute --validate-mode research`](scripts/run_db_first.py) after publish.
+- **Track B — Portfolio manager & analyst** (user-specific): **reads** the research **`digest`** from Supabase (does **not** compile it) + [`config/preferences.md`](config/preferences.md) + [`config/investment-profile.md`](config/investment-profile.md); portfolio H1–H9 produces thesis artifacts, deliberation, PM direction, sized book, and `commit_run` booking. Timing is controlled by [`config/schedule.json`](config/schedule.json) (`portfolio_manager_cadence`, `execution_assumption`, `rebalance_source_for_opens`). Run full validation: `--validate-mode full` or `pm`.
 
 ### Track B — fresh vs delta artifacts (thesis-first)
 
@@ -114,13 +114,13 @@ Library: `digiquant.dashboard.research_retrieval.legacy_backfill`.
 
 `research_retrieval.views` compiles deterministic brief/digest markdown from one
 exact pinned `ResearchStateVersion` (sorted entities; embeds state id / hash /
-schema). Atlas publish dual-writes `research-state-brief` /
+schema). research publish dual-writes `research-state-brief` /
 `research-state-digest` only when the preflight pin is present and
 `PublishDeps.research_state_store` can exact-load that version; structured-write
 failure refuses view publication. Incumbent digest/segment documents stay until
 a later parity/retention gate.
 
-**Operator note:** Atlas/Hermes CLI currently construct `PublishDeps(client=…)`
+**Operator note:** research/portfolio CLI currently construct `PublishDeps(client=…)`
 (and preflight deps) **without** injecting `research_state_store` — same shadow
 pattern as WP12.3. Dual-write therefore does **not** run on default production
 CLI paths until callers wire the same in-memory store used for the pin (durable
@@ -130,7 +130,7 @@ wiring lands.
 
 ### Research attention shadow evaluation (WP13.5 / #2934)
 
-After a shadow-mode Olympus run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+After a shadow-mode dashboard run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
 reconcile planned attention decisions to exact WP1 attempt usage and downstream
 artifacts before considering enforcement:
 
@@ -250,15 +250,15 @@ Capability-preserving reductions in place:
 | Per-phase shared-context filtering | `_node_factory._shared_context(context_keys=…)`, `SegmentNodeSpec.extra_context_keys` | Each node receives only the prior documents it consumes (own segment + declared extras) instead of the full latest-per-key dump (every segment + `analyst/*` + `pm-rebalance` + digests) — same information where it's used, large token cut where it isn't |
 | **Per-phase `data_layer` allowlist (#935)** | `_node_factory._shared_context(data_layer_scope=…)`, `SegmentNodeSpec.data_layer_scope` | The whole `data_layer.market_context` (every ETF's 12 technicals + every macro series) was dumped into *every* node. Now scoped: cross-asset phases (macro / asset-class / sector / equity / synthesis) keep `full`; the **PM** gets `portfolio` (macro + regime signals, no per-ticker ETF dump — it reads the book + prices via the data tools); **analyst / debate** nodes get `ticker` (compact regime signals only — they fetch their own ticker's technicals via tools). Freshness probes are scalars and always kept. Same data where it's used; large cut where the node fetches its own |
 | **Delta-aware snapshot history (#935)** | `_node_factory._shared_context(slim_snapshots=…)` (auto-on for `run_type=delta`) | On a **delta** run, the full `last_snapshots` history is collapsed inside shared_context to the latest snapshot's compact **bias row** (regime + per-asset bias) plus the **changed-segment** slugs from triage — a delta node still sees yesterday's stance without re-serializing the fat digest snapshot N times. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). The phases that genuinely consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, so dropping the shared_context copy is lossless |
-| Hermes focus list | `hermes/candidates.py` (`HERMES_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
-| `snapshot_lookback` 5 → 2 | `atlas/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
+| portfolio focus list | `portfolio/candidates.py` (`PORTFOLIO_FOCUS_TOP_N`, default 5) | 7C/7CD deliberate current holdings + top-scored opportunity candidates instead of the first `ATLAS_MAX_ANALYSTS` tickers of the watchlist file — same depth, applied where signal is; explicit `--watchlist` overrides |
+| `snapshot_lookback` 5 → 2 | `research/supabase_io.py` | Prior digests are re-serialized into every node's shared context; baseline + latest delta preserves continuity without 3 redundant copies |
 
 The shared-context block stays the **first (stable)** prompt content part with
 unchanged keys, so the diet does **not** disturb the stable→volatile prompt-cache
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds. (`max_search_results` is unused under native Olympus grounding —
+thresholds. (`max_search_results` is unused under native dashboard grounding —
 Exa toolkit only.) A **blanket** fan-out cap is still
 rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
@@ -296,7 +296,7 @@ on 2026-07-23 when it first appeared, and the payload attributed it to `price_te
 Dating a wrong number makes it auditable, not true. Grounding needs a numeric-fidelity validator
 cross-checking prose against `price_technicals`; that is not built.
 
-**Spend alert (#1764).** `ATLAS_SPEND_ALERT_USD` (default **$10**) is a warning threshold on a
+**Spend alert (#1764).** `RESEARCH_SPEND_ALERT_USD` (default **$10**) is a warning threshold on a
 single chain invocation. Breaching it writes `breakdown.spend_alert`
 (`{threshold_usd, est_cost_usd, scope}`), logs a warning, and raises a GitHub Actions
 `::warning::` annotation on the run summary. It is **alert only** — by the owner's explicit
@@ -321,9 +321,9 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | Env | Values | Effect |
 |---|---|---|
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/digiquant_models.yaml` |
-| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + Olympus native web grounding (`get_grounding_model` / Perplexity / `:online`) |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + dashboard native web grounding (`get_grounding_model` / Perplexity / `:online`) |
 
-`apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
+`apply_digiquant_openrouter_env()` (portfolio chain startup and `validate-providers.py` preflight)
 sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
 tier + `openrouter_defaults`. No other OpenRouter env vars are set at chain startup. The workflow
 (`.github/workflows/pipeline-digiquant.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
@@ -342,18 +342,18 @@ provider yields a step **failure**, not a 240-minute job **cancellation**.
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
 | **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
-| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** Olympus production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
+| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** dashboard production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding (Olympus)** resolves via `get_grounding_model()` from the tier's
+**Web grounding (dashboard)** resolves via `get_grounding_model()` from the tier's
 `web_search_models` pool. Every production pool entry is `perplexity/sonar` or an
 `:online` variant — **web-search-capable models only** (#2567). digillm uses
-built-in provider search; Olympus call sites do **not** pass Exa `engine` /
+built-in provider search; dashboard call sites do **not** pass Exa `engine` /
 `max_results`. The Exa `openrouter:web_search` server tool remains a digillm /
 digigraph toolkit fallback for non-native models (opt-in / diagnostics). Check 4
-in `validate-providers.py` exercises the **native** Olympus path.
+in `validate-providers.py` exercises the **native** dashboard path.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -369,7 +369,7 @@ claims are not trusted (#987 mistral-small: page said tools, every endpoint 404'
 manually anytime: `OPENROUTER_API_KEY=… python3 scripts/validate_digiquant_pools.py`.
 
 
-When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `atlas monthly`), the workflow opens or appends to a deduped tracking issue titled `atlas-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
+When the scheduled research pipeline fails (`research baseline`, `research delta`, or `research monthly`), the workflow opens or appends to a deduped tracking issue titled `research-{baseline,delta,monthly}-failure` with `ci:failure` label. Each comment lists the failing step, the last successful run timestamp, the run URL, and the last 200 log lines.
 
 **Owner:** Chris (sole on-call). New failure issues should be triaged within one business day.
 
@@ -447,8 +447,8 @@ Common flags:
 - **Delta ops** on weekdays: `templates/delta-request-schema.json`
 - **Per-document research pipeline** (optional Track B): `templates/schemas/research-baseline-manifest.schema.json`, `templates/schemas/document-delta.schema.json`, `templates/schemas/research-changelog.schema.json` — publish manifest on baseline; weekdays publish `document-deltas/…` then run [`scripts/fold_document_deltas.py`](scripts/fold_document_deltas.py) to materialize targets + `research-changelog/{{DATE}}.json`.
 
-### Hermes deliberation layer (auto-published by the pipeline, #698)
-The Hermes phases publish their per-run reasoning to `documents.payload` so the
+### portfolio deliberation layer (auto-published by the pipeline, #698)
+The portfolio phases publish their per-run reasoning to `documents.payload` so the
 dashboard can show *why* a decision was made — no operator step required:
 - `analyst/{TICKER}` — Phase 7C 4-axis analyst synthesis (`category=deep-dive`).
 - `deliberation/{TICKER}` — Phase 7C-D bull/bear `DebateSummary` (rounds + theses
@@ -461,7 +461,7 @@ These render natively in the Research Library via `render-pipeline-payloads.ts`.
 
 ### Paper portfolio (auto-materialized by Phase 9D, #700)
 The pipeline owns the paper book — no operator step. After publish, Phase 9D
-(`hermes/portfolio_materialize.py`) turns the PM's `phase7d_rebalance` into:
+(`portfolio/portfolio_materialize.py`) turns the PM's `phase7d_rebalance` into:
 - **`positions`** — one row per `recommended_portfolio` target weight for the
   run date (+ a `CASH` residual row), upserted on `(date, ticker)`.
 - **`nav_history`** — a base-100 normalized index, upserted on `date`:
@@ -542,8 +542,8 @@ Re-run with `--force` to overwrite. Uses [`scripts/legacy_delta_to_ops.py`](scri
 and since #1736 they legitimately disagree.
 
 - **`status`** — was the run healthy? Written by `diagnostics.summarize_run`. It flips to
-  `degraded` on **any** failed research segment, on a majority of dead Hermes deliberations,
-  on an H9 non-commit, and on "Atlas produced research but nothing committed". Read
+  `degraded` on **any** failed research segment, on a majority of dead portfolio deliberations,
+  on an H9 non-commit, and on "research produced research but nothing committed". Read
   `breakdown.degraded_reasons` for which rule tripped.
 - **`retry_signal`** (surfaced as `degraded` in `run.log`'s final JSON, and the process exit
   code) — is re-running worth the money? Deliberately frozen at the pre-#1736 rules, so
@@ -577,10 +577,10 @@ book 06-26; first post-gap book 07-17. Any performance series that spans those d
 
 **Cause and fix.** H9 was failing its coherence check closed while runs still reported `ok`
 (#1555). 18 of the 22 `atlas_run_diagnostics` rows in the window say `status='ok'` and every one
-of them carries `hermes_h9_commit_run/hermes/portfolio/commit-run: held ticker <T> missing from
+of them carries `portfolio_h9_commit_run/portfolio/commit-run: held ticker <T> missing from
 book and not flat in H7`. Fixed **2026-07-17** (`40312d82`, PR #1565); `positions` resumes the
 same date. Full evidence and the post-fix `book_committed` reconciliation are in
-[`hermes/docs/ARCHITECTURE.md`](../../hermes/docs/ARCHITECTURE.md) under "The 2026-06-27 →
+[`portfolio/docs/ARCHITECTURE.md`](../../portfolio/docs/ARCHITECTURE.md) under "The 2026-06-27 →
 2026-07-16 book gap is permanent and accepted".
 
 **Why there is no backfill script, and why `--fill-calendar-through` is not the answer.** Two

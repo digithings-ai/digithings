@@ -117,7 +117,7 @@ jobs:
       - name: Fetch quotes -> update cache -> upsert price_history
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
-            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+            --watchlist digiquant/src/digiquant/research/config/watchlist.md \
             --cache-dir data/price-history \
             --period 1y \
             --instrument-metadata \
@@ -204,7 +204,7 @@ jobs:
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-macro \
             --sources yahoo \
-            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --latest-only \
             --supabase
 
@@ -320,7 +320,7 @@ jobs:
         # Default --sources is fred,yahoo (issue #328 dropped Frankfurter+FNG).
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-macro \
-            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --supabase
       - name: Fetch sector single-name quotes + technicals (daily, #946)
         # The 15-min intraday job fetches only the watchlist ETFs (rate-limit / timeout
@@ -329,7 +329,7 @@ jobs:
         # after the close so price_technicals carries single-name indicators.
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
-            --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+            --watchlist digiquant/src/digiquant/research/config/watchlist.md \
             --include-sectors \
             --cache-dir data/price-history \
             --period 1y \

@@ -18,7 +18,7 @@ from digiquant.research.phases.phase4_assetclass import (
     InternationalReport,
     build_phase4,
 )
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 
 def _macro_payload() -> str:
@@ -74,14 +74,14 @@ def _dispatch(_model: str, messages: list[dict[str, Any]], **_: Any) -> str:
 @pytest.mark.unit
 class TestPhase3Macro:
     def test_single_node_produces_regime(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase3()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase3()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase3_output is not None
         assert final.phase3_output.payload.source == "today"
         assert final.phase3_output.payload.body["regime_label"].startswith("Slowing")
@@ -90,14 +90,14 @@ class TestPhase3Macro:
 @pytest.mark.unit
 class TestPhase4AssetClasses:
     def test_five_way_fan_out(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase3(), build_phase4()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase3(), build_phase4()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_dispatch,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert set(final.phase4_outputs.keys()) == {
             "bonds",
             "commodities",
@@ -128,8 +128,8 @@ class TestPhase4AssetClasses:
                     pass
             return _dispatch(_model, messages)
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase3(), build_phase4()])
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        compiled = build_pipeline(ResearchState, [build_phase3(), build_phase4()])
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=capture,

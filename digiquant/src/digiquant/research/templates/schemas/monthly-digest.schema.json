@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Monthly Digest",
+  "title": "digiquant-research Monthly Digest",
   "description": "Monthly synthesis artifact. JSON source of truth; markdown is rendered from this payload.",
   "type": "object",
   "additionalProperties": false,

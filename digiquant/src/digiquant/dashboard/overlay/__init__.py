@@ -1,12 +1,12 @@
 """Overlay pipeline runs (T4) — per-workspace research + private books.
 
 Entitled Custom/Enterprise workspaces get a scheduled overlay of the **one**
-Olympus graph (no ``run_type`` fork): ProfileConfig pin → publish-if-missing
+dashboard graph (no ``run_type`` fork): ProfileConfig pin → publish-if-missing
 into the shared corpus → user-private H7–H9 book under their workspace.
 House run state and job rows are never touched by overlay failures.
 
 Re-exports are lazy (PEP 562, same pattern as ``digiquant.brokers``): the house
-pipeline imports ``overlay.persist`` via ``atlas.supabase_io`` on every run, and
+pipeline imports ``overlay.persist`` via ``research.supabase_io`` on every run, and
 an eager ``__init__`` would drag ``budget`` → ``digigraph`` and ``byok`` →
 ``digillm``/``openai`` into the digiquant-only CI lane, which deliberately does
 not install those packages. Overlay jobs (which do need them) run with the full

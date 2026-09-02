@@ -1,4 +1,4 @@
-"""Deterministic cumulative returns persisted for the Olympus Performance view."""
+"""Deterministic cumulative returns persisted for the dashboard Performance view."""
 
 from __future__ import annotations
 

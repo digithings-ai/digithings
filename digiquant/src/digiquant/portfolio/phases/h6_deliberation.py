@@ -16,7 +16,7 @@ from digiquant.research.phases._node_factory import (
     _shared_context,
     build_grounding,
 )
-from digiquant.research.state import PhaseError, PhaseHermesState
+from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import prior_book_current_weights
 from digiquant.dashboard.envcompat import (
     ATTEMPT,
@@ -56,7 +56,7 @@ from digiquant.portfolio.models.forecast import (
 from digiquant.portfolio.research_attention import research_attention_h6_enforce_path
 from digiquant.portfolio.roster_cap import capped_tickers
 from digiquant.portfolio.skills import load_skill_full
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.ticker_fingerprint import deliberation_skip_signal
 from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
 from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
@@ -84,8 +84,8 @@ from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, Re
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/portfolio/deliberation"
-PHASE_NAME = "hermes_h6_deliberation"
+NODE_ID = "portfolio/deliberation"
+PHASE_NAME = "portfolio_h6_deliberation"
 DEFAULT_DELIBERATION_MAX_ROUNDS = 10
 DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
@@ -95,11 +95,11 @@ def _h6_attempt_id() -> str:
     return raw or "1"
 
 
-def _base_bundle_for_ticker(state: HermesState, ticker: str) -> TickerEvidenceBundle | None:
+def _base_bundle_for_ticker(state: PortfolioState, ticker: str) -> TickerEvidenceBundle | None:
     sym = ticker.strip().upper()
-    raw = state.phase_hermes.ticker_evidence_bundles.get(sym)
+    raw = state.phase_portfolio.ticker_evidence_bundles.get(sym)
     if not isinstance(raw, dict):
-        raw = state.phase_hermes.ticker_evidence_bundles.get(ticker)
+        raw = state.phase_portfolio.ticker_evidence_bundles.get(ticker)
     if not isinstance(raw, dict) or not raw:
         return None
     try:
@@ -108,13 +108,13 @@ def _base_bundle_for_ticker(state: HermesState, ticker: str) -> TickerEvidenceBu
         return None
 
 
-def _h6_grounding(state: HermesState, *, segment: str = ""):
+def _h6_grounding(state: PortfolioState, *, segment: str = ""):
     """H6 grounding — research tools only; generic web search forbidden (#2908)."""
     return build_grounding(
         use_data_tools=False,
         live_search=False,
         run_date=state.run_date,
-        segment=segment or "hermes/h6_deliberation",
+        segment=segment or "portfolio/h6_deliberation",
         use_research_tools=True,
         research_phase="h6_deliberation",
         watchlist=tuple(state.config.watchlist),
@@ -145,7 +145,7 @@ def _attach_evidence_amendment(
 
 def _maybe_attempt_missing_fact_amendment(
     *,
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     proposal: MissingFactProposal | None,
     base_bundle: TickerEvidenceBundle | None,
@@ -203,7 +203,7 @@ def deliberation_min_rounds() -> int:
         return DEFAULT_DELIBERATION_MIN_ROUNDS
 
 
-def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
+def _prior_deliberation_summary(state: PortfolioState, ticker: str) -> dict[str, Any] | None:
     # Preferred: slim carry hydrated in preflight (#925). ``deliberation/*`` is excluded
     # from ``latest_segments`` so the full transcript never bloats every node — the slim
     # summary lives in ``prior_deliberation_by_ticker`` instead.
@@ -218,8 +218,8 @@ def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, An
     return dict(payload) if isinstance(payload, dict) else None
 
 
-def _analyst_payload(state: HermesState, ticker: str) -> dict[str, Any]:
-    return dict(state.phase_hermes.asset_analysts.get(ticker, {}))
+def _analyst_payload(state: PortfolioState, ticker: str) -> dict[str, Any]:
+    return dict(state.phase_portfolio.asset_analysts.get(ticker, {}))
 
 
 def _base_forecast_from_analyst(analyst: dict[str, Any]) -> ForecastAssessment | None:
@@ -257,7 +257,7 @@ def _carry_prior_effective(
     *,
     prior: dict[str, Any],
     base: ForecastAssessment | None,
-    state: HermesState,
+    state: PortfolioState,
 ) -> EffectiveForecast | None:
     """Fingerprint skip: preserve prior effective identity/time/hash when present."""
     raw_eff = prior.get("effective_forecast")
@@ -286,7 +286,7 @@ def _carry_prior_effective(
 
 def _resolve_from_debate(
     *,
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     analyst: dict[str, Any],
     amendment_terms_raw: dict[str, Any] | None,
@@ -348,7 +348,7 @@ def _resolve_from_debate(
         )
 
 
-def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
+def _portfolio_phase_inputs(state: PortfolioState, ticker: str) -> dict[str, Any]:
     inputs = {
         "ticker": ticker,
         "analyst_payload": _analyst_payload(state, ticker),
@@ -363,9 +363,9 @@ def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
     return inputs
 
 
-def _roster_reason_for(state: HermesState, ticker: str) -> str:
+def _roster_reason_for(state: PortfolioState, ticker: str) -> str:
     sym = ticker.strip().upper()
-    for entry in state.phase_hermes.focus_roster:
+    for entry in state.phase_portfolio.focus_roster:
         if str(entry.ticker).strip().upper() == sym:
             return str(entry.roster_reason)
     return "other"
@@ -382,7 +382,7 @@ def _bundle_conflict_signal(bundle_dump: Mapping[str, Any] | None) -> bool:
     return False
 
 
-def _invalidation_risk_for(state: HermesState, ticker: str, analyst: Mapping[str, Any]) -> bool:
+def _invalidation_risk_for(state: PortfolioState, ticker: str, analyst: Mapping[str, Any]) -> bool:
     """Thesis challenged / invalidation hit for this ticker → select H6."""
     sym = ticker.strip().upper()
     for thesis in state.prior_context.active_theses:
@@ -405,7 +405,7 @@ def _invalidation_risk_for(state: HermesState, ticker: str, analyst: Mapping[str
     return False
 
 
-def _resolve_h6_selection(state: HermesState, ticker: str, analyst: dict[str, Any]) -> H6Selection:
+def _resolve_h6_selection(state: PortfolioState, ticker: str, analyst: dict[str, Any]) -> H6Selection:
     """Build features + selection; planner errors → incumbent fallback (full H6)."""
     mode = resolve_h6_selection_mode()
     if mode is H6SelectionMode.OFF:
@@ -428,9 +428,9 @@ def _resolve_h6_selection(state: HermesState, ticker: str, analyst: dict[str, An
         prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker.strip().upper())
         if not isinstance(prior_analyst, dict):
             prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker)
-        bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker.strip().upper())
+        bundle_dump = state.phase_portfolio.ticker_evidence_bundles.get(ticker.strip().upper())
         if not isinstance(bundle_dump, dict):
-            bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker)
+            bundle_dump = state.phase_portfolio.ticker_evidence_bundles.get(ticker)
         bundle_id = None
         if isinstance(bundle_dump, dict) and bundle_dump.get("bundle_id"):
             bundle_id = str(bundle_dump["bundle_id"])
@@ -500,7 +500,7 @@ def _deliberation_summary(
 
 
 def run_deliberation_loop(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     *,
     base_bundle: TickerEvidenceBundle | None = None,
@@ -554,7 +554,7 @@ def run_deliberation_loop(
             phase_inputs=pm_inputs,
             shared_context=_shared_context(
                 state,
-                # Atlas digest = the curated cross-checked read (#1674); analyst doc = the case.
+                # research digest = the curated cross-checked read (#1674); analyst doc = the case.
                 context_keys=(f"analyst/{ticker}", "digest", "digest-delta"),
                 data_layer_scope="portfolio",
             ),
@@ -703,7 +703,7 @@ def _h6_node_factory(
     evidence_bundle_store: EvidenceBundleStore | None = None,
     research_state_store: ResearchStateStore | None = None,
 ):
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
             return {}
         analyst = _analyst_payload(state, ticker)
@@ -765,7 +765,7 @@ def _h6_node_factory(
                 )
             carried = _attach_selection(carried, selection)
             return {
-                "phase_hermes": PhaseHermesState(
+                "phase_portfolio": PhasePortfolioState(
                     deliberation_summaries={ticker: carried.model_dump(mode="json")}
                 )
             }
@@ -827,7 +827,7 @@ def _h6_node_factory(
                 )
             carried = _attach_selection(carried, selection)
             return {
-                "phase_hermes": PhaseHermesState(
+                "phase_portfolio": PhasePortfolioState(
                     deliberation_summaries={ticker: carried.model_dump(mode="json")}
                 )
             }
@@ -873,7 +873,7 @@ def _h6_node_factory(
                 )
                 carried = _attach_selection(carried, selection)
                 return {
-                    "phase_hermes": PhaseHermesState(
+                    "phase_portfolio": PhasePortfolioState(
                         deliberation_summaries={ticker: carried.model_dump(mode="json")}
                     )
                 }
@@ -921,7 +921,7 @@ def _h6_node_factory(
                 )
             fallback = _attach_selection(fallback, selection)
             return {
-                "phase_hermes": PhaseHermesState(
+                "phase_portfolio": PhasePortfolioState(
                     deliberation_summaries={ticker: fallback.model_dump(mode="json")}
                 ),
                 "errors": [
@@ -952,7 +952,7 @@ def _h6_node_factory(
         )
         summary = _attach_selection(summary, selection)
         result: dict[str, Any] = {
-            "phase_hermes": PhaseHermesState(
+            "phase_portfolio": PhasePortfolioState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
             )
         }
@@ -983,7 +983,7 @@ def build_h6_deliberation(
     capped = capped_tickers(tickers, held=held)
     if not capped:
 
-        def _noop(_state: HermesState) -> dict[str, Any]:
+        def _noop(_state: PortfolioState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(
@@ -1009,13 +1009,13 @@ def build_h6_from_state(
     """Runtime roster fan-out — one parallel ``Send`` worker per focus-roster ticker.
 
     Like H5, the roster is only known at run time, so ``FanOutPhase`` maps each ticker to a
-    concurrent worker; the ``phase_hermes`` (deliberation) and ``errors`` reducers merge the
+    concurrent worker; the ``phase_portfolio`` (deliberation) and ``errors`` reducers merge the
     parallel writes. Replaces the prior serial loop so each ticker's PM↔analyst debate runs
     concurrently instead of one after another.
     """
 
-    def _worker(state: HermesState) -> dict[str, Any]:
-        ticker = state.hermes_fanout_ticker
+    def _worker(state: PortfolioState) -> dict[str, Any]:
+        ticker = state.portfolio_fanout_ticker
         if not ticker:
             return {}
         return _h6_node_factory(ticker, evidence_bundle_store, research_state_store)(state)

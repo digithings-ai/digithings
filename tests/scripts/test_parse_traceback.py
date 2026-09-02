@@ -52,7 +52,7 @@ def test_identify_component_prefers_src_prefix() -> None:
 def test_identify_component_handles_absolute_and_windows_paths() -> None:
     abs_path = str(REPO_ROOT / "digisearch" / "src" / "digisearch" / "ingest.py")
     assert pt.identify_component(abs_path) == "digisearch"
-    assert pt.identify_component(r"digiquant\src\digiquant\olympus\hermes\state.py") == "digiquant"
+    assert pt.identify_component(r"digiquant\src\digiquant\dashboard\portfolio\state.py") == "digiquant"
 
 
 def test_parse_traceback_extracts_last_frame_and_component() -> None:

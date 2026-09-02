@@ -1,4 +1,4 @@
-"""Supabase adapter for the Atlas sub-graph.
+"""Supabase adapter for the research sub-graph.
 
 Replaces the legacy ``scripts/publish_document.py`` and
 ``scripts/materialize_snapshot.py`` write paths from inside the digigraph
@@ -216,7 +216,7 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
     - This logger.info call emits to the standard logger; digigraph's
       ``audit.py`` wraps that into structured JSONL downstream.
     """
-    logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
+    logger.info("research_io audit: %s %s", event_type, redact_mapping(payload))
 
 
 def _json_safe(value: Any) -> Any:
@@ -267,7 +267,7 @@ def publish_document(
     rows pass a non-None ``doc_type`` from the constraint allowlist.
 
     Returns a :class:`PublishedArtifact` that callers append to
-    ``AtlasResearchState.published``. Idempotent — replays with the same
+    ``ResearchState.published``. Idempotent — replays with the same
     (workspace_id, date, document_key) either update the row or no-op.
     """
     scoped = str(resolved_workspace_id(workspace_id))

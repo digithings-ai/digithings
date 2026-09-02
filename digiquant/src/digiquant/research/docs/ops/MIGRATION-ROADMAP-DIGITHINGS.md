@@ -1,6 +1,6 @@
 # Migration roadmap: digithings, digigraph, multi-tenant
 
-This document is the **post-cleanup migration spec** for moving **digiquant-atlas** into the **digithings** monorepo as the **digiquant** product, adopting **digigraph** (LangGraph) for scheduled runs, then adding **user tenancy** (auth, workspaces, BYOK, Stripe, RLS).
+This document is the **post-cleanup migration spec** for moving **digiquant-research** into the **digithings** monorepo as the **digiquant** product, adopting **digigraph** (LangGraph) for scheduled runs, then adding **user tenancy** (auth, workspaces, BYOK, Stripe, RLS).
 
 **Before executing:** complete [PRE-MIGRATION-CLEANUP.md](PRE-MIGRATION-CLEANUP.md) so the tree you migrate is lean.
 
@@ -10,7 +10,7 @@ This document is the **post-cleanup migration spec** for moving **digiquant-atla
 
 **Wave 2 design detail:** [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md) — graph families, node types, Cowork task mapping, env/idempotency (implements **§ P1b**).
 
-**External repos:** The digithings monorepo lives alongside this repo — on disk: `../digithings` from the parent of `digiquant-atlas` (e.g. `/Users/…/Code/digithings`). Product name **digithings**; folder name may be lowercase.
+**External repos:** The digithings monorepo lives alongside this repo — on disk: `../digithings` from the parent of `digiquant-research` (e.g. `/Users/…/Code/digithings`). Product name **digithings**; folder name may be lowercase.
 
 ---
 
@@ -20,7 +20,7 @@ Execution is intentionally **three waves**. Do **not** start Wave 3 (user worksp
 
 | Wave | Priority | Outcome |
 |------|----------|---------|
-| **Wave 1 — digithings + digiquant** | **First** | Atlas **lives inside the digithings monorepo** as a **digiquant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to digichat/digiclaw integration. |
+| **Wave 1 — digithings + digiquant** | **First** | research **lives inside the digithings monorepo** as a **digiquant** app/service (package + route + deploy), same way other first-class apps do. One build pipeline, shared conventions, path to digichat/digiclaw integration. |
 | **Wave 2 — digigraph operations** | **Second** | **Stop depending on Cowork UI schedules** for recurring work. Implement **daily** and **postmortem** (and related) runs as **digigraph** graphs (**LangGraph** in digithings — “line graph” in conversation = this stack). **Systematic execution**: your own schedule (cron / API / queue), **API connections**, MCP and tools already wired in digithings. Graph nodes call the **same canonical Python/scripts** (`publish_document`, `run_db_first`, `validate_db_first`, etc.) where possible. |
 | **Wave 3 — Users & tenancy** | **Final** | **User access** (OAuth), **user settings**, **user-level research**, **workspaces**, **BYOK**, **Stripe**, **RLS** — the productized multi-tenant plan (former **P2–P8** in this doc). |
 
@@ -76,7 +76,7 @@ These are **plan defaults** so implementation can start without re-debating each
 - **Revoked / missing BYOK:** Runner marks job `skipped` with reason `no_credentials`; UI shows “Connect API key to run.”
 - **Stripe webhook ordering:** Use `stripe_events` idempotency + **compare** `subscription` object timestamps or event `created` so out-of-order events do not regress `subscription_status`.
 - **Concurrent settings saves:** Use `workspaces.updated_at` **check** (If-Match style) or `published_profile_version` increment to avoid lost updates.
-- **Operator error:** Wrong `ATLAS_WORKSPACE_ID` publishing to another tenant — mitigate with **CLI confirmation** or **allowlist** of workspace ids in operator env for prod.
+- **Operator error:** Wrong `RESEARCH_WORKSPACE_ID` publishing to another tenant — mitigate with **CLI confirmation** or **allowlist** of workspace ids in operator env for prod.
 
 ---
 
@@ -134,18 +134,18 @@ Each phase has **deliverables**, **files/migrations**, and **acceptance criteria
 
 ### P1 — Monorepo + hosting (Wave 1)
 
-**Goal:** Atlas UI and build live inside digithings; one deploy; optional redirect from GitHub Pages.
+**Goal:** research UI and build live inside digithings; one deploy; optional redirect from GitHub Pages.
 
-**Execution plan:** [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md) — naming (`apps/digiquant-atlas` vs `digiquant/`), subtree vs submodule, Next `basePath`, CI, ordered checklist.
+**Execution plan:** [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md) — naming (`digiquant/src/digiquant/research` vs `digiquant/`), subtree vs submodule, Next `basePath`, CI, ordered checklist.
 
 | Task | Detail |
 |------|--------|
-| Import | `apps/digiquant-atlas` or `apps/atlas` (align with digithings conventions); preserve or subtree history. |
-| Routing | Sub-path e.g. `/digiquant-atlas` or `/atlas` — match [`digichat/ARCHITECTURE.md`](../../../digithings/digichat/ARCHITECTURE.md) routing patterns. |
-| Env | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_*`, `ATLAS_ENCRYPTION_KEY` / KMS ref, `CRON_SECRET`. |
+| Import | `digiquant/src/digiquant/research` or `apps/research` (align with digithings conventions); preserve or subtree history. |
+| Routing | Sub-path e.g. `/digiquant-research` or `/research` — match [`digichat/ARCHITECTURE.md`](../../../digithings/digichat/ARCHITECTURE.md) routing patterns. |
+| Env | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, server-only `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_*`, `RESEARCH_ENCRYPTION_KEY` / KMS ref, `CRON_SECRET`. |
 | CI | Build + deploy step in digithings pipeline; E2E smoke on staging. |
 
-**Acceptance:** Staging URL loads Atlas pages (`/`, `/library`, `/portfolio`, …) under sub-route; no secrets in client bundle.
+**Acceptance:** Staging URL loads research pages (`/`, `/library`, `/portfolio`, …) under sub-route; no secrets in client bundle.
 
 ---
 
@@ -284,8 +284,8 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 | Route / module | Responsibility |
 |----------------|----------------|
-| `POST /api/atlas/credentials` | Accept plaintext once; encrypt with server key; store fingerprint; audit. |
-| `DELETE /api/atlas/credentials` | Revoke. |
+| `POST /api/research/credentials` | Accept plaintext once; encrypt with server key; store fingerprint; audit. |
+| `DELETE /api/research/credentials` | Revoke. |
 | `POST /api/stripe/webhook` | Verify signature; idempotent insert into `stripe_events`; update `workspaces` billing columns. |
 | `POST /api/stripe/checkout-session` | Create Checkout for logged-in user (map to `stripe_customer_id`). |
 | `GET /api/stripe/portal` | Customer Portal session. |
@@ -324,7 +324,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 **Goal:** Same code path for Cowork and automation.
 
-**Scripts to extend** (add `--workspace-id` and/or `ATLAS_WORKSPACE_ID`):
+**Scripts to extend** (add `--workspace-id` and/or `RESEARCH_WORKSPACE_ID`):
 
 - [`scripts/publish_document.py`](../../scripts/publish_document.py)
 - [`scripts/materialize_snapshot.py`](../../scripts/materialize_snapshot.py)
@@ -333,7 +333,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 - [`scripts/validate_db_first.py`](../../scripts/validate_db_first.py)
 - [`scripts/execute_at_open.py`](../../scripts/execute_at_open.py), [`scripts/backfill_execution_prices.py`](../../scripts/backfill_execution_prices.py) as applicable
 
-**New package (suggested):** `scripts/atlas_runner/` or `python -m atlas_runner`:
+**New package (suggested):** `scripts/research_runner/` or `python -m research_runner`:
 
 - Load workspace row (service role): profile, prefs, policy
 - Decrypt BYOK (same crypto as TS or delegate to small shared lib — **one** implementation preferred)
@@ -378,7 +378,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 ---
 
-## E) File checklist (Atlas repo — indicative)
+## E) File checklist (research repo — indicative)
 
 **New**
 
@@ -391,7 +391,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 - `app/api/**/route.ts` (or under digithings `apps/.../api`) for Stripe + credentials
 - `templates/schemas/rebalancing-policy.schema.json` (and siblings)
 - `docs/ops/multi-tenant.md`
-- `scripts/atlas_runner/**` (or equivalent)
+- `scripts/research_runner/**` (or equivalent)
 
 **Modify**
 
@@ -403,8 +403,8 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 **digithings repo (merge side)**
 
-- App registration, shared `layout` nav link to Atlas
-- Optional: digichat tool definitions calling Atlas BFF
+- App registration, shared `layout` nav link to research
+- Optional: digichat tool definitions calling research BFF
 - Docker compose service for **worker** (if not GHA-only)
 
 ---
@@ -416,7 +416,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 | `NEXT_PUBLIC_SUPABASE_URL` | Client | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client | RLS-scoped anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server/worker only | Publishers, webhooks, decrypt jobs |
-| `ATLAS_ENCRYPTION_KEY` or KMS refs | Server/worker | BYOK envelope |
+| `RESEARCH_ENCRYPTION_KEY` or KMS refs | Server/worker | BYOK envelope |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Server | Billing |
 | `STRIPE_PRICE_PRO` etc. | Server | Checkout |
 | `CRON_SECRET` | Server | Internal dispatch auth |
@@ -444,7 +444,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 ## H) Cowork / manual operator (ongoing)
 
 - After **Wave 2**, **scheduled** work is **digigraph**, not Cowork UI timers. **Cowork** remains for **ad-hoc** operator sessions and emergencies.
-- Document **`ATLAS_WORKSPACE_ID`** (or `--workspace-id`) in [`cowork/PROJECT.md`](../../cowork/PROJECT.md) and [`RUNBOOK.md`](../../RUNBOOK.md) (Wave 3 when multi-tenant writes matter).
+- Document **`RESEARCH_WORKSPACE_ID`** (or `--workspace-id`) in [`cowork/PROJECT.md`](../../cowork/PROJECT.md) and [`RUNBOOK.md`](../../RUNBOOK.md) (Wave 3 when multi-tenant writes matter).
 - Manual runs use **service role** on operator machine — treat laptop as **trusted**; never commit keys.
 
 ---
@@ -468,7 +468,7 @@ Add **`workspace_id` uuid not null** (after backfill) to:
 
 ## K) Suggested execution order (when you leave plan mode)
 
-1. **Wave 1 — P1:** Import Atlas into **digithings** per [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md); route + env + CI on staging.
+1. **Wave 1 — P1:** Import research into **digithings** per [DIGITHINGS-WAVE1-PLAN.md](DIGITHINGS-WAVE1-PLAN.md); route + env + CI on staging.
 2. **Wave 2 — P1b:** Implement **digigraph** flows for **daily** + **postmortem** (etc.) per [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md); wire schedule/API; retire Cowork **scheduled** reliance; keep scripts as the canonical publish path.
 3. **Wave 3 — Req sign-off:** confirm **A.4** before large DB churn.
 4. **P2a–c** migrations → regenerate types → **P3** auth + query scoping.

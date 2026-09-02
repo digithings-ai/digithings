@@ -263,7 +263,7 @@ class TestExportedSchemaArtifact:
 
         repo_root = Path(__file__).resolve().parents[3]
         schema_path = (
-            repo_root / "digiquant" / "docs" / "schemas" / f"atlas_snapshot.v{SCHEMA_VERSION}.json"
+            repo_root / "digiquant" / "docs" / "schemas" / f"research_snapshot.v{SCHEMA_VERSION}.json"
         )
         assert schema_path.exists(), (
             f"missing schema artifact at {schema_path}; "

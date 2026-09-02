@@ -1,4 +1,4 @@
-"""WP13.3 — Atlas research attention planner wiring (#2926)."""
+"""WP13.3 — research attention planner wiring (#2926)."""
 
 from __future__ import annotations
 
@@ -13,13 +13,13 @@ from digiquant.research.research_attention import (
     apply_segment_metric_patch,
     artifact_target_key,
     attention_store_for_run,
-    plan_atlas_research_attention,
+    plan_research_attention,
     reset_attention_stores,
     triage_phase_attention_update,
 )
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,
     DeltaTriageDecision,
     DeltaTriageResult,
@@ -30,7 +30,7 @@ from digiquant.dashboard.edit_mode.models import PriorPublished
 from digiquant.dashboard.research_retrieval.planner import AttentionMode, AttentionRolloutMode
 from pydantic import BaseModel
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -52,12 +52,12 @@ def _prior_bonds_row() -> dict[str, Any]:
     }
 
 
-def _state_with_triage(*, price_deltas: dict[str, float] | None = None) -> AtlasResearchState:
-    state = AtlasResearchState(
+def _state_with_triage(*, price_deltas: dict[str, float] | None = None) -> ResearchState:
+    state = ResearchState(
         run_type="delta",
         run_date=RUN,
         baseline_date=PRIOR,
-        config=AtlasConfigBundle(watchlist=["TLT"]),
+        config=ResearchConfigBundle(watchlist=["TLT"]),
         prior_context=PriorContext(latest_segments={"bonds": _prior_bonds_row()}),
         price_deltas=price_deltas or {},
     )
@@ -112,7 +112,7 @@ def test_triage_builds_plan_before_segment_nodes(monkeypatch: pytest.MonkeyPatch
 def test_plan_persists_decisions_to_attention_store(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
     state = _state_with_triage(price_deltas={"TLT": 0.01})
-    plan = plan_atlas_research_attention(state)
+    plan = plan_research_attention(state)
     assert plan is not None
     from digiquant.research.research_attention import persist_research_attention_plan
 
@@ -127,7 +127,7 @@ def test_plan_persists_decisions_to_attention_store(monkeypatch: pytest.MonkeyPa
     assert bonds.mode is AttentionMode.METRIC_PATCH
 
 
-def _apply_attention_plan(state: AtlasResearchState) -> AtlasResearchState:
+def _apply_attention_plan(state: ResearchState) -> ResearchState:
     return state.model_copy(update=triage_phase_attention_update(state))
 
 
@@ -263,7 +263,7 @@ def test_off_mode_skips_plan_and_allows_incumbent_without_plan(
 ) -> None:
     monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "off")
     state = _state_with_triage()
-    assert plan_atlas_research_attention(state) is None
+    assert plan_research_attention(state) is None
     triage_update = build_triage_node(None)(state)
     assert triage_update.get("research_attention_plan") is None
 

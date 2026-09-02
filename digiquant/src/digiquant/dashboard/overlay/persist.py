@@ -31,9 +31,9 @@ publish must skip it (see ``publish_phase``) even with persist on.
 ``onchain_cohort_positioning`` are the same class of shared register: no
 ``workspace_id`` column, leftover ``UNIQUE(date, …)`` / ``UNIQUE(run_date, ticker)``
 / ``UNIQUE(date, market)``. Overlay persist-on still compiles H1–H5,
-preflight_reflect, and Atlas preflight with the overlay client; a same-date
+preflight_reflect, and research preflight with the overlay client; a same-date
 upsert last-writer-wins the house corpus, and ``resolve_pending`` would stamp
-house reflections by id. Overlay ``run_atlas_then_hermes`` also always
+house reflections by id. Overlay ``run_research_then_portfolio`` also always
 reaches ``_run_beliefs_fold`` after a fail-soft H9 book refuse; distillation
 reads every unfolded house ``decision_log`` row and stamps
 ``beliefs_folded_at`` by id. ``skip_overlay_shared_register`` no-ops those
@@ -132,7 +132,7 @@ def skip_overlay_shared_register(workspace_id: UUID | str | None) -> bool:
     return is_private_workspace(workspace_id)
 
 
-def hermes_document_key(base: str, workspace_id: UUID | str | None) -> str:
+def portfolio_document_key(base: str, workspace_id: UUID | str | None) -> str:
     """House keys stay unprefixed. Overlay H7/H8 keys are ``overlay/{ws}/{base}``."""
     if not is_private_workspace(workspace_id):
         return base
@@ -145,7 +145,7 @@ __all__ = [
     "OVERLAY_PERSIST_ENV",
     "OverlayLegacyBookBlocked",
     "OverlayPersistDisabled",
-    "hermes_document_key",
+    "portfolio_document_key",
     "is_private_workspace",
     "overlay_persist_enabled",
     "require_overlay_legacy_book_safe",

@@ -26,7 +26,7 @@ class ResearchRetriever:
         *,
         client: SupabaseClient,
         run_date: date,
-        phase: RetrievalPhase = "atlas_edit",
+        phase: RetrievalPhase = "research_edit",
         cache: ResearchCache | None = None,
         watchlist: tuple[str, ...] = (),
         retrieval_pin: RetrievalQueryPin | None = None,

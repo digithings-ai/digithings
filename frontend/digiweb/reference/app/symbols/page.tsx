@@ -108,7 +108,7 @@ export default function SymbolsPage() {
           colophon&apos;s own scale. The specimen below is deliberately the widest cell on the page
           and is <em>still</em>{" "}
           narrower than that, so treat it as a lockup check, not a fidelity one (each caption below
-          repeats this so it reads next to the artifact, not just up here). The olympus mark is
+          repeats this so it reads next to the artifact, not just up here). The dashboard mark is
           ported from the dashboard&apos;s loader, four strokes in currentColor. One exception to
           the currentColor rule: the <strong>terminal</strong> mark and wordmark are deliberately{" "}
           <strong>one tone</strong> — plain <code>--ink</code>, never <code>--accent</code>, even

@@ -1,4 +1,4 @@
-"""CLI smoke tests for the Atlas → Hermes chain entry point."""
+"""CLI smoke tests for the research → portfolio chain entry point."""
 
 from __future__ import annotations
 
@@ -74,8 +74,8 @@ def test_chain_dry_run_compiles_daily_graph(capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["cadence"] == "daily"
-    assert payload["compiled"]["atlas"] is True
-    assert payload["compiled"]["hermes"] is True
+    assert payload["compiled"]["research"] is True
+    assert payload["compiled"]["portfolio"] is True
     assert "monthly" not in json.dumps(payload)
 
 
@@ -84,10 +84,10 @@ def test_simulated_chain_initial_state_exposes_research_pin_fields():
     from datetime import UTC, datetime
     from uuid import uuid4
 
-    from digiquant.research.graph import AtlasInput, initial_state
+    from digiquant.research.graph import ResearchInput, initial_state
 
     state = initial_state(
-        AtlasInput(run_date=date(2026, 4, 26), cadence="daily"),
+        ResearchInput(run_date=date(2026, 4, 26), cadence="daily"),
         knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
         run_id=uuid4(),
     )

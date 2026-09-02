@@ -1,6 +1,6 @@
-name: "Pipeline: Olympus research"
+name: "Pipeline: digiquant research"
 
-# Unified Atlas+Hermes daily cron (replaces atlas-baseline/delta/monthly/fed-odds).
+# Unified research+portfolio daily cron (replaces research-baseline/delta/monthly/fed-odds).
 # Single daily cadence + optional workflow_dispatch refresh_scope.
 # Tunables: .github/digiquant-pipeline.yml.
 #
@@ -23,13 +23,13 @@ on:
   workflow_dispatch:
     inputs:
       refresh_scope:
-        description: "Force full rewrites (none|all|segments|hermes|digest|beliefs)."
+        description: "Force full rewrites (none|all|segments|portfolio|digest|beliefs)."
         type: choice
         options:
           - none
           - all
           - segments
-          - hermes
+          - portfolio
           - digest
           - beliefs
         default: none
@@ -134,7 +134,7 @@ jobs:
       REFRESH_SCOPE: ${{ needs.resolve.outputs.refresh_scope }}
       RUN_DATE: ${{ needs.resolve.outputs.run_date }}
     steps:
-      - name: Check out Olympus source
+      - name: Check out digiquant source
         uses: actions/checkout@v4
         with:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#814)
@@ -179,7 +179,7 @@ jobs:
           ARGS=(
             uv run --frozen --no-sync python -m digiquant prices fetch-macro
             --sources fedprob
-            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml
+            --manifest digiquant/src/digiquant/research/config/macro_series.yaml
           )
           if [ "${DRY_RUN:-}" = "true" ]; then
             ARGS+=(--dry-run)
@@ -202,16 +202,16 @@ jobs:
           # Per-attempt read timeout for digillm during preflight only (#2528/#2531). The real
           # pipeline run step keeps digillm's 600s default.
           DIGILLM_REQUEST_TIMEOUT_SECONDS: "20"
-          # Same pool as the "Run Olympus research pipeline" step below (#1622). OPENROUTER_ALLOWED_MODELS
-          # is applied in-process by validate-providers.py via apply_olympus_openrouter_env() — same
-          # as Hermes chain startup (#2532). Fallback routing applies to the initial request as well
+          # Same pool as the "Run dashboard research pipeline" step below (#1622). OPENROUTER_ALLOWED_MODELS
+          # is applied in-process by validate-providers.py via apply_digiquant_openrouter_env() — same
+          # as portfolio chain startup (#2532). Fallback routing applies to the initial request as well
           # as empty-response retries (#2540); check_openrouter_function_tools() surfaces model
           # substitution instead of hard-failing when it matches production tolerance.
-          OPENROUTER_FALLBACK_MODELS: &olympus_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          OPENROUTER_FALLBACK_MODELS: &digiquant_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/research/validate-providers.py --skip-dry-run
 
-      - name: Run Olympus research pipeline
+      - name: Run digiquant research pipeline
         id: run
         # 3×70m attempts + 20m backoff. Under the 240m job so the outcome step still runs.
         timeout-minutes: 230
@@ -226,7 +226,7 @@ jobs:
           # every openrouter/ request when this is set (primary call, not only empty retries).
           # That covers provider errors (5xx, rate limits, endpoint refusals) — not empty 200s
           # with blank content (#2520). Cheap→capable, all endpoint-gate-verified.
-          OPENROUTER_FALLBACK_MODELS: *olympus_openrouter_fallback_models
+          OPENROUTER_FALLBACK_MODELS: *digiquant_openrouter_fallback_models
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
@@ -274,7 +274,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: olympus-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
+          name: digiquant-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
           # Includes run.log and WP10.1 shadow-allocation-*.json when H9 completed.
           path: artifacts/
           retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
@@ -300,7 +300,7 @@ jobs:
             cancelled) OUTCOME="cancelled" ;;
             *)         OUTCOME="failure" ;;
           esac
-          TITLE="olympus-daily-${OUTCOME}"
+          TITLE="digiquant-daily-${OUTCOME}"
           mkdir -p artifacts
           if [ -f artifacts/run.log ]; then
             tail -n 200 artifacts/run.log > artifacts/tail.log
@@ -358,9 +358,9 @@ jobs:
           fi
 
           if [ "$OUTCOME" = "cancelled" ]; then
-            LEAD='Olympus daily run was CANCELLED on %s (refresh_scope=%s) — most likely the 240-minute job timeout, otherwise an operator cancel.\n\n'
+            LEAD='dashboard daily run was CANCELLED on %s (refresh_scope=%s) — most likely the 240-minute job timeout, otherwise an operator cancel.\n\n'
           else
-            LEAD='Olympus daily run failed on %s (refresh_scope=%s).\n\n'
+            LEAD='dashboard daily run failed on %s (refresh_scope=%s).\n\n'
           fi
 
           {
@@ -370,7 +370,7 @@ jobs:
             printf '**Chain outcome:** %s\n' "$OUTCOME_LINE"
             printf '**Last successful run:** %s (%s)\n' "$LAST_OK" "$LAST_OK_REL"
             printf '**Workflow run:** %s\n\n' "$RUN_URL"
-            printf '**On-call:** see [RUNBOOK](%s/blob/develop/digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md) §"Atlas job failure triage".\n\n' "$REPO_URL"
+            printf '**On-call:** see [RUNBOOK](%s/blob/develop/digiquant/src/digiquant/research/docs/RUNBOOK.md) §"research job failure triage".\n\n' "$REPO_URL"
             printf '<details><summary>Last 200 log lines</summary>\n\n```\n'
             cat artifacts/tail.log
             printf '\n```\n\n</details>\n'

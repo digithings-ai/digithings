@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any  # score:allow untyped any — scored-lint
 if TYPE_CHECKING:  # build_trades returns Trades; keep the dep import lazy (see _ensure_importable)
     from digiquant.research.backtest import Trade
 
-# repo root: .../digiquant/scripts/research/backtest_decisions.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/backtest_decisions.py → up 4 (research → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -116,7 +116,7 @@ def build_trades(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Backtest recorded Atlas decisions (zero LLM).")
+    parser = argparse.ArgumentParser(description="Backtest recorded research decisions (zero LLM).")
     parser.add_argument("--start", default=None, help="Earliest decision run_date YYYY-MM-DD.")
     parser.add_argument("--benchmark", default="SPY", help="Default benchmark ticker.")
     args = parser.parse_args(argv)

@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.thesis import MarketThesisExplorationOutput, ThesisProposal
 from digiquant.portfolio.phases.h2_market_thesis_exploration import _reviewed_status_by_id
 from digiquant.portfolio.writers.thesis_io import (
@@ -17,7 +17,7 @@ from digiquant.portfolio.writers.thesis_io import (
 )
 from pydantic import ValidationError
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -26,8 +26,8 @@ SCHEMA_PATH = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "templates"
     / "schemas"
     / "market-thesis-exploration.schema.json"
@@ -180,13 +180,13 @@ def test_rejects_ambiguous_legacy_active_topic() -> None:
 
 
 def test_h2_update_preserves_h1_same_run_status() -> None:
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 7, 20),
         prior_context=PriorContext(
             active_theses=[{"thesis_id": "cta-risk-management", "status": "ACTIVE"}]
         ),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             thesis_review={
                 "body": {
                     "reviewed_theses": [

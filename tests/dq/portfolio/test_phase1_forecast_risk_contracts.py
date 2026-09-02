@@ -15,17 +15,17 @@ import pytest
 from digiquant.research import cost_liquidity_registry as clr
 from digiquant.research import forecast_registry as fr
 from digiquant.research import risk_policy_registry as rpr
-from digiquant.research.graph import AtlasGraphDeps, AtlasInput, build_atlas_graph
+from digiquant.research.graph import ResearchGraphDeps, ResearchInput, build_research_graph
 from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
 from digiquant.research.phases.publish_phase import PublishDeps
 from digiquant.research.phases.triage_phase import TriageDeps
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.research.testing.simulator import simulated_pipeline
 from digiquant.portfolio.graph import (
-    HermesGraphDeps,
+    PortfolioGraphDeps,
     ThesisGraphDeps,
-    build_hermes_graph,
-    build_hermes_phases_thesis,
+    build_portfolio_graph,
+    build_portfolio_phases_thesis,
 )
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
@@ -41,8 +41,8 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.portfolio.sizing import TickerRisk, size_portfolio
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.incumbent_risk_fixtures import (
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,
     load_incumbent_risk_fixture,
     sizing_result_snapshot,
@@ -61,21 +61,21 @@ _FORBIDDEN_PHASE1_NODES = frozenset(
     }
 )
 
-_HERMES_COMPILED_NODES = frozenset(
+_PORTFOLIO_COMPILED_NODES = frozenset(
     {
-        "hermes/thesis/market-review",
-        "hermes/thesis/market-exploration",
-        "hermes/thesis/vehicle-map",
-        "hermes/thesis/opportunity-screener",
-        "hermes/portfolio/asset-analyst-worker",
-        "hermes/portfolio/deliberation-worker",
-        "hermes/portfolio/pm-direction",
-        "hermes/portfolio/risk-sizing",
-        "hermes/portfolio/commit-run",
+        "portfolio/thesis/market-review",
+        "portfolio/thesis/market-exploration",
+        "portfolio/thesis/vehicle-map",
+        "portfolio/thesis/opportunity-screener",
+        "portfolio/asset-analyst-worker",
+        "portfolio/deliberation-worker",
+        "portfolio/pm-direction",
+        "portfolio/risk-sizing",
+        "portfolio/commit-run",
     }
 )
 
-_ATLAS_COMPILED_NODES = frozenset(
+_RESEARCH_COMPILED_NODES = frozenset(
     {
         "preflight",
         "triage",
@@ -97,42 +97,42 @@ def _graph_node_names(graph) -> set[str]:
     return set(graph.get_graph().nodes.keys())
 
 
-def test_hermes_graph_topology_unchanged_by_phase1() -> None:
+def test_portfolio_graph_topology_unchanged_by_phase1() -> None:
     client = FakeSupabaseClient()
-    deps = HermesGraphDeps(
+    deps = PortfolioGraphDeps(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
-    graph = build_hermes_graph(watchlist=["AAPL"], deps=deps)
+    graph = build_portfolio_graph(watchlist=["AAPL"], deps=deps)
     nodes = _graph_node_names(graph)
     assert _FORBIDDEN_PHASE1_NODES.isdisjoint(nodes)
-    assert _HERMES_COMPILED_NODES.issubset(nodes)
-    phase_names = {p.name for p in build_hermes_phases_thesis(watchlist=["AAPL"], held=set())}
+    assert _PORTFOLIO_COMPILED_NODES.issubset(nodes)
+    phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "hermes_h1_thesis_review",
-        "hermes_h7_pm_direction",
-        "hermes_h8_risk_sizing",
-        "hermes_h9_commit_run",
+        "portfolio_h1_thesis_review",
+        "portfolio_h7_pm_direction",
+        "portfolio_h8_risk_sizing",
+        "portfolio_h9_commit_run",
     ):
         assert expected in phase_names
 
 
-def test_atlas_graph_topology_unchanged_by_phase1() -> None:
+def test_research_graph_topology_unchanged_by_phase1() -> None:
     client = FakeSupabaseClient()
-    deps = AtlasGraphDeps(
+    deps = ResearchGraphDeps(
         preflight=PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
         ),
         preflight_reflect=PreflightReflectDeps(client=client),
         triage=TriageDeps(client=client),
         publish=PublishDeps(client=client),
     )
-    graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+    graph = build_research_graph(deps=deps, watchlist=("AAPL",))
     nodes = _graph_node_names(graph)
     assert _FORBIDDEN_PHASE1_NODES.isdisjoint(nodes)
-    assert _ATLAS_COMPILED_NODES.issubset(nodes)
+    assert _RESEARCH_COMPILED_NODES.issubset(nodes)
     assert "sector-scorecard" not in nodes
     assert "sector-technology" in nodes
     for forbidden in (
@@ -196,7 +196,7 @@ def test_phase1_registry_modules_export_cutoff_reads() -> None:
 def test_knowledge_cutoff_bounds_cost_estimate_visibility() -> None:
     from digiquant.research import cost_liquidity_registry as clr
 
-    from tests.dq.atlas.test_cost_liquidity_registry import CostRegistryFake, _bundle
+    from tests.dq.research.test_cost_liquidity_registry import CostRegistryFake, _bundle
 
     client = CostRegistryFake()
     bundle = _bundle()
@@ -217,7 +217,7 @@ def test_knowledge_cutoff_bounds_cost_estimate_visibility() -> None:
 
 
 def _run_phase1_pipeline(*, canned_extras: dict | None = None, overrides: dict | None = None):
-    from tests.dq.hermes.phase1_e2e_fixtures import (
+    from tests.dq.portfolio.phase1_e2e_fixtures import (
         PHASE1_PIPELINE_PREFERENCES,
         PHASE1_RUN_DATE,
         analyst_payload_override,
@@ -237,14 +237,14 @@ def _run_phase1_pipeline(*, canned_extras: dict | None = None, overrides: dict |
             preferences=PHASE1_PIPELINE_PREFERENCES,
         ) as run:
             final = run.invoke(
-                AtlasInput(run_date=PHASE1_RUN_DATE, watchlist=("AAPL",)),
+                ResearchInput(run_date=PHASE1_RUN_DATE, watchlist=("AAPL",)),
             )
             return final, run
 
 
 def test_phase1_composition_e2e_simulated_pipeline() -> None:
     """Full graph: registries populated, H7 lineage, H8/H9 observational artifacts, book once."""
-    from tests.dq.hermes.phase1_e2e_fixtures import (
+    from tests.dq.portfolio.phase1_e2e_fixtures import (
         LATE_KNOWN_AT,
         mature_cohort_outcome_rows,
         resolved_outcome_row,
@@ -259,26 +259,26 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
             ],
         },
     )
-    hermes = final.phase_hermes
-    manifest = hermes.commit_manifest or {}
+    portfolio = final.phase_portfolio
+    manifest = portfolio.commit_manifest or {}
 
     assert final.knowledge_cutoff_at is not None
-    assert hermes.pm_direction_memo is not None
-    for row in hermes.pm_direction_memo.roster:
+    assert portfolio.pm_direction_memo is not None
+    for row in portfolio.pm_direction_memo.roster:
         assert row.forecast_reference is not None
         assert row.forecast_reference.effective_forecast_id is not None
         assert row.forecast_reference.base_forecast_id is not None
         assert row.forecast_reference.ticker == row.ticker
 
-    assert hermes.forecast_calibrations
-    assert hermes.calibrated_forecasts
-    cal = next(iter(hermes.forecast_calibrations.values()))
+    assert portfolio.forecast_calibrations
+    assert portfolio.calibrated_forecasts
+    cal = next(iter(portfolio.forecast_calibrations.values()))
     assert cal["status"] == CalibrationArtifactStatus.AVAILABLE.value
     assert int(cal["sample_count"]) >= 3
 
-    assert hermes.risk_policy is not None
-    assert hermes.covariance_snapshot is not None
-    assert hermes.risk_policy["status"] in (
+    assert portfolio.risk_policy is not None
+    assert portfolio.covariance_snapshot is not None
+    assert portfolio.risk_policy["status"] in (
         PolicyArtifactStatus.AVAILABLE.value,
         PolicyArtifactStatus.DEGRADED.value,
     )
@@ -305,9 +305,9 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
     assert len(run.client.store.get("portfolio_ledger_commits", [])) == 1
 
     # Simulator canned H7 memo sets AAPL confidence=0.7; H8 haircuts cash-first.
-    aapl_row = next(row for row in hermes.pm_direction_memo.roster if row.ticker == "AAPL")
+    aapl_row = next(row for row in portfolio.pm_direction_memo.roster if row.ticker == "AAPL")
     assert aapl_row.confidence == pytest.approx(0.7)
-    assert sized_book_weights(hermes.sized_book) == {"AAPL": 70.0}
+    assert sized_book_weights(portfolio.sized_book) == {"AAPL": 70.0}
 
     cutoff = final.knowledge_cutoff_at
     assert cutoff is not None
@@ -338,22 +338,22 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
 
 def test_phase1_shadow_calibration_sparse_cohort_when_no_outcomes() -> None:
     final, _run = _run_phase1_pipeline()
-    hermes = final.phase_hermes
-    assert hermes.calibrated_forecasts
-    subject = hermes.calibrated_forecasts["AAPL"]
+    portfolio = final.phase_portfolio
+    assert portfolio.calibrated_forecasts
+    subject = portfolio.calibrated_forecasts["AAPL"]
     assert subject["status"] == CalibrationArtifactStatus.UNAVAILABLE.value
     assert subject["unavailable_reason"] == "empty_cohort"
 
 
 def test_phase1_cutoff_excludes_late_known_outcomes_from_calibration() -> None:
-    from tests.dq.hermes.phase1_e2e_fixtures import LATE_KNOWN_AT, resolved_outcome_row
+    from tests.dq.portfolio.phase1_e2e_fixtures import LATE_KNOWN_AT, resolved_outcome_row
 
     final, _run = _run_phase1_pipeline(
         canned_extras={
             "olympus_forecast_outcomes": [resolved_outcome_row(salt=1, known_at=LATE_KNOWN_AT)]
         },
     )
-    cal = next(iter(final.phase_hermes.forecast_calibrations.values()))
+    cal = next(iter(final.phase_portfolio.forecast_calibrations.values()))
     assert cal["status"] == CalibrationArtifactStatus.UNAVAILABLE.value
     assert cal["unavailable_reason"] == "empty_cohort"
 
@@ -361,7 +361,7 @@ def test_phase1_cutoff_excludes_late_known_outcomes_from_calibration() -> None:
 def test_phase1_invalid_amendment_preserves_base_effective() -> None:
     from datetime import date
 
-    from tests.dq.hermes.phase1_e2e_fixtures import (
+    from tests.dq.portfolio.phase1_e2e_fixtures import (
         invalid_forecast_amendment_dict,
         sample_forecast_terms_dict,
     )
@@ -382,11 +382,11 @@ def test_phase1_invalid_amendment_preserves_base_effective() -> None:
         effective_at=cutoff,
         known_at=cutoff,
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 4, 26),
         knowledge_cutoff_at=cutoff,
-        phase_hermes=PhaseHermesState(),
+        phase_portfolio=PhasePortfolioState(),
     )
     analyst = {
         "ticker": "AAPL",
@@ -409,7 +409,7 @@ def test_phase1_invalid_amendment_preserves_base_effective() -> None:
 
 def test_phase1_unpriceable_action_is_typed_not_zero() -> None:
 
-    from tests.dq.hermes.test_commit_run import _ledger_client, _run, _state
+    from tests.dq.portfolio.test_commit_run import _ledger_client, _run, _state
 
     client = _ledger_client()  # no price rows — SPY unpriceable
     state = _state(
@@ -420,7 +420,7 @@ def test_phase1_unpriceable_action_is_typed_not_zero() -> None:
         },
     )
     out = _run(client, state)
-    manifest = out["phase_hermes"].commit_manifest or {}
+    manifest = out["phase_portfolio"].commit_manifest or {}
     assert manifest["status"] == "committed"
     assert "SPY" in (manifest.get("ledger_unpriced_symbols") or [])
     assert manifest["cost_liquidity_registry_status"] in ("ok", "degraded", "skipped")
@@ -430,7 +430,7 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
 
     from digiquant.portfolio.phases import h9_commit_run as h9
 
-    from tests.dq.hermes.test_commit_run import _run, _state
+    from tests.dq.portfolio.test_commit_run import _run, _state
 
     client = FakeSupabaseClient()
     state = _state()
@@ -440,21 +440,21 @@ def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
     out = _run(client, state)
-    manifest = out["phase_hermes"].commit_manifest or {}
+    manifest = out["phase_portfolio"].commit_manifest or {}
     assert manifest["status"] == "committed"
     assert manifest["risk_policy_registry_status"] == "degraded"
     assert client.store.get("positions", [])
 
 
 def test_phase1_h9_second_commit_with_same_book_is_noop() -> None:
-    from tests.dq.hermes.test_commit_run import _ledger_client, _mirror_ledger, _run, _state
+    from tests.dq.portfolio.test_commit_run import _ledger_client, _mirror_ledger, _run, _state
 
     client = _ledger_client(SPY=100.0)
     state = _state()
     first = _run(client, state)
-    assert first["phase_hermes"].commit_manifest["status"] == "committed"
+    assert first["phase_portfolio"].commit_manifest["status"] == "committed"
     positions_after_first = len(client.store.get("positions", []))
     _mirror_ledger(client)
     second = _run(client, state)
-    assert second["phase_hermes"].commit_manifest["status"] == "noop"
+    assert second["phase_portfolio"].commit_manifest["status"] == "noop"
     assert len(client.store.get("positions", [])) == positions_after_first

@@ -1,6 +1,6 @@
-"""Append-only persistence for Olympus EOD period accounting (#2597, Task 3.2).
+"""Append-only persistence for dashboard EOD period accounting (#2597, Task 3.2).
 
-Writes ``olympus_accounting_{periods,contributions,holdings}`` via service-role
+Writes ``dashboard_accounting_{periods,contributions,holdings}`` via service-role
 ``INSERT`` only — never ``upsert``/``UPDATE``/``DELETE``. Exact same-input retry
 reproduces the same primary keys and is a no-op once the full child set exists.
 A mid-chain crash leaves an incomplete period that

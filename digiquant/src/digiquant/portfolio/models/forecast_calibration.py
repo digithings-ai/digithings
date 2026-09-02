@@ -1,7 +1,7 @@
 """Forecast outcome and calibration contracts (#2672 / WP5.1).
 
 Defines immutable prospective labels and versioned calibration artifacts for
-Olympus Phase 1. Schema + strict Pydantic only — the deterministic calibrator
+dashboard Phase 1. Schema + strict Pydantic only — the deterministic calibrator
 and H6→H7 attach helpers live in
 :mod:`digiquant.portfolio.forecast_calibration` (WP5.3/5.4); table writers
 in :mod:`digiquant.research.forecast_registry` (WP5.4). No H8 consumption.

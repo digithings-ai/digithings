@@ -291,7 +291,7 @@ export interface Database {
       };
       thesis_vehicles: {
         // Analyst vehicle-selection map: ticker → MARKET thesis_id, with rationale +
-        // candidate_rank (many-to-many). Written reliably by Hermes H3
+        // candidate_rank (many-to-many). Written reliably by portfolio H3
         // (persist_thesis_vehicle_map). This is the RELIABLE ticker→market-thesis join
         // used by the Theses story spine (#1562) — `theses.linked_market_thesis_id` is
         // self-referential/dead. NB: `thesis_id` is co-generated per `date` with the
@@ -429,7 +429,7 @@ export interface Database {
       // The base table remains service-role-only; this view excludes token and cost
       // telemetry (067 is economics authority) as well as prompts, tool values/results,
       // document bodies, credentials, and reasoning. Soft-stamped call_id / attempt_id /
-      // node_run_id enable Gate 3 reconciliation to olympus_provider_*.
+      // node_run_id enable Gate 3 reconciliation to dashboard_provider_*.
       olympus_run_event_trace: {
         Row: {
           run_id: string;

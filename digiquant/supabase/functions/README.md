@@ -74,7 +74,7 @@ supabase secrets set \
 
 **Checkout / portal return URLs** append `/dashboard/settings/?tab=billing`.
 `APP_URL` on `core` must be `https://digiquant.io` (origin only — never loopback,
-never a path that already includes `/dashboard` or `/olympus`).
+never a path that already includes `/dashboard` or `/dashboard`).
 
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` are injected by
 the Edge Runtime — do not put the service role key in app env files that ship to
@@ -93,7 +93,7 @@ Events to enable: `checkout.session.completed`, `customer.subscription.created`,
 
 ## Local Deno tests
 
-There is **no** CI Deno lane yet (follow-up: wire an `olympus-functions` job). Run
+There is **no** CI Deno lane yet (follow-up: wire an `dashboard-functions` job). Run
 locally:
 
 ```bash

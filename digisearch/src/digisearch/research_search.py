@@ -1,4 +1,4 @@
-"""Atlas research search helpers (MCP-free).
+"""research search helpers (MCP-free).
 
 ``search_strategies`` is the typed query surface used by the digisearch MCP
 tool and unit tests. Keeping it out of ``mcp_server.py`` avoids importing
@@ -9,12 +9,12 @@ from __future__ import annotations
 
 from typing import Any  # score:allow untyped any — MCP search result dicts
 
-from digisearch.research_ingest import ATLAS_FILTERABLE_FIELDS, ATLAS_INDEX_NAME
+from digisearch.research_ingest import RESEARCH_FILTERABLE_FIELDS, RESEARCH_INDEX_NAME
 from digisearch.core.models import Query
 from digisearch.search._stub import query_index
 
 
-def _atlas_filters(
+def _research_filters(
     *,
     date_from_ymd: int | None,
     date_to_ymd: int | None,
@@ -37,7 +37,7 @@ def _atlas_filters(
     ):
         if value is None or not str(value).strip():
             continue
-        if field not in ATLAS_FILTERABLE_FIELDS:
+        if field not in RESEARCH_FILTERABLE_FIELDS:
             continue
         clauses.append({"field": field, "op": "eq", "value": str(value).strip()})
     return clauses
@@ -54,9 +54,9 @@ def search_strategies(
     run_type: str | None = None,
     index_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Semantic search over the Atlas research library indexed by digisearch."""
-    idx = (index_name or ATLAS_INDEX_NAME or "atlas").strip() or "atlas"
-    structured = _atlas_filters(
+    """Semantic search over the research library indexed by digisearch."""
+    idx = (index_name or RESEARCH_INDEX_NAME or "research").strip() or "research"
+    structured = _research_filters(
         date_from_ymd=date_from_ymd,
         date_to_ymd=date_to_ymd,
         doc_type=doc_type,

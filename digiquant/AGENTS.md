@@ -40,7 +40,7 @@ Before making any change to `digiquant/`:
 Beyond root `AGENTS.md`:
 
 - **Nautilus only**: NautilusTrader is the sole backtest and live-trade engine. Do not add a second backtest path. VectorBT Pro sweeps are Phase 3.
-- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on paths in the allowlist below (Nautilus wrangler, tearsheet Plotly bridge, legacy atlas preload script). Do not add new pandas imports without updating this table.
+- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on paths in the allowlist below (Nautilus wrangler, tearsheet Plotly bridge, legacy research preload script). Do not add new pandas imports without updating this table.
 
 ### Pandas allowlist (REM-058/059)
 
@@ -48,11 +48,11 @@ Beyond root `AGENTS.md`:
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
 | `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
-| `digiquant/olympus/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
+| `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
 | `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
-| `digiquant/scripts/research/preload-history.py` | Same atlas ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
+| `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/sdca/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
@@ -93,19 +93,19 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`frontend/dashboard`; ADR-0026). `/olympus/` is retired — no redirect alias.
+Public path is **`/dashboard/`** only (`frontend/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
 
-When touching `digiquant/src/digiquant/olympus/` **or** `frontend/dashboard/` Group A queries:
+When touching `digiquant/src/digiquant/dashboard/` **or** `frontend/dashboard/` Group A queries:
 
-1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § Atlas + Hermes and
+1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
    [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
 2. Read **house book scope**: [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md) —
    omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_data`
    stamps `HOUSE_BOOK_READ_TABLES`.
-3. Read component guides: [`src/digiquant/olympus/atlas/docs/AGENTS.md`](src/digiquant/olympus/atlas/docs/AGENTS.md),
-   [`src/digiquant/olympus/hermes/docs/AGENTS.md`](src/digiquant/olympus/hermes/docs/AGENTS.md).
-4. **One graph, one daily cadence** — do not add `OLYMPUS_HERMES_LITE`, `run_type` graph forks,
-   or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
+3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
+   [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
+4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
+   or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` (frozen production env; dual-read `DIGIQUANT_MODEL_TIER`) + per-artifact `skip`/`edit`/`full`.
 5. **Edit-mode extension pattern** (`digiquant.dashboard.edit_mode`):
    - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
      at node entry.
@@ -117,13 +117,13 @@ When touching `digiquant/src/digiquant/olympus/` **or** `frontend/dashboard/` Gr
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
      never actuates; cannot expand H4 or rewrite H7/H8).
    - Track C glass-box (#1945 / #2622): `attention_plan_io` +
-     `attention_plan_graph.maybe_publish_attention_plan_shadow` (Atlas
+     `attention_plan_graph.maybe_publish_attention_plan_shadow` (research
      `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
      `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
      a published document; never actuate (`enforce` absent).
-6. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+6. **portfolio extension pattern** (H1–H9): add phases via `build_portfolio_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
-   sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
+   sizes; H9 `commit_run` is the portfolio terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
 7. Tests: `pytest tests/dq/dashboard/ tests/dq/research/ tests/dq/portfolio/ -m unit -v`
 
@@ -424,9 +424,9 @@ pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
 ## digiquant Supabase backend — `core` (#1064)
 
 The digiquant shared backend is the **`core`** Supabase project — the project historically
-used by Olympus/Atlas ([`supabase/`](supabase/), `project_id "digiquant-atlas"`), repurposed
+used by dashboard/research ([`supabase/`](supabase/), `project_id "digiquant-research"`), repurposed
 (renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
-2-project limit is taken by Olympus + the confidential **twelve-x** project. The shared market
+2-project limit is taken by dashboard + the confidential **twelve-x** project. The shared market
 datasets already live here; #1064 only **adds** the strategy store
 ([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
 
@@ -441,10 +441,10 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 ---
 
-## Atlas research sandbox image (#396)
+## research sandbox image (#396)
 
 `digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
-service (`digiquant/Dockerfile`). Atlas agents execute Python research / paper-book
+service (`digiquant/Dockerfile`). research agents execute Python research / paper-book
 code inside it. The open-source quant stack is baked at **build time** — do not
 `pip install` inside agent runs.
 

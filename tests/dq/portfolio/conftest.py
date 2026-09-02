@@ -1,12 +1,12 @@
-"""Hermes test collection gate.
+"""portfolio test collection gate.
 
-The Hermes sub-package imports ``digigraph.graph.pipeline_builder`` (and the
+The portfolio sub-package imports ``digigraph.graph.pipeline_builder`` (and the
 research-agent driver) which in turn pulls ``openai``. The standard
 ``digiquant-test`` CI job installs only ``digiquant[dev]``, so digigraph's
-runtime deps are absent — collecting the Hermes tests there would error out.
+runtime deps are absent — collecting the portfolio tests there would error out.
 
-Mirrors :mod:`tests.dq.atlas.conftest`. The full Hermes test set runs in
-``test-research-graph.yml`` (extended with Hermes paths in #476) where
+Mirrors :mod:`tests.dq.research.conftest`. The full portfolio test set runs in
+``test-research-graph.yml`` (extended with portfolio paths in #476) where
 ``install-workspace.sh`` has installed digigraph + its deps first.
 """
 

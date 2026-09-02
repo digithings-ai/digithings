@@ -14,17 +14,17 @@ from digiquant.research.phases.publish_phase import (
     render_digest_markdown,
 )
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
     SegmentPayload,
     SegmentSlot,
 )
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 def _slot(slug: str, **extra: Any) -> SegmentSlot:
@@ -36,13 +36,13 @@ def _carried_slot(reason: str = "below_triage_threshold") -> SegmentSlot:
     return SegmentSlot(payload=Carried(baseline_date=date(2026, 4, 19), reason=reason))
 
 
-def _seed_full_state(run_type: str = "baseline") -> AtlasResearchState:
+def _seed_full_state(run_type: str = "baseline") -> ResearchState:
     """Populate every phase output that the publish node should write."""
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type=run_type,  # type: ignore[arg-type]
         run_date=date(2026, 4, 26),
         baseline_date=date(2026, 4, 19) if run_type == "delta" else None,
-        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
+        config=ResearchConfigBundle(watchlist=["AAPL", "MSFT"]),
     )
     state.phase1_outputs = {
         "alt-sentiment-news": _slot("alt-sentiment-news"),
@@ -56,7 +56,7 @@ def _seed_full_state(run_type: str = "baseline") -> AtlasResearchState:
         "market_regime_snapshot": "regime",
         "us_equities_summary": "equities",
     }
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts={
             "AAPL": {"ticker": "AAPL", "stance": "buy"},
             "MSFT": {"ticker": "MSFT", "stance": "hold"},
@@ -75,8 +75,8 @@ class TestPublishNode:
 
         result = node(state)
 
-        # Atlas publish: inspectable inputs (+ bias-row when present) plus
-        # segments + digest; Hermes artifacts publish in h9/commit_run.
+        # research publish: inspectable inputs (+ bias-row when present) plus
+        # segments + digest; portfolio artifacts publish in h9/commit_run.
         doc_rows = client.store["documents"]
         keys = sorted(r["document_key"] for r in doc_rows)
         assert keys == sorted(
@@ -101,7 +101,7 @@ class TestPublishNode:
         overlay = uuid4()
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
-        state.config = AtlasConfigBundle(
+        state.config = ResearchConfigBundle(
             watchlist=list(state.config.watchlist),
             workspace_id=str(overlay),
         )
@@ -119,7 +119,7 @@ class TestPublishNode:
         monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
-        state.config = AtlasConfigBundle(
+        state.config = ResearchConfigBundle(
             watchlist=list(state.config.watchlist),
             workspace_id=str(house_workspace_id()),
         )
@@ -127,11 +127,11 @@ class TestPublishNode:
         node(state)
         assert len(client.store["daily_snapshots"]) == 1
 
-    def test_hermes_artifacts_not_published_from_atlas_when_present(self) -> None:
-        """Thesis-first topology: deliberation / risk-debate publish in Hermes h9, not Atlas."""
+    def test_portfolio_artifacts_not_published_from_research_when_present(self) -> None:
+        """Thesis-first topology: deliberation / risk-debate publish in portfolio h9, not research."""
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             deliberation_summaries={
                 "AAPL": {
                     "ticker": "AAPL",
@@ -290,8 +290,8 @@ class TestPublishNode:
         }
         assert digest_keys == set()
 
-    def test_atlas_publish_omits_pm_rebalance_doc(self) -> None:
-        """pm-rebalance is written by Hermes commit_run (see tests/dq/portfolio/test_commit_run.py)."""
+    def test_research_publish_omits_pm_rebalance_doc(self) -> None:
+        """pm-rebalance is written by portfolio commit_run (see tests/dq/portfolio/test_commit_run.py)."""
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
         build_publish_node(PublishDeps(client=client))(state)
@@ -312,7 +312,7 @@ class TestPublishPhaseCompiles:
         from digigraph.graph.pipeline_builder import build_pipeline
 
         deps = PublishDeps(client=FakeSupabaseClient())
-        compiled = build_pipeline(AtlasResearchState, [build_publish_phase(deps)])
+        compiled = build_pipeline(ResearchState, [build_publish_phase(deps)])
         # Compile-time assertion only: invoking would require a hydrated state
         # and the publish node currently expects phase outputs to exist.
         assert compiled is not None
@@ -321,28 +321,28 @@ class TestPublishPhaseCompiles:
 @pytest.mark.unit
 class TestGraphDepsWiring:
     def test_publish_none_skips_publish_phase(self) -> None:
-        """Default ``AtlasGraphDeps.publish=None`` must not append the publish phase."""
-        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        """Default ``ResearchGraphDeps.publish=None`` must not append the publish phase."""
+        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
         from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
-        deps = AtlasGraphDeps(
-            preflight=PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle())
+        deps = ResearchGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=lambda: ResearchConfigBundle())
         )
         # Compiles without error and without needing publish wiring.
-        graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+        graph = build_research_graph(deps=deps, watchlist=("AAPL",))
         assert graph is not None
 
     def test_publish_provided_appends_publish_phase(self) -> None:
-        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
         from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
-        deps = AtlasGraphDeps(
-            preflight=PreflightDeps(client=client, config_loader=lambda: AtlasConfigBundle()),
+        deps = ResearchGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=lambda: ResearchConfigBundle()),
             publish=PublishDeps(client=client),
         )
-        graph = build_atlas_graph(deps=deps, watchlist=("AAPL",))
+        graph = build_research_graph(deps=deps, watchlist=("AAPL",))
         assert graph is not None
 
 
@@ -352,18 +352,18 @@ class TestSuppressDegenerate:
     suppressed at publish (a confident-looking empty doc helps no one). Findings present, or
     any other grade (incl. ungraded None), always publish."""
 
-    def _state_with(self, **phase1: SegmentSlot) -> AtlasResearchState:
-        state = AtlasResearchState(
+    def _state_with(self, **phase1: SegmentSlot) -> ResearchState:
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             baseline_date=None,
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         state.phase1_outputs = dict(phase1)
         state.phase7_digest = {"market_regime_snapshot": "r"}  # so a snapshot/digest still writes
         return state
 
-    def _published_keys(self, state: AtlasResearchState) -> set[str]:
+    def _published_keys(self, state: ResearchState) -> set[str]:
         client = FakeSupabaseClient()
         build_publish_node(PublishDeps(client=client))(state)
         return {r["document_key"] for r in client.store["documents"]}
@@ -514,11 +514,11 @@ class TestContinuitySnapshotOnPartialRun:
             "market_regime_snapshot": "Risk-on",
             "us_equities_summary": "Tech leading",
         }
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 19),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         state.phase7_digest = None
         state.prior_context = PriorContext(
@@ -544,10 +544,10 @@ class TestContinuitySnapshotOnPartialRun:
     def test_no_digest_no_prior_writes_nothing(self) -> None:
         """No digest AND no prior snapshot → no snapshot row written (nothing to carry)."""
         client = FakeSupabaseClient()
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         state.phase7_digest = None
         # Empty prior_context — no prior snapshots at all.
@@ -568,11 +568,11 @@ class TestContinuitySnapshotOnPartialRun:
             "actionable_summary": [],
             "risk_radar": [],
         }
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 19),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         state.phase7_digest = None
         state.prior_context = PriorContext(

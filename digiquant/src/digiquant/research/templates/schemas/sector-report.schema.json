@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Sector Report",
+  "title": "digiquant-research Sector Report",
   "description": "Per-sector daily report (baseline or delta). JSON source of truth; markdown is derived.",
   "type": "object",
   "additionalProperties": false,

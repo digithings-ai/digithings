@@ -23,7 +23,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_RELPATH = Path(".github/workflows/pipeline-digiquant-allocation-shadow.yml")
 
-TRUSTED_SOURCE_WORKFLOWS: frozenset[str] = frozenset({"Pipeline: Olympus research"})
+TRUSTED_SOURCE_WORKFLOWS: frozenset[str] = frozenset({"Pipeline: dashboard research"})
 TRUSTED_SOURCE_BRANCHES: frozenset[str] = frozenset({"main"})
 ALLOWED_SCHEMA_VERSIONS: frozenset[str] = frozenset({"1.0"})
 
@@ -70,9 +70,9 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
 DEFAULT_SCAN_RELPATHS: tuple[str, ...] = (
     "digiquant/scripts/research/check_allocation_shadow_isolation.py",
     "digiquant/scripts/research/compare_allocation_shadow.py",
-    "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",
-    "digiquant/src/digiquant/olympus/hermes/shadow_optimizer.py",
-    "digiquant/src/digiquant/olympus/replay/allocation_comparison.py",
+    "digiquant/src/digiquant/portfolio/shadow_artifact.py",
+    "digiquant/src/digiquant/portfolio/shadow_optimizer.py",
+    "digiquant/src/digiquant/dashboard/replay/allocation_comparison.py",
 )
 
 
@@ -353,7 +353,7 @@ def _check_source_trust_gates(on: Any, *, path: str) -> list[IsolationFinding]:
         findings.append(
             IsolationFinding(
                 code="untrusted_source",
-                message="workflow must gate on workflow_run from an approved Olympus producer",
+                message="workflow must gate on workflow_run from an approved dashboard producer",
                 path=path,
             )
         )
@@ -606,7 +606,7 @@ def write_report(report: IsolationReport, output_path: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Check write-denied isolation for Olympus allocation shadow evaluation."
+        description="Check write-denied isolation for dashboard allocation shadow evaluation."
     )
     parser.add_argument(
         "--repo-root",

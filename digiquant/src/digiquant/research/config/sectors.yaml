@@ -1,4 +1,4 @@
-# Atlas sector-research config. Consumed by phase5_equities via sectors.load_sectors().
+# research sector-research config. Consumed by phase5_equities via sectors.load_sectors().
 # The 11-way Phase 5 fan-out iterates this list; each entry becomes one LangGraph node.
 #
 # Fields per sector:

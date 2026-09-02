@@ -32,14 +32,14 @@ class TestHeldInvariantCap:
         phase = build_h5_asset_analyst(list(_BOOK), held=_HELD)
         names = {n.name for n in phase.nodes}
         for ticker in _HELD:
-            assert f"hermes/portfolio/asset-analyst-{ticker}" in names
+            assert f"portfolio/asset-analyst-{ticker}" in names
 
     def test_h6_nodes_cover_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
         phase = build_h6_deliberation(list(_BOOK), held=_HELD)
         names = {n.name for n in phase.nodes}
         for ticker in _HELD:
-            assert f"hermes/portfolio/deliberation-{ticker}" in names
+            assert f"portfolio/deliberation-{ticker}" in names
 
     def test_roster_cap_signatures_align(self) -> None:
         sig = inspect.signature(capped_tickers)

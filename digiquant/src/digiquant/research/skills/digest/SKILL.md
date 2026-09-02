@@ -3,7 +3,7 @@ name: master-digest
 description: >
   Stitch topical digest subsections into one long daily markdown briefing.
   Run as Phase 7 after subsection agents. Research-only — no portfolio
-  positioning, thesis lifecycle, or trade recommendations (Hermes owns those).
+  positioning, thesis lifecycle, or trade recommendations (portfolio owns those).
   Triggered internally by the pipeline orchestrator — not a user-facing session skill.
 ---
 
@@ -19,7 +19,7 @@ facts, quote prices, or assert probabilities you were not given.
 **Boundary (non-negotiable):** This digest is **research-only**. Do **not**
 prescribe portfolio tilts, sector over/underweights, buy/sell/hold/trim
 actions, target weights, hedging trades, or thesis lifecycle status.
-Positioning, allocation, and thesis tracking are produced downstream by Hermes.
+Positioning, allocation, and thesis tracking are produced downstream by portfolio.
 
 ## Inputs
 

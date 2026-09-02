@@ -1,4 +1,4 @@
-"""End-to-end Atlas pipeline simulation tests.
+"""End-to-end research pipeline simulation tests.
 
 These tests exercise the full LangGraph pipeline (preflight → all 9
 phases → publish) using ``digiquant.research.testing.simulator`` to mock
@@ -20,15 +20,15 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.research.graph import AtlasInput
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.graph import ResearchInput
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.research.testing import (
     DEFAULT_RESPONSES,
     parse_phase_inputs,
     parse_schema_name,
     simulated_pipeline,
 )
-from digiquant.portfolio.graph import HermesGraphDeps, ThesisGraphDeps
+from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
 from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
@@ -37,7 +37,7 @@ from digiquant.portfolio.models.deliberation import (
 from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
 @pytest.mark.unit
@@ -78,7 +78,7 @@ class TestBaselineEndToEnd:
         its piece of state and the publish phase routed the digest."""
         with simulated_pipeline(watchlist=("AAPL", "MSFT")) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL", "MSFT"),
@@ -99,15 +99,15 @@ class TestBaselineEndToEnd:
 
         # Phase 7C 4-axis specialists ran for every ticker (#430).
         for ticker in ("AAPL", "MSFT"):
-            assert ticker in final.phase_hermes.asset_analysts
+            assert ticker in final.phase_portfolio.asset_analysts
 
         for ticker in ("AAPL", "MSFT"):
-            debate = final.phase_hermes.deliberation_summaries[ticker]
+            debate = final.phase_portfolio.deliberation_summaries[ticker]
             assert "net_stance" in debate
 
         # H7 direction + H8 sized book.
-        assert final.phase_hermes.pm_direction_memo is not None
-        assert final.phase_hermes.sized_book is not None
+        assert final.phase_portfolio.pm_direction_memo is not None
+        assert final.phase_portfolio.sized_book is not None
 
         # Publish phase wrote both daily_snapshots + per-segment documents.
         assert "daily_snapshots" in run.client.store
@@ -122,7 +122,7 @@ class TestBaselineEndToEnd:
         that don't care about the persistence path."""
         with simulated_pipeline(watchlist=("AAPL",), publish=False) as run:
             run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
@@ -136,7 +136,7 @@ class TestDeltaCarryForward:
     def test_delta_run_invokes_triage_and_publishes_digest_delta(self) -> None:
         with simulated_pipeline(watchlist=("AAPL",)) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     run_date=date(2026, 4, 26),
                     baseline_date=date(2026, 4, 19),
                     watchlist=("AAPL",),
@@ -156,7 +156,7 @@ class TestCustomResearchRouting:
     def test_custom_prompt_routes_under_custom_research_doc_type(self) -> None:
         with simulated_pipeline(watchlist=("AAPL",)) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
@@ -202,7 +202,7 @@ class TestOverrides:
             overrides={"AnalystPayload": custom_analyst},
         ) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL", "MSFT"),
@@ -212,7 +212,7 @@ class TestOverrides:
         # H5 unified analyst: one call per ticker.
         assert len(seen_tickers) == 2
         for ticker in ("AAPL", "MSFT"):
-            payload = final.phase_hermes.asset_analysts[ticker]
+            payload = final.phase_portfolio.asset_analysts[ticker]
             assert payload["conviction_score"] == 5
 
 
@@ -329,7 +329,7 @@ class TestDurableH5H6LineageRoundTrip:
             grounding_calls.append(bool(kwargs.get("live_search")))
             return ([{"type": "function"}], execute_tool, None)
 
-        atlas_input = AtlasInput(
+        research_input = ResearchInput(
             refresh_scope="all",
             run_date=date(2026, 4, 26),
             watchlist=("AAPL", "MSFT"),
@@ -352,16 +352,16 @@ class TestDurableH5H6LineageRoundTrip:
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
-                after_h5 = run.invoke_through_h5(atlas_input)
+                after_h5 = run.invoke_through_h5(research_input)
 
             h5_snapshot = store.dump_snapshot()
             checkpoint_json = after_h5.model_dump_json()
             reloaded_store = EvidenceBundleStore.from_snapshot(h5_snapshot)
-            checkpoint_state = AtlasResearchState.model_validate_json(checkpoint_json)
+            checkpoint_state = ResearchState.model_validate_json(checkpoint_json)
 
             assert len(reloaded_store._bases) >= 1
             for ticker in ("AAPL", "MSFT"):
-                bundle_dump = checkpoint_state.phase_hermes.ticker_evidence_bundles.get(ticker)
+                bundle_dump = checkpoint_state.phase_portfolio.ticker_evidence_bundles.get(ticker)
                 assert bundle_dump is not None, f"missing H5 bundle for {ticker}"
                 bundle_id = UUID(str(bundle_dump["bundle_id"]))
                 loaded = reloaded_store.load_base_bundle(bundle_id)
@@ -376,11 +376,11 @@ class TestDurableH5H6LineageRoundTrip:
                 )
 
             prior_lineage = reloaded_store.lineage_bytes()
-            run.hermes_deps = HermesGraphDeps(
-                thesis=run.hermes_deps.thesis,
-                risk_sizing=run.hermes_deps.risk_sizing,
-                commit_run=run.hermes_deps.commit_run,
-                phase9=run.hermes_deps.phase9,
+            run.portfolio_deps = PortfolioGraphDeps(
+                thesis=run.portfolio_deps.thesis,
+                risk_sizing=run.portfolio_deps.risk_sizing,
+                commit_run=run.portfolio_deps.commit_run,
+                phase9=run.portfolio_deps.phase9,
                 evidence_bundle_store=reloaded_store,
             )
 
@@ -394,13 +394,13 @@ class TestDurableH5H6LineageRoundTrip:
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
-                final = run.invoke_hermes_from_h6(checkpoint_state)
+                final = run.invoke_portfolio_from_h6(checkpoint_state)
 
         assert grounding_calls and all(live is False for live in grounding_calls)
         assert pm_round.get("AAPL", 0) >= 2
 
-        aapl = final.phase_hermes.deliberation_summaries["AAPL"]
-        msft = final.phase_hermes.deliberation_summaries["MSFT"]
+        aapl = final.phase_portfolio.deliberation_summaries["AAPL"]
+        msft = final.phase_portfolio.deliberation_summaries["MSFT"]
         assert aapl.get("evidence_amendment_outcome") == H6AmendmentOutcome.ACCEPTED.value
         assert aapl.get("evidence_amendment_id")
         assert aapl.get("missing_fact_request_id")
@@ -409,7 +409,7 @@ class TestDurableH5H6LineageRoundTrip:
 
         aapl_bundle_id = UUID(str(aapl["base_bundle_id"]))
         base_hash = reloaded_store.load_base_bundle(aapl_bundle_id).content_hash
-        assert base_hash == final.phase_hermes.ticker_evidence_bundles["AAPL"]["content_hash"]
+        assert base_hash == final.phase_portfolio.ticker_evidence_bundles["AAPL"]["content_hash"]
         assert reloaded_store.amendment_count_for_base(aapl_bundle_id) == 1
 
         post_h6_snapshot = reloaded_store.dump_snapshot()
@@ -425,38 +425,38 @@ class TestPhase3ResearchComposition:
     """Integration 3.1 — one-graph Phase 3 lock surface (#3019)."""
 
     def test_simulator_graphs_exclude_planner_nodes(self) -> None:
-        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
         from digiquant.research.phases.preflight import PreflightDeps
         from digiquant.research.phases.triage_phase import TriageDeps
-        from digiquant.portfolio.graph import build_hermes_graph
+        from digiquant.portfolio.graph import build_portfolio_graph
         from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
         from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
-        from tests.dq.hermes.phase3_e2e_fixtures import FORBIDDEN_PHASE3_NODES
+        from tests.dq.portfolio.phase3_e2e_fixtures import FORBIDDEN_PHASE3_NODES
 
         client = FakeSupabaseClient()
-        atlas = build_atlas_graph(
-            deps=AtlasGraphDeps(
+        research = build_research_graph(
+            deps=ResearchGraphDeps(
                 preflight=PreflightDeps(
                     client=client,
-                    config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+                    config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
                 ),
                 triage=TriageDeps(client=client),
             ),
             watchlist=("AAPL", "MSFT"),
         )
-        hermes = build_hermes_graph(
+        portfolio = build_portfolio_graph(
             watchlist=["AAPL", "MSFT"],
-            deps=HermesGraphDeps(
+            deps=PortfolioGraphDeps(
                 thesis=ThesisGraphDeps(client=client),
                 risk_sizing=RiskSizingDeps(client=client),
                 commit_run=CommitRunDeps(client=client),
             ),
         )
-        atlas_nodes = set(atlas.get_graph().nodes.keys())
-        hermes_nodes = set(hermes.get_graph().nodes.keys())
-        assert FORBIDDEN_PHASE3_NODES.isdisjoint(atlas_nodes)
-        assert FORBIDDEN_PHASE3_NODES.isdisjoint(hermes_nodes)
+        research_nodes = set(research.get_graph().nodes.keys())
+        portfolio_nodes = set(portfolio.get_graph().nodes.keys())
+        assert FORBIDDEN_PHASE3_NODES.isdisjoint(research_nodes)
+        assert FORBIDDEN_PHASE3_NODES.isdisjoint(portfolio_nodes)
 
     def test_simulated_run_threads_evidence_bundle_store(self) -> None:
         store = EvidenceBundleStore()
@@ -467,13 +467,13 @@ class TestPhase3ResearchComposition:
             commit_run=False,
         ) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     refresh_scope="all",
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
             )
-        assert final.phase_hermes.asset_analysts.get("AAPL")
+        assert final.phase_portfolio.asset_analysts.get("AAPL")
         assert store._bases, "H5 must persist at least one base bundle when writer enabled"
         snapshot = store.dump_snapshot()
         reloaded = EvidenceBundleStore.from_snapshot(snapshot)

@@ -1,4 +1,4 @@
-"""Shared grounding helper for thesis-track Hermes nodes (H1–H4)."""
+"""Shared grounding helper for thesis-track portfolio nodes (H1–H4)."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from typing import (
 )
 
 from digiquant.research.phases._node_factory import build_grounding
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 
 
 def build_thesis_grounding(
-    state: HermesState,
+    state: PortfolioState,
     *,
     phase: RetrievalPhase,
     use_data_tools: bool = False,

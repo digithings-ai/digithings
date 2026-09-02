@@ -1,4 +1,4 @@
-"""WP13.3 — route Atlas research attention before provider work (#2926).
+"""WP13.3 — route research attention before provider work (#2926).
 
 Invokes :func:`plan_research_attention` after triage and branches early in
 provider-owning nodes. ``off`` / ``shadow`` / ``enforce`` via
@@ -15,15 +15,6 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 )
 from uuid import UUID
 
-from digiquant.research.state import (
-    AtlasResearchState,
-    Carried,
-    DeltaTriageDecision,
-    SegmentPayload,
-    SegmentSlot,
-)
-from digiquant.research.triage import triage_decision_to_signal
-from digiquant.research.triage_signals import max_abs_move_for_segment, segment_tickers
 from digiquant.dashboard.edit_mode.content_identity import prior_content_date
 from digiquant.dashboard.edit_mode.models import PriorPublished, TriageSignal
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
@@ -36,9 +27,20 @@ from digiquant.dashboard.research_retrieval.planner import (
     AttentionPlan,
     AttentionRolloutMode,
     AttentionTargetKind,
-    plan_research_attention,
+)
+from digiquant.dashboard.research_retrieval.planner import (
+    plan_research_attention as compile_research_attention_plan,
 )
 from digiquant.dashboard.research_retrieval.store import AttentionStore
+from digiquant.research.state import (
+    Carried,
+    DeltaTriageDecision,
+    ResearchState,
+    SegmentPayload,
+    SegmentSlot,
+)
+from digiquant.research.triage import triage_decision_to_signal
+from digiquant.research.triage_signals import max_abs_move_for_segment, segment_tickers
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,7 @@ def resolve_research_attention_rollout_mode() -> AttentionRolloutMode:
 class _StatePriorLoader:
     """Resolve segment/digest priors from ``state.prior_context.latest_segments``."""
 
-    def __init__(self, state: AtlasResearchState) -> None:
+    def __init__(self, state: ResearchState) -> None:
         self._state = state
 
     def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
@@ -106,7 +108,7 @@ def artifact_target_key(artifact_kind: str, artifact_id: str) -> str:
     return f"{artifact_kind.strip().lower()}:{artifact_id.strip()}"
 
 
-def _state_version_id(state: AtlasResearchState) -> UUID | None:
+def _state_version_id(state: ResearchState) -> UUID | None:
     pin = state.research_state_pin
     if not isinstance(pin, dict):
         return None
@@ -127,7 +129,7 @@ def _triage_mode_from_signal(
     return signal.mode
 
 
-def _segment_has_structured_delta(state: AtlasResearchState, segment: str) -> bool:
+def _segment_has_structured_delta(state: ResearchState, segment: str) -> bool:
     tickers = segment_tickers().get(segment, ())
     if not tickers or not state.price_deltas:
         return False
@@ -142,11 +144,11 @@ def _staleness_days(prior: PriorPublished | None, run_date: date) -> int | None:
 
 
 def build_segment_attention_features(
-    state: AtlasResearchState,
+    state: ResearchState,
     segment: str,
     decision: DeltaTriageDecision | None = None,
 ) -> AttentionFeatures:
-    """Structured features for one Atlas segment artifact."""
+    """Structured features for one research segment artifact."""
     loader = _StatePriorLoader(state)
     prior = loader.load(("segment", segment), state.run_date)
     triage_signal = triage_decision_to_signal(decision) if decision is not None else None
@@ -164,7 +166,7 @@ def build_segment_attention_features(
 
 
 def build_digest_attention_features(
-    state: AtlasResearchState,
+    state: ResearchState,
     *,
     document_key: str,
     triage_signal: TriageSignal | None,
@@ -185,8 +187,8 @@ def build_digest_attention_features(
     )
 
 
-def collect_atlas_attention_features(state: AtlasResearchState) -> tuple[AttentionFeatures, ...]:
-    """All Atlas artifact targets for one run (segments + master digest)."""
+def collect_research_attention_features(state: ResearchState) -> tuple[AttentionFeatures, ...]:
+    """All research artifact targets for one run (segments + master digest)."""
     if state.custom_prompt:
         return ()
     features: list[AttentionFeatures] = []
@@ -209,15 +211,15 @@ def collect_atlas_attention_features(state: AtlasResearchState) -> tuple[Attenti
     return tuple(features)
 
 
-def plan_atlas_research_attention(state: AtlasResearchState) -> AttentionPlan | None:
+def plan_research_attention(state: ResearchState) -> AttentionPlan | None:
     """Build the research attention plan for this run; ``None`` when mode is off."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF:
         return None
-    features = collect_atlas_attention_features(state)
+    features = collect_research_attention_features(state)
     if not features:
         return None
-    return plan_research_attention(
+    return compile_research_attention_plan(
         run_id=str(state.run_id),
         state_version_id=_state_version_id(state),
         features=features,
@@ -227,7 +229,7 @@ def plan_atlas_research_attention(state: AtlasResearchState) -> AttentionPlan | 
 
 def persist_research_attention_plan(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     plan: AttentionPlan,
     attempt_id: str | None = None,
     recorded_at: datetime | None = None,
@@ -239,15 +241,15 @@ def persist_research_attention_plan(
     store.append_plan(plan, attempt_id=resolved_attempt, recorded_at=stamp)
 
 
-def plan_and_persist_research_attention(state: AtlasResearchState) -> AttentionPlan | None:
+def plan_and_persist_research_attention(state: ResearchState) -> AttentionPlan | None:
     """Plan after triage and persist reasons to :class:`AttentionStore`."""
-    plan = plan_atlas_research_attention(state)
+    plan = plan_research_attention(state)
     if plan is not None:
         persist_research_attention_plan(state=state, plan=plan)
     return plan
 
 
-def _load_attention_plan(state: AtlasResearchState) -> AttentionPlan | None:
+def _load_attention_plan(state: ResearchState) -> AttentionPlan | None:
     raw = state.research_attention_plan
     if raw is None:
         return None
@@ -256,7 +258,7 @@ def _load_attention_plan(state: AtlasResearchState) -> AttentionPlan | None:
     return AttentionPlan.model_validate(raw)
 
 
-def resolve_attention_plan_for_node(state: AtlasResearchState) -> AttentionPlan | None:
+def resolve_attention_plan_for_node(state: ResearchState) -> AttentionPlan | None:
     """Return the plan for provider gating — lazy-build when triage ran without persist."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF or state.custom_prompt:
@@ -265,7 +267,7 @@ def resolve_attention_plan_for_node(state: AtlasResearchState) -> AttentionPlan 
     if plan is not None:
         return plan
     if state.triage is not None:
-        return plan_atlas_research_attention(state)
+        return plan_research_attention(state)
     if rollout is AttentionRolloutMode.ENFORCE:
         raise RuntimeError(
             "research attention plan missing before provider work "
@@ -274,7 +276,7 @@ def resolve_attention_plan_for_node(state: AtlasResearchState) -> AttentionPlan 
     return None
 
 
-def require_research_attention_plan(state: AtlasResearchState) -> AttentionPlan:
+def require_research_attention_plan(state: ResearchState) -> AttentionPlan:
     """Fail closed when provider work starts without a plan (shadow/enforce)."""
     plan = resolve_attention_plan_for_node(state)
     if plan is None:
@@ -311,7 +313,7 @@ def enforce_path_for_decision(decision: AttentionDecision | None) -> EnforcePath
 
 
 def research_attention_enforce_path(
-    state: AtlasResearchState,
+    state: ResearchState,
     *,
     target_key: str,
 ) -> EnforcePath:
@@ -326,7 +328,7 @@ def research_attention_enforce_path(
 
 
 def apply_segment_metric_patch(
-    state: AtlasResearchState,
+    state: ResearchState,
     segment: str,
     prior: PriorPublished,
 ) -> SegmentSlot:
@@ -350,7 +352,7 @@ def apply_segment_metric_patch(
 
 
 def apply_digest_metric_patch(
-    state: AtlasResearchState,
+    state: ResearchState,
     prior: PriorPublished,
 ) -> dict[str, Any]:
     """Deterministic digest structured update — zero provider calls."""
@@ -362,7 +364,7 @@ def apply_digest_metric_patch(
 
 
 def carry_segment_slot(
-    state: AtlasResearchState,
+    state: ResearchState,
     segment: str,
     *,
     reason: str,
@@ -379,7 +381,7 @@ def carry_segment_slot(
     return SegmentSlot(payload=Carried(baseline_date=baseline, reason=reason))
 
 
-def incumbent_segment_edit_mode(state: AtlasResearchState, segment: str) -> str:
+def incumbent_segment_edit_mode(state: ResearchState, segment: str) -> str:
     loader = _StatePriorLoader(state)
     triage_signal = None
     if state.triage is not None:
@@ -397,7 +399,7 @@ def incumbent_segment_edit_mode(state: AtlasResearchState, segment: str) -> str:
     )
 
 
-def triage_phase_attention_update(state: AtlasResearchState) -> dict[str, Any]:
+def triage_phase_attention_update(state: ResearchState) -> dict[str, Any]:
     """State update dict after triage evaluation — plan before provider nodes."""
     plan = plan_and_persist_research_attention(state)
     if plan is None:
@@ -414,13 +416,13 @@ __all__ = [
     "build_digest_attention_features",
     "build_segment_attention_features",
     "carry_segment_slot",
-    "collect_atlas_attention_features",
+    "collect_research_attention_features",
     "enforce_path_for_decision",
     "incumbent_segment_edit_mode",
     "lookup_attention_decision",
     "persist_research_attention_plan",
     "plan_and_persist_research_attention",
-    "plan_atlas_research_attention",
+    "plan_research_attention",
     "require_research_attention_plan",
     "research_attention_enforce_path",
     "reset_attention_stores",

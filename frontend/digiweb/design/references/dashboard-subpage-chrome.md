@@ -51,7 +51,7 @@ region) — never a second nested blur layer (that produces a double-blur artifa
   `frontend/dashboard/app/globals.css`.
 - `backdrop-blur` is confined to sticky/overlay chrome (this tab bar, the app top
   bar, command palette, sidebar) — never content cards.
-- Accent = Olympus cyan (`fin-blue` / `--accent`), used for the active tab + focus ring.
+- Accent = dashboard cyan (`fin-blue` / `--accent`), used for the active tab + focus ring.
 
 ## Standard subpage layout
 
@@ -73,6 +73,6 @@ region) — never a second nested blur layer (that produces a double-blur artifa
 
 ---
 
-See also: [`../EVOLUTION.md`](../EVOLUTION.md) §3 (Olympus) and the surface-system
-note in `frontend/dashboard/app/globals.css` (#1216). Olympus has no `ARCHITECTURE.md`,
+See also: [`../EVOLUTION.md`](../EVOLUTION.md) §3 (dashboard) and the surface-system
+note in `frontend/dashboard/app/globals.css` (#1216). dashboard has no `ARCHITECTURE.md`,
 so this reference is the design home for subpage chrome.

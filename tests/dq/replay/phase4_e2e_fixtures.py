@@ -780,7 +780,7 @@ def _criteria(*criteria: GateCriterion) -> HumanAuthoredGateCriteria:
         schema_version="1.0",
         criteria_key="phase4-golden-v1",
         criteria_version_id=_CRITERIA_VERSION_ID,
-        author="human-governance@olympus",
+        author="human-governance@dashboard",
         rationale="pre-versioned Phase 4 golden gate",
         effective_at=_CUTOFF_LATE,
         recorded_at=_CUTOFF_LATE,

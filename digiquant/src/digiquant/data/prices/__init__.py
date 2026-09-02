@@ -34,7 +34,7 @@ OHLCV_COLUMNS: tuple[str, ...] = (
     "symbol",
 )
 
-# Canonical indicator column list (matches Atlas price_technicals schema).
+# Canonical indicator column list (matches research price_technicals schema).
 TECHNICAL_COLUMNS: tuple[str, ...] = (
     "sma_20",
     "sma_50",

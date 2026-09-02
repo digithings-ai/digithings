@@ -1,4 +1,4 @@
-"""WP-B: inspectable Inputs + bias-row documents published from Atlas state."""
+"""WP-B: inspectable Inputs + bias-row documents published from research state."""
 
 from __future__ import annotations
 
@@ -15,21 +15,21 @@ from digiquant.research.inspectable_io import (
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 
-def _state_with_inputs() -> AtlasResearchState:
-    return AtlasResearchState(
+def _state_with_inputs() -> ResearchState:
+    return ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 31),
-        config=AtlasConfigBundle(
+        config=ResearchConfigBundle(
             watchlist=["SPY", "QQQ", "GLD"],
             investment_profile={"horizon": "long"},
             preferences={"max_name_pct": 12},

@@ -30,8 +30,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
-CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "olympus" / "hermes" / "chain.py"
-DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "olympus" / "atlas" / "diagnostics.py"
+CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "portfolio" / "chain.py"
+DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "research" / "diagnostics.py"
 MIGRATION = (
     REPO_ROOT / "digiquant" / "supabase" / "migrations" / "065_atlas_run_diagnostics_attempt.sql"
 )

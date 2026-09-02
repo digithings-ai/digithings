@@ -1,6 +1,6 @@
-"""Atlas → Hermes chain orchestrator (ADR-0015).
+"""research → portfolio chain orchestrator (ADR-0015).
 
-Atlas research-only → Hermes analyst/debate/PM → ``publish_phase``.
+research-only → portfolio analyst/debate/PM → ``publish_phase``.
 Cron entry point: ``python -m digiquant.portfolio.chain``.
 """
 
@@ -20,10 +20,10 @@ from digigraph import usage as _usage
 from digiquant.research import diagnostics as _diagnostics
 from digiquant.research import provider_telemetry as _provider_telemetry
 from digiquant.research.graph import (
-    AtlasGraphDeps,
-    AtlasInput,
+    ResearchGraphDeps,
+    ResearchInput,
     _legacy_run_type,
-    build_atlas_graph,
+    build_research_graph,
     initial_state,
 )
 from digiquant.research.phases.preflight import (
@@ -32,12 +32,12 @@ from digiquant.research.phases.preflight import (
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.research.phases.triage_phase import TriageDeps
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseError
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhaseError
 from digiquant.dashboard.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
 from digiquant.portfolio.graph import (
-    HermesGraphDeps,
+    PortfolioGraphDeps,
     ThesisGraphDeps,
-    build_hermes_graph,
+    build_portfolio_graph,
 )
 from digiquant.dashboard.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
@@ -48,18 +48,18 @@ __all__ = [
     "ChainDeps",
     "cli_main",
     "dispatch_house_notifications_after_chain",
-    "run_atlas_then_hermes",
+    "run_research_then_portfolio",
     "run_beliefs_distillation_if_triggered",
 ]
 
 
 @dataclass(frozen=True)
 class ChainDeps:
-    """Dependencies for the Atlas → Hermes chain.
+    """Dependencies for the research → portfolio chain.
 
-    Atlas-side deps (preflight, triage, preflight-reflect) come from
-    :class:`AtlasGraphDeps`. Hermes-side deps (H1–H9 thesis path) come from
-    :class:`HermesGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
+    research-side deps (preflight, triage, preflight-reflect) come from
+    :class:`ResearchGraphDeps`. portfolio-side deps (H1–H9 thesis path) come from
+    :class:`PortfolioGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
     daily graph — beliefs distillation runs after publish via
     :func:`run_beliefs_distillation_if_triggered` (daily short fold; full
     rewrite on ``refresh_scope=beliefs`` or backlog). The terminal
@@ -67,14 +67,14 @@ class ChainDeps:
     everything at the end.
     """
 
-    atlas: AtlasGraphDeps
-    hermes: HermesGraphDeps
+    research: ResearchGraphDeps
+    portfolio: PortfolioGraphDeps
     publish: PublishDeps | None = None
-    # Phase 7E / H8 risk-sizing runs inside the Hermes graph (PR 4c). ``risk_sizing`` is
-    # wired via ``HermesGraphDeps`` for the H8 node — not as a chain terminal phase.
-    risk_sizing: Any | None = None  # legacy ChainDeps field; use hermes.risk_sizing
-    # Phase 9D paper-portfolio materialization folded into Hermes H9 (PR 4d).
-    materialize: Any | None = None  # legacy ChainDeps field — use hermes.commit_run
+    # Phase 7E / H8 risk-sizing runs inside the portfolio graph (PR 4c). ``risk_sizing`` is
+    # wired via ``PortfolioGraphDeps`` for the H8 node — not as a chain terminal phase.
+    risk_sizing: Any | None = None  # legacy ChainDeps field; use portfolio.risk_sizing
+    # Phase 9D paper-portfolio materialization folded into portfolio H9 (PR 4d).
+    materialize: Any | None = None  # legacy ChainDeps field — use portfolio.commit_run
     # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
     # legacy). Always wired by ``cli_main`` so every real run records its health.
     diagnostics: DiagnosticsDeps | None = None
@@ -126,9 +126,9 @@ def _outer_attempt() -> int:
     return attempt
 
 
-def _coerce_atlas_state(result: Any) -> AtlasResearchState:
+def _coerce_research_state(result: Any) -> ResearchState:
     """LangGraph ``invoke`` may return a plain dict (notably on checkpoint resume)."""
-    return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+    return ResearchState.model_validate(result) if isinstance(result, dict) else result
 
 
 def _maybe_export_shadow_allocation_artifact(state: Any) -> None:
@@ -170,7 +170,7 @@ def _invoke_resumable(
 ) -> Any:
     """Invoke one chained graph, resuming its own thread when a checkpoint exists.
 
-    Distinct thread per graph (``{thread_base}::{suffix}``) so Atlas/Hermes never
+    Distinct thread per graph (``{thread_base}::{suffix}``) so research/portfolio never
     share a thread (their state schemas differ). If the thread already has a
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
 
@@ -180,7 +180,7 @@ def _invoke_resumable(
     re-select research state mid-replay (#2628 / #2863).
     """
     if checkpointer is None or not thread_base:
-        return _coerce_atlas_state(graph.invoke(state))
+        return _coerce_research_state(graph.invoke(state))
     cfg = {"configurable": {"thread_id": f"{thread_base}::{suffix}"}}
     resuming = False
     try:
@@ -191,7 +191,7 @@ def _invoke_resumable(
         _logger.info(
             "resuming %s from checkpoint thread %s", suffix, cfg["configurable"]["thread_id"]
         )
-    return _coerce_atlas_state(graph.invoke(None if resuming else state, cfg))
+    return _coerce_research_state(graph.invoke(None if resuming else state, cfg))
 
 
 def _degraded_run_pct() -> float:
@@ -213,7 +213,7 @@ def _retry_worthy_summary(summary: _diagnostics.RunSummary) -> bool:
     return summary.retry_signal and not summary.book_committed
 
 
-def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
+def _retry_worthy(state: ResearchState, *, degraded_pct: float) -> bool:
     """Whether the CI outer-retry should fire for this run.
 
     True only when the run is degraded AND its book did not actually **commit**. A run that
@@ -223,16 +223,16 @@ def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
 
     #1555 generalizes the #809 guard from *materialized* to *committed*: a book that H8
     materialized but H9 never persisted (coherence fail-closed / idempotency conflict / silent
-    skip) is NOT durable work — it must retry. A book-less degraded run (Atlas failed / Hermes
+    skip) is NOT durable work — it must retry. A book-less degraded run (research failed / portfolio
     skipped) still retries as before.
     """
     return _retry_worthy_summary(_diagnostics.summarize_run(state, degraded_pct=degraded_pct))
 
 
-def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseException) -> None:
+def _record_chain_error(state: ResearchState, label: str, exc: BaseException) -> None:
     """Append a PhaseError marking a chain-level failure (``phase="chain"``, ``node=label``)
     so the diagnostics degraded gate sees it: ``summarize_run`` marks the run *failed* when a
-    core engine (atlas/hermes) crashed and *degraded* on any other chain-level crash
+    core engine (research/portfolio) crashed and *degraded* on any other chain-level crash
     (publish/materialize/risk-sizing). The ``"chain"`` marker keeps these distinct from
     node-level errors (which are already reflected as failed segments). Best-effort —
     error-recording must never itself break the chain."""
@@ -244,32 +244,32 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseExceptio
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
-def _preflight_config(deps: ChainDeps) -> AtlasConfigBundle | None:
+def _preflight_config(deps: ChainDeps) -> ResearchConfigBundle | None:
     """Pin overlay workspace on initial state before fail-soft graph invoke.
 
-    Overlay identity is loaded in Atlas preflight. If Atlas raises at graph
+    Overlay identity is loaded in research preflight. If research raises at graph
     level, ``_safe_invoke_graph`` returns the original state. Beliefs fold
     then ran with ``workspace_id=None`` (house path) and stamped house
     ``decision_log``. Call the preflight config loader once up front so a
     private workspace skip is already on the last-good state. House loaders
-    that omit ``workspace_id`` still fold. Tests may pass ``atlas=None``.
+    that omit ``workspace_id`` still fold. Tests may pass ``research=None``.
     """
-    atlas = getattr(deps, "atlas", None)
-    if atlas is None:
+    research = getattr(deps, "research", None)
+    if research is None:
         return None
-    preflight = getattr(atlas, "preflight", None)
+    preflight = getattr(research, "preflight", None)
     if preflight is None:
         return None
     loader = getattr(preflight, "config_loader", None)
     if not callable(loader):
         return None
     loaded = loader()
-    return loaded if isinstance(loaded, AtlasConfigBundle) else None
+    return loaded if isinstance(loaded, ResearchConfigBundle) else None
 
 
 def _safe_invoke_graph(
-    graph: Any, state: AtlasResearchState, checkpointer: Any, thread_base: str | None, label: str
-) -> AtlasResearchState:
+    graph: Any, state: ResearchState, checkpointer: Any, thread_base: str | None, label: str
+) -> ResearchState:
     """Run a sub-graph; on a graph-level crash record the error and return the last-good
     state, so the terminal phases (publish/materialize) and the diagnostics row still run.
     Per-node failures are already handled fail-soft inside the graph (Pillar 1A); this is
@@ -287,8 +287,8 @@ def _safe_invoke_graph(
 
 
 def _run_terminal_phase(
-    phase_deps: Any, build_phase: Any, state: AtlasResearchState, label: str
-) -> AtlasResearchState:
+    phase_deps: Any, build_phase: Any, state: ResearchState, label: str
+) -> ResearchState:
     """Run one terminal single-node phase (risk-sizing / publish / materialize) when its
     deps are present; a failure in one is recorded and never blocks the others or the
     diagnostics write."""
@@ -297,8 +297,8 @@ def _run_terminal_phase(
     from digiquant.portfolio.pipeline_builder import build_pipeline
 
     try:
-        return _coerce_atlas_state(
-            build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        return _coerce_research_state(
+            build_pipeline(ResearchState, [build_phase(phase_deps)]).invoke(state)
         )
     except OverlayLegacyBookBlocked:
         raise
@@ -308,7 +308,7 @@ def _run_terminal_phase(
         return state
 
 
-def resolve_run_id(atlas_input: AtlasInput) -> str:
+def resolve_run_id(research_input: ResearchInput) -> str:
     """CI run id when present, else a deterministic, self-labelled local id.
 
     ``-local`` is a suffix no GitHub run id can carry, so an off-CI run can never be mistaken
@@ -317,20 +317,20 @@ def resolve_run_id(atlas_input: AtlasInput) -> str:
     date would otherwise share one identifier.
     """
     return os.environ.get("GITHUB_RUN_ID") or (
-        f"{atlas_input.cadence}-{atlas_input.run_date.isoformat()}-local"
+        f"{research_input.cadence}-{research_input.run_date.isoformat()}-local"
     )
 
 
-def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
+def _run_beliefs_fold(state: ResearchState, deps: ChainDeps, research_input: ResearchInput) -> None:
     """Fold the beliefs backlog, fail-soft (#1737).
 
     Beliefs distillation is a daily short fold after publish (WP-I), not a graph node.
     LLM/Supabase errors must not kill a run that already committed a book. Record it as
-    ``run_atlas_then_hermes`` and killed a run that had already committed a book. Record it as
+    ``run_research_then_portfolio`` and killed a run that had already committed a book. Record it as
     a chain-level error (so the run reports ``degraded``, not ``ok``) and continue: the
     diagnostics row and the caller's exit code then describe what actually happened.
     """
-    if deps.atlas.preflight.client is None:
+    if deps.research.preflight.client is None:
         return
     if skip_overlay_shared_register(state.config.workspace_id):
         # Overlay persist-on still reaches this post-publish fold after a
@@ -341,9 +341,9 @@ def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: A
         return
     try:
         run_beliefs_distillation_if_triggered(
-            client=deps.atlas.preflight.client,
-            atlas_input=atlas_input,
-            run_type=_legacy_run_type(atlas_input.refresh_scope),
+            client=deps.research.preflight.client,
+            research_input=research_input,
+            run_type=_legacy_run_type(research_input.refresh_scope),
             workspace_id=state.config.workspace_id,
         )
     except Exception as exc:  # a daily fold must never kill a booked run
@@ -351,44 +351,44 @@ def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: A
         _record_chain_error(state, "beliefs", exc)
 
 
-def run_atlas_then_hermes(
+def run_research_then_portfolio(
     *,
-    atlas_input: AtlasInput,
+    research_input: ResearchInput,
     deps: ChainDeps,
     debate_rounds: int | None = None,
     checkpointer: Any = None,
     thread_base: str | None = None,
-    hermes_watchlist: list[str] | None = None,
-    hermes_held: Collection[str] = (),
+    portfolio_watchlist: list[str] | None = None,
+    portfolio_held: Collection[str] = (),
     manage_usage: bool = True,
-) -> AtlasResearchState:
-    """Compose Atlas → Hermes → publish, return the final state.
+) -> ResearchState:
+    """Compose research → portfolio → publish, return the final state.
 
-    ``hermes_watchlist`` narrows the Phase 7C/7CD per-ticker fan-out to a
+    ``portfolio_watchlist`` narrows the Phase 7C/7CD per-ticker fan-out to a
     focus list (#696 — holdings + top-scored candidates) without touching the
-    Atlas research watchlist; ``None`` fans out over the full watchlist.
+    research watchlist; ``None`` fans out over the full watchlist.
 
-    ``hermes_held`` are the prior-book holdings; they are threaded to the
+    ``portfolio_held`` are the prior-book holdings; they are threaded to the
     7C/7CD cap so a holding is never dropped by ``ATLAS_MAX_ANALYSTS`` and
     auto-exited by the PM (the Jun-18 IJR regression, #936).
 
-    ``deps.atlas.publish`` is overridden to ``None`` for the Atlas pass —
+    ``deps.research.publish`` is overridden to ``None`` for the research pass —
     publish runs once at the very end with the full populated state.
 
-    When ``checkpointer`` + ``thread_base`` are set, Atlas and Hermes run under
-    **distinct** thread ids (``{thread_base}::atlas`` / ``::hermes``) so each
+    When ``checkpointer`` + ``thread_base`` are set, research and portfolio run under
+    **distinct** thread ids (``{thread_base}::research`` / ``::portfolio``) so each
     resumes from its own checkpoint (#665); publish is never checkpointed (cheap
     + idempotent upserts).
 
     ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
-    ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
+    ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the research
     pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
     non-None overrides preferences.
 
     ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
     (#2628 / WP4.1) and, when the preflight ``config_loader`` is present, the
-    overlay ``workspace_id`` so a fail-soft Atlas crash cannot fold beliefs as
-    house. Atlas preflight then pins one ``research_state_pin``
+    overlay ``workspace_id`` so a fail-soft research crash cannot fold beliefs as
+    house. research preflight then pins one ``research_state_pin``
     (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
     it does not re-call ``now()`` or re-select state as ingestion continues.
 
@@ -396,7 +396,7 @@ def run_atlas_then_hermes(
     passes False so ``overlay_usage_scope`` is not wiped by a nested
     ``usage.start`` / ``usage.reset``.
     """
-    state = initial_state(atlas_input)
+    state = initial_state(research_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
     started_at = datetime.now(tz=timezone.utc)
@@ -414,64 +414,64 @@ def run_atlas_then_hermes(
             # must be on last-good state before fail-soft graph invoke; a raising
             # loader stays inside this envelope so diagnostics still flush.
             state = state.model_copy(update={"config": pinned})
-        # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
-        if atlas_input.refresh_scope == "beliefs":
-            _run_beliefs_fold(state, deps, atlas_input)
+        # Operator escape hatch: beliefs-only run (no research/portfolio research).
+        if research_input.refresh_scope == "beliefs":
+            _run_beliefs_fold(state, deps, research_input)
             return state
 
-        # Atlas: research only, no publish.
-        atlas_deps = AtlasGraphDeps(
-            preflight=deps.atlas.preflight,
+        # research: research only, no publish.
+        research_deps = ResearchGraphDeps(
+            preflight=deps.research.preflight,
             publish=None,  # chain handles publish at the end
-            triage=deps.atlas.triage,
-            preflight_reflect=deps.atlas.preflight_reflect,
+            triage=deps.research.triage,
+            preflight_reflect=deps.research.preflight_reflect,
         )
-        atlas_graph = build_atlas_graph(
-            deps=atlas_deps,
-            watchlist=atlas_input.watchlist,
+        research_graph = build_research_graph(
+            deps=research_deps,
+            watchlist=research_input.watchlist,
             checkpointer=checkpointer,
         )
-        state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
+        state = _safe_invoke_graph(research_graph, state, checkpointer, thread_base, "research")
 
-        # Research-sufficiency gate (#944): Hermes books a rebalance + decision_log rows
-        # INSIDE its own graph (H9 commit-run), so it must NOT run when the Atlas pass
+        # Research-sufficiency gate (#944): portfolio books a rebalance + decision_log rows
+        # INSIDE its own graph (H9 commit-run), so it must NOT run when the research pass
         # produced no fresh research — otherwise the PM commits decisions on stale prior
-        # context. The Jun-20 incident: Atlas crashed on empty LLM responses, the chain
+        # context. The Jun-20 incident: research crashed on empty LLM responses, the chain
         # swallowed it (``_safe_invoke_graph``), and a pm-rebalance was written against
         # 2-day-stale prices. Skipping records a chain error so the run is gated degraded and
-        # CI's outer retry fires; the terminal publish still flushes whatever Atlas produced.
-        if _diagnostics.atlas_research_produced(state):
-            hermes_graph = build_hermes_graph(
+        # CI's outer retry fires; the terminal publish still flushes whatever research produced.
+        if _diagnostics.research_produced(state):
+            portfolio_graph = build_portfolio_graph(
                 watchlist=list(
-                    hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
+                    portfolio_watchlist if portfolio_watchlist is not None else research_input.watchlist
                 ),
-                deps=deps.hermes,
+                deps=deps.portfolio,
                 checkpointer=checkpointer,
-                held=hermes_held,
+                held=portfolio_held,
             )
-            state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+            state = _safe_invoke_graph(portfolio_graph, state, checkpointer, thread_base, "portfolio")
             # WP10.1: one-way shadow artifact after H9. Fail-soft — never reruns or
             # mutates the production booking path / graph.
             _maybe_export_shadow_allocation_artifact(state)
         else:
             _logger.error(
-                "chain: Atlas produced no research for %s; skipping Hermes — no rebalance booked",
-                atlas_input.run_date.isoformat(),
+                "chain: research produced no research for %s; skipping portfolio — no rebalance booked",
+                research_input.run_date.isoformat(),
             )
             _record_chain_error(
                 state,
-                "hermes-skipped",
+                "portfolio-skipped",
                 RuntimeError(
-                    "Atlas produced no fresh research; Hermes skipped to avoid booking a "
+                    "research produced no fresh research; portfolio skipped to avoid booking a "
                     "rebalance on stale context"
                 ),
             )
 
-        # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
+        # Terminal phase — research artifacts only; portfolio terminal is H9 in-graph.
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
 
         # Daily short fold (WP-I) — always publishes a same-date beliefs document.
-        _run_beliefs_fold(state, deps, atlas_input)
+        _run_beliefs_fold(state, deps, research_input)
         return state
     except BaseException as exc:
         # Last-resort recorder (#1733/#1763). The diagnostics row is written by the ``finally``
@@ -516,8 +516,8 @@ def run_atlas_then_hermes(
                     state=state,
                     run_id=deps.diagnostics.run_id,
                     attempt=deps.diagnostics.attempt,
-                    run_type=_legacy_run_type(atlas_input.refresh_scope),
-                    run_date=atlas_input.run_date,
+                    run_type=_legacy_run_type(research_input.refresh_scope),
+                    run_date=research_input.run_date,
                     model=deps.diagnostics.model,
                     usage_snapshot=_usage.snapshot(),
                     started_at=started_at,
@@ -540,14 +540,14 @@ def run_atlas_then_hermes(
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
 # Invoked as ``python -m digiquant.portfolio.chain --cadence daily …`` by
-# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the Atlas
+# the unified cron workflow (.github/workflows/dashboard.yml). Mirrors the research
 # CLI cadence surface so the workflow YAML stays thin.
 
 
 def _parse_cli_date(value: str) -> date:
     from datetime import datetime as _dt
 
-    # strptime, not date.fromisoformat: mirrors the Atlas CLI, which must reject
+    # strptime, not date.fromisoformat: mirrors the research CLI, which must reject
     # non-ISO-extended input such as "20260420". The intermediate datetime is naive,
     # which is harmless — .date() discards the time immediately.
     return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
@@ -560,7 +560,7 @@ def _build_cli_parser():
 
     parser = argparse.ArgumentParser(
         prog="python -m digiquant.portfolio.chain",
-        description="Run Atlas → Hermes end-to-end (research + analysis + PM + reflection).",
+        description="Run research → portfolio end-to-end (research + analysis + PM + reflection).",
     )
     _add_cadence_cli_args(parser)
     parser.add_argument(
@@ -580,7 +580,7 @@ def _build_cli_parser():
         default=None,
         help=(
             "Resume a prior run's checkpoints (its GITHUB_RUN_ID). Requires "
-            "DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI. Atlas/Hermes "
+            "DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI. research/portfolio "
             "continue from the last completed node; completed work is not re-run."
         ),
     )
@@ -620,7 +620,7 @@ def dispatch_house_notifications_after_chain(
 ) -> None:
     """Fail-soft K5 close-out for the house CLI only.
 
-    Overlay invokes :func:`run_atlas_then_hermes` (not ``cli_main``), so nested
+    Overlay invokes :func:`run_research_then_portfolio` (not ``cli_main``), so nested
     overlay runs never send house digests. Notify is imported here rather than
     at module import so ``import chain`` on the overlay path does not load
     Mailgun. ``dispatch_notifications`` is itself fail-soft; this wrapper also
@@ -642,41 +642,41 @@ def cli_main(argv: list[str] | None = None) -> int:
     import json
     import sys
 
-    from digigraph.model_config import apply_olympus_openrouter_env
+    from digigraph.model_config import apply_digiquant_openrouter_env
 
-    apply_olympus_openrouter_env()
+    apply_digiquant_openrouter_env()
 
-    # Re-use Atlas's CLI helpers — they already handle --auto-baseline,
+    # Re-use research's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.
     from digiquant.research.graph import _make_default_config_loader, resolve_cli_inputs
 
     parser = _build_cli_parser()
     args = parser.parse_args(argv)
     kwargs = resolve_cli_inputs(args)
-    atlas_input = AtlasInput(**kwargs)
+    research_input = ResearchInput(**kwargs)
 
     summary = {
-        "cadence": atlas_input.cadence,
-        "refresh_scope": atlas_input.refresh_scope,
-        "run_type": _legacy_run_type(atlas_input.refresh_scope),
-        "run_date": atlas_input.run_date.isoformat(),
+        "cadence": research_input.cadence,
+        "refresh_scope": research_input.refresh_scope,
+        "run_type": _legacy_run_type(research_input.refresh_scope),
+        "run_date": research_input.run_date.isoformat(),
         "baseline_date": (
-            atlas_input.baseline_date.isoformat() if atlas_input.baseline_date else None
+            research_input.baseline_date.isoformat() if research_input.baseline_date else None
         ),
-        "watchlist": list(atlas_input.watchlist),
+        "watchlist": list(research_input.watchlist),
     }
 
     if args.dry_run:
         # Compile both graphs cleanly, no invocation.
-        compiled = {"atlas": False, "hermes": False}
+        compiled = {"research": False, "portfolio": False}
         try:
-            atlas_deps = AtlasGraphDeps(
+            research_deps = ResearchGraphDeps(
                 preflight=PreflightDeps(client=None, config_loader=None)  # type: ignore[arg-type]
             )
-            build_atlas_graph(deps=atlas_deps, watchlist=atlas_input.watchlist)
-            compiled["atlas"] = True
-            build_hermes_graph(watchlist=list(atlas_input.watchlist))
-            compiled["hermes"] = True
+            build_research_graph(deps=research_deps, watchlist=research_input.watchlist)
+            compiled["research"] = True
+            build_portfolio_graph(watchlist=list(research_input.watchlist))
+            compiled["portfolio"] = True
         except Exception as exc:  # pragma: no cover
             summary["compile_error"] = repr(exc)
         json.dump({**summary, "dry_run": True, "compiled": compiled}, sys.stdout, default=str)
@@ -686,10 +686,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     client = build_client(SupabaseConfig.from_env())
-    atlas_deps = AtlasGraphDeps(
+    research_deps = ResearchGraphDeps(
         preflight=PreflightDeps(
             client=client,
-            config_loader=_make_default_config_loader(atlas_input.watchlist),
+            config_loader=_make_default_config_loader(research_input.watchlist),
         ),
         publish=None,  # chain handles publish at the end
         triage=TriageDeps(client=client),
@@ -698,15 +698,15 @@ def cli_main(argv: list[str] | None = None) -> int:
     from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
     from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
-    hermes_deps = HermesGraphDeps(
+    portfolio_deps = PortfolioGraphDeps(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
-    run_id = resolve_run_id(atlas_input)
+    run_id = resolve_run_id(research_input)
     chain_deps = ChainDeps(
-        atlas=atlas_deps,
-        hermes=hermes_deps,
+        research=research_deps,
+        portfolio=portfolio_deps,
         publish=PublishDeps(client=client),
         diagnostics=DiagnosticsDeps(client=client, run_id=run_id, attempt=_outer_attempt()),
     )
@@ -716,25 +716,25 @@ def cli_main(argv: list[str] | None = None) -> int:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or run_id
-    # Hermes H4 builds ``phase_hermes.focus_roster`` in-graph; Atlas watchlist is
+    # portfolio H4 builds ``phase_portfolio.focus_roster`` in-graph; research watchlist is
     # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
     _holdings: list[str] = []
     if not args.watchlist.strip():
         from digiquant.research.supabase_io import load_prior_book
         from digiquant.portfolio.candidates import holdings_from_prior_book
 
-        _prior_book = load_prior_book(client, atlas_input.run_date)
+        _prior_book = load_prior_book(client, research_input.run_date)
         _holdings = holdings_from_prior_book(_prior_book)
 
-    final_state = run_atlas_then_hermes(
-        atlas_input=atlas_input,
+    final_state = run_research_then_portfolio(
+        research_input=research_input,
         deps=chain_deps,
         checkpointer=_checkpointer,
         thread_base=_thread_base,
-        hermes_watchlist=None,
+        portfolio_watchlist=None,
         # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
-        # operator overrides --watchlist or for monthly runs (no Hermes).
-        hermes_held=set(_holdings or ()),
+        # operator overrides --watchlist or for monthly runs (no portfolio).
+        portfolio_held=set(_holdings or ()),
     )
 
     # Degraded-run gate (#726, 1B) + good-book guard (#809): a run that produced little/no
@@ -742,7 +742,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # sector does NOT trip it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). BUT a
     # run that already materialized a valid sized book must NOT retry — that wasted ~20 min of
     # backoff sleeps on a good book (#809). The diagnostics row, written inside
-    # run_atlas_then_hermes, records the why. Monthly runs (no research segments) don't trip it.
+    # run_research_then_portfolio, records the why. Monthly runs (no research segments) don't trip it.
     run_summary = _diagnostics.summarize_run(final_state, degraded_pct=_degraded_run_pct())
     retry_worthy = _retry_worthy_summary(run_summary)
     # ``degraded`` keeps its pre-#1736 meaning (= the retry signal) so nothing parsing run.log
@@ -751,7 +751,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # that lost segments but committed its book is ``status=degraded, degraded=false`` (#1736).
     summary["degraded"] = run_summary.retry_signal
     summary["status"] = run_summary.status
-    summary["book_materialized"] = final_state.phase_hermes.sized_book is not None
+    summary["book_materialized"] = final_state.phase_portfolio.sized_book is not None
     # #1555: a green run must be *provably* a committed run. ``book_committed`` sits beside
     # ``book_materialized`` so an operator never again reads ``ok:true, book_materialized:true``
     # and assumes the book persisted — the silent H4→H9 freeze (2026-06-26) presented exactly
@@ -762,7 +762,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     # K5: production cron is this CLI, not run_db_first.py. Only on a
     # non-retry exit so a failed attempt that CI will redo does not email.
     if not retry_worthy:
-        dispatch_house_notifications_after_chain(atlas_input.run_date)
+        dispatch_house_notifications_after_chain(research_input.run_date)
     return 1 if retry_worthy else 0
 
 

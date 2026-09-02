@@ -16,7 +16,7 @@ import { useReducedMotion } from "motion/react";
  *
  * Three dresses: `underline` for content regions, `pill` for a compact
  * filled-rect mode switch (API name kept; shape is radius 0), `chip` for a
- * wrapping row of bordered chips (olympus dashboard sub-nav — mono face,
+ * wrapping row of bordered chips (dashboard sub-nav — mono face,
  * accent-tinted active chip). `pill` and `chip` position the ink with
  * translate(x, y) + measured height, so `chip` rows may flex-wrap. The strip is controlled (`active` + `onChange`);
  * panels are consumer-owned — wire them with the exported `tabId`/

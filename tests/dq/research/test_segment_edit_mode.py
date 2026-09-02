@@ -1,4 +1,4 @@
-"""Segment edit-mode pilot tests (Olympus #930 slice A2 — macro)."""
+"""Segment edit-mode pilot tests (dashboard #930 slice A2 — macro)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from digiquant.research.phases.phase3_macro import MacroRegimeReport
 from digiquant.research.phases.phase5_equities import EquityOverviewReport
 from digiquant.research.skills import SkillNotFoundError, load_skill_edit
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Carried,
     DeltaTriageDecision,
     DeltaTriageResult,
@@ -29,9 +29,9 @@ from digiquant.research.state import (
 from digiquant.research.triage import evaluate
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 
-from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
+from tests.dq.research.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
-_ATLAS_EDIT_SKILL_SLUGS = (
+_RESEARCH_EDIT_SKILL_SLUGS = (
     "macro",
     "digest",
     "equity",
@@ -75,7 +75,7 @@ def _macro_state_with_prior(
     run_date: date = date(2026, 4, 27),
     baseline_date: date = date(2026, 4, 26),
     triage_decision: str = "regenerate",
-) -> AtlasResearchState:
+) -> ResearchState:
     state = _delta_state(
         run_date,
         baseline_date,
@@ -121,14 +121,14 @@ class TestMacroEditSkill:
         assert body
         assert "DocumentPatch" in body or "document_delta" in body.lower()
 
-    @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
+    @pytest.mark.parametrize("slug", _RESEARCH_EDIT_SKILL_SLUGS)
     def test_all_segment_edit_skills_exist(self, slug: str) -> None:
         body = load_skill_edit(slug)
         assert body
         assert "DocumentPatch" in body
         edit_path = (
             Path(__file__).resolve().parents[3]
-            / "digiquant/src/digiquant/olympus/atlas/skills"
+            / "digiquant/src/digiquant/research/skills"
             / slug
             / f"{slug}-edit.md"
         )
@@ -205,7 +205,7 @@ class TestBuildSegmentNodeEditMode:
         MacroRegimeReport.model_validate(slot.payload.body)
 
     def test_full_runs_when_no_prior_exists(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 4, 27),
             baseline_date=date(2026, 4, 26),
@@ -299,7 +299,7 @@ def _equity_prior_body() -> dict[str, Any]:
     }
 
 
-def _equity_state_with_prior(*, triage_decision: str = "regenerate") -> AtlasResearchState:
+def _equity_state_with_prior(*, triage_decision: str = "regenerate") -> ResearchState:
     state = _delta_state(
         date(2026, 4, 27),
         date(2026, 4, 26),
@@ -473,8 +473,8 @@ class TestEditSchemaConstraintsReachTheModel:
     uncapped; inventing a character limit again reintroduces discarded patches.
     """
 
-    @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
-    def test_every_atlas_edit_skill_states_the_limits(self, slug: str) -> None:
+    @pytest.mark.parametrize("slug", _RESEARCH_EDIT_SKILL_SLUGS)
+    def test_every_research_edit_skill_states_the_limits(self, slug: str) -> None:
         body = load_skill_edit(slug)
         assert "Output constraints (schema-enforced)" in body
         assert "512 characters maximum" in body
@@ -483,10 +483,10 @@ class TestEditSchemaConstraintsReachTheModel:
         # The skill's own content must survive the append.
         assert "DocumentPatch" in body
 
-    def test_hermes_edit_skills_get_them_too(self) -> None:
-        from digiquant.portfolio.skills import load_skill_edit as hermes_load_edit
+    def test_portfolio_edit_skills_get_them_too(self) -> None:
+        from digiquant.portfolio.skills import load_skill_edit as portfolio_load_edit
 
-        body = hermes_load_edit("asset-analyst")
+        body = portfolio_load_edit("asset-analyst")
         assert "Output constraints (schema-enforced)" in body
         assert "240 characters maximum" not in body
 

@@ -10,10 +10,10 @@ from uuid import UUID
 
 import pytest
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.focus_roster import with_fanout_ticker
@@ -66,19 +66,19 @@ def _bundle_dump(*, evidence_count: int = 1) -> tuple[dict[str, Any], tuple[Any,
     return built.bundle.model_dump(mode="json"), built.evidence
 
 
-def _state() -> AtlasResearchState:
+def _state() -> ResearchState:
     bundle_dump, _evidence = _bundle_dump()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 8, 26),
         knowledge_cutoff_at=_TS,
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=PriorContext(
             prior_book=[{"ticker": "AAPL", "weight": 0.05}],
             active_theses=[],
         ),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")],
         asset_analysts={
             "AAPL": {
@@ -170,7 +170,7 @@ class TestH6AmendmentWiring:
                 out = h6_deliberation.build_h6_from_state(store).worker.run(
                     with_fanout_ticker(_state(), "AAPL")
                 )
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["evidence_amendment_outcome"] == H6AmendmentOutcome.ACCEPTED.value
         assert summary["missing_fact_request_id"]
         assert summary["evidence_amendment_id"]
@@ -217,7 +217,7 @@ class TestH6AmendmentWiring:
                 out = h6_deliberation.build_h6_from_state().worker.run(
                     with_fanout_ticker(state, "AAPL")
                 )
-        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        summary = out["phase_portfolio"].deliberation_summaries["AAPL"]
         assert summary["evidence_amendment_outcome"] == H6AmendmentOutcome.INVALID_REQUEST.value
         assert summary["evidence_amendment_failure_reason"] == "claim_id_not_in_base_bundle"
         assert summary["base_bundle_id"] == bundle_dump["bundle_id"]

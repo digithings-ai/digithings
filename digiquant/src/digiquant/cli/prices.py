@@ -29,7 +29,7 @@ _YAHOO_FX_BACKFILL_START = "1999-01-04"
 
 @click.group()
 def prices() -> None:
-    """Price / technicals / macro pipeline (migrated from Atlas scripts)."""
+    """Price / technicals / macro pipeline (migrated from research scripts)."""
 
 
 # ─── Shared helpers ───────────────────────────────────────────────────────

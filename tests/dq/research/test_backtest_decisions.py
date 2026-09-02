@@ -17,7 +17,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "backtest_decisions.py"
 )
 

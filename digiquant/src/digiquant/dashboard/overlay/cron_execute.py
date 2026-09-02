@@ -1,6 +1,6 @@
 """Execute claimed overlay_daily jobs (T4).
 
-Dispatch-only cron leaves rows ``running``. ``--execute`` runs the one Olympus
+Dispatch-only cron leaves rows ``running``. ``--execute`` runs the one dashboard
 graph. ``chain=None`` is forbidden: ``execute_overlay`` would mark
 ``succeeded`` without a book. This module does not import ``byok`` / digillm.
 """
@@ -139,9 +139,9 @@ def production_chain_factory(
     profile_version_id: UUID,
     run_date: date,
 ) -> Callable[..., object]:
-    """Lazy-import the real Olympus graph. Never returns None."""
+    """Lazy-import the real dashboard graph. Never returns None."""
     del run_date
-    # Dependency-isolation: graph_invoke pulls hermes/atlas; digiquant-only CI omits digillm.
+    # Dependency-isolation: graph_invoke pulls portfolio/research; digiquant-only CI omits digillm.
     from digiquant.dashboard.overlay.graph_invoke import build_overlay_chain
 
     return build_overlay_chain(

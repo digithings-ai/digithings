@@ -20,7 +20,7 @@ const history: MatrixCellHistoryEntry[] = [
   {
     run_date: '2026-06-23',
     report_date: '2026-06-23',
-    source_file: 'atlas-2026-06-23.pdf',
+    source_file: 'research-2026-06-23.pdf',
     direction: 'bullish',
     conviction: 'medium',
     rationale: 'Previous view',
@@ -28,7 +28,7 @@ const history: MatrixCellHistoryEntry[] = [
   {
     run_date: '2026-06-22',
     report_date: '2026-06-22',
-    source_file: 'atlas-2026-06-22.pdf',
+    source_file: 'research-2026-06-22.pdf',
     direction: 'neutral',
     conviction: 'low',
     rationale: 'Oldest view',
@@ -62,7 +62,7 @@ describe('MatrixCellHistoryPanel', () => {
 
   it('renders the primary view and history entries', () => {
     const cellData = cell({
-      broker: 'Atlas Macro',
+      broker: 'research Macro',
       column: 'USD',
       currency: 'USD',
       run_date: '2026-06-24',
@@ -70,7 +70,7 @@ describe('MatrixCellHistoryPanel', () => {
       history,
     });
     const html = renderBody(cellData);
-    expect(html).toContain('Atlas Macro');
+    expect(html).toContain('research Macro');
     expect(html).toContain('USD');
     expect(html).toContain('Latest view'); // primary
     expect(html).toContain('Previous view'); // history[0]
@@ -79,7 +79,7 @@ describe('MatrixCellHistoryPanel', () => {
 
   it('shows each view with its date and an open-brief affordance', () => {
     const cellData = cell({
-      broker: 'Atlas Macro',
+      broker: 'research Macro',
       column: 'USD',
       history,
     });
@@ -94,7 +94,7 @@ describe('MatrixCellHistoryPanel', () => {
 
   it('indicates the count in the header when there are history entries', () => {
     const cellData = cell({
-      broker: 'Atlas Macro',
+      broker: 'research Macro',
       column: 'USD',
       history,
     });

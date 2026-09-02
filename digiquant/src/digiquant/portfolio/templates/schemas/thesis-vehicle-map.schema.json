@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Thesis Vehicle Map",
+  "title": "digiquant-research Thesis Vehicle Map",
   "description": "Maps market theses to candidate ETF/vehicle tickers using user mandate and watchlist. Multiple vehicles per thesis allowed.",
   "type": "object",
   "additionalProperties": false,

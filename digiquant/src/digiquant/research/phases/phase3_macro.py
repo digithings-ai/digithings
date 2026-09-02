@@ -12,7 +12,7 @@ from digiquant.research.phases._node_factory import (
     scalar_slot_write_adapter,
 )
 from digiquant.research.segments import ResearchMemo
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 # Per ARCHITECTURE.md §Phase 3: 4-factor model. Optional machine tokens for the
 # pipeline strip / phase-6; the operator artifact is markdown ``body``.
@@ -48,7 +48,7 @@ _SPEC = SegmentNodeSpec(
 _MACRO_EXCLUDED_PHASE1 = {"alt-ai-portfolios"}
 
 
-def _macro_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+def _macro_inputs_builder(state: ResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
     """Phase 3 reads Phase 1 alt-data signals so the regime classification
     is coloured by positioning (per ARCHITECTURE.md §Phase 3)."""
     return {

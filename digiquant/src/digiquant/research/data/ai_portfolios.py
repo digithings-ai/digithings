@@ -4,7 +4,7 @@ Reads the latest public posts of tracked AI-run portfolio accounts on X via
 OpenRouter **native** web search (web-search-capable grounding model), returning
 a cited summary to inject into phase_inputs. Does not assemble Exa
 ``engine`` / ``max_results`` params — those belong to the digillm toolkit
-fallback, not Olympus.
+fallback, not dashboard.
 
 Requires ``OPENROUTER_API_KEY``; fails soft to ``None`` otherwise.
 """

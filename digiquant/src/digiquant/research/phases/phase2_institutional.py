@@ -27,7 +27,7 @@ from digiquant.research.phases._node_factory import (
 )
 from digiquant.research.segments import ResearchMemo
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )
@@ -72,7 +72,7 @@ _SPECS = (
 )
 
 
-def _breaker_tripped(state: AtlasResearchState) -> bool:
+def _breaker_tripped(state: ResearchState) -> bool:
     """True only on a DELTA run whose institutional layer has been absent
     for ``>= ABSENCE_BREAKER_THRESHOLD`` consecutive runs.
 
@@ -84,7 +84,7 @@ def _breaker_tripped(state: AtlasResearchState) -> bool:
     return state.data_layer.institutional_absence_streak >= ABSENCE_BREAKER_THRESHOLD
 
 
-def _absent_stub_slot(spec: SegmentNodeSpec, state: AtlasResearchState) -> SegmentSlot:
+def _absent_stub_slot(spec: SegmentNodeSpec, state: ResearchState) -> SegmentSlot:
     """Deterministic, search-free 'absent' stub for a skipped institutional segment.
 
     Empty markdown ``body`` so publish suppresses it (``_is_degenerate``) instead
@@ -110,11 +110,11 @@ def _absent_stub_slot(spec: SegmentNodeSpec, state: AtlasResearchState) -> Segme
     )
 
 
-def _build_phase2_node(spec: SegmentNodeSpec) -> Callable[[AtlasResearchState], dict[str, Any]]:
+def _build_phase2_node(spec: SegmentNodeSpec) -> Callable[[ResearchState], dict[str, Any]]:
     """Wrap the generic segment node with the delta circuit-breaker (#928)."""
     inner = build_segment_node(spec)
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: ResearchState) -> dict[str, Any]:
         if _breaker_tripped(state):
             logger.info(
                 "phase2 circuit-breaker: skipping %s (institutional absent %d>=%d runs); "

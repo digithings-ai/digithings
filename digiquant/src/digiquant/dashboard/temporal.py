@@ -1,6 +1,6 @@
-"""Run-scoped temporal boundary for Olympus Phase 1 registry reads (#2628 / WP4.1).
+"""Run-scoped temporal boundary for dashboard Phase 1 registry reads (#2628 / WP4.1).
 
-Every Atlas/Hermes run pins one timezone-aware UTC ``knowledge_cutoff_at`` before
+Every research/portfolio run pins one timezone-aware UTC ``knowledge_cutoff_at`` before
 initial state construction. Later readers filter ``known_at <= knowledge_cutoff_at``
 so a long or replayed run cannot observe records that arrived mid-run.
 
@@ -45,7 +45,7 @@ def capture_knowledge_cutoff_at(
 ) -> datetime:
     """Capture the run's knowledge cutoff as timezone-aware UTC.
 
-    Call **before** constructing :class:`~digiquant.research.state.AtlasResearchState`.
+    Call **before** constructing :class:`~digiquant.research.state.ResearchState`.
     Inject ``now`` only in tests — production always uses ``datetime.now(UTC)``.
     """
     stamp = now() if now is not None else datetime.now(UTC)

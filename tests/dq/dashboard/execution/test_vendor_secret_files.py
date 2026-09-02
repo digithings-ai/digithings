@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from digiquant.execution.staging_secrets import KAIROS_STAGING_REQUIRED_SECRETS
+from digiquant.execution.staging_secrets import STAGING_REQUIRED_SECRETS
 from digiquant.execution.vendor_secret_apply import run_vendor_secret_apply
 from digiquant.execution.vendor_secret_files import (
     EXIT_VENDOR_FILES_OR_KEYS_MISSING,
@@ -27,7 +27,7 @@ _FAKE = {
     "STRIPE_PRICE_STUDIO_MONTHLY": "price_studio",
     "MAILGUN_API_KEY": "key-not-real",
     "MAILGUN_DOMAIN": "mg.example.test",
-    "NOTIFY_FROM": "Kairos <noreply@example.test>",
+    "NOTIFY_FROM": "execution <noreply@example.test>",
     "ALPACA_OAUTH_CLIENT_ID": "alpaca-client",
     "ALPACA_OAUTH_CLIENT_SECRET": "alpaca-secret",
 }
@@ -66,7 +66,7 @@ def _write_complete(root: Path) -> None:
 def test_inspect_reports_missing_files_by_name(tmp_path: Path) -> None:
     report = inspect_vendor_secret_files(tmp_path)
     assert report.missing_files == VENDOR_SECRET_FILENAMES
-    assert report.missing_keys == KAIROS_STAGING_REQUIRED_SECRETS
+    assert report.missing_keys == STAGING_REQUIRED_SECRETS
     msg = format_vendor_apply_blocked(report)
     assert "digithings-stripe.env" in msg
     assert "STRIPE_SECRET_KEY" in msg

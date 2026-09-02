@@ -11,13 +11,13 @@ import {
   settingsBillingReturnUrl,
 } from "./app-url.ts";
 
-Deno.test("publicAppOrigin strips trailing slash and /dashboard (and retired /olympus)", () => {
+Deno.test("publicAppOrigin strips trailing slash and /dashboard (and retired /dashboard)", () => {
   assertEquals(publicAppOrigin("https://digiquant.io"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/dashboard"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/dashboard/"), "https://digiquant.io");
-  assertEquals(publicAppOrigin("https://digiquant.io/olympus"), "https://digiquant.io");
-  assertEquals(publicAppOrigin("https://digiquant.io/olympus/"), "https://digiquant.io");
+  assertEquals(publicAppOrigin("https://digiquant.io/dashboard"), "https://digiquant.io");
+  assertEquals(publicAppOrigin("https://digiquant.io/dashboard/"), "https://digiquant.io");
 });
 
 Deno.test("Alpaca redirect_uri is origin + /dashboard callback", () => {
@@ -30,7 +30,7 @@ Deno.test("Alpaca redirect_uri is origin + /dashboard callback", () => {
     "https://digiquant.io/dashboard/settings/brokers/callback/",
   );
   assertEquals(
-    pinnedAlpacaRedirectUriFromOrigin("https://digiquant.io/olympus"),
+    pinnedAlpacaRedirectUriFromOrigin("https://digiquant.io/dashboard"),
     "https://digiquant.io/dashboard/settings/brokers/callback/",
   );
   assertEquals(
@@ -49,7 +49,7 @@ Deno.test("billing return URL lands on Settings billing tab", () => {
     "https://digiquant.io/dashboard/settings/?tab=billing&checkout=cancel",
   );
   assertEquals(
-    settingsBillingReturnUrl("https://digiquant.io/olympus", "cancel"),
+    settingsBillingReturnUrl("https://digiquant.io/dashboard", "cancel"),
     "https://digiquant.io/dashboard/settings/?tab=billing&checkout=cancel",
   );
   assertEquals(

@@ -45,9 +45,9 @@ def test_dry_run_does_not_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     assert called == []
 
 
-def test_run_atlas_then_hermes_source_does_not_dispatch() -> None:
+def test_run_research_then_portfolio_source_does_not_dispatch() -> None:
     """Overlay graph_invoke calls this library API; house mail must not ride along."""
-    start = _CHAIN_SRC.index("def run_atlas_then_hermes")
+    start = _CHAIN_SRC.index("def run_research_then_portfolio")
     end = _CHAIN_SRC.index("def dispatch_house_notifications_after_chain")
     assert "dispatch_house_notifications_after_chain" not in _CHAIN_SRC[start:end]
     assert "dispatch_notifications" not in _CHAIN_SRC[start:end]
@@ -56,6 +56,6 @@ def test_run_atlas_then_hermes_source_does_not_dispatch() -> None:
 def test_cli_main_dispatches_only_when_not_retry_worthy() -> None:
     cli = _CHAIN_SRC[_CHAIN_SRC.index("def cli_main") :]
     assert "if not retry_worthy:" in cli
-    assert "dispatch_house_notifications_after_chain(atlas_input.run_date)" in cli
+    assert "dispatch_house_notifications_after_chain(research_input.run_date)" in cli
     dry = cli[cli.index("if args.dry_run:") : cli.index("from digiquant.research.supabase_io")]
     assert "dispatch_house_notifications_after_chain" not in dry

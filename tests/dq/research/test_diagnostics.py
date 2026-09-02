@@ -5,9 +5,9 @@ the row (fail-soft); is_degraded gates the CLI exit. A node-failure carry (reaso
 NODE_FAILED_REASON) counts as failed; a deliberate carry does not.
 
 Since #1736 ``status`` (health) and ``retry_signal`` (CI exit) diverge, and three new rules
-escalate ``ok`` → ``degraded``: any failed research segment, a majority of dead Hermes
-deliberations, and "Atlas researched but nothing committed". Most fixtures here therefore
-pass ``phase_hermes=_committed_book()`` so that each test varies exactly one thing.
+escalate ``ok`` → ``degraded``: any failed research segment, a majority of dead portfolio
+deliberations, and "researched but nothing committed". Most fixtures here therefore
+pass ``phase_portfolio=_committed_book()`` so that each test varies exactly one thing.
 """
 
 from __future__ import annotations
@@ -18,16 +18,16 @@ import pytest
 from digiquant.research import diagnostics
 from digiquant.research.phases.fail_soft import NODE_FAILED_REASON
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Carried,
     PhaseError,
-    PhaseHermesState,
+    PhasePortfolioState,
     PublishedArtifact,
     SegmentPayload,
     SegmentSlot,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -65,9 +65,9 @@ def _carried(reason: str) -> SegmentSlot:
     return SegmentSlot(payload=Carried(baseline_date=date(2026, 6, 9), reason=reason))
 
 
-def _committed_book(**extra) -> PhaseHermesState:
-    """A Hermes phase whose book both materialized AND committed — a healthy terminal."""
-    return PhaseHermesState(
+def _committed_book(**extra) -> PhasePortfolioState:
+    """A portfolio phase whose book both materialized AND committed — a healthy terminal."""
+    return PhasePortfolioState(
         sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
         commit_manifest={"status": "committed", "source_run_id": "r1"},
         **extra,
@@ -75,9 +75,9 @@ def _committed_book(**extra) -> PhaseHermesState:
 
 
 def _state(
-    *, phase1=None, phase3=None, phase5=None, errors=None, phase_hermes=None
-) -> AtlasResearchState:
-    state = AtlasResearchState(
+    *, phase1=None, phase3=None, phase5=None, errors=None, phase_portfolio=None
+) -> ResearchState:
+    state = ResearchState(
         run_type="baseline", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
     )
     if phase1:
@@ -88,8 +88,8 @@ def _state(
         state.phase5_outputs = phase5
     if errors:
         state.errors = errors
-    if phase_hermes is not None:
-        state.phase_hermes = phase_hermes
+    if phase_portfolio is not None:
+        state.phase_portfolio = phase_portfolio
     return state
 
 
@@ -103,7 +103,7 @@ def test_counts_today_carried_and_failed() -> None:
             "sector-tech": _today("sector-tech"),
             "sector-utilities": _carried(NODE_FAILED_REASON),
         },
-        phase_hermes=_committed_book(),
+        phase_portfolio=_committed_book(),
     )
     s = diagnostics.summarize_run(state)
     assert s.segments_total == 4
@@ -121,7 +121,7 @@ def test_status_ok_when_nothing_failed_and_book_committed() -> None:
     # The only shape that still earns "ok": every segment accounted for, book committed.
     state = _state(
         phase1={"macro": _today("macro"), "rates": _carried("below_triage_threshold")},
-        phase_hermes=_committed_book(),
+        phase_portfolio=_committed_book(),
     )
     s = diagnostics.summarize_run(state)
     assert s.segments_failed == 0
@@ -136,29 +136,29 @@ def test_status_failed_when_nothing_fresh() -> None:
     assert s.status == "failed"
 
 
-def test_atlas_research_produced_true_when_fresh_segments() -> None:
+def test_research_produced_true_when_fresh_segments() -> None:
     state = _state(phase1={"macro": _today("macro")})
-    assert diagnostics.atlas_research_produced(state) is True
+    assert diagnostics.research_produced(state) is True
 
 
-def test_atlas_research_produced_true_for_fully_carried_quiet_delta() -> None:
+def test_research_produced_true_for_fully_carried_quiet_delta() -> None:
     # A quiet delta that carried everything from baseline (none fresh) still has valid
-    # research for Hermes — it must not be gated as "no research".
+    # research for portfolio — it must not be gated as "no research".
     state = _state(phase1={"macro": _carried("below_triage_threshold")})
-    assert diagnostics.atlas_research_produced(state) is True
+    assert diagnostics.research_produced(state) is True
 
 
-def test_atlas_research_produced_false_on_atlas_chain_crash() -> None:
-    # Even with segments in state, a chain-level atlas crash means the research is untrusted.
+def test_research_produced_false_on_research_chain_crash() -> None:
+    # Even with segments in state, a chain-level research crash means the research is untrusted.
     state = _state(
         phase1={"macro": _today("macro")},
-        errors=[PhaseError(phase="chain", node="atlas", message="empty LLM response")],
+        errors=[PhaseError(phase="chain", node="research", message="empty LLM response")],
     )
-    assert diagnostics.atlas_research_produced(state) is False
+    assert diagnostics.research_produced(state) is False
 
 
-def test_atlas_research_produced_false_when_nothing_produced() -> None:
-    assert diagnostics.atlas_research_produced(_state()) is False
+def test_research_produced_false_when_nothing_produced() -> None:
+    assert diagnostics.research_produced(_state()) is False
 
 
 def test_status_degraded_above_threshold() -> None:
@@ -193,22 +193,22 @@ def test_chain_level_error_gates_the_run() -> None:
         errors=[PhaseError(phase="chain", node="publish", message="publish crashed")],
     )
     assert diagnostics.summarize_run(degraded).status == "degraded"
-    # ...and a core-engine (atlas/hermes) chain crash fails it outright.
+    # ...and a core-engine (research/portfolio) chain crash fails it outright.
     failed = _state(
         phase1={"a": _today("a")},
-        errors=[PhaseError(phase="chain", node="hermes", message="hermes crashed")],
+        errors=[PhaseError(phase="chain", node="portfolio", message="portfolio crashed")],
     )
     assert diagnostics.summarize_run(failed).status == "failed"
 
 
 def test_node_level_error_does_not_gate_via_chain_marker() -> None:
-    # A node-level PhaseError (phase != "chain", and not one of the Hermes reasoning phases)
+    # A node-level PhaseError (phase != "chain", and not one of the portfolio reasoning phases)
     # is summarized but does NOT itself flip status — node failures already surface as failed
     # segments. The committed book is what keeps this "ok" now (the no-book gate, #1736).
     state = _state(
         phase1={"a": _today("a")},
         errors=[PhaseError(phase="phase5", node="sector-utilities", message="bad json")],
-        phase_hermes=_committed_book(),
+        phase_portfolio=_committed_book(),
     )
     assert diagnostics.summarize_run(state).status == "ok"
 
@@ -254,10 +254,10 @@ def test_empty_state_is_failed() -> None:
 def test_error_summary_from_state_errors() -> None:
     state = _state(
         phase1={"macro": _today("macro")},
-        errors=[PhaseError(phase="hermes", node="pm", message="boom")],
+        errors=[PhaseError(phase="portfolio", node="pm", message="boom")],
     )
     s = diagnostics.summarize_run(state)
-    assert "hermes/pm: boom" in s.error_summary
+    assert "portfolio/pm: boom" in s.error_summary
     assert s.breakdown["errors"][0]["node"] == "pm"
 
 
@@ -271,11 +271,11 @@ def test_is_degraded_matches_status() -> None:
 # ------------------------------------------------- #1736: status vs retry_signal (STRICT)
 
 
-def _prod_shaped_state(*, failed: int, phase_hermes=None) -> AtlasResearchState:
+def _prod_shaped_state(*, failed: int, phase_portfolio=None) -> ResearchState:
     """27 research segments with ``failed`` node-failure carries — the daily prod shape."""
     slots = {f"s{i}": _today(f"s{i}") for i in range(27 - failed)}
     slots.update({f"f{i}": _carried(NODE_FAILED_REASON) for i in range(failed)})
-    return _state(phase5=slots, phase_hermes=phase_hermes)
+    return _state(phase5=slots, phase_portfolio=phase_portfolio)
 
 
 def test_strict_gate_degrades_a_single_failed_segment_without_asking_for_a_retry() -> None:
@@ -285,7 +285,7 @@ def test_strict_gate_degrades_a_single_failed_segment_without_asking_for_a_retry
     AND it must not ask CI to retry (the book committed — re-running burns three attempts
     plus ~20 min of backoff on work that already landed, #809).
     """
-    state = _prod_shaped_state(failed=4, phase_hermes=_committed_book())
+    state = _prod_shaped_state(failed=4, phase_portfolio=_committed_book())
     s = diagnostics.summarize_run(state)
     assert s.segments_failed == 4
     assert (s.segments_failed / s.segments_total) * 100.0 < 50.0, "under the old share rule"
@@ -296,7 +296,7 @@ def test_strict_gate_degrades_a_single_failed_segment_without_asking_for_a_retry
 
 def test_retry_signal_still_fires_on_the_legacy_share_rule() -> None:
     # Above ATLAS_DEGRADED_RUN_PCT the legacy gate trips as it always has, so CI retries.
-    state = _prod_shaped_state(failed=20, phase_hermes=_committed_book())
+    state = _prod_shaped_state(failed=20, phase_portfolio=_committed_book())
     s = diagnostics.summarize_run(state)
     assert s.status == "degraded"
     assert s.retry_signal is True
@@ -316,16 +316,16 @@ def test_no_book_gate_degrades_research_with_nothing_committed() -> None:
     assert s.breakdown["degraded_reasons"] == ["no_committed_book"]
 
 
-def test_no_book_gate_silent_when_atlas_produced_no_research() -> None:
-    # No research → Hermes was never run by the chain, so "no book" is not the finding
+def test_no_book_gate_silent_when_research_produced_no_research() -> None:
+    # No research → portfolio was never run by the chain, so "no book" is not the finding
     # (the run is already ``failed`` on the nothing-fresh rule).
     assert diagnostics.summarize_run(_state()).status == "failed"
 
 
-def test_no_book_gate_silent_when_atlas_crashed_at_chain_level() -> None:
-    # An Atlas chain crash is ``failed`` and the no-book gate must not overwrite it.
+def test_no_book_gate_silent_when_research_crashed_at_chain_level() -> None:
+    # An research chain crash is ``failed`` and the no-book gate must not overwrite it.
     state = _prod_shaped_state(failed=0)
-    state.errors = [PhaseError(phase="chain", node="atlas", message="empty LLM response")]
+    state.errors = [PhaseError(phase="chain", node="research", message="empty LLM response")]
     assert diagnostics.summarize_run(state).status == "failed"
 
 
@@ -333,91 +333,91 @@ def test_noop_commit_manifest_satisfies_the_no_book_gate() -> None:
     # An idempotent re-run of an already-booked day is committed, not a gap.
     state = _prod_shaped_state(
         failed=0,
-        phase_hermes=PhaseHermesState(commit_manifest={"status": "noop", "source_run_id": "r1"}),
+        phase_portfolio=PhasePortfolioState(commit_manifest={"status": "noop", "source_run_id": "r1"}),
     )
     assert diagnostics.summarize_run(state).status == "ok"
 
 
-# ------------------------------------------------- #1742: Hermes deliberation density
+# ------------------------------------------------- #1742: portfolio deliberation density
 
 
-def _hermes_deliberations(n: int, *, failed: int, phase: str = "hermes_h6_deliberation"):
-    """A Hermes phase with ``n`` deliberations of which ``failed`` recorded a PhaseError."""
-    hermes = _committed_book(
+def _portfolio_deliberations(n: int, *, failed: int, phase: str = "portfolio_h6_deliberation"):
+    """A portfolio phase with ``n`` deliberations of which ``failed`` recorded a PhaseError."""
+    portfolio = _committed_book(
         deliberation_summaries={f"T{i}": {"ticker": f"T{i}"} for i in range(n)}
     )
     errors = [
-        PhaseError(phase=phase, node=f"hermes/portfolio/deliberation-T{i}", message="boom")
+        PhaseError(phase=phase, node=f"portfolio/deliberation-T{i}", message="boom")
         for i in range(failed)
     ]
-    return hermes, errors
+    return portfolio, errors
 
 
-def test_hermes_deliberation_gate_degrades_a_mostly_dead_portfolio() -> None:
+def test_portfolio_deliberation_gate_degrades_a_mostly_dead_portfolio() -> None:
     # 2026-07-31: 31 of 39 deliberations dead, every research segment fine, reported "ok".
-    hermes, errors = _hermes_deliberations(39, failed=31)
-    state = _prod_shaped_state(failed=0, phase_hermes=hermes)
+    portfolio, errors = _portfolio_deliberations(39, failed=31)
+    state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = errors
     s = diagnostics.summarize_run(state)
-    assert s.breakdown["hermes_deliberation"] == {"total": 39, "failed": 31}
+    assert s.breakdown["portfolio_deliberation"] == {"total": 39, "failed": 31}
     assert s.status == "degraded"
-    assert "hermes_deliberations" in s.breakdown["degraded_reasons"]
+    assert "portfolio_deliberations" in s.breakdown["degraded_reasons"]
 
 
-def test_hermes_deliberation_gate_tolerates_routine_cap_noise() -> None:
+def test_portfolio_deliberation_gate_tolerates_routine_cap_noise() -> None:
     # The 2026-07-26 baseline: 1 of 50 — H6 emits the same (phase, node) for a benign
     # max_rounds cap as for an LLM crash, so a gate on *any* error would flip every run.
-    hermes, errors = _hermes_deliberations(50, failed=1)
-    state = _prod_shaped_state(failed=0, phase_hermes=hermes)
+    portfolio, errors = _portfolio_deliberations(50, failed=1)
+    state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = errors
     s = diagnostics.summarize_run(state)
-    assert s.breakdown["hermes_deliberation"] == {"total": 50, "failed": 1}
+    assert s.breakdown["portfolio_deliberation"] == {"total": 50, "failed": 1}
     assert s.status == "ok"
 
 
 def test_h9_commit_error_is_excluded_from_the_deliberation_numerator() -> None:
-    # hermes_h9_commit_run is already gated by #1555; counting it here would double-count it
+    # portfolio_h9_commit_run is already gated by #1555; counting it here would double-count it
     # and pollute a metric that is supposed to measure *reasoning* failures.
-    hermes, _ = _hermes_deliberations(4, failed=0)
-    state = _prod_shaped_state(failed=0, phase_hermes=hermes)
+    portfolio, _ = _portfolio_deliberations(4, failed=0)
+    state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = [
         PhaseError(
-            phase="hermes_h9_commit_run", node="hermes/portfolio/commit-run", message="conflict"
+            phase="portfolio_h9_commit_run", node="portfolio/commit-run", message="conflict"
         )
     ]
     s = diagnostics.summarize_run(state)
-    assert s.breakdown["hermes_deliberation"] == {"total": 4, "failed": 0}
+    assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 0}
 
 
-def test_hermes_deliberation_gate_silent_when_nothing_was_deliberated() -> None:
+def test_portfolio_deliberation_gate_silent_when_nothing_was_deliberated() -> None:
     # Zero deliberations = no denominator, so the share gate cannot say anything. The
     # catastrophic version of this shape is caught by the no-book gate instead.
-    hermes, errors = _hermes_deliberations(0, failed=2, phase="phase_hermes")
-    state = _prod_shaped_state(failed=0, phase_hermes=hermes)
+    portfolio, errors = _portfolio_deliberations(0, failed=2, phase="phase_portfolio")
+    state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = errors
     s = diagnostics.summarize_run(state)
-    assert s.breakdown["hermes_deliberation"] == {"total": 0, "failed": 2}
+    assert s.breakdown["portfolio_deliberation"] == {"total": 0, "failed": 2}
     assert s.status == "ok"
 
 
 @pytest.mark.parametrize(
     "phase",
     [
-        "phase_hermes",
-        "hermes_h6_deliberation",
-        "hermes_h7_pm_direction",
+        "phase_portfolio",
+        "portfolio_h6_deliberation",
+        "portfolio_h7_pm_direction",
         "phase7d_pm",
         "phase9_evolution",
     ],
 )
-def test_every_hermes_failure_phase_literal_is_counted(phase: str) -> None:
-    # An explicit allow-list, not a ``hermes_*`` prefix: pin all five literals so a rename
+def test_every_portfolio_failure_phase_literal_is_counted(phase: str) -> None:
+    # An explicit allow-list, not a ``portfolio_*`` prefix: pin all five literals so a rename
     # in the phase modules fails here rather than silently emptying the metric.
-    hermes, errors = _hermes_deliberations(4, failed=3, phase=phase)
-    state = _prod_shaped_state(failed=0, phase_hermes=hermes)
+    portfolio, errors = _portfolio_deliberations(4, failed=3, phase=phase)
+    state = _prod_shaped_state(failed=0, phase_portfolio=portfolio)
     state.errors = errors
     s = diagnostics.summarize_run(state)
-    assert s.breakdown["hermes_deliberation"] == {"total": 4, "failed": 3}
+    assert s.breakdown["portfolio_deliberation"] == {"total": 4, "failed": 3}
     assert s.status == "degraded"
 
 
@@ -426,7 +426,7 @@ def test_every_hermes_failure_phase_literal_is_counted(phase: str) -> None:
 
 def test_registered_contributor_lands_in_breakdown(breakdown_contributor) -> None:
     breakdown_contributor(lambda state: {"roster": {"width": len(state.phase5_outputs)}})
-    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_hermes=_committed_book()))
+    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_portfolio=_committed_book()))
     assert s.breakdown["roster"] == {"width": 27}
 
 
@@ -436,24 +436,24 @@ def test_contributor_failure_is_swallowed(breakdown_contributor) -> None:
 
     breakdown_contributor(_boom)
     breakdown_contributor(lambda _state: {"budget": {"usd": 3.0}})
-    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_hermes=_committed_book()))
+    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_portfolio=_committed_book()))
     assert s.status == "ok", "a broken contributor must never gate a run"
     assert s.breakdown["budget"] == {"usd": 3.0}, "later contributors still run"
 
 
 def test_contributor_cannot_clobber_an_existing_breakdown_key(breakdown_contributor) -> None:
     breakdown_contributor(lambda _state: {"phase5_outputs": "hijacked"})
-    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_hermes=_committed_book()))
+    s = diagnostics.summarize_run(_prod_shaped_state(failed=0, phase_portfolio=_committed_book()))
     assert s.breakdown["phase5_outputs"] == {"ok": 27, "carried": 0, "failed": 0}
 
 
 def test_contributors_do_not_run_on_the_mid_run_gating_path(breakdown_contributor) -> None:
-    # ``chain`` calls atlas_research_produced BEFORE Hermes; a contributor firing there would
+    # ``chain`` calls research_produced BEFORE portfolio; a contributor firing there would
     # see a half-populated state (and fire twice per run).
     calls: list[int] = []
     breakdown_contributor(lambda _state: calls.append(1) or {})
-    state = _prod_shaped_state(failed=0, phase_hermes=_committed_book())
-    assert diagnostics.atlas_research_produced(state) is True
+    state = _prod_shaped_state(failed=0, phase_portfolio=_committed_book())
+    assert diagnostics.research_produced(state) is True
     assert calls == []
     diagnostics.summarize_run(state)
     assert calls == [1]
@@ -689,7 +689,7 @@ def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
 # --------------------------------------------------------------------------- cancelled status (#814)
 
 
-def _state_with_published_snapshot(**kwargs) -> AtlasResearchState:
+def _state_with_published_snapshot(**kwargs) -> ResearchState:
     """State where a daily_snapshots row was successfully published."""
     state = _state(**kwargs)
     state.published = [
@@ -730,11 +730,11 @@ def test_failed_when_no_snapshot_even_without_fresh_segments() -> None:
 
 
 def test_core_engine_crash_stays_failed_even_with_published_snapshot() -> None:
-    # A core engine (atlas/hermes) crash is always failed, even if a snapshot was
+    # A core engine (research/portfolio) crash is always failed, even if a snapshot was
     # somehow published earlier.
     state = _state_with_published_snapshot(
         phase1={"macro": _today("macro")},
-        errors=[PhaseError(phase="chain", node="atlas", message="atlas crashed")],
+        errors=[PhaseError(phase="chain", node="research", message="research crashed")],
     )
     s = diagnostics.summarize_run(state)
     assert s.status == "failed"

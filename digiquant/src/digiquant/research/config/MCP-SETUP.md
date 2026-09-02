@@ -20,7 +20,7 @@ So **`FRED_API_KEY`** lives once in `mcp.secrets.env` for local runs and matches
 - **`.vscode/` is gitignored** here; use **`.cursor/mcp.json`** as the shared team template.
 - **Important:** Cursor only sees `${env:…}` if those variables exist when the app (or MCP host) starts. Practical options:
   - Launch Cursor from a terminal after:  
-    `set -a && source /path/to/digiquant-atlas/config/mcp.secrets.env && set +a && cursor .`
+    `set -a && source /path/to/digiquant-research/config/mcp.secrets.env && set +a && cursor .`
   - Or use **[direnv](https://direnv.net/)** in the repo root to export `mcp.secrets.env` when you `cd` into the project, then start Cursor from that shell.
   - Or merge OS-level env in your login shell (`~/.zshrc`) — least portable.
 

@@ -1,4 +1,4 @@
-"""WP13.4 — plan Hermes research attention after H4 without changing roster (#2930).
+"""WP13.4 — plan portfolio research attention after H4 without changing roster (#2930).
 
 Invokes :func:`plan_research_attention` at H4 end over the fixed focus roster and
 branches in H5/H6 provider paths. ``off`` / ``shadow`` / ``enforce`` via
@@ -27,7 +27,7 @@ from digiquant.research.supabase_io import prior_book_current_weights
 from digiquant.dashboard.edit_mode.models import PriorPublished
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
 from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
@@ -53,7 +53,7 @@ def _analyst_artifact_key(ticker: str) -> tuple[str, str]:
     return ("analyst", ticker.strip().upper())
 
 
-def _load_prior_analyst_published(state: HermesState, ticker: str) -> PriorPublished | None:
+def _load_prior_analyst_published(state: PortfolioState, ticker: str) -> PriorPublished | None:
     artifact_key = _analyst_artifact_key(ticker)
     doc_key = artifact_document_key(artifact_key)
     row = state.prior_context.latest_segments.get(doc_key)
@@ -79,11 +79,11 @@ def _load_prior_analyst_published(state: HermesState, ticker: str) -> PriorPubli
 
 
 def ticker_target_key(ticker: str) -> str:
-    """Canonical Hermes ticker attention target (``ticker:SPY``)."""
+    """Canonical portfolio ticker attention target (``ticker:SPY``)."""
     return f"ticker:{ticker.strip().upper()}"
 
 
-def _state_version_id(state: HermesState) -> UUID | None:
+def _state_version_id(state: PortfolioState) -> UUID | None:
     pin = state.research_state_pin
     if not isinstance(pin, dict):
         return None
@@ -96,9 +96,9 @@ def _state_version_id(state: HermesState) -> UUID | None:
         return None
 
 
-def _roster_entry_for(state: HermesState, ticker: str) -> FocusRosterEntry | None:
+def _roster_entry_for(state: PortfolioState, ticker: str) -> FocusRosterEntry | None:
     sym = ticker.strip().upper()
-    for entry in state.phase_hermes.focus_roster:
+    for entry in state.phase_portfolio.focus_roster:
         if entry.ticker.upper() == sym:
             return entry
     return None
@@ -111,7 +111,7 @@ def _staleness_days(prior: PriorPublished | None, run_date: date) -> int | None:
     return max(0, (run_date - content_date).days)
 
 
-def _prior_analyst_body(state: HermesState, ticker: str) -> dict[str, Any] | None:
+def _prior_analyst_body(state: PortfolioState, ticker: str) -> dict[str, Any] | None:
     sym = ticker.strip().upper()
     prior = state.prior_context.prior_analyst_by_ticker.get(sym)
     if not isinstance(prior, dict):
@@ -120,12 +120,12 @@ def _prior_analyst_body(state: HermesState, ticker: str) -> dict[str, Any] | Non
 
 
 def build_ticker_attention_features(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     *,
     analyst: Mapping[str, Any] | None = None,
 ) -> AttentionFeatures:
-    """Structured features for one Hermes ticker (H4 pre-provider or post-H5)."""
+    """Structured features for one portfolio ticker (H4 pre-provider or post-H5)."""
     entry = _roster_entry_for(state, ticker)
     roster_reason = entry.roster_reason if entry is not None else "other"
     held_set = set(holdings_from_prior_book(state.prior_context.prior_book))
@@ -158,29 +158,29 @@ def build_ticker_attention_features(
         state_version_id=str(pin_raw) if pin_raw is not None else None,
         h6=h6,
         has_prior=prior_pub is not None,
-        force_full_rewrite=state.refresh_scope in ("all", "hermes"),
+        force_full_rewrite=state.refresh_scope in ("all", "portfolio"),
         has_structured_delta=price_delta is not None,
         staleness_days=_staleness_days(prior_pub, state.run_date),
         exploration_slot=exploration_slot,
     )
 
 
-def collect_hermes_attention_features(state: HermesState) -> tuple[AttentionFeatures, ...]:
+def collect_portfolio_attention_features(state: PortfolioState) -> tuple[AttentionFeatures, ...]:
     """All ticker targets from the fixed H4 focus roster."""
     if state.custom_prompt:
         return ()
     return tuple(
         build_ticker_attention_features(state, entry.ticker)
-        for entry in state.phase_hermes.focus_roster
+        for entry in state.phase_portfolio.focus_roster
     )
 
 
-def plan_hermes_research_attention(state: HermesState) -> AttentionPlan | None:
+def plan_portfolio_research_attention(state: PortfolioState) -> AttentionPlan | None:
     """Build the post-H4 research attention plan; ``None`` when mode is off."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF:
         return None
-    features = collect_hermes_attention_features(state)
+    features = collect_portfolio_attention_features(state)
     if not features:
         return None
     return plan_research_attention(
@@ -191,30 +191,30 @@ def plan_hermes_research_attention(state: HermesState) -> AttentionPlan | None:
     )
 
 
-def persist_hermes_research_attention_plan(
+def persist_portfolio_research_attention_plan(
     *,
-    state: HermesState,
+    state: PortfolioState,
     plan: AttentionPlan,
     attempt_id: str | None = None,
     recorded_at: datetime | None = None,
 ) -> None:
-    """Append Hermes plan + decisions to the run-scoped :class:`AttentionStore`."""
+    """Append portfolio plan + decisions to the run-scoped :class:`AttentionStore`."""
     stamp = recorded_at or datetime.now(tz=UTC)
-    resolved_attempt = attempt_id or f"hermes-h4:{state.run_id}"
+    resolved_attempt = attempt_id or f"portfolio-h4:{state.run_id}"
     store = attention_store_for_run(str(state.run_id))
     store.append_plan(plan, attempt_id=resolved_attempt, recorded_at=stamp)
 
 
-def plan_and_persist_hermes_research_attention(state: HermesState) -> AttentionPlan | None:
+def plan_and_persist_portfolio_research_attention(state: PortfolioState) -> AttentionPlan | None:
     """Plan after H4 roster is fixed and persist reasons."""
-    plan = plan_hermes_research_attention(state)
+    plan = plan_portfolio_research_attention(state)
     if plan is not None:
-        persist_hermes_research_attention_plan(state=state, plan=plan)
+        persist_portfolio_research_attention_plan(state=state, plan=plan)
     return plan
 
 
-def _load_hermes_attention_plan(state: HermesState) -> AttentionPlan | None:
-    raw = state.hermes_research_attention_plan
+def _load_portfolio_attention_plan(state: PortfolioState) -> AttentionPlan | None:
+    raw = state.portfolio_research_attention_plan
     if raw is None:
         return None
     if isinstance(raw, AttentionPlan):
@@ -222,30 +222,30 @@ def _load_hermes_attention_plan(state: HermesState) -> AttentionPlan | None:
     return AttentionPlan.model_validate(raw)
 
 
-def resolve_hermes_attention_plan(state: HermesState) -> AttentionPlan | None:
-    """Return the Hermes plan for provider gating."""
+def resolve_portfolio_research_attention_plan(state: PortfolioState) -> AttentionPlan | None:
+    """Return the portfolio plan for provider gating."""
     rollout = resolve_research_attention_rollout_mode()
     if rollout is AttentionRolloutMode.OFF or state.custom_prompt:
         return None
-    plan = _load_hermes_attention_plan(state)
+    plan = _load_portfolio_attention_plan(state)
     if plan is not None:
         return plan
-    if state.phase_hermes.focus_roster:
-        return plan_hermes_research_attention(state)
+    if state.phase_portfolio.focus_roster:
+        return plan_portfolio_research_attention(state)
     if rollout is AttentionRolloutMode.ENFORCE:
         raise RuntimeError(
-            "hermes research attention plan missing before provider work "
+            "portfolio research attention plan missing before provider work "
             f"(run_id={state.run_id}); H4 must plan first"
         )
     return None
 
 
-def h4_phase_attention_update(state: HermesState) -> dict[str, Any]:
+def h4_phase_attention_update(state: PortfolioState) -> dict[str, Any]:
     """State update dict after H4 roster is fixed — plan before H5/H6 providers."""
-    plan = plan_and_persist_hermes_research_attention(state)
+    plan = plan_and_persist_portfolio_research_attention(state)
     if plan is None:
         return {}
-    return {"hermes_research_attention_plan": plan.model_dump(mode="json")}
+    return {"portfolio_research_attention_plan": plan.model_dump(mode="json")}
 
 
 def _h5_enforce_path_for_mode(mode: AttentionMode) -> H5EnforcePath:
@@ -259,14 +259,14 @@ def _h5_enforce_path_for_mode(mode: AttentionMode) -> H5EnforcePath:
 
 
 def research_attention_h5_enforce_path(
-    state: HermesState,
+    state: PortfolioState,
     *,
     ticker: str,
 ) -> H5EnforcePath:
     """Return early H5 path under enforce mode; ``None`` for off/shadow/incumbent."""
     if resolve_research_attention_rollout_mode() is not AttentionRolloutMode.ENFORCE:
         return None
-    plan = resolve_hermes_attention_plan(state)
+    plan = resolve_portfolio_research_attention_plan(state)
     if plan is None:
         return None
     decision = lookup_attention_decision(plan, ticker.strip().upper())
@@ -276,7 +276,7 @@ def research_attention_h5_enforce_path(
 
 
 def resolve_h6_attention_decision(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     analyst: Mapping[str, Any],
 ) -> AttentionDecision | None:
@@ -291,7 +291,7 @@ def resolve_h6_attention_decision(
 
 
 def research_attention_h6_enforce_path(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     analyst: Mapping[str, Any],
 ) -> H6EnforcePath:
@@ -307,7 +307,7 @@ def research_attention_h6_enforce_path(
 
 
 def apply_analyst_metric_patch(
-    state: HermesState,
+    state: PortfolioState,
     ticker: str,
     prior: PriorPublished,
     *,
@@ -338,15 +338,15 @@ __all__ = [
     "OLYMPUS_RESEARCH_ATTENTION_MODE_ENV",
     "apply_analyst_metric_patch",
     "build_ticker_attention_features",
-    "collect_hermes_attention_features",
+    "collect_portfolio_attention_features",
     "h4_phase_attention_update",
     "lookup_attention_decision",
-    "persist_hermes_research_attention_plan",
-    "plan_and_persist_hermes_research_attention",
-    "plan_hermes_research_attention",
+    "persist_portfolio_research_attention_plan",
+    "plan_and_persist_portfolio_research_attention",
+    "plan_portfolio_research_attention",
     "research_attention_h5_enforce_path",
     "research_attention_h6_enforce_path",
     "resolve_h6_attention_decision",
-    "resolve_hermes_attention_plan",
+    "resolve_portfolio_research_attention_plan",
     "ticker_target_key",
 ]

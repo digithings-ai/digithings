@@ -1,6 +1,6 @@
 """Pre-flight: config load, prior context, data-layer probe (no LLM).
 
-See ``atlas/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
+See ``research/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
 ``preflight_reflect`` resolves due ``decision_log`` rows (Phase B #432) and,
 beside that path, matured typed forecast outcomes (#2676 / WP5.2) — never by
 converting legacy conviction scores inside ``decision_log``.
@@ -32,8 +32,8 @@ from digiquant.research.decision_log import (
 from digiquant.research.forecast_outcomes import resolve_matured_forecast_outcomes
 from digiquant.research.sectors_config import load_sectors
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
@@ -74,7 +74,7 @@ class PreflightDeps:
     """Wiring deps for the preflight node (injected client + config_loader)."""
 
     client: SupabaseClient
-    config_loader: Callable[[], AtlasConfigBundle]
+    config_loader: Callable[[], ResearchConfigBundle]
     # Staleness threshold for price_technicals: if the latest date is older
     # than run_date - this many days, we flag a fallback in DataLayerSnapshot.
     price_staleness_days: int = 3
@@ -140,7 +140,7 @@ def _refresh_on_demand_enabled() -> bool:
 
 
 def _refresh_stale_technicals(
-    deps: PreflightDeps, run_date: date, config: AtlasConfigBundle
+    deps: PreflightDeps, run_date: date, config: ResearchConfigBundle
 ) -> bool:
     """Recompute technicals from ``price_history`` (network-free) to clear staleness.
 
@@ -169,7 +169,7 @@ def _refresh_stale_technicals(
 
 
 def _data_layer_snapshot(
-    deps: PreflightDeps, run_date: date, config: AtlasConfigBundle
+    deps: PreflightDeps, run_date: date, config: ResearchConfigBundle
 ) -> DataLayerSnapshot:
     """Probe price_technicals + macro_series freshness; empty tables are valid."""
     latest_tech, ticker_count = query_price_technicals_freshness(client=deps.client)
@@ -352,12 +352,12 @@ def _profile_config_store_for_pin(client: SupabaseClient, version_id: str) -> di
 
 def _hydrate_config(
     client: SupabaseClient,
-    config: AtlasConfigBundle,
+    config: ResearchConfigBundle,
     run_date: date,
-) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
+) -> tuple[ResearchConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
     from digiquant.research.dashboard_digest import portfolio_preferences_static
-    from digiquant.research.graph import _atlas_config_root
+    from digiquant.research.graph import _research_config_root
     from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
 
     try:
@@ -366,7 +366,7 @@ def _hydrate_config(
         prior_book = []
 
     preferences = {
-        **portfolio_preferences_static(_atlas_config_root() / "portfolio.json"),
+        **portfolio_preferences_static(_research_config_root() / "portfolio.json"),
         **dict(config.preferences),
     }
     current_weights = prior_book_current_weights(prior_book)
@@ -408,7 +408,7 @@ def _hydrate_config(
         requested_version_id=requested_version,
         workspace_id=UUID(str(config.workspace_id)) if config.workspace_id else None,
     )
-    hydrated = AtlasConfigBundle(
+    hydrated = ResearchConfigBundle(
         watchlist=watchlist,
         investment_profile=investment_profile,
         hedge_funds=list(config.hedge_funds),
@@ -431,7 +431,7 @@ def _resolve_research_state_attempt_id(deps: PreflightDeps) -> str:
     return "1"
 
 
-def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+def _pin_research_state_update(deps: PreflightDeps, state: ResearchState) -> dict[str, Any]:
     """WP12.3: select once and carry an exact research-state pin (or typed unavailable).
 
     Resume: if state already carries a pin dump, keep it (checkpoint / same attempt).
@@ -515,7 +515,7 @@ def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -
     }
 
 
-def _outcome_maturation_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+def _outcome_maturation_update(deps: PreflightDeps, state: ResearchState) -> dict[str, Any]:
     """WP15.6: mature prior outcomes and pin one structured lesson at cutoff."""
     from digiquant.research.phases.outcome_maturation import (
         OutcomeMaturationDeps,
@@ -552,14 +552,14 @@ def _outcome_maturation_update(deps: PreflightDeps, state: AtlasResearchState) -
     return outcome_lesson_preflight_update(result)
 
 
-def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
+def build_preflight_node(deps: PreflightDeps) -> Callable[[ResearchState], dict]:
     """Return the LangGraph preflight node bound to ``deps``."""
 
-    def preflight(state: AtlasResearchState) -> dict:
+    def preflight(state: ResearchState) -> dict:
         # Legacy delta runs required baseline_date for carry provenance. Daily
         # cadence resolves priors per-artifact via prior_published (spec §5.1).
         if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
-            raise ValueError("delta run requires baseline_date to be set on AtlasResearchState")
+            raise ValueError("delta run requires baseline_date to be set on ResearchState")
 
         config = deps.config_loader()
         config, prior_book = _hydrate_config(deps.client, config, state.run_date)
@@ -671,10 +671,10 @@ class PreflightReflectDeps:
 
 def build_preflight_reflect_node(
     deps: PreflightReflectDeps,
-) -> Callable[[AtlasResearchState], dict[str, Any]]:
+) -> Callable[[ResearchState], dict[str, Any]]:
     """Return the Phase B reflect node bound to ``deps``."""
 
-    def reflect(state: AtlasResearchState) -> dict[str, Any]:
+    def reflect(state: ResearchState) -> dict[str, Any]:
         if skip_overlay_shared_register(state.config.workspace_id):
             logger.info(
                 "overlay skip shared register decision_log / forecast outcomes "

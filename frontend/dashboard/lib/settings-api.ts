@@ -1,5 +1,5 @@
 /**
- * Typed fetchers for the Olympus settings Edge Function + T2 billing links (T3).
+ * Typed fetchers for the dashboard settings Edge Function + T2 billing links (T3).
  * Session JWT goes in Authorization; only NEXT_PUBLIC_* in the static bundle.
  */
 

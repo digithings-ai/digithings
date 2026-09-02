@@ -44,7 +44,7 @@ _CUTOFF = datetime(2024, 6, 15, 12, 0, tzinfo=_UTC)
 _EARLIER = _CUTOFF - timedelta(days=5)
 
 _REPLAY_ROOT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "olympus" / "replay"
+    Path(__file__).resolve().parents[3] / "digiquant" / "src" / "digiquant" / "dashboard" / "replay"
 )
 
 

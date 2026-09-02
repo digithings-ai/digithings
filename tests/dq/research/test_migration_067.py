@@ -33,7 +33,7 @@ FORBIDDEN_COLUMNS = (
     "raw_exception",
     "search_text",
     # The fan-out discriminator is stored as the deliberately generic `fanout_key`. These names
-    # would mean the Olympus vocabulary leaked into the shared ledger.
+    # would mean the dashboard vocabulary leaked into the shared ledger.
     "ticker",
     "symbol",
 )

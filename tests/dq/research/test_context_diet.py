@@ -20,7 +20,7 @@ from digiquant.research.phases._node_factory import (
     _shared_context,
 )
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     DataLayerSnapshot,
     DeltaTriageDecision,
     DeltaTriageResult,
@@ -163,10 +163,10 @@ def _today_slot(slug: str) -> SegmentSlot:
     return SegmentSlot(payload=SegmentPayload(segment=slug, body={"bias": "up"}, as_of=RUN_DATE))
 
 
-def _delta_state() -> AtlasResearchState:
+def _delta_state() -> ResearchState:
     """A representative DELTA run: fat market_context + 5-snapshot history +
     a triage result marking some segments regenerate, some carry."""
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=BASELINE_DATE,
@@ -188,9 +188,9 @@ def _delta_state() -> AtlasResearchState:
     )
 
 
-def _baseline_state() -> AtlasResearchState:
+def _baseline_state() -> ResearchState:
     """The equivalent BASELINE run: same data, but full context (no diet)."""
-    return AtlasResearchState(
+    return ResearchState(
         run_type="baseline",
         run_date=RUN_DATE,
         baseline_date=BASELINE_DATE,
@@ -370,14 +370,14 @@ def _segment_with_sources(key: str) -> dict[str, Any]:
     }
 
 
-def _delta_state_with_sources() -> AtlasResearchState:
+def _delta_state_with_sources() -> ResearchState:
     """Delta state whose ``latest_segments`` payloads carry real sources."""
     snaps = [
         _full_snapshot("2026-06-18", "delta"),
         _full_snapshot("2026-06-17", "delta"),
     ]
     segments = {key: _segment_with_sources(key) for key in ("macro", "bonds", "equity")}
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=BASELINE_DATE,

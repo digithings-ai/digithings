@@ -1,6 +1,6 @@
-name: "Pipeline: Atlas metrics refresh"
+name: "Pipeline: research metrics refresh"
 
-# Daily refresh of the derived performance + lookback surfaces the Olympus
+# Daily refresh of the derived performance + lookback surfaces the dashboard
 # dashboard reads (portfolio_metrics, current_book_lookback). Both are deterministic
 # Polars/SQL recomputes — zero LLM cost. Runs after the EOD price ingest (21:00,
 # pipeline-digiquant-prices.yml) so the latest closes are in price_history, and after the
@@ -34,7 +34,7 @@ on:
       date:
         # Empty no longer means "latest existing book" for metrics (#1746): it means today
         # UTC, and the metrics step exits 3 if today has no positions book. Dispatching
-        # empty before the 12:00 UTC Olympus book lands is therefore expected to go red —
+        # empty before the 12:00 UTC dashboard book lands is therefore expected to go red —
         # pass an explicit date whose book exists to recompute one.
         description: "Metrics/lookback date (YYYY-MM-DD). Empty = today UTC (metrics exits 3 if today has no book)."
         required: false
@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: atlas-refresh-metrics
+  group: research-refresh-metrics
   cancel-in-progress: false
 
 jobs:
@@ -69,13 +69,13 @@ jobs:
       # `--frozen` would have failed on the first line of a pipeline that touches
       # live data (#1717).
       #
-      # `--package digiquant --extra atlas` rather than the workspace-wide sync the
+      # `--package digiquant --extra research` rather than the workspace-wide sync the
       # test gates use: this reproduces exactly what `install-workspace.sh digiquant`
-      # plus `digiquant[atlas]` installed, and keeps NautilusTrader out of a job that
+      # plus `digiquant[research]` installed, and keeps NautilusTrader out of a job that
       # never needs it. digibase and digikey arrive as declared dependencies of
       # digiquant, so the hand-ordered install script is no longer needed here.
       - name: Install from lockfile
-        run: uv sync --frozen --package digiquant --extra atlas
+        run: uv sync --frozen --package digiquant --extra research
 
       # STEP ORDER (#2597/#2598): accounting finalizer BEFORE metrics. Once a complete
       # status=final period exists, metrics consume it for pnl_pct / indexed NAV.

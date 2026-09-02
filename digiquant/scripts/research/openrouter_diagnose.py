@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenRouter diagnostic — root-cause an empty-completion / degraded Atlas run, and report spend.
+"""OpenRouter diagnostic — root-cause an empty-completion / degraded research run, and report spend.
 
 Runs three checks, cheapest first, and prints a verdict:
 
@@ -208,12 +208,12 @@ def check_strict_ping() -> bool:
     except Exception as exc:  # noqa: BLE001 — diagnostic: report any failure, never raise
         # An empty body surfaces here as a ValidationError / "empty completion" RuntimeError.
         print(f"  {FAIL}  strict ping failed — {type(exc).__name__}: {exc}")
-        print("        → this is the degraded-run signature. Triage: atlas docs/RUNBOOK.md")
+        print("        → this is the degraded-run signature. Triage: research docs/RUNBOOK.md")
         return False
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="OpenRouter diagnostic for Atlas runs.")
+    parser = argparse.ArgumentParser(description="OpenRouter diagnostic for research runs.")
     parser.add_argument(
         "--no-ping",
         action="store_true",

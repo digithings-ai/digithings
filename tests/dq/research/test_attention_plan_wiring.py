@@ -7,12 +7,12 @@ from datetime import date
 import pytest
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     DeltaTriageDecision,
     DeltaTriageResult,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
 )
 from digiquant.dashboard.attention_plan_graph import (
     OLYMPUS_PLANNER_MODE_ENV,
@@ -21,18 +21,18 @@ from digiquant.dashboard.attention_plan_graph import (
 )
 from digiquant.dashboard.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
 RUN = date(2026, 8, 25)
 
 
-def _state_with_triage() -> AtlasResearchState:
-    state = AtlasResearchState(
+def _state_with_triage() -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=RUN,
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
     state.triage = DeltaTriageResult(
         evaluated_at=RUN,
@@ -52,7 +52,7 @@ def _state_with_triage() -> AtlasResearchState:
             ),
         ],
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[
             FocusRosterEntry(ticker="AAPL", roster_reason="held"),
             FocusRosterEntry(ticker="MSFT", roster_reason="momentum"),
@@ -72,10 +72,10 @@ def test_planner_mode_from_env_defaults_to_shadow(monkeypatch: pytest.MonkeyPatc
 
 def test_maybe_publish_skips_without_triage() -> None:
     client = FakeSupabaseClient()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=RUN,
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
     assert maybe_publish_attention_plan_shadow(client=client, state=state) is None
     assert client.store.get("documents", []) == []

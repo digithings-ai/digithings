@@ -107,7 +107,7 @@ The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_sta
 
 When `stream: true` in `POST /v1/chat/completions`:
 
-1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:340`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. Because the copy outlives the request — the thread is neither daemonic nor joined, and `byok_header_context`'s `finally` runs `pop_byok` as soon as streaming starts, resetting the *parent's* vars only — the worker calls `clear_byok_bindings()` in its own `finally`, so the user's key does not stay resident in a context copy after the request it came from is gone. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and Olympus passes labels explicitly instead.)
+1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:340`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. Because the copy outlives the request — the thread is neither daemonic nor joined, and `byok_header_context`'s `finally` runs `pop_byok` as soon as streaming starts, resetting the *parent's* vars only — the worker calls `clear_byok_bindings()` in its own `finally`, so the user's key does not stay resident in a context copy after the request it came from is gone. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and dashboard passes labels explicitly instead.)
 2. The HTTP response is a `StreamingResponse` whose generator consumes the queue and yields SSE chunks.
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
@@ -126,31 +126,31 @@ When `stream: true` in `POST /v1/chat/completions`:
 
 ## 4. Data Model
 
-### 4.0 Olympus call-event capture
+### 4.0 dashboard call-event capture
 
 `usage.start()` activates ordered aggregate events and a temporary, lock-protected detailed
-telemetry buffer for an Olympus process. `digillm` contributes terminal model/search events;
+telemetry buffer for an dashboard process. `digillm` contributes terminal model/search events;
 `graph/research_agent.py` times actual tool execution. `call_context(node_run_id, phase, operation,
 document_key)` labels model/search calls, while the tool wrapper also passes display labels
 explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers
-on its own. That is a property of the pool, not of Olympus: the two pools on the *credential*
+on its own. That is a property of the pool, not of dashboard: the two pools on the *credential*
 path (§8.4, `planning/executor.py` and `digillm.run_tools`) submit through
 `contextvars.copy_context().run(...)` instead, which is the alternative to threading the value
-through by hand. Olympus keeps the explicit labels — passing a display string is cheaper than
+through by hand. dashboard keeps the explicit labels — passing a display string is cheaper than
 a context copy and does not silently widen what a worker inherits.
 
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
 It never stores prompts, argument or result values, document bodies, credentials, PII-heavy
 values, model output, or chain-of-thought. `events_snapshot()` returns the ordered body-free
-records; aggregate `snapshot()` includes them under `events` for the Atlas diagnostics writer.
+records; aggregate `snapshot()` includes them under `events` for the research diagnostics writer.
 
 #### Logical provider-call boundary
 
 **Purpose:** label each logical provider invocation with generic intent, parentage, and artifact
 disposition. **Reason:** the aggregate explains run totals and physical attempts explain transport,
 but neither explains why a call existed or which prior call caused a repair or follow-up.
-**Intent:** make provider work attributable without moving Olympus policy into digigraph or adding
+**Intent:** make provider work attributable without moving dashboard policy into digigraph or adding
 nodes to the canonical graph. **System contribution:** detailed usage, artifact linkage, and later
 research-policy evaluation can share one stable lineage.
 
@@ -195,7 +195,7 @@ is the regression guard.
 **Run identity.** `usage.start(run_id=...)` takes the `GITHUB_RUN_ID` that `atlas_run_diagnostics`
 already writes with `on_conflict="run_id,attempt"`, so detailed telemetry and the diagnostics row
 join on one value. It is stored verbatim — truncating a join key would corrupt reconciliation. No
-second identifier is minted; `AtlasResearchState.run_id` is a per-process `uuid4` that joins to
+second identifier is minted; `ResearchState.run_id` is a per-process `uuid4` that joins to
 nothing and is deliberately not used.
 
 **When identity is unavailable, nothing is recorded.** This is the honest case, not a gap:
@@ -206,10 +206,10 @@ nothing and is deliberately not used.
 | Off CI, via `cli_main` | `{cadence}-{run_date}-local` — reused, not minted | `-local` is a suffix no CI run id can carry, so the two can never be confused |
 | `deps.diagnostics is None` (library/test callers) | `None` | No node records, no logical calls; physical attempts unchanged. Such a run writes no diagnostics row either, so there is nothing to reconcile against |
 | Blank/whitespace | normalised to `None` | `run_id text NOT NULL CHECK (length(run_id) > 0)` can never be violated from this producer |
-| `usage.start()` with no argument (operator scripts, the Atlas simulator, the chat workflow) | `None` | Emits nothing **by design** |
+| `usage.start()` with no argument (operator scripts, the research simulator, the chat workflow) | `None` | Emits nothing **by design** |
 
 **A NULL `fanout_key` means "this execution had no fan-out cursor", never "instrumentation
-missing".** Atlas `phase5_sectors` nodes and the compile-time per-ticker H5/H6 variants already
+missing".** research `phase5_sectors` nodes and the compile-time per-ticker H5/H6 variants already
 carry their discriminator in `node_name`, so they leave `fanout_key` NULL correctly. A worker that
 no-ops on a falsy cursor still emits an honest `SUCCEEDED` record with no child provider call.
 
@@ -474,7 +474,7 @@ A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context ma
 
 `PostgresSaver` never deletes thread state. Nothing in `langgraph-checkpoint-postgres` expires a `thread_id`, so **any deployment using `DIGI_CHECKPOINTER=postgres` with non-reusable thread ids grows without bound** and the operator owns retention.
 
-Olympus is the load-bearing case: `hermes/chain.py:125` derives `thread_id` as `"<GITHUB_RUN_ID>::atlas"` / `"::hermes"`, which is never reused, so no row ever became collectable. By 2026-08-01 the four checkpointer tables held 952 MB of a 1263 MB database (75%) and were growing ~50-58 MB/day.
+dashboard is the load-bearing case: `portfolio/chain.py:125` derives `thread_id` as `"<GITHUB_RUN_ID>::research"` / `"::portfolio"`, which is never reused, so no row ever became collectable. By 2026-08-01 the four checkpointer tables held 952 MB of a 1263 MB database (75%) and were growing ~50-58 MB/day.
 
 Retention is enforced **in the database, not in digigraph** — the pruner must not depend on a Python process being alive, and digigraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement).
 
@@ -484,10 +484,10 @@ Three properties that any other Postgres-checkpointer deployment should copy:
 - **Key staleness on `max((checkpoint->>'ts')::timestamptz)` per thread.** Per-row it is a reliable ISO 8601 timestamp; taking the max means an in-flight or freshly-resumed thread can never be eligible, and an unparsable/absent `ts` yields `NULL`, fails the comparison, and is retained.
 - **Retention is a resume ceiling.** Any resume-from-checkpoint feature (here, `pipeline-digiquant.yml`'s `resume_run_id`) can only reach back as far as the retention window, so the window can never be zero.
 
-**The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one H6 superstep persisted 52 complete `AtlasResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
+**The real cost driver is upstream of retention.** 94% of the bytes sit on the `__pregel_tasks` channel: `FanOutPhase` dispatches one `Send` per item and `pipeline_builder.py:57-58` hands each worker a **full copy of the live state**, so one H6 superstep persisted 52 complete `ResearchState` copies (a single 48 MB row was measured). That is `O(fan-out width x state size)` per superstep and it contradicts `AGENTS.md`'s "State stays lean … no large DataFrames in state or LangGraph checkpoints" as well as [`docs/LANGGRAPH_REVIEW.md`](docs/LANGGRAPH_REVIEW.md). Shrinking the `Send` payload to a cursor is a ~20x lever; it changes `FanOutPhase`'s state-copy contract in this shared library and is therefore deferred as a human-gated architecture change (follow-up to #1758). Retention caps the footprint; it does not reduce the write volume.
 #### 5.5.3 Postgres connection bounds — #1734
 
-`PostgresSaver.from_conn_string` forwards its argument straight to `psycopg.Connection.connect`, which applies **no** connect timeout and **no** TCP keepalives, and exposes no kwarg for either. An established connection to a peer that disappears without sending an RST therefore stays in `ESTABLISHED` indefinitely, and a checkpoint read/write blocks with nothing but the caller's own job timeout as a backstop — the shape of the 2026-07-30 Olympus stall (210 minutes of silence inside a 240-minute job, beginning at a checkpoint-write boundary).
+`PostgresSaver.from_conn_string` forwards its argument straight to `psycopg.Connection.connect`, which applies **no** connect timeout and **no** TCP keepalives, and exposes no kwarg for either. An established connection to a peer that disappears without sending an RST therefore stays in `ESTABLISHED` indefinitely, and a checkpoint read/write blocks with nothing but the caller's own job timeout as a backstop — the shape of the 2026-07-30 dashboard stall (210 minutes of silence inside a 240-minute job, beginning at a checkpoint-write boundary).
 
 `_bounded_conn_string()` closes that by merging the bounds into the conninfo itself, which libpq accepts as ordinary connection parameters:
 
@@ -500,7 +500,7 @@ It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` k
 
 `statement_timeout` is deliberately **not** set. It is enforced server-side, so it cannot help when the network path is gone, and it risks aborting a legitimately slow write against a checkpoint table already at ~950 MB in production (#1758).
 
-Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the Olympus path `hermes/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
+Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the dashboard path `portfolio/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
 
 #### 5.5.4 Store (cross-thread memory) — parallel but not identical backend selection
 
@@ -721,7 +721,7 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 `get_model_for_mode()` (now in `model_config.py`) resolves the model via `_load_model_modes()`, which is **mtime-cached per process**: `config/model_modes.yaml` is opened and parsed by PyYAML only when its mtime changes, so steady-state calls cost a single `path.stat()` plus the env reads (`DIGI_CONFIG_PATH`, `DIGI_MODEL_MODES_FILE`). The mode itself is re-read from env/config on every LLM call to pick up runtime changes.
 
-Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`.
+Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid dashboard models — dashboard/research use `get_model_for_phase()`.
 
 **BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`, plus `_BYOK_MODEL_EXAMPLES` — `_load_byok_catalog` returns three of the four and derives `BYOK_ROUTABLE_PROVIDERS` from the first) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. **One field is exempt from fail-loud, deliberately:** each entry's optional `fallbackModels` is read for exactly one purpose — the `(e.g. …)` parenthetical in `byok_default_model_refusal` — so a bad value there cannot break routing, and `_clean_examples` strips it, drops what it cannot use, warns, and carries on. Fail-loud is there to stop a broken catalog from 400ing every request; escalating a cosmetic parenthetical to a startup crash buys nothing and would newly break an operator catalog carrying `fallbackModels: null`, which imported fine while the key was an untyped extra. It strips because this value is quoted verbatim into user-facing copy — as the entry `id`s are by `byok_provider_unsupported`, but those `_id_non_empty` already strips. Do not "harden" it into a raise — `test_a_malformed_example_list_does_not_crash_startup` pins the tolerance and `test_example_is_stripped_before_it_reaches_user_facing_copy` the strip. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
 
@@ -754,7 +754,7 @@ Search results from digisearch are written to `{run_data_dir}/{session_id}/datas
 
 ### 8.3.1 Two-tier context compaction (#399)
 
-Long research sessions (document RAG + Atlas `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
+Long research sessions (document RAG + research `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
 
 | Tier | When | What happens |
 |------|------|----------------|
@@ -765,7 +765,7 @@ Long research sessions (document RAG + Atlas `run_research_agent`) accumulate to
 
 - `digigraph.compaction.compact_messages` — pure orchestrator (tier 1 then tier 2)
 - `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`
-- `graph/research_agent.py` — same pre-LLM compaction for Atlas/Hermes phase calls (retries re-compact)
+- `graph/research_agent.py` — same pre-LLM compaction for research/portfolio phase calls (retries re-compact)
 - Same-turn tool results are **not** stubbed at `execute_tool` time: digillm already caps injected tool text via `DIGI_TOOL_MESSAGE_MAX_CHARS` (default 12k) while keeping a usable prefix. Stubbing before inject hid digisearch hits from the model whenever `DIGI_RUN_DATA_DIR` was set (typical project RAG).
 
 **State contract:** `WorkflowState._compaction_event` holds a lean `CompactionEvent` dict (refs, counts, token deltas). `WorkflowState.llm_messages` holds the compacted LLM view for the next turn. Originals are **not** deleted from the session workspace — resume reloads them via the event's `tier1_refs` / `tier2_evicted_ref`. Checkpointer policy is unchanged (`DIGI_CHECKPOINTER=memory|sqlite|postgres`).
@@ -863,7 +863,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases route on **pinned** per-capability models from `config/digiquant_models.yaml` (`openrouter/openrouter/auto` — OpenRouter Auto Router — is reserved for the OpenRouter diagnostic scripts (`digiquant/scripts/research/openrouter_diagnose.py` and the preflight's structured-output probe), not phase routing and not grounding — `get_grounding_model()` resolves a web-search-capable model from the active tier's pools; see `digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md` "OpenRouter model tiers"); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
+- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. research/portfolio phases route on **pinned** per-capability models from `config/digiquant_models.yaml` (`openrouter/openrouter/auto` — OpenRouter Auto Router — is reserved for the OpenRouter diagnostic scripts (`digiquant/scripts/research/openrouter_diagnose.py` and the preflight's structured-output probe), not phase routing and not grounding — `get_grounding_model()` resolves a web-search-capable model from the active tier's pools; see `digiquant/src/digiquant/research/docs/RUNBOOK.md` "OpenRouter model tiers"); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
 ### 9.7 digivault
@@ -1072,7 +1072,7 @@ All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extr
 `digigraph/src/digigraph/graph/research_agent.py` and
 `digigraph/src/digigraph/graph/pipeline_builder.py` provide reusable
 primitives for composing phase-structured research sub-graphs. The digiquant
-Atlas migration (issue #176, ADR-0009) is the first consumer.
+research migration (issue #176, ADR-0009) is the first consumer.
 
 - `run_research_agent(skill_text, phase_inputs, shared_context, output_model)` —
   calls LiteLLM with an analyst-persona system prompt, injecting a skill file
@@ -1100,6 +1100,6 @@ Atlas migration (issue #176, ADR-0009) is the first consumer.
   run in parallel with synthetic fan-in barriers. The `__barrier__` prefix
   is reserved.
 
-These primitives stay Atlas-agnostic on purpose. Any sub-graph that wants
+These primitives stay research-agnostic on purpose. Any sub-graph that wants
 phase-structured parallel research can reuse them by declaring its own
 phase list.

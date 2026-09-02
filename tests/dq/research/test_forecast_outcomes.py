@@ -14,7 +14,7 @@ from digiquant.research.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
 )
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
@@ -26,7 +26,7 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.models.forecast_calibration import OutcomeStatus
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 pytestmark = pytest.mark.unit
 
@@ -425,7 +425,7 @@ class TestPreflightReflectWiring:
             fake_resolve_outcomes,
         )
         node = build_preflight_reflect_node(PreflightReflectDeps(client=OutcomesFake()))
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             knowledge_cutoff_at=CUTOFF,

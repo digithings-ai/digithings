@@ -77,7 +77,7 @@ class TestMigrationFilePresent:
         """Rollback DROP TABLEs must be commented so re-running the migration
         does not drop the tables it just created.
 
-        DROP POLICY IF EXISTS is allowed uncommented — existing Atlas
+        DROP POLICY IF EXISTS is allowed uncommented — existing research
         migrations (005/007/015/023) use it for idempotent policy replace.
         """
         assert "Rollback" in sql, "no rollback section header"

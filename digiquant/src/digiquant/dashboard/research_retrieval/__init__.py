@@ -1,4 +1,4 @@
-"""Olympus unified research + portfolio retrieval (spec §6.1).
+"""dashboard unified research + portfolio retrieval (spec §6.1).
 
 Phase 3 WP12.1 frozen research-state contracts live in
 :mod:`digiquant.dashboard.research_retrieval.models` (prose remains a view).

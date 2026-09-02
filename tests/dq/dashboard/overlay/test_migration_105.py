@@ -21,11 +21,11 @@ WRITERS = (
     "commit_io.py",
     "attention_plan_io.py",
     "beliefs_distillation.py",
-    "scripts/atlas/publish_document.py",
-    "scripts/atlas/publish_research.py",
-    "scripts/atlas/materialize_snapshot.py",
-    "scripts/atlas/backfill_normalize_schemas.py",
-    "scripts/atlas/backfill_pm_rebalance_and_activity.py",
+    "digiquant/scripts/research/publish_document.py",
+    "digiquant/scripts/research/publish_research.py",
+    "digiquant/scripts/research/materialize_snapshot.py",
+    "digiquant/scripts/research/backfill_normalize_schemas.py",
+    "digiquant/scripts/research/backfill_pm_rebalance_and_activity.py",
 )
 
 

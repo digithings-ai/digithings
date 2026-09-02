@@ -57,7 +57,7 @@ Announce: "Deliberation ingest complete. [N] tickers from session index."
 
 If **no** session index exists:
 
-- Use per-ticker deliberation output from the Hermes phase7cd debate graph nodes.
+- Use per-ticker deliberation output from the portfolio phase7cd debate graph nodes.
 - Or ingest a single legacy transcript `deliberation-transcript/{{DATE}}.json` if present.
 
 ---

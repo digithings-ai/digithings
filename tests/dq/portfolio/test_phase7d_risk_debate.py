@@ -10,9 +10,9 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
 )
 from digiquant.portfolio.phases.phase7d_pm import (
     build_phase7d,
@@ -29,15 +29,15 @@ def _no_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
 
 
-def _state_for_debate() -> AtlasResearchState:
+def _state_for_debate() -> ResearchState:
     """Minimal state with phase 6 bias + phase 7C analyst payload."""
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
-        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
+        config=ResearchConfigBundle(watchlist=["AAPL", "MSFT"]),
     )
     state.phase6_bias_row = {"date": "2026-04-26", "macro_regime": "late-cycle"}
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts={
             "AAPL": {
                 "ticker": "AAPL",
@@ -78,7 +78,7 @@ def _conservative_payload(aggressive_input: str) -> str:
 @pytest.mark.unit
 class TestRiskAggressiveNode:
     def test_aggressive_node_writes_aggressive_case_only(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase7d_risk_aggressive()])
+        compiled = build_pipeline(ResearchState, [build_phase7d_risk_aggressive()])
         state = _state_for_debate()
 
         with patch(
@@ -86,7 +86,7 @@ class TestRiskAggressiveNode:
             return_value=_aggressive_payload(),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         debate = final.phase7d_risk_debate
         assert debate is not None
@@ -121,7 +121,7 @@ class TestRiskAggressiveNode:
 @pytest.mark.unit
 class TestRiskConservativeNode:
     def test_conservative_node_writes_full_debate_summary(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase7d_risk_conservative()])
+        compiled = build_pipeline(ResearchState, [build_phase7d_risk_conservative()])
         state = _state_for_debate()
         state.phase7d_risk_debate = {
             "aggressive_case": "Lift AAPL by 3%.",
@@ -134,7 +134,7 @@ class TestRiskConservativeNode:
             return_value=_conservative_payload("Lift AAPL by 3%."),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         debate = final.phase7d_risk_debate
         assert debate is not None
@@ -213,5 +213,5 @@ class TestPhase7dStructure:
 
     def test_full_phase7d_pipeline_compiles(self) -> None:
         """Smoke test: spread the three sub-phases into a pipeline cleanly."""
-        compiled = build_pipeline(AtlasResearchState, list(build_phase7d()))
+        compiled = build_pipeline(ResearchState, list(build_phase7d()))
         assert compiled is not None

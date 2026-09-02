@@ -7,14 +7,14 @@ from uuid import UUID, uuid4
 
 import pytest
 from digiquant.research import cost_liquidity_registry as clr
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.portfolio.h9_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
 )
 from digiquant.portfolio.risk_policy import resolve_risk_policy
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -23,19 +23,19 @@ _TS = datetime(2026, 8, 25, 15, 0, tzinfo=UTC)
 _COMMIT_ID = UUID("bbbbbbbb-2222-4222-8222-222222222222")
 
 
-def _state(*, preferences: dict | None = None, with_policy: bool = False) -> AtlasResearchState:
-    state = AtlasResearchState(
+def _state(*, preferences: dict | None = None, with_policy: bool = False) -> ResearchState:
+    state = ResearchState(
         run_id=uuid4(),
         run_type="delta",
         run_date=_RUN_DATE,
         baseline_date=date(2026, 8, 22),
         knowledge_cutoff_at=_TS,
-        config=AtlasConfigBundle(preferences=preferences or {}),
+        config=ResearchConfigBundle(preferences=preferences or {}),
     )
     if with_policy:
-        from digiquant.research.state import PhaseHermesState
+        from digiquant.research.state import PhasePortfolioState
 
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             risk_policy=_policy().model_dump(mode="json"),
         )
     return state

@@ -111,7 +111,7 @@ def test_placeholder_phase_dash_N_fails(cov: Any, monkeypatch: pytest.MonkeyPatc
 
 
 def test_invalid_model_fails(cov: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    _write_tsv(cov.TSV, ["12\tPhase 4 — Olympus\tdigiquant\tTask\tP1\tgpt-4o"])
+    _write_tsv(cov.TSV, ["12\tPhase 4 — dashboard\tdigiquant\tTask\tP1\tgpt-4o"])
     monkeypatch.setattr(
         cov,
         "_gh_json",
@@ -124,7 +124,7 @@ def test_valid_sonnet_and_opus_rows_pass(cov: Any, monkeypatch: pytest.MonkeyPat
     _write_tsv(
         cov.TSV,
         [
-            "21\tPhase 4 — Olympus\tdigiquant\tTask\tP1\tsonnet",
+            "21\tPhase 4 — dashboard\tdigiquant\tTask\tP1\tsonnet",
             "22\tPhase 5 — Auth\tdigikey\tTask\tP0\topus",
         ],
     )

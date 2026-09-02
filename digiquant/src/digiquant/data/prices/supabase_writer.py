@@ -1,6 +1,6 @@
 """Supabase upsert helpers for price_history / price_technicals / macro_series_observations.
 
-Preserves the column contracts Atlas still reads:
+Preserves the column contracts research still reads:
 
 * ``price_history`` — ``{date, ticker, open, high, low, close, volume}``
 * ``price_technicals`` — ``{date, ticker, <TECHNICAL_COLUMNS>}``

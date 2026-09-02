@@ -1,8 +1,8 @@
 /**
- * TypeScript row types for the twelve-x FX research tables that Olympus reads.
+ * TypeScript row types for the twelve-x FX research tables that dashboard reads.
  *
  * These MUST match the shared data contract (twelve-x migration 005) exactly —
- * Olympus only reads these tables, twelve-x owns the writes.
+ * dashboard only reads these tables, twelve-x owns the writes.
  */
 
 /** Canonical G10 currency universe (display + ordering for consensus views). */
@@ -128,7 +128,7 @@ export interface FxEventSnapshotRow {
  *
  * Not a twelve-x table, despite living in this module. The calendar is shared, so #1066
  * made `core` its single source and retired twelve-x's own `fx_economic_calendar`
- * (no dual-write) — which is why `getUpcomingEvents` reads it through the MAIN Olympus
+ * (no dual-write) — which is why `getUpcomingEvents` reads it through the MAIN dashboard
  * client rather than `twelveXSupabase`. The `Fx` prefix on this interface is a naming
  * leftover, not a claim of ownership.
  */

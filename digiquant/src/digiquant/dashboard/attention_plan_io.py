@@ -3,7 +3,7 @@
 Typed contract for publishing WP13-class shadow plans under
 ``document_key='attention-plan'``. Daily graph call-site:
 ``digiquant.dashboard.attention_plan_graph.maybe_publish_attention_plan_shadow``
-(invoked from Atlas ``publish_phase``).
+(invoked from research ``publish_phase``).
 """
 
 from __future__ import annotations

@@ -12,6 +12,6 @@ describe('/system route', () => {
   it('is a redirect stub to Pipeline (System nav removed)', () => {
     const html = renderToStaticMarkup(createElement(Page));
     expect(html).toContain('Redirecting to Pipeline');
-    expect(html).not.toContain('How Olympus works');
+    expect(html).not.toContain('How dashboard works');
   });
 });

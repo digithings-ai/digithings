@@ -1,4 +1,4 @@
-"""Atlas Phase 9 closed-loop reflection — write/resolve helpers (#432).
+"""research Phase 9 closed-loop reflection — write/resolve helpers (#432).
 
 Splits the two-phase reflection mechanic into testable units:
 
@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import (
     SupabaseClient,
     query_pending_decisions,
@@ -65,7 +65,7 @@ def _thesis_text(thesis: str | None) -> str:
 def persist_pending(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
 ) -> int:
     """Phase A — write one ``pending`` row per ticker that Phase 7C produced.
 
@@ -273,7 +273,7 @@ def fetch_recent_lessons(
     )
 
 
-def _holding_days(state: AtlasResearchState) -> int:
+def _holding_days(state: ResearchState) -> int:
     """Derive holding window from conviction or ``preferences['holding_days']``.
 
     If preferences['holding_days'] is set, honour the explicit override.

@@ -20,7 +20,7 @@ from digiquant.portfolio.risk_controls import (
     compute_breaker_scale,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -141,7 +141,7 @@ def test_reader_look_ahead_guard_excludes_future_nav() -> None:
 
 def test_incumbent_breaker_defaults_and_ramp_match_golden_fixture() -> None:
     """WP6.1 (#2687): freeze drawdown breaker thresholds and ramp curve."""
-    from tests.dq.hermes.incumbent_risk_fixtures import (
+    from tests.dq.portfolio.incumbent_risk_fixtures import (
         dataclass_matches_fixture,
         load_incumbent_risk_fixture,
     )

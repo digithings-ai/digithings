@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchState, PhasePortfolioState
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastTerms,
@@ -19,14 +19,14 @@ from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from pydantic import ValidationError
 
-from tests.dq.hermes.phase1_e2e_fixtures import sample_forecast_terms_dict
+from tests.dq.portfolio.phase1_e2e_fixtures import sample_forecast_terms_dict
 
 pytestmark = pytest.mark.unit
 
 _CUTOFF = datetime(2026, 8, 31, 18, 43, tzinfo=UTC)
 
 
-def _analyst() -> tuple[dict[str, object], AtlasResearchState]:
+def _analyst() -> tuple[dict[str, object], ResearchState]:
     terms = ForecastTerms.model_validate(sample_forecast_terms_dict())
     assessment = materialize_forecast_assessment(
         ticker="GLD",
@@ -42,11 +42,11 @@ def _analyst() -> tuple[dict[str, object], AtlasResearchState]:
         effective_at=_CUTOFF,
         known_at=_CUTOFF,
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 31),
         knowledge_cutoff_at=_CUTOFF,
-        phase_hermes=PhaseHermesState(),
+        phase_portfolio=PhasePortfolioState(),
     )
     analyst = {
         "ticker": "GLD",

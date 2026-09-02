@@ -1,11 +1,11 @@
-"""Atlas → Hermes chain integration test.
+"""research → portfolio chain integration test.
 
-Exercises :func:`digiquant.portfolio.chain.run_atlas_then_hermes` end-to-end
+Exercises :func:`digiquant.portfolio.chain.run_research_then_portfolio` end-to-end
 through the same simulator harness the per-phase tests use. Validates the
 chain's three responsibilities:
 
-1. Atlas runs research-only (publish=None during the Atlas pass).
-2. Hermes consumes the populated state and runs analyst → debate → PM →
+1. research runs research-only (publish=None during the research pass).
+2. portfolio consumes the populated state and runs analyst → debate → PM →
    reflection.
 3. ``publish_phase`` flushes the fully populated state once at the end.
 
@@ -13,11 +13,11 @@ Two scenarios:
 
 - ``test_baseline_chain_populates_both_engines`` — full baseline run hits
   every phase. State should carry research outputs (phase1..7) AND analysis
-  outputs (phase_hermes.asset_analysts, pm_direction_memo, sized_book) by the
+  outputs (phase_portfolio.asset_analysts, pm_direction_memo, sized_book) by the
   end. The fake Supabase client should record exactly one daily_snapshots
   upsert and the analyst/PM document writes.
-- ``test_monthly_chain_short_circuits_at_atlas`` — monthly run uses
-  Atlas's phase_monthly path; Hermes does not run; state's H-slots stay
+- ``test_monthly_chain_short_circuits_at_research`` — monthly run uses
+  research's phase_monthly path; portfolio does not run; state's H-slots stay
   unset.
 """
 
@@ -28,42 +28,42 @@ from typing import Any  # score:allow untyped any — scored-lint suppression: t
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.research.testing.simulator import simulated_pipeline
 
 
 @pytest.mark.unit
 class TestChainBaseline:
     def test_baseline_chain_populates_both_engines(self) -> None:
-        """Atlas → Hermes chain: research + analysis slots both populated."""
+        """research → portfolio chain: research + analysis slots both populated."""
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
             )
 
-        # Research outputs (Atlas).
+        # Research outputs (research).
         assert final.phase7_digest is not None
         assert "master-digest" in (final.phase7_digest.get("segment") or "")
 
-        # Analysis outputs (Hermes H5–H8).
-        assert "AAPL" in final.phase_hermes.asset_analysts, (
-            "Hermes H5 should have populated phase_hermes.asset_analysts"
+        # Analysis outputs (portfolio H5–H8).
+        assert "AAPL" in final.phase_portfolio.asset_analysts, (
+            "portfolio H5 should have populated phase_portfolio.asset_analysts"
         )
-        assert final.phase_hermes.pm_direction_memo is not None, (
-            "Hermes H7 should have populated pm_direction_memo"
+        assert final.phase_portfolio.pm_direction_memo is not None, (
+            "portfolio H7 should have populated pm_direction_memo"
         )
-        assert final.phase_hermes.sized_book is not None, (
-            "Hermes H8 should have populated sized_book"
+        assert final.phase_portfolio.sized_book is not None, (
+            "portfolio H8 should have populated sized_book"
         )
 
-    def test_baseline_chain_publish_writes_after_hermes(self) -> None:
+    def test_baseline_chain_publish_writes_after_portfolio(self) -> None:
         """Terminal publish runs once with both engines' outputs in scope."""
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -83,17 +83,17 @@ class TestChainBaseline:
         # exists in state before publish runs, so the analyst doc is in the store.
         documents = store.get("documents", [])
         document_keys = {row.get("document_key") for row in documents}
-        # Atlas's research segments published — alt-* and asset-class
+        # research's research segments published — alt-* and asset-class
         # docs land here. (The synthesis digest goes to daily_snapshots,
         # not documents/.)
         assert "alt-sentiment-news" in document_keys
         assert "bonds" in document_keys
-        # Hermes's analyst payload published in the same pass.
+        # portfolio's analyst payload published in the same pass.
         assert "analyst/AAPL" in document_keys, (
             f"analyst document missing from publish; saw keys: {sorted(k for k in document_keys if k)}"
         )
         # Final state from the chain still has the analyst payload populated.
-        assert "AAPL" in final.phase_hermes.asset_analysts
+        assert "AAPL" in final.phase_portfolio.asset_analysts
 
 
 @pytest.mark.unit
@@ -133,9 +133,9 @@ class TestChainMaterialization:
                 },
             },
         ) as run:
-            final = run.invoke(AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
+            final = run.invoke(ResearchInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
 
-        assert final.phase_hermes.sized_book is not None
+        assert final.phase_portfolio.sized_book is not None
         store = run.client.store
         positions = {r["ticker"]: r for r in store.get("positions", [])}
         assert positions["AAPL"]["weight_pct"] == 100.0
@@ -163,7 +163,7 @@ class TestChainMaterialization:
                 }
             },
         ) as run:
-            run.invoke(AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
+            run.invoke(ResearchInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)))
         assert "positions" not in run.client.store
         assert "nav_history" not in run.client.store
 
@@ -171,10 +171,10 @@ class TestChainMaterialization:
 @pytest.mark.unit
 class TestChainDailyCadence:
     def test_daily_chain_populates_both_engines(self) -> None:
-        """Atlas → Hermes chain with daily cadence: research + analysis slots populated."""
+        """research → portfolio chain with daily cadence: research + analysis slots populated."""
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -182,44 +182,44 @@ class TestChainDailyCadence:
 
         assert final.phase7_digest is not None
         assert "master-digest" in (final.phase7_digest.get("segment") or "")
-        assert "AAPL" in final.phase_hermes.asset_analysts
-        assert final.phase_hermes.pm_direction_memo is not None
-        assert final.phase_hermes.sized_book is not None
+        assert "AAPL" in final.phase_portfolio.asset_analysts
+        assert final.phase_portfolio.pm_direction_memo is not None
+        assert final.phase_portfolio.sized_book is not None
 
 
 @pytest.mark.unit
 class TestChainResearchGate:
-    """#944: Hermes must not run/commit when the Atlas pass produced no fresh research.
+    """#944: portfolio must not run/commit when the research pass produced no fresh research.
 
-    The Jun-20 incident: Atlas crashed on empty LLM responses (``openrouter/auto``), yet the
-    chain swallowed the crash (``_safe_invoke_graph``) and Hermes ran, booking a pm-rebalance
-    on 2-day-stale prior context. The gate must skip the Hermes commit entirely on an
-    insufficient Atlas pass and record the skip so the run is gated (CI retries).
+    The Jun-20 incident: research crashed on empty LLM responses (``openrouter/auto``), yet the
+    chain swallowed the crash (``_safe_invoke_graph``) and portfolio ran, booking a pm-rebalance
+    on 2-day-stale prior context. The gate must skip the portfolio commit entirely on an
+    insufficient research pass and record the skip so the run is gated (CI retries).
     """
 
-    def test_failed_atlas_skips_hermes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_failed_research_skips_portfolio(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from digiquant.research.state import PhaseError
         from digiquant.portfolio import chain as chain_mod
 
-        hermes_built: list[bool] = []
+        portfolio_built: list[bool] = []
 
         def _fake_safe_invoke(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
-            # Simulate the Atlas pass crashing at the chain level: _safe_invoke_graph records
-            # a chain/atlas error and returns the last-good (research-empty) state.
+            # Simulate the research pass crashing at the chain level: _safe_invoke_graph records
+            # a chain/research error and returns the last-good (research-empty) state.
             label = _a[-1] if _a else _k.get("label")
-            if label == "atlas":
+            if label == "research":
                 state.errors.append(
                     PhaseError(
                         phase="chain",
-                        node="atlas",
+                        node="research",
                         message="empty LLM response from 'openrouter/auto'",
                         retryable=True,
                     )
                 )
             return state
 
-        def _fake_build_hermes_graph(**_kwargs: Any) -> Any:
-            hermes_built.append(True)
+        def _fake_build_portfolio_graph(**_kwargs: Any) -> Any:
+            portfolio_built.append(True)
 
             class _Graph:
                 def invoke(self, state: Any, *_a: Any, **_k: Any) -> Any:
@@ -228,38 +228,38 @@ class TestChainResearchGate:
             return _Graph()
 
         monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _fake_safe_invoke)
-        monkeypatch.setattr(chain_mod, "build_atlas_graph", lambda *_a, **_k: object())
+        monkeypatch.setattr(chain_mod, "build_research_graph", lambda *_a, **_k: object())
         monkeypatch.setattr(chain_mod, "_run_terminal_phase", lambda *_a, **_k: _a[2])
-        monkeypatch.setattr(chain_mod, "build_hermes_graph", _fake_build_hermes_graph)
+        monkeypatch.setattr(chain_mod, "build_portfolio_graph", _fake_build_portfolio_graph)
 
         with simulated_pipeline(watchlist=("AAPL",)) as run:
-            final = chain_mod.run_atlas_then_hermes(
-                atlas_input=AtlasInput(run_date=date(2026, 6, 20), watchlist=("AAPL",)),
-                deps=chain_mod.ChainDeps(atlas=run.deps, hermes=run.hermes_deps),
+            final = chain_mod.run_research_then_portfolio(
+                research_input=ResearchInput(run_date=date(2026, 6, 20), watchlist=("AAPL",)),
+                deps=chain_mod.ChainDeps(research=run.deps, portfolio=run.portfolio_deps),
             )
 
-        assert hermes_built == [], "Hermes must be skipped when Atlas produced no research"
-        assert any(getattr(e, "node", "") == "hermes-skipped" for e in final.errors), (
+        assert portfolio_built == [], "portfolio must be skipped when research produced no research"
+        assert any(getattr(e, "node", "") == "portfolio-skipped" for e in final.errors), (
             "the skip must be recorded as a chain error so the run is gated for retry"
         )
 
 
 @pytest.mark.unit
 class TestChainHeldInvariant:
-    """``run_atlas_then_hermes`` threads prior-book holdings into the 7C/7CD cap (#936).
+    """``run_research_then_portfolio`` threads prior-book holdings into the 7C/7CD cap (#936).
 
     The Jun-18 regression: a held name (IJR) fell outside the
     ``ATLAS_MAX_ANALYSTS`` window and was dropped from the fan-out, so the PM
-    auto-exited it. ``hermes_held`` must reach ``build_hermes_graph(..., held=...)``
+    auto-exited it. ``portfolio_held`` must reach ``build_portfolio_graph(..., held=...)``
     so the held-aware cap can keep it.
     """
 
-    def test_hermes_held_reaches_build_hermes_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_portfolio_held_reaches_build_portfolio_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from digiquant.portfolio import chain as chain_mod
 
         captured: dict[str, Any] = {}
 
-        def _fake_build_hermes_graph(**kwargs: Any):
+        def _fake_build_portfolio_graph(**kwargs: Any):
             captured.update(kwargs)
 
             class _Graph:
@@ -268,12 +268,12 @@ class TestChainHeldInvariant:
 
             return _Graph()
 
-        # Stub the Atlas pass + telemetry so we exercise only the chain's Hermes wiring. The
-        # Atlas stub populates one fresh segment so the #944 research-sufficiency gate passes
-        # (a no-op Atlas pass would now correctly skip Hermes).
-        def _atlas_produces_research(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
+        # Stub the research pass + telemetry so we exercise only the chain's portfolio wiring. The
+        # research stub populates one fresh segment so the #944 research-sufficiency gate passes
+        # (a no-op research pass would now correctly skip portfolio).
+        def _research_produces_research(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
             label = _a[-1] if _a else _k.get("label")
-            if label == "atlas":
+            if label == "research":
                 from digiquant.research.state import SegmentPayload, SegmentSlot
 
                 state.phase3_output = SegmentSlot(
@@ -281,40 +281,40 @@ class TestChainHeldInvariant:
                 )
             return state
 
-        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _atlas_produces_research)
+        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _research_produces_research)
         monkeypatch.setattr(chain_mod, "_run_terminal_phase", lambda *_a, **_k: _a[2])
-        monkeypatch.setattr(chain_mod, "build_atlas_graph", lambda *_a, **_k: object())
+        monkeypatch.setattr(chain_mod, "build_research_graph", lambda *_a, **_k: object())
 
         held = {"SPY", "IJR", "XLP"}
-        with patch.object(chain_mod, "build_hermes_graph", _fake_build_hermes_graph):
+        with patch.object(chain_mod, "build_portfolio_graph", _fake_build_portfolio_graph):
             with simulated_pipeline(watchlist=("AAPL",)) as run:
-                chain_mod.run_atlas_then_hermes(
-                    atlas_input=AtlasInput(
+                chain_mod.run_research_then_portfolio(
+                    research_input=ResearchInput(
                         run_date=date(2026, 6, 18),
                         watchlist=("AAPL", "SPY", "IJR", "XLP"),
                     ),
                     deps=chain_mod.ChainDeps(
-                        atlas=run.deps,
-                        hermes=run.hermes_deps,
+                        research=run.deps,
+                        portfolio=run.portfolio_deps,
                     ),
-                    hermes_watchlist=["SPY", "IJR", "XLP", "AAPL"],
-                    hermes_held=held,
+                    portfolio_watchlist=["SPY", "IJR", "XLP", "AAPL"],
+                    portfolio_held=held,
                 )
 
-        assert "held" in captured, "build_hermes_graph called without held kwarg"
+        assert "held" in captured, "build_portfolio_graph called without held kwarg"
         assert set(captured["held"]) == held, (
-            f"prior-book holdings not threaded into Hermes cap: {held - set(captured['held'])}"
+            f"prior-book holdings not threaded into portfolio cap: {held - set(captured['held'])}"
         )
 
 
 @pytest.mark.unit
 class TestChainKnowledgeCutoff:
-    """WP4.1 (#2628): chain pins one UTC cutoff for the whole Atlas→Hermes run."""
+    """WP4.1 (#2628): chain pins one UTC cutoff for the whole research→portfolio run."""
 
     def test_baseline_chain_pins_utc_knowledge_cutoff(self) -> None:
         with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
             final = run.invoke(
-                AtlasInput(
+                ResearchInput(
                     run_date=date(2026, 4, 26),
                     watchlist=("AAPL",),
                 )
@@ -324,7 +324,7 @@ class TestChainKnowledgeCutoff:
         assert final.knowledge_cutoff_at.tzinfo is not None
         assert final.knowledge_cutoff_at.utcoffset().total_seconds() == 0
 
-    def test_run_atlas_then_hermes_preserves_initial_cutoff(
+    def test_run_research_then_portfolio_preserves_initial_cutoff(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from datetime import UTC, datetime
@@ -334,9 +334,9 @@ class TestChainKnowledgeCutoff:
 
         pinned = datetime(2026, 4, 26, 9, 15, 0, tzinfo=UTC)
 
-        def _atlas_then_hermes(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
+        def _research_then_portfolio(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
             label = _a[-1] if _a else _k.get("label")
-            if label == "atlas":
+            if label == "research":
                 from digiquant.research.state import SegmentPayload, SegmentSlot
 
                 state.phase3_output = SegmentSlot(
@@ -346,24 +346,24 @@ class TestChainKnowledgeCutoff:
             assert state.knowledge_cutoff_at == pinned
             return state
 
-        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _atlas_then_hermes)
+        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _research_then_portfolio)
         monkeypatch.setattr(chain_mod, "_run_terminal_phase", lambda *_a, **_k: _a[2])
-        monkeypatch.setattr(chain_mod, "build_atlas_graph", lambda *_a, **_k: object())
-        monkeypatch.setattr(chain_mod, "build_hermes_graph", lambda *_a, **_k: object())
+        monkeypatch.setattr(chain_mod, "build_research_graph", lambda *_a, **_k: object())
+        monkeypatch.setattr(chain_mod, "build_portfolio_graph", lambda *_a, **_k: object())
 
         with patch(
             "digiquant.research.graph.capture_knowledge_cutoff_at",
             return_value=pinned,
         ):
             with simulated_pipeline(watchlist=("AAPL",)) as run:
-                final = chain_mod.run_atlas_then_hermes(
-                    atlas_input=AtlasInput(
+                final = chain_mod.run_research_then_portfolio(
+                    research_input=ResearchInput(
                         run_date=date(2026, 4, 26),
                         watchlist=("AAPL",),
                     ),
                     deps=chain_mod.ChainDeps(
-                        atlas=run.deps,
-                        hermes=run.hermes_deps,
+                        research=run.deps,
+                        portfolio=run.portfolio_deps,
                     ),
                 )
 
@@ -378,7 +378,7 @@ def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
     chain records-and-continues, ``execute_overlay`` finishes succeeded and
     the remaining hop lights without cutover 113.
     """
-    from digiquant.research.state import AtlasResearchState
+    from digiquant.research.state import ResearchState
     from digiquant.portfolio.chain import _safe_invoke_graph
     from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked
 
@@ -386,6 +386,6 @@ def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
         def invoke(self, *_args: object, **_kwargs: object) -> None:
             raise OverlayLegacyBookBlocked()
 
-    state = AtlasResearchState(run_type="delta", run_date=date(2026, 8, 30))
+    state = ResearchState(run_type="delta", run_date=date(2026, 8, 30))
     with pytest.raises(OverlayLegacyBookBlocked):
-        _safe_invoke_graph(_Boom(), state, None, None, "hermes")
+        _safe_invoke_graph(_Boom(), state, None, None, "portfolio")

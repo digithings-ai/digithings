@@ -29,12 +29,12 @@ from digiquant.portfolio.risk_policy import (
 from digiquant.portfolio.sizing import SizingCaps, size_portfolio
 from pydantic import ValidationError
 
-from tests.dq.hermes.incumbent_risk_fixtures import (
+from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,
     load_incumbent_risk_fixture,
     sizing_result_snapshot,
 )
-from tests.dq.hermes.test_incumbent_risk_characterization import (
+from tests.dq.portfolio.test_incumbent_risk_characterization import (
     _LEAF_SCENARIOS,
     _REP_BOOK_SCENARIOS,
 )

@@ -14,7 +14,7 @@ from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
-_SCRIPTS = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "atlas"
+_SCRIPTS = Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research"
 _HOUSE = str(house_workspace_id())
 
 
@@ -22,7 +22,7 @@ def _load(name: str):
     path = _SCRIPTS / f"{name}.py"
     if str(_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(_SCRIPTS))
-    # Other atlas tests stub this sibling as a MagicMock at collection time.
+    # Other research tests stub this sibling as a MagicMock at collection time.
     sys.modules.pop("position_entry_from_events", None)
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None

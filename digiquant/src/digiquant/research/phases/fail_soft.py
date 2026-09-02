@@ -1,9 +1,9 @@
-"""Fail-soft execution wrapper for Atlas research nodes (Pillar 1A).
+"""Fail-soft execution wrapper for research nodes (Pillar 1A).
 
 A single research node that gets an empty/invalid LLM body (or a transient
 provider error) must not abort the whole run. Before this, an empty OpenRouter
 response made ``run_research_agent`` raise ``JSONDecodeError`` after its retries,
-the exception propagated through LangGraph, and the entire Atlas→Hermes chain
+the exception propagated through LangGraph, and the entire research→portfolio chain
 died **before publish + materialize** — so 19 healthy phases' work and the paper
 book were lost to one bad sector call.
 
@@ -78,7 +78,7 @@ def run_segment_fail_soft(
         return slot, []
     except Exception as exc:  # deliberate fail-soft boundary; see module docstring
         logger.warning(
-            "atlas node %r (phase %s) failed (%s: %s); carrying baseline forward",
+            "research node %r (phase %s) failed (%s: %s); carrying baseline forward",
             segment_slug,
             phase,
             type(exc).__name__,

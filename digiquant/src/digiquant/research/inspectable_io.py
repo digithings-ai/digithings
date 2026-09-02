@@ -13,7 +13,7 @@ from typing import Any  # score:allow untyped any — JSON-derived prior-context
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.research.state import AtlasResearchState, Phase6BiasRow
+from digiquant.research.state import ResearchState, Phase6BiasRow
 from digiquant.research.supabase_io import (
     PublishedArtifact,
     SupabaseClient,
@@ -130,7 +130,7 @@ def _coerce_optional_float(value: Any) -> float | None:
 
 
 def build_inputs_payload(
-    state: AtlasResearchState,
+    state: ResearchState,
     *,
     attention_plan_key: str | None = None,
 ) -> InputsDocumentPayload:
@@ -273,7 +273,7 @@ def render_bias_row_markdown(payload: BiasRowDocumentPayload) -> str:
 def publish_inputs_document(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     attention_plan_key: str | None = None,
 ) -> PublishedArtifact:
     payload = build_inputs_payload(state, attention_plan_key=attention_plan_key)
@@ -296,7 +296,7 @@ def publish_inputs_document(
 def publish_bias_row_document(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
 ) -> PublishedArtifact | None:
     row = state.phase6_bias_row
     if not row:

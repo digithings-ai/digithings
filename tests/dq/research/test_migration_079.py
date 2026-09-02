@@ -1,4 +1,4 @@
-"""Contract tests for migration 079, private Olympus forecast registry (#2663)."""
+"""Contract tests for migration 079, private dashboard forecast registry (#2663)."""
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ FORBIDDEN_COLUMNS = (
 )
 FORBIDDEN_SQL = (
     "INSERT INTO",
-    "INSERT INTO public.olympus_forecast",
+    "INSERT INTO public.dashboard_forecast",
 )
 
 

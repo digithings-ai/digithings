@@ -201,11 +201,11 @@ nautilus_smoke:
   - tests/dq/strategies/sdca/test_nautilus_strategy.py
   - tests/dq/replay/test_nautilus_portfolio.py
   - tests/dq/replay/test_worker.py
-  - digiquant/src/digiquant/olympus/replay/**
+  - digiquant/src/digiquant/dashboard/replay/**
   - .github/workflows/test-nautilus.yml
 
-atlas_graph:
-  - digiquant/src/digiquant/olympus/atlas/**
+research_graph:
+  - digiquant/src/digiquant/research/**
   - digiquant/scripts/research/**
   - digiquant/supabase/**
   - tests/dq/research/**
@@ -213,11 +213,11 @@ atlas_graph:
   # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
   # `tests/dq/research tests/dq/portfolio tests/dq/learning`. An edit_mode-only change therefore
   # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
-  # edit_mode/content_identity.py and is consumed by three atlas modules (#1749).
-  - digiquant/src/digiquant/olympus/edit_mode/**
-  - digiquant/src/digiquant/olympus/hermes/**
-  - digiquant/src/digiquant/olympus/learning/**
-  - digiquant/src/digiquant/olympus/replay/walk_forward.py
+  # edit_mode/content_identity.py and is consumed by three research modules (#1749).
+  - digiquant/src/digiquant/dashboard/edit_mode/**
+  - digiquant/src/digiquant/portfolio/**
+  - digiquant/src/digiquant/dashboard/learning/**
+  - digiquant/src/digiquant/dashboard/replay/walk_forward.py
   - tests/dq/replay/test_walk_forward.py
   - tests/dq/replay/phase4_e2e_fixtures.py
   - tests/dq/replay/test_phase4_end_to_end.py
@@ -269,9 +269,9 @@ ruff_and_scripts:
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
   - .github/workflows/db-migrate.yml
-  # tests/scripts/test_pipeline_olympus_attempt.py asserts the outer-retry loop exports
+  # tests/scripts/test_pipeline_dashboard_attempt.py asserts the outer-retry loop exports
   # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
-  # key (#1762). This file IS listed under atlas_graph, but that lane's selector is
+  # key (#1762). This file IS listed under research_graph, but that lane's selector is
   # `tests/dq/research tests/dq/portfolio tests/dq/learning` — it never runs tests/scripts/. Drop the
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
   # symptom is a cost figure that is quietly a floor.
@@ -298,8 +298,8 @@ ruff_and_scripts:
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-research-graph.yml pinned to
 # `files: .github/workflows/pipeline-digiquant.yml`, reached only through the
-# atlas_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
-# itself was never workflow-linted at all (observed on #1818, where atlas_graph
+# research_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
+# itself was never workflow-linted at all (observed on #1818, where research_graph
 # reported "skipping" over a diff of pure workflow YAML).
 # .github/actionlint.yaml is listed because it holds the suppression rules: a
 # change that widens or narrows them has to re-run the lint it governs.

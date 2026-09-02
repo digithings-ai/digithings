@@ -1,10 +1,10 @@
-# Non-secret Olympus pipeline tunables. Loaded into $GITHUB_ENV by
+# Non-secret dashboard pipeline tunables. Loaded into $GITHUB_ENV by
 # workflows/pipeline-digiquant.yml
 # ("Load pipeline configuration"). Secrets stay in workflow step env blocks.
 
 env:
   # Tier policy: config/digiquant_models.yaml (cheap|balanced|quality).
-  # apply_olympus_openrouter_env() in chain startup sets OPENROUTER_* from tier.
+  # apply_digiquant_openrouter_env() in chain startup sets OPENROUTER_* from tier.
   OLYMPUS_MODEL_TIER: "cheap"
 
   # Enforced for the first time by #1767 — before it, H4 passed the whole H3 thesis

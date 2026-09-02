@@ -114,7 +114,7 @@ def main() -> int:
     if not os.environ.get("LANGSMITH_API_KEY"):
         print("FAIL: LANGSMITH_API_KEY not set (secret missing)")
         return 1
-    os.environ.setdefault("LANGSMITH_PROJECT", "atlas-langsmith-smoke")
+    os.environ.setdefault("LANGSMITH_PROJECT", "research-langsmith-smoke")
     endpoint = _auth_ok()
     nesting = _nesting_ok()
     if endpoint and nesting:

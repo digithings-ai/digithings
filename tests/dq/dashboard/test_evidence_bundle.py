@@ -3,7 +3,7 @@
 Red coverage: canonical dedupe; event/known/source times; conflicts/missing
 fields; forecast cites bundle/evidence IDs; durable writer disable retains
 typed in-run bundle. H5 provider-path wiring lives in ``tests/dq/portfolio/``
-(atlas-graph CI has digigraph deps).
+(research-graph CI has digigraph deps).
 """
 
 from __future__ import annotations

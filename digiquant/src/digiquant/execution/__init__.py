@@ -1,6 +1,6 @@
-"""Kairos order-intent router + broker mirror sync (K4).
+"""execution order-intent router + broker mirror sync (K4).
 
-Routes approved Hermes order intents to the configured venue after H9 /
+Routes approved portfolio order intents to the configured venue after H9 /
 ``execute_at_open``, and mirrors external acks / fills / positions append-only
 (D10: broker is authoritative for external venues). The internal
 ``paper_internal`` path stays byte-for-byte unchanged.

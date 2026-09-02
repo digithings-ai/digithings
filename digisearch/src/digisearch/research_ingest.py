@@ -1,6 +1,6 @@
-"""Atlas ``documents`` row → digisearch index (pull-based; idempotent chunk IDs).
+"""research ``documents`` row → digisearch index (pull-based; idempotent chunk IDs).
 
-:func:`ingest_atlas_payload` indexes a pre-fetched row; :func:`ingest_atlas_document`
+:func:`ingest_research_payload` indexes a pre-fetched row; :func:`ingest_research_document`
 fetches via Supabase then delegates. Chunk ids are ``(document_key, date, index)`` —
 re-ingest replaces prior chunks for the same doc id.
 """
@@ -28,12 +28,13 @@ from digisearch.search._stub import _stub_index, add_chunks
 logger = logging.getLogger(__name__)
 
 
-#: Default index name for Atlas research documents. Override with
-#: ``DIGISEARCH_ATLAS_INDEX``.
-ATLAS_INDEX_NAME: str = os.environ.get("DIGISEARCH_ATLAS_INDEX", "atlas")
+#: Default index name for research documents. Override with
+#: ``DIGISEARCH_ATLAS_INDEX``. The stored Chroma/vector index id ``atlas`` is
+#: frozen — already-written vectors keep that collection name.
+RESEARCH_INDEX_NAME: str = os.environ.get("DIGISEARCH_ATLAS_INDEX", "atlas")
 
-#: Atlas chunk metadata fields that are filterable from the MCP tool.
-ATLAS_FILTERABLE_FIELDS: frozenset[str] = frozenset(
+#: research chunk metadata fields that are filterable from the MCP tool.
+RESEARCH_FILTERABLE_FIELDS: frozenset[str] = frozenset(
     {
         "date",  # ISO YYYY-MM-DD string (eq match)
         "date_ordinal",  # int YYYYMMDD (range match — gt/ge/lt/le)
@@ -48,8 +49,8 @@ ATLAS_FILTERABLE_FIELDS: frozenset[str] = frozenset(
 )
 
 
-class _AtlasRowSource(Protocol):
-    """Minimal Supabase client surface for :func:`ingest_atlas_document`."""
+class _ResearchRowSource(Protocol):
+    """Minimal Supabase client surface for :func:`ingest_research_document`."""
 
     def table(self, name: str) -> Any:
         """Return a table query builder (Supabase client API)."""
@@ -58,7 +59,7 @@ class _AtlasRowSource(Protocol):
 
 @dataclass(frozen=True)
 class IndexedDocument:
-    """Result of ingesting one Atlas document into digisearch."""
+    """Result of ingesting one research document into digisearch."""
 
     document_key: str
     date: str
@@ -90,7 +91,7 @@ def _ordinal_from_iso_date(value: str | DateType | None) -> int | None:
 
 
 def _content_from_row(row: Mapping[str, Any]) -> str:
-    """Extract searchable text from an Atlas ``documents`` row.
+    """Extract searchable text from an research ``documents`` row.
 
     Prefers the ``content`` (markdown) column when populated; falls back to a
     canonicalized JSON dump of ``payload`` so chunk content stays stable across
@@ -108,10 +109,10 @@ def _content_from_row(row: Mapping[str, Any]) -> str:
         return str(payload)
 
 
-def _extract_atlas_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
-    """Build the chunk-metadata dict from an Atlas row.
+def _extract_research_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the chunk-metadata dict from an research row.
 
-    Captures every field listed in :data:`ATLAS_FILTERABLE_FIELDS` plus a few
+    Captures every field listed in :data:`RESEARCH_FILTERABLE_FIELDS` plus a few
     useful lineage keys (``title``, ``source``). Drops ``None`` values so the
     Chroma serializer doesn't store empty cells.
     """
@@ -121,7 +122,7 @@ def _extract_atlas_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
     asset_class = payload.get("asset_class") if isinstance(payload, Mapping) else None
 
     raw: dict[str, Any] = {
-        "source": "atlas",
+        "source": "research",
         "date": date_iso or None,
         "date_ordinal": _ordinal_from_iso_date(date_value),
         "doc_type": row.get("doc_type"),
@@ -139,14 +140,14 @@ def _extract_atlas_metadata(row: Mapping[str, Any]) -> dict[str, Any]:
 def _stable_doc_id(row: Mapping[str, Any]) -> str:
     """Deterministic ``Document.id`` from ``(date, document_key)``.
 
-    Same row replayed → same id → :func:`ingest_atlas_payload` rewrites the
+    Same row replayed → same id → :func:`ingest_research_payload` rewrites the
     same chunk slot rather than duplicating. UUID5 with the ``URL`` namespace
     keeps ids opaque while remaining deterministic.
     """
     date_iso = str(row.get("date") or "")[:10]
     document_key = str(row.get("document_key") or "")
-    seed = f"atlas::{date_iso}::{document_key}"
-    return f"atlas-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
+    seed = f"research::{date_iso}::{document_key}"
+    return f"research-{uuid.uuid5(uuid.NAMESPACE_URL, seed)}"
 
 
 def _drop_existing_chunks(index_name: str, doc_id: str) -> int:
@@ -155,7 +156,7 @@ def _drop_existing_chunks(index_name: str, doc_id: str) -> int:
     Returns the count removed. Real backends (Chroma, Azure) handle upsert via
     matching ids, but the stub append-only list needs a manual sweep. Lives
     here rather than in ``_stub.py`` because re-indexing semantics are an
-    Atlas-ingest concern, not a generic search concern.
+    research-ingest concern, not a generic search concern.
     """
     chunks = _stub_index.get(index_name)
     if not chunks:
@@ -167,13 +168,13 @@ def _drop_existing_chunks(index_name: str, doc_id: str) -> int:
     return removed
 
 
-def ingest_atlas_payload(
+def ingest_research_payload(
     row: Mapping[str, Any],
     *,
     index_name: str | None = None,
     chunker: Chunker | None = None,
 ) -> IndexedDocument:
-    """Index one Atlas ``documents`` row into digisearch (pure function).
+    """Index one research ``documents`` row into digisearch (pure function).
 
     Parameters
     ----------
@@ -184,11 +185,11 @@ def ingest_atlas_payload(
         present.
     index_name:
         digisearch index to write into. Defaults to
-        :data:`ATLAS_INDEX_NAME` (``"atlas"`` unless the
+        :data:`RESEARCH_INDEX_NAME` (``"research"`` unless the
         ``DIGISEARCH_ATLAS_INDEX`` env override is set).
     chunker:
         Optional chunker override for tests. Defaults to the document chunker
-        selected by ``DIGISEARCH_CHUNKER`` (Chonkie semantic). Atlas rows are
+        selected by ``DIGISEARCH_CHUNKER`` (Chonkie semantic). research rows are
         flat research payloads with no structural segments, so this path
         deliberately does not use the ``SegmentAwareChunker`` that
         ``POST /ingest`` wraps.
@@ -208,21 +209,21 @@ def ingest_atlas_payload(
     date_value = row.get("date")
     document_key = row.get("document_key")
     if not date_value or not document_key:
-        raise ValueError("Atlas row requires non-empty 'date' and 'document_key'")
+        raise ValueError("research row requires non-empty 'date' and 'document_key'")
 
     date_iso = str(date_value)[:10]
-    target_index = (index_name or ATLAS_INDEX_NAME).strip() or ATLAS_INDEX_NAME
+    target_index = (index_name or RESEARCH_INDEX_NAME).strip() or RESEARCH_INDEX_NAME
     used_chunker = chunker or get_document_chunker()
 
     doc_id = _stable_doc_id(row)
-    metadata = _extract_atlas_metadata(row)
+    metadata = _extract_research_metadata(row)
     content = _content_from_row(row)
 
     doc = Document(
         id=doc_id,
         content=content,
         source=f"supabase://documents/{date_value}/{document_key}",
-        doc_type=str(row.get("doc_type") or "atlas_research"),
+        doc_type=str(row.get("doc_type") or "research_research"),
         metadata=dict(metadata),
         chunks=[],
     )
@@ -230,7 +231,7 @@ def ingest_atlas_payload(
     chunks = used_chunker.chunk(doc)
     # Stable chunk IDs: same input → same ids → upsert by replacement.
     for idx, chunk in enumerate(chunks):
-        chunk.id = f"atlas::{document_key}::{date_iso}::{idx}"
+        chunk.id = f"research::{document_key}::{date_iso}::{idx}"
         chunk.doc_id = doc_id
     merge_document_metadata_into_chunks(doc, chunks)
     for chunk in chunks:
@@ -240,9 +241,9 @@ def ingest_atlas_payload(
     add_chunks(target_index, chunks)
 
     logger.info(
-        "atlas_ingest done",
+        "research_ingest done",
         extra={
-            "operation": "ingest_atlas_payload",
+            "operation": "ingest_research_payload",
             "duration_ms": int((time.perf_counter() - start) * 1000),
             "outcome": "ok",
             "doc_id": doc_id,
@@ -264,8 +265,8 @@ def ingest_atlas_payload(
     )
 
 
-def fetch_atlas_row(
-    client: _AtlasRowSource, date: str | DateType, document_key: str
+def fetch_research_row(
+    client: _ResearchRowSource, date: str | DateType, document_key: str
 ) -> Mapping[str, Any] | None:
     """Pull one ``documents`` row by ``(date, document_key)``.
 
@@ -292,39 +293,39 @@ def fetch_atlas_row(
     return rows[0]
 
 
-def ingest_atlas_document(
-    client: _AtlasRowSource,
+def ingest_research_document(
+    client: _ResearchRowSource,
     date: str | DateType,
     document_key: str,
     *,
     index_name: str | None = None,
 ) -> IndexedDocument | None:
-    """Fetch + index one Atlas document by ``(date, document_key)``.
+    """Fetch + index one research document by ``(date, document_key)``.
 
     Returns ``None`` if the row is missing (no chunks indexed). The natural
-    way to call this is from a polling worker or directly from Atlas's
+    way to call this is from a polling worker or directly from research's
     ``publish_phase`` once #57 lands a queue.
     """
-    row = fetch_atlas_row(client, date, document_key)
+    row = fetch_research_row(client, date, document_key)
     if row is None:
         logger.warning(
-            "atlas_ingest skipped — row not found",
+            "research_ingest skipped — row not found",
             extra={
-                "operation": "ingest_atlas_document",
+                "operation": "ingest_research_document",
                 "outcome": "skipped",
                 "document_key": document_key,
                 "date": str(date)[:10],
             },
         )
         return None
-    return ingest_atlas_payload(row, index_name=index_name)
+    return ingest_research_payload(row, index_name=index_name)
 
 
 __all__ = [
-    "ATLAS_INDEX_NAME",
-    "ATLAS_FILTERABLE_FIELDS",
+    "RESEARCH_INDEX_NAME",
+    "RESEARCH_FILTERABLE_FIELDS",
     "IndexedDocument",
-    "fetch_atlas_row",
-    "ingest_atlas_document",
-    "ingest_atlas_payload",
+    "fetch_research_row",
+    "ingest_research_document",
+    "ingest_research_payload",
 ]

@@ -1,4 +1,4 @@
-"""Hermes phase nodes — thesis-first H1–H9 graph.
+"""portfolio phase nodes — thesis-first H1–H9 graph.
 
 Phases:
     - ``h1``–``h4`` — thesis track (market review → exploration → vehicle map → screener)

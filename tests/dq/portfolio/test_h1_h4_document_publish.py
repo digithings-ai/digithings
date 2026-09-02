@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
 from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
 from digiquant.portfolio.phases import h1_thesis_review as h1
@@ -17,7 +17,7 @@ from digiquant.portfolio.phases.h4_opportunity_screener import (
     build_h4_opportunity_screener,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 THESIS_REVIEW_DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 
@@ -25,10 +25,10 @@ THESIS_REVIEW_DOCUMENT_KEY = artifact_document_key(ARTIFACT_KEY)
 @pytest.mark.unit
 class TestH1PublishesThesisReviewDocument:
     def test_h1_upserts_thesis_review_document_key(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
-            config=AtlasConfigBundle(watchlist=["GLD"]),
+            config=ResearchConfigBundle(watchlist=["GLD"]),
             prior_context=PriorContext(
                 active_theses=[
                     {
@@ -40,7 +40,7 @@ class TestH1PublishesThesisReviewDocument:
             ),
         )
         client = FakeSupabaseClient()
-        compiled = build_pipeline(AtlasResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
         llm_review = ThesisReviewOutput(
             reviewed_theses=[
                 ThesisStatusUpdate(
@@ -68,10 +68,10 @@ class TestH1PublishesThesisReviewDocument:
 
     def test_h1_receives_stitched_markdown_briefing(self) -> None:
         """WP-E: H1 consumes date/body/regime_label, not JSON findings."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
-            config=AtlasConfigBundle(watchlist=["GLD"]),
+            config=ResearchConfigBundle(watchlist=["GLD"]),
             prior_context=PriorContext(active_theses=[]),
         )
         state.phase7_digest = {
@@ -90,7 +90,7 @@ class TestH1PublishesThesisReviewDocument:
             return ThesisReviewOutput(), None, []
 
         client = FakeSupabaseClient()
-        compiled = build_pipeline(AtlasResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
         with patch.object(h1, "run_thesis_phase_llm", side_effect=_capture):
             compiled.invoke(state)
 
@@ -104,10 +104,10 @@ class TestH1PublishesThesisReviewDocument:
         assert "material_findings" not in digest
 
     def test_h1_composes_legacy_digest_json_into_markdown(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
-            config=AtlasConfigBundle(watchlist=["GLD"]),
+            config=ResearchConfigBundle(watchlist=["GLD"]),
             prior_context=PriorContext(active_theses=[]),
         )
         state.phase7_digest = {
@@ -126,7 +126,7 @@ class TestH1PublishesThesisReviewDocument:
             return ThesisReviewOutput(), None, []
 
         client = FakeSupabaseClient()
-        compiled = build_pipeline(AtlasResearchState, [build_h1_thesis_review(client=client)])
+        compiled = build_pipeline(ResearchState, [build_h1_thesis_review(client=client)])
         with patch.object(h1, "run_thesis_phase_llm", side_effect=_capture):
             compiled.invoke(state)
 
@@ -143,14 +143,14 @@ class TestH4PublishesOpportunityScreener:
     ) -> None:
         from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (2, 0, None))
         client = FakeSupabaseClient()
         node = build_h4_opportunity_screener(client=client).nodes[0].run
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 8, 31),
-            config=AtlasConfigBundle(watchlist=["SPY", "QQQ", "GLD"]),
+            config=ResearchConfigBundle(watchlist=["SPY", "QQQ", "GLD"]),
             prior_context=PriorContext(prior_book=[{"ticker": "SPY"}, {"ticker": "QQQ"}]),
         )
         node(state)

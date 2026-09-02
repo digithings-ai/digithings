@@ -39,7 +39,7 @@ CapsuleBody = Annotated[str, Field(min_length=0)]
 
 
 class ContextRole(StrEnum):
-    """Hermes/Atlas roles that receive compiled context capsules."""
+    """portfolio/research roles that receive compiled context capsules."""
 
     H5_ANALYST = "h5_analyst"
     H6_DELIBERATION = "h6_deliberation"

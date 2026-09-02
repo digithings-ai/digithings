@@ -2,28 +2,28 @@
 
 This document **implements** [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP-DIGITHINGS.md) **§ P1 — Monorepo + hosting**. Complete [PRE-MIGRATION-CLEANUP.md](PRE-MIGRATION-CLEANUP.md) first so the tree you import is lean.
 
-**digithings path:** sibling repo `../digithings` (see roadmap). There is **no** `apps/` folder in digithings today — Wave 1 **creates** the Atlas app location and wiring.
+**digithings path:** sibling repo `../digithings` (see roadmap). There is **no** `apps/` folder in digithings today — Wave 1 **creates** the research app location and wiring.
 
 ---
 
 ## Goals (from roadmap)
 
-- Atlas **UI and build** live **inside** the digithings repo.
+- research **UI and build** live **inside** the digithings repo.
 - **One** primary deploy story for that UI (staging first).
-- **Optional:** keep GitHub Pages deploy from standalone `digiquant-atlas` until cutover, or retire it after parity.
+- **Optional:** keep GitHub Pages deploy from standalone `digiquant-research` until cutover, or retire it after parity.
 
-**Acceptance:** Staging URL serves Atlas routes under a **sub-path** (e.g. `/atlas`); `NEXT_PUBLIC_*` only in client bundle; service role **server-only**.
+**Acceptance:** Staging URL serves research routes under a **sub-path** (e.g. `/research`); `NEXT_PUBLIC_*` only in client bundle; service role **server-only**.
 
 ---
 
 ## Naming (avoid collisions)
 
-| In `digithings` | Already means | Atlas Wave 1 name |
+| In `digithings` | Already means | research Wave 1 name |
 |-----------------|---------------|-------------------|
-| `digiquant/` | Nautilus backtest service | Do **not** reuse this folder for the Atlas web app. |
-| `digichat/` | Next.js chat BFF | Atlas is a **separate** Next app or route tree — see below. |
+| `digiquant/` | Nautilus backtest service | Do **not** reuse this folder for the research web app. |
+| `digichat/` | Next.js chat BFF | research is a **separate** Next app or route tree — see below. |
 
-**Recommended package path:** `apps/digiquant-atlas` **or** `apps/atlas-web` (pick one and use it in all docs/CI). The roadmap phrase “digiquant product” is **marketing**; the **directory** should say `digiquant-atlas` or `atlas` so it is not confused with `digiquant/`.
+**Recommended package path:** `digiquant/src/digiquant/research` **or** `apps/research-web` (pick one and use it in all docs/CI). The roadmap phrase “digiquant product” is **marketing**; the **directory** should say `digiquant-research` or `research` so it is not confused with `digiquant/`.
 
 ---
 
@@ -32,10 +32,10 @@ This document **implements** [MIGRATION-ROADMAP-DIGITHINGS.md](MIGRATION-ROADMAP
 | Approach | Pros | Cons |
 |----------|------|------|
 | **Git subtree** | History preserved in monorepo | Larger clone; merge discipline |
-| **Git submodule** | Atlas stays own remote | Two-repo workflow; CI must init submodule |
+| **Git submodule** | research stays own remote | Two-repo workflow; CI must init submodule |
 | **Copy + new root** | Simplest first deploy | Loses file-level history unless you squash |
 
-For a **first** integration, **subtree** or **monorepo-native copy** with a clear tag in Atlas (`pre-digithings-import`) is enough; refine later.
+For a **first** integration, **subtree** or **monorepo-native copy** with a clear tag in research (`pre-digithings-import`) is enough; refine later.
 
 **Minimum tree to import:**
 
@@ -48,16 +48,16 @@ Do **not** import gitignored `data/`, `outputs/`, or local env files.
 
 ## Next.js integration options
 
-digichat lives at `digichat/` (Next 16, App Router). Atlas `frontend/` is Next 15 + static export to `out/` today (``deploy.yml``).
+digichat lives at `digichat/` (Next 16, App Router). research `frontend/` is Next 15 + static export to `out/` today (``deploy.yml``).
 
 | Option | Description |
 |--------|-------------|
-| **A — Standalone app in monorepo** | `apps/digiquant-atlas` full Next app; reverse proxy or host path `/atlas` → that service. Cleanest separation; matches roadmap “sub-route”. |
-| **B — Route group under digichat** | `digichat/src/app/(atlas)/...` reuses one Next build. Faster coupling; mixes auth and Atlas concerns — only if you explicitly want one deployable. |
+| **A — Standalone app in monorepo** | `digiquant/src/digiquant/research` full Next app; reverse proxy or host path `/research` → that service. Cleanest separation; matches roadmap “sub-route”. |
+| **B — Route group under digichat** | `digichat/src/app/(research)/...` reuses one Next build. Faster coupling; mixes auth and research concerns — only if you explicitly want one deployable. |
 
 **Recommendation:** **Option A** for Wave 1 unless you need a single binary for demo week.
 
-**`basePath`:** If served under `/atlas`, set `basePath: '/atlas'` in `next.config.ts` and fix any hardcoded absolute URLs in Atlas `frontend/`.
+**`basePath`:** If served under `/research`, set `basePath: '/research'` in `next.config.ts` and fix any hardcoded absolute URLs in research `frontend/`.
 
 **Version alignment:** Plan a **Next/React bump** to match digichat (16 / 19) in the same Wave or immediately after first green build — track as a sub-task to avoid dual maintenance.
 
@@ -79,11 +79,11 @@ Copy patterns from [`config/local.env.example`](../../config/local.env.example) 
 
 ## CI / build
 
-**Today:** Atlas uses ``.github/workflows/deploy.yml`` (Node 20, `frontend/`, static export).
+**Today:** research uses ``.github/workflows/deploy.yml`` (Node 20, `frontend/`, static export).
 
 **Wave 1:**
 
-1. Add a **digithings** workflow (or `Makefile` target) that runs `npm ci && npm run build` in `apps/digiquant-atlas` (path TBD).
+1. Add a **digithings** workflow (or `Makefile` target) that runs `npm ci && npm run build` in `digiquant/src/digiquant/research` (path TBD).
 2. Decide **output:** static `out/` (Pages) vs **Node** `next start` behind Docker — digichat style suggests **server** deploy for BFF later; static export may limit future API routes.
 3. **Smoke:** a minimal `curl` health check against staging (the legacy `scripts/smoke-test.sh` shim is gone post-issue-#316).
 
@@ -91,7 +91,7 @@ Copy patterns from [`config/local.env.example`](../../config/local.env.example) 
 
 ## Python / scripts (no relocation required for Wave 1)
 
-Operators can keep running from **`digiquant-atlas` clone** or from monorepo path `apps/digiquant-atlas/../scripts` — document **`ATLAS_ROOT`** in digithings `.env.example` when scripts are invoked from containers.
+Operators can keep running from **`digiquant-research` clone** or from monorepo path `digiquant/src/digiquant/research/../scripts` — document **`RESEARCH_ROOT`** in digithings `.env.example` when scripts are invoked from containers.
 
 Wave 1 **does not** require digigraph to run the pipeline; that is [Wave 2](DIGITHINGS-WAVE2-GRAPH-SKETCH.md).
 
@@ -99,7 +99,7 @@ Wave 1 **does not** require digigraph to run the pipeline; that is [Wave 2](DIGI
 
 ## Ordered checklist
 
-1. **Tag** current Atlas: `git tag pre-digithings-wave1` (optional).
+1. **Tag** current research: `git tag pre-digithings-wave1` (optional).
 2. **Create** `apps/<chosen-name>/` in `digithings`; import `frontend` + supporting dirs per table above.
 3. **Adjust** `package.json` name, `next.config` `basePath`, TS paths if needed.
 4. **Align** Node/npm versions with digithings (see root `Makefile` / `package.json` if present).
@@ -124,4 +124,4 @@ Wave 1 **does not** require digigraph to run the pipeline; that is [Wave 2](DIGI
 
 ## Handoff to Wave 2
 
-When P1 acceptance is met, proceed to roadmap **§ P1b** and [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md). Graph runners will need a stable **`ATLAS_ROOT`** pointing at the monorepo path containing `scripts/`.
+When P1 acceptance is met, proceed to roadmap **§ P1b** and [DIGITHINGS-WAVE2-GRAPH-SKETCH.md](DIGITHINGS-WAVE2-GRAPH-SKETCH.md). Graph runners will need a stable **`RESEARCH_ROOT`** pointing at the monorepo path containing `scripts/`.

@@ -1,4 +1,4 @@
-"""Supabase writers for thesis-first Hermes phases."""
+"""Supabase writers for thesis-first portfolio phases."""
 
 from __future__ import annotations
 

@@ -29,10 +29,10 @@ from digiquant.research.phases.phase7_synthesis import (
 )
 from digiquant.research.skills import load_skill
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
     SegmentPayload,
     SegmentSlot,
@@ -44,12 +44,12 @@ from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
 from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision, build_phase7d
 
 
-def _seed_state_through_phase5() -> AtlasResearchState:
+def _seed_state_through_phase5() -> ResearchState:
     """Populate phases 1–5 with minimal fresh slots so Phase 6+ has input."""
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 4, 26),
-        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
+        config=ResearchConfigBundle(watchlist=["AAPL", "MSFT"]),
     )
 
     def _slot(slug: str, bias: str = "bullish", **extra: Any) -> SegmentSlot:
@@ -84,10 +84,10 @@ def _seed_state_through_phase5() -> AtlasResearchState:
 @pytest.mark.unit
 class TestPhase6BiasRow:
     def test_row_captures_phases_1_through_5(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         state = _seed_state_through_phase5()
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         row = final.phase6_bias_row
         assert row is not None
@@ -101,19 +101,19 @@ class TestPhase6BiasRow:
         assert row["notes"] == ""  # filled by Phase 7
 
     def test_prefers_internal_bias_over_legacy_bias(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         state = _seed_state_through_phase5()
         equity = state.phase5_outputs["equity"]
         equity.payload.body["internal_bias"] = "bearish"
         equity.payload.body["bias"] = "bullish"
         result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
         assert final.phase6_bias_row is not None
         assert final.phase6_bias_row["equity_bias"] == "bearish"
 
     def test_no_llm_call(self) -> None:
         """Phase 6 is pure aggregation."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
+        compiled = build_pipeline(ResearchState, [build_phase6()])
         state = _seed_state_through_phase5()
         with patch(
             "digigraph.graph.research_agent.completion_text",
@@ -164,8 +164,8 @@ class TestPhase6BiasRow:
             ]
         )
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
-        final = AtlasResearchState.model_validate(compiled.invoke(state))
+        compiled = build_pipeline(ResearchState, [build_phase6()])
+        final = ResearchState.model_validate(compiled.invoke(state))
 
         row = final.phase6_bias_row
         assert row is not None
@@ -194,8 +194,8 @@ class TestPhase6BiasRow:
             ]
         )
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6()])
-        final = AtlasResearchState.model_validate(compiled.invoke(state))
+        compiled = build_pipeline(ResearchState, [build_phase6()])
+        final = ResearchState.model_validate(compiled.invoke(state))
 
         assert final.phase6_bias_row is not None
         assert final.phase6_bias_row["macro_regime"].startswith("Slowing")
@@ -258,7 +258,7 @@ def _fake_phase7_completion(_m: str, msgs: list[dict[str, Any]], **_: Any) -> st
 @pytest.mark.unit
 class TestPhase7Synthesis:
     def test_digest_synthesized_and_freshness_overwritten(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -269,7 +269,7 @@ class TestPhase7Synthesis:
             side_effect=fake,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         digest = final.phase7_digest
         assert digest is not None
@@ -354,13 +354,13 @@ class TestPhase7Synthesis:
                 )
             return DigestSnapshot.model_validate(json.loads(_digest_payload()))
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
 
         with patch(
             "digiquant.research.phases.phase7_synthesis.run_research_agent",
             side_effect=fake_agent,
         ):
-            final = AtlasResearchState.model_validate(compiled.invoke(state))
+            final = ResearchState.model_validate(compiled.invoke(state))
 
         digest = final.phase7_digest
         assert digest is not None
@@ -396,7 +396,7 @@ class TestPhase7ResearchOnlyBoundary:
 
     def test_position_fields_stripped_after_synthesis(self) -> None:
         """LLM output with position fields must not leak into persisted digest."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -411,7 +411,7 @@ class TestPhase7ResearchOnlyBoundary:
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         assert final.phase7_digest is not None
         assert "thesis_tracker" not in final.phase7_digest
@@ -553,7 +553,7 @@ class TestPhase7TodayOnlyInputs:
             "alt-politician-signals": _carried_slot("alt-politician-signals"),
         }
 
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         captured: list[dict[str, Any]] = []
 
         def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
@@ -644,7 +644,7 @@ class TestH5AssetAnalysts:
     def test_per_ticker_fan_out(self) -> None:
         tickers = ["AAPL", "MSFT"]
         compiled = build_pipeline(
-            AtlasResearchState,
+            ResearchState,
             [build_h5_asset_analyst(tickers)],
         )
         state = _seed_state_through_phase5()
@@ -664,16 +664,16 @@ class TestH5AssetAnalysts:
             side_effect=fake,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        assert set(final.phase_hermes.asset_analysts.keys()) == {"AAPL", "MSFT"}
+        assert set(final.phase_portfolio.asset_analysts.keys()) == {"AAPL", "MSFT"}
         for ticker in tickers:
-            payload = AnalystPayload.model_validate(final.phase_hermes.asset_analysts[ticker])
+            payload = AnalystPayload.model_validate(final.phase_portfolio.asset_analysts[ticker])
             assert payload.stance == "buy"
             assert payload.conviction_score >= 1
 
     def test_empty_watchlist_does_not_explode(self) -> None:
-        compiled = build_pipeline(AtlasResearchState, [build_h5_asset_analyst([])])
+        compiled = build_pipeline(ResearchState, [build_h5_asset_analyst([])])
         state = _seed_state_through_phase5()
         with patch(
             "digigraph.graph.research_agent.completion_text",
@@ -711,9 +711,9 @@ class TestPhase7dPm:
     def test_rebalance_decision_produced(self) -> None:
         # build_phase7d returns three sub-phases (risk-aggressive →
         # risk-conservative → pm-rebalance) per #431. Spread them.
-        compiled = build_pipeline(AtlasResearchState, list(build_phase7d()))
+        compiled = build_pipeline(ResearchState, list(build_phase7d()))
         state = _seed_state_through_phase5()
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts={
                 "AAPL": {
                     "ticker": "AAPL",
@@ -753,7 +753,7 @@ class TestPhase7dPm:
             side_effect=fake,
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+        final = ResearchState.model_validate(result) if isinstance(result, dict) else result
 
         reb = final.phase7d_rebalance
         assert reb is not None
@@ -820,7 +820,7 @@ def _verbose_slot(slug: str) -> SegmentSlot:
     )
 
 
-def _full_baseline_state(sector_count: int) -> AtlasResearchState:
+def _full_baseline_state(sector_count: int) -> ResearchState:
     """A full baseline day: every phase-1..5 segment fresh and verbose, plus a
     fat prior context (a full prior digest + every prior segment carried)."""
     phase1 = [
@@ -860,11 +860,11 @@ def _full_baseline_state(sector_count: int) -> AtlasResearchState:
             "payload": prior_digest,
         }
 
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 7, 12),
         baseline_date=date(2026, 7, 5),
-        config=AtlasConfigBundle(watchlist=["AAPL", "MSFT", "NVDA"]),
+        config=ResearchConfigBundle(watchlist=["AAPL", "MSFT", "NVDA"]),
         prior_context=PriorContext(latest_segments=latest_segments),
         phase1_outputs={s: _verbose_slot(s) for s in phase1},
         phase2_outputs={s: _verbose_slot(s) for s in phase2},
@@ -877,7 +877,7 @@ def _full_baseline_state(sector_count: int) -> AtlasResearchState:
 
 @pytest.mark.unit
 class TestDigestInputBudget:
-    def _assembled_tokens(self, state: AtlasResearchState) -> float:
+    def _assembled_tokens(self, state: ResearchState) -> float:
         """Serialized prompt size in tokens, mirroring research_agent's assembly:
         SHARED_CONTEXT + skill + PHASE_INPUTS + OUTPUT_SCHEMA."""
         phase_inputs = _digest_phase_inputs(state)
@@ -976,7 +976,7 @@ class TestDigestFailureVisibility:
                 }
             }
         )
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
 
         overflow = RuntimeError(
             "BadRequestError 400: endpoint maximum context length is 64000 tokens, requested ~90690"
@@ -985,7 +985,7 @@ class TestDigestFailureVisibility:
             "digiquant.research.phases.phase7_synthesis.run_research_agent",
             side_effect=overflow,
         ):
-            final = AtlasResearchState.model_validate(compiled.invoke(state))
+            final = ResearchState.model_validate(compiled.invoke(state))
 
         digest = final.phase7_digest
         assert digest is not None, "must carry the prior digest forward, not crash"
@@ -1004,20 +1004,20 @@ class TestDigestFailureVisibility:
     def test_successful_synthesis_has_no_carried_marker(self) -> None:
         """A fresh synthesis must NOT carry a provenance marker — the marker is the
         signal that distinguishes carried-forward from fresh (#1559)."""
-        compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
+        compiled = build_pipeline(ResearchState, [build_phase6(), *build_phase7()])
         state = _seed_state_through_phase5()
 
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=_fake_phase7_completion,
         ):
-            final = AtlasResearchState.model_validate(compiled.invoke(state))
+            final = ResearchState.model_validate(compiled.invoke(state))
 
         digest = final.phase7_digest
         assert digest is not None
         assert not digest.get("carried_from"), "fresh synthesis must not be marked carried"
         # This asserted a global ``status == "ok"`` until #1736. It cannot any more: the
-        # fixture is Atlas-only, so it commits no book and the no-book gate degrades it. The
+        # fixture is research-only, so it commits no book and the no-book gate degrades it. The
         # claim under test is *digest* health, so assert that directly — the synthesis left
         # no failure marker and no error behind.
         summary = diagnostics.summarize_run(final)

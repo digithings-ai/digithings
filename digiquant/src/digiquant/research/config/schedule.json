@@ -23,7 +23,7 @@
     "notes": "prior_trading_day → execute_at_open.py --prior-trading-day-rebalance (e.g. Fri decision → Mon open)."
   },
   "cowork_operator": {
-    "description": "Filled by the Cowork setup wizard (cowork/SETUP-ATLAS-COWORK.md). Not read by Python scripts.",
+    "description": "Filled by the Cowork setup wizard (cowork/SETUP-RESEARCH-COWORK.md). Not read by Python scripts.",
     "configured": true,
     "configured_at": "2026-04-15",
     "timezone": "America/New_York",
@@ -38,14 +38,14 @@
     ],
     "scheduled_tasks": [
       {
-        "name": "Atlas — Research Delta (pre-market)",
+        "name": "research — Research Delta (pre-market)",
         "task_file": "cowork/tasks/research-daily-delta.md",
         "cron_utc": "0 10 * * 1-5",
         "local_time": "6:00 AM ET weekdays",
         "notes": "Sunday: swap task file to research-weekly-baseline.md (cron: 0 10 * * 0). Month-end: swap to research-monthly-synthesis.md."
       },
       {
-        "name": "Atlas — Positioning / PM Rebalance (pre-market)",
+        "name": "research — Positioning / PM Rebalance (pre-market)",
         "task_file": "cowork/tasks/portfolio-pm-rebalance.md",
         "cron_utc": "0 12 * * 1-5",
         "local_time": "8:00 AM ET weekdays",

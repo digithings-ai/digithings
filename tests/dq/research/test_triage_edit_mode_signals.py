@@ -1,4 +1,4 @@
-"""Triage → TriageSignal mapping and resolve_edit_mode integration (Olympus #930 slice A1)."""
+"""Triage → TriageSignal mapping and resolve_edit_mode integration (dashboard #930 slice A1)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 from digiquant.research.phases.triage_phase import build_triage_node
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     DataLayerSnapshot,
     DeltaTriageDecision,
     PriorContext,
@@ -15,7 +15,7 @@ from digiquant.research.state import (
 from digiquant.research.triage import evaluate, triage_decision_to_signal
 from digiquant.dashboard.edit_mode import PriorLoader, PriorPublished, TriageSignal, resolve_edit_mode
 
-from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
+from tests.dq.research.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
 
 class _SegmentPriorLoader(PriorLoader):
@@ -102,7 +102,7 @@ class TestTriageResolvesEditMode:
 @pytest.mark.unit
 class TestTriageAlwaysOn:
     def test_baseline_run_evaluates_decisions(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             data_layer=DataLayerSnapshot(
@@ -131,7 +131,7 @@ class TestTriageAlwaysOn:
         assert macro.decision == "regenerate"
 
     def test_triage_phase_node_runs_on_baseline(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
             data_layer=DataLayerSnapshot(

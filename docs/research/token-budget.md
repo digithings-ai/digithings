@@ -1,11 +1,11 @@
-# Atlas Pipeline — Token Budget & Model Routing
+# research Pipeline — Token Budget & Model Routing
 
 *Last updated: 2026-06-20.*
 
 > **⚠️ Current routing (2026-06): OpenRouter, open-weight pins per tier.**
-> `config/olympus_models.yaml` pins an **open-weight** model per capability tier;
+> `config/digiquant_models.yaml` pins an **open-weight** model per capability tier;
 > `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`) selects the
-> pinned set, and `apply_olympus_openrouter_env()` (Hermes chain startup) sets
+> pinned set, and `apply_digiquant_openrouter_env()` (portfolio chain startup) sets
 > `OPENROUTER_ALLOWED_MODELS` + `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**
 > = cheapest Auto Router dial) from the active tier. Every LLM call and the web
 > grounding pre-pass (built-in provider search on `perplexity/sonar` or `:online`
@@ -26,7 +26,7 @@
 > they still describe the relative shape of the run. The **provider/model**
 > columns in the per-phase headers are historical (Gemini/Ollama) and retained
 > only as the capability-tier rationale; the live routing is the OpenRouter tier
-> system above. See [`atlas/docs/RUNBOOK.md`](../../digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md)
+> system above. See [`research/docs/RUNBOOK.md`](../../digiquant/src/digiquant/research/docs/RUNBOOK.md)
 > "OpenRouter model tiers" for the authoritative routing knobs.
 >
 > **Shared-context diet (#935):** the per-phase token counts below are the
@@ -210,7 +210,7 @@ content part in `research_agent._format_scope_block`):
 | `slim_snapshots` (`_shared_context(slim_snapshots=…)`, auto-on for `run_type=delta`) | auto | On a **delta** run, `last_snapshots` is collapsed to the latest snapshot's compact **bias row** (regime + per-asset bias + envelope dates) plus the **changed-segment** slugs from triage. **Baseline** runs keep the full history (the weekly baseline reviews the whole prior week). Lossless: the phases that consume the history (triage / phase9 / monthly) read `state.prior_context.last_snapshots` into their own `phase_inputs`, not the shared-context copy. |
 
 **Measured effect** (deterministic serialized-byte budget,
-`tests/dq/atlas/test_context_diet.py`): on a representative delta state with a
+`tests/dq/research/test_context_diet.py`): on a representative delta state with a
 fat `market_context` and a 5-snapshot history, a delta phase's shared-context is
 **≥30% smaller** than the equivalent baseline phase's, and the analyst
 (`ticker`) and PM (`portfolio`) scopes are smaller still. The diet is asserted by

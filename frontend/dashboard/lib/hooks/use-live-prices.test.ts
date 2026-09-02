@@ -33,7 +33,7 @@ describe('nextChannelTopic — no two subscriptions may share a topic (#1833)', 
 
   it('still carries the prefix and the instance id, and stays phoenix-safe', () => {
     const topic = nextChannelTopic('_R_7_');
-    expect(topic.startsWith('olympus-prices-live-_R_7_-')).toBe(true);
+    expect(topic.startsWith('dashboard-prices-live-_R_7_-')).toBe(true);
     // Sent verbatim in the phoenix join, so the whole topic stays in the safe character set
     // the instance id is already stripped down to.
     expect(topic).toMatch(/^[A-Za-z0-9_-]+$/);

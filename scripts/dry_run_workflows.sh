@@ -50,7 +50,7 @@ python3 -m pytest \
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 
-echo "== REM-009: atlas compute-technicals (Polars) =="
+echo "== REM-009: research compute-technicals (Polars) =="
 if [[ -f digiquant/scripts/research/compute-technicals.py ]]; then
   python3 digiquant/scripts/research/compute-technicals.py --help >/dev/null 2>&1 || true
   echo "  (run with real data paths per digiquant/scripts/research/README if needed)"

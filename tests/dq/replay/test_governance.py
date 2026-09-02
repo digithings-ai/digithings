@@ -362,7 +362,7 @@ def _criterion(
 
 def _criteria(
     *criteria: GateCriterion,
-    author: str = "human-governance@olympus",
+    author: str = "human-governance@dashboard",
     rationale: str = "pre-versioned promotion gate",
     criteria_version_id: UUID | None = None,
 ) -> HumanAuthoredGateCriteria:
@@ -562,8 +562,8 @@ def test_tampered_criteria_hash_rejected() -> None:
 
 
 def test_to_store_criteria_preserves_author_not_evaluator() -> None:
-    criteria = _criteria(_criterion(), author="alice@olympus")
+    criteria = _criteria(_criterion(), author="alice@dashboard")
     row = to_store_criteria_version(criteria)
-    assert row.author == "alice@olympus"
+    assert row.author == "alice@dashboard"
     assert row.author != "evaluator"
     assert row.content_hash == criteria.content_hash

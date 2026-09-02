@@ -13,13 +13,13 @@ import yaml
 from digiquant.dashboard.accounting.engine import compute_period
 from digiquant.dashboard.accounting.io import persist_period
 
-from tests.dq.atlas.test_finalize_period_accounting import (
+from tests.dq.research.test_finalize_period_accounting import (
     EFFECTIVE,
     PERIOD,
     MergingFake,
     _final_hold_input,
 )
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -30,7 +30,7 @@ def _load_metrics_mod():
     stub = types.ModuleType("position_entry_from_events")
     stub.resolve_entry_price = lambda *a, **k: None  # type: ignore[attr-defined]
     sys.modules.setdefault("position_entry_from_events", stub)
-    path = REPO / "digiquant" / "scripts" / "atlas" / "refresh_performance_metrics.py"
+    path = REPO / "digiquant" / "scripts" / "research" / "refresh_performance_metrics.py"
     spec = importlib.util.spec_from_file_location("refresh_performance_metrics_2598", path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)

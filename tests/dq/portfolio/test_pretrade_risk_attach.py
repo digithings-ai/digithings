@@ -35,17 +35,17 @@ def _run_h8(
     current_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
         PriorContext,
     )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
-    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
-    from tests.dq.hermes.test_calibrated_sizing import _bundle
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
+    from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.portfolio.test_calibrated_sizing import _bundle
 
     returns = {t: ("0.06", "0.02", "1.0") for t in tickers}
     bundle = _bundle(returns=returns)
@@ -80,13 +80,13 @@ def _run_h8(
     }
     if current_weights is not None:
         prefs["current_weights"] = current_weights
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences=prefs),
+        config=ResearchConfigBundle(preferences=prefs),
         prior_context=PriorContext(prior_book=prior_book or []),
-        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+        phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
     )
     client = FakeSupabaseClient(
         canned_reads={
@@ -97,13 +97,13 @@ def _run_h8(
         }
     )
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    hermes = out["phase_hermes"]
-    book = hermes.sized_book
+    portfolio = out["phase_portfolio"]
+    book = portfolio.sized_book
     assert book is not None
-    report_raw = hermes.pre_trade_risk_report
+    report_raw = portfolio.pre_trade_risk_report
     assert report_raw is not None, "WP9.3 must attach pre_trade_risk_report after final H8"
     report = PreTradeRiskReport.model_validate(report_raw)
-    return {"book": book, "report": report, "hermes": hermes, "bundle": bundle}
+    return {"book": book, "report": report, "portfolio": portfolio, "bundle": bundle}
 
 
 def test_report_fingerprint_matches_final_book_after_controls(
@@ -234,15 +234,15 @@ def test_builder_path_does_not_mutate_final_book_weights(
     before = [dict(row) for row in book["recommended_portfolio"]]
     # Re-run attach helper against a mutable copy of the book payload.
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
     )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
-    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
+    from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
 
     run_date = date(2026, 6, 12)
     memo = PMDirectionMemo(
@@ -253,12 +253,12 @@ def test_builder_path_does_not_mutate_final_book_weights(
         ],
         memo="m",
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences={}),
-        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+        config=ResearchConfigBundle(preferences={}),
+        phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
     )
     mutable_book = {
         **book,
@@ -297,16 +297,16 @@ def test_report_failure_omits_report_without_changing_book(
         lambda **_k: None,
     )
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
     )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
-    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
-    from tests.dq.hermes.test_calibrated_sizing import _bundle
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
+    from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.portfolio.test_calibrated_sizing import _bundle
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",)))
@@ -319,11 +319,11 @@ def test_report_failure_omits_report_without_changing_book(
         lambda *_a, **_k: bundle,
     )
     run_date = date(2026, 6, 12)
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(
+        config=ResearchConfigBundle(
             preferences={
                 "max_single_etf_pct": 100,
                 "max_sector_pct": 100,
@@ -332,7 +332,7 @@ def test_report_failure_omits_report_without_changing_book(
                 "h8_sizing_input_mode": "calibrated",
             }
         ),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             pm_direction_memo=PMDirectionMemo(
                 date=run_date,
                 roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
@@ -348,10 +348,10 @@ def test_report_failure_omits_report_without_changing_book(
         }
     )
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    hermes = out["phase_hermes"]
-    assert hermes.sized_book is not None
-    assert hermes.pre_trade_risk_report is None
-    assert "pre_trade_risk_report_hash" not in hermes.sized_book
+    portfolio = out["phase_portfolio"]
+    assert portfolio.sized_book is not None
+    assert portfolio.pre_trade_risk_report is None
+    assert "pre_trade_risk_report_hash" not in portfolio.sized_book
 
 
 def test_controls_from_adjustments_maps_caps_and_exits() -> None:

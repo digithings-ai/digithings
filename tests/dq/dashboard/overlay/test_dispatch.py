@@ -89,7 +89,7 @@ def test_missing_byok_skips_no_credentials() -> None:
 
 
 def test_creator_plan_floor_studio_without_stripe_claims() -> None:
-    """D1: entitlement_grants.plan_floor=studio unlocks Kairos overlay without Stripe."""
+    """D1: entitlement_grants.plan_floor=studio unlocks execution overlay without Stripe."""
     store = MemoryJobRunStore()
     result = dispatch_overlay_daily(
         store=store,

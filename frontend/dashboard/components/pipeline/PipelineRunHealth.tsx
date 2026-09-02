@@ -7,15 +7,15 @@ import { EmptyState } from '@/components/observability/shared';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
 import { RunEconomicsRow } from '@/components/system/run-economics-row';
 import { EntitledSurface } from '@/components/entitled-surface';
-import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import { fetchResearchRunDiagnostics } from '@/lib/observability-queries';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 import type { PlanTier } from '@/lib/entitlements';
 
-function forDate(diagnostics: AtlasRunDiagnostics[], date: string): AtlasRunDiagnostics[] {
+function forDate(diagnostics: ResearchRunDiagnostics[], date: string): ResearchRunDiagnostics[] {
   return diagnostics.filter((d) => d.run_date === date);
 }
 
-function summaryLine(dayRuns: AtlasRunDiagnostics[]): string {
+function summaryLine(dayRuns: ResearchRunDiagnostics[]): string {
   if (!dayRuns.length) return 'No run telemetry for this date';
   const latest = dayRuns[0];
   const segs =
@@ -35,14 +35,14 @@ export default function PipelineRunHealth({
   /** Test override for the economics strip gate. */
   tier?: PlanTier;
 }) {
-  const [diagnostics, setDiagnostics] = useState<AtlasRunDiagnostics[] | null>(null);
+  const [diagnostics, setDiagnostics] = useState<ResearchRunDiagnostics[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     // Initial `loading` is already true — avoid setState in the effect body
     // (react-hooks/set-state-in-effect). Writes stay in async callbacks.
-    fetchAtlasRunDiagnostics()
+    fetchResearchRunDiagnostics()
       .then((d) => alive && setDiagnostics(d))
       .catch(() => alive && setDiagnostics([]))
       .finally(() => alive && setLoading(false));

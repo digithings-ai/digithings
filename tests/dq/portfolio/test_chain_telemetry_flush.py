@@ -15,7 +15,7 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: opaque ChainDeps/monkeypatch args
 
 import pytest
-from digiquant.research.graph import AtlasInput
+from digiquant.research.graph import ResearchInput
 from digiquant.portfolio import chain as chain_mod
 
 from digigraph import usage as _usage
@@ -25,16 +25,16 @@ pytestmark = pytest.mark.unit
 
 def _deps(client: Any = None, run_id: str = "gha-1979") -> Any:
     return chain_mod.ChainDeps(
-        atlas=None,
-        hermes=None,
+        research=None,
+        portfolio=None,
         diagnostics=chain_mod.DiagnosticsDeps(client=client, run_id=run_id, attempt=2),
     )
 
 
-def _beliefs_input() -> AtlasInput:
-    # The shortest path through run_atlas_then_hermes that still enters the try/finally.
-    # `daily` is the only cadence AtlasResearchState accepts.
-    return AtlasInput(cadence="daily", run_date=date(2026, 8, 7), refresh_scope="beliefs")
+def _beliefs_input() -> ResearchInput:
+    # The shortest path through run_research_then_portfolio that still enters the try/finally.
+    # `daily` is the only cadence ResearchState accepts.
+    return ResearchInput(cadence="daily", run_date=date(2026, 8, 7), refresh_scope="beliefs")
 
 
 class Trace(list):  # type: ignore[type-arg]
@@ -80,7 +80,7 @@ def test_a_successful_run_flushes_the_detailed_ledger_once(
 ) -> None:
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
 
-    chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+    chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert trace.count("flush") == 1
 
@@ -90,7 +90,7 @@ def test_the_flush_precedes_both_the_aggregate_write_and_the_buffer_reset(
 ) -> None:
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
 
-    chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+    chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert trace == ["flush", "write_row", "reset"]
 
@@ -102,7 +102,7 @@ def test_the_flush_sees_the_records_the_run_actually_buffered(
     so a flush behind it would be handed an empty list and report a clean, empty success."""
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", _emit_a_node_run)
 
-    chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+    chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     kwargs = trace.flush_kwargs
     assert kwargs["run_id"] == "gha-1979"
@@ -129,7 +129,7 @@ def test_a_run_that_raises_still_flushes_and_reraises_unchanged(
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", _explode)
 
     with pytest.raises(RuntimeError) as caught:
-        chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+        chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert caught.value is boom, "telemetry must not substitute its own exception"
     assert trace.count("flush") == 1
@@ -147,7 +147,7 @@ def test_a_terminating_exception_still_flushes(
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", _explode)
 
     with pytest.raises(KeyboardInterrupt):
-        chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+        chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert trace == ["flush", "write_row", "reset"]
 
@@ -165,7 +165,7 @@ def test_a_detailed_flush_failure_leaves_the_aggregate_row_written(
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
 
     # The run completes normally — a telemetry failure is not a run failure.
-    chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+    chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert trace == ["flush", "write_row", "reset"]
 
@@ -185,7 +185,7 @@ def test_an_aggregate_failure_leaves_the_detailed_flush_done(
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", _emit_a_node_run)
 
     with pytest.raises(RuntimeError):
-        chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=_deps())
+        chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=_deps())
 
     assert trace.index("flush") < trace.index("write_row")
     assert len(trace.flush_kwargs["node_runs"]) == 1
@@ -197,10 +197,10 @@ def test_without_diagnostics_wiring_nothing_is_flushed_and_the_absence_is_logged
     """A run with no diagnostics deps has no run identifier, so `node_run_scope` never opens and
     no node runs or logical calls are produced *at the source* — not merely left unflushed."""
     monkeypatch.setattr(chain_mod, "_run_beliefs_fold", _emit_a_node_run)
-    deps = chain_mod.ChainDeps(atlas=None, hermes=None)
+    deps = chain_mod.ChainDeps(research=None, portfolio=None)
 
     with caplog.at_level("INFO", logger=chain_mod._logger.name):
-        chain_mod.run_atlas_then_hermes(atlas_input=_beliefs_input(), deps=deps)
+        chain_mod.run_research_then_portfolio(research_input=_beliefs_input(), deps=deps)
 
     assert "flush" not in trace
     assert _usage.node_runs_snapshot() == []

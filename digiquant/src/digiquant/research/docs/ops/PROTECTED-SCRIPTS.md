@@ -26,7 +26,7 @@ CLI reference.
 |-----|---------|
 | Intraday | `python -m digiquant prices fetch-quotes` → `compute-technicals` |
 | EOD macro | `python -m digiquant prices sync-calendar` → `fetch-macro` |
-| At-open | [`scripts/atlas/execute_at_open.py`](../../scripts/atlas/execute_at_open.py) |
+| At-open | [`digiquant/scripts/research/execute_at_open.py`](../../digiquant/scripts/research/execute_at_open.py) |
 
 ### [`pipeline-meta-review.yml`](../../.github/workflows/pipeline-meta-review.yml)
 
@@ -96,7 +96,7 @@ PY
 
 | Script | Classification |
 |--------|----------------|
-| `audit_activity_coverage_api.py` | **Keep** — ops / SQL companion; may be invoked ad hoc with `scripts/atlas/sql/`. |
+| `audit_activity_coverage_api.py` | **Keep** — ops / SQL companion; may be invoked ad hoc with `digiquant/scripts/research/sql/`. |
 | `backfill_pm_rebalance_and_activity.py` | **Keep** — specialized backfill; referenced implicitly by RUNBOOK-style ops. |
 | `backfill_positions_entry_from_events.py` | **Keep** — migration helper. |
 | `format_deliberation_transcripts_chat.py` | **Keep** — formatting utility; optional operator use. |

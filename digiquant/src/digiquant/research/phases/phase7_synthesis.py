@@ -2,7 +2,7 @@
 
 Research-only: topical subsection agents write markdown; the stitcher assembles
 one long briefing. Portfolio positioning, thesis lifecycle, and trade
-recommendations are Hermes's domain (phases 7C–7E).
+recommendations are portfolio's domain (phases 7C–7E).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from digiquant.research.segments import (
 )
 from digiquant.research.skills import load_skill, load_skill_edit
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     PhaseError,
     refresh_scope_forces_full,
 )
@@ -179,7 +179,7 @@ def _slot_freshness(payload: object) -> SegmentFreshness:
     return SegmentFreshness(source="today", as_of=as_of)
 
 
-def _segment_freshness(state: AtlasResearchState) -> dict[str, SegmentFreshness]:
+def _segment_freshness(state: ResearchState) -> dict[str, SegmentFreshness]:
     """Derive the freshness map from state — does not rely on the LLM."""
     out: dict[str, SegmentFreshness] = {}
     for bag in (
@@ -225,7 +225,7 @@ def _enforce_research_only_boundary(digest: DigestSnapshot) -> DigestSnapshot:
     return digest.model_copy(update={"body": _strip_trade_verbs(digest.body)})
 
 
-def _digest_document_key(state: AtlasResearchState) -> str:
+def _digest_document_key(state: ResearchState) -> str:
     if state.custom_prompt:
         return f"custom-research/{state.run_id}"
     if state.run_type == "delta":
@@ -233,7 +233,7 @@ def _digest_document_key(state: AtlasResearchState) -> str:
     return "digest"
 
 
-def _digest_triage_signal(state: AtlasResearchState) -> TriageSignal | None:
+def _digest_triage_signal(state: ResearchState) -> TriageSignal | None:
     if state.triage is None:
         return None
     if state.triage.decisions and all(d.decision == "carry" for d in state.triage.decisions):
@@ -242,7 +242,7 @@ def _digest_triage_signal(state: AtlasResearchState) -> TriageSignal | None:
 
 
 class _DigestPriorLoader:
-    def __init__(self, state: AtlasResearchState, document_key: str) -> None:
+    def __init__(self, state: ResearchState, document_key: str) -> None:
         self._state = state
         self._document_key = document_key
 
@@ -359,7 +359,7 @@ def _slim_segment_body(body: dict[str, Any], char_budget: int) -> dict[str, Any]
     return out
 
 
-def _count_today_segments(state: AtlasResearchState) -> int:
+def _count_today_segments(state: ResearchState) -> int:
     """Count freshly-generated (``source == "today"``) phase-1..5 segments."""
     total = 0
     for bag in (
@@ -397,7 +397,7 @@ def _full_prior_digest_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _prior_digest_bodies(state: AtlasResearchState, limit: int = 2) -> list[dict[str, Any]]:
+def _prior_digest_bodies(state: ResearchState, limit: int = 2) -> list[dict[str, Any]]:
     """Last ``limit`` full digest briefings, most recent first."""
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -431,7 +431,7 @@ def _prior_digest_bodies(state: AtlasResearchState, limit: int = 2) -> list[dict
     return out[:limit]
 
 
-def _digest_shared_context(state: AtlasResearchState) -> dict[str, Any]:
+def _digest_shared_context(state: ResearchState) -> dict[str, Any]:
     """Shared context for digest nodes — digest keys plus full prior briefing bodies."""
     shared = _shared_context(
         state,
@@ -450,7 +450,7 @@ def _digest_shared_context(state: AtlasResearchState) -> dict[str, Any]:
     return shared
 
 
-def _subsection_payloads(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
+def _subsection_payloads(state: ResearchState) -> dict[str, dict[str, Any]]:
     return {
         slug: dict(payload)
         for slug, payload in state.phase7_subsection_outputs.items()
@@ -458,7 +458,7 @@ def _subsection_payloads(state: AtlasResearchState) -> dict[str, dict[str, Any]]
     }
 
 
-def _digest_phase_inputs(state: AtlasResearchState) -> dict[str, Any]:
+def _digest_phase_inputs(state: ResearchState) -> dict[str, Any]:
     """Stitcher inputs: subsections + two full prior briefings + bias row."""
     phase_inputs: dict[str, Any] = {
         "segment": "master-digest",
@@ -472,7 +472,7 @@ def _digest_phase_inputs(state: AtlasResearchState) -> dict[str, Any]:
     return phase_inputs
 
 
-def _subsection_phase_inputs(slug: str, state: AtlasResearchState) -> dict[str, Any]:
+def _subsection_phase_inputs(slug: str, state: ResearchState) -> dict[str, Any]:
     spec = next(s for s in DIGEST_SUBSECTION_SPECS if s.slug == slug)
     per_segment = _per_segment_char_budget(_count_today_segments(state))
     inputs: dict[str, Any] = {
@@ -503,7 +503,7 @@ def _published_digest_fields(merged: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _fallback_stitch(state: AtlasResearchState, date_str: str) -> str:
+def _fallback_stitch(state: ResearchState, date_str: str) -> str:
     parts = [f"# Daily Digest — {date_str}", ""]
     for spec in DIGEST_SUBSECTION_SPECS:
         sub = state.phase7_subsection_outputs.get(spec.slug) or {}
@@ -513,7 +513,7 @@ def _fallback_stitch(state: AtlasResearchState, date_str: str) -> str:
     return "\n".join(parts).strip() + "\n"
 
 
-def _finalize_digest(state: AtlasResearchState, body: dict[str, Any]) -> dict[str, Any]:
+def _finalize_digest(state: ResearchState, body: dict[str, Any]) -> dict[str, Any]:
     result = DigestSnapshot.model_validate(body)
     overrides: dict[str, Any] = {
         "segment_freshness": _segment_freshness(state),
@@ -529,7 +529,7 @@ def _finalize_digest(state: AtlasResearchState, body: dict[str, Any]) -> dict[st
     return _published_digest_fields(merged)
 
 
-def _carry_prior_digest(state: AtlasResearchState, prior: PriorPublished) -> dict[str, Any]:
+def _carry_prior_digest(state: ResearchState, prior: PriorPublished) -> dict[str, Any]:
     body = dict(prior.payload)
     return _finalize_digest(state, body)
 
@@ -543,9 +543,9 @@ def _prior_is_valid_digest(prior: PriorPublished) -> bool:
 
 
 def _carry_prior_digest_or_raise(
-    state: AtlasResearchState, document_key: str, exc: Exception
+    state: ResearchState, document_key: str, exc: Exception
 ) -> dict[str, Any]:
-    """Fail-soft degrade: carry a valid prior digest instead of aborting Atlas."""
+    """Fail-soft degrade: carry a valid prior digest instead of aborting research."""
     prior = _DigestPriorLoader(state, document_key).load(("digest", document_key), state.run_date)
     if prior is not None and _prior_is_valid_digest(prior):
         logger.warning(
@@ -575,7 +575,7 @@ def _carry_prior_digest_or_raise(
     raise exc
 
 
-def _digest_skips_llm(state: AtlasResearchState) -> bool:
+def _digest_skips_llm(state: ResearchState) -> bool:
     """True when quiet-day / attention carry would skip the stitcher LLM."""
     document_key = _digest_document_key(state)
     rollout = resolve_research_attention_rollout_mode()
@@ -601,7 +601,7 @@ def _digest_skips_llm(state: AtlasResearchState) -> bool:
 
 
 def _subsection_node(slug: str):
-    def _run(state: AtlasResearchState) -> dict[str, Any]:
+    def _run(state: ResearchState) -> dict[str, Any]:
         if _digest_skips_llm(state):
             return {}
         skill_text = load_skill("digest-subsection")
@@ -634,7 +634,7 @@ def _subsection_node(slug: str):
     return _run
 
 
-def _stitch_node(state: AtlasResearchState) -> dict[str, Any]:
+def _stitch_node(state: ResearchState) -> dict[str, Any]:
     document_key = _digest_document_key(state)
     rollout = resolve_research_attention_rollout_mode()
     if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
@@ -727,7 +727,7 @@ def _stitch_node(state: AtlasResearchState) -> dict[str, Any]:
 _synthesis_node = _stitch_node
 
 
-def _regime_label_from_phase3(state: AtlasResearchState) -> str:
+def _regime_label_from_phase3(state: ResearchState) -> str:
     """Return the short regime token from phase3's macro body (fail-soft to empty string)."""
     if state.phase3_output is None or state.phase3_output.payload.source != "today":
         return ""

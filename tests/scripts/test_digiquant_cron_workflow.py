@@ -1,10 +1,10 @@
-"""Kairos cron GHA spec is probe-only and stays off the house pipeline.
+"""execution cron GHA spec is probe-only and stays off the house pipeline.
 
-Overlay ``usage.start`` is process-global, so overlay / kairos sync / route /
-digest / Mailgun must never share ``pipeline-digiquant.yml``'s Hermes chain job. The spec in
-``docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml`` is
+Overlay ``usage.start`` is process-global, so overlay / execution sync / route /
+digest / Mailgun must never share ``pipeline-digiquant.yml``'s portfolio chain job. The spec in
+``docs/agent-backlog/execution-tenancy/execution-cron-check.workflow.yml`` is
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
-``hermes.chain`` on that job would be a production apply against Observer.
+``portfolio.chain`` on that job would be a production apply against Observer.
 
 Install is ``.github/workflows/execution-cron-check.yml`` copied from the spec
 byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
@@ -21,15 +21,15 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "execution-cron-check.workflow.yml"
+SPEC = REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "execution-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 MAILGUN_FRAGMENT = (
-    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-digiquant-mailgun.env.yml"
+    REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "pipeline-digiquant-mailgun.env.yml"
 )
 MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
 
-FORBIDDEN_APPLY = ("--execute", "--all", "hermes.chain")
+FORBIDDEN_APPLY = ("--execute", "--all", "portfolio.chain")
 
 
 def _triggers(doc: dict[str | bool, object]) -> dict[str, object]:
@@ -59,7 +59,7 @@ def _blob(path: Path) -> str:
     return "\n".join(_run_scripts(path))
 
 
-class TestKairosCronSpecIsProbeOnly:
+class TestExecutionCronSpecIsProbeOnly:
     def test_spec_file_exists(self) -> None:
         assert SPEC.is_file()
 
@@ -160,12 +160,12 @@ class TestHouseScheduleRetriesOffPeak:
 
 
 class TestHousePipelineDoesNotRunOverlay:
-    def test_house_run_scripts_omit_kairos_and_overlay(self) -> None:
+    def test_house_run_scripts_omit_execution_and_overlay(self) -> None:
         blob = _blob(HOUSE)
         assert "digiquant.portfolio.chain" in blob
-        assert "olympus.overlay" not in blob
-        assert "kairos.sync_cron" not in blob
-        assert "kairos.route_cron" not in blob
+        assert "dashboard.overlay" not in blob
+        assert "execution.sync_cron" not in blob
+        assert "execution.route_cron" not in blob
         assert "execution_cron_check" not in blob
         assert "notify.dispatch" not in blob
 
@@ -176,11 +176,11 @@ def _house_chain_step_env() -> dict[str, object]:
         for step in job.get("steps", []):
             if not isinstance(step, dict):
                 continue
-            if "hermes.chain" in str(step.get("run") or ""):
+            if "portfolio.chain" in str(step.get("run") or ""):
                 env = step.get("env") or {}
                 assert isinstance(env, dict)
                 return env
-    raise AssertionError("house hermes.chain step not found")
+    raise AssertionError("house portfolio.chain step not found")
 
 
 class TestHousePipelineMailgunEnvFragment:
@@ -205,7 +205,7 @@ class TestHousePipelineMailgunEnvFragment:
 
     def test_docs_name_the_splice_hop(self) -> None:
         unblock = (
-            REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "HUMAN-UNBLOCK.md"
+            REPO_ROOT / "docs" / "agent-backlog" / "execution-tenancy" / "HUMAN-UNBLOCK.md"
         ).read_text(encoding="utf-8")
         assert "pipeline-digiquant-mailgun.env.yml" in unblock
         for key in MAILGUN_KEYS:

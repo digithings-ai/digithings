@@ -1,7 +1,7 @@
 """Daily-graph wiring for AttentionPlan shadow publish (#2622 / #1945).
 
 Computes a WP13-class shadow plan beside incumbent edit modes and upserts
-``document_key='attention-plan'`` during the Atlas publish phase so Pipeline
+``document_key='attention-plan'`` during the research publish phase so Pipeline
 can inspect refresh reasons. Never actuates alternate routing.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from digiquant.research.state import AtlasResearchState, PublishedArtifact
+from digiquant.research.state import ResearchState, PublishedArtifact
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.research.triage import triage_decision_to_signal
 from digiquant.dashboard.attention_plan import PlannerMode, plan_attention_shadow
@@ -31,7 +31,7 @@ OLYMPUS_PLANNER_MODE_ENV = "OLYMPUS_PLANNER_MODE"
 class _StatePriorLoader:
     """Resolve segment priors from ``state.prior_context.latest_segments``."""
 
-    def __init__(self, state: AtlasResearchState) -> None:
+    def __init__(self, state: ResearchState) -> None:
         self._state = state
 
     def load(self, artifact_key: ArtifactKey, run_date: date) -> PriorPublished | None:
@@ -67,13 +67,13 @@ def planner_mode_from_env() -> PlannerMode:
     return "shadow"
 
 
-def _segment_artifact_keys(state: AtlasResearchState) -> list[ArtifactKey]:
+def _segment_artifact_keys(state: ResearchState) -> list[ArtifactKey]:
     if state.triage is None or not state.triage.decisions:
         return []
     return [("segment", decision.segment) for decision in state.triage.decisions]
 
 
-def _triage_map(state: AtlasResearchState) -> dict[ArtifactKey, TriageSignal | None]:
+def _triage_map(state: ResearchState) -> dict[ArtifactKey, TriageSignal | None]:
     if state.triage is None:
         return {}
     out: dict[ArtifactKey, TriageSignal | None] = {}
@@ -82,14 +82,14 @@ def _triage_map(state: AtlasResearchState) -> dict[ArtifactKey, TriageSignal | N
     return out
 
 
-def _h4_roster(state: AtlasResearchState) -> list[str]:
-    hermes = state.phase_hermes
-    if hermes is None or not hermes.focus_roster:
+def _h4_roster(state: ResearchState) -> list[str]:
+    portfolio = state.phase_portfolio
+    if portfolio is None or not portfolio.focus_roster:
         return []
-    return [entry.ticker for entry in hermes.focus_roster if entry.ticker]
+    return [entry.ticker for entry in portfolio.focus_roster if entry.ticker]
 
 
-def _documents_run_type(state: AtlasResearchState) -> str:
+def _documents_run_type(state: ResearchState) -> str:
     if state.run_type in ("baseline", "delta"):
         return state.run_type
     return "baseline"
@@ -98,7 +98,7 @@ def _documents_run_type(state: AtlasResearchState) -> str:
 def maybe_publish_attention_plan_shadow(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
 ) -> PublishedArtifact | None:
     """Plan + publish AttentionPlan when triage ran and planner mode is shadow.
 

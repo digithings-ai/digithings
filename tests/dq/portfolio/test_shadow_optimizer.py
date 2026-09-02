@@ -83,8 +83,8 @@ _OPTIMIZER = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "shadow_optimizer.py"
 )
 _PRODUCTION_GUARD_PATHS = (
@@ -92,31 +92,31 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "chain.py",
     pathlib.Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "phases"
     / "phase7e_risk_sizing.py",
     pathlib.Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "phases"
     / "h9_commit_run.py",
     pathlib.Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "hermes"
+    / "dashboard"
+    / "portfolio"
     / "shadow_artifact.py",
 )
 

@@ -6,7 +6,7 @@ the first buy OPEN into append-only rows. This module seeds exactly one opening 
 commit → decision → requested/approved quantity → executed order → paper fill → open lot —
 derived from the committed book + NAV + marks. It does not invent pre-cutover fill history.
 
-Sole-writer rule: this helper is owned by the execution path under ``hermes/writers/`` and
+Sole-writer rule: this helper is owned by the execution path under ``portfolio/writers/`` and
 is the only module besides :mod:`execution_io` that may INSERT ``paper_executions`` /
 ``holding_lots``. All writes go through :func:`ledger_io._insert` (never upsert).
 """

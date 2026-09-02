@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone Atlas decision resolver (Pillar 3A, #726).
+"""Standalone research decision resolver (Pillar 3A, #726).
 
 Resolves every *due* ``decision_log`` row — computes realized alpha vs the benchmark and
 writes the reflection lesson — by calling
@@ -29,13 +29,13 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-# repo root: .../digiquant/scripts/research/resolve_decisions.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/resolve_decisions.py → up 4 (research → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _ensure_importable() -> None:
-    """Add the monorepo ``*/src`` paths to sys.path so the atlas package imports."""
+    """Add the monorepo ``*/src`` paths to sys.path so the research package imports."""
     for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
         path = str(_REPO_ROOT / rel)
         if path not in sys.path:
@@ -50,7 +50,7 @@ def _parse_run_date(value: str | None) -> date:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Resolve due Atlas decision_log rows (alpha vs benchmark + reflection)."
+        description="Resolve due research decision_log rows (alpha vs benchmark + reflection)."
     )
     parser.add_argument(
         "--run-date",

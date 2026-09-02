@@ -18,7 +18,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "openrouter_diagnose.py"
 )
 

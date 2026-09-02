@@ -20,7 +20,7 @@ from datetime import date
 
 import pytest
 from digiquant.research.diagnostics import _row, summarize_run
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.telemetry import (
     SPEND_ALERT_DEFAULT_USD,
     SPEND_ALERT_ENV,
@@ -112,7 +112,7 @@ class TestTheAlertFragment:
 
 class TestItReachesTheDiagnosticsRow:
     def _row_for(self, cost: float | None) -> dict[str, object]:
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 8, 5))
+        state = ResearchState(run_type="delta", run_date=date(2026, 8, 5))
         return _row(
             run_id="30930587340",
             run_type="delta",
@@ -146,7 +146,7 @@ class TestItNeverBlocks:
     """The owner's decision, pinned. These are the tests that must never be relaxed."""
 
     def _summary_and_row(self, cost: float) -> tuple[object, dict[str, object]]:
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 8, 5))
+        state = ResearchState(run_type="delta", run_date=date(2026, 8, 5))
         summary = summarize_run(state)
         row = _row(
             run_id="r",
@@ -164,14 +164,14 @@ class TestItNeverBlocks:
         breakdown = row["breakdown"]
         assert isinstance(breakdown, dict)
         assert SPEND_ALERT_KEY in breakdown  # it did fire …
-        baseline = summarize_run(AtlasResearchState(run_type="delta", run_date=date(2026, 8, 5)))
+        baseline = summarize_run(ResearchState(run_type="delta", run_date=date(2026, 8, 5)))
         assert row["status"] == baseline.status  # … and changed nothing
 
     def test_a_massive_overrun_leaves_retry_signal_untouched(self) -> None:
         """`retry_signal` drives the process exit code and therefore CI's outer-retry loop. An
         alert that flipped it would spend MORE money on a run flagged for spending too much."""
         summary, _ = self._summary_and_row(10_000.0)
-        baseline = summarize_run(AtlasResearchState(run_type="delta", run_date=date(2026, 8, 5)))
+        baseline = summarize_run(ResearchState(run_type="delta", run_date=date(2026, 8, 5)))
         assert summary.retry_signal == baseline.retry_signal
 
     def test_the_alert_is_not_recorded_as_a_degraded_reason(self) -> None:

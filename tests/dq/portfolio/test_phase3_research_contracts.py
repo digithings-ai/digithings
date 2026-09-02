@@ -13,17 +13,17 @@ import pathlib
 from datetime import date
 
 import pytest
-from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+from digiquant.research.graph import ResearchGraphDeps, build_research_graph
 from digiquant.research.phases.preflight import PreflightDeps
 from digiquant.research.phases.publish_phase import PublishDeps
 from digiquant.research.phases.triage_phase import TriageDeps
 from digiquant.research.research_attention import resolve_research_attention_rollout_mode
-from digiquant.research.state import AtlasConfigBundle
+from digiquant.research.state import ResearchConfigBundle
 from digiquant.portfolio.graph import (
-    HermesGraphDeps,
+    PortfolioGraphDeps,
     ThesisGraphDeps,
-    build_hermes_graph,
-    build_hermes_phases_thesis,
+    build_portfolio_graph,
+    build_portfolio_phases_thesis,
 )
 from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
 from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
@@ -45,11 +45,11 @@ from digiquant.dashboard.research_retrieval.planner import (
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.phase3_e2e_fixtures import (
-    ATLAS_COMPILED_NODES,
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.phase3_e2e_fixtures import (
+    RESEARCH_COMPILED_NODES,
     FORBIDDEN_PHASE3_NODES,
-    HERMES_COMPILED_NODES,
+    PORTFOLIO_COMPILED_NODES,
     PHASE3_RUN_ID,
     PRODUCTION_GUARD_PATHS,
     assert_research_plan_preserves_h4_roster,
@@ -70,44 +70,44 @@ def _graph_node_names(graph) -> set[str]:
 # --------------------------------------------------------------------------- topology / no planner node
 
 
-def test_atlas_graph_topology_unchanged_by_phase3() -> None:
+def test_research_graph_topology_unchanged_by_phase3() -> None:
     client = FakeSupabaseClient()
-    deps = AtlasGraphDeps(
+    deps = ResearchGraphDeps(
         preflight=PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
         ),
         triage=TriageDeps(client=client),
         publish=PublishDeps(client=client),
     )
-    graph = build_atlas_graph(deps=deps, watchlist=("AAPL", "MSFT"))
+    graph = build_research_graph(deps=deps, watchlist=("AAPL", "MSFT"))
     nodes = _graph_node_names(graph)
     assert FORBIDDEN_PHASE3_NODES.isdisjoint(nodes)
-    assert ATLAS_COMPILED_NODES.issubset(nodes)
+    assert RESEARCH_COMPILED_NODES.issubset(nodes)
     assert "sector-scorecard" not in nodes
     assert "sector-technology" in nodes
 
 
-def test_hermes_graph_topology_unchanged_by_phase3() -> None:
+def test_portfolio_graph_topology_unchanged_by_phase3() -> None:
     client = FakeSupabaseClient()
-    deps = HermesGraphDeps(
+    deps = PortfolioGraphDeps(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
-    graph = build_hermes_graph(watchlist=["AAPL", "MSFT"], deps=deps)
+    graph = build_portfolio_graph(watchlist=["AAPL", "MSFT"], deps=deps)
     nodes = _graph_node_names(graph)
     assert FORBIDDEN_PHASE3_NODES.isdisjoint(nodes)
-    assert HERMES_COMPILED_NODES.issubset(nodes)
-    phase_names = {p.name for p in build_hermes_phases_thesis(watchlist=["AAPL"], held=set())}
+    assert PORTFOLIO_COMPILED_NODES.issubset(nodes)
+    phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "hermes_h1_thesis_review",
-        "hermes_h4_opportunity_screener",
-        "hermes_h5_asset_analyst",
-        "hermes_h6_deliberation",
-        "hermes_h7_pm_direction",
-        "hermes_h8_risk_sizing",
-        "hermes_h9_commit_run",
+        "portfolio_h1_thesis_review",
+        "portfolio_h4_opportunity_screener",
+        "portfolio_h5_asset_analyst",
+        "portfolio_h6_deliberation",
+        "portfolio_h7_pm_direction",
+        "portfolio_h8_risk_sizing",
+        "portfolio_h9_commit_run",
     ):
         assert expected in phase_names
 
@@ -115,7 +115,7 @@ def test_hermes_graph_topology_unchanged_by_phase3() -> None:
 def test_h6_deliberation_module_disables_broad_live_search() -> None:
     path = (
         pathlib.Path(__file__).resolve().parents[3]
-        / "digiquant/src/digiquant/olympus/hermes/phases/h6_deliberation.py"
+        / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py"
     )
     source = path.read_text(encoding="utf-8")
     assert "live_search=True" not in source
@@ -125,9 +125,9 @@ def test_h6_deliberation_module_disables_broad_live_search() -> None:
 def test_planner_helpers_are_not_graph_nodes() -> None:
     """Static guard: research_attention / context_wiring stay helper modules."""
     for rel in (
-        "digiquant/src/digiquant/olympus/hermes/research_attention.py",
-        "digiquant/src/digiquant/olympus/atlas/research_attention.py",
-        "digiquant/src/digiquant/olympus/research_retrieval/context_wiring.py",
+        "digiquant/src/digiquant/portfolio/research_attention.py",
+        "digiquant/src/digiquant/research/research_attention.py",
+        "digiquant/src/digiquant/dashboard/research_retrieval/context_wiring.py",
     ):
         path = pathlib.Path(__file__).resolve().parents[3] / rel
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -141,7 +141,7 @@ def test_planner_helpers_are_not_graph_nodes() -> None:
 
 def test_h4_roster_unchanged_across_shadow_attention_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster_a = compute_focus_roster(
         watchlist=["AAPL", "MSFT", "SPY", "QQQ"],
         held={"AAPL"},

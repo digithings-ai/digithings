@@ -13,10 +13,10 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
 )
 from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
@@ -29,17 +29,17 @@ pytestmark = pytest.mark.unit
 
 _H6_PATH = (
     Path(__file__).resolve().parents[3]
-    / "digiquant/src/digiquant/olympus/hermes/phases/h6_deliberation.py"
+    / "digiquant/src/digiquant/portfolio/phases/h6_deliberation.py"
 )
 
 
-def _state() -> AtlasResearchState:
-    state = AtlasResearchState(
+def _state() -> ResearchState:
+    state = ResearchState(
         run_type="baseline",
         run_date=date(2026, 6, 20),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")],
         asset_analysts={
             "AAPL": {
@@ -81,7 +81,7 @@ class TestH6AnalystSkillLoad:
             return f"# stub skill {slug}"
 
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         pm_calls = {"n": 0}
 
@@ -121,8 +121,8 @@ class TestH6AnalystSkillLoad:
         ):
             result = compiled.invoke(_state())
 
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert "asset-analyst" not in loaded
         assert "deliberation-analyst-response" in loaded
         assert "deliberation" in loaded

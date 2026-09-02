@@ -1,4 +1,4 @@
-"""Olympus event-boundary period accounting (#2596 / #2597, Phase 0 Tasks 3.1–3.2).
+"""dashboard event-boundary period accounting (#2596 / #2597, Phase 0 Tasks 3.1–3.2).
 
 Pure Decimal/Polars contracts and engine plus append-only persistence. Curated public
 views are Task 3.4. Portfolio/accounting tables are user-private — never grant public

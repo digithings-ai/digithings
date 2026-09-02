@@ -63,7 +63,7 @@ def test_cutover_stays_under_cutover_dir() -> None:
 def test_db_migrate_and_verify_are_maxdepth_one() -> None:
     migrate = (REPO_ROOT / ".github" / "workflows" / "db-migrate.yml").read_text(encoding="utf-8")
     verify = (
-        REPO_ROOT / "digiquant" / "scripts" / "atlas" / "verify-supabase-migrations.sh"
+        REPO_ROOT / "digiquant" / "scripts" / "research" / "verify-supabase-migrations.sh"
     ).read_text(encoding="utf-8")
     rls = (REPO_ROOT / "scripts" / "rls_proof" / "run.sh").read_text(encoding="utf-8")
     assert "find digiquant/supabase/migrations -maxdepth 1" in migrate

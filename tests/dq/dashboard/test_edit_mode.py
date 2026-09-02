@@ -27,8 +27,8 @@ _DELTA_EXAMPLE = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "olympus"
-    / "atlas"
+    / "dashboard"
+    / "research"
     / "templates"
     / "delta-request.example.json"
 )

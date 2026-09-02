@@ -92,7 +92,7 @@ class TestPublishCategoryConstraint:
     def test_beliefs_category_is_constraint_valid(self) -> None:
         """Regression for #1383 — beliefs distillation publishes category="learning",
         which migration 043 forgot to add to chk_documents_category, crashing the
-        Olympus daily pipeline for 11 runs. Pin the value the writer actually emits."""
+        dashboard daily pipeline for 11 runs. Pin the value the writer actually emits."""
         from digiquant.dashboard.learning.beliefs_distillation import BELIEFS_CATEGORY
 
         assert BELIEFS_CATEGORY in ALLOWED_CATEGORIES

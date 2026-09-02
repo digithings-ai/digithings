@@ -37,8 +37,8 @@ def _env_num(name: str, default: str, cast: type) -> float:
         return cast(default)
 
 
-STRESS_FLOOR = int(_env_num("ATLAS_BUDGET_STRESS_FLOOR", "3", int))
-DISPERSION_HI = _env_num("ATLAS_BUDGET_DISPERSION_HI", "0.015", float)
+STRESS_FLOOR = int(_env_num("RESEARCH_BUDGET_STRESS_FLOOR", "3", int))
+DISPERSION_HI = _env_num("RESEARCH_BUDGET_DISPERSION_HI", "0.015", float)
 
 RegimeLabel = Literal["stress", "neutral", "dispersion"]
 

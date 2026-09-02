@@ -1,4 +1,4 @@
-"""Build versioned H7 prerequisite snapshot at Atlas preflight (#2946 / WP14.3)."""
+"""Build versioned H7 prerequisite snapshot at research preflight (#2946 / WP14.3)."""
 
 from __future__ import annotations
 

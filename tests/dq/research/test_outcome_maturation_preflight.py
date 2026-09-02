@@ -8,7 +8,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+from digiquant.research.graph import ResearchGraphDeps, build_research_graph
 from digiquant.research.phases.outcome_maturation import (
     DEFAULT_OUTCOME_LESSON_COHORT,
     DEFAULT_OUTCOME_LESSON_HORIZON,
@@ -17,7 +17,7 @@ from digiquant.research.phases.outcome_maturation import (
     pin_outcome_lesson_for_preflight,
 )
 from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.dashboard.learning.lesson_registry import LessonCompiler
 from digiquant.dashboard.learning.outcome_assembly import (
     AssemblyPassResult,
@@ -45,10 +45,10 @@ from digiquant.dashboard.research_retrieval.h7_decision_context import (
     compile_h7_decision_context,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.test_h7_context_compiler import _evidence, _loaded_state, _store_with_state
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.test_h7_context_compiler import _evidence, _loaded_state, _store_with_state
 from tests.dq.learning.test_lesson_registry import _report
-from tests.dq.olympus.test_context_compiler import _bundle
+from tests.dq.dashboard.test_context_compiler import _bundle
 
 pytestmark = pytest.mark.unit
 
@@ -334,12 +334,12 @@ def test_preflight_pins_lesson_before_h7_prerequisites() -> None:
     episode = _portfolio_episode(source_run_id=_PRIOR_RUN)
     deps = PreflightDeps(
         client=_preflight_client(),
-        config_loader=lambda: AtlasConfigBundle(),
+        config_loader=lambda: ResearchConfigBundle(),
         outcome_maturation_deps=_maturation_deps(store, episodes=(episode,)),
     )
     node = build_preflight_node(deps)
     out = node(
-        AtlasResearchState(
+        ResearchState(
             run_type="baseline",
             run_date=date(2026, 8, 27),
             knowledge_cutoff_at=_CUTOFF,
@@ -409,11 +409,11 @@ def test_h5_and_h7_wire_expose_lesson_id(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_graph_node_list_unchanged() -> None:
-    g = build_atlas_graph(
-        deps=AtlasGraphDeps(
+    g = build_research_graph(
+        deps=ResearchGraphDeps(
             preflight=PreflightDeps(
                 client=_preflight_client(),
-                config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+                config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
             )
         ),
         watchlist=("AAPL",),

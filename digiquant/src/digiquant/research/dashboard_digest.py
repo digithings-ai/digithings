@@ -1,4 +1,4 @@
-"""Atlas dashboard digest parsing — shared by update_tearsheet and backfill scripts (SIMP-011)."""
+"""research dashboard digest parsing — shared by update_tearsheet and backfill scripts (SIMP-011)."""
 
 from __future__ import annotations
 

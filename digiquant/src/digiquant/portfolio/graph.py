@@ -1,8 +1,8 @@
-"""Compiled Hermes sub-graph — thesis-first H1–H9 (PR 4a–4d).
+"""Compiled portfolio sub-graph — thesis-first H1–H9 (PR 4a–4d).
 
-Per [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md), Hermes consumes
-an Atlas digest and produces analyst, deliberation, PM, and reflection outputs
-via ``state.phase_hermes`` slots.
+Per [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md), portfolio consumes
+an research digest and produces analyst, deliberation, PM, and reflection outputs
+via ``state.phase_portfolio`` slots.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
 from digiquant.portfolio.phases.h2_market_thesis_exploration import (
@@ -33,17 +33,17 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import (
 )
 from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
 from digiquant.portfolio.pipeline_builder import PipelinePhase, build_pipeline
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 __all__ = [
     "CommitRunDeps",
-    "HermesGraphDeps",
+    "PortfolioGraphDeps",
     "Phase9Deps",
     "ThesisGraphDeps",
-    "build_hermes_graph",
-    "build_hermes_phases",
-    "build_hermes_phases_thesis",
+    "build_portfolio_graph",
+    "build_portfolio_phases",
+    "build_portfolio_phases_thesis",
 ]
 
 
@@ -55,8 +55,8 @@ class ThesisGraphDeps:
 
 
 @dataclass(frozen=True)
-class HermesGraphDeps:
-    """Dependencies for the Hermes sub-graph."""
+class PortfolioGraphDeps:
+    """Dependencies for the portfolio sub-graph."""
 
     phase9: Phase9Deps | None = (
         None  # legacy evolution LLM — not on daily path; use beliefs on-demand
@@ -68,7 +68,7 @@ class HermesGraphDeps:
     research_state_store: ResearchStateStore | None = None
 
 
-def _resolve_risk_sizing_client(deps: HermesGraphDeps) -> SupabaseClient | None:
+def _resolve_risk_sizing_client(deps: PortfolioGraphDeps) -> SupabaseClient | None:
     if deps.risk_sizing is not None:
         return deps.risk_sizing.client
     if deps.thesis is not None:
@@ -76,7 +76,7 @@ def _resolve_risk_sizing_client(deps: HermesGraphDeps) -> SupabaseClient | None:
     return None
 
 
-def _resolve_shared_client(deps: HermesGraphDeps) -> SupabaseClient | None:
+def _resolve_shared_client(deps: PortfolioGraphDeps) -> SupabaseClient | None:
     """Prefer thesis, then risk sizing, then H9 commit client."""
     if deps.thesis is not None and deps.thesis.client is not None:
         return deps.thesis.client
@@ -88,29 +88,29 @@ def _resolve_shared_client(deps: HermesGraphDeps) -> SupabaseClient | None:
     return None
 
 
-def _build_h8_risk_sizing(deps: HermesGraphDeps) -> PipelinePhase:
+def _build_h8_risk_sizing(deps: PortfolioGraphDeps) -> PipelinePhase:
     client = _resolve_risk_sizing_client(deps)
     if client is None:
 
-        def _noop(_state: HermesState) -> dict[str, Any]:
+        def _noop(_state: PortfolioState) -> dict[str, Any]:
             return {}
 
         return PipelinePhase(
-            name="hermes_h8_risk_sizing",
-            nodes=[NodeSpec(name="hermes/portfolio/risk-sizing-noop", run=_noop)],
+            name="portfolio_h8_risk_sizing",
+            nodes=[NodeSpec(name="portfolio/risk-sizing-noop", run=_noop)],
         )
     return build_risk_sizing_phase(RiskSizingDeps(client=client))
 
 
-def build_hermes_phases_thesis(
+def build_portfolio_phases_thesis(
     *,
     watchlist: list[str],
-    deps: HermesGraphDeps | None = None,
+    deps: PortfolioGraphDeps | None = None,
     debate_rounds: int = 1,  # removed with 7CD; kept for CLI compat
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
-    """Thesis-first Hermes phases H1–H9 (PR 4d)."""
-    deps = deps or HermesGraphDeps()
+    """Thesis-first portfolio phases H1–H9 (PR 4d)."""
+    deps = deps or PortfolioGraphDeps()
     thesis_client = deps.thesis.client if deps.thesis else None
     shared_client = _resolve_shared_client(deps)
     bundle_store = deps.evidence_bundle_store
@@ -139,31 +139,31 @@ def build_hermes_phases_thesis(
     return phases
 
 
-def build_hermes_phases(
+def build_portfolio_phases(
     *,
     watchlist: list[str],
-    deps: HermesGraphDeps | None = None,
+    deps: PortfolioGraphDeps | None = None,
     debate_rounds: int = 1,
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     """Legacy alias — thesis-first graph is canonical."""
-    return build_hermes_phases_thesis(
+    return build_portfolio_phases_thesis(
         watchlist=watchlist, deps=deps, debate_rounds=debate_rounds, held=held
     )
 
 
-def build_hermes_graph(
+def build_portfolio_graph(
     *,
     watchlist: list[str],
-    deps: HermesGraphDeps | None = None,
+    deps: PortfolioGraphDeps | None = None,
     debate_rounds: int = 1,
     checkpointer: Any = None,
     held: Collection[str] = (),
 ):
-    """Compile and return the Hermes StateGraph."""
+    """Compile and return the portfolio StateGraph."""
     return build_pipeline(
-        HermesState,
-        build_hermes_phases_thesis(
+        PortfolioState,
+        build_portfolio_phases_thesis(
             watchlist=watchlist, deps=deps, debate_rounds=debate_rounds, held=held
         ),
         checkpointer=checkpointer,
@@ -175,7 +175,7 @@ def _build_cli_parser():
 
     parser = argparse.ArgumentParser(
         prog="python -m digiquant.portfolio.graph",
-        description="Run the Hermes analysis sub-graph against a saved Atlas digest.",
+        description="Run the portfolio analysis sub-graph against a saved research digest.",
     )
     parser.add_argument("--from-digest", required=True)
     parser.add_argument("--watchlist", default="")
@@ -183,12 +183,12 @@ def _build_cli_parser():
     return parser
 
 
-def _load_state(path: str) -> AtlasResearchState:
+def _load_state(path: str) -> ResearchState:
     import json
     from pathlib import Path
 
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    return AtlasResearchState.model_validate(raw)
+    return ResearchState.model_validate(raw)
 
 
 def cli_main(argv: list[str] | None = None) -> int:
@@ -202,7 +202,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     state = _load_state(args.from_digest)
 
     if args.dry_run:
-        graph = build_hermes_graph(watchlist=watchlist)
+        graph = build_portfolio_graph(watchlist=watchlist)
         json.dump(
             {
                 "dry_run": True,
@@ -216,15 +216,15 @@ def cli_main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
 
-    graph = build_hermes_graph(watchlist=watchlist)
+    graph = build_portfolio_graph(watchlist=watchlist)
     final = graph.invoke(state)
     json.dump(
         {
             "ok": True,
             "run_id": str(state.run_id),
-            "asset_analysts": list(final.phase_hermes.asset_analysts.keys()),
-            "pm_direction_present": final.phase_hermes.pm_direction_memo is not None,
-            "sized_book_present": final.phase_hermes.sized_book is not None,
+            "asset_analysts": list(final.phase_portfolio.asset_analysts.keys()),
+            "pm_direction_present": final.phase_portfolio.pm_direction_memo is not None,
+            "sized_book_present": final.phase_portfolio.sized_book is not None,
         },
         sys.stdout,
         default=str,

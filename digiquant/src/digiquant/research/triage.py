@@ -1,7 +1,7 @@
 """Delta triage — deterministic rules that decide which segments regenerate
 on a weekday delta run vs. carry forward from the baseline.
 
-Mirrors the priority table in ``digiquant/src/digiquant/olympus/atlas/docs/agentic/ARCHITECTURE.md``
+Mirrors the priority table in ``digiquant/src/digiquant/research/docs/agentic/ARCHITECTURE.md``
 §Mon–Sat — Daily Delta. Table-driven so the rules are readable and the
 Phase 9 post-mortem can see exactly why a segment ran or didn't.
 
@@ -41,7 +41,7 @@ from typing import Callable, Literal  # heterogeneous rule signatures
 
 from digiquant.research.sectors_config import load_sectors
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Carried,
     DeltaTriageDecision,
     DeltaTriageResult,
@@ -66,17 +66,17 @@ class TriageRule:
 
     segment: str
     tier: Tier
-    evaluator: Callable[[AtlasResearchState], tuple[bool, str]]
+    evaluator: Callable[[ResearchState], tuple[bool, str]]
 
 
 # ─── Rule primitives ─────────────────────────────────────────────────────────
 
 
-def _always(_: AtlasResearchState) -> tuple[bool, str]:
+def _always(_: ResearchState) -> tuple[bool, str]:
     return True, "mandatory_tier"
 
 
-def _per_segment_bias(state: AtlasResearchState, segment: str) -> str | None:
+def _per_segment_bias(state: ResearchState, segment: str) -> str | None:
     """Return yesterday's per-segment bias if the prior digest recorded one.
 
     Prefers ``snapshot.bias_by_segment[segment]`` when the schema ships that
@@ -98,7 +98,7 @@ def _per_segment_bias(state: AtlasResearchState, segment: str) -> str | None:
     return _bias_from_latest_segments(state, segment)
 
 
-def _bias_from_latest_segments(state: AtlasResearchState, segment: str) -> str | None:
+def _bias_from_latest_segments(state: ResearchState, segment: str) -> str | None:
     """Extract the per-segment bias from the latest published document, if any."""
     # latest_segments is keyed by document_key; segment slug may match doc_type.
     for row in state.prior_context.latest_segments.values():
@@ -180,12 +180,12 @@ def _rule_for_segment(
 
 
 def _bind_segment(
-    evaluator: Callable[[AtlasResearchState, str], tuple[bool, str]],
+    evaluator: Callable[[ResearchState, str], tuple[bool, str]],
     segment: str,
-) -> Callable[[AtlasResearchState], tuple[bool, str]]:
+) -> Callable[[ResearchState], tuple[bool, str]]:
     """Currying helper: lock ``segment`` into an evaluator."""
 
-    def _bound(state: AtlasResearchState) -> tuple[bool, str]:
+    def _bound(state: ResearchState) -> tuple[bool, str]:
         return evaluator(state, segment)
 
     return _bound
@@ -218,7 +218,7 @@ def _price_move_evaluator(threshold: float):
     is fractional (``0.005`` = 0.5%) to match ``state.price_deltas``.
     """
 
-    def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+    def _check(state: ResearchState, segment: str) -> tuple[bool, str]:
         if state.data_layer.fallback_used != "supabase":
             return True, f"data_layer_fallback={state.data_layer.fallback_used}"
 
@@ -272,7 +272,7 @@ def _low_tier_evaluator(threshold: float):
     (insufficient evidence).
     """
 
-    def _check(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+    def _check(state: ResearchState, segment: str) -> tuple[bool, str]:
         # Gate 1: untrusted data layer → regen regardless of bias/price.
         if state.data_layer.fallback_used != "supabase":
             return True, f"data_layer_fallback={state.data_layer.fallback_used}"
@@ -327,7 +327,7 @@ def _low_tier_evaluator(threshold: float):
     return _check
 
 
-def _bias_shifted_evaluator(state: AtlasResearchState, segment: str) -> tuple[bool, str]:
+def _bias_shifted_evaluator(state: ResearchState, segment: str) -> tuple[bool, str]:
     """Standard-tier evaluator. Regens on per-segment bias shift only --
     no price-delta input (see module docstring's signal table)."""
     segment_bias = _per_segment_bias(state, segment)
@@ -338,7 +338,7 @@ def _bias_shifted_evaluator(state: AtlasResearchState, segment: str) -> tuple[bo
     return False, f"segment_bias_quiet={segment_bias}"
 
 
-def _current_onchain_injection(state: AtlasResearchState) -> dict | None:
+def _current_onchain_injection(state: ResearchState) -> dict | None:
     """Return this run's compact Hyperdash injection, or None on a Hyperdash outage.
 
     Preflight writes the ``compact_summary()`` dict into
@@ -350,7 +350,7 @@ def _current_onchain_injection(state: AtlasResearchState) -> dict | None:
     return val if isinstance(val, dict) and val else None
 
 
-def _prior_onchain_injection(state: AtlasResearchState) -> dict | None:
+def _prior_onchain_injection(state: ResearchState) -> dict | None:
     """Return the prior run's persisted onchain injection, or None if unavailable.
 
     phase6_consolidate persists the same compact dict into the daily snapshot's
@@ -367,7 +367,7 @@ def _prior_onchain_injection(state: AtlasResearchState) -> dict | None:
     return val if isinstance(val, dict) and val else None
 
 
-def _onchain_unchanged_evaluator(state: AtlasResearchState, _segment: str) -> tuple[bool, str]:
+def _onchain_unchanged_evaluator(state: ResearchState, _segment: str) -> tuple[bool, str]:
     """Low-tier evaluator for ``alt-onchain-positioning``.
 
     The segment is deterministically grounded — it just interprets the compact
@@ -401,7 +401,7 @@ def _env_gated_evaluator(env_var: str):
     (matches the ``ATLAS_DATA_TOOLS`` kill-switch convention).
     """
 
-    def _check(_state: AtlasResearchState, _segment: str) -> tuple[bool, str]:
+    def _check(_state: ResearchState, _segment: str) -> tuple[bool, str]:
         raw = os.environ.get(env_var, "").strip().lower()
         if raw not in ("", "0", "false"):
             return True, f"{env_var}={raw}"
@@ -467,7 +467,7 @@ def triage_decision_to_signal(decision: DeltaTriageDecision) -> TriageSignal:
     return TriageSignal(mode="stale")
 
 
-def _resolve_baseline_date(state: AtlasResearchState) -> date:
+def _resolve_baseline_date(state: ResearchState) -> date:
     """Prior artifact date used for carry provenance and triage metadata."""
     if state.baseline_date is not None:
         return state.baseline_date
@@ -479,7 +479,7 @@ def _resolve_baseline_date(state: AtlasResearchState) -> date:
     return state.run_date - timedelta(days=1)
 
 
-def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
+def evaluate(state: ResearchState) -> DeltaTriageResult:
     """Return per-segment regenerate/carry decisions for the daily run.
 
     Always evaluates the rule table (no ``run_type`` gate). Downstream
@@ -509,7 +509,7 @@ def evaluate(state: AtlasResearchState) -> DeltaTriageResult:
 
 def make_triage_gate(
     result: DeltaTriageResult,
-) -> Callable[[AtlasResearchState, str], Carried | None]:
+) -> Callable[[ResearchState, str], Carried | None]:
     """Return a gate callable compatible with phases._node_factory.build_segment_node.
 
     For each (state, segment) the gate returns either None (regenerate) or
@@ -518,7 +518,7 @@ def make_triage_gate(
     """
     lookup: dict[str, DeltaTriageDecision] = {d.segment: d for d in result.decisions}
 
-    def _gate(state: AtlasResearchState, segment: str) -> Carried | None:
+    def _gate(state: ResearchState, segment: str) -> Carried | None:
         decision = lookup.get(segment)
         if decision is None or decision.decision == "regenerate":
             return None

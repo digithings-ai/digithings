@@ -6,7 +6,7 @@ description: >
   user says "run monthly synthesis", "end of month review", or via monthly-rollup.sh.
 ---
 
-# digiquant-atlas — Monthly Synthesis Skill
+# digiquant-research — Monthly Synthesis Skill
 
 End-of-month review. Synthesizes the full month of weekly baselines + daily deltas into a
 comprehensive long-term view. Designed to run on the last trading day of each month.

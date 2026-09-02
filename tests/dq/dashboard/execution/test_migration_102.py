@@ -1,4 +1,4 @@
-"""Structural contract tests for migration 102 (Kairos broker mirror, K4).
+"""Structural contract tests for migration 102 (execution broker mirror, K4).
 
 # score:allow todo
 

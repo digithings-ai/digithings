@@ -13,7 +13,7 @@ const SIGNALS = [
   { scope: "research", name: "pairs", pct: "−0.62%", up: false },
 ];
 
-export function PhoneOlympus() {
+export function PhoneDashboard() {
   return (
     <div className="phone" role="img" aria-label="digiquant mobile app mockup">
       <span className="phone-btn phone-btn--power" aria-hidden="true" />

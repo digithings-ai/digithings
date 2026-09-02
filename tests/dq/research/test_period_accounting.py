@@ -1,4 +1,4 @@
-"""Unit tests for Olympus event-boundary period accounting (#2596, Task 3.1).
+"""Unit tests for dashboard event-boundary period accounting (#2596, Task 3.1).
 
 Golden fixtures: hold, add, trim, exit, cash, multiple fills, open gap, costs,
 dividend/split policy, missing marks, stale marks, benchmark mismatch, exact retry,

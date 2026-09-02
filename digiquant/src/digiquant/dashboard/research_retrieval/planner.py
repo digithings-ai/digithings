@@ -16,11 +16,11 @@ inject it into provider prompts.
 
 WP13.1 (#2918) adds versioned :class:`ResearchAttentionPolicy`, five attention
 modes, and :func:`plan_research_attention` for pre-provider routing. Runtime
-Atlas/Hermes wiring is WP13.3/13.4 — this module exposes the policy + planner API only.
+research/portfolio wiring is WP13.3/13.4 — this module exposes the policy + planner API only.
 
 WP13.2 (#2922) adds persistence contracts consumed by
 :class:`~digiquant.dashboard.research_retrieval.store.AttentionStore` — storage
-only; no Atlas/Hermes activation.
+only; no research/portfolio activation.
 """
 
 from __future__ import annotations
@@ -399,10 +399,10 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 # WP13.1 — versioned research attention policy (#2918)
 # ---------------------------------------------------------------------------
 
-OLYMPUS_RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
-_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
-_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
-_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_evaluation")
+RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
+_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_plan")
+_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_decision")
+_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_evaluation")
 _TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
 
 
@@ -910,7 +910,7 @@ def plan_research_attention(
     policy: ResearchAttentionPolicy | None = None,
     rollout_mode: AttentionRolloutMode | None = None,
 ) -> AttentionPlan:
-    """Build a research attention plan — API only; no Atlas/Hermes wiring (WP13.3+)."""
+    """Build a research attention plan — API only; no research/portfolio wiring (WP13.3+)."""
     resolved_policy = policy if policy is not None else load_research_attention_policy()
     resolved_rollout = rollout_mode if rollout_mode is not None else AttentionRolloutMode.SHADOW
 
@@ -1154,7 +1154,7 @@ __all__ = [
     "PersistedAttentionPlan",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "OLYMPUS_H6_SELECTION_MODE_ENV",
-    "OLYMPUS_RESEARCH_POLICY_ENV",
+    "RESEARCH_POLICY_ENV",
     "PolicyExploration",
     "PolicySessionBudget",
     "PolicyThresholds",

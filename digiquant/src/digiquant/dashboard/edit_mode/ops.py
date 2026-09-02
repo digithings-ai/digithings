@@ -1,4 +1,4 @@
-"""JSON Pointer patch ops — canonical merge primitive for Olympus edit-mode.
+"""JSON Pointer patch ops — canonical merge primitive for dashboard edit-mode.
 
 Logic originally mirrored ``digiquant/scripts/research/materialize_snapshot.py:apply_ops``
 (now frozen). This copy additionally implements the RFC 6901 ``-`` append token and

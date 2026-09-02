@@ -18,7 +18,7 @@ vi.mock('@/components/app-shell-context', () => ({
   }),
 }));
 vi.mock('@/components/sidebar-settings', () => ({ default: () => null }));
-vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
+vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 
 const authMock = vi.hoisted(() => ({
   authEnabled: false,

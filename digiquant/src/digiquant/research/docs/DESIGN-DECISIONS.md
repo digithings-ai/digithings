@@ -1,4 +1,4 @@
-# digiquant-atlas — Solution Design Decisions
+# digiquant-research — Solution Design Decisions
 
 > Record of key architectural and design decisions with rationale, alternatives considered,
 > and trade-offs accepted. Use ADR (Architecture Decision Record) format.
@@ -297,8 +297,8 @@ Deploy the Vite-built React SPA to **GitHub Pages** via GitHub Actions.
 # Steps: npm ci → npm run build → upload dist → deploy to Pages
 ```
 
-Base URL: `https://chrizefan.github.io/digiquant-atlas/`
-Vite config: `base: '/digiquant-atlas/'`
+Base URL: `https://chrizefan.github.io/digiquant-research/`
+Vite config: `base: '/digiquant-research/'`
 
 ### Alternatives Considered
 
@@ -314,7 +314,7 @@ Vite config: `base: '/digiquant-atlas/'`
 - **Pro**: Free, zero-maintenance, built into GitHub
 - **Pro**: Automatic deploy on `git push`
 - **Con**: Limited to static files (no SSR, no API routes)
-- **Con**: Base path required (`/digiquant-atlas/`) — can cause routing issues
+- **Con**: Base path required (`/digiquant-research/`) — can cause routing issues
 - **Con**: No server-side rendering for SEO (not relevant for personal dashboard)
 
 ---
@@ -689,7 +689,7 @@ Track only **exchange-traded funds (ETFs)**:
 `config/digiquant_models.yaml` × `OLYMPUS_MODEL_TIER` after the Gemini free tier's per-minute
 caps broke the daily workflows (#569/#570/#572). See
 [ARCHITECTURE.md "LLM Routing — OpenRouter capability tiers"](agentic/ARCHITECTURE.md#llm-routing--openrouter-capability-tiers)
-and [RUNBOOK.md "OpenRouter model tiers"](RUNBOOK.md#openrouter-model-tiers-configolympus_modelsyaml).
+and [RUNBOOK.md "OpenRouter model tiers"](RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml).
 The table below is the historical 2026-04 design.  
 **Date**: 2026-04
 
@@ -722,7 +722,7 @@ Configuration lives in `config/model_modes.yaml` under a `phase_models` block. P
 | Alternative | Why Rejected |
 |-------------|-------------|
 | **Single Ollama provider with more retries** | Doesn't solve the concurrency ceiling — 98 Phase 7C calls will always exhaust a 1-concurrent provider regardless of backoff |
-| **LiteLLM fallback chain** | Would work but requires running a LiteLLM proxy server; the Atlas pipeline runs in GitHub Actions with no persistent infra |
+| **LiteLLM fallback chain** | Would work but requires running a LiteLLM proxy server; the research pipeline runs in GitHub Actions with no persistent infra |
 | **Reduce parallelism** (serialize all phases) | Phase 1 and 7C are intentionally parallel — serializing 98 analyst calls would add ~30 min per run |
 | **Single provider, capped fan-out only** | Capping Phase 7C at 25 helps but still risks 429s when 25 Ollama calls fire simultaneously |
 | **Pay for a single premium tier** | Against the design goal: baseline workflow must run free |
@@ -742,7 +742,7 @@ Configuration lives in `config/model_modes.yaml` under a `phase_models` block. P
 
 The entire routing table is in `config/model_modes.yaml` (`phase_models` block). To add a provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py`. No changes to phase files or the graph required — the `phase_slug` lookup is transparent to all callers.
 
-See [`docs/atlas/token-budget.md`](../../../../docs/atlas/token-budget.md) for the full per-phase token budget and provider headroom calculation.
+See [`docs/research/token-budget.md`](../../../../docs/research/token-budget.md) for the full per-phase token budget and provider headroom calculation.
 
 ---
 

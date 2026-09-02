@@ -532,19 +532,19 @@ def get_forecast_amendment(
 def collect_lineage_from_state(
     state: Any,
 ) -> tuple[list[ForecastAssessment], list[ForecastAmendment]]:
-    """Extract typed lineage artifacts from Hermes phase state for H9 persistence.
+    """Extract typed lineage artifacts from portfolio phase state for H9 persistence.
 
-    Bases come from ``phase_hermes.asset_analysts[*].forecast_assessment``.
-    Amendments come from ``phase_hermes.deliberation_summaries[*].forecast_amendment``
+    Bases come from ``phase_portfolio.asset_analysts[*].forecast_assessment``.
+    Amendments come from ``phase_portfolio.deliberation_summaries[*].forecast_amendment``
     when H6 attached a complete accepted amendment dump.
     """
-    hermes = getattr(state, "phase_hermes", None)
+    portfolio = getattr(state, "phase_portfolio", None)
     assessments: list[ForecastAssessment] = []
     amendments: list[ForecastAmendment] = []
-    if hermes is None:
+    if portfolio is None:
         return assessments, amendments
 
-    analysts = getattr(hermes, "asset_analysts", None) or {}
+    analysts = getattr(portfolio, "asset_analysts", None) or {}
     for payload in analysts.values():
         if not isinstance(payload, dict):
             continue
@@ -560,7 +560,7 @@ def collect_lineage_from_state(
                 exc,
             )
 
-    summaries = getattr(hermes, "deliberation_summaries", None) or {}
+    summaries = getattr(portfolio, "deliberation_summaries", None) or {}
     for summary in summaries.values():
         if not isinstance(summary, dict):
             continue
@@ -582,14 +582,14 @@ def collect_lineage_from_state(
 def collect_shadow_calibrations_from_state(
     state: Any,
 ) -> tuple[list[ForecastCalibration], list[CalibratedForecast]]:
-    """Extract WP5.4 shadow calibration artifacts from Hermes typed state."""
-    hermes = getattr(state, "phase_hermes", None)
+    """Extract WP5.4 shadow calibration artifacts from portfolio typed state."""
+    portfolio = getattr(state, "phase_portfolio", None)
     calibrations: list[ForecastCalibration] = []
     subjects: list[CalibratedForecast] = []
-    if hermes is None:
+    if portfolio is None:
         return calibrations, subjects
 
-    for raw in (getattr(hermes, "forecast_calibrations", None) or {}).values():
+    for raw in (getattr(portfolio, "forecast_calibrations", None) or {}).values():
         if not isinstance(raw, dict):
             continue
         try:
@@ -601,7 +601,7 @@ def collect_shadow_calibrations_from_state(
                 exc,
             )
 
-    for raw in (getattr(hermes, "calibrated_forecasts", None) or {}).values():
+    for raw in (getattr(portfolio, "calibrated_forecasts", None) or {}).values():
         if not isinstance(raw, dict):
             continue
         try:
@@ -621,7 +621,7 @@ def persist_forecast_lineage_from_state(
     client: SupabaseClient,
     state: Any,
 ) -> RegistryWriteResult:
-    """Collect lineage + shadow calibrations from Hermes state; empty is success."""
+    """Collect lineage + shadow calibrations from portfolio state; empty is success."""
     assessments, amendments = collect_lineage_from_state(state)
     calibrations, subjects = collect_shadow_calibrations_from_state(state)
     lineage = RegistryWriteResult()

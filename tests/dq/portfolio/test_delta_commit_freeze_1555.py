@@ -9,7 +9,7 @@ book_materialized:true`` while nothing committed to ``positions`` / ``nav_histor
 - H8 sizing then DROPS that held name from the sized book (it is neither a PM long
   nor inside the min-hold window).
 - H9 ``coherence_errors`` fails closed ("held ticker X missing from book and not flat
-  in H7") and returns a ``PhaseError`` whose ``phase="hermes_h9_commit_run"`` never
+  in H7") and returns a ``PhaseError`` whose ``phase="portfolio_h9_commit_run"`` never
   reaches the degraded gate (which only escalates ``phase="chain"`` errors / research
   failures) — so the run stays "ok" and the freeze is invisible.
 
@@ -29,8 +29,8 @@ from datetime import date
 
 import pytest
 from digiquant.research import diagnostics
-from digiquant.research.graph import AtlasInput
-from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.research.graph import ResearchInput
+from digiquant.research.state import ResearchState, PhasePortfolioState
 from digiquant.research.testing.simulator import (
     build_quiet_day_canned_extras,
     simulated_pipeline,
@@ -42,8 +42,8 @@ RUN_DATE = date(2026, 6, 29)
 WATCHLIST = ("AAPL", "MSFT")
 
 
-def _run_quiet_delta(*, commit_run: bool = True) -> tuple[AtlasResearchState, dict]:
-    """Run the Atlas→Hermes chain for a quiet delta day with two held positions.
+def _run_quiet_delta(*, commit_run: bool = True) -> tuple[ResearchState, dict]:
+    """Run the research→portfolio chain for a quiet delta day with two held positions.
 
     Both watchlist names are prior-book holdings with sub-threshold price moves, so H4
     gates them out of the roster (Stage 1b staleness gate) and dispatches no analyst —
@@ -56,7 +56,7 @@ def _run_quiet_delta(*, commit_run: bool = True) -> tuple[AtlasResearchState, di
         replace_canned_defaults=True,
         commit_run=commit_run,
     ) as run:
-        final = run.invoke(AtlasInput(run_date=RUN_DATE, watchlist=WATCHLIST, refresh_scope="none"))
+        final = run.invoke(ResearchInput(run_date=RUN_DATE, watchlist=WATCHLIST, refresh_scope="none"))
     return final, run.client.store
 
 
@@ -68,21 +68,21 @@ class TestDeltaDayCommits:
 
         # Precondition: this IS the frozen scenario — both held names were gated out of
         # H5 (no fresh analyst) and quietly recorded in the excluded ledger.
-        assert final.phase_hermes.asset_analysts == {}, "quiet day: no analyst should dispatch"
-        excluded = {e.ticker for e in final.phase_hermes.focus_roster_excluded}
+        assert final.phase_portfolio.asset_analysts == {}, "quiet day: no analyst should dispatch"
+        excluded = {e.ticker for e in final.phase_portfolio.focus_roster_excluded}
         assert {"AAPL", "MSFT"} <= excluded, "held names must be in the gated-out ledger"
 
         # The fix: gated-out held names are carried into the sized book at drifted weight.
         book_tickers = {
             row["ticker"]
-            for row in (final.phase_hermes.sized_book or {}).get("recommended_portfolio", [])
+            for row in (final.phase_portfolio.sized_book or {}).get("recommended_portfolio", [])
         }
         assert {"AAPL", "MSFT"} <= book_tickers, (
             f"gated-out held names dropped from the sized book: saw {book_tickers}"
         )
 
         # A green run must be provably committed: manifest present + positions written.
-        manifest = final.phase_hermes.commit_manifest
+        manifest = final.phase_portfolio.commit_manifest
         assert manifest is not None, "no commit manifest — the book never committed"
         assert manifest.get("status") == "committed"
 
@@ -115,8 +115,8 @@ class TestUncommittedBookIsLoud:
         # commit_run wiring off → H8 materializes a book, H9 is a no-op (no manifest).
         # Pre-#1555 this reported status "ok"; now it must be degraded.
         final, store = _run_quiet_delta(commit_run=False)
-        assert final.phase_hermes.sized_book is not None
-        assert final.phase_hermes.commit_manifest is None
+        assert final.phase_portfolio.sized_book is not None
+        assert final.phase_portfolio.commit_manifest is None
         assert "positions" not in store
 
         summary = diagnostics.summarize_run(final)
@@ -126,7 +126,7 @@ class TestUncommittedBookIsLoud:
         assert diagnostics.is_degraded(final) is True
 
     def test_summarize_run_escalates_and_marks_head(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
         # A fresh research segment so the base verdict would otherwise be "ok".
@@ -135,7 +135,7 @@ class TestUncommittedBookIsLoud:
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
         }
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
             commit_manifest=None,
         )
@@ -143,16 +143,16 @@ class TestUncommittedBookIsLoud:
         assert summary.status == "degraded"  # escalated from "ok"
         assert summary.book_committed is False
         # The commit-failure marker is at the HEAD so it survives the error_summary cap.
-        assert summary.error_summary.startswith("hermes_h9_commit_run/uncommitted")
+        assert summary.error_summary.startswith("portfolio_h9_commit_run/uncommitted")
 
     def test_h9_commit_error_flips_degraded_even_without_materialized_book(self) -> None:
         # H9 exit: sized_book is None but H7 emitted a memo → PhaseError
         # ("sized_book missing but H7 pm_direction_memo present"). Here ``book_materialized``
         # is False, so the materialized-but-uncommitted trigger alone would miss it — the
-        # escalation must also fire on any ``hermes_h9_commit_run`` PhaseError (#1555 3a).
+        # escalation must also fire on any ``portfolio_h9_commit_run`` PhaseError (#1555 3a).
         from digiquant.research.state import PhaseError, SegmentPayload, SegmentSlot
 
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
         state.phase1_outputs = {
@@ -160,8 +160,8 @@ class TestUncommittedBookIsLoud:
         }
         state.errors = [
             PhaseError(
-                phase="hermes_h9_commit_run",
-                node="hermes/portfolio/commit-run",
+                phase="portfolio_h9_commit_run",
+                node="portfolio/commit-run",
                 message="sized_book missing but H7 pm_direction_memo present",
                 retryable=False,
             )
@@ -169,10 +169,10 @@ class TestUncommittedBookIsLoud:
         summary = diagnostics.summarize_run(state)
         assert summary.book_materialized is False  # nothing materialized …
         assert summary.status == "degraded"  # … yet the H9 error still gates the run
-        assert summary.error_summary.startswith("hermes_h9_commit_run/uncommitted")
+        assert summary.error_summary.startswith("portfolio_h9_commit_run/uncommitted")
 
     def test_idempotency_noop_counts_as_committed(self) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
         from digiquant.research.state import SegmentPayload, SegmentSlot
@@ -180,7 +180,7 @@ class TestUncommittedBookIsLoud:
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
         }
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
             commit_manifest={"status": "noop", "source_run_id": str(state.run_id)},
         )
@@ -189,9 +189,9 @@ class TestUncommittedBookIsLoud:
         assert summary.book_committed is True
 
     def test_diagnostics_row_carries_structured_commit_flag(self) -> None:
-        from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+        from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
         from digiquant.research.state import SegmentPayload, SegmentSlot
@@ -199,7 +199,7 @@ class TestUncommittedBookIsLoud:
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
         }
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             sized_book={"recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}]},
             commit_manifest=None,
         )

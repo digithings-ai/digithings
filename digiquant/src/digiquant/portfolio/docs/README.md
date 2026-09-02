@@ -1,12 +1,12 @@
-# Hermes — thesis-aware portfolio loop
+# portfolio — thesis-aware portfolio loop
 
-Hermes consumes a research [`DigestPayload`](../../atlas/snapshot.py) from
-[Atlas](../atlas/) and runs **H1–H9**: market thesis review → exploration → vehicle map →
+portfolio consumes a research [`DigestPayload`](../../research/snapshot.py) from
+[research](../research/) and runs **H1–H9**: market thesis review → exploration → vehicle map →
 opportunity screener → unified asset analyst → PM↔analyst deliberation → PM direction →
 deterministic risk sizing → **`commit_run`** terminal booking.
 
-See [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) and
-[ADR-0020](../../../../../docs/adr/0020-olympus-mvp-daily-delta.md). Full topology:
+See [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) and
+[ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md). Full topology:
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Phases (live graph — H1–H9)
@@ -24,9 +24,9 @@ See [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) and
 ## Code layout
 
 ```
-digiquant/src/digiquant/olympus/hermes/
-├── graph.py                 ← build_hermes_phases_thesis / build_hermes_graph
-├── chain.py                 ← run_atlas_then_hermes (cron entry)
+digiquant/src/digiquant/portfolio/
+├── graph.py                 ← build_portfolio_phases_thesis / build_portfolio_graph
+├── chain.py                 ← run_research_then_portfolio (cron entry)
 ├── phases/
 │   ├── h1_thesis_review.py … h9_commit_run.py
 │   └── phase7e_risk_sizing.py   ← H8
@@ -36,15 +36,15 @@ digiquant/src/digiquant/olympus/hermes/
 
 ## CLI entry points
 
-- `python -m digiquant.portfolio.chain --cadence daily` — full Atlas A0–A4 → Hermes H1–H9. **Cron uses this** (`.github/workflows/pipeline-digiquant.yml`).
-- `--refresh-scope` — operator full refresh (`all`, `segments`, `hermes`, `digest`, `beliefs`)
-- `python -m digiquant.portfolio.graph --from-digest <path>` — Hermes only
+- `python -m digiquant.portfolio.chain --cadence daily` — full research A0–A4 → portfolio H1–H9. **Cron uses this** (`.github/workflows/pipeline-digiquant.yml`).
+- `--refresh-scope` — operator full refresh (`all`, `segments`, `portfolio`, `digest`, `beliefs`)
+- `python -m digiquant.portfolio.graph --from-digest <path>` — portfolio only
 - Deprecated: `--run-type baseline|delta` (warns); `monthly` rejected
 
 ## Documents
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — canonical H1–H9 map
-- [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped)
+- [`PORTFOLIO_SUBGRAPH.md`](PORTFOLIO_SUBGRAPH.md) — historical Wave 2 spec (topology now shipped)
 - [`WAVE2_UNIT_SPECS.md`](WAVE2_UNIT_SPECS.md) — historical unit IDs
 - [`AGENTS.md`](AGENTS.md) — extension checklist
 

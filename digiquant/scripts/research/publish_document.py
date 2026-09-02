@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # ─── FROZEN ─────────────────────────────────────────────────────────────────
-# This script is superseded by ``digiquant/src/digiquant/olympus/atlas/
-# supabase_io.py::publish_document``, called from the Atlas sub-graph
+# This script is superseded by ``digiquant/src/digiquant/research/
+# supabase_io.py::publish_document``, called from the research sub-graph
 # (issue #176). It stays on disk as an operator escape hatch for manual
 # backfills but is not invoked by the scheduled pipeline.
 #
-# Do not extend this file. New Atlas write paths live in the sub-graph.
+# Do not extend this file. New research write paths live in the sub-graph.
 # If you need a behavior change, update ``supabase_io.py`` and the phase
 # node that emits the document. See ADR-0009.
 # ────────────────────────────────────────────────────────────────────────────

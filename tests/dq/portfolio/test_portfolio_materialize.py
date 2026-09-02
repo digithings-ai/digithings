@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.portfolio.portfolio_materialize import (
     MaterializeDeps,
     _default_invalidation,
@@ -19,7 +19,7 @@ from digiquant.portfolio.portfolio_materialize import (
 )
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -47,8 +47,8 @@ _POSITIONS_CATEGORY_ALLOWED = frozenset(
 )
 
 
-def _state(recommended) -> AtlasResearchState:
-    state = AtlasResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9))
+def _state(recommended) -> ResearchState:
+    state = ResearchState(run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9))
     state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
     return state
 
@@ -162,7 +162,7 @@ class TestNavChaining:
 class TestGuards:
     def test_no_rebalance_is_noop(self) -> None:
         client = FakeSupabaseClient()
-        state = AtlasResearchState(run_type="delta", run_date=RUN_DATE)
+        state = ResearchState(run_type="delta", run_date=RUN_DATE)
         # phase7d_rebalance left None
         build_materialize_node(MaterializeDeps(client=client))(state)
         assert "positions" not in client.store
@@ -201,9 +201,9 @@ class TestGuards:
         )
 
 
-def _state_with_analysts(recommended, analysts, debates=None) -> AtlasResearchState:
+def _state_with_analysts(recommended, analysts, debates=None) -> ResearchState:
     state = _state(recommended)
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts=analysts,
         deliberation_summaries=debates or {},
     )
@@ -321,14 +321,14 @@ class TestPositionRiskFields:
     (off → exact prior book shape; on → entry/stop/target/conviction/sector/horizon)."""
 
     def _state(self, recommended, *, analysts=None, debates=None, preferences=None):
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=RUN_DATE,
             baseline_date=date(2026, 6, 9),
-            config=AtlasConfigBundle(preferences=preferences or {}),
+            config=ResearchConfigBundle(preferences=preferences or {}),
         )
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts=analysts or {},
             deliberation_summaries=debates or {},
         )
@@ -512,11 +512,11 @@ class TestBookIntegrity:
     """#814 — book-write integrity: thesis_id on positions, invalidation defaults."""
 
     def _run(self, client, recommended, analysts=None, debates=None) -> None:
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
         )
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts=analysts or {},
             deliberation_summaries=debates or {},
         )

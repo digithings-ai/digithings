@@ -60,7 +60,7 @@ def _olympus_redirect_probe(url: str) -> tuple[int, str]:
 
 def test_default_probe_user_agent_is_not_python_urllib() -> None:
     assert "python-urllib" not in PROBE_USER_AGENT.lower()
-    assert "kairos-pages-dashboard-gate" in PROBE_USER_AGENT
+    assert "execution-pages-dashboard-gate" in PROBE_USER_AGENT
 
 
 def test_probe_reports_all_required_paths() -> None:
@@ -106,7 +106,7 @@ def test_alpaca_callback_404_blocks_apply_when_other_dashboard_paths_are_200() -
     assert deployed == []
 
 
-def test_olympus_redirect_is_not_ready() -> None:
+def test_legacy_path_redirect_is_not_ready() -> None:
     report = probe_pages_dashboard(origin=ORIGIN, probe=_olympus_redirect_probe)
     assert report.ready is False
 
@@ -220,7 +220,7 @@ def test_apply_refuses_when_handlers_lack_redeem_invite(tmp_path: Path) -> None:
     assert any("redeem-invite" in msg for msg in logs)
 
 
-def test_apply_refuses_when_app_url_still_olympus(tmp_path: Path) -> None:
+def test_apply_refuses_when_app_url_still_legacy_path(tmp_path: Path) -> None:
     deployed: list[str] = []
 
     def run(argv: list[str] | tuple[str, ...]) -> None:
@@ -236,7 +236,7 @@ def test_apply_refuses_when_app_url_still_olympus(tmp_path: Path) -> None:
     )
     assert code == EXIT_CHECKOUT_STALE
     assert deployed == []
-    assert any("/olympus" in msg or "dashboard" in msg for msg in logs)
+    assert any("/dashboard" in msg or "dashboard" in msg for msg in logs)
 
 
 def test_check_does_not_require_redeem_invite_source(tmp_path: Path) -> None:
@@ -312,7 +312,7 @@ def test_ready_live_bundle_passes_and_v32_fails() -> None:
     assert ok is True
     stale, reason = settings_bundle_ready(V32_LIVE_BUNDLE)
     assert stale is False
-    assert "redeem-invite" in reason or "/olympus" in reason
+    assert "redeem-invite" in reason or "/dashboard" in reason
 
 
 def test_comment_only_markers_are_not_ready() -> None:
@@ -392,7 +392,7 @@ def test_apply_refuses_when_live_bundle_still_v32() -> None:
     )
     assert code == EXIT_LIVE_EF_STALE
     assert deployed  # deploy already ran; live proof is after
-    assert any("dashboard" in msg or "olympus" in msg or "redeem-invite" in msg for msg in logs)
+    assert any("dashboard" in msg or "dashboard" in msg or "redeem-invite" in msg for msg in logs)
 
 
 def test_apply_refuses_when_live_fetch_fails() -> None:
@@ -497,7 +497,7 @@ def test_fetch_rejects_unknown_function() -> None:
         fetch_live_function_bundle("stripe-webhook", token="x", http_bytes=lambda _url: b"nope")
 
 
-def test_apply_refuses_when_checkout_bundle_still_olympus() -> None:
+def test_apply_refuses_when_checkout_bundle_still_legacy_path() -> None:
     def mixed(slug: str) -> str:
         if slug == "settings":
             return READY_LIVE_BUNDLE
@@ -513,7 +513,7 @@ def test_apply_refuses_when_checkout_bundle_still_olympus() -> None:
     )
     assert code == EXIT_LIVE_EF_STALE
     assert any("create-checkout-session" in msg for msg in logs)
-    assert any("dashboard" in msg or "olympus" in msg for msg in logs)
+    assert any("dashboard" in msg or "dashboard" in msg for msg in logs)
 
 
 def test_app_url_bundle_ready_accepts_dashboard_pins() -> None:
@@ -521,4 +521,4 @@ def test_app_url_bundle_ready_accepts_dashboard_pins() -> None:
     assert ok is True
     stale, reason = app_url_bundle_ready(V32_LIVE_BUNDLE, where="live checkout bundle")
     assert stale is False
-    assert "dashboard" in reason or "olympus" in reason
+    assert "dashboard" in reason or "dashboard" in reason

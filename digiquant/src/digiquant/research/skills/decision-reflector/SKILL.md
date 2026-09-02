@@ -1,16 +1,16 @@
 ---
 name: decision-reflector
 description: >
-  Generate a 2-4 sentence post-mortem reflection on a prior Atlas analyst decision once the
+  Generate a 2-4 sentence post-mortem reflection on a prior research analyst decision once the
   holding window has elapsed. Inputs: original ticker, stance, conviction score, thesis, plus
   the realized return, the SPY benchmark return, and the alpha (return - benchmark) over the
   holding window. Output: a single ``reflection`` field. Triggers: Phase 0 reflection node
-  inside the Atlas sub-graph, called once per due decision.
+  inside the research sub-graph, called once per due decision.
 ---
 
 # Decision Reflector Skill
 
-You are reading the post-mortem of a single equity research decision the Atlas pipeline made
+You are reading the post-mortem of a single equity research decision the research pipeline made
 ``holding_days`` trading days ago. The decision has now been measured against actual price
 action and against the SPY benchmark. Your job is to write a short, *useful* lesson the
 Portfolio Manager can apply to subsequent calls — not a victory lap, not a flagellation.

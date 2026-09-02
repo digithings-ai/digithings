@@ -1,6 +1,6 @@
 # docs/agentic/ — Agentic development documentation
 
-Central reference for running the digiquant-atlas pipeline on any AI platform.
+Central reference for running the digiquant-research pipeline on any AI platform.
 
 **How production runs are driven:** scheduled **Claude Cowork** jobs should attach one task file from [`cowork/tasks/README.md`](../cowork/tasks/README.md) (research → portfolio → postmortem/GitHub). That is the primary operational loop; the docs below describe behavior those tasks invoke.
 
@@ -10,9 +10,9 @@ Central reference for running the digiquant-atlas pipeline on any AI platform.
 - **Operator steps:** [`RUNBOOK.md`](../../RUNBOOK.md) — env, publish, validation, GitHub vs Co-work, Track A/B.
 - **One CLI entrypoint:** `python3 scripts/run_db_first.py` (after segment JSON is published to Supabase). No local agent-cache required — see [`data/README.md`](../../data/README.md).
 
-## What is digiquant-atlas?
+## What is digiquant-research?
 
-A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → Hermes H1–H9) with **one daily cadence** and edit-mode continuity (`skip`/`edit`/`full` per artifact). Phases emit structured JSON materialized into `daily_snapshots` and `documents` in Supabase.
+A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → portfolio H1–H9) with **one daily cadence** and edit-mode continuity (`skip`/`edit`/`full` per artifact). Phases emit structured JSON materialized into `daily_snapshots` and `documents` in Supabase.
 
 ## Quick start (DB-first)
 

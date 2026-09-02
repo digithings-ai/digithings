@@ -6,7 +6,7 @@ rows from migration ``083_olympus_pretrade_risk_reports.sql``.
 **Exact retry:** same ``report_id`` + same ``report_content_hash`` is a no-op.
 **Content conflict:** same ``report_id`` + different hash raises
 :class:`PreTradeRiskRegistryConflict` — never UPDATE.
-**H9 boundary:** validation lives in ``hermes.writers.commit_io``; this module
+**H9 boundary:** validation lives in ``portfolio.writers.commit_io``; this module
 only appends. H9 never imports report builders.
 """
 

@@ -12,7 +12,7 @@ from pydantic import Field
 
 from digiquant.research.phases._node_factory import _shared_context
 from digiquant.research.phases.phase7_synthesis import DigestSnapshot
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 
 class MonthlyDigest(DigestSnapshot):
@@ -24,7 +24,7 @@ class MonthlyDigest(DigestSnapshot):
     )
 
 
-def _monthly_node(state: AtlasResearchState) -> dict[str, Any]:
+def _monthly_node(state: ResearchState) -> dict[str, Any]:
     from digigraph.graph.research_agent import run_research_agent
 
     from digiquant.research.skills import SkillNotFoundError, load_skill

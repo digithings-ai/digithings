@@ -14,7 +14,7 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.action_cost_inputs import (
     ActionCostBindingError,
@@ -45,7 +45,7 @@ ORDER_INTENTS = "portfolio_ledger_order_intents"
 _PRICE_HISTORY = "price_history"
 
 
-def investor_currency_from_state(state: AtlasResearchState) -> str | None:
+def investor_currency_from_state(state: ResearchState) -> str | None:
     """Resolve explicit portfolio currency — never infer USD or NAV."""
     prefs = getattr(getattr(state, "config", None), "preferences", None) or {}
     raw = prefs.get("investor_currency") or prefs.get("currency")
@@ -161,7 +161,7 @@ def _load_commit_orders(
 def build_cost_bundles_for_commit(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     commit_id: UUID,
     policy: RiskPolicy,
 ) -> list[CostLiquidityBundle]:

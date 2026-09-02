@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Evolution Proposals",
+  "title": "digiquant-research Evolution Proposals",
   "description": "Improvement proposals from pipeline post-mortem.",
   "type": "object",
   "additionalProperties": false,

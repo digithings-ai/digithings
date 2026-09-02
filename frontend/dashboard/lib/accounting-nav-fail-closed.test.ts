@@ -1,7 +1,7 @@
 /**
  * #3029 — live digiquant.io cut over to `public_accounting_nav_history` before
  * migrations 072–074 landed on prod. Silent empty NAV / “momentarily unavailable”
- * hid the contract break. These guards lock fail-closed wiring across olympus +
+ * hid the contract break. These guards lock fail-closed wiring across dashboard +
  * digiquant-web (no browser fallback to `public_nav_history`).
  */
 import { describe, expect, it } from 'vitest';
@@ -10,18 +10,18 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const olympusRoot = join(here, '..');
-const repoRoot = join(olympusRoot, '..', '..');
+const dashboardRoot = join(here, '..');
+const repoRoot = join(dashboardRoot, '..', '..');
 
 describe('accounting NAV fail-closed wiring (#3029)', () => {
-  it('olympus tearsheet fetch throws AccountingNavContractError (not safeSelect empty)', () => {
+  it('dashboard tearsheet fetch throws AccountingNavContractError (not safeSelect empty)', () => {
     const src = readFileSync(join(here, 'observability-queries.ts'), 'utf8');
     expect(src).toContain('AccountingNavContractError');
     expect(src).toContain('if (navQuery.error)');
     expect(src).toMatch(/throw new AccountingNavContractError/);
   });
 
-  it('olympus dashboard asserts accounting NAV query ok before mapping rows', () => {
+  it('dashboard asserts accounting NAV query ok before mapping rows', () => {
     const src = readFileSync(join(here, 'queries.ts'), 'utf8');
     expect(src).toContain('assertAccountingNavQueryOk(navRes.error)');
   });

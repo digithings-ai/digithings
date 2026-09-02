@@ -18,7 +18,7 @@ from digiquant.research.pretrade_risk_registry import (
     persist_pretrade_risk_report,
     pretrade_risk_report_id,
 )
-from digiquant.research.state import AtlasResearchState, PublishedArtifact, RebalancePayload
+from digiquant.research.state import ResearchState, PublishedArtifact, RebalancePayload
 from digiquant.research.supabase_io import (
     SupabaseClient,
     load_prior_book,
@@ -31,7 +31,7 @@ from digiquant.portfolio.payloads import analyst_payloads, deliberation_summarie
 from digiquant.portfolio.risk_envelope import risk_horizon_days
 from digiquant.portfolio.sector_map import sector_bucket
 from digiquant.dashboard.overlay.persist import (
-    hermes_document_key,
+    portfolio_document_key,
     is_private_workspace,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
@@ -130,7 +130,7 @@ def _prior_book_date(prior_book: list[dict[str, Any]]) -> date | None:
     NAV return is computed over a window the book was not actually held for, so
     this reads the ``date`` column off the prior-book rows rather than
     re-deriving it from ``nav_history`` (which the metrics cron may extend to
-    bookless dates — see the ownership contract in ``hermes/docs/ARCHITECTURE.md``).
+    bookless dates — see the ownership contract in ``portfolio/docs/ARCHITECTURE.md``).
     """
     for row in prior_book:
         raw = row.get("date")
@@ -153,7 +153,7 @@ def _interval_price_returns(
 ) -> dict[str, float]:
     """``{ticker: pct_change}`` from the ``start_date`` close to the last close before ``run_date``.
 
-    A *new* helper rather than a change to ``atlas.supabase_io.query_price_deltas``
+    A *new* helper rather than a change to ``research.supabase_io.query_price_deltas``
     (#1745): that function is deliberately a one-trading-day signal shared with the
     triage rule evaluators, and re-pointing it at an interval would silently change
     every rule threshold calibrated against it.
@@ -491,7 +491,7 @@ class BookedPortfolio:
 def book_portfolio(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> BookedPortfolio:
     """Upsert ``positions`` + ``nav_history`` from H8 weights only."""
@@ -631,7 +631,7 @@ def manifest_document_key(source_run_id: str, workspace_id: str | None = None) -
 
     Uses :func:`is_private_workspace`, not a truthy *workspace_id*. A house UUID
     (or omitted id) must keep the house prefix — same rule as
-    :func:`hermes_document_key`. A truthy check would write house manifests under
+    :func:`portfolio_document_key`. A truthy check would write house manifests under
     ``overlay-commit/{house}/`` and ``load_commit_manifests`` would miss
     existing ``commit-run/`` rows.
     """
@@ -646,7 +646,7 @@ def load_commit_manifests(
 ) -> list[dict[str, Any]]:
     """Every commit manifest already persisted for ``run_date`` (#1744).
 
-    Keyed on the **date**, never on ``source_run_id``. ``AtlasResearchState.run_id``
+    Keyed on the **date**, never on ``source_run_id``. ``ResearchState.run_id``
     is a fresh ``uuid4()`` per process, so CI's outer retry always presents a new id
     and a run_id-keyed lookup structurally *cannot* see the manifest an earlier
     attempt on the same date wrote — the guard was dead across exactly the retries it
@@ -730,7 +730,7 @@ def resolve_prior_commit(
 def save_commit_manifest(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     manifest: dict[str, Any],
 ) -> PublishedArtifact:
     source_run_id = str(state.run_id)
@@ -753,7 +753,7 @@ def save_commit_manifest(
 def publish_portfolio_brief(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> PublishedArtifact:
     """Publish operator brief — weights from H8 ``sized_book`` only.
@@ -767,7 +767,7 @@ def publish_portfolio_brief(
     payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
-        document_key=hermes_document_key("pm-rebalance", workspace_id),
+        document_key=portfolio_document_key("pm-rebalance", workspace_id),
         payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
@@ -778,12 +778,12 @@ def publish_portfolio_brief(
     )
 
 
-def publish_hermes_documents(
+def publish_portfolio_documents(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
 ) -> list[PublishedArtifact]:
-    """Publish H5/H6/H7 artifacts not covered by Atlas publish."""
+    """Publish H5/H6/H7 artifacts not covered by research publish."""
     date_str = state.run_date.isoformat()
     run_type = state.run_type
     workspace_id = getattr(state.config, "workspace_id", None)
@@ -793,7 +793,7 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=hermes_document_key(f"analyst/{ticker}", workspace_id),
+                document_key=portfolio_document_key(f"analyst/{ticker}", workspace_id),
                 payload=dict(payload),
                 doc_type=None,
                 run_type=run_type,
@@ -812,7 +812,7 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=hermes_document_key(f"deliberation/{ticker}", workspace_id),
+                document_key=portfolio_document_key(f"deliberation/{ticker}", workspace_id),
                 payload=dict(debate),
                 doc_type=None,
                 run_type=run_type,
@@ -825,13 +825,13 @@ def publish_hermes_documents(
             )
         )
 
-    memo = state.phase_hermes.pm_direction_memo
+    memo = state.phase_portfolio.pm_direction_memo
     if memo is not None:
         payload = memo.model_dump(mode="json") if hasattr(memo, "model_dump") else dict(memo)
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=hermes_document_key("pm-direction-memo", workspace_id),
+                document_key=portfolio_document_key("pm-direction-memo", workspace_id),
                 payload=payload,
                 doc_type="PM Direction Memo",
                 run_type=run_type,
@@ -845,17 +845,17 @@ def publish_hermes_documents(
     return artifacts
 
 
-def held_tickers(state: AtlasResearchState) -> set[str]:
+def held_tickers(state: ResearchState) -> set[str]:
     """Prior-book holdings + H4 roster entries marked ``held`` (#936)."""
     held = set(holdings_from_prior_book(state.prior_context.prior_book))
-    for entry in state.phase_hermes.focus_roster:
+    for entry in state.phase_portfolio.focus_roster:
         if entry.roster_reason == "held" and entry.ticker:
             held.add(entry.ticker.strip().upper())
     return held
 
 
-def flat_tickers_from_memo(state: AtlasResearchState) -> set[str]:
-    memo = state.phase_hermes.pm_direction_memo
+def flat_tickers_from_memo(state: ResearchState) -> set[str]:
+    memo = state.phase_portfolio.pm_direction_memo
     if memo is None:
         return set()
     roster = memo.roster if hasattr(memo, "roster") else memo.get("roster", [])
@@ -868,7 +868,7 @@ def flat_tickers_from_memo(state: AtlasResearchState) -> set[str]:
     return flats
 
 
-def gated_out_tickers(state: AtlasResearchState) -> set[str]:
+def gated_out_tickers(state: ResearchState) -> set[str]:
     """HELD names deliberately not dispatched to H5 (Stage 1b staleness gate, #1030).
 
     The H4 staleness/delta gate records a quiet, unlinked held name in
@@ -884,14 +884,14 @@ def gated_out_tickers(state: AtlasResearchState) -> set[str]:
     ledger" pass.
     """
     excluded = {
-        e.ticker.strip().upper() for e in state.phase_hermes.focus_roster_excluded if e.ticker
+        e.ticker.strip().upper() for e in state.phase_portfolio.focus_roster_excluded if e.ticker
     }
     return excluded & held_tickers(state)
 
 
-def memo_addressed_tickers(state: AtlasResearchState) -> set[str]:
+def memo_addressed_tickers(state: ResearchState) -> set[str]:
     """Tickers the H7 PM memo's roster explicitly addressed (``long`` or ``flat``)."""
-    memo = state.phase_hermes.pm_direction_memo
+    memo = state.phase_portfolio.pm_direction_memo
     if memo is None:
         return set()
     roster = memo.roster if hasattr(memo, "roster") else memo.get("roster", [])
@@ -903,7 +903,7 @@ def memo_addressed_tickers(state: AtlasResearchState) -> set[str]:
     return addressed
 
 
-def carried_held_tickers(state: AtlasResearchState) -> set[str]:
+def carried_held_tickers(state: ResearchState) -> set[str]:
     """HELD names carried at drifted weight instead of resized or dropped (#1030, #1649).
 
     Two deliberate-carry classes share ONE set so H8's carry injection and H9's
@@ -924,12 +924,12 @@ def carried_held_tickers(state: AtlasResearchState) -> set[str]:
     """
     held = held_tickers(state)
     carried = gated_out_tickers(state)
-    if state.phase_hermes.pm_direction_memo is not None:
+    if state.phase_portfolio.pm_direction_memo is not None:
         carried = carried | (held - memo_addressed_tickers(state))
     return carried & held
 
 
-def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> list[str]:
+def coherence_errors(state: ResearchState, weights: dict[str, float]) -> list[str]:
     """Fail-closed checks before terminal write."""
     errors: list[str] = []
     flats = flat_tickers_from_memo(state)
@@ -991,7 +991,7 @@ def resolve_pretrade_risk_mode() -> PreTradeRiskMode:
 
 
 def validate_pretrade_risk_report(
-    state: AtlasResearchState,
+    state: ResearchState,
     weights: dict[str, float],
     *,
     mode: PreTradeRiskMode | None = None,
@@ -1006,7 +1006,7 @@ def validate_pretrade_risk_report(
     if effective is PreTradeRiskMode.OFF:
         return PreTradeRiskValidation(ok=True, mode=effective, reason="mode_off")
 
-    raw = state.phase_hermes.pre_trade_risk_report
+    raw = state.phase_portfolio.pre_trade_risk_report
     if raw is None:
         return PreTradeRiskValidation(
             ok=False,
@@ -1038,7 +1038,7 @@ def validate_pretrade_risk_report(
             report=report,
         )
 
-    book = state.phase_hermes.sized_book or {}
+    book = state.phase_portfolio.sized_book or {}
     stamped = book.get("pre_trade_risk_report_hash")
     if stamped is not None and str(stamped) != report.report_content_hash:
         return PreTradeRiskValidation(
@@ -1048,7 +1048,7 @@ def validate_pretrade_risk_report(
             report=report,
         )
 
-    bundle_raw = state.phase_hermes.allocation_input_bundle
+    bundle_raw = state.phase_portfolio.allocation_input_bundle
     if isinstance(bundle_raw, dict):
         bundle_hash = bundle_raw.get("bundle_content_hash")
         if bundle_hash and str(bundle_hash) != report.allocation_input_bundle_hash:
@@ -1143,7 +1143,7 @@ def persist_validated_pretrade_risk_report(
     }
 
 
-def persist_decision_log(*, client: SupabaseClient, state: AtlasResearchState) -> int:
+def persist_decision_log(*, client: SupabaseClient, state: ResearchState) -> int:
     return persist_pending(client=client, state=state)
 
 
@@ -1162,7 +1162,7 @@ __all__ = [
     "manifest_document_key",
     "persist_decision_log",
     "persist_validated_pretrade_risk_report",
-    "publish_hermes_documents",
+    "publish_portfolio_documents",
     "publish_portfolio_brief",
     "resolve_pretrade_risk_mode",
     "validate_pretrade_risk_report",

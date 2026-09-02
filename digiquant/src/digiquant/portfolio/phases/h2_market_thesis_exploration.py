@@ -9,14 +9,14 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.segments import digest_briefing_for_hermes
+from digiquant.research.segments import digest_briefing_for_portfolio
 from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.models.thesis import MarketThesisExplorationOutput
 from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
     run_thesis_phase_llm,
 )
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.thesis_io import (
     persist_market_thesis_exploration,
     validate_market_thesis_proposals,
@@ -25,20 +25,20 @@ from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
-NODE_ID = "hermes/thesis/market-exploration"
-PHASE_NAME = "hermes_h2_market_exploration"
+NODE_ID = "portfolio/thesis/market-exploration"
+PHASE_NAME = "portfolio_h2_market_exploration"
 ARTIFACT_KEY = ("thesis", "market-exploration")
 DOC_TYPE = "market_thesis_exploration"
 
 
-def _reviewed_status_by_id(state: HermesState) -> dict[str, str]:
+def _reviewed_status_by_id(state: PortfolioState) -> dict[str, str]:
     """H1's same-run status wins when H2 refreshes an existing thesis body."""
     statuses = {
         str(row.get("thesis_id")): str(row.get("status") or "ACTIVE")
         for row in state.prior_context.active_theses
         if row.get("thesis_id")
     }
-    review_document = state.phase_hermes.thesis_review or {}
+    review_document = state.phase_portfolio.thesis_review or {}
     body = review_document.get("body") if isinstance(review_document, dict) else None
     reviewed = body.get("reviewed_theses") if isinstance(body, dict) else None
     if not isinstance(reviewed, list):
@@ -53,7 +53,7 @@ def _reviewed_status_by_id(state: HermesState) -> dict[str, str]:
     return statuses
 
 
-def _run_h2_llm(state: HermesState) -> MarketThesisExplorationOutput:
+def _run_h2_llm(state: PortfolioState) -> MarketThesisExplorationOutput:
     exploration, _doc, errors = run_thesis_phase_llm(
         state=state,
         skill_slug="market-thesis-exploration",
@@ -64,9 +64,9 @@ def _run_h2_llm(state: HermesState) -> MarketThesisExplorationOutput:
         phase_inputs={
             "doc_type": DOC_TYPE,
             "segment": NODE_ID,
-            "digest": digest_briefing_for_hermes(state.phase7_digest),
+            "digest": digest_briefing_for_portfolio(state.phase7_digest),
             "active_theses": list(state.prior_context.active_theses),
-            "thesis_review": state.phase_hermes.thesis_review,
+            "thesis_review": state.phase_portfolio.thesis_review,
             "meta": {"research_refs": []},
         },
         # Baseline runs publish `digest`, delta runs publish `digest-delta`
@@ -82,7 +82,7 @@ def _run_h2_llm(state: HermesState) -> MarketThesisExplorationOutput:
 
 
 def _h2_node_factory(client: SupabaseClient | None):
-    def _node(state: HermesState) -> dict[str, Any]:
+    def _node(state: PortfolioState) -> dict[str, Any]:
         exploration = _run_h2_llm(state)
         proposals, validation_errors = validate_market_thesis_proposals(
             list(exploration.theses),
@@ -114,7 +114,7 @@ def _h2_node_factory(client: SupabaseClient | None):
                 workspace_id=state.config.workspace_id,
             )
         return {
-            "phase_hermes": state.phase_hermes.model_copy(
+            "phase_portfolio": state.phase_portfolio.model_copy(
                 update={"market_thesis_exploration": document}
             ),
         }

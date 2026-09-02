@@ -15,7 +15,7 @@ from digiquant.research.phases.phase7_synthesis import (
 )
 from digiquant.research.segments import (
     compose_legacy_digest_body,
-    digest_briefing_for_hermes,
+    digest_briefing_for_portfolio,
 )
 from digiquant.research.skills import (
     DIGEST_BRIEFING_RULES,
@@ -23,7 +23,7 @@ from digiquant.research.skills import (
     load_skill,
     load_skill_edit,
 )
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 
 pytestmark = pytest.mark.unit
 
@@ -93,8 +93,8 @@ def test_digest_snapshot_composes_legacy_row_when_body_missing() -> None:
     assert "Narrow breadth" in snap.body
 
 
-def test_digest_briefing_for_hermes_is_date_body_regime_only() -> None:
-    briefing = digest_briefing_for_hermes(
+def test_digest_briefing_for_portfolio_is_date_body_regime_only() -> None:
+    briefing = digest_briefing_for_portfolio(
         {
             "date": "2026-08-31",
             "body": "# Daily Digest — 2026-08-31\n\n## Market regime\n\nSlowing.\n",
@@ -115,7 +115,7 @@ def test_digest_briefing_for_hermes_is_date_body_regime_only() -> None:
 
 
 def test_digest_briefing_composes_legacy_when_body_absent() -> None:
-    briefing = digest_briefing_for_hermes(_legacy_digest_row())
+    briefing = digest_briefing_for_portfolio(_legacy_digest_row())
     assert briefing["date"] == "2026-08-31"
     assert "Growth slowing" in briefing["body"]
     assert briefing["regime_label"] == "Slowing / Cooling"
@@ -165,10 +165,10 @@ def test_prior_digest_bodies_are_two_full_reports_not_300_char_slims() -> None:
     day_before = "# Daily Digest — 2026-08-29\n\n## Market regime\n\n" + (
         "Day-before held a risk-off stance. " * 40
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 31),
-        config=AtlasConfigBundle(watchlist=["SPY"]),
+        config=ResearchConfigBundle(watchlist=["SPY"]),
         prior_context=PriorContext(
             last_snapshots=[
                 {

@@ -18,7 +18,7 @@ name: "Test: digiquant"
 #
 # So the lane pins its own extras instead of subtracting from everything, which
 # also keeps the historical set exact rather than approximately right:
-# `[dev,visualization,brokers-alpaca]` transitively brings atlas, indicators and m2
+# `[dev,visualization,brokers-alpaca]` transitively brings research, indicators and m2
 # (via dev) plus the optional Alpaca paper SDK for `tests/dq/brokers/`, but not
 # prices, data, optimize, mcp, otel or nautilus. digibase and digikey arrive as
 # declared dependencies of digiquant.
@@ -31,7 +31,7 @@ name: "Test: digiquant"
 # widening of the gate (nautilus), which is what this shape avoids.
 #
 # `pip install cryptography pandas` dropped as redundant: both arrive
-# transitively (cryptography via digikey, pandas via the atlas/m2 extras).
+# transitively (cryptography via digikey, pandas via the research/m2 extras).
 on:
   workflow_call:
 

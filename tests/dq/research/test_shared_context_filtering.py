@@ -14,12 +14,12 @@ from digiquant.research.phases._node_factory import _shared_context
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.research.phases.phase3_macro import _SPEC as MACRO_SPEC
 from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
-from digiquant.research.state import AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchState, PriorContext
 
 pytestmark = pytest.mark.unit
 
 
-def _state() -> AtlasResearchState:
+def _state() -> ResearchState:
     segments = {
         key: {"date": "2026-06-11", "document_key": key, "doc_type": None, "payload": {"k": key}}
         for key in (
@@ -33,7 +33,7 @@ def _state() -> AtlasResearchState:
             "digest-delta",
         )
     }
-    return AtlasResearchState(
+    return ResearchState(
         run_type="baseline",
         run_date=date(2026, 6, 12),
         prior_context=PriorContext(latest_segments=segments),

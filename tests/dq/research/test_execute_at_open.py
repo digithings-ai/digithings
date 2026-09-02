@@ -32,7 +32,7 @@ from digiquant.dashboard.tenancy import house_workspace_id
 pytestmark = pytest.mark.unit
 
 _SCRIPT = (
-    Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
+    Path(__file__).resolve().parents[3] / "digiquant" / "scripts" / "research" / "execute_at_open.py"
 )
 
 
@@ -57,7 +57,7 @@ resolve_rebalance_payload_fallback = _mod.resolve_rebalance_payload_fallback
 
 # ─── Fake PostgREST client ──────────────────────────────────────────────────
 #
-# Purpose-built rather than reusing ``tests.dq.atlas.test_supabase_io``'s
+# Purpose-built rather than reusing ``tests.dq.research.test_supabase_io``'s
 # ``FakeSupabaseClient``: that fake's ``execute()`` silently drops filter ops it
 # does not recognise, and it does not implement ``neq``. ``_prior_book_date``
 # issues ``.neq("ticker", "CASH")``, so under the shared fake that filter would be

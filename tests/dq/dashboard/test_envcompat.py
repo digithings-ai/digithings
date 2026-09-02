@@ -96,7 +96,7 @@ def test_operator_scripts_use_digiquant_prefix() -> None:
         assert (scripts / name).is_file(), name
     # GHA ``execution-cron-check.yml`` is protected on cursor/*; wrapper stays until
     # a feat/ hop renames the workflow.
-    leftover = [p.name for p in scripts.glob("kairos_*.py") if p.name != "execution_cron_check.py"]
+    leftover = [p.name for p in scripts.glob("execution_*.py") if p.name != "execution_cron_check.py"]
     assert leftover == [], leftover
     assert (scripts / "execution_cron_check.py").is_file()
 
@@ -104,7 +104,7 @@ def test_operator_scripts_use_digiquant_prefix() -> None:
 def test_cron_probe_workflow_keeps_house_pipeline_separate() -> None:
     installed = REPO_ROOT / ".github" / "workflows" / "execution-cron-check.yml"
     spec = (
-        REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "execution-cron-check.workflow.yml"
+        REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
     )
     assert installed.is_file()
     assert spec.is_file()

@@ -7,7 +7,7 @@ description: >
 
 # PM Rebalance Decision (deprecated)
 
-**Daily Hermes runs use `pm-direction` (H7) + H8 risk sizing.** This skill emitted
+**Daily portfolio runs use `pm-direction` (H7) + H8 risk sizing.** This skill emitted
 weight-bearing `RebalanceDecision` payloads from Phase 7D — that path is removed from
 the thesis-first graph.
 

@@ -1,6 +1,6 @@
 """Phase 9D — materialize the PM decision into the paper portfolio (#700).
 
-The Hermes PM (Phase 7D) emits ``state.phase7d_rebalance`` — a target book of
+The portfolio PM (Phase 7D) emits ``state.phase7d_rebalance`` — a target book of
 ``recommended_portfolio`` weights. Previously that died as a document; the
 ``positions`` / ``nav_history`` tables the dashboard reads never got a row.
 This terminal step turns the decision into the actual paper book, daily.
@@ -39,7 +39,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
 from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, env_lookup
 from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries, sized_book
@@ -163,7 +163,7 @@ def _upsert_theses(
 ) -> int:
     """Materialize one thesis row (+ vehicle) per booked holding (#713).
 
-    The live Atlas→Hermes chain previously never wrote the ``theses`` table (only
+    The live research→portfolio chain previously never wrote the ``theses`` table (only
     frozen legacy scripts did), so the dashboard's Theses surface stayed empty.
     This derives one thesis per held ticker — keyed ``(date, thesis_id=ticker.lower())``
     to match the ``theses`` unique key — from the per-ticker ``AnalystPayload``
@@ -537,7 +537,7 @@ def _enrich_positions(
 def build_materialize_node(deps: MaterializeDeps):
     """Return the Phase 9D node bound to ``deps``."""
 
-    def materialize(state: AtlasResearchState) -> dict[str, Any]:
+    def materialize(state: ResearchState) -> dict[str, Any]:
         # The PM never ran (partial graph / legacy / dry-run) → don't fabricate a
         # book. This is distinct from the PM running and choosing to hold cash.
         book = sized_book(state)

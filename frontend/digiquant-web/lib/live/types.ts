@@ -7,7 +7,7 @@
  * with a daily-close SEED/fallback from the `public_price_latest` view so
  * values exist before the first tick and when a lane is dark.
  *
- * The two consumer lanes (StockTicker tape + Olympus live portfolio section)
+ * The two consumer lanes (StockTicker tape + dashboard live portfolio section)
  * build against these types — treat them as the contract.
  */
 

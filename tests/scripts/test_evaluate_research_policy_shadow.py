@@ -28,7 +28,7 @@ from digiquant.dashboard.research_retrieval.shadow_evaluation import ShadowProvi
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "atlas" / "evaluate_research_policy_shadow.py"
+_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "evaluate_research_policy_shadow.py"
 _TS = datetime(2026, 8, 26, 16, 30, tzinfo=UTC)
 _STATE = UUID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
 

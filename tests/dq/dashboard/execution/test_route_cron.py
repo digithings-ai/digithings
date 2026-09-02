@@ -1,4 +1,4 @@
-"""Unit tests for Kairos order-intent route cron (K4 production seam).
+"""Unit tests for execution order-intent route cron (K4 production seam).
 
 Injects fingerprints and a route callback — never unseals credentials or
 constructs Alpaca adapters. Never treats kill-switch-off as a successful submit.
@@ -211,8 +211,8 @@ def test_connection_id_missing_says_route_not_sync() -> None:
         log_err=err.append,
     )
     assert rc == EXIT_ROUTING_DISABLED
-    assert "kairos route:" in err[0]
-    assert "kairos sync:" not in err[0]
+    assert "execution route:" in err[0]
+    assert "execution sync:" not in err[0]
     assert called == []
 
 

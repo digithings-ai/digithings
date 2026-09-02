@@ -3,7 +3,7 @@
 `_shared_context`'s `context_keys` whitelist filters `prior_context.latest_segments`
 (one entry per literal `document_key` string) down to what a phase actually
 consumes. The digest is published as `digest` on baseline runs and `digest-delta`
-on delta runs (`atlas/phases/publish_phase.py`), so a whitelist missing either
+on delta runs (`research/phases/publish_phase.py`), so a whitelist missing either
 real key — or listing a key nothing ever writes, like the old `digest-baseline` —
 silently drops or keeps-stale the wrong digest instead of raising.
 """
@@ -13,17 +13,17 @@ from __future__ import annotations
 import pathlib
 from datetime import date
 
-import digiquant.portfolio.phases as hermes_phases_pkg
+import digiquant.portfolio.phases as portfolio_phases_pkg
 import pytest
 from digiquant.research.phases._node_factory import _shared_context
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 
 
-def _state_with_latest_segments(latest_segments: dict) -> AtlasResearchState:
-    return AtlasResearchState(
+def _state_with_latest_segments(latest_segments: dict) -> ResearchState:
+    return ResearchState(
         run_type="delta",
         run_date=date(2026, 6, 8),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=PriorContext(latest_segments=latest_segments),
     )
 
@@ -73,10 +73,10 @@ def test_live_h_phases_never_reference_dead_digest_baseline_key():
     """`digest-baseline` is never published by anything. Guard against the typo
     reappearing in the live H1-H9 phase modules. `phase7d_pm.py` is deliberately
     excluded — confirmed unreachable from any production graph builder
-    (`hermes/graph.py::build_hermes_phases` aliases to the thesis-first graph,
+    (`portfolio/graph.py::build_portfolio_phases` aliases to the thesis-first graph,
     never `phase7d_pm.build_phase7d_pm`), so it isn't fixed as part of #1270.
     """
-    phases_dir = pathlib.Path(hermes_phases_pkg.__file__).parent
+    phases_dir = pathlib.Path(portfolio_phases_pkg.__file__).parent
     live_h_files = sorted(phases_dir.glob("h*.py"))
     assert live_h_files, "expected to find the h1..h9 phase modules"
 

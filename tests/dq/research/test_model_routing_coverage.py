@@ -1,9 +1,9 @@
 """Model-routing coverage: every phase slug must resolve via digiquant_models.yaml.
 
-A slug without olympus capability mapping (and without a non-flagship ``phase_models``
+A slug without dashboard capability mapping (and without a non-flagship ``phase_models``
 override) falls back through ``get_model_for_mode()`` to the hard-coded ``gpt-4o-mini``
 last resort, which digillm routes to the default OpenAI client — unauthenticated in the
-Atlas CI workflows, where only ``OPENROUTER_API_KEY`` is provided. That is exactly how the
+research CI workflows, where only ``OPENROUTER_API_KEY`` is provided. That is exactly how the
 ``alt-ai-portfolios`` segment 401'd every scheduled delta run (#678). Segment slugs are
 derived from the phase specs themselves so a new segment cannot ship without a routing entry.
 """
@@ -24,7 +24,7 @@ _REPO_CONFIG = str(Path(__file__).parents[3] / "config")
 
 # Static phase_slug literals passed to run_research_agent outside the
 # SegmentNodeSpec fan-outs (regenerate with: git grep -h 'phase_slug="'
-# -- digiquant/src/digiquant/olympus).
+# -- digiquant/src/digiquant/dashboard).
 _STATIC_PHASE_SLUGS = (
     "equity",
     "master-digest",
@@ -48,16 +48,16 @@ _DYNAMIC_SLUG_EXAMPLES = (
     "research-manager-AAPL",
 )
 
-# Hermes H1–H7 phase_slug literals (see digiquant/olympus/hermes/phases/*).
-_HERMES_STATIC_SLUGS = (
-    "hermes/thesis/market-review",
-    "hermes/thesis/market-exploration",
-    "hermes/thesis/vehicle-map",
-    "hermes/portfolio/pm-direction",
+# portfolio H1–H7 phase_slug literals (see digiquant/portfolio/phases/*).
+_PORTFOLIO_STATIC_SLUGS = (
+    "portfolio/thesis/market-review",
+    "portfolio/thesis/market-exploration",
+    "portfolio/thesis/vehicle-map",
+    "portfolio/pm-direction",
 )
 
-_HERMES_DYNAMIC_SLUG_EXAMPLES = (
-    "hermes/portfolio/asset-analyst-AAPL",
+_PORTFOLIO_DYNAMIC_SLUG_EXAMPLES = (
+    "portfolio/asset-analyst-AAPL",
     "h6_pm_challenge-AAPL",
     "h6_analyst_response-AAPL",
 )
@@ -70,8 +70,8 @@ def _all_slugs() -> list[str]:
     slugs += [
         *_STATIC_PHASE_SLUGS,
         *_DYNAMIC_SLUG_EXAMPLES,
-        *_HERMES_STATIC_SLUGS,
-        *_HERMES_DYNAMIC_SLUG_EXAMPLES,
+        *_PORTFOLIO_STATIC_SLUGS,
+        *_PORTFOLIO_DYNAMIC_SLUG_EXAMPLES,
     ]
     return slugs
 

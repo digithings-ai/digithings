@@ -32,7 +32,7 @@ from digiquant.research.research_attention import (
 )
 from digiquant.research.skills import load_skill, load_skill_edit
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Carried,
     PhaseError,
     SegmentPayload,
@@ -73,7 +73,7 @@ def _data_tools_enabled() -> bool:
 
 
 @lru_cache(maxsize=1)
-def _atlas_data_client() -> Any:
+def _research_data_client() -> Any:
     """Memoized Supabase client for the data tools.
 
     Segment nodes don't carry a client, so build one from env the same way the
@@ -87,11 +87,11 @@ def _atlas_data_client() -> Any:
 def get_data_client() -> Any:
     """Public accessor for the memoized Supabase data client.
 
-    Hermes analyst nodes reuse the same cached client as Atlas segment nodes
+    portfolio analyst nodes reuse the same cached client as research segment nodes
     (#713) to pre-fetch per-ticker data, rather than reaching into the private
-    ``_atlas_data_client`` directly.
+    ``_research_data_client`` directly.
     """
-    return _atlas_data_client()
+    return _research_data_client()
 
 
 _MACRO_STALE_DAYS_DEFAULT = 7
@@ -131,7 +131,7 @@ def _ingested_macro_stale(run_date: Any) -> bool:
     if not _data_tools_enabled():
         return True
     try:
-        client = _atlas_data_client()
+        client = _research_data_client()
     except Exception as exc:  # any client failure → paid fallback, never crash
         logger.warning("macro freshness probe: client unavailable (%s); paid fallback", exc)
         return True
@@ -203,7 +203,7 @@ def build_grounding(
             # Anchor "as of" reads to the run's logical date (not wall-clock) so tool
             # outputs are reproducible + look-ahead-safe for backfills/delta runs.
             execute_tool = build_data_tool_dispatcher(
-                _atlas_data_client(), run_date=run_date, allowed_tables=data_tool_tables
+                _research_data_client(), run_date=run_date, allowed_tables=data_tool_tables
             )
             tools = DATA_TOOLS
         except Exception as exc:  # degrade to tool-less rather than crash the phase
@@ -224,7 +224,7 @@ def build_grounding(
                     t for t in research_defs if t["function"]["name"] != "query_portfolio"
                 ]
             research_execute = build_research_tool_dispatcher(
-                _atlas_data_client(),
+                _research_data_client(),
                 run_date=run_date,
                 phase=research_phase,
                 watchlist=watchlist,
@@ -289,8 +289,8 @@ def apply_web_grounding_to_inputs(
     segments where web search is the *primary* grounding).
     """
     from digiquant.research.data.web_grounding import (
-        OlympusWebSearchError,
-        olympus_web_search_required,
+        DashboardWebSearchError,
+        dashboard_web_search_required,
     )
 
     inputs = dict(phase_inputs)
@@ -299,8 +299,8 @@ def apply_web_grounding_to_inputs(
         return inputs
     if not live_search or live_search_is_fallback:
         return inputs
-    if olympus_web_search_required():
-        raise OlympusWebSearchError(
+    if dashboard_web_search_required():
+        raise DashboardWebSearchError(
             f"{segment}: OLYMPUS_WEB_SEARCH=required but web grounding unavailable"
         )
     inputs["grounding_absent"] = True
@@ -320,13 +320,13 @@ class SegmentNodeSpec:
     """Stable slug written into SegmentPayload.segment and the output dict key."""
 
     skill_slug: str
-    """Path in ``digiquant/src/digiquant/olympus/atlas/skills/<slug>/SKILL.md`` — the 'what to research'."""
+    """Path in ``digiquant/src/digiquant/research/skills/<slug>/SKILL.md`` — the 'what to research'."""
 
     output_model: type[BaseModel]
     """Pydantic class the LLM output must validate against."""
 
     phase_outputs_field: str
-    """AtlasResearchState attribute this node updates (e.g. 'phase1_outputs')."""
+    """ResearchState attribute this node updates (e.g. 'phase1_outputs')."""
 
     use_data_tools: bool = False
     """Equip the research agent with the Supabase price/macro data tools."""
@@ -363,7 +363,7 @@ class SegmentNodeSpec:
 
 
 # Type aliases for the two factory seams.
-InputsBuilder = Callable[[AtlasResearchState, SegmentNodeSpec], dict[str, Any]]
+InputsBuilder = Callable[[ResearchState, SegmentNodeSpec], dict[str, Any]]
 WriteAdapter = Callable[[SegmentNodeSpec, SegmentSlot], dict[str, Any]]
 
 
@@ -458,7 +458,7 @@ def _scoped_data_layer(data_layer: dict[str, Any], scope: DataLayerScope) -> dic
     return out
 
 
-def _changed_segment_keys(state: AtlasResearchState) -> list[str]:
+def _changed_segment_keys(state: ResearchState) -> list[str]:
     """Segment slugs the current delta run regenerated (vs carried).
 
     Read from the triage decisions when present; falls back to the freshly
@@ -477,7 +477,7 @@ def _changed_segment_keys(state: AtlasResearchState) -> list[str]:
     return sorted(changed)
 
 
-def _slim_prior_snapshots(prior: dict[str, Any], state: AtlasResearchState) -> None:
+def _slim_prior_snapshots(prior: dict[str, Any], state: ResearchState) -> None:
     """In-place: replace the full ``last_snapshots`` history with a slim delta view.
 
     On a delta run the full N-snapshot history is redundant in shared_context;
@@ -549,7 +549,7 @@ def _slim_segment_payloads(prior: dict[str, Any]) -> None:
 
 
 def _shared_context(
-    state: AtlasResearchState,
+    state: ResearchState,
     *,
     context_keys: tuple[str, ...] | None = None,
     data_layer_scope: DataLayerScope = "full",
@@ -605,7 +605,7 @@ def _shared_context(
     }
 
 
-def default_inputs_builder(_state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+def default_inputs_builder(_state: ResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
     """Volatile per-segment inputs — minimal default.
 
     Phase 1 and Phase 2 nodes use this as-is; later phases supply their own
@@ -630,7 +630,7 @@ def scalar_slot_write_adapter(spec: SegmentNodeSpec, slot: SegmentSlot) -> dict[
 class _StatePriorLoader:
     """Resolve segment priors from ``state.prior_context.latest_segments``."""
 
-    def __init__(self, state: AtlasResearchState) -> None:
+    def __init__(self, state: ResearchState) -> None:
         self._state = state
 
     def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
@@ -656,14 +656,14 @@ class _StatePriorLoader:
         )
 
 
-def _triage_reason_for_segment(state: AtlasResearchState, segment: str) -> str | None:
+def _triage_reason_for_segment(state: ResearchState, segment: str) -> str | None:
     if state.triage is None:
         return None
     decision = next((d for d in state.triage.decisions if d.segment == segment), None)
     return decision.reason if decision is not None else None
 
 
-def _resolve_segment_edit_mode(state: AtlasResearchState, segment: str) -> EditMode:
+def _resolve_segment_edit_mode(state: ResearchState, segment: str) -> EditMode:
     loader = _StatePriorLoader(state)
     triage_signal = None
     if state.triage is not None:
@@ -679,7 +679,7 @@ def _resolve_segment_edit_mode(state: AtlasResearchState, segment: str) -> EditM
     )
 
 
-def _carry_baseline_date(state: AtlasResearchState, segment: str) -> date:
+def _carry_baseline_date(state: ResearchState, segment: str) -> date:
     prior = _StatePriorLoader(state).load(("segment", segment), state.run_date)
     if prior is not None:
         return prior.date
@@ -753,7 +753,7 @@ def _delta_row(result: EditSegmentResult) -> dict[str, Any]:
 
 def _run_edit_segment(
     *,
-    state: AtlasResearchState,
+    state: ResearchState,
     spec: SegmentNodeSpec,
     inputs: dict[str, Any],
     prior: PriorPublished,
@@ -859,12 +859,12 @@ def build_segment_node(
     *,
     inputs_builder: InputsBuilder = default_inputs_builder,
     write_adapter: WriteAdapter = dict_slot_write_adapter,
-    triage_gate: Callable[[AtlasResearchState, str], Carried | None] | None = None,
+    triage_gate: Callable[[ResearchState, str], Carried | None] | None = None,
     model: str | None = None,
-) -> Callable[[AtlasResearchState], dict[str, Any]]:
+) -> Callable[[ResearchState], dict[str, Any]]:
     """Return a LangGraph node for one segment (optional triage carry / model override)."""
 
-    def _node(state: AtlasResearchState) -> dict[str, Any]:
+    def _node(state: ResearchState) -> dict[str, Any]:
         carried: Carried | None = None
         # Non-gating: an edit→full fallback that then succeeds must still leave the run
         # `ok`, but it must stop being invisible (#1741).

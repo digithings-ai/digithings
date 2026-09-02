@@ -11,7 +11,7 @@ from digiquant.research.phases._node_factory import (
     build_segment_node,
 )
 from digiquant.research.segments import ResearchMemo
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 
 class BondsReport(ResearchMemo):
@@ -86,7 +86,7 @@ _SPECS = (
 )
 
 
-def _asset_class_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+def _asset_class_inputs_builder(state: ResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
     """Inject macro regime and phase-1 signals into segment phase_inputs."""
     macro_body: dict[str, Any] = {}
     if state.phase3_output is not None and state.phase3_output.payload.source == "today":

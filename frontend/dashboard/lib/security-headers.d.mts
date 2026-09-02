@@ -4,5 +4,5 @@
  * security-headers.test.ts — typecheck without converting the module that
  * scripts import as plain ESM.
  */
-export declare const OLYMPUS_CSP: string;
-export declare const OLYMPUS_SECURITY_HEADERS: ReadonlyArray<{ key: string; value: string }>;
+export declare const DASHBOARD_CSP: string;
+export declare const DASHBOARD_SECURITY_HEADERS: ReadonlyArray<{ key: string; value: string }>;

@@ -1,4 +1,4 @@
-"""Read helpers for thesis-first Hermes state slots."""
+"""Read helpers for thesis-first portfolio state slots."""
 
 from __future__ import annotations
 
@@ -8,20 +8,20 @@ from typing import (
 
 from digiquant.research.state import RebalancePayload
 from digiquant.portfolio.models.deliberation import is_unchallenged_carry
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 
 
-def analyst_payloads(state: HermesState) -> dict[str, dict[str, Any]]:
+def analyst_payloads(state: PortfolioState) -> dict[str, dict[str, Any]]:
     """Per-ticker unified analyst payloads (H5)."""
     return {
         ticker: {k: v for k, v in payload.items() if k != "_document"}
-        for ticker, payload in state.phase_hermes.asset_analysts.items()
+        for ticker, payload in state.phase_portfolio.asset_analysts.items()
     }
 
 
-def sized_book(state: HermesState) -> RebalancePayload | None:
+def sized_book(state: PortfolioState) -> RebalancePayload | None:
     """H8 sized portfolio — sole weight owner on the thesis-first path."""
-    book = state.phase_hermes.sized_book
+    book = state.phase_portfolio.sized_book
     if book is not None:
         return book
     # Legacy strangler: chain-terminal 7E may still populate phase7d_rebalance.
@@ -86,7 +86,7 @@ def _shaped_theses(
     return bull, bear
 
 
-def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
+def deliberation_summaries(state: PortfolioState) -> dict[str, dict[str, Any]]:
     """Per-ticker deliberation summaries (H6) — PM-compatible debate shape.
 
     Persists the convergence metadata (``converged`` / ``escalated`` / ``cap_reason`` /
@@ -106,7 +106,7 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
     summary already carried distinct theses — the UI renders the chat, not mirrored cards.
     """
     out: dict[str, dict[str, Any]] = {}
-    for ticker, summary in state.phase_hermes.deliberation_summaries.items():
+    for ticker, summary in state.phase_portfolio.deliberation_summaries.items():
         if not isinstance(summary, dict):
             continue
         rounds = summary.get("transcript", summary.get("rounds", []))

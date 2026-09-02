@@ -1,4 +1,4 @@
-"""Kairos execution contracts: typed venue/order/position models for broker adapters.
+"""execution contracts: typed venue/order/position models for broker adapters.
 
 Every real or stub `BrokerAdapter` implementation (`base.py`) exchanges these Pydantic
 models with a venue instead of loose positional args. This closes the surface a K1/K2
@@ -6,7 +6,7 @@ adapter has to fill in and gives every downstream caller (K4's router/sync) one 
 strict vocabulary for "what an order is", "what a fill is", and "what a position is",
 rather than each adapter inventing its own dict shape.
 
-Scope — contracts and typing only, mirroring `hermes/models/portfolio_ledger.py`'s style
+Scope — contracts and typing only, mirroring `portfolio/models/portfolio_ledger.py`'s style
 exactly (`StrEnum` vocabularies, a frozen strict base, `Decimal` money/quantity fields,
 `model_validator(mode="after")` business rules). This module performs **no I/O**: no HTTP
 client, no broker SDK, no database access, and it does not construct or call any venue
@@ -20,7 +20,7 @@ silent precision loss that convention exists to rule out). Every timestamp field
 UTC-only `AwareDatetime`, rejected if naive or offset by anything other than +00:00,
 mirroring `portfolio_ledger._reject_non_utc` (reimplemented locally rather than imported,
 since that helper is private to its module and this module must not import from
-`hermes/`).
+`portfolio/`).
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ class OrderType(StrEnum):
 def _reject_non_utc(*values: AwareDatetime | None) -> None:
     """Raise unless every non-null timestamp is UTC (offset exactly +00:00).
 
-    Mirrors `hermes.models.portfolio_ledger._reject_non_utc` exactly; reimplemented here
+    Mirrors `portfolio.models.portfolio_ledger._reject_non_utc` exactly; reimplemented here
     rather than imported because that helper is private to its module.
     """
     for value in values:
@@ -118,9 +118,9 @@ def _reject_non_utc(*values: AwareDatetime | None) -> None:
 
 
 class BrokerContractModel(BaseModel):
-    """Strict, immutable base for every Kairos broker contract.
+    """Strict, immutable base for every execution broker contract.
 
-    Mirrors `hermes.models.portfolio_ledger.PortfolioLedgerModel`: unknown fields are
+    Mirrors `portfolio.models.portfolio_ledger.PortfolioLedgerModel`: unknown fields are
     rejected rather than silently dropped, and instances are frozen — a submitted order
     request, an ack, or a fill is never mutated in place; a caller that needs a changed
     value constructs a new instance.
@@ -147,7 +147,7 @@ class BrokerOrderRequest(_SymbolNormalizingModel):
     """A caller's request to submit one order to a venue via `BrokerAdapter.submit_order`.
 
     `client_order_id` is set to `str(order_intent_id)` when the request is derived from a
-    Hermes `OrderIntent` (a later work package), so a resubmit after a crash is
+    portfolio `OrderIntent` (a later work package), so a resubmit after a crash is
     recoverable by looking the id up on the venue before retrying, never by inferring one
     from a freshly randomized id. `quantity`/`notional` are XOR — exactly one is set,
     mirroring `RequestedTarget`'s weight/quantity XOR in `portfolio_ledger.py`.

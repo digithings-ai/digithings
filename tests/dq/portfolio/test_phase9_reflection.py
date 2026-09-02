@@ -37,13 +37,13 @@ from digiquant.research.phases.preflight import (
     build_preflight_reflect_node,
 )
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
 )
 from digiquant.portfolio.phases.phase9_evolution import Phase9Deps, build_phase9
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -56,18 +56,18 @@ def _seed_state_with_analysts(
     watchlist: tuple[str, ...] = ("AAPL", "MSFT"),
     preferences: dict[str, Any] | None = None,
     run_date: date = date(2026, 4, 26),
-) -> AtlasResearchState:
-    """Build an AtlasResearchState with Phase 7C analyst rows already populated."""
-    state = AtlasResearchState(
+) -> ResearchState:
+    """Build an ResearchState with Phase 7C analyst rows already populated."""
+    state = ResearchState(
         run_id=_RUN_ID,
         run_type="baseline",
         run_date=run_date,
-        config=AtlasConfigBundle(
+        config=ResearchConfigBundle(
             watchlist=list(watchlist),
             preferences=preferences or {},
         ),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts={
             ticker: {
                 "ticker": ticker,
@@ -141,7 +141,7 @@ class TestPhaseAWritesPending:
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL",))
         long_thesis = "A" * 900 + "B" * 100  # 1000 chars — formerly truncated to 800
-        state.phase_hermes.asset_analysts["AAPL"]["thesis"] = long_thesis
+        state.phase_portfolio.asset_analysts["AAPL"]["thesis"] = long_thesis
 
         persist_pending(client=client, state=state)
 
@@ -244,7 +244,7 @@ class TestPhaseAWritesPending:
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL", "MSFT"))
         # Corrupt one entry by removing required field.
-        del state.phase_hermes.asset_analysts["MSFT"]["stance"]
+        del state.phase_portfolio.asset_analysts["MSFT"]["stance"]
 
         rows_written = persist_pending(client=client, state=state)
 
@@ -648,10 +648,10 @@ class TestLessonsInjection:
         )
         deps = PreflightDeps(
             client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+            config_loader=lambda: ResearchConfigBundle(watchlist=["AAPL"]),
         )
         node = build_preflight_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=run_date)
+        state = ResearchState(run_type="baseline", run_date=run_date)
 
         out = node(state)
 
@@ -669,13 +669,13 @@ class TestLessonsInjection:
         from digiquant.portfolio.phases.phase7d_pm import _pm_node
 
         lessons = [{"ticker": "AAPL", "reflection": "Past lesson", "alpha": 0.02}]
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 4, 26),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(decision_lessons=lessons),
         )
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts={
                 "AAPL": {
                     "ticker": "AAPL",
@@ -725,7 +725,7 @@ class TestPreflightReflectNode:
         client = FakeSupabaseClient()
         deps = PreflightReflectDeps(client=client, reflector=_stub_reflector)
         node = build_preflight_reflect_node(deps)
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
 
         out = node(state)
 
@@ -747,17 +747,17 @@ class TestConvictionDerivedHoldingDays:
         convictions: dict[str, int],
         *,
         preferences: dict[str, Any] | None = None,
-    ) -> AtlasResearchState:
-        state = AtlasResearchState(
+    ) -> ResearchState:
+        state = ResearchState(
             run_id=_RUN_ID,
             run_type="baseline",
             run_date=date(2026, 4, 26),
-            config=AtlasConfigBundle(
+            config=ResearchConfigBundle(
                 watchlist=list(convictions),
                 preferences=preferences or {},
             ),
         )
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             asset_analysts={
                 ticker: {
                     "ticker": ticker,
@@ -799,11 +799,11 @@ class TestConvictionDerivedHoldingDays:
 
     def test_no_analysts_uses_default(self) -> None:
         """When no analyst payloads exist, fall back to DEFAULT_HOLDING_DAYS."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_id=_RUN_ID,
             run_type="baseline",
             run_date=date(2026, 4, 26),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         )
         assert _holding_days(state) == DEFAULT_HOLDING_DAYS
 
@@ -816,11 +816,11 @@ class TestConvictionDerivedHoldingDays:
 
 @pytest.mark.unit
 class TestGraphDepsWiring:
-    def test_phase9_deps_threaded_through_build_hermes_graph(self) -> None:
-        """build_hermes_graph compiles cleanly when Phase9Deps is wired (#473)."""
-        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_graph
+    def test_phase9_deps_threaded_through_build_portfolio_graph(self) -> None:
+        """build_portfolio_graph compiles cleanly when Phase9Deps is wired (#473)."""
+        from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_graph
 
         client = FakeSupabaseClient()
-        deps = HermesGraphDeps(phase9=Phase9Deps(client=client))
-        graph = build_hermes_graph(watchlist=["AAPL"], deps=deps)
+        deps = PortfolioGraphDeps(phase9=Phase9Deps(client=client))
+        graph = build_portfolio_graph(watchlist=["AAPL"], deps=deps)
         assert graph is not None

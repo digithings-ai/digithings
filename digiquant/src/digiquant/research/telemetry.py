@@ -24,7 +24,7 @@ from typing import (
 )
 
 from digiquant.research.diagnostics import register_breakdown_contributor
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ SPEND_ALERT_KEY = "spend_alert"
 #
 # So this is a WARNING threshold, not a ceiling. Nothing here can change ``status``,
 # ``retry_signal``, or the process exit code.
-SPEND_ALERT_ENV = "ATLAS_SPEND_ALERT_USD"
+SPEND_ALERT_ENV = "RESEARCH_SPEND_ALERT_USD"
 
 # Calibrated against observed production runs: 2026-07-31 $4.00 / 292 calls, 07-26 $4.70 / 349
 # calls, and a ~$1.55 mean across the 22 rows whose telemetry was never overwritten. The known
@@ -65,7 +65,7 @@ __all__ = [
 
 
 @register_breakdown_contributor
-def merge_fallback_breakdown(state: AtlasResearchState) -> dict[str, Any]:
+def merge_fallback_breakdown(state: ResearchState) -> dict[str, Any]:
     """Count the segments whose edit patch failed to merge and were regenerated full.
 
     #1641 replaced the ``edit merge failed`` ``PhaseError`` with a silent fallback to
@@ -92,7 +92,7 @@ def merge_fallback_breakdown(state: AtlasResearchState) -> dict[str, Any]:
 
 
 @register_breakdown_contributor
-def content_freeze_breakdown(state: AtlasResearchState) -> dict[str, Any]:
+def content_freeze_breakdown(state: ResearchState) -> dict[str, Any]:
     """Count the segments whose edit merge produced a content-identical body (#1749/#1751).
 
     A no-op merge still publishes a ``documents`` row under the run date marked
@@ -130,7 +130,7 @@ def content_freeze_breakdown(state: AtlasResearchState) -> dict[str, Any]:
 def spend_alert_threshold_usd() -> float | None:
     """The per-invocation USD alert threshold, or ``None`` when alerting is off.
 
-    ``ATLAS_SPEND_ALERT_USD`` overrides :data:`SPEND_ALERT_DEFAULT_USD`. A value of ``0`` or
+    ``RESEARCH_SPEND_ALERT_USD`` overrides :data:`SPEND_ALERT_DEFAULT_USD`. A value of ``0`` or
     below **disables** the alert — an explicit off switch matters because this fires on a
     heuristic, and an operator running a deliberately expensive backfill should be able to
     silence it without editing code.

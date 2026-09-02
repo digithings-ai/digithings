@@ -136,16 +136,16 @@ const DigiLink = (p: P) => (
     <rect x="-2" y="-5.5" width="15" height="11" rx="5.5" />
   </Svg>
 );
-// atlas — research scheduler: a globe with meridian + equator
-const Atlas = (p: P) => (
+// research — research scheduler: a globe with meridian + equator
+const research = (p: P) => (
   <Svg {...p}>
     <circle cx="0" cy="0" r="12" fill="currentColor" fillOpacity={TINT} />
     <path d="M0 -12a5 12 0 0 0 0 24a5 12 0 0 0 0 -24" />
     <path d="M-12 0 12 0" />
   </Svg>
 );
-// hermes — signal messenger: a paper-plane send mark, filled
-const Hermes = (p: P) => (
+// portfolio — signal messenger: a paper-plane send mark, filled
+const portfolio = (p: P) => (
   <Svg {...p}>
     <path
       d="M13 -12 -12 -1 -1 3 3 12 13 -12z"
@@ -156,8 +156,8 @@ const Hermes = (p: P) => (
     <circle cx="-1" cy="3" r="1.7" fill="currentColor" stroke="none" />
   </Svg>
 );
-// kairos — execution timing: a clock, one tick struck to mark the moment
-const Kairos = (p: P) => (
+// execution — execution timing: a clock, one tick struck to mark the moment
+const execution = (p: P) => (
   <Svg {...p}>
     <circle cx="0" cy="0" r="12" fill="currentColor" fillOpacity={TINT} />
     <path d="M0 -12 0 -9" stroke="currentColor" strokeWidth="2.6" />
@@ -171,8 +171,8 @@ export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digikey: DigiKey, digismith: DigiSmith, digiclaw: DigiClaw, digibase: DigiBase,
   digivault: DigiVault,
   digistore: DigiStore, digilink: DigiLink,
-  atlas: Atlas, hermes: Hermes, kairos: Kairos,
-  research: Atlas, portfolio: Hermes, execution: Kairos,
+  research: research, portfolio: portfolio, execution: execution,
+  research: research, portfolio: portfolio, execution: execution,
 };
 
 export function Emblem({ id, size = 32, className }: { id: string; size?: number; className?: string }) {

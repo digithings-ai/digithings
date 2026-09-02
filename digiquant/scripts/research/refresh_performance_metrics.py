@@ -146,7 +146,7 @@ class StaleBookError(RuntimeError):
 def resolve_scheduled_metrics_date(sb: Any, target: date) -> str:
     """ISO date the scheduled (flagless) run must process, or raise ``StaleBookError``.
 
-    The cron fires at 22:00 UTC, ten hours after the Olympus book for ``target``
+    The cron fires at 22:00 UTC, ten hours after the dashboard book for ``target``
     (today UTC) materializes, so on a healthy day ``max(positions.date) == target``.
     An older maximum means the book never landed and there is nothing new to compute.
     Returns ``max(positions.date)`` — identical to ``target`` on a healthy day, and
@@ -168,7 +168,7 @@ def resolve_scheduled_metrics_date(sb: Any, target: date) -> str:
             f"stale book: latest positions date {latest.isoformat()} is "
             f"{(target - latest).days} day(s) before the target {target.isoformat()}. "
             "Refusing to re-stamp the older portfolio_metrics row — that silent rewrite is "
-            "what hid 22 no-op runs behind a green cron (#1746). Repair the upstream Olympus "
+            "what hid 22 no-op runs behind a green cron (#1746). Repair the upstream dashboard "
             f"book for {target.isoformat()} and re-run; to recompute the last real book "
             f"instead, pass --date {latest.isoformat()}. Do NOT pass "
             f"--date {target.isoformat()} — that date has no book, so carry-forward would "

@@ -1,4 +1,4 @@
-"""Pin Olympus Settings remaining-hop predicates to the Python source of truth.
+"""Pin dashboard Settings remaining-hop predicates to the Python source of truth.
 
 The About panel copies ``proven_remaining_hops``. A fill-only TS predicate
 would light ``paper_fill_mirrored`` from an ``api_key`` row the cron now holds.

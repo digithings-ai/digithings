@@ -9,7 +9,7 @@ international, and cash sleeves too. This module unifies both sources:
   :func:`~digiquant.research.sectors_config.load_sectors`), coarse class ``EQUITY``.
 - Everything else resolves via ``config/asset_classes.yaml``.
 
-**Authority on conflict:** ``sectors.yaml`` drives the *research* fan-out (what Atlas
+**Authority on conflict:** ``sectors.yaml`` drives the *research* fan-out (what research
 studies), while ``asset_classes.yaml`` reflects a ticker's *true risk exposure*. The
 latter therefore wins when both list a ticker — e.g. ``USO`` is researched under the
 Energy sector but is a crude-oil-futures ETF, so for risk bucketing it is ``commodity``;
@@ -59,8 +59,8 @@ def _norm(ticker: str) -> str:
 
 
 def _asset_classes_path() -> Path:
-    # this file: …/olympus/hermes/sector_map.py → …/olympus/atlas/config/asset_classes.yaml
-    return Path(__file__).resolve().parents[1] / "atlas" / "config" / "asset_classes.yaml"
+    # this file: …/portfolio/sector_map.py → …/research/config/asset_classes.yaml
+    return Path(__file__).resolve().parents[1] / "research" / "config" / "asset_classes.yaml"
 
 
 @lru_cache(maxsize=1)

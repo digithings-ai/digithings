@@ -1,4 +1,4 @@
-name: "Pipeline: Olympus allocation shadow"
+name: "Pipeline: allocation shadow"
 
 # WP10.2 (#2762) — write-denied shadow evaluation surface for WP10.1 artifacts.
 #
@@ -7,18 +7,18 @@ name: "Pipeline: Olympus allocation shadow"
 #   - no production Supabase / provider / broker / checkpointer secrets
 #   - no secrets: inherit
 #   - permissions: contents:read + actions:read only (artifact download)
-#   - trusted producer: "Pipeline: Olympus research" on main
+#   - trusted producer: "Pipeline: dashboard research" on main
 #   - workflow_dispatch verifies producer run identity via Actions API (#2832)
 #     — never trust hardcoded workflow labels from free-form inputs
 #
 # This workflow does NOT run the challenger optimizer (WP10.3+) and must never
 # call H9 commit I/O, live Nautilus, or broker adapters. Disable this workflow
-# to roll back; production olympus graph is unaffected.
+# to roll back; production dashboard graph is unaffected.
 
 on:
   workflow_run:
     workflows:
-      - "Pipeline: Olympus research"
+      - "Pipeline: dashboard research"
     types:
       - completed
     branches:
@@ -26,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       source_run_id:
-        description: "Olympus research Actions run id to download artifacts from (required for dispatch)."
+        description: "dashboard research Actions run id to download artifacts from (required for dispatch)."
         required: true
         type: string
       source_branch:
@@ -40,7 +40,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: olympus-allocation-shadow
+  group: digiquant-allocation-shadow
   cancel-in-progress: false
 
 jobs:
@@ -53,7 +53,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Check out released Olympus source
+      - name: Check out released digiquant source
         uses: actions/checkout@v4
         with:
           # Match production pipelines: scheduled/default-branch triggers still
@@ -65,7 +65,7 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install digiquant (no atlas/network extras required)
+      - name: Install digiquant (no research/network extras required)
         run: uv sync --frozen --package digiquant
 
       - name: Resolve producer identity
@@ -81,7 +81,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TRUSTED_WORKFLOW="Pipeline: Olympus research"
+          TRUSTED_WORKFLOW="Pipeline: dashboard research"
           TRUSTED_BRANCH="main"
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             source_run_id="${RUN_ID_DISPATCH}"
@@ -89,7 +89,7 @@ jobs:
               echo "::error::missing producer run id"
               exit 1
             fi
-            # Verify the run id actually belongs to the trusted Olympus producer
+            # Verify the run id actually belongs to the trusted dashboard producer
             # on main — never trust hardcoded labels from dispatch inputs (#2832).
             meta="$(gh api "repos/${REPO}/actions/runs/${source_run_id}" \
               --jq '{name:.name,head_branch:.head_branch,path:.path}')"
@@ -131,7 +131,7 @@ jobs:
         with:
           run-id: ${{ steps.producer.outputs.source_run_id }}
           github-token: ${{ github.token }}
-          pattern: olympus-daily-*
+          pattern: digiquant-daily-*
           merge-multiple: true
           path: incoming
           # github.token only — never repository secrets / secrets: inherit.
@@ -177,6 +177,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: olympus-allocation-shadow-${{ steps.producer.outputs.source_run_id }}
+          name: digiquant-allocation-shadow-${{ steps.producer.outputs.source_run_id }}
           path: artifacts/
           retention-days: 30

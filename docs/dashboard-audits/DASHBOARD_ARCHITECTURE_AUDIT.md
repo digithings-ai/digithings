@@ -1,30 +1,30 @@
-# Olympus Architecture Audit — Step 1 (Backend Map)
+# dashboard Architecture Audit — Step 1 (Backend Map)
 
 > **SUPERSEDED (2026-06-20).** This audit reflects the **pre-#930** graph (7C/7CD/7D, `run_type`
 > baseline/delta/monthly, chain-terminal materialize). **Do not use for current topology.**
 >
 > **Canonical references:**
-> - [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md) § Atlas + Hermes
+> - [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md) § research + portfolio
 > - [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
-> - [`digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md)
+> - [`digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md)
 >
 > **Current entry point:** `python -m digiquant.portfolio.chain --cadence daily`
-> (`.github/workflows/pipeline-digiquant.yml`). Hermes terminal = **H9 `commit_run`**.
+> (`.github/workflows/pipeline-digiquant.yml`). portfolio terminal = **H9 `commit_run`**.
 
-> **Scope (historical).** A read-only, end-to-end map of the Olympus backend as of 2026-06-16.
+> **Scope (historical).** A read-only, end-to-end map of the dashboard backend as of 2026-06-16.
 
 ---
 
 ## 1. Entry points & run shapes
 
 Cron entry point: **`python -m digiquant.portfolio.chain --run-type {baseline|delta|monthly}`**
-(`digiquant/src/digiquant/olympus/hermes/chain.py::cli_main`).
+(`digiquant/src/digiquant/portfolio/chain.py::cli_main`).
 
 | Run type | Cron (`.github/workflows`) | Shape |
 |----------|----------------------------|-------|
-| `baseline` | `atlas-baseline.yml` — `Sat 12:00 UTC` | full research → Hermes → book |
-| `delta` | `atlas-delta.yml` — `Mon–Fri 12:00 UTC` | same + a triage phase after preflight |
-| `monthly` | `atlas-monthly.yml` — month-end `14:00` | preflight → monthly-synthesis only (no Hermes, no book) |
+| `baseline` | `research-baseline.yml` — `Sat 12:00 UTC` | full research → portfolio → book |
+| `delta` | `research-delta.yml` — `Mon–Fri 12:00 UTC` | same + a triage phase after preflight |
+| `monthly` | `research-monthly.yml` — month-end `14:00` | preflight → monthly-synthesis only (no portfolio, no book) |
 
 Data ingestion cron (separate): `digiquant-prices.yml` — intraday `*/15 13–21 Mon–Fri`
 (fetch-quotes + compute-technicals), EOD `21:25` (sync-calendar + fetch-macro + the sector
@@ -32,18 +32,18 @@ single names), and `13:35`/`14:35` (`execute_at_open.py --prior-trading-day-reba
 These are UTC but every deadline they serve is ET wall-clock, so the windows are the union
 of both offsets and the at-open pair is narrowed to one run by an ET gate job (#1775).
 
-There is also a standalone Atlas CLI (`python -m digiquant.research.graph`) that runs
+There is also a standalone research CLI (`python -m digiquant.research.graph`) that runs
 research-only and publishes — used by tests/dry-runs; production uses the chain.
 
 ---
 
 ## 2. The live pipeline (ordered node graph)
 
-`run_atlas_then_hermes` composes **three** things: the Atlas graph, the Hermes graph, and a
+`run_research_then_portfolio` composes **three** things: the research graph, the portfolio graph, and a
 set of *terminal chain phases* run **outside** either graph. `_usage.start()` wraps the whole
 run; the `finally` block always writes the diagnostics row.
 
-### Atlas graph — `build_atlas_graph` (research only)
+### research graph — `build_research_graph` (research only)
 
 | # | Phase (file) | LLM? | Calls / grounding | Produces |
 |---|--------------|------|-------------------|----------|
@@ -60,15 +60,15 @@ run; the `finally` block always writes the diagnostics row.
 | 11 | **phase6_consolidate** (`phase6_consolidate.py`) | no | deterministic | `Phase6BiasRow` (the `daily_snapshots` bias row). **`fed_odds` hardcoded `None`** |
 | 12 | **phase7_synthesis** (`phase7_synthesis.py`) | **1 LLM** | `digest` skill — **no tools, no web**; synthesizes from upstream bodies | `DigestSnapshot` (regime/alt/inst/asset/equity summaries, actionable items, risk radar, deterministic `segment_freshness`) |
 
-### Hermes graph — `build_hermes_graph` (analysis → debate → PM → reflection)
+### portfolio graph — `build_portfolio_graph` (analysis → debate → PM → reflection)
 
 Fan-out is over a **focus watchlist** (`select_focus_tickers`: holdings + top-scored
-candidates, `candidates.py`) — narrower than the Atlas research scope. `ATLAS_MAX_ANALYSTS`
+candidates, `candidates.py`) — narrower than the research scope. `ATLAS_MAX_ANALYSTS`
 caps it.
 
 | # | Phase (file) | LLM? | Per ticker | Produces |
 |---|--------------|------|-----------|----------|
-| 13 | **phase7c_specialists** (`hermes/phases/phase7c_analyst.py`) | **4×N LLM** | technical / sentiment / news / fundamental, each *(market-data tools, blinded to the book)* | `SpecialistPayload` ×4 (axis conviction 0–1 + stance) |
+| 13 | **phase7c_specialists** (`portfolio/phases/phase7c_analyst.py`) | **4×N LLM** | technical / sentiment / news / fundamental, each *(market-data tools, blinded to the book)* | `SpecialistPayload` ×4 (axis conviction 0–1 + stance) |
 | 14 | **phase7c_join** | no | deterministic | `AnalystPayload` (conviction −5..+5, stance, thesis; **`risks` always empty — TODO**) |
 | 15 | **phase7cd bull / bear** (`phase7cd_debate.py`) | **2N LLM/round** | bull then bear, *(market-data tools, blinded)* | `DebateRoundContribution` ×2 |
 | 16 | **phase7cd research_manager** | **N LLM** | judge | `DebateSummary` (bull/bear thesis, `net_stance`, `conviction_delta` −2..+2) |
@@ -77,13 +77,13 @@ caps it.
 | 19 | **phase7d_pm** | **1 LLM** | the decision *(FULL tools — may read positions/nav/theses)* | `RebalanceDecision` (recommended_portfolio, actions, notes). Empty = deliberate 100% cash |
 | 20 | **phase9_evolution** (`phase9_evolution.py`) | **1 LLM** + DB write | — | `persist_pending` → `decision_log` rows; `Phase9Artifacts` (sources scorecard, quality post-mortem, improvement proposals) |
 
-### Terminal chain phases — in `run_atlas_then_hermes`, **outside both graphs**
+### Terminal chain phases — in `run_research_then_portfolio`, **outside both graphs**
 
 | # | Phase | LLM? | Produces / writes |
 |---|-------|------|-------------------|
-| 21 | **phase7e risk-sizing** (`hermes/phases/phase7e_risk_sizing.py`) | no | **overwrites** `recommended_portfolio` with `size_portfolio()` output + rebuilt actions + breaker note |
-| 22 | **publish** (`atlas/phases/publish_phase.py`) | no | upserts `documents` (segments, macro, digest, `analyst/{t}`, `deliberation/{t}`, `pm-rebalance`, `risk-debate`) + `daily_snapshots`. Skips carried + degenerate |
-| 23 | **materialize** (`hermes/portfolio_materialize.py`) | no | upserts `nav_history`, `positions` (+CASH row), `theses`, `thesis_vehicles` |
+| 21 | **phase7e risk-sizing** (`portfolio/phases/phase7e_risk_sizing.py`) | no | **overwrites** `recommended_portfolio` with `size_portfolio()` output + rebuilt actions + breaker note |
+| 22 | **publish** (`research/phases/publish_phase.py`) | no | upserts `documents` (segments, macro, digest, `analyst/{t}`, `deliberation/{t}`, `pm-rebalance`, `risk-debate`) + `daily_snapshots`. Skips carried + degenerate |
+| 23 | **materialize** (`portfolio/portfolio_materialize.py`) | no | upserts `nav_history`, `positions` (+CASH row), `theses`, `thesis_vehicles` |
 | — | **diagnostics** (`finally`) | no | `atlas_run_diagnostics` row (segment counts, token/cost from `digigraph.usage`, errors) |
 
 **Per-baseline LLM call count** ≈ `26 + 7N` (N = focus-watchlist size) + due reflections. The
@@ -126,7 +126,7 @@ for **every** segment/analyst/debate/PM/reflection node.
 ### LLM calls
 | Call | Skill | Output | Consumed by |
 |------|-------|--------|-------------|
-| 12 Atlas research segments | per-segment SKILL.md | `SegmentReport` subclasses | phase6 bias row, phase7 digest, Hermes 7C axis inputs |
+| 12 research segments | per-segment SKILL.md | `SegmentReport` subclasses | phase6 bias row, phase7 digest, portfolio 7C axis inputs |
 | master digest | `digest` | `DigestSnapshot` | published doc + `daily_snapshots`; dashboard "Morning Brief"; risk debaters' context |
 | 4×N specialists | `{axis}-analyst` | `SpecialistPayload` | deterministic join |
 | N debates (bull/bear/mgr) | `research-debate`,`research-manager` | `DebateSummary` | PM `debate_summaries`; sizer conviction delta; published `deliberation/{t}` |
@@ -135,7 +135,7 @@ for **every** segment/analyst/debate/PM/reflection node.
 | reflector | `decision-reflector` | `ReflectorOutput` | `decision_log.reflection`; feeds next run's PM `past_context` |
 | evolution | `pipeline-evolution` | `Phase9Artifacts` | `state.phase9_evolution` (dashboard "improvement" surface) |
 
-### Data tools (analyst-callable, `atlas/data/tools.py` → `queries.py`)
+### Data tools (analyst-callable, `research/data/tools.py` → `queries.py`)
 `query_data` (whitelisted tables), `get_macro_series`, `get_market_breadth`,
 `get_sector_relative_strength`, `get_vix_term_structure`, `get_etf_flows_proxy` (volume proxy,
 **not** true flows), `get_fed_rate_probabilities` (Kalshi ladder→25bp distribution + Polymarket
@@ -173,7 +173,7 @@ These populate the tables the tools read.
 
 ## 6. Wiring-status summary
 
-**Fully wired & working:** the entire Atlas research graph; the Hermes 4-axis analyst → bull/bear
+**Fully wired & working:** the entire research graph; the portfolio 4-axis analyst → bull/bear
 debate → risk debate → PM chain; deterministic risk-sizing (phase7e) + drawdown breaker;
 book materialization (nav/positions/theses); publish; diagnostics; the in-graph learning loop
 (persist + resolve); OpenRouter cost controls + empty-response self-heal.
@@ -197,8 +197,8 @@ book materialization (nav/positions/theses); publish; diagnostics; the in-graph 
    whose body was *"This skill has been superseded… Immediately load and follow: `skills/orchestrator/SKILL.md`"*
    (a path that no longer exists). The digest skill body has been replaced with a real synthesis instruction.
 
-**Orphaned-from-scheduling but NOT dead:** `atlas/attribution.py`, `atlas/backtest.py`,
-`atlas/dashboard_digest.py` (0 src importers) are imported by `scripts/atlas/{refresh_attribution,
+**Orphaned-from-scheduling but NOT dead:** `research/attribution.py`, `research/backtest.py`,
+`research/dashboard_digest.py` (0 src importers) are imported by `digiquant/scripts/research/{refresh_attribution,
 backtest_decisions,update_tearsheet}.py` — library code whose runners aren't cronned.
 
 ---
@@ -209,10 +209,10 @@ backtest_decisions,update_tearsheet}.py` — library code whose runners aren't c
   field; either wire it (from specialist risk text / bear case) or drop it.
 - **`build_phase1` docstring says "4 parallel nodes"** but builds **5** (`_SPECS` has 5) — stale comment.
 - **`PROTECTED-SCRIPTS.md` is stale** — references a `daily-price-update.yml` workflow that no longer
-  exists and `scripts/*` paths that are now `scripts/atlas/*`. Misleads any future pruning.
-- **60 scripts in `scripts/atlas/`** — many are one-shot backfills (`backfill_*`, `retrofit_*`,
+  exists and `scripts/*` paths that are now `digiquant/scripts/research/*`. Misleads any future pruning.
+- **60 scripts in `digiquant/scripts/research/`** — many are one-shot backfills (`backfill_*`, `retrofit_*`,
   `legacy_delta_to_ops`, `convert_snapshot_v1`, `migrate_md_outputs_to_json`). Candidate for an
-  `scripts/atlas/archive/` move once confirmed run-once. **(verify each before removal.)**
+  `digiquant/scripts/research/archive/` move once confirmed run-once. **(verify each before removal.)**
 - **`pipeline_builder.py` is a one-line shim** over `digigraph.graph.pipeline_builder` (decoupling
   tracked in #579) — fine to keep, noted for the #579 cleanup.
 - **`phase_monthly` import in `chain.py`** is a `# noqa: F401` "keep for doc linkage" — smells like a
@@ -246,7 +246,7 @@ items. Net corrections + new findings:
   default = regen when evidence is thin. Signals: `price_history` deltas (look-back-guarded) + prior bias.
 - **`positions` has one automated writer (`materialize`).** `execute_at_open.py` writes `position_events`,
   not `positions` — the earlier "two writers" concern is a non-issue for the scheduled pipeline.
-- **State reducers (`atlas/state.py`; `HermesState` is an alias of `AtlasResearchState`):** `phase1/2/4/5_outputs`
+- **State reducers (`research/state.py`; `PortfolioState` is an alias of `ResearchState`):** `phase1/2/4/5_outputs`
   use a **collision-loud** merge (`SegmentSlotCollisionError` if two nodes write the same slug); `phase7c_specialists`
   merges by axis (inner collision = error); `phase7c_analysts` + `phase7cd_debates` are right-wins; **`errors`
   uses an append reducer** (parallel fan-out never drops a `PhaseError`). Good — the fan-out error-collection is correct.
@@ -268,25 +268,25 @@ items. Net corrections + new findings:
 
 ### Confirmed dead code / deslop inventory (high confidence; verify before deleting)
 **FROZEN scripts superseded by the `digiquant prices` CLI** (zero importers, no cron, explicit FROZEN headers):
-`scripts/atlas/{compute-technicals,fetch-quotes,fetch-macro,ingest_fred,ingest_fx_frankfurter,ingest_crypto_fng,preload-history}.py`.
+`digiquant/scripts/research/{compute-technicals,fetch-quotes,fetch-macro,ingest_fred,ingest_fx_frankfurter,ingest_crypto_fng,preload-history}.py`.
 `ingest_treasury_curve.py` is the same pattern (no FROZEN header but absorbed by the eod-macro job).
 
 **One-shot backfills already executed** (true orphans — 0 importers / 0 cron / 0 test):
-`scripts/atlas/{backfill_simulated_runs,regen_research_deltas,retrofit_delta_requests,legacy_delta_to_ops,convert_snapshot_v1,migrate_md_outputs_to_json}.py`
-→ candidate for an `scripts/atlas/archive/` move.
+`digiquant/scripts/research/{backfill_simulated_runs,regen_research_deltas,retrofit_delta_requests,legacy_delta_to_ops,convert_snapshot_v1,migrate_md_outputs_to_json}.py`
+→ candidate for an `digiquant/scripts/research/archive/` move.
 
 **Dead module paths in shared data:** `data/m2.py` (`M2DataFetcher`/`build_m2_composite` — not wired to any cron or
 the pipeline); `data/prices/macro_ingest.py` Frankfurter + crypto-FNG fetchers (dropped as default sources since #328,
 opt-in only). `migrations/007` defines a **`bb_middle` column that is never written** (`TECHNICAL_COLUMNS` omits it → always NULL).
 
 **Dead skills (now deleted — WS4a):** These 21 graph-unused human-session wrapper skills have been removed:
-Atlas: `asset-analyst, daily-delta, data-fetch, deep-dive, earnings, github-workflow, market-thesis-exploration,
+research: `asset-analyst, daily-delta, data-fetch, deep-dive, earnings, github-workflow, market-thesis-exploration,
 mcp-data-fetch, orchestrator, premarket-pulse, profile-setup, research-daily, research-library, sector-heatmap,
-sector-rotation, weekly-baseline`. Hermes: `deliberation, opportunity-screener, thesis, thesis-tracker, thesis-vehicle-map`.
+sector-rotation, weekly-baseline`. portfolio: `deliberation, opportunity-screener, thesis, thesis-tracker, thesis-vehicle-map`.
 Plus the `digest` skill body (dead pointer — addressed in WS3).
 
 **Stale docs (mislead future pruning/onboarding):** `PROTECTED-SCRIPTS.md` cites a non-existent `daily-price-update.yml`
-and old `scripts/*` paths; `migrations/026` SQL comment references the removed `apps/digiquant-atlas/` paths; `SCHEMA.md`
+and old `scripts/*` paths; `migrations/026` SQL comment references the removed `digiquant/src/digiquant/research/` paths; `SCHEMA.md`
 lists `position_events` PK as BIGSERIAL (actually `uuid`) and still ERDs the dropped `benchmark_history` table.
 
 ### Still-true gaps (unchanged by the deep-dive)

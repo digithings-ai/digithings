@@ -1,4 +1,4 @@
-"""Retrieval tool contract tests (Olympus #930 — tools/research-retrieval)."""
+"""Retrieval tool contract tests (dashboard #930 — tools/research-retrieval)."""
 
 from __future__ import annotations
 
@@ -40,8 +40,8 @@ from digiquant.dashboard.research_retrieval.store import (
 from digiquant.dashboard.research_retrieval.tools import resolve_retrieval_manifest_mode
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.olympus.test_context_compiler import _evidence, _loaded_state
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.dashboard.test_context_compiler import _evidence, _loaded_state
 
 _TS = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
 
@@ -218,7 +218,7 @@ class TestFetchPriorDocument:
                 }
             ),
             run_date=date(2026, 6, 20),
-            phase="atlas_edit",
+            phase="research_edit",
         )
         assert retriever.fetch_prior_document("macro") == {"headline": "full body"}
 
@@ -236,7 +236,7 @@ class TestFetchPriorDocument:
                 }
             ),
             run_date=date(2026, 6, 20),
-            phase="atlas_edit",
+            phase="research_edit",
         )
         assert retriever.fetch_prior_document("macro", section_path="/sections/rates") == {
             "view": "higher"
@@ -573,7 +573,7 @@ class TestRetrievalManifestPinning:
             ),
             run_date=date(2026, 8, 26),
             document_key=legacy.document_key,
-            phase="atlas_edit",
+            phase="research_edit",
             retrieval_pin=pin,
         )
         assert "error" in out
@@ -603,7 +603,7 @@ class TestRetrievalManifestPinning:
             run_date=date(2026, 8, 26),
             document_key=legacy.document_key,
             as_of_date=date.fromisoformat(legacy.as_of_date),
-            phase="atlas_edit",
+            phase="research_edit",
             retrieval_pin=pin,
         )
         assert allowed["payload"]["headline"] == "manifest ok"
@@ -614,7 +614,7 @@ class TestRetrievalManifestPinning:
             run_date=date(2026, 8, 26),
             document_key="equity",
             as_of_date=date(2026, 8, 20),
-            phase="atlas_edit",
+            phase="research_edit",
             retrieval_pin=pin,
         )
         assert "error" in blocked
@@ -633,7 +633,7 @@ class TestRetrievalManifestPinning:
             run_date=date(2026, 8, 26),
             document_key="equity",
             as_of_date=date(2026, 8, 20),
-            phase="atlas_edit",
+            phase="research_edit",
             retrieval_pin=pin,
         )
         assert "retrieval_pin_shadow" in out
@@ -712,7 +712,7 @@ class TestRetrievalManifestPinning:
                 }
             ),
             run_date=date(2026, 8, 26),
-            phase="atlas_edit",
+            phase="research_edit",
             retrieval_pin=pin,
         )
         out = retriever.fetch_prior_document(

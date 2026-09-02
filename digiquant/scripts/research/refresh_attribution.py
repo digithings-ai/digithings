@@ -32,7 +32,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
-# repo root: .../digiquant/scripts/research/refresh_attribution.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/refresh_attribution.py → up 4 (research → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 

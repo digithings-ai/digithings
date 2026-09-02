@@ -396,9 +396,9 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
     )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
@@ -407,8 +407,8 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
         build_risk_sizing_node,
     )
 
-    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
+    from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     policy = _risk_policy()
@@ -435,12 +435,12 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
         "weight_increment_pct": 0,
         "h8_sizing_input_mode": "calibrated",
     }
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 6, 12),
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences=prefs),
-        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+        config=ResearchConfigBundle(preferences=prefs),
+        phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
     )
     client = FakeSupabaseClient(
         canned_reads={
@@ -450,7 +450,7 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
         }
     )
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    book = out["phase_hermes"].sized_book
+    book = out["phase_portfolio"].sized_book
     assert book is not None
     assert book["h8_sizing_input_mode"] == "calibrated"
     assert book["allocation_input_bundle_hash"] == bundle.bundle_content_hash
@@ -461,7 +461,7 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
         lambda *_a, **_k: {},
     )
     out_fb = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    book_fb = out_fb["phase_hermes"].sized_book
+    book_fb = out_fb["phase_portfolio"].sized_book
     assert book_fb is not None
     assert book_fb["h8_sizing_input_mode"] == "incumbent_fallback"
     assert book_fb["allocation_input_bundle_hash"] == bundle.bundle_content_hash
@@ -472,21 +472,21 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
 
 def test_continuity_backstop_and_final_cap_invariants() -> None:
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
         PriorContext,
     )
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     run_date = date(2026, 6, 12)
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences={}),
+        config=ResearchConfigBundle(preferences={}),
         prior_context=PriorContext(prior_book=[{"ticker": "DBO", "weight_pct": 7.5}]),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             pm_direction_memo=PMDirectionMemo(
                 date=run_date,
                 roster=[

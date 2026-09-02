@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
-from digiquant.research.graph import AtlasInput, initial_state
+from digiquant.research.graph import ResearchInput, initial_state
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     Carried,
     DataLayerSnapshot,
     DeltaTriageDecision,
@@ -16,13 +16,13 @@ from digiquant.research.state import (
     ExcludedTicker,
     FocusRosterEntry,
     PhaseError,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
     PublishedArtifact,
     SegmentPayload,
     SegmentSlot,
     SegmentSlotCollisionError,
-    _merge_phase_hermes,
+    _merge_phase_portfolio,
     _merge_right_wins_dict,
     _merge_segment_dict,
 )
@@ -36,8 +36,8 @@ from pydantic import ValidationError
 
 
 @pytest.mark.unit
-class TestMergePhaseHermes:
-    """Reducer for nested ``phase_hermes`` writes across H4–H9 (#1030)."""
+class TestMergePhasePortfolio:
+    """Reducer for nested ``phase_portfolio`` writes across H4–H9 (#1030)."""
 
     def test_preserves_focus_roster_excluded_from_right(self) -> None:
         """H4 writes the excluded ledger as the *right* operand; the reducer must
@@ -47,21 +47,21 @@ class TestMergePhaseHermes:
         field list, so the ledger H4 produced was silently lost before H9
         commit-run read it — orphaning gated-out held positions.
         """
-        left = PhaseHermesState()  # prior state, no ledger yet
-        right = PhaseHermesState(  # H4's write
+        left = PhasePortfolioState()  # prior state, no ledger yet
+        right = PhasePortfolioState(  # H4's write
             focus_roster=[FocusRosterEntry(ticker="SPY", roster_reason="held")],
             focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
         )
-        merged = _merge_phase_hermes(left, right)
+        merged = _merge_phase_portfolio(left, right)
         assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
 
     def test_later_phase_does_not_clobber_existing_ledger(self) -> None:
         """A downstream phase (right) with no ledger must not wipe H4's ledger (left)."""
-        left = PhaseHermesState(
+        left = PhasePortfolioState(
             focus_roster_excluded=[ExcludedTicker(ticker="AAPL", reason="held, quiet")],
         )
-        right = PhaseHermesState(asset_analysts={"SPY": {"ticker": "SPY"}})
-        merged = _merge_phase_hermes(left, right)
+        right = PhasePortfolioState(asset_analysts={"SPY": {"ticker": "SPY"}})
+        merged = _merge_phase_portfolio(left, right)
         assert [e.ticker for e in merged.focus_roster_excluded] == ["AAPL"]
         assert "SPY" in merged.asset_analysts
 
@@ -104,7 +104,7 @@ class TestFrozenContexts:
     """Config + prior context must be frozen so cache keys stay stable across phases."""
 
     def test_config_bundle_is_frozen(self) -> None:
-        cfg = AtlasConfigBundle(watchlist=["SPY"])
+        cfg = ResearchConfigBundle(watchlist=["SPY"])
         with pytest.raises(ValidationError):
             cfg.watchlist = ["QQQ"]  # type: ignore[misc]
 
@@ -142,9 +142,9 @@ class TestTriage:
 
 
 @pytest.mark.unit
-class TestAtlasResearchState:
+class TestResearchState:
     def test_minimal_state_has_sensible_defaults(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         # A unique run_id is auto-generated.
         assert state.run_id is not None
         # Output slots start empty; triage None until delta run computes one.
@@ -156,18 +156,18 @@ class TestAtlasResearchState:
 
     def test_run_type_rejects_invalid(self) -> None:
         with pytest.raises(ValidationError):
-            AtlasResearchState(run_type="nonsense", run_date=date(2026, 4, 26))  # type: ignore[arg-type]
+            ResearchState(run_type="nonsense", run_date=date(2026, 4, 26))  # type: ignore[arg-type]
 
     def test_delta_run_requires_caller_to_set_baseline_date(self) -> None:
         """A delta without a baseline is a caller bug; the state model doesn't
         enforce it at the type level — it's enforced by the preflight node.
         This test documents that the *state* allows it but the sub-graph
         must not."""
-        state = AtlasResearchState(run_type="delta", run_date=date(2026, 4, 27))
+        state = ResearchState(run_type="delta", run_date=date(2026, 4, 27))
         assert state.baseline_date is None  # preflight will reject
 
     def test_publish_ledger_append(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         state.published.append(
             PublishedArtifact(
                 table="documents",
@@ -180,7 +180,7 @@ class TestAtlasResearchState:
         assert state.published[0].table == "documents"
 
     def test_errors_ledger_append(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         state.errors.append(
             PhaseError(phase="phase3_macro", node="macro_regime", message="LLM timeout")
         )
@@ -255,7 +255,7 @@ class TestKnowledgeCutoff:
 
     def test_state_rejects_naive_cutoff(self) -> None:
         with pytest.raises(ValidationError):
-            AtlasResearchState(
+            ResearchState(
                 run_type="baseline",
                 run_date=date(2026, 4, 26),
                 knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, 0),  # noqa: DTZ001  # type: ignore[arg-type]
@@ -264,7 +264,7 @@ class TestKnowledgeCutoff:
     def test_state_rejects_non_utc_cutoff(self) -> None:
         eastern = timezone(timedelta(hours=-4))
         with pytest.raises(ValidationError, match="UTC"):
-            AtlasResearchState(
+            ResearchState(
                 run_type="baseline",
                 run_date=date(2026, 4, 26),
                 knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, 0, tzinfo=eastern),
@@ -279,10 +279,10 @@ class TestKnowledgeCutoff:
             return pinned
 
         state = initial_state(
-            AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)),
+            ResearchInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)),
             clock=_clock,
         )
-        assert calls == ["clock"], "cutoff must be captured before AtlasResearchState is built"
+        assert calls == ["clock"], "cutoff must be captured before ResearchState is built"
         assert state.knowledge_cutoff_at == pinned
         assert require_knowledge_cutoff_at(state) == pinned
 
@@ -291,7 +291,7 @@ class TestKnowledgeCutoff:
         assert capture_knowledge_cutoff_at(now=lambda: pinned) == pinned
 
     def test_missing_cutoff_fails_closed_without_now_fallback(self) -> None:
-        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        state = ResearchState(run_type="baseline", run_date=date(2026, 4, 26))
         assert state.knowledge_cutoff_at is None
         with pytest.raises(KnowledgeCutoffError, match="no now\\(\\) fallback"):
             require_knowledge_cutoff_at(state)

@@ -2,11 +2,11 @@
 """
 finalize_period_accounting.py
 
-Phase 0 Task 3.2 (#2597): EOD finalizer for Olympus period accounting.
+Phase 0 Task 3.2 (#2597): EOD finalizer for dashboard period accounting.
 
 Loads authoritative opening holdings/cash, same-day paper fills, and closing
 marks; runs the pure ``compute_period`` engine; persists private
-``olympus_accounting_*`` rows via ``accounting.io``. H9 provisional NAV in
+``dashboard_accounting_*`` rows via ``accounting.io``. H9 provisional NAV in
 ``nav_history`` / ``positions`` stays as continuity data and is never selected
 as final.
 
@@ -22,10 +22,10 @@ Writes estimated/incomplete/failed periods as labeled non-final rows. Only
 empty while a positions book exists) so no mislabeled partial final is published.
 
 Usage:
-  python3 scripts/atlas/finalize_period_accounting.py --supabase
-  python3 scripts/atlas/finalize_period_accounting.py --supabase --date YYYY-MM-DD
-  python3 scripts/atlas/finalize_period_accounting.py --supabase --dry-run
-  python3 scripts/atlas/finalize_period_accounting.py --supabase --shadow
+  python3 digiquant/scripts/research/finalize_period_accounting.py --supabase
+  python3 digiquant/scripts/research/finalize_period_accounting.py --supabase --date YYYY-MM-DD
+  python3 digiquant/scripts/research/finalize_period_accounting.py --supabase --dry-run
+  python3 digiquant/scripts/research/finalize_period_accounting.py --supabase --shadow
 
 Exit codes: 0 ok · 1 hard failure · 2 reconcile miss (--strict-reconcile) · 3 declined
 Environment: SUPABASE_URL / CORE_SUPABASE_*, OLYMPUS_ACCOUNTING_FINALIZER

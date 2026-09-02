@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -21,7 +21,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "scripts"
-    / "atlas"
+    / "research"
     / "refresh_attribution.py"
 )
 

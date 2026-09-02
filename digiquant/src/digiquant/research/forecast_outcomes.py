@@ -455,7 +455,7 @@ def resolve_matured_forecast_outcomes(
     Parameters
     ----------
     run_date:
-        Current Atlas run date — maturity must be on or before this session day.
+        Current research run date — maturity must be on or before this session day.
     knowledge_cutoff_at:
         Pinned run cutoff; forecasts and closes known after it are invisible.
     current_run_id:

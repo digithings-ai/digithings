@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "digiquant-atlas Research Changelog",
+  "title": "digiquant-research Research Changelog",
   "description": "Compact summary of document_delta runs for a date; PM/analyst layer input.",
   "type": "object",
   "additionalProperties": false,

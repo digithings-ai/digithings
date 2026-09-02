@@ -651,8 +651,8 @@ def collect_effective_forecasts_from_state(state: object) -> list[EffectiveForec
     Missing or invalid dumps are skipped — never invented. Order is ticker-sorted
     for deterministic attach/persist.
     """
-    hermes = getattr(state, "phase_hermes", None)
-    summaries = getattr(hermes, "deliberation_summaries", None) or {}
+    portfolio = getattr(state, "phase_portfolio", None)
+    summaries = getattr(portfolio, "deliberation_summaries", None) or {}
     found: list[EffectiveForecast] = []
     for ticker in sorted(summaries.keys()):
         summary = summaries[ticker]

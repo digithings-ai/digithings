@@ -1,4 +1,4 @@
-"""Structural security checks for Olympus ordered call telemetry migration 066."""
+"""Structural security checks for dashboard ordered call telemetry migration 066."""
 
 from __future__ import annotations
 

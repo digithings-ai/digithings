@@ -64,7 +64,7 @@ vi.mock('@/components/login-screen', () => ({
   LoginScreen: () => createElement('div', { 'data-login': '1' }, 'Sign in to digiquant'),
 }));
 
-vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
+vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null }));
 
 import { AuthGate, isDashboardAuthCallbackPath, isDashboardAuthPath } from './auth-gate';
 
@@ -86,18 +86,18 @@ describe('isDashboardAuthPath', () => {
     expect(isDashboardAuthCallbackPath('/auth/callback')).toBe(true);
     expect(isDashboardAuthCallbackPath('/auth/callback/')).toBe(true);
     expect(isDashboardAuthCallbackPath('/dashboard/auth/callback')).toBe(true);
-    expect(isDashboardAuthCallbackPath('/olympus/auth/callback')).toBe(false);
+    expect(isDashboardAuthCallbackPath('/dashboard/auth/callback')).toBe(false);
     expect(isDashboardAuthCallbackPath('/login')).toBe(false);
     expect(isDashboardAuthCallbackPath('/signup')).toBe(false);
   });
 
-  it('allows basePath-prefixed exact forms and rejects the retired /olympus prefix', () => {
+  it('allows basePath-prefixed exact forms and rejects the retired /dashboard prefix', () => {
     expect(isDashboardAuthPath('/dashboard/login')).toBe(true);
     expect(isDashboardAuthPath('/dashboard/signup')).toBe(true);
     expect(isDashboardAuthPath('/dashboard/auth/callback/')).toBe(true);
-    expect(isDashboardAuthPath('/olympus/login')).toBe(false);
-    expect(isDashboardAuthPath('/olympus/signup')).toBe(false);
-    expect(isDashboardAuthPath('/olympus/auth/callback/')).toBe(false);
+    expect(isDashboardAuthPath('/dashboard/login')).toBe(false);
+    expect(isDashboardAuthPath('/dashboard/signup')).toBe(false);
+    expect(isDashboardAuthPath('/dashboard/auth/callback/')).toBe(false);
   });
 
   it('rejects lookalike paths that previously bypassed via endsWith', () => {

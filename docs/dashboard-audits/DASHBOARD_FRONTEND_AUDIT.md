@@ -1,9 +1,9 @@
-# Olympus Architecture Audit — Step 2 (Frontend / Dashboard)
+# dashboard Architecture Audit — Step 2 (Frontend / Dashboard)
 
-> **Scope.** Page-by-page audit of the Olympus dashboard (`frontend/dashboard/`, Next.js static
+> **Scope.** Page-by-page audit of the dashboard (`frontend/dashboard/`, Next.js static
 > export, reads prod Supabase via anon key): is every view rendering the right data, correctly,
 > and optimally for a PM to review the research/deliberation/decisions and decide whether to
-> follow the book? Cross-referenced against the Step-1 persistence map (`OLYMPUS_ARCHITECTURE_AUDIT.md`).
+> follow the book? Cross-referenced against the Step-1 persistence map (`DASHBOARD_ARCHITECTURE_AUDIT.md`).
 >
 > **Method.** 6-agent Sonnet fan-out, one per route group, seeded with the backend persistence
 > state; every CRITICAL claim re-verified against source. Date: 2026-06-17.

@@ -19,7 +19,7 @@ WP11.1 ticker evidence bundles live beside this store as
 
 WP13.2 attention plans/decisions/context/evaluations:
 :class:`AttentionStore` (migration ``092_olympus_attention_context.sql``).
-Storage only — no Atlas/Hermes runtime activation (WP13.3+).
+Storage only — no research/portfolio runtime activation (WP13.3+).
 """
 
 from __future__ import annotations
@@ -764,7 +764,7 @@ class AttentionStore:
     """Append-only attention plan/decision/context/evaluation boundary (#2922 / WP13.2).
 
     Dark launch: migration ``092_olympus_attention_context.sql``. No runtime
-    Atlas/Hermes activation — callers opt in via env gates in WP13.3+.
+    research/portfolio activation — callers opt in via env gates in WP13.3+.
     """
 
     def __init__(self) -> None:

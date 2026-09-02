@@ -15,17 +15,17 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 import pytest
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    PhaseHermesState,
+    ResearchConfigBundle,
+    ResearchState,
+    PhasePortfolioState,
 )
 from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
 from digiquant.portfolio.allocation_hashes import weights_fingerprint
 from digiquant.portfolio.graph import (
-    HermesGraphDeps,
+    PortfolioGraphDeps,
     ThesisGraphDeps,
-    build_hermes_graph,
-    build_hermes_phases_thesis,
+    build_portfolio_graph,
+    build_portfolio_phases_thesis,
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases import phase7e_risk_sizing
@@ -41,10 +41,10 @@ from digiquant.dashboard.replay.allocation_comparison import ComparisonStatus
 from digiquant.dashboard.replay.models import PortfolioReplayStatus
 from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.phase2_e2e_fixtures import (
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.phase2_e2e_fixtures import (
     FORBIDDEN_PHASE2_NODES,
-    HERMES_COMPILED_NODES,
+    PORTFOLIO_COMPILED_NODES,
     PHASE2_RUN_ID,
     PRODUCTION_GUARD_PATHS,
     load_isolation_checker,
@@ -76,8 +76,8 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.phases.phase7e_risk_sizing import build_risk_sizing_node
 
-    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
-    from tests.dq.hermes.test_calibrated_sizing import _bundle
+    from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.portfolio.test_calibrated_sizing import _bundle
 
     tickers = ("AAPL", "MSFT")
     returns = {t: ("0.06", "0.02", "1.0") for t in tickers}
@@ -109,12 +109,12 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "weight_increment_pct": 0,
         "h8_sizing_input_mode": "calibrated",
     }
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=run_date,
         baseline_date=date(2026, 6, 9),
-        config=AtlasConfigBundle(preferences=prefs),
-        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+        config=ResearchConfigBundle(preferences=prefs),
+        phase_portfolio=PhasePortfolioState(pm_direction_memo=memo),
     )
     client = FakeSupabaseClient(
         canned_reads={
@@ -125,34 +125,34 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         }
     )
     out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
-    hermes = out["phase_hermes"]
-    book = hermes.sized_book
+    portfolio = out["phase_portfolio"]
+    book = portfolio.sized_book
     assert book is not None
-    report_raw = hermes.pre_trade_risk_report
+    report_raw = portfolio.pre_trade_risk_report
     assert report_raw is not None
     report = PreTradeRiskReport.model_validate(report_raw)
-    return {"book": book, "report": report, "bundle": bundle, "hermes": hermes}
+    return {"book": book, "report": report, "bundle": bundle, "portfolio": portfolio}
 
 
 # --------------------------------------------------------------------------- topology / ownership
 
 
-def test_hermes_graph_topology_unchanged_by_phase2() -> None:
+def test_portfolio_graph_topology_unchanged_by_phase2() -> None:
     client = FakeSupabaseClient()
-    deps = HermesGraphDeps(
+    deps = PortfolioGraphDeps(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client),
     )
-    graph = build_hermes_graph(watchlist=["AAPL"], deps=deps)
+    graph = build_portfolio_graph(watchlist=["AAPL"], deps=deps)
     nodes = _graph_node_names(graph)
     assert FORBIDDEN_PHASE2_NODES.isdisjoint(nodes)
-    assert HERMES_COMPILED_NODES.issubset(nodes)
-    phase_names = {p.name for p in build_hermes_phases_thesis(watchlist=["AAPL"], held=set())}
+    assert PORTFOLIO_COMPILED_NODES.issubset(nodes)
+    phase_names = {p.name for p in build_portfolio_phases_thesis(watchlist=["AAPL"], held=set())}
     for expected in (
-        "hermes_h7_pm_direction",
-        "hermes_h8_risk_sizing",
-        "hermes_h9_commit_run",
+        "portfolio_h7_pm_direction",
+        "portfolio_h8_risk_sizing",
+        "portfolio_h9_commit_run",
     ):
         assert expected in phase_names
 
@@ -176,7 +176,7 @@ def test_h7_owns_eligibility_h5_stance_cannot_reverse() -> None:
 
 def test_rank_gap_does_not_change_calibrated_magnitude() -> None:
     returns = {"AAPL": ("0.06", "0.03", "0.9"), "MSFT": ("0.03", "0.03", "0.9")}
-    from tests.dq.hermes.test_allocation_invariants import _bundle, _calibrated_size, _targets
+    from tests.dq.portfolio.test_allocation_invariants import _bundle, _calibrated_size, _targets
 
     dense = _bundle(returns=returns, ranks={"AAPL": 1, "MSFT": 2})
     gapped = _bundle(returns=returns, ranks={"AAPL": 1, "MSFT": 99})
@@ -252,10 +252,10 @@ def test_h9_validates_hashes_never_recomputes_report() -> None:
     final = {
         e.ticker: e.weight_pct for e in artifact.incumbent_final_weights.entries if e.weight_pct > 0
     }
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 26),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             sized_book={
                 "recommended_portfolio": [{"ticker": t, "target_pct": w} for t, w in final.items()]
                 + [
@@ -395,10 +395,10 @@ def test_replay_hard_failure_is_visible(tmp_path: pathlib.Path, monkeypatch) -> 
 
 def test_h9_validate_rejects_bundle_hash_mismatch() -> None:
     artifact = phase2_shadow_artifact()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 26),
-        phase_hermes=PhaseHermesState(
+        phase_portfolio=PhasePortfolioState(
             sized_book={
                 "recommended_portfolio": [
                     {"ticker": "AAPL", "target_pct": 25.0},

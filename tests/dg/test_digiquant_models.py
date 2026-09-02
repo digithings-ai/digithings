@@ -1,4 +1,4 @@
-"""Olympus model tier policy (config/digiquant_models.yaml)."""
+"""dashboard model tier policy (config/digiquant_models.yaml)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from pathlib import Path
 import digigraph.model_config as model_config
 import pytest
 from digigraph.model_config import (
-    apply_olympus_openrouter_env,
+    apply_digiquant_openrouter_env,
     get_grounding_model,
     get_model_for_mode,
     get_model_for_phase,
-    get_olympus_tier,
+    get_digiquant_tier,
     is_flagship_allowed_models_entry,
     is_flagship_openrouter_model,
     is_native_search_only_model,
@@ -91,24 +91,24 @@ _BANNED_QWEN_MODEL_MARKERS = (
 def _repo_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGI_CONFIG_PATH", _REPO_CONFIG)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
 
 
 def _cheap_research_pool() -> set[str]:
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     return set(cfg.tiers["cheap"].allowed_models["research"])
 
 
 @pytest.mark.unit
-def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
+def test_portfolio_thesis_and_portfolio_slugs_route_openrouter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Hermes H1–H7 slugs must resolve via olympus_models (CI has OPENROUTER_API_KEY only)."""
+    """portfolio H1–H7 slugs must resolve via dashboard_models (CI has OPENROUTER_API_KEY only)."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
-    assert get_model_for_phase("hermes/thesis/market-review") in cheap.allowed_models["research"]
-    assert get_model_for_phase("hermes/portfolio/pm-direction") in cheap.allowed_models["reasoning"]
+    assert get_model_for_phase("portfolio/thesis/market-review") in cheap.allowed_models["research"]
+    assert get_model_for_phase("portfolio/pm-direction") in cheap.allowed_models["reasoning"]
     assert get_model_for_phase("beliefs-distillation") in cheap.allowed_models["research"]
 
 
@@ -116,7 +116,7 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
 def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression (Olympus daily, run 28014812240, #1006): H6 deliberation turns must emit
+    """Regression (dashboard daily, run 28014812240, #1006): H6 deliberation turns must emit
     strict JSON (DeliberationPmTurn / DeliberationAnalystTurn). #991 first mapped the phase to
     the ``reasoning`` pool (prose-only deepseek-r1 → json.loads failed at char 0); #998 then
     routed it to the cheap ``research`` pool — but that pool also contains ``llama-4-maverick``,
@@ -127,7 +127,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     # The live macro watchlist from the failing run.
     watchlist = (
         "SPY QQQ DIA IWB VTI MDY IJH IWM IJR XLK XLF XLE XLV XLI XLRE XLU XLY XLP XLB XLC "
@@ -136,7 +136,7 @@ def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
         "EMB DXY UUP VIX"
     ).split()
     for ticker in watchlist:
-        model = get_model_for_phase(f"hermes/portfolio/deliberation-{ticker}")
+        model = get_model_for_phase(f"portfolio/deliberation-{ticker}")
         assert model == "openrouter/deepseek/deepseek-v4-flash", (
             f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable "
             "deepseek-v4-flash"
@@ -167,7 +167,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
 ) -> None:
     """H5 asset-analyst must resolve from the extraction pool (CI run 27950332738)."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    model = get_model_for_phase("hermes/portfolio/asset-analyst-AAPL")
+    model = get_model_for_phase("portfolio/asset-analyst-AAPL")
     assert model is not None
     assert model.startswith("openrouter/")
     assert model in _CHEAP_PHASE_MODELS
@@ -177,7 +177,7 @@ def test_asset_analyst_slug_resolves_to_known_good_openrouter_model(
 @pytest.mark.unit
 def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     assert get_model_for_phase("alt-sentiment-news") in cheap.allowed_models["extraction"]
     assert get_model_for_phase("monthly-digest") in cheap.allowed_models["reasoning"]
@@ -187,7 +187,7 @@ def test_cheap_tier_resolves_extraction_and_reasoning(monkeypatch: pytest.Monkey
 @pytest.mark.unit
 def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     quality = cfg.tiers["quality"]
     assert get_model_for_phase("pm-rebalance") in quality.allowed_models["reasoning"]
     assert get_model_for_phase("macro") in quality.allowed_models["research"]
@@ -196,7 +196,7 @@ def test_quality_tier_uses_reasoning_pool(monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.mark.unit
 def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
     assert any("gpt-5.6-luna" in m for m in research)
@@ -208,7 +208,7 @@ def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.unit
 def test_quality_tier_allows_frontier_in_pools() -> None:
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     quality = cfg.tiers["quality"]
     frontier = [m for m in quality.allowed_models["reasoning"] if is_flagship_openrouter_model(m)]
     assert frontier, "quality tier should include frontier reasoning models"
@@ -226,13 +226,13 @@ def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
-def test_apply_olympus_openrouter_env_sets_open_weight_pool(
+def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
     monkeypatch.delenv("OPENROUTER_COST_QUALITY_TRADEOFF", raising=False)
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    tier = apply_olympus_openrouter_env()
+    tier = apply_digiquant_openrouter_env()
     assert tier == "cheap"
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "deepseek/*" in pool
@@ -249,7 +249,7 @@ def test_apply_quality_tier_preserves_frontier_auto_router_pool(
 ) -> None:
     monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    apply_olympus_openrouter_env()
+    apply_digiquant_openrouter_env()
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "openai/*" in pool
     assert "anthropic/*" in pool
@@ -259,7 +259,7 @@ def test_apply_quality_tier_preserves_frontier_auto_router_pool(
 def test_apply_does_not_override_explicit_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "custom/*")
     monkeypatch.setenv("OPENROUTER_COST_QUALITY_TRADEOFF", "9")
-    apply_olympus_openrouter_env()
+    apply_digiquant_openrouter_env()
     assert os.environ["OPENROUTER_ALLOWED_MODELS"] == "custom/*"
     assert os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] == "9"
 
@@ -271,7 +271,7 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
     assert model is not None
     assert model.startswith("openrouter/")
     assert is_web_search_capable_model(model)
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     assert model in cfg.tiers["cheap"].web_search_models
 
 
@@ -279,7 +279,7 @@ def test_grounding_model_from_web_search_pool(monkeypatch: pytest.MonkeyPatch) -
 def test_grounding_model_may_be_perplexity(monkeypatch: pytest.MonkeyPatch) -> None:
     """Perplexity is valid for grounding-only paths, not tool phases."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     assert "openrouter/perplexity/sonar" in cfg.tiers["cheap"].web_search_models
     # Deterministic pick for a segment that hashes to perplexity
     for segment in ("macro", "bonds", "perplexity-grounding", "alt-sentiment-news"):
@@ -303,7 +303,7 @@ def test_phase_models_flagship_override_rejected_on_cheap(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") in _cheap_research_pool()
 
 
@@ -321,7 +321,7 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") == "openrouter/openai/gpt-5.6-luna"
 
 
@@ -339,7 +339,7 @@ def test_phase_models_open_weight_override_wins(
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     assert get_model_for_phase("macro") == "openrouter/deepseek/deepseek-r1"
 
 
@@ -361,7 +361,7 @@ def test_phase_models_online_override_rejected(
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     model = get_model_for_phase("macro")
     assert model in _cheap_research_pool()
     assert ":online" not in model
@@ -446,7 +446,7 @@ def test_sanitize_allowed_models_preserves_frontier_on_quality() -> None:
 @pytest.mark.unit
 def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
     """Regression: perplexity/sonar in allowed_models caused tool-use 404s."""
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         for capability, pool in tier_cfg.allowed_models.items():
             for model in pool:
@@ -459,13 +459,13 @@ def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
 
 
 @pytest.mark.unit
-def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
+def test_no_stale_qwen_model_ids_in_dashboard_config() -> None:
     """Regression: retired qwen/qwen3-235b slugs 400 on OpenRouter (CI run 27950332738)."""
     yaml_text = Path(_REPO_CONFIG, "digiquant_models.yaml").read_text().lower()
     hits = [marker for marker in _BANNED_QWEN_MODEL_MARKERS if marker in yaml_text]
     assert not hits, f"digiquant_models.yaml still references banned Qwen slugs: {hits}"
 
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         assert tier_cfg.allowed_models, f"tier {tier_name} must define allowed_models pools"
         assert not tier_cfg.models, f"tier {tier_name} must not use legacy models: pins"
@@ -493,43 +493,43 @@ def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
 def test_default_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
-    assert get_olympus_tier() == "cheap"
+    assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
-def test_digiquant_model_tier_wins_over_olympus_alias(
+def test_digiquant_model_tier_wins_over_dashboard_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#3381: DIGIQUANT_MODEL_TIER is canonical; retired OLYMPUS_* is alias only."""
+    """#3381: DIGIQUANT_MODEL_TIER is canonical; retired DASHBOARD_* is alias only."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    assert get_olympus_tier() == "quality"
+    assert get_digiquant_tier() == "quality"
 
 
 @pytest.mark.unit
 def test_digiquant_model_tier_alone(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "balanced")
-    assert get_olympus_tier() == "balanced"
+    assert get_digiquant_tier() == "balanced"
 
 
 @pytest.mark.unit
-def test_olympus_model_tier_alias_when_canonical_absent(
+def test_dashboard_model_tier_alias_when_canonical_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_olympus_tier() == "quality"
+    assert get_digiquant_tier() == "quality"
 
 
 @pytest.mark.unit
-def test_empty_digiquant_model_tier_ignores_olympus_alias(
+def test_empty_digiquant_model_tier_ignores_dashboard_alias(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Canonical key presence (even empty) wins — matches envcompat kill-switch semantics."""
     monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "")
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
-    assert get_olympus_tier() == "cheap"
+    assert get_digiquant_tier() == "cheap"
 
 
 @pytest.mark.unit
@@ -550,7 +550,7 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
     """#926 gate: default cheap tier pools open-weight models for edit-mode segment schemas."""
     monkeypatch.delenv("OLYMPUS_MODEL_TIER", raising=False)
     monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
-    assert get_olympus_tier() == "cheap"
+    assert get_digiquant_tier() == "cheap"
     model = get_model_for_phase(phase_slug)
     assert model is not None
     assert model.startswith("openrouter/")
@@ -563,7 +563,7 @@ def test_edit_mode_segments_route_to_cheap_open_weight_models(
 
 @pytest.mark.unit
 def test_cheap_tier_has_no_flagship_pins() -> None:
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     cheap = cfg.tiers["cheap"]
     for capability, pool in cheap.allowed_models.items():
         for model in pool:
@@ -584,7 +584,7 @@ def test_no_online_slug_in_any_phase_pool() -> None:
     ("No endpoints found that support tool use"). Grounding is a separate web-search
     pre-pass over ``web_search_models``; phase pools stay bare.
     """
-    cfg = model_config._load_olympus_models()
+    cfg = model_config._load_digiquant_models()
     for tier_name, tier_cfg in cfg.tiers.items():
         for capability, pool in tier_cfg.allowed_models.items():
             for model in pool:
@@ -601,8 +601,8 @@ def test_no_online_slug_in_any_phase_pool() -> None:
 
 
 # ── Phase-slug routing must never fall through to the dev fallback (401 guard) ──
-# Regression: the Hermes deliberation worker built slug
-# ``hermes/portfolio/deliberation-{ticker}`` which matched no phase_capabilities entry
+# Regression: the portfolio deliberation worker built slug
+# ``portfolio/deliberation-{ticker}`` which matched no phase_capabilities entry
 # nor prefix, so get_model_for_phase returned None and the caller fell back to
 # get_model_for_mode() -> a dev model (ollama/*) that digillm routed to the default
 # OpenAI client -> 401 "Incorrect API key provided: not-set", failing the live baseline.
@@ -612,11 +612,11 @@ def test_no_online_slug_in_any_phase_pool() -> None:
 @pytest.mark.parametrize(
     "slug",
     [
-        "hermes/portfolio/deliberation-AAPL",  # the regression: was unmapped
+        "portfolio/deliberation-AAPL",  # the regression: was unmapped
         "h6_pm_challenge-AAPL",
         "h6_analyst_response-AAPL",
-        "hermes/portfolio/asset-analyst-AAPL",
-        "hermes/portfolio/pm-direction",
+        "portfolio/asset-analyst-AAPL",
+        "portfolio/pm-direction",
         "sector-technology",
         "macro",
         "alt-options-derivatives",
@@ -629,7 +629,7 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
 ) -> None:
     """Every live-pipeline phase slug must resolve to an OpenRouter model (never None)."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     resolved = get_model_for_phase(slug)
     assert resolved is not None, f"phase slug {slug!r} is unmapped — falls back to dev model (401)"
     assert resolved.startswith("openrouter/"), (
@@ -642,13 +642,13 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
     """The deliberation worker slug resolves to an OpenRouter (the #991 401 guard),
     JSON/tool-capable model — research-pool-equivalent capability. It must NOT resolve to a
     reasoning-pool-only model like deepseek-r1, whose prose output broke json.loads for the
-    H6 turns (#993). ``hermes/portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
+    H6 turns (#993). ``portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
     ``test_deliberation_pinned_to_json_reliable_deepseek_v4_flash``), so the pinned model need
     not also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368).
     """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    resolved = get_model_for_phase("hermes/portfolio/deliberation-NVDA")
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
+    resolved = get_model_for_phase("portfolio/deliberation-NVDA")
     assert resolved is not None
     assert resolved in _CHEAP_PHASE_MODELS
 
@@ -657,14 +657,14 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
 def test_get_model_for_mode_does_not_auto_override_when_openrouter_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto Olympus paid models."""
+    """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto dashboard paid models."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
     monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
     monkeypatch.setenv("DIGI_LLM_MODE", "test")
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     resolved = get_model_for_mode()
     # Dev/local defaults stay local unless agents.llm / DIGI_LLM_* pin OpenRouter.
@@ -709,11 +709,11 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
     from digigraph.llm_auth import pop_byok, push_byok_header
 
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
-    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_digiquant_models_cache", None)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     # 'macro' maps to a capability, so the capability branch is entered; the resolver
     # then comes back empty, which is the state the guard exists for.
-    monkeypatch.setattr(model_config, "_model_for_olympus_capability", lambda *a, **k: None)
+    monkeypatch.setattr(model_config, "_model_for_digiquant_capability", lambda *a, **k: None)
 
     class _Headers:
         def __init__(self, d: dict[str, str]) -> None:

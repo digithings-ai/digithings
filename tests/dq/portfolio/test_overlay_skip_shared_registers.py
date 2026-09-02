@@ -17,17 +17,17 @@ from digiquant.research.decision_log import (
     persist_pending,
     resolve_pending,
 )
-from digiquant.research.graph import AtlasGraphDeps, AtlasInput
+from digiquant.research.graph import ResearchGraphDeps, ResearchInput
 from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
     build_preflight_node,
     build_preflight_reflect_node,
 )
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.research.supabase_io import upsert_onchain_cohort_positioning
 from digiquant.portfolio.chain import ChainDeps, _run_beliefs_fold
-from digiquant.portfolio.graph import HermesGraphDeps
+from digiquant.portfolio.graph import PortfolioGraphDeps
 from digiquant.portfolio.models.thesis import (
     ThesisReviewOutput,
     ThesisStatusUpdate,
@@ -46,7 +46,7 @@ from digiquant.dashboard.learning.beliefs_distillation import distill_beliefs
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
@@ -222,10 +222,10 @@ def test_overlay_materialize_skips_theses_register(
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay_client = FakeSupabaseClient()
-    overlay_state = AtlasResearchState(
+    overlay_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
     overlay_state.phase7d_rebalance = {
         "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100}],
@@ -237,10 +237,10 @@ def test_overlay_materialize_skips_theses_register(
     assert overlay_client.store.get("thesis_vehicles", []) == []
 
     house_client = FakeSupabaseClient()
-    house_state = AtlasResearchState(
+    house_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
     )
     house_state.phase7d_rebalance = {
         "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100}],
@@ -251,13 +251,13 @@ def test_overlay_materialize_skips_theses_register(
     assert [r["thesis_id"] for r in house_client.store["theses"]] == ["spy"]
 
 
-def _analyst_state(*, workspace_id: str | None) -> AtlasResearchState:
-    state = AtlasResearchState(
+def _analyst_state(*, workspace_id: str | None) -> ResearchState:
+    state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=workspace_id),
+        config=ResearchConfigBundle(workspace_id=workspace_id),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         asset_analysts={
             "SPY": {
                 "ticker": "SPY",
@@ -350,18 +350,18 @@ def test_overlay_preflight_reflect_skips_decision_log(
         fake_resolve_pending,
     )
     node = build_preflight_reflect_node(PreflightReflectDeps(client=FakeSupabaseClient()))
-    overlay_state = AtlasResearchState(
+    overlay_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
     assert node(overlay_state) == {}
     assert calls == []
 
-    house_state = AtlasResearchState(
+    house_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
     )
     assert node(house_state) == {}
     assert calls == ["decision_log"]
@@ -437,13 +437,13 @@ def test_overlay_preflight_injects_onchain_without_persisting(
     )
     deps = PreflightDeps(
         client=overlay_client,
-        config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+        config_loader=lambda: ResearchConfigBundle(workspace_id=str(overlay)),
     )
     node = build_preflight_node(deps)
-    overlay_state = AtlasResearchState(
+    overlay_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
     with patch(
         "digiquant.research.phases.preflight.get_onchain_cohort_positioning",
@@ -456,10 +456,10 @@ def test_overlay_preflight_injects_onchain_without_persisting(
 
 def _beliefs_chain_deps(client: FakeSupabaseClient) -> ChainDeps:
     return ChainDeps(
-        atlas=AtlasGraphDeps(
+        research=ResearchGraphDeps(
             preflight=PreflightDeps(client=client, config_loader=None),  # type: ignore[arg-type]
         ),
-        hermes=HermesGraphDeps(),
+        portfolio=PortfolioGraphDeps(),
     )
 
 
@@ -484,10 +484,10 @@ def test_overlay_beliefs_fold_does_not_run(
 ) -> None:
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
-    overlay_state = AtlasResearchState(
+    overlay_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
     with patch(
         "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
@@ -496,7 +496,7 @@ def test_overlay_beliefs_fold_does_not_run(
         _run_beliefs_fold(
             overlay_state,
             _beliefs_chain_deps(FakeSupabaseClient()),
-            AtlasInput(run_date=_RUN),
+            ResearchInput(run_date=_RUN),
         )
     assert overlay_state.errors == []
 
@@ -506,10 +506,10 @@ def test_overlay_beliefs_fold_does_not_run(
         house_calls.append("beliefs")
         return False
 
-    house_state = AtlasResearchState(
+    house_state = ResearchState(
         run_type="delta",
         run_date=_RUN,
-        config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
+        config=ResearchConfigBundle(workspace_id=str(house_workspace_id())),
     )
     with patch(
         "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
@@ -518,9 +518,9 @@ def test_overlay_beliefs_fold_does_not_run(
         _run_beliefs_fold(
             house_state,
             _beliefs_chain_deps(FakeSupabaseClient()),
-            AtlasInput(run_date=_RUN),
+            ResearchInput(run_date=_RUN),
         )
-    omitted_state = AtlasResearchState(run_type="delta", run_date=_RUN)
+    omitted_state = ResearchState(run_type="delta", run_date=_RUN)
     with patch(
         "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         house_fold,
@@ -528,7 +528,7 @@ def test_overlay_beliefs_fold_does_not_run(
         _run_beliefs_fold(
             omitted_state,
             _beliefs_chain_deps(FakeSupabaseClient()),
-            AtlasInput(run_date=_RUN),
+            ResearchInput(run_date=_RUN),
         )
     assert house_calls == ["beliefs", "beliefs"]
 
@@ -594,16 +594,16 @@ def test_overlay_distill_beliefs_does_not_stamp_house_rows(
     assert omitted_client.store["decision_log"][0].get("beliefs_folded_at") is not None
 
 
-def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
+def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Overlay identity must be on initial state, not only after preflight.
 
-    ``_safe_invoke_graph`` returns the pre-Atlas state when Atlas raises.
+    ``_safe_invoke_graph`` returns the pre-research state when research raises.
     That state used to have ``workspace_id=None``, so beliefs fold took the
     house path and stamped ``beliefs_folded_at`` on every unfolded row.
     """
-    from digiquant.portfolio.chain import run_atlas_then_hermes
+    from digiquant.portfolio.chain import run_research_then_portfolio
     from digiquant.dashboard.learning import beliefs_distillation as mod
 
     overlay = uuid4()
@@ -617,25 +617,25 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
 
     monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
 
-    class _BoomAtlasGraph:
+    class _BoomResearchGraph:
         def invoke(self, *_a: object, **_k: object) -> object:
-            raise RuntimeError("atlas exploded before preflight")
+            raise RuntimeError("research exploded before preflight")
 
     deps = ChainDeps(
-        atlas=AtlasGraphDeps(
+        research=ResearchGraphDeps(
             preflight=PreflightDeps(
                 client=overlay_client,
-                config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+                config_loader=lambda: ResearchConfigBundle(workspace_id=str(overlay)),
             ),
         ),
-        hermes=HermesGraphDeps(),
+        portfolio=PortfolioGraphDeps(),
     )
     with patch(
-        "digiquant.portfolio.chain.build_atlas_graph",
-        return_value=_BoomAtlasGraph(),
+        "digiquant.portfolio.chain.build_research_graph",
+        return_value=_BoomResearchGraph(),
     ):
-        run_atlas_then_hermes(
-            atlas_input=AtlasInput(run_date=_RUN),
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=_RUN),
             deps=deps,
             manage_usage=False,
         )
@@ -646,7 +646,7 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
 def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.portfolio.chain import DiagnosticsDeps, run_atlas_then_hermes
+    from digiquant.portfolio.chain import DiagnosticsDeps, run_research_then_portfolio
     from digiquant.dashboard.learning import beliefs_distillation as mod
 
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
@@ -659,28 +659,28 @@ def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
 
     monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
 
-    def boom_loader() -> AtlasConfigBundle:
+    def boom_loader() -> ResearchConfigBundle:
         raise RuntimeError("loader exploded")
 
     written: dict[str, object] = {}
 
-    def _capture(_client: object, *, state: AtlasResearchState, **_kwargs: object) -> None:
+    def _capture(_client: object, *, state: ResearchState, **_kwargs: object) -> None:
         written["errors"] = [(e.phase, e.node) for e in state.errors]
         return None
 
     deps = ChainDeps(
-        atlas=AtlasGraphDeps(
+        research=ResearchGraphDeps(
             preflight=PreflightDeps(client=overlay_client, config_loader=boom_loader),
         ),
-        hermes=HermesGraphDeps(),
+        portfolio=PortfolioGraphDeps(),
         diagnostics=DiagnosticsDeps(client=object(), run_id="r1"),
     )
     with (
         patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(RuntimeError, match="loader exploded"),
     ):
-        run_atlas_then_hermes(
-            atlas_input=AtlasInput(run_date=_RUN),
+        run_research_then_portfolio(
+            research_input=ResearchInput(run_date=_RUN),
             deps=deps,
             manage_usage=True,
         )

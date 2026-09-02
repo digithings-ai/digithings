@@ -45,7 +45,7 @@ class TestCapIsEnforced:
     ) -> None:
         """8 held + 40 thesis vehicles under a cap of 30 must yield 30, not 48."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "30")
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         watchlist, held, mappings = _prod_shape()
 
         roster = compute_focus_roster(
@@ -232,19 +232,19 @@ class TestRosterBreakdownContributor:
     @staticmethod
     def _state(roster_len: int) -> object:
         from digiquant.research.state import (
-            AtlasConfigBundle,
+            ResearchConfigBundle,
             ExcludedTicker,
             FocusRosterEntry,
-            PhaseHermesState,
+            PhasePortfolioState,
         )
-        from digiquant.portfolio.state import HermesState
+        from digiquant.portfolio.state import PortfolioState
 
-        state = HermesState(
+        state = PortfolioState(
             run_type="delta",
             run_date=_RUN_DATE,
-            config=AtlasConfigBundle(watchlist=[]),
+            config=ResearchConfigBundle(watchlist=[]),
         )
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             focus_roster=[
                 FocusRosterEntry(
                     ticker=f"T{i}",

@@ -17,16 +17,16 @@ from unittest.mock import patch
 
 import pytest
 from digiquant.research.phases.phase_monthly import MonthlyDigest, _monthly_node
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
-def _minimal_state() -> AtlasResearchState:
-    return AtlasResearchState(
+def _minimal_state() -> ResearchState:
+    return ResearchState(
         run_type="monthly",
         run_date=date(2026, 5, 1),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
     )
 
 
@@ -70,12 +70,12 @@ class TestMonthlyDigestModelConfig:
         monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
         import digigraph.model_config as mc
 
-        monkeypatch.setattr(mc, "_olympus_models_cache", None)
+        monkeypatch.setattr(mc, "_digiquant_models_cache", None)
 
         model = get_model_for_phase("monthly-digest")
-        cfg = mc._load_olympus_models()
+        cfg = mc._load_digiquant_models()
         assert model in cfg.tiers["cheap"].allowed_models["reasoning"], (
-            f"monthly-digest should route via olympus_models cheap tier reasoning pool, got {model!r}"
+            f"monthly-digest should route via dashboard_models cheap tier reasoning pool, got {model!r}"
         )
 
     def test_phase_slug_not_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +88,7 @@ class TestMonthlyDigestModelConfig:
         monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
         import digigraph.model_config as mc
 
-        monkeypatch.setattr(mc, "_olympus_models_cache", None)
+        monkeypatch.setattr(mc, "_digiquant_models_cache", None)
 
         assert get_model_for_phase("monthly-digest") is not None
 
@@ -138,7 +138,7 @@ class TestMonthlyNodePassesPhaseSlug:
         monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
         import digigraph.model_config as mc
 
-        monkeypatch.setattr(mc, "_olympus_models_cache", None)
+        monkeypatch.setattr(mc, "_digiquant_models_cache", None)
 
         called_models: list[str] = []
 
@@ -160,7 +160,7 @@ class TestMonthlyNodePassesPhaseSlug:
             _monthly_node(state)
 
         assert called_models, "LLM must be called"
-        cfg = mc._load_olympus_models()
+        cfg = mc._load_digiquant_models()
         reasoning_pool = set(cfg.tiers["cheap"].allowed_models["reasoning"])
         for m in called_models:
             assert "kimi" not in m.lower(), (

@@ -1,16 +1,16 @@
-"""Atlas test collection gate.
+"""research test collection gate.
 
-The Atlas sub-package imports `digigraph.graph.pipeline_builder`, which in
+The research sub-package imports `digigraph.graph.pipeline_builder`, which in
 turn pulls `openai` (a digigraph dependency). The standard `digiquant-test`
 CI job installs only `digiquant[dev]`, so digigraph's runtime deps are
-absent — collecting the Atlas tests there would error out.
+absent — collecting the research tests there would error out.
 
 The repo-root pytest.ini puts all `*/src` directories on pythonpath, which
 means `find_spec("digigraph")` succeeds even when digigraph is not
 pip-installed. So we must actually attempt the import to know whether the
 chain is wired up.
 
-The full Atlas test set runs in `test-research-graph.yml` where
+The full research test set runs in `test-research-graph.yml` where
 install-workspace.sh has installed digigraph + its deps first.
 
 `data/test_*.py` was dropped from the glob below (#2183): of the five files

@@ -14,14 +14,14 @@ from datetime import date
 
 import pytest
 from digiquant.research import diagnostics
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.telemetry import MERGE_FALLBACK_KEY, merge_fallback_breakdown
 
 pytestmark = pytest.mark.unit
 
 
-def _state(**extra: object) -> AtlasResearchState:
-    return AtlasResearchState(
+def _state(**extra: object) -> ResearchState:
+    return ResearchState(
         run_type="delta",
         run_date=date(2026, 7, 31),
         baseline_date=date(2026, 7, 30),
@@ -100,7 +100,7 @@ class TestMergeFallbacksStateField:
         ``InvalidConcurrentGraphUpdate`` on concurrent writes to one field, which would
         turn a cost-telemetry key into a run-killing defect.
         """
-        reducers = [m for m in AtlasResearchState.model_fields["merge_fallbacks"].metadata]
+        reducers = [m for m in ResearchState.model_fields["merge_fallbacks"].metadata]
         assert len(reducers) == 1, "merge_fallbacks must carry exactly one reducer"
         reduce = reducers[0]
         assert reduce({"sector-energy": "a"}, {"sector-materials": "b"}) == {

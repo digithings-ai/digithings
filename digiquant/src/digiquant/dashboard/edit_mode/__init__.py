@@ -1,6 +1,6 @@
-"""Olympus edit-mode continuity — patch merge and mode resolution.
+"""dashboard edit-mode continuity — patch merge and mode resolution.
 
-Public API for Atlas/Hermes nodes (spec §4–§5). Wraps the proven
+Public API for research/portfolio nodes (spec §4–§5). Wraps the proven
 ``apply_ops`` merge primitive from ``materialize_snapshot.py``.
 """
 

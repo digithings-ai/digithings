@@ -493,7 +493,7 @@ def test_cron_headers_do_not_import_byok_or_graph() -> None:
         assert "byok" not in imports
         assert "digillm" not in imports
         assert "overlay.runner" not in imports
-        assert "hermes.chain" not in imports
+        assert "portfolio.chain" not in imports
 
 
 def test_require_overlay_chain_refuses_none() -> None:

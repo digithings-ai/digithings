@@ -11,7 +11,7 @@ from typing import Any  # score:allow untyped any — used for LangGraph update 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.research.research_attention import triage_phase_attention_update
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient, query_price_deltas
 from digiquant.research.triage import evaluate
 from digiquant.research.triage_signals import all_tracked_tickers
@@ -36,7 +36,7 @@ def build_triage_node(deps: TriageDeps | None):
     (``(state) -> dict of field updates``).
     """
 
-    def _triage(state: AtlasResearchState) -> dict[str, Any]:
+    def _triage(state: ResearchState) -> dict[str, Any]:
         price_deltas: dict[str, float] = {}
         if deps is not None:
             tickers = all_tracked_tickers()

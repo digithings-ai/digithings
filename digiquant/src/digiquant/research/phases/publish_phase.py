@@ -18,7 +18,7 @@ from digiquant.research.inspectable_io import (
 )
 from digiquant.research.segments import compose_legacy_digest_body
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     Phase7DigestPayload,
     PublishedArtifact,
     SegmentSlot,
@@ -151,7 +151,7 @@ def _publish_segment_bag(
 def _publish_document_deltas(
     *,
     client: SupabaseClient,
-    state: AtlasResearchState,
+    state: ResearchState,
     run_type: str,
     date_str: str,
 ) -> list[PublishedArtifact]:
@@ -174,7 +174,7 @@ def _publish_document_deltas(
 
 
 def _carry_incomplete_snapshot(
-    state: AtlasResearchState,
+    state: ResearchState,
 ) -> Phase7DigestPayload | None:
     """Build a carried-incomplete snapshot from the most recent prior snapshot.
 
@@ -238,7 +238,7 @@ def _append_house_daily_snapshot(
 def _maybe_publish_compiled_research_views(
     *,
     deps: PublishDeps,
-    state: AtlasResearchState,
+    state: ResearchState,
     run_type: str,
     date_str: str,
 ) -> list[PublishedArtifact]:
@@ -324,10 +324,10 @@ def _maybe_publish_compiled_research_views(
     return published
 
 
-def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
+def build_publish_node(deps: PublishDeps) -> Callable[[ResearchState], dict[str, Any]]:
     """Return the publish node bound to ``deps``."""
 
-    def publish(state: AtlasResearchState) -> dict[str, Any]:
+    def publish(state: ResearchState) -> dict[str, Any]:
         date_str = state.run_date.isoformat()
         run_type = state.run_type
         workspace_id = getattr(state.config, "workspace_id", None)
@@ -417,19 +417,19 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             if state.custom_prompt:
                 digest_key = f"custom-research/{state.run_id}"
                 digest_doc_type: str | None = "Custom Research"
-                title = f"Atlas Custom Research {date_str}"
+                title = f"research Custom Research {date_str}"
                 digest_category = "output"
             elif run_type == "delta":
                 digest_key = "digest-delta"
                 digest_doc_type = "Daily Delta"
-                title = f"Atlas Daily Delta {date_str}"
+                title = f"research Daily Delta {date_str}"
                 digest_category = "delta"
             else:
                 # ``monthly`` never reaches publish (deps=None for monthly);
                 # baseline is the only remaining ``run_type`` that lands here.
                 digest_key = "digest"
                 digest_doc_type = "Daily Digest"
-                title = f"Atlas Daily Digest {date_str}"
+                title = f"research Daily Digest {date_str}"
                 digest_category = "synthesis"
 
             artifacts.append(

@@ -1,4 +1,4 @@
-"""Shared helpers for thesis-track Hermes LLM nodes."""
+"""Shared helpers for thesis-track portfolio LLM nodes."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from digiquant.dashboard.edit_mode import (
 )
 from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch, section_index
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
-from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.thesis_grounding import build_thesis_grounding
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 
@@ -38,7 +38,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class _StatePriorLoader:
-    def __init__(self, state: HermesState) -> None:
+    def __init__(self, state: PortfolioState) -> None:
         self._state = state
 
     def load(self, artifact_key: tuple[str, str], run_date: date) -> PriorPublished | None:
@@ -57,14 +57,14 @@ class _StatePriorLoader:
         return PriorPublished(date=prior_date, document_key=doc_key, payload=payload)
 
 
-def resolve_thesis_edit_mode(state: HermesState, artifact_key: tuple[str, str]) -> EditMode:
+def resolve_thesis_edit_mode(state: PortfolioState, artifact_key: tuple[str, str]) -> EditMode:
     return resolve_edit_mode(
         artifact_key=artifact_key,
         run_date=state.run_date,
         prior_loader=_StatePriorLoader(state),
         triage=None,
         force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="segment")
-        or state.refresh_scope == "hermes",
+        or state.refresh_scope == "portfolio",
     )
 
 
@@ -86,7 +86,7 @@ def build_thesis_document(
 
 def run_thesis_phase_llm(
     *,
-    state: HermesState,
+    state: PortfolioState,
     skill_slug: str,
     artifact_key: tuple[str, str],
     retrieval_phase: RetrievalPhase,
@@ -159,7 +159,7 @@ def run_thesis_phase_llm(
             )
         except (MergeError, ValidationError) as exc:
             logger.warning("thesis edit merge failed for %s (%s)", phase_slug, exc)
-            errors.append(PhaseError(phase="phase_hermes", node=phase_slug, message=str(exc)[:500]))
+            errors.append(PhaseError(phase="phase_portfolio", node=phase_slug, message=str(exc)[:500]))
             return None, dict(prior.payload), errors
         materialized = dict(merge_result.materialized)
         body_raw = materialized.get("body", materialized)
@@ -182,7 +182,7 @@ def run_thesis_phase_llm(
         )
         errors.append(
             PhaseError(
-                phase="phase_hermes", node=phase_slug, message=f"thesis LLM failed: {exc}"[:500]
+                phase="phase_portfolio", node=phase_slug, message=f"thesis LLM failed: {exc}"[:500]
             )
         )
         return None, {}, errors

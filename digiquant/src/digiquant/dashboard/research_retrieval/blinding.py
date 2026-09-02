@@ -1,4 +1,4 @@
-"""Phase-scoped blinding for Olympus retrieval tools and provider prompts (spec §6.1)."""
+"""Phase-scoped blinding for dashboard retrieval tools and provider prompts (spec §6.1)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from digiquant.dashboard.research_retrieval.planner import (
 )
 
 RetrievalPhase = Literal[
-    "atlas_edit",
+    "research_edit",
     "h1_thesis",
     "h2_thesis",
     "h5_analyst",
@@ -32,7 +32,7 @@ _H5_BLOCKED_DOC_KEYS = frozenset({DIGEST_DOCUMENT_KEY, "beliefs"})
 
 _PORTFOLIO_ALLOWED_PHASES = frozenset(
     {
-        "atlas_edit",
+        "research_edit",
         "h1_thesis",
         "h2_thesis",
         "h7_pm",

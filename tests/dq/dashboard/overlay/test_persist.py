@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.portfolio.writers.commit_io import book_portfolio, publish_hermes_documents
+from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
+from digiquant.portfolio.writers.commit_io import book_portfolio, publish_portfolio_documents
 from digiquant.dashboard.overlay.byok import ByokProbe
 from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
@@ -21,7 +21,7 @@ from digiquant.dashboard.overlay.persist import (
     LEGACY_BOOK_UNIQUE_CODE,
     OverlayLegacyBookBlocked,
     OverlayPersistDisabled,
-    hermes_document_key,
+    portfolio_document_key,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
     skip_overlay_shared_register,
@@ -30,18 +30,18 @@ from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
 from digiquant.dashboard.research_corpus import ResearchCorpusStore
 from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus, house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 
 _OK = ByokProbe(present_and_unsealable=True, provider="openai", fingerprint="deadbeef")
 
 
-def test_hermes_keys_house_unprefixed_overlay_namespaced() -> None:
+def test_portfolio_keys_house_unprefixed_overlay_namespaced() -> None:
     overlay = uuid4()
-    assert hermes_document_key("pm-direction-memo", None) == "pm-direction-memo"
-    assert hermes_document_key("pm-direction-memo", house_workspace_id()) == "pm-direction-memo"
-    namespaced = hermes_document_key("pm-direction-memo", overlay)
+    assert portfolio_document_key("pm-direction-memo", None) == "pm-direction-memo"
+    assert portfolio_document_key("pm-direction-memo", house_workspace_id()) == "pm-direction-memo"
+    namespaced = portfolio_document_key("pm-direction-memo", overlay)
     assert namespaced == f"overlay/{overlay}/pm-direction-memo"
 
 
@@ -86,10 +86,10 @@ def test_overlay_book_portfolio_refuses_private_workspace(
     """Persist=1 must not write overlay positions/NAV while UNIQUE(date) remains."""
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay = uuid4()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 30),
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
     client = FakeSupabaseClient(
         canned_reads={
@@ -114,21 +114,21 @@ def test_overlay_book_portfolio_refuses_private_workspace(
     assert client.store.get("nav_history", []) == []
 
 
-def test_publish_hermes_documents_namespaces_overlay_keys(
+def test_publish_portfolio_documents_namespaces_overlay_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay = uuid4()
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 8, 30),
-        config=AtlasConfigBundle(workspace_id=str(overlay)),
+        config=ResearchConfigBundle(workspace_id=str(overlay)),
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         pm_direction_memo={"stance": "risk-on", "notes": "overlay"},
     )
     client = FakeSupabaseClient()
-    artifacts = publish_hermes_documents(client=client, state=state)
+    artifacts = publish_portfolio_documents(client=client, state=state)
     keys = {a.document_key for a in artifacts}
     assert f"overlay/{overlay}/pm-direction-memo" in keys
     assert "pm-direction-memo" not in keys

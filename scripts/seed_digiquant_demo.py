@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Seed Olympus with demo nav_history (>=2 pts) + a resolved decision_log batch.
+"""Seed dashboard with demo nav_history (>=2 pts) + a resolved decision_log batch.
 
 Development / demo utility.  Does NOT run in CI or production.  Designed for
-fresh installs that have run no Hermes cycles so the Performance tear sheet
+fresh installs that have run no portfolio cycles so the Performance tear sheet
 renders an equity curve + decision track-record instead of empty-state.
 
 Fixes #1045

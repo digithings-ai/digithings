@@ -32,7 +32,7 @@ from digiquant.research.supabase_io import (
 from digiquant.dashboard.tenancy import house_workspace_id
 
 # Canonical fake lives in tests.fixtures.fake_supabase (#1196); re-export so
-# existing ``from tests.dq.atlas.test_supabase_io import FakeSupabaseClient``
+# existing ``from tests.dq.research.test_supabase_io import FakeSupabaseClient``
 # imports keep working.
 from tests.fixtures.fake_supabase import (
     FakeSupabaseClient as FakeSupabaseClient,
@@ -109,7 +109,7 @@ class TestJsonSafe:
 @pytest.mark.unit
 class TestPublishDocument:
     def test_serializes_date_objects_nested_in_payload(self) -> None:
-        """Regression (Olympus daily crash, 2026-06-22): a ``PMDirectionMemo``
+        """Regression (dashboard daily crash, 2026-06-22): a ``PMDirectionMemo``
         rehydrated from a LangGraph checkpoint as a plain dict — rather than the
         Pydantic model — carries a raw ``datetime.date`` in ``payload['date']``.
         The Supabase client JSON-encodes the row via httpx, so the date must be
@@ -194,7 +194,7 @@ class TestPublishDocument:
                 title="t",
                 date_str="2026-04-20",
             )
-        audit_msgs = [r.message for r in caplog.records if "atlas_io audit" in r.message]
+        audit_msgs = [r.message for r in caplog.records if "research_io audit" in r.message]
         assert audit_msgs, "expected an audit log line"
         assert "macro/2026-04-20.json" in audit_msgs[0]
 

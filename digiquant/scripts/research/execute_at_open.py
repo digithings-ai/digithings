@@ -22,7 +22,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _ensure_importable() -> None:
-    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
+    """Add the monorepo ``*/src`` paths to sys.path so the portfolio writers import."""
     for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
         path = str(_REPO_ROOT / rel)
         if path not in sys.path:
@@ -456,7 +456,7 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
 
 
 def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
-    """Kairos venue-dispatch seam (K4).
+    """execution venue-dispatch seam (K4).
 
     House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
     existing ``build_events_from_paper_fills`` path and its outputs stay
@@ -944,7 +944,7 @@ def main() -> int:
     venue = resolve_execution_venue_for_run(env_lookup(EXECUTION_WORKSPACE_ID) or None)
     if venue != "paper_internal":
         print(
-            f"error: execute_at_open external venue {venue!r} requires the Kairos "
+            f"error: execute_at_open external venue {venue!r} requires the execution "
             f"router (route_pending_orders); this script keeps the paper_internal path only",
             file=sys.stderr,
         )

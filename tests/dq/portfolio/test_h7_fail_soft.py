@@ -11,7 +11,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
@@ -48,7 +48,7 @@ PRIOR_MEMO_PAYLOAD = {
 }
 
 
-def _state(*, with_prior_memo: bool, with_current_forecast: bool = False) -> AtlasResearchState:
+def _state(*, with_prior_memo: bool, with_current_forecast: bool = False) -> ResearchState:
     latest = {"pm-direction-memo": {"payload": dict(PRIOR_MEMO_PAYLOAD)}} if with_prior_memo else {}
     deliberation: dict[str, dict[str, object]] = {}
     if with_current_forecast:
@@ -59,12 +59,12 @@ def _state(*, with_prior_memo: bool, with_current_forecast: bool = False) -> Atl
             "amendment_id": None,
             "forecast_degradation": None,
         }
-    return AtlasResearchState(
+    return ResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 7, 21),
         prior_context=PriorContext(latest_segments=latest),
-        phase_hermes=PhaseHermesState(deliberation_summaries=deliberation),
+        phase_portfolio=PhasePortfolioState(deliberation_summaries=deliberation),
     )
 
 
@@ -77,7 +77,7 @@ class TestH7FailSoft:
         ):
             out = _h7_node(state)
 
-        memo = out["phase_hermes"].pm_direction_memo
+        memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None, "prior memo must be carried"
         assert memo.date == RUN_DATE, "carried memo must be re-dated to today"
         assert [e.ticker for e in memo.roster] == ["SPY", "TLT"]
@@ -99,7 +99,7 @@ class TestH7FailSoft:
         ):
             out = _h7_node(state)
 
-        assert out["phase_hermes"].pm_direction_memo is None
+        assert out["phase_portfolio"].pm_direction_memo is None
         errors = out.get("errors") or []
         assert len(errors) == 1 and errors[0].phase != "chain"
 
@@ -111,7 +111,7 @@ class TestH7FailSoft:
         ):
             out = _h7_node(state)
 
-        memo = out["phase_hermes"].pm_direction_memo
+        memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None
         spy = next(e for e in memo.roster if e.ticker == "SPY")
         assert spy.direction == "long"
@@ -152,7 +152,7 @@ class TestH7BindOnSuccess:
         ):
             out = _h7_node(state)
 
-        memo = out["phase_hermes"].pm_direction_memo
+        memo = out["phase_portfolio"].pm_direction_memo
         assert memo is not None
         assert memo.date == RUN_DATE
         ref = memo.roster[0].forecast_reference

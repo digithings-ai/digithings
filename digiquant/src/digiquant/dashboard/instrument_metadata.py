@@ -1,4 +1,4 @@
-"""Canonical metadata contract for instruments tracked by Olympus."""
+"""Canonical metadata contract for instruments tracked by dashboard."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from digiquant.portfolio.sector_map import asset_class, sector_bucket
 
 
 class InstrumentMetadata(BaseModel):
-    """Provider-sourced identity plus deterministic Olympus classification."""
+    """Provider-sourced identity plus deterministic dashboard classification."""
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -37,7 +37,7 @@ class InstrumentMetadata(BaseModel):
         return str(value).strip().upper()
 
     @classmethod
-    def fallback(cls, ticker: str, *, provider: str = "olympus") -> InstrumentMetadata:
+    def fallback(cls, ticker: str, *, provider: str = "dashboard") -> InstrumentMetadata:
         """Return a truthful row when a provider cannot resolve a symbol."""
         normalized = str(ticker).strip().upper()
         return cls(

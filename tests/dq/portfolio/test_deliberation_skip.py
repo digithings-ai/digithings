@@ -1,4 +1,4 @@
-"""H6 deliberation skip tests (Olympus #930 PR 4b + WP11.3 #2902)."""
+"""H6 deliberation skip tests (dashboard #930 PR 4b + WP11.3 #2902)."""
 
 from __future__ import annotations
 
@@ -8,29 +8,29 @@ from unittest.mock import patch
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.research.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
+    ResearchConfigBundle,
+    ResearchState,
     FocusRosterEntry,
-    PhaseHermesState,
+    PhasePortfolioState,
     PriorContext,
 )
 from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
 from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker
 
 
-def _quiet_state() -> AtlasResearchState:
+def _quiet_state() -> ResearchState:
     news_hash = news_hash_for_ticker(
-        AtlasResearchState(
+        ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
         ),
         "AAPL",
     )
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=date(2026, 6, 20),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        config=ResearchConfigBundle(watchlist=["AAPL"]),
         prior_context=PriorContext(
             prior_analyst_by_ticker={
                 "AAPL": {
@@ -55,7 +55,7 @@ def _quiet_state() -> AtlasResearchState:
         ),
         price_deltas={"AAPL": 0.001},
     )
-    state.phase_hermes = PhaseHermesState(
+    state.phase_portfolio = PhasePortfolioState(
         focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")],
         asset_analysts={
             "AAPL": {
@@ -75,15 +75,15 @@ def _quiet_state() -> AtlasResearchState:
 class TestDeliberationSkip:
     def test_quiet_fingerprint_carries_summary_without_llm(self) -> None:
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
         ):
             result = compiled.invoke(_quiet_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["conclusion"] == "prior agreement"
         assert summary["selection_reason"]  # WP11.3: every run/carry has one reason
@@ -92,17 +92,17 @@ class TestDeliberationSkip:
         """#925: the slim ``prior_deliberation_by_ticker`` carry (conclusion_excerpt)
         must land in the carried summary's ``conclusion`` — not an empty string."""
         news_hash = news_hash_for_ticker(
-            AtlasResearchState(
+            ResearchState(
                 run_type="delta",
                 run_date=date(2026, 6, 20),
-                config=AtlasConfigBundle(watchlist=["AAPL"]),
+                config=ResearchConfigBundle(watchlist=["AAPL"]),
             ),
             "AAPL",
         )
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
-            config=AtlasConfigBundle(watchlist=["AAPL"]),
+            config=ResearchConfigBundle(watchlist=["AAPL"]),
             prior_context=PriorContext(
                 prior_analyst_by_ticker={
                     "AAPL": {
@@ -126,7 +126,7 @@ class TestDeliberationSkip:
             ),
             price_deltas={"AAPL": 0.001},
         )
-        state.phase_hermes = PhaseHermesState(
+        state.phase_portfolio = PhasePortfolioState(
             focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")],
             asset_analysts={
                 "AAPL": {
@@ -140,15 +140,15 @@ class TestDeliberationSkip:
             },
         )
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("skip path must not call LLM"),
         ):
             result = compiled.invoke(state)
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["conclusion"] == "trim into strength; yields peaked"
 
@@ -162,15 +162,15 @@ class TestH6SelectionEnforceCarry:
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("enforce low-value must not call provider"),
         ):
             result = compiled.invoke(_quiet_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["carry_reason"] == "low_value_carry"
         assert summary["selection_reason"] == "low_value_carry"
@@ -182,15 +182,15 @@ class TestH6SelectionEnforceCarry:
     ) -> None:
         monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "shadow")
         compiled = build_pipeline(
-            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+            ResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
         )
         with patch(
             "digigraph.graph.research_agent.completion_text",
             side_effect=AssertionError("shadow incumbent skip must not call LLM"),
         ):
             result = compiled.invoke(_quiet_state())
-        final = AtlasResearchState.model_validate(result)
-        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        final = ResearchState.model_validate(result)
+        summary = final.phase_portfolio.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["carry_reason"] == "fingerprint_skip"
         assert summary["selection_reason"] == "low_value_carry"

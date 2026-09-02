@@ -1,6 +1,6 @@
 """House GHA Group A reads ignore overlay nav_history / positions / metrics.
 
-Hermes chain (`python -m digiquant.portfolio.chain`) filters
+portfolio chain (`python -m digiquant.portfolio.chain`) filters
 ``workspace_id`` on Group A tables so an overlay same-calendar row cannot
 seed house NAV, trip the drawdown breaker, or open lots from a private book.
 Omitted ``workspace_id`` means house.
@@ -25,8 +25,8 @@ from digiquant.portfolio.writers.opening_snapshot import (
 )
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.test_opening_snapshot import BOOK_D, NOW, _book_client
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.test_opening_snapshot import BOOK_D, NOW, _book_client
 
 pytestmark = pytest.mark.unit
 

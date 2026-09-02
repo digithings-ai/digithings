@@ -68,7 +68,7 @@ and metric guides that cycle analysts actually keep open:
 S2F, Rainbow, Mayer, daily RSI, Fear & Greed, exchange-reserve “supply
 shock,” and Hyperdash perp positioning are **not** in this ranking:
 wrong thesis, invalidated, price-duplicate of the SDCA power-law rails,
-or the wrong horizon. In-repo Hyperdash remains an Atlas overlay
+or the wrong horizon. In-repo Hyperdash remains an research overlay
 ([`hyperdash.py`](../../digiquant/src/digiquant/data/onchain/hyperdash.py));
 it is not an MVRV/SOPR history.
 
@@ -202,7 +202,7 @@ a commercial digiquant.io tearsheet without review.
 
 | Source | Why it is famous | Why not #1086 v1 |
 |---|---|---|
-| Glassnode Studio / API | The industry metric-guide set | Paid. Atlas ops already list it as a research subscription, not an ingest. |
+| Glassnode Studio / API | The industry metric-guide set | Paid. research ops already list it as a research subscription, not an ingest. |
 | CryptoQuant | Miner + exchange | Paid. |
 | Look Into Bitcoin | The public *chart* canon (MVRV-Z, RHODL, Pi, CVDD, …) | Charts, not a documented bulk API. Scrape = ToS/human-gate. |
 | CheckOnChain | Checkmate’s working set (Originals, SOPR, Puell, RHODL, AVIV) | Same: dashboard, not a free series API. |
@@ -248,7 +248,7 @@ realized price, MVRV-Z-as-raw, LTH/STH MVRV, or Pi Cycle.
 **One source to ingest first:** **Bitview `GET /api/series/{id}/day1`**
 (or the same paths on a self-hosted BRK). Start with those four ids plus
 `realized_price` as a **non-voting annotation** (cost-basis line for
-tearsheets / Atlas). Skip `nupl`.
+tearsheets / research). Skip `nupl`.
 
 **Not v1 (collinear or wrong layer):**
 

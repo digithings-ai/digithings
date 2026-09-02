@@ -279,7 +279,7 @@ def _pending_order_heads(
     replaced and must never be filled.
 
     ``workspace_id`` omitted ⇒ house (same as :func:`ledger_io._rows_for_date`). Overlay
-    / Kairos callers pass the connection's workspace so private books stay isolated.
+    / execution callers pass the connection's workspace so private books stay isolated.
     """
     rows = _rows_for_date(
         client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=workspace_id

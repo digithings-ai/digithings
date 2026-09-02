@@ -8,7 +8,7 @@ import pytest
 from digiquant.research.state import FocusRosterEntry
 from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 _BOOK = ["AAA", "BBB", "SPY", "CCC", "IJR", "DDD", "XLP"]
 _HELD = {"SPY", "IJR", "XLP"}
@@ -19,7 +19,7 @@ class TestH4FocusRosterHeldInvariant:
     def test_held_always_in_roster(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """With the staleness gate disabled, every held name must appear in the roster."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "4")
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -29,7 +29,7 @@ class TestH4FocusRosterHeldInvariant:
         assert _HELD.issubset(tickers), f"held dropped from H4 roster: {_HELD - tickers}"
 
     def test_held_entries_tagged_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -64,7 +64,7 @@ class TestH4FocusRosterHeldInvariant:
 
     def test_held_over_cap_keeps_all_held(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=list(_BOOK),
             held=_HELD,
@@ -133,7 +133,7 @@ class TestHeldAbsentFromSlate:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """IJR is held but NOT in the watchlist — must still appear in roster."""
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB", "CCC"],
             held={"IJR"},
@@ -146,7 +146,7 @@ class TestHeldAbsentFromSlate:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Held ticker injected into roster must carry roster_reason='held'."""
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["AAA", "BBB"],
             held={"XLF"},
@@ -214,7 +214,7 @@ class TestNewCandidateReservation:
     ) -> None:
         """Cap=3, 3 held, 0 non-held watchlist — held-only roster is fine."""
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP"],
             held={"SPY", "IJR", "XLP"},
@@ -232,7 +232,7 @@ class TestNewCandidateReservation:
         and no new candidates can be reserved; that is acceptable.
         """
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
-        monkeypatch.setenv("HERMES_HELD_GATE", "off")
+        monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
         roster = compute_focus_roster(
             watchlist=["SPY", "IJR", "XLP", "NEW1"],
             held={"SPY", "IJR", "XLP"},
@@ -273,11 +273,11 @@ def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 def test_excluded_ticker_and_state_slot() -> None:
-    from digiquant.research.state import ExcludedTicker, PhaseHermesState
+    from digiquant.research.state import ExcludedTicker, PhasePortfolioState
 
     e = ExcludedTicker(ticker="TLT", reason="held, no material change (Δ<0.5%)")
     assert e.ticker == "TLT" and e.reason
-    assert PhaseHermesState().focus_roster_excluded == []
+    assert PhasePortfolioState().focus_roster_excluded == []
 
 
 @pytest.mark.unit
@@ -308,7 +308,7 @@ def test_extract_thesis_mappings_carries_rationale() -> None:
 @pytest.mark.unit
 def test_held_gate_drops_stale_unlinked_held(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
-    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    monkeypatch.setenv("PORTFOLIO_HELD_STALENESS_DELTA", "0.005")
     roster = compute_focus_roster(
         watchlist=["TLT", "XLE"],
         held={"TLT", "XLE"},
@@ -323,7 +323,7 @@ def test_held_gate_drops_stale_unlinked_held(monkeypatch: pytest.MonkeyPatch) ->
 
 @pytest.mark.unit
 def test_held_gate_keeps_material_move(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    monkeypatch.setenv("PORTFOLIO_HELD_STALENESS_DELTA", "0.005")
     roster = compute_focus_roster(
         watchlist=["TLT"],
         held={"TLT"},
@@ -335,7 +335,7 @@ def test_held_gate_keeps_material_move(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster = compute_focus_roster(
         watchlist=["TLT"],
         held={"TLT"},
@@ -349,7 +349,7 @@ def test_held_gate_off_keeps_all(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_held_gate_no_signal_keeps_held(monkeypatch: pytest.MonkeyPatch) -> None:
     # No delta signal at all this run (e.g. a baseline/monthly run where price_deltas is
     # empty) → the gate can't judge staleness, so it must NOT gate out held names (#1017).
-    monkeypatch.setenv("HERMES_HELD_GATE", "on")
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "on")
     roster = compute_focus_roster(
         watchlist=["TLT", "AGG"],
         held={"TLT", "AGG"},
@@ -377,9 +377,9 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
         compute_focus_roster_excluded,
     )
 
-    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
-    monkeypatch.setenv("HERMES_HELD_STALENESS_DELTA", "0.005")
+    monkeypatch.setenv("PORTFOLIO_HELD_STALENESS_DELTA", "0.005")
     monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "10")
 
     # A stub client that selects nothing — QQQ stays below-screen.
@@ -464,7 +464,7 @@ def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
 @pytest.mark.unit
 def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "100")  # env would allow all
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     roster = compute_focus_roster(
         watchlist=["AAA", "BBB", "CCC", "DDD"],
         held=set(),
@@ -480,23 +480,23 @@ def test_compute_focus_roster_honors_adaptive_budget(monkeypatch: pytest.MonkeyP
 # ---------------------------------------------------------------------------
 
 
-def _make_min_hermes_state(*, watchlist: list[str]) -> "object":
-    """Minimal HermesState for node-level tests: a watchlist, no held, no thesis map.
+def _make_min_portfolio_state(*, watchlist: list[str]) -> "object":
+    """Minimal PortfolioState for node-level tests: a watchlist, no held, no thesis map.
 
-    Mirrors the construction in test_build_hermes_phases_thesis /
-    test_chain_safety_net (run_type/run_date/config + empty phase_hermes).
+    Mirrors the construction in test_build_portfolio_phases_thesis /
+    test_chain_safety_net (run_type/run_date/config + empty phase_portfolio).
     """
     from datetime import date as _date
 
-    from digiquant.research.state import AtlasConfigBundle, PhaseHermesState
-    from digiquant.portfolio.state import HermesState
+    from digiquant.research.state import ResearchConfigBundle, PhasePortfolioState
+    from digiquant.portfolio.state import PortfolioState
 
-    state = HermesState(
+    state = PortfolioState(
         run_type="delta",
         run_date=_date(2026, 6, 20),
-        config=AtlasConfigBundle(watchlist=list(watchlist)),
+        config=ResearchConfigBundle(watchlist=list(watchlist)),
     )
-    state.phase_hermes = PhaseHermesState()
+    state.phase_portfolio = PhasePortfolioState()
     return state
 
 
@@ -504,13 +504,13 @@ def _make_min_hermes_state(*, watchlist: list[str]) -> "object":
 def test_h4_node_applies_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (1, 0, None))
     node = h4.build_h4_opportunity_screener(client=None).nodes[0].run
-    # Build a minimal HermesState with watchlist of 3, no held, no thesis map.
-    state = _make_min_hermes_state(watchlist=["AAA", "BBB", "CCC"])
+    # Build a minimal PortfolioState with watchlist of 3, no held, no thesis map.
+    state = _make_min_portfolio_state(watchlist=["AAA", "BBB", "CCC"])
     out = node(state)
-    roster = out["phase_hermes"].focus_roster
+    roster = out["phase_portfolio"].focus_roster
     assert len(roster) == 1  # adaptive budget=1 applied
 
 
@@ -525,8 +525,8 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
     )
     from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
-    monkeypatch.setenv("HERMES_HELD_GATE", "off")
-    state = _make_min_hermes_state(watchlist=["AAA", "BBB", "SPY", "CCC"])
+    monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
+    state = _make_min_portfolio_state(watchlist=["AAA", "BBB", "SPY", "CCC"])
     node = h4.build_h4_opportunity_screener(client=None).nodes[0].run
     rosters: dict[str, str] = {}
     for mode in ("off", "shadow", "enforce"):
@@ -534,11 +534,11 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
         reset_attention_stores()
         out = node(state.model_copy())
         rosters[mode] = json.dumps(
-            [e.model_dump(mode="json") for e in out["phase_hermes"].focus_roster],
+            [e.model_dump(mode="json") for e in out["phase_portfolio"].focus_roster],
             sort_keys=True,
         )
         excluded = json.dumps(
-            [e.model_dump(mode="json") for e in out["phase_hermes"].focus_roster_excluded],
+            [e.model_dump(mode="json") for e in out["phase_portfolio"].focus_roster_excluded],
             sort_keys=True,
         )
         rosters[f"{mode}_excluded"] = excluded

@@ -1,6 +1,6 @@
 ---
 name: alt-data-ai-portfolios
-description: Tracks AI-run / AI-driven investment portfolio accounts on X (Claude/Grok/Gemini and multi-model aggregators) that post live equity holdings and named-ticker picks. A proxy for what OTHER AI investment systems are picking at the stock level — Olympus trades ETFs, so the value is the implied sector/theme tilt. Phase-1 alt-data segment.
+description: Tracks AI-run / AI-driven investment portfolio accounts on X (Claude/Grok/Gemini and multi-model aggregators) that post live equity holdings and named-ticker picks. A proxy for what OTHER AI investment systems are picking at the stock level — dashboard trades ETFs, so the value is the implied sector/theme tilt. Phase-1 alt-data segment.
 ---
 
 # AI Portfolios Sub-Agent (cross-model stock-bias proxy)

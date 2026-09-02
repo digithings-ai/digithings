@@ -18,7 +18,7 @@ from digiquant.research.phases._node_factory import (
 )
 from digiquant.research.sectors_config import SectorConfig, load_sectors
 from digiquant.research.segments import ResearchMemo
-from digiquant.research.state import AtlasResearchState
+from digiquant.research.state import ResearchState
 
 # ─── Output models ──────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ _EQUITY_SPEC = SegmentNodeSpec(
 )
 
 
-def _equity_inputs_builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+def _equity_inputs_builder(state: ResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
     return {
         "segment": spec.segment_slug,
         "macro_regime": _macro_body(state),
@@ -67,7 +67,7 @@ def _sector_config_payload(sector: SectorConfig) -> dict[str, Any]:
     }
 
 
-def _equity_overview_body(state: AtlasResearchState) -> dict[str, Any]:
+def _equity_overview_body(state: ResearchState) -> dict[str, Any]:
     equity_slot = state.phase5_outputs.get("equity")
     if equity_slot is not None and equity_slot.payload.source == "today":
         return equity_slot.payload.body  # type: ignore[union-attr]
@@ -75,7 +75,7 @@ def _equity_overview_body(state: AtlasResearchState) -> dict[str, Any]:
 
 
 def _sector_inputs_builder(sector: SectorConfig) -> InputsBuilder:
-    def _builder(state: AtlasResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
+    def _builder(state: ResearchState, spec: SegmentNodeSpec) -> dict[str, Any]:
         return {
             "segment": spec.segment_slug,
             "sector_config": _sector_config_payload(sector),
@@ -101,19 +101,19 @@ def _sector_spec(sector: SectorConfig) -> SegmentNodeSpec:
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _macro_body(state: AtlasResearchState) -> dict[str, Any]:
+def _macro_body(state: ResearchState) -> dict[str, Any]:
     if state.phase3_output is None or state.phase3_output.payload.source != "today":
         return {}
     return state.phase3_output.payload.body  # type: ignore[union-attr]
 
 
-def _phase1_bodies(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
+def _phase1_bodies(state: ResearchState) -> dict[str, dict[str, Any]]:
     return {
         slug: slot.payload.model_dump(mode="json") for slug, slot in state.phase1_outputs.items()
     }
 
 
-def _phase4_bodies(state: AtlasResearchState) -> dict[str, dict[str, Any]]:
+def _phase4_bodies(state: ResearchState) -> dict[str, dict[str, Any]]:
     return {
         slug: slot.payload.model_dump(mode="json") for slug, slot in state.phase4_outputs.items()
     }

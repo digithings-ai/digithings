@@ -2,10 +2,10 @@
 
 Phase 1–5 segments emit a :class:`ResearchMemo` (markdown ``body`` plus a thin
 envelope). The daily digest is a stitched markdown briefing
-(:func:`digest_briefing_for_hermes`). :class:`SegmentReport` remains for
+(:func:`digest_briefing_for_portfolio`). :class:`SegmentReport` remains for
 historical snapshot rows. This file defines both.
 
-Kept minimal on purpose — the legacy Atlas system does not have strict
+Kept minimal on purpose — the legacy research system does not have strict
 per-segment schemas beyond the overall digest/delta contracts in
 ``templates/schemas/``. We pick a clean Pydantic shape that makes the LLM's
 output deterministic, covers everything the Phase 7 digest synthesis needs
@@ -571,7 +571,7 @@ def compose_legacy_digest_body(data: Mapping[str, Any]) -> str:
     return "\n\n".join(parts).strip() + ("\n" if parts else "")
 
 
-def digest_briefing_for_hermes(digest: Mapping[str, Any] | None) -> dict[str, str]:
+def digest_briefing_for_portfolio(digest: Mapping[str, Any] | None) -> dict[str, str]:
     """Thin H1/H2 envelope: ``date`` / ``body`` / ``regime_label`` only."""
     if not isinstance(digest, Mapping) or not digest:
         return {}
@@ -678,7 +678,7 @@ class SegmentReport(BaseModel):
     """Historical digest / snapshot core (bias, headline, findings).
 
     Phase 1–5 research uses :class:`ResearchMemo`. New digests are markdown
-    briefings (:func:`digest_briefing_for_hermes`); this shape validates old
+    briefings (:func:`digest_briefing_for_portfolio`); this shape validates old
     library rows.
     """
 

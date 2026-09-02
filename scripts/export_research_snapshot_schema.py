@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the Atlas SnapshotEnvelope JSON Schema to disk.
+"""Export the research SnapshotEnvelope JSON Schema to disk.
 
 The serialized JSON Schema is the artifact frontend / TypeScript consumers
 read to generate types or runtime validators. Re-run after any field change
@@ -11,7 +11,7 @@ Usage::
     python3 scripts/export_research_snapshot_schema.py --output /tmp/snapshot.json
 
 The default output path is
-``digiquant/docs/schemas/atlas_snapshot.v{SCHEMA_VERSION}.json``.
+``digiquant/docs/schemas/research_snapshot.v{SCHEMA_VERSION}.json``.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from digiquant.research.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa
 
 
 def _default_output_path() -> Path:
-    return REPO_ROOT / "digiquant" / "docs" / "schemas" / f"atlas_snapshot.v{SCHEMA_VERSION}.json"
+    return REPO_ROOT / "digiquant" / "docs" / "schemas" / f"research_snapshot.v{SCHEMA_VERSION}.json"
 
 
 def main(argv: list[str] | None = None) -> int:

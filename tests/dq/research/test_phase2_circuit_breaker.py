@@ -30,11 +30,11 @@ from digiquant.research.phases.phase2_institutional import (
     build_phase2,
 )
 from digiquant.research.state import (
-    AtlasResearchState,
+    ResearchState,
     DataLayerSnapshot,
 )
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 _INST_SLUGS = {"inst-institutional-flows", "inst-hedge-fund-intel"}
 
@@ -71,8 +71,8 @@ def _data_layer(streak: int) -> DataLayerSnapshot:
     )
 
 
-def _invoke_phase2(state: AtlasResearchState) -> AtlasResearchState:
-    compiled = build_pipeline(AtlasResearchState, [build_phase2()])
+def _invoke_phase2(state: ResearchState) -> ResearchState:
+    compiled = build_pipeline(ResearchState, [build_phase2()])
     with (
         patch(
             "digigraph.graph.research_agent.completion_text",
@@ -83,7 +83,7 @@ def _invoke_phase2(state: AtlasResearchState) -> AtlasResearchState:
         result = compiled.invoke(state)
         state.__dict__["_agent_call"] = agent_call
         state.__dict__["_web_search"] = web_search
-    final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+    final = ResearchState.model_validate(result) if isinstance(result, dict) else result
     final.__dict__["_agent_call"] = state.__dict__["_agent_call"]
     final.__dict__["_web_search"] = state.__dict__["_web_search"]
     return final
@@ -93,7 +93,7 @@ def _invoke_phase2(state: AtlasResearchState) -> AtlasResearchState:
 class TestPhase2CircuitBreaker:
     def test_delta_absent_for_threshold_runs_skips_with_zero_search(self) -> None:
         """Delta + streak >= 3 → inst-* skipped, deterministic absent stub, no search."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 14),
@@ -118,7 +118,7 @@ class TestPhase2CircuitBreaker:
 
     def test_delta_absent_records_skip_reason_in_diagnostics(self) -> None:
         """Diagnostics breakdown records that inst-* skipped, with the reason."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 14),
@@ -134,7 +134,7 @@ class TestPhase2CircuitBreaker:
 
     def test_baseline_runs_phase2_fully_regardless_of_streak(self) -> None:
         """Baseline always runs Phase 2 fully — even with a long absence streak."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="baseline",
             run_date=date(2026, 6, 20),
             data_layer=_data_layer(ABSENCE_BREAKER_THRESHOLD + 5),
@@ -153,7 +153,7 @@ class TestPhase2CircuitBreaker:
 
     def test_delta_fresh_layer_runs_phase2(self) -> None:
         """Delta + streak 0 (layer fresh) → Phase 2 runs fully."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 14),
@@ -169,7 +169,7 @@ class TestPhase2CircuitBreaker:
 
     def test_delta_just_below_threshold_runs_phase2(self) -> None:
         """Delta + streak == threshold-1 → not yet tripped, Phase 2 runs."""
-        state = AtlasResearchState(
+        state = ResearchState(
             run_type="delta",
             run_date=date(2026, 6, 20),
             baseline_date=date(2026, 6, 14),

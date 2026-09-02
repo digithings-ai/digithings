@@ -3,7 +3,7 @@
 After a human pastes Stripe / Mailgun / Alpaca OAuth into
 ``.local/secrets/digithings-{stripe,mailgun,alpaca}.env``, this module is the
 resume path onto ``core`` Edge Function secrets. It reuses
-:data:`KAIROS_STAGING_REQUIRED_SECRETS` so apply and staging E2E cannot drift.
+:data:`STAGING_REQUIRED_SECRETS` so apply and staging E2E cannot drift.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.execution.staging_secrets import (
-    KAIROS_STAGING_OPTIONAL_SECRETS,
-    KAIROS_STAGING_REQUIRED_SECRETS,
-    missing_kairos_staging_secrets,
+    STAGING_OPTIONAL_SECRETS,
+    STAGING_REQUIRED_SECRETS,
+    missing_execution_staging_secrets,
 )
 
 EXIT_VENDOR_FILES_OR_KEYS_MISSING: int = 2
@@ -89,10 +89,10 @@ def inspect_vendor_secret_files(repo_root: Path) -> VendorSecretLoad:
     )
     present_files = tuple(name for name in VENDOR_SECRET_FILENAMES if (secrets / name).is_file())
     environ = load_vendor_secret_environ(repo_root)
-    missing_keys = tuple(missing_kairos_staging_secrets(environ))
+    missing_keys = tuple(missing_execution_staging_secrets(environ))
     present_key_names = tuple(
         name
-        for name in (*KAIROS_STAGING_REQUIRED_SECRETS, *KAIROS_STAGING_OPTIONAL_SECRETS)
+        for name in (*STAGING_REQUIRED_SECRETS, *STAGING_OPTIONAL_SECRETS)
         if name in environ and environ[name].strip()
     )
     return VendorSecretLoad(
@@ -111,7 +111,7 @@ def format_vendor_apply_blocked(report: VendorSecretLoad) -> str:
         parts.append("missing keys: " + ", ".join(report.missing_keys))
     detail = "; ".join(parts) if parts else "unknown"
     return (
-        "Kairos vendor-secret apply blocked — "
+        "execution vendor-secret apply blocked — "
         f"{detail}. Write gitignored .local/secrets/digithings-{{stripe,mailgun,alpaca}}.env; "
         "do not fake Stripe/Mailgun/Alpaca OAuth."
     )
@@ -120,7 +120,7 @@ def format_vendor_apply_blocked(report: VendorSecretLoad) -> str:
 def write_vendor_secret_env_file(environ: Mapping[str, str], path: Path) -> None:
     """Write the selected vendor secrets to a mode-0600 CLI env file."""
     lines: list[str] = []
-    for name in (*KAIROS_STAGING_REQUIRED_SECRETS, *KAIROS_STAGING_OPTIONAL_SECRETS):
+    for name in (*STAGING_REQUIRED_SECRETS, *STAGING_OPTIONAL_SECRETS):
         value = environ.get(name, "").strip()
         if value:
             lines.append(f"{name}={value}")

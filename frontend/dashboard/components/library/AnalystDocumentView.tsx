@@ -7,13 +7,13 @@ import { SignedConvictionBadge } from '@/components/shared/signed-conviction-bad
 import AnalystDossierCard from '@/components/portfolio/tickers/AnalystDossierCard';
 
 /**
- * Structured view for Hermes per-ticker analyst specialist reports (`analyst/{ticker}`).
+ * Structured view for portfolio per-ticker analyst specialist reports (`analyst/{ticker}`).
  * Converges on `AnalystDossierCard` (#1562 PR4) so the library path and the
  * Ticker Dossier route (`components/portfolio/tickers`) render the SAME analyst
  * payload identically — thesis, bull/bear case, tailwinds/headwinds, risks,
  * technicals/expectations/fundamentals, price targets, and sources. All of
  * these fields are present in the live `documents.payload` shape
- * (`digiquant/.../hermes/models/analyst.py:AnalystPayload`) — all 80 frozen
+ * (`digiquant/.../portfolio/models/analyst.py:AnalystPayload`) — all 80 frozen
  * analyst docs carry bull_case/bear_case/headwinds/tailwinds (#1562 blueprint
  * §3), so they are no longer discarded here.
  *

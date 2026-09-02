@@ -36,7 +36,7 @@ jobs:
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
-      atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
+      research_graph: ${{ steps.filter.outputs.research_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -154,17 +154,17 @@ jobs:
               - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
               - 'tests/dq/replay/test_nautilus_portfolio.py'
               - 'tests/dq/replay/test_worker.py'
-              - 'digiquant/src/digiquant/olympus/replay/**'
+              - 'digiquant/src/digiquant/dashboard/replay/**'
               - '.github/workflows/test-nautilus.yml'
-            atlas_graph:
-              - 'digiquant/src/digiquant/olympus/atlas/**'
+            research_graph:
+              - 'digiquant/src/digiquant/research/**'
               - 'digiquant/scripts/research/**'
               - 'digiquant/supabase/**'
               - 'tests/dq/research/**'
-              - 'digiquant/src/digiquant/olympus/edit_mode/**'
-              - 'digiquant/src/digiquant/olympus/hermes/**'
-              - 'digiquant/src/digiquant/olympus/learning/**'
-              - 'digiquant/src/digiquant/olympus/replay/walk_forward.py'
+              - 'digiquant/src/digiquant/dashboard/edit_mode/**'
+              - 'digiquant/src/digiquant/portfolio/**'
+              - 'digiquant/src/digiquant/dashboard/learning/**'
+              - 'digiquant/src/digiquant/dashboard/replay/walk_forward.py'
               - 'tests/dq/replay/test_walk_forward.py'
               - 'tests/dq/replay/phase4_e2e_fixtures.py'
               - 'tests/dq/replay/test_phase4_end_to_end.py'
@@ -325,9 +325,9 @@ jobs:
     if: needs.changes.outputs.nautilus_smoke == 'true'
     uses: ./.github/workflows/test-nautilus.yml
 
-  atlas-graph:
+  research-graph:
     needs: changes
-    if: needs.changes.outputs.atlas_graph == 'true'
+    if: needs.changes.outputs.research_graph == 'true'
     uses: ./.github/workflows/test-research-graph.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
@@ -393,7 +393,7 @@ jobs:
   # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
   # edits to ci.yml itself. The predecessor was a job inside test-research-graph.yml
   # with `files: ".github/workflows/pipeline-digiquant.yml"`, invoked only from the
-  # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
+  # research_graph lane; a workflow-only PR skipped that lane entirely and got no
   # actionlint at all. Suppressions live in .github/actionlint.yaml.
   actionlint:
     name: actionlint
@@ -574,7 +574,7 @@ jobs:
       - score
       - e2e-contract
       - nautilus-smoke
-      - atlas-graph
+      - research-graph
       - pip-audit
       - ruff-and-scripts
       - actionlint
@@ -585,7 +585,7 @@ jobs:
 
       # Drift guard: this job's own `needs:` list was hand-enumerated once
       # and already went stale silently (e2e-contract/nautilus-smoke/
-      # atlas-graph were added to ci.yml after required-checks existed and
+      # research-graph were added to ci.yml after required-checks existed and
       # never got added here — a real false-green gap, not hypothetical).
       # Fail loudly instead of trusting the list matches the file forever.
       - name: Verify needs list covers every job in this file

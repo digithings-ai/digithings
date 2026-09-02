@@ -25,7 +25,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
 )
 from digiquant.portfolio.risk_policy import resolve_risk_policy
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
+from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
 pytestmark = pytest.mark.unit
 

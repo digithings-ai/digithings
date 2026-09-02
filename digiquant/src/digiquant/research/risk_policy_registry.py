@@ -321,13 +321,13 @@ def get_covariance_snapshot(
 def collect_h8_risk_snapshots_from_state(
     state: Any,
 ) -> tuple[RiskPolicy | None, CovarianceSnapshot | None]:
-    """Extract typed H8 risk artifacts from Hermes phase state for H9 persistence."""
-    hermes = getattr(state, "phase_hermes", None)
-    if hermes is None:
+    """Extract typed H8 risk artifacts from portfolio phase state for H9 persistence."""
+    portfolio = getattr(state, "phase_portfolio", None)
+    if portfolio is None:
         return None, None
 
-    policy_raw = getattr(hermes, "risk_policy", None)
-    snapshot_raw = getattr(hermes, "covariance_snapshot", None)
+    policy_raw = getattr(portfolio, "risk_policy", None)
+    snapshot_raw = getattr(portfolio, "covariance_snapshot", None)
     policy: RiskPolicy | None = None
     snapshot: CovarianceSnapshot | None = None
 
@@ -440,7 +440,7 @@ def persist_h8_risk_snapshots_from_state(
     client: SupabaseClient,
     state: Any,
 ) -> RiskRegistryWriteResult:
-    """Collect H8 artifacts from Hermes state; empty is success."""
+    """Collect H8 artifacts from portfolio state; empty is success."""
     policy, snapshot = collect_h8_risk_snapshots_from_state(state)
     if policy is None or snapshot is None:
         return RiskRegistryWriteResult()

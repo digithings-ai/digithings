@@ -1,4 +1,4 @@
-"""Kairos staging E2E runner — Observer hops, then remaining-hop product state.
+"""execution staging E2E runner — Observer hops, then remaining-hop product state.
 
 Phase A: Settings/checkout probes without vendor secrets. Observer writes
 must return ``TIER_FORBIDDEN``. Checkout may still be a named config miss.
@@ -43,9 +43,9 @@ from digiquant.execution.remaining_hops import (
     remaining_hops_unproven,
 )
 from digiquant.execution.staging_secrets import (
-    KAIROS_STAGING_REQUIRED_SECRETS,
+    STAGING_REQUIRED_SECRETS,
     format_missing_secrets_failure,
-    missing_kairos_staging_secrets,
+    missing_execution_staging_secrets,
 )
 
 DEFAULT_FUNCTIONS_BASE = "https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1"
@@ -327,7 +327,7 @@ def _emit_remaining_product_state(
     )
     proven = proven_remaining_hops(evidence)
     blockers = remaining_hop_blockers(evidence)
-    log("kairos_staging_e2e: remaining hop product-state")
+    log("execution_staging_e2e: remaining hop product-state")
     for name in REMAINING_LIVE_HOPS:
         if proven[name]:
             log(f"  {name} proven=True")
@@ -505,7 +505,7 @@ def run_staging_e2e(
         return 3
     jwt = resolved.token
     if jwt:
-        log("kairos_staging_e2e: Observer hops (Settings + checkout, no vendor secrets required)")
+        log("execution_staging_e2e: Observer hops (Settings + checkout, no vendor secrets required)")
         results = run_observer_hops(
             http=http,
             jwt=jwt,
@@ -536,18 +536,18 @@ def run_staging_e2e(
         if unproven is None:
             return 3
         if not unproven:
-            log("kairos_staging_e2e: all remaining hops proven from Settings reads")
+            log("execution_staging_e2e: all remaining hops proven from Settings reads")
             return 0
     else:
         log(
-            "kairos_staging_e2e: Observer hops skipped "
+            "execution_staging_e2e: Observer hops skipped "
             "(set DIGIQUANT_STAGING_USER_JWT or DIGIQUANT_STAGING_EMAIL+PASSWORD+ANON)"
         )
         unproven = remaining_hops_unproven()
 
-    log("kairos_staging_e2e: checking required secret *names* (values never printed)")
-    log(f"  inventory_count={len(KAIROS_STAGING_REQUIRED_SECRETS)}")
-    missing = missing_kairos_staging_secrets(env)
+    log("execution_staging_e2e: checking required secret *names* (values never printed)")
+    log(f"  inventory_count={len(STAGING_REQUIRED_SECRETS)}")
+    missing = missing_execution_staging_secrets(env)
     if missing:
         err(format_missing_secrets_failure(missing))
         err(format_remaining_hops_failure(unproven))
@@ -589,7 +589,7 @@ def run_staging_e2e(
 
     err(format_remaining_hops_failure(unproven))
     log(
-        "kairos_staging_e2e: checkout cleared config errors. "
+        "execution_staging_e2e: checkout cleared config errors. "
         "Remaining hops still unproven — exit 4, not 0."
     )
     return EXIT_REMAINING_HOPS_UNPROVEN

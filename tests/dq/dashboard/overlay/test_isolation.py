@@ -11,8 +11,8 @@ from digiquant.portfolio.writers.commit_io import _prune_orphan_positions
 from digiquant.portfolio.writers.ledger_io import COMMITS, _rows_for_date
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
-from tests.dq.hermes.test_execution_io import RUN_DATE, _Chain, _run
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
+from tests.dq.portfolio.test_execution_io import RUN_DATE, _Chain, _run
 
 pytestmark = pytest.mark.unit
 

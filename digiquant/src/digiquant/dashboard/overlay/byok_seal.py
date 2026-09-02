@@ -159,11 +159,11 @@ def inspect_byok_secret_file(repo_root: Path) -> ByokSealFile:
 def format_byok_seal_blocked(report: ByokSealFile) -> str:
     if report.missing_file:
         return (
-            "Kairos BYOK seal blocked — missing file: "
+            "execution BYOK seal blocked — missing file: "
             f"{BYOK_SECRET_FILENAME}. Write gitignored .local/secrets/{BYOK_SECRET_FILENAME}; "
             "do not seal a placeholder or house LLM key."
         )
-    return "Kairos BYOK seal blocked — missing keys: " + ", ".join(report.missing_keys)
+    return "execution BYOK seal blocked — missing keys: " + ", ".join(report.missing_keys)
 
 
 def assert_workspace_may_receive_byok(workspace: WorkspaceEntitlement) -> None:

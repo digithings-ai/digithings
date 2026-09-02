@@ -1,4 +1,4 @@
-"""Venue resolution policy for Kairos order routing (K4).
+"""Venue resolution policy for execution order routing (K4).
 
 ``resolve_venue`` is the single gate between an approved ``OrderIntent`` and a
 concrete :class:`~digiquant.brokers.contracts.ExecutionVenue`. v1 deliberately

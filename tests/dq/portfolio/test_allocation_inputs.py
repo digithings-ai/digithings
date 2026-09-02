@@ -447,9 +447,9 @@ def test_long_plus_flat_roster_pins_matching_covariance() -> None:
 
 def test_from_state_fills_missing_horizons_with_default() -> None:
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
     )
     from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
@@ -459,12 +459,12 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
     policy = _risk_policy()
     cov = _covariance(("AAPL",))
     memo = _memo("AAPL")
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=_SESSION,
         knowledge_cutoff_at=_CUTOFF,
-        config=AtlasConfigBundle(preferences={"current_weights": {"AAPL": 40.0, "CASH": 60.0}}),
-        phase_hermes=PhaseHermesState(
+        config=ResearchConfigBundle(preferences={"current_weights": {"AAPL": 40.0, "CASH": 60.0}}),
+        phase_portfolio=PhasePortfolioState(
             pm_direction_memo=memo,
             calibrated_forecasts={"AAPL": _calibrated("AAPL").model_dump(mode="json")},
             # No deliberation_summaries → no H6 horizons
@@ -484,9 +484,9 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
 def test_from_state_derives_coherent_non_default_horizon() -> None:
     """#2814: coherent H6 horizon ≠ 21 must assemble — not reject via expected=21."""
     from digiquant.research.state import (
-        AtlasConfigBundle,
-        AtlasResearchState,
-        PhaseHermesState,
+        ResearchConfigBundle,
+        ResearchState,
+        PhasePortfolioState,
     )
     from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
@@ -504,12 +504,12 @@ def test_from_state_derives_coherent_non_default_horizon() -> None:
             }
         }
     }
-    state = AtlasResearchState(
+    state = ResearchState(
         run_type="delta",
         run_date=_SESSION,
         knowledge_cutoff_at=_CUTOFF,
-        config=AtlasConfigBundle(preferences={"current_weights": {"AAPL": 40.0, "CASH": 60.0}}),
-        phase_hermes=PhaseHermesState(
+        config=ResearchConfigBundle(preferences={"current_weights": {"AAPL": 40.0, "CASH": 60.0}}),
+        phase_portfolio=PhasePortfolioState(
             pm_direction_memo=memo,
             calibrated_forecasts={"AAPL": _calibrated("AAPL").model_dump(mode="json")},
             deliberation_summaries=deliberation,

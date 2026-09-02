@@ -14,7 +14,7 @@ Distinct from Track B ``research_corpus`` (#2613): corpus pins are tenant-agnost
 theme/asset/segment identity. These models are versioned claim/event/evidence
 state with temporal provenance and supersession.
 
-Style mirrors ``hermes.models.forecast`` / ``accounting.models``: frozen,
+Style mirrors ``portfolio.models.forecast`` / ``accounting.models``: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, UUID5 content identity, immutable
 tuples. Canonical IDs and content hashes are independent of input list ordering.
 """
@@ -111,7 +111,7 @@ class TypedProvenance(ResearchStateModel):
     source_run_id: NonEmptyStr
     attempt_id: NonEmptyStr
     artifact_id: NonEmptyStr
-    writer_role: NonEmptyStr = "olympus"
+    writer_role: NonEmptyStr = "dashboard"
 
 
 def _require_utc(value: AwareDatetime, *, field_name: str) -> AwareDatetime:
