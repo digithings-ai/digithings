@@ -92,7 +92,7 @@ supabase secrets set \
   APP_URL=https://digiquant.io \
   ALPACA_OAUTH_CLIENT_ID=… \
   ALPACA_OAUTH_CLIENT_SECRET=…   # never NEXT_PUBLIC_
-  FX_HUB_INVITE_HASH=…           # sha256 hex of the 12x invite; never NEXT_PUBLIC_
+  FX_HUB_INVITE_HASH=…           # sha256 hex of the FX Hub invite; never NEXT_PUBLIC_
 ```
 
 `APP_URL` must be the **site origin** (`https://digiquant.io`) — never

@@ -172,11 +172,10 @@ Share one reusable desk URL on the dashboard origin:
 
 `https://digiquant.io/dashboard?invite=<code>`
 
-(or the same `invite` query on `/dashboard/twelve-x`). Unsigned visitors stash the
-token in `sessionStorage` (tab-scoped). After Google, GitHub, or email signup/login
-**in that same tab**, the app POSTs that code to settings `POST /access/redeem-invite`
-(SHA-256 compare against `FX_HUB_INVITE_HASH` and/or `product_invite_codes`) and
-grants `fx_hub` for the **signed-in email**.
+Unsigned visitors stash the token in `sessionStorage` (tab-scoped). After Google,
+GitHub, or email signup/login **in that same tab**, the app POSTs that code to
+settings `POST /access/redeem-invite` (SHA-256 compare against `FX_HUB_INVITE_HASH`
+and/or `product_invite_codes`) and grants `fx_hub` for the **signed-in email**.
 No session / no email → no grant. Do not put a code field on the OAuth card. The
 FX Hub locked surface still has a paste-code form as fallback if someone forgets
 the link, or if confirm-email opens a **new** tab (stash does not follow). Rate
@@ -196,7 +195,7 @@ Operator steps:
    Mailgun digest is a separate secret; until it exists the notification is the
    table row + `notification_log` event `fx_hub_invite_redeemed`.
 
-Cloudflare Access on **`/dashboard/twelve-x*`** remains a human Zero Trust
-option if the team should never see the rest of the dashboard — it is not encoded here.
+Cloudflare Access on FX Hub remains a human Zero Trust option if the team should
+never see the rest of the dashboard — it is not encoded here.
 Do not flip production Access or auth flags as part of the invite-link change.
 

@@ -73,8 +73,8 @@ describe('pathWithoutInviteParam', () => {
     expect(pathWithoutInviteParam('/dashboard/?invite=fx-hub-desk-token&tab=brief')).toBe(
       '/dashboard/?tab=brief',
     );
-    expect(pathWithoutInviteParam('/dashboard/twelve-x?invite=fx-hub-desk-token')).toBe(
-      '/dashboard/twelve-x',
+    expect(pathWithoutInviteParam('/dashboard/settings?invite=fx-hub-desk-token')).toBe(
+      '/dashboard/settings',
     );
   });
 
