@@ -112,5 +112,7 @@ deno test --allow-env --allow-read \
   _shared/app-url.test.ts \
   _shared/cors.test.ts \
   _shared/invite.test.ts \
+  _shared/profile-schemas.test.ts \
+  _shared/billing-auth.test.ts \
   settings/settings.test.ts
 ```

@@ -8,6 +8,13 @@ import {
 } from "./embed-chat-error";
 import { LEGACY_EMBED_DISABLED_MESSAGE } from "./embed-legacy-gate";
 
+describe("BYOK_MODEL_REMEDIABLE_MESSAGE (#2529)", () => {
+  it("points at the in-chat settings affordance, not a full page reload", () => {
+    expect(BYOK_MODEL_REMEDIABLE_MESSAGE).toMatch(/Update your key/i);
+    expect(BYOK_MODEL_REMEDIABLE_MESSAGE).not.toMatch(/Reload/i);
+  });
+});
+
 describe("formatEmbedChatError", () => {
   it("returns null for empty errors", () => {
     expect(formatEmbedChatError(undefined)).toBeNull();
