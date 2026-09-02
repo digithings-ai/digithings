@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import math
 from datetime import date
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     m2_liquidity_z,
     parse_indicator_weights_json,
+    rs_eth_confluence_z,
     rs_eth_z,
 )
 from digiquant.strategies.sdca.price_oscillators import (
@@ -138,6 +140,90 @@ class TestNamedExtras:
         assert sum(tail) / len(tail) > 0
 
 
+class TestRsEthConfluenceZ:
+    def _btc_eth(self, n: int = 500) -> tuple[pl.Series, pl.Series, pl.Series]:
+        dates = _dates(n)
+        btc = pl.Series(
+            [
+                1000.0
+                + 300.0 * math.sin(2 * math.pi * i / 140.0)
+                + 60.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        eth = pl.Series([50.0] * n)
+        return dates, btc, eth
+
+    def test_clipped_to_unit_interval(self) -> None:
+        dates, btc, eth = self._btc_eth()
+        z = rs_eth_confluence_z(dates, btc, dates, eth)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        dates, btc, eth = self._btc_eth()
+        slow = rs_eth_z(dates, btc, dates, eth, window=90, min_samples=20)
+        fast = rs_eth_z(dates, btc, dates, eth, window=30, min_samples=15)
+        confluence = rs_eth_confluence_z(dates, btc, dates, eth)
+
+        saw_agreement = saw_disagreement = False
+        for s, f, c in zip(slow.to_list(), fast.to_list(), confluence.to_list(), strict=True):
+            if s is None and f is None:
+                assert c is None
+                continue
+            if s is None:
+                assert c == pytest.approx(f, abs=1e-9)
+                continue
+            if f is None:
+                assert c == pytest.approx(s, abs=1e-9)
+                continue
+            base = 0.5 * s + 0.5 * f
+            if s == 0.0 or f == 0.0:
+                expected = base
+            elif (s > 0) == (f > 0):
+                frac = min(abs(s), abs(f)) / max(abs(s), abs(f))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
+
+    def test_fast_leg_params_change_output(self) -> None:
+        n = 300
+        dates = _dates(n)
+        btc = pl.Series([1000.0 - 0.3 * i + 20.0 * math.sin(i / 6.0) for i in range(n)])
+        eth = pl.Series([50.0 + 0.05 * i for i in range(n)])
+        z_short = rs_eth_confluence_z(
+            dates, btc, dates, eth, fast_window=10, fast_min_samples=5
+        ).to_list()
+        z_long = rs_eth_confluence_z(
+            dates, btc, dates, eth, fast_window=40, fast_min_samples=20
+        ).to_list()
+        assert z_short != z_long
+
+
+class TestOscillatorSpecRsEthFast:
+    def test_default_matches_shorter_window(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.rs_eth_fast_window == 30
+        assert spec.rs_eth_fast_min_samples == 15
+
+    def test_fast_independent_of_slow(self) -> None:
+        spec = SdcaOscillatorSpec(rs_eth_window=120, rs_eth_fast_window=20)
+        assert spec.rs_eth_window == 120
+        assert spec.rs_eth_fast_window == 20
+
+    def test_fast_min_samples_must_not_exceed_window(self) -> None:
+        with pytest.raises(ValueError, match="rs_eth_fast_min_samples"):
+            SdcaOscillatorSpec(rs_eth_fast_window=10, rs_eth_fast_min_samples=20)
+
+
 class TestBuildExtraIndicators:
     def test_zero_weights_emit_no_extras_even_when_sources_exist(self) -> None:
         dates = _dates(30)
@@ -246,6 +332,29 @@ class TestBuildExtraIndicators:
         assert len(extras) == 1
         expected = sma_band_confluence_z(
             dates, close, slow_window=80, fast_window=15, fast_min_samples=8
+        )
+        assert extras[0].z.to_list() == expected.to_list()
+
+    def test_rs_eth_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """rs_eth now wires to rs_eth_confluence_z (slow+fast), not the raw single-window z."""
+        n = 300
+        dates = _dates(n)
+        btc = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        eth = pl.Series([50.0 + 0.2 * ((i % 25) - 12) + 0.1 * i for i in range(n)])
+        sources = ExtraIndicatorSources(eth_dates=dates, eth_close=eth)
+        spec = SdcaOscillatorSpec(
+            rs_eth_window=60, rs_eth_fast_window=12, rs_eth_fast_min_samples=6
+        )
+        extras = build_extra_indicators(
+            dates,
+            btc,
+            SdcaCompositeWeights(valuation=1.0, rs_eth=1.0),
+            sources,
+            oscillators=spec,
+        )
+        assert len(extras) == 1
+        expected = rs_eth_confluence_z(
+            dates, btc, dates, eth, slow_window=60, fast_window=12, fast_min_samples=6
         )
         assert extras[0].z.to_list() == expected.to_list()
 

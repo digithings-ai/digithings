@@ -7,6 +7,13 @@ The engine already blends ``Σ(zᵢ·wᵢ)/Σ(wᵢ)`` then
 long-horizon votes; they are **not** Mayer / 200w SMA (near-duplicate of
 power-law ``valuation_z``).
 
+``rs_eth`` is the same agreement-scaled multi-timeframe pattern used by the
+price oscillators (``price_oscillators.py``), applied to the BTC/ETH log
+ratio: ``rs_eth_confluence_z`` blends a slow leg (``rs_eth_z`` at a 90-day
+window, long-term rotation) with a fast leg (30-day, medium-term rotation).
+``m2``/``dxy`` stay single-window — they track slow macro regimes without a
+comparably fast rotation to confluence against.
+
 ``SdcaCompositeWeights`` defaults ``valuation=1``, extras ``0`` (disabled,
 excluded from the blend). Published ``btc_sdca`` in ``settings.json`` turns
 on M2, DXY, weekly log-MACD, and MTF weekly/monthly RSI — see
@@ -34,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
+    agreement_scaled_blend,
     macd_confluence_z,
     price_oscillator_z_vectors,
     rsi_confluence_z,
@@ -48,6 +56,9 @@ EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATO
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
 _SIGMA_FLOOR = 1e-12
+_RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
+_RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
 WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "valuation": "valuation_weight",
     "m2": "m2_weight",
@@ -223,6 +234,46 @@ def rs_eth_z(
     return (-causal_rolling_z(ratio, window=window, min_samples=min_samples)).alias("rs_eth")
 
 
+def rs_eth_confluence_z(
+    dates: pl.Series,
+    btc_price: pl.Series,
+    eth_dates: pl.Series,
+    eth_close: pl.Series,
+    *,
+    slow_window: int = DEFAULT_ROLLING_WINDOW,
+    slow_min_samples: int = _MIN_SAMPLES,
+    fast_window: int = 30,
+    fast_min_samples: int = 15,
+    slow_weight: float = _RS_ETH_CONFLUENCE_SLOW_WEIGHT,
+    agreement_boost: float = _RS_ETH_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Slow (long-term) + fast (medium-term) BTC/ETH relative-strength z.
+
+    Same agreement-scaled blend as the price-oscillator confluences
+    (``rsi_confluence_z`` / ``macd_confluence_z`` / ``sma_band_confluence_z``
+    in ``price_oscillators.py``). Like ``sma_band_confluence_z``, both legs
+    share one formula — ``rs_eth_z``'s rolling z of the BTC/ETH log ratio —
+    so timeframe separation is window length, not bar-aggregation. BTC/ETH
+    rotation has both a slow, multi-quarter cycle and faster swings, so a
+    two-timeframe read fits the ratio the same way it fits a price band.
+    """
+    slow = rs_eth_z(
+        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples
+    )
+    fast = rs_eth_z(
+        dates, btc_price, eth_dates, eth_close, window=fast_window, min_samples=fast_min_samples
+    )
+    return agreement_scaled_blend(
+        slow,
+        fast,
+        long_term_weight=slow_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="rs_eth",
+    )
+
+
 def dxy_z(
     dates: pl.Series,
     dxy_dates: pl.Series,
@@ -283,13 +334,15 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="rs_eth",
-                z=rs_eth_z(
+                z=rs_eth_confluence_z(
                     dates,
                     btc_price,
                     eth_dates,
                     sources.eth_close,  # type: ignore[arg-type]
-                    window=window,
-                    min_samples=min_samples,
+                    slow_window=spec.rs_eth_window,
+                    slow_min_samples=spec.rs_eth_min_samples,
+                    fast_window=spec.rs_eth_fast_window,
+                    fast_min_samples=spec.rs_eth_fast_min_samples,
                 ),
                 weight=enabled["rs_eth"],
             )
@@ -512,6 +565,7 @@ __all__ = [
     "m2_liquidity_z",
     "missing_extra_names",
     "parse_indicator_weights_json",
+    "rs_eth_confluence_z",
     "rs_eth_z",
     "sources_from_optional_paths",
 ]

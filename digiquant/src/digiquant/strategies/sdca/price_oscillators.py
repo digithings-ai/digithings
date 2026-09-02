@@ -68,6 +68,10 @@ _SMA_BAND_FAST_MIN_SAMPLES = 10
 _SMA_BAND_CONFLUENCE_SLOW_WEIGHT = 0.5
 _SMA_BAND_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _SMA_BAND_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
+_RS_ETH_WINDOW = 90
+_RS_ETH_MIN_SAMPLES = 20
+_RS_ETH_FAST_WINDOW = 30
+_RS_ETH_FAST_MIN_SAMPLES = 15
 _SIGMA_FLOOR = 1e-12
 _WEEK_DAYS = 6  # Monday start + 6 days → Sunday (ISO week complete)
 _RSI_DEAD_LOW = 30.0
@@ -101,6 +105,12 @@ class SdcaOscillatorSpec(BaseModel):
     of the SMA-band confluence (``sma_band_confluence_z``);
     ``sma_band_fast_window``/``sma_band_fast_min_samples`` are its
     medium-term fast leg — same formula, shorter window.
+    ``rs_eth_window``/``rs_eth_min_samples`` and
+    ``rs_eth_fast_window``/``rs_eth_fast_min_samples`` configure
+    ``rs_eth_confluence_z`` (``indicator_catalog.py``) the same way — BTC/ETH
+    relative strength is not a price-oscillator technical, but reuses this
+    spec as the one per-indicator-period config object already threaded
+    through ``build_extra_indicators``.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -119,6 +129,10 @@ class SdcaOscillatorSpec(BaseModel):
     sma_band_min_samples: int = Field(_SMA_BAND_MIN_SAMPLES, ge=2)
     sma_band_fast_window: int = Field(_SMA_BAND_FAST_WINDOW, ge=2)
     sma_band_fast_min_samples: int = Field(_SMA_BAND_FAST_MIN_SAMPLES, ge=2)
+    rs_eth_window: int = Field(_RS_ETH_WINDOW, ge=2)
+    rs_eth_min_samples: int = Field(_RS_ETH_MIN_SAMPLES, ge=2)
+    rs_eth_fast_window: int = Field(_RS_ETH_FAST_WINDOW, ge=2)
+    rs_eth_fast_min_samples: int = Field(_RS_ETH_FAST_MIN_SAMPLES, ge=2)
 
     @model_validator(mode="after")
     def _ordered(self) -> SdcaOscillatorSpec:
@@ -132,6 +146,10 @@ class SdcaOscillatorSpec(BaseModel):
             raise ValueError("sma_band_min_samples must be <= sma_band_window")
         if self.sma_band_fast_min_samples > self.sma_band_fast_window:
             raise ValueError("sma_band_fast_min_samples must be <= sma_band_fast_window")
+        if self.rs_eth_min_samples > self.rs_eth_window:
+            raise ValueError("rs_eth_min_samples must be <= rs_eth_window")
+        if self.rs_eth_fast_min_samples > self.rs_eth_fast_window:
+            raise ValueError("rs_eth_fast_min_samples must be <= rs_eth_fast_window")
         return self
 
 
