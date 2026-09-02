@@ -21,14 +21,20 @@ from pathlib import Path
 WORKFLOW_FILE = "pipeline-olympus.yml"
 
 
+# Only these events count as "today's house already landed". A same-day
+# workflow_dispatch dry-run success must not suppress the scheduled book.
+_COUNTING_EVENTS = frozenset({"schedule", "repository_dispatch"})
+
+
 @dataclass(frozen=True)
 class PriorRun:
-    """Sanitized Actions run — ids and conclusions only."""
+    """Sanitized Actions run — ids, event, and conclusions only."""
 
     run_id: int
     status: str
     conclusion: str | None
     created_at: datetime
+    event: str
 
 
 def parse_utc(value: str) -> datetime:
@@ -47,9 +53,10 @@ def parse_runs(raw: object) -> tuple[PriorRun, ...]:
         run_id = item.get("databaseId")
         status = item.get("status")
         created = item.get("createdAt")
+        event = item.get("event")
         if not isinstance(run_id, int) or not isinstance(status, str):
             continue
-        if not isinstance(created, str):
+        if not isinstance(created, str) or not isinstance(event, str):
             continue
         conclusion = item.get("conclusion")
         rows.append(
@@ -58,6 +65,7 @@ def parse_runs(raw: object) -> tuple[PriorRun, ...]:
                 status=status,
                 conclusion=conclusion if isinstance(conclusion, str) else None,
                 created_at=parse_utc(created),
+                event=event,
             )
         )
     return tuple(rows)
@@ -78,6 +86,8 @@ def should_skip_house_run(
     for run in runs:
         if run.run_id == current_run_id:
             continue
+        if run.event not in _COUNTING_EVENTS:
+            continue
         if run.status != "completed" or run.conclusion != "success":
             continue
         if start <= run.created_at < end:
@@ -96,7 +106,7 @@ def _list_runs() -> tuple[PriorRun, ...]:
             "--limit",
             "30",
             "--json",
-            "databaseId,conclusion,status,createdAt",
+            "databaseId,conclusion,status,createdAt,event",
         ],
         check=False,
         capture_output=True,

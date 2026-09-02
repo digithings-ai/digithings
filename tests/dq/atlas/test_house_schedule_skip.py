@@ -37,12 +37,14 @@ def _run(
     created_at: datetime,
     status: str = "completed",
     conclusion: str | None = "success",
+    event: str = "schedule",
 ) -> object:
     return module.PriorRun(
         run_id=run_id,
         status=status,
         conclusion=conclusion,
         created_at=created_at,
+        event=event,
     )
 
 
@@ -100,13 +102,39 @@ def test_parse_runs_reads_gh_run_list_json() -> None:
                 "status": "completed",
                 "conclusion": "success",
                 "createdAt": "2026-09-01T09:20:00Z",
+                "event": "schedule",
             },
             {"databaseId": "nope"},
+            {
+                "databaseId": 12,
+                "status": "completed",
+                "conclusion": "success",
+                "createdAt": "2026-09-01T09:21:00Z",
+            },
         ]
     )
     assert len(parsed) == 1
     assert parsed[0].run_id == 11
     assert parsed[0].created_at.tzinfo is not None
+    assert parsed[0].event == "schedule"
+
+
+def test_workflow_dispatch_success_does_not_skip() -> None:
+    module = _load()
+    prior = _run(
+        module,
+        run_id=1,
+        created_at=datetime(2026, 9, 1, 9, 20, tzinfo=UTC),
+        event="workflow_dispatch",
+    )
+    assert (
+        module.should_skip_house_run(
+            current_run_id=2,
+            run_date=date(2026, 9, 1),
+            runs=(prior,),
+        )
+        is False
+    )
 
 
 def test_workflow_dispatch_force_never_skips() -> None:

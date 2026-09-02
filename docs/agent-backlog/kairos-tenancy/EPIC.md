@@ -26,8 +26,8 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
 packages are on `develop`. Live house GHA book-commit, Pages `/dashboard/` cutover
 (including Alpaca callback), and staging E2E remaining hops are **not** proven;
 they are tracked in [#3391](https://github.com/digithings-ai/digithings/issues/3391).
-Pick that issue up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"`
-schedule. Do not claim those probes passed. Do not re-open this epic unless a
+Pick that issue up after the next `pipeline-olympus.yml` schedule
+(`cron: "17 9/10/11/12 * * *"`). Do not claim those probes passed. Do not re-open this epic unless a
 probe contradicts delivery (house GHA red for a new writer bug, or Pages/EF
 cutover broke Auth).
 
@@ -84,7 +84,7 @@ Wave E
       (`eb791dd99`). Do **not** merge conflicting
       [#3332](https://github.com/digithings-ai/digithings/pull/3332) (atlas-graph
       red: `test_h9_is_the_only_ledger_writer`; overlaps #3335 `_json_safe`).
-      Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
+      Next scheduled GHA (`cron: "17 9/10/11/12 * * *"`) is still the live
       *pipeline* book-commit proof (`python scripts/digiquant_house_pipeline_proof.py`,
       [#3367](https://github.com/digithings-ai/digithings/pull/3367) on `develop`
       `207dd0a68`; fail-close [#3383](https://github.com/digithings-ai/digithings/pull/3383)
