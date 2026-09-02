@@ -203,10 +203,10 @@ anon path as default. See `docs/reviews/REM-deferred-ops.md`.
 `scripts/build-digiquant.sh` fails the build if the file is present. Portfolio data
 comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
 
-**Committed-book SSOT (#3319):** Brief, Pipeline, `pm-rebalance`, and holdings
+**Committed-book SSOT (#3319 / #3426):** Brief, Pipeline, `pm-rebalance`, and holdings
 follow `daily_snapshots.date`. Positions and rebalance rows newer than that
-snapshot are ignored until a snapshot exists for that date. Pipeline Health
-notes when the committed snapshot is older than today.
+snapshot are ignored until a snapshot exists for that date. Pipeline Health notes
+hidden newer positions only when those dates exist; a snapshot query error fails closed.
 
 **CSP (REM-077):** security headers ship from `frontend/digiquant-web/public/_headers`,
 which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pages

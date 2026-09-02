@@ -7,6 +7,7 @@ import { AppShellProvider } from '@/components/app-shell-context';
 import AppFrame from '@/components/app-frame';
 import { LoginScreen } from '@/components/login-screen';
 import { useAuth } from '@/lib/auth-context';
+import { useInviteLink } from '@/lib/invite-link';
 
 /** Exact auth routes (Next usePathname strips basePath). */
 const AUTH_PATHS = new Set(['/login', '/signup', '/auth/callback']);
@@ -86,6 +87,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const { authEnabled, session, loading } = useAuth();
   const pathname = usePathname();
   const mounted = useHasMounted();
+  useInviteLink();
 
   if (!authEnabled) {
     return <AppProviders>{children}</AppProviders>;

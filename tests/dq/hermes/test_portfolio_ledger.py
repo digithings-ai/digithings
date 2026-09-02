@@ -32,6 +32,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     TargetAdjustmentType,
     paper_execution_id,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -78,6 +79,26 @@ class TestPortfolioLedgerModel:
     stays a documented, tested fact about upstream Pydantic v2 rather than something
     that silently gets "fixed" by a future refactor's assumptions, or silently
     reappears as a surprise if a caller ever does reach for ``model_copy``."""
+
+    def test_defaults_workspace_id_to_house(self) -> None:
+        """T0 (#5-T0 / #c326219d): house pipeline omits workspace_id; default is house."""
+        commit = make_commit()
+        assert commit.workspace_id == house_workspace_id()
+
+    def test_accepts_stamped_workspace_id_on_read_back(self) -> None:
+        """Writers stamp workspace_id before insert; extra=forbid must not reject it.
+
+        Without the field on PortfolioLedgerModel, model_validate of PostgREST
+        rows degraded H9 cost-liquidity evidence (#c326219d).
+        """
+        overlay = uuid4()
+        commit = make_commit(workspace_id=overlay)
+        assert commit.workspace_id == overlay
+        # Wire form uses a UUID string (same as PostgREST JSON).
+        payload = commit.model_dump(mode="json")
+        assert payload["workspace_id"] == str(overlay)
+        roundtrip = PortfolioCommit.model_validate(payload)
+        assert roundtrip.workspace_id == overlay
 
     def test_model_copy_bypasses_freeze_and_validation(self) -> None:
         commit = make_commit()

@@ -242,6 +242,7 @@ export default function OverviewPage() {
         ledgerDayEvents={selectBriefLedgerDayEvents(data.position_events, latestDate)}
         runHealth={latestDate ? runHealth : null}
         runDiagnostics={runDiagnostics}
+        positionDates={(data.position_history ?? []).map((row) => row.date)}
       />
     </div>
   );
