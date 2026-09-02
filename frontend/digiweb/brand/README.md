@@ -22,7 +22,10 @@ need a file that lives elsewhere, take it from the path given.
 | vector / print / resize | `avatar/digithings-avatar-{dark,light}.svg` | the source both PNGs are rendered from |
 | **company email sign-off** | `email/signoff.{txt,html}` | lowercase digithings, tagline, digithings.ai |
 
-Public downloads of the same bytes are on [digithings.ai/brand](https://digithings.ai/brand) (`/press` redirects there). That page is a mirror with `--check`, not a second set of logos.
+The same bytes are previewed on the local design-reference at `/brand`
+(`npm run dev --workspace design-reference` → http://127.0.0.1:4013/brand/).
+That page is a `--check` mirror, not a second set of logos, and it is **not**
+shipped on digithings.ai.
 
 The avatar is the compact `d` + block cursor — the terminal identity's reduction,
 not the full `digi` lockup, which closes up below about 64px.
@@ -124,9 +127,10 @@ python3 frontend/digiweb/brand/build-header.py --check   # verify, write nothing
 ```
 
 `--check` also verifies the served mirrors under
-`frontend/digithings-web/public/brand/` (and `public/og.png`) so the marketing
-page cannot drift from this folder. Re-run the header builder after an avatar
-or OG rebuild so those copies refresh.
+`frontend/digiweb/reference/public/brand/` (and the live `public/og.png` unfurl
+cards) so the design-reference kit cannot drift from this folder. Re-run the
+header builder after an avatar or OG rebuild so those copies refresh. The
+marketing sites do not serve `/brand`.
 
 ## Colours
 

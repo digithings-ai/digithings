@@ -1,8 +1,9 @@
-/** Public brand-kit catalogue — hrefs the /brand page renders as downloads.
+/** Brand-kit catalogue — hrefs the design-reference /brand page renders as downloads.
  *
- *  Served copies live under public/brand/ and are kept in sync by
- *  `frontend/digiweb/brand/build-header.py --check`. Canonical sources stay in
- *  `frontend/digiweb/brand/` so a second hand-copied logo cannot drift.
+ *  Served copies live under frontend/digiweb/reference/public/brand/ and are
+ *  kept in sync by `frontend/digiweb/brand/build-header.py --check`. Canonical
+ *  sources stay in `frontend/digiweb/brand/` so a second hand-copied logo
+ *  cannot drift. This kit is not shipped on digithings.ai.
  */
 
 export const BRAND_WORD = "digithings";
@@ -97,9 +98,9 @@ export const HEADERS: KitFile[] = [
 export const OG_CARDS: KitFile[] = [
   {
     label: "Open Graph card",
-    href: "/og.png",
+    href: "/brand/og/digithings-og.png",
     size: "1200×630",
-    note: "Link unfurls. Also at /brand/og/digithings-og.png.",
+    note: "Same bytes as each live site's public/og.png unfurl card.",
   },
   {
     label: "Open Graph card svg",

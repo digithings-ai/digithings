@@ -29,6 +29,7 @@ const FAMILIES = [
   { href: "/terminal", label: "Terminal", blurb: "Diegetic CLI session and streaming chat transcript." },
   { href: "/chatbot", label: "Chatbot", blurb: "Thinking chain, composer, markdown, inline chart & graph, widgets." },
   { href: "/symbols", label: "Symbols", blurb: "Module emblems, wordmarks, QR, vendor logos, glyphs." },
+  { href: "/brand", label: "Brand", blurb: "Avatars, social headers, OG card, mail sign-off — local kit only." },
   { href: "/account", label: "Account", blurb: "Login, sign-up, payment, settings, profile templates." },
 ] as const;
 
@@ -44,7 +45,7 @@ export function ContentsOverview() {
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
-      <h2 className="title">Fourteen families, one system.</h2>
+      <h2 className="title">Fifteen families, one system.</h2>
       <p className="section-copy">
         Every page is one family of design elements, all sharing the same tokens, livery, and
         motion laws. Start on Iterate when the blend is in flux — otherwise start anywhere; the
