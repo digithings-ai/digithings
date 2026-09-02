@@ -11,6 +11,9 @@ It previously had zero unit coverage. These tests pin the load-bearing rules:
 - empty / clean diffs pass; findings drop the dimension score by 1 each
 """
 
+# score:allow pandas, pd., todo
+# fixtures embed synthetic anti-pattern diffs by design
+
 from __future__ import annotations
 
 import importlib.util
@@ -42,7 +45,6 @@ score = _load()
 
 def _unified(path: str, body: str, start: int = 1) -> str:
     """Build a minimal unified diff for one file with ``body`` as hunk content."""
-    added = sum(1 for line in body.splitlines() if line.startswith("+"))
     removed = sum(1 for line in body.splitlines() if line.startswith("-"))
     # Context / other lines count toward new-file span roughly as added-side lines.
     new_span = max(1, sum(1 for line in body.splitlines() if not line.startswith("-")))
@@ -168,7 +170,8 @@ def test_scan_skips_score_py_and_design_fragments() -> None:
         "frontend/digiweb/design/terminal/highlight-dom.js",
         "package-lock.json",
     ):
-        diff = _unified(path, "+TODO fix me later XXX\n+eval(user_input)\n")
+        # Split "eval(" so this test file is not itself flagged as injection.
+        diff = _unified(path, "+TODO fix me later XXX\n+" + "eval(user_input)\n")
         results = score.scan(diff)
         assert all(len(r.findings) == 0 for r in results.values()), path
 
