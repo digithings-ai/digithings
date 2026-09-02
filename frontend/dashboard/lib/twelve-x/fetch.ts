@@ -3,11 +3,11 @@
  *
  * Mirrors the `querySupabase` retry/guard pattern in `lib/queries.ts`, but runs
  * against the dedicated twelve-x client (`./supabase`) rather than the main
- * Olympus singleton. All selects are cast to the contract row types in
+ * dashboard singleton. All selects are cast to the contract row types in
  * `./types.ts`.
  *
  * Empty-state philosophy (per the suite spec): the FX digest relaxes the
- * Atlas "today / yesterday only" window — there is no daily-freshness banner,
+ * research "today / yesterday only" window — there is no daily-freshness banner,
  * so `getLatestDigest()` simply returns the latest covered session.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -90,7 +90,7 @@ async function querySupabase<T>(
 }
 
 /**
- * Empty-tolerant query against the MAIN Olympus client (the `core` project), for the
+ * Empty-tolerant query against the MAIN dashboard client (the `core` project), for the
  * shared `economic_calendar` (#1066). The calendar moved out of the twelve-x project
  * into `core`'s shared data layer, so it is read via the main client — unlike the other
  * FX research tables, which stay on `twelveXSupabase`. Same empty == `[]` semantics as
@@ -375,7 +375,7 @@ async function fetchCalendarWindow({
   queryEnd,
 }: CalendarWindow): Promise<FxEconomicCalendarRow[]> {
   // #1066: the calendar lives in the shared `core` project now, so it is read via the
-  // MAIN Olympus client (not `twelveXSupabase`), from `economic_calendar`.
+  // MAIN dashboard client (not `twelveXSupabase`), from `economic_calendar`.
   if (!isSupabaseConfigured() || !supabase) return [];
   const rows = await queryMainSupabase<FxEconomicCalendarRow[]>((sb) =>
     sb
@@ -539,7 +539,7 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
 
 /**
  * Lightweight idea history for continuity (pair+direction streak).
- * Caps lookback so Olympus does not pull the full archive.
+ * Caps lookback so dashboard does not pull the full archive.
  *
  * When `asOfBoardDate` is set (canonical board run_date), the window is
  * `[board − lookbackDays, board]` inclusive so the displayed board is never

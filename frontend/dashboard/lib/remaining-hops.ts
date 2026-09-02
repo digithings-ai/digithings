@@ -1,7 +1,7 @@
 /**
  * Member-visible remaining-hop predicates.
  *
- * Mirrors ``digiquant.olympus.kairos.remaining_hops.proven_remaining_hops``
+ * Mirrors ``digiquant.execution.remaining_hops.proven_remaining_hops``
  * and ``remaining_hop_blockers``. The Settings About panel never claims
  * digest inbox confirmation — that flag is operator-only
  * (`DIGIQUANT_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also requires

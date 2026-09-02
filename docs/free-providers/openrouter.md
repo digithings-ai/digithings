@@ -90,7 +90,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (fallback tail in chain) |
 | Single-shot 100k | Yes, via `google/gemini-2.0-flash-exp:free` (1M ctx) — when available |
 | Privacy safe | Unknown — check per-model data policy card on openrouter.ai |
-| Atlas/Hermes role | Fallback if primary providers hit rate limits |
+| research/portfolio role | Fallback if primary providers hit rate limits |
 
 ---
 

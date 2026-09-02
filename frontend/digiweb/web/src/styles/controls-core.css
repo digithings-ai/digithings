@@ -4,7 +4,7 @@
    plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
    (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
    SearchBar (ctl-search / sb-*). The #1548 families carry the reference
-   dress, plus olympus's shipped dresses where the two differ (nb-pager
+   dress, plus dashboard's shipped dresses where the two differ (nb-pager
    "capsule", nb-seg "accent" — see the NavButtons dresses section;
    tg-chip-quant accent chip and ctl-search-row dropdown filter row — see
    the TagsInput / SearchBar sections); they
@@ -1088,7 +1088,7 @@
 /* ── Skeleton — the sk-* shimmer grammar (#1548, from
       reference/app/controls/controls.css). Shape defaults in
       @layer components so call-site width/height utilities can size them
-      (olympus's snapshot skeleton uses h-20 blocks); the ::after shimmer,
+      (dashboard's snapshot skeleton uses h-20 blocks); the ::after shimmer,
       keyframes, and reduced-motion guard stay unlayered ─────────────────── */
 
 @layer components {
@@ -1194,7 +1194,7 @@
     color: var(--ink-mute);
   }
 
-  /* note — the italic "why it's empty" secondary line (olympus observability) */
+  /* note — the italic "why it's empty" secondary line (dashboard observability) */
   .ctl-empty-note {
     margin: 0;
     max-width: 24ch;
@@ -1210,10 +1210,10 @@
   color: var(--danger);
 }
 
-/* ── EmptyState glass dresses (#1548 olympus adoption) — the app's shipped
+/* ── EmptyState glass dresses (#1548 dashboard adoption) — the app's shipped
       looks, value-for-value from components/observability/shared.tsx and
       components/db-unavailable.tsx. Type/spacing only: the surface stays the
-      call-site class (olympus `.glass-card`, unlayered app CSS, so it wins
+      call-site class (dashboard `.glass-card`, unlayered app CSS, so it wins
       the card chrome AND keeps the app's motion-reveal hook). No state rules
       here, so everything sits in @layer components — call-site utilities may
       still adjust geometry (e.g. db-unavailable's `max-w-md mx-auto`). ────── */
@@ -1379,7 +1379,7 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-/* ── NavButtons dresses (#1548) — olympus's shipped looks, translated
+/* ── NavButtons dresses (#1548) — dashboard's shipped looks, translated
       exactly from its Tailwind utilities. Defaults in @layer components;
       state overrides unlayered AFTER the reference state rules so they win
       the tie at higher specificity. color-mix(in oklab, …) matches Tailwind
@@ -1387,12 +1387,12 @@
 
       - .nb-pager--capsule (Pager dress="capsule"): one bordered term-bg
         capsule (9px radius, mono 12.5px tabular) with borderless chevron
-        edges pinned in auto columns — olympus DatePager / pipeline + briefs.
+        edges pinned in auto columns — dashboard DatePager / pipeline + briefs.
       - .nb-pager--date .nb-pager-date: fixed-width centered label slot
         sized for the longest en-US short format ("Wed, Sep 30, 2026").
       - .nb-seg-group--accent (SegmentedControl dress="accent"): sans
         font-medium cells on a transparent track, accent/20 wash + accent
-        text on the selection — olympus PerformanceDateRange. ─────────── */
+        text on the selection — dashboard PerformanceDateRange. ─────────── */
 
 @layer components {
   .nb-pager--capsule {
@@ -1621,7 +1621,7 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
 }
 
-/* quant dress (#1548 olympus adoption — the NAV-comparables picker in
+/* quant dress (#1548 dashboard adoption — the NAV-comparables picker in
    components/portfolio/performance-chart-workspace.tsx): a rounded-md 11px
    accent chip, NOT the reference pill. Translated utility-for-utility from
    the shipped chip (gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px]
@@ -1718,7 +1718,7 @@
   color: var(--ink);
 }
 
-/* row dress (#1548 olympus adoption — the ticker filter row inside the
+/* row dress (#1548 dashboard adoption — the ticker filter row inside the
    NAV-comparables dropdown pane, performance-chart-workspace.tsx): a
    full-width radius-less hairline-bottom row with an inset accent focus
    ring and no leading glyph. Translated utility-for-utility from the

@@ -13,20 +13,20 @@ from uuid import uuid4
 
 import pytest
 from digikey.models import DigiAuthContext
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     GovernanceDecisionError,
     record_policy_governance_decision,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GateCriteriaVersion,
     GateEvaluation,
     GovernanceDecisionKind,
     PolicyComparisonReport,
     PolicyGovernanceDecision,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore, PolicyReplayStoreConflict
+from digiquant.dashboard.replay.store import PolicyReplayStore, PolicyReplayStoreConflict
+from digiquant.portfolio.allocation_hashes import sha256_hex
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

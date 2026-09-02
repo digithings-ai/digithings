@@ -260,7 +260,7 @@ describe('layoutPipeline', () => {
     expect(node?.runStatus).toBe('persisted-artifact');
   });
 
-  it('collapsed day does not paint Hermes/Learning stages as stage-overview', () => {
+  it('collapsed day does not paint portfolio/Learning stages as stage-overview', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
       fanoutKeys: {},

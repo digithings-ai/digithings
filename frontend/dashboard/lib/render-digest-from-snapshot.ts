@@ -13,7 +13,7 @@ export type DigestSnapshot = {
   sector_scorecard?: Array<Record<string, unknown>>;
   narrative?: Record<string, unknown>;
   /**
-   * Short regime label from the Atlas pipeline — when present, preferred over
+   * Short regime label from the research pipeline — when present, preferred over
    * the full `market_regime_snapshot` paragraph for display headers.
    * Optional: absent on rows written before this field was added.
    */
@@ -25,7 +25,7 @@ function str(v: unknown): string {
 }
 
 export function renderDigestMarkdownFromSnapshot(snapshot: DigestSnapshot): string {
-  // The Atlas pipeline publishes the master-digest shape (DigestPayload) into
+  // The research pipeline publishes the master-digest shape (DigestPayload) into
   // `daily_snapshots.snapshot`; the v1 operator schema below has `regime` /
   // `portfolio` / `sector_scorecard` instead. Route by shape.
   if (isMasterDigestPayload(snapshot)) {

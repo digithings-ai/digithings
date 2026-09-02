@@ -1,7 +1,7 @@
 'use client';
 
 import { AsOfBadge } from '@/components/shared/as-of-badge';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 
 function isOk(status: string | null): boolean {
   const s = (status ?? '').toLowerCase();
@@ -9,11 +9,11 @@ function isOk(status: string | null): boolean {
 }
 
 /** Most-recent run whose status reads as success (diagnostics are newest-first from the query). */
-export function latestSuccessfulRun(diagnostics: AtlasRunDiagnostics[]): AtlasRunDiagnostics | null {
+export function latestSuccessfulRun(diagnostics: ResearchRunDiagnostics[]): ResearchRunDiagnostics | null {
   return diagnostics.find((d) => isOk(d.status)) ?? null;
 }
 
-export function FreshnessBanner({ latest }: { latest: AtlasRunDiagnostics }) {
+export function FreshnessBanner({ latest }: { latest: ResearchRunDiagnostics }) {
   const segs =
     latest.segments_total != null
       ? `${latest.segments_ok ?? 0}/${latest.segments_total} segments`

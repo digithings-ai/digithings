@@ -17,8 +17,8 @@ function cell(partial: Partial<MatrixCell> & { broker: string; column: MatrixCel
 }
 
 const CELLS: MatrixCell[] = [
-  cell({ broker: 'Atlas Macro', column: 'USD', direction: 'bullish', conviction: 'high', currency: 'USD', rationale: 'Dollar smile intact', key_facts: ['Real yields rising'], targets: [{ label: 'TP', level: 1.05 }], signal: 'Add on dips' }),
-  cell({ broker: 'Atlas Macro', column: 'EUR', direction: 'bearish', conviction: 'medium', currency: 'EUR/USD', source_file: 'atlas-eur.md', run_date: '2026-06-23' }),
+  cell({ broker: 'research Macro', column: 'USD', direction: 'bullish', conviction: 'high', currency: 'USD', rationale: 'Dollar smile intact', key_facts: ['Real yields rising'], targets: [{ label: 'TP', level: 1.05 }], signal: 'Add on dips' }),
+  cell({ broker: 'research Macro', column: 'EUR', direction: 'bearish', conviction: 'medium', currency: 'EUR/USD', source_file: 'research-eur.md', run_date: '2026-06-23' }),
   cell({ broker: 'Meridian FX', column: 'JPY', direction: 'watch', conviction: 'low', currency: 'JPY' }),
 ];
 
@@ -39,17 +39,17 @@ describe('BrokerProfilePanel', () => {
   });
 
   it('renders only the focused broker’s views (a slide-over dialog)', () => {
-    const html = render('Atlas Macro');
+    const html = render('research Macro');
     expect(html).toContain('role="dialog"');
-    expect(html).toContain('Atlas Macro');
-    // Atlas's two instruments show; Meridian's JPY view must NOT leak in.
+    expect(html).toContain('research Macro');
+    // research's two instruments show; Meridian's JPY view must NOT leak in.
     expect(html).toContain('USD');
     expect(html).toContain('EUR/USD');
     expect(html).not.toContain('Meridian FX');
   });
 
   it('shows the desk’s rationale, key facts, signal and target levels', () => {
-    const html = render('Atlas Macro');
+    const html = render('research Macro');
     expect(html).toContain('Dollar smile intact');
     expect(html).toContain('Real yields rising');
     expect(html).toContain('Add on dips');
@@ -57,14 +57,14 @@ describe('BrokerProfilePanel', () => {
   });
 
   it('tallies the net tilt across the desk’s views (1 bull / 1 bear here)', () => {
-    const html = render('Atlas Macro');
+    const html = render('research Macro');
     expect(html).toContain('2 views');
     expect(html).toContain('1 bull');
     expect(html).toContain('1 bear');
   });
 
   it('offers an open-brief affordance per view', () => {
-    const html = render('Atlas Macro');
+    const html = render('research Macro');
     expect(html).toContain('Open brief');
   });
 

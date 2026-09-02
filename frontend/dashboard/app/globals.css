@@ -4,7 +4,7 @@
 /* ── digithings design canon ─────────────────────────────────────────────
    tokens.css declares the [data-theme] semantic tokens; web-theme.css is THE
    Tailwind v4 bridge (`@theme inline`) that turns them into utilities
-   (text-ink, bg-surface, border-hair, text-up/down, font-mono, …). Olympus
+   (text-ink, bg-surface, border-hair, text-up/down, font-mono, …). dashboard
    declares NO bridge of its own (#1402) — it extends the canon below with
    app-local vars only. quant-native + tearsheet are the shared component
    grammars this dashboard reuses. */
@@ -32,13 +32,13 @@
    the deprecated @digithings/design/tearsheet sheet). Imported PLAINLY on
    purpose: the sheet manages its own layering, and its @media print grammar
    (light-token pin, chrome hides, break rules) is the family's differentiator.
-   Olympus's §13 dashboard variants + shell print rules live later in this
+   dashboard's §13 dashboard variants + shell print rules live later in this
    file, so cascade ties resolve to the app. */
 @import "@digithings/web/styles/finance-tearsheet.css";
 @import "@digithings/web/styles/finance-tearsheet-overlay.css";
-/* chat-core (#1418, adopted by olympus in #1450) — imported PLAINLY on
+/* chat-core (#1418, adopted by dashboard in #1450) — imported PLAINLY on
    purpose (MIGRATION.md rule 2 exception): its element combinators are
-   deliberately unlayered so they keep beating plain utilities. Olympus uses
+   deliberately unlayered so they keep beating plain utilities. dashboard uses
    only the .chat-md markdown grammar — the canonical markdown typography
    that <ChatMarkdown> (via SafeMarkdown) scopes around rendered documents
    and memo notes. */
@@ -94,7 +94,7 @@
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
    tokens.css names Geist Mono for sans / mono / display (BLEND v0.1).
-   olympus self-hosts that face through next/font (layout.tsx), which
+   dashboard self-hosts that face through next/font (layout.tsx), which
    exposes it ONLY via the hashed --font-geist-mono variable. Re-declare
    the canon font tokens (equal specificity, later source) so utilities
    resolve to the CSP-safe self-hosted face (font-src 'self' data:). */
@@ -108,14 +108,14 @@
   --font-family-mono: var(--font-mono);
 }
 
-/* ── Olympus-local vars (token-derived — no raw palette hex) ─────────────
+/* ── dashboard-local vars (token-derived — no raw palette hex) ─────────────
    Kept OUT of the theme namespace on purpose: these are app-local custom
    props, not utility tokens. --shadow-overlay is a depth cue for floating
    chrome (black-based shadow, not a themed color). */
 html {
   --shadow-overlay: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
   /* Command palette overlay stacking — the shared shell's .cp-overlay reads
-     var(--cp-z, 40); olympus's shipped palette stacks at 2000, above the
+     var(--cp-z, 40); dashboard's shipped palette stacks at 2000, above the
      sticky nav / sidebar drawer chrome. */
   --cp-z: 2000;
 }
@@ -161,7 +161,7 @@ html.motion-on [data-reveal].reveal-in {
 }
 
 /* ── Surface system (BLEND v0.1 tonal slab) ────────────────────────────
-   Olympus dashboards are instrument-density tonal slabs: `--surface` fill,
+   dashboards are instrument-density tonal slabs: `--surface` fill,
    1px `--hair` border, radius 0. Hover lifts the hairline to `--hair-2`.
    Depth is reserved for floating overlays; content panels stay shadowless.
    `backdrop-blur` is used ONLY on sticky/overlay chrome (nav, mobile app
@@ -241,8 +241,8 @@ html.light .qn-blueprint-bg {
   --tw-prose-td-borders: var(--hair);
 }
 
-/* ── Atlas loader (logo-based) ─────────────────────────────────────────── */
-@keyframes atlas-logo-build-collapse {
+/* ── research loader (logo-based) ─────────────────────────────────────────── */
+@keyframes research-logo-build-collapse {
   0% {
     transform: scale(0.82);
     filter: drop-shadow(0 0 0 transparent);
@@ -265,9 +265,9 @@ html.light .qn-blueprint-bg {
   }
 }
 
-@keyframes atlas-logo-draw {
+@keyframes research-logo-draw {
   0% {
-    stroke-dashoffset: var(--atlas-stroke-len);
+    stroke-dashoffset: var(--research-stroke-len);
     opacity: 0;
   }
   10% {
@@ -287,8 +287,8 @@ html.light .qn-blueprint-bg {
   }
 }
 
-.atlas-loader-screen,
-.atlas-loader-inline {
+.research-loader-screen,
+.research-loader-inline {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -296,47 +296,47 @@ html.light .qn-blueprint-bg {
   gap: 12px;
   color: var(--ink-soft);
 }
-.atlas-loader-screen {
+.research-loader-screen {
   height: 100vh;
   background: var(--bg);
 }
 
-.atlas-loader {
+.research-loader {
   position: relative;
   width: 56px;
   height: 56px;
 }
 
-.atlas-loader-logo {
+.research-loader-logo {
   display: grid;
   place-items: center;
-  animation: atlas-logo-build-collapse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation: research-logo-build-collapse 1.55s cubic-bezier(0.22, 1, 0.36, 1) infinite;
   transform-origin: 50% 50%;
 }
 
-.atlas-loader-mark {
+.research-loader-mark {
   display: block;
 }
 
-.atlas-loader-stroke {
+.research-loader-stroke {
   stroke: var(--ink);
-  --atlas-stroke-len: 220;
-  stroke-dasharray: var(--atlas-stroke-len);
-  stroke-dashoffset: var(--atlas-stroke-len);
-  animation: atlas-logo-draw 1.55s ease-in-out infinite;
+  --research-stroke-len: 220;
+  stroke-dasharray: var(--research-stroke-len);
+  stroke-dashoffset: var(--research-stroke-len);
+  animation: research-logo-draw 1.55s ease-in-out infinite;
 }
 
-.atlas-loader-stroke-1 { --atlas-stroke-len: 120; }
-.atlas-loader-stroke-2 { --atlas-stroke-len: 190; animation-delay: 0.03s; }
-.atlas-loader-stroke-3 { --atlas-stroke-len: 45;  animation-delay: 0.06s; }
-.atlas-loader-stroke-4 { --atlas-stroke-len: 165; animation-delay: 0.09s; }
+.research-loader-stroke-1 { --research-stroke-len: 120; }
+.research-loader-stroke-2 { --research-stroke-len: 190; animation-delay: 0.03s; }
+.research-loader-stroke-3 { --research-stroke-len: 45;  animation-delay: 0.06s; }
+.research-loader-stroke-4 { --research-stroke-len: 165; animation-delay: 0.09s; }
 
 @media (prefers-reduced-motion: reduce) {
-  .atlas-loader-logo,
-  .atlas-loader-stroke {
+  .research-loader-logo,
+  .research-loader-stroke {
     animation: none !important;
   }
-  .atlas-loader-stroke {
+  .research-loader-stroke {
     stroke-dashoffset: 0;
     opacity: 1;
   }
@@ -358,9 +358,9 @@ html.light .qn-blueprint-bg {
   background: color-mix(in srgb, var(--ink) 22%, transparent);
 }
 
-/* ── Shared-Sheet scrim (olympus overlay convention) ─────────────────────
+/* ── Shared-Sheet scrim (dashboard overlay convention) ─────────────────────
    The @digithings/web Sheet ships digichat's compat scrim (bg-bg/10 + 4px
-   blur — a kept delta, see controls-overlay.css header). Olympus overlay
+   blur — a kept delta, see controls-overlay.css header). dashboard overlay
    chrome dims with black-based scrims (command palette black/75, sidebar
    drawer black/60, twelve-x slide-overs black/50) — re-dress the sheet
    overlay to match, keyed off the control's data-slot hook (an attribute
@@ -461,14 +461,14 @@ html.light .qn-blueprint-bg {
   transform: translateY(-1px);
 }
 
-/* ── Tearsheet: olympus-local layer ─────────────────────────────────
+/* ── Tearsheet: dashboard-local layer ─────────────────────────────────
    The base .ts-* grammar (canon §06) is the shared finance-tearsheet
    family: @digithings/web/styles/finance-tearsheet.css, imported at the
-   top of this file (#1463). Below are ONLY olympus’s deliberate variants
+   top of this file (#1463). Below are ONLY dashboard’s deliberate variants
    (§13 dashboard adaptations — tighter panels/KPIs, sans-scale charts,
    .ts-btn/.ts-notes additions) — unlayered and after the family import,
    so they beat both the family’s @layer components defaults and its
-   unlayered ties. The @media print block keeps olympus’s page geometry
+   unlayered ties. The @media print block keeps dashboard’s page geometry
    and shell-chrome hides; everything else in print (light-token pin,
    .ts-* chrome hides, break rules) now comes from the family sheet. */
 .ts-header-actions { display: flex; align-items: center; gap: 0.7rem; }
@@ -522,11 +522,11 @@ html.light .qn-blueprint-bg {
 }
 
 @media print {
-  /* Olympus shell chrome — hidden so the printed PDF is just the tear sheet.
+  /* dashboard shell chrome — hidden so the printed PDF is just the tear sheet.
      The .ts-* chrome hides, light-token pin, color-adjust, break-inside and
      scroll-release rules all come from the family sheet. */
   #app-sidebar-nav, [data-print-hide] { display: none !important; }
-  /* Olympus page geometry (shipped look): zero printer margin, the sheet
+  /* dashboard page geometry (shipped look): zero printer margin, the sheet
      carries its own 14/13mm padding — overrides the family’s 12/14mm @page
      margins + zero .ts-page padding. */
   @page { margin: 0; }
@@ -534,7 +534,7 @@ html.light .qn-blueprint-bg {
   /* Shipped print header: looser than the family pin (1.1rem/0.85rem/1.55rem). */
   .ts-header { margin-bottom: 1.4rem; padding-bottom: 1.4rem; }
   .ts-h1 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); }
-  /* The family hides .ts-panel-head (digiquant’s heads are toolbars); olympus’s
+  /* The family hides .ts-panel-head (digiquant’s heads are toolbars); dashboard’s
      heads are the printed track labels — content, so they stay. */
   .ts-panel-head { display: flex !important; }
 }

@@ -19,7 +19,7 @@ describe("AuthCard", () => {
     expect(html).toContain('data-testid="login-x"');
     expect(html).toContain('data-testid="login-email-submit"');
     expect(html).toContain('aria-label="X"');
-    expect(html).not.toContain("olympus");
+    expect(html).not.toContain("dashboard");
     expect(html).not.toContain("DigiQuant");
     expect(html).not.toContain("Twitter");
     expect(html).not.toContain("Open the desk");
@@ -54,6 +54,6 @@ describe("AuthCard", () => {
     expect(html).toContain("Sign up");
     expect(html).toContain("acct-auth-strength");
     expect(html).toContain("strong");
-    expect(html).not.toContain("olympus");
+    expect(html).not.toContain("dashboard");
   });
 });

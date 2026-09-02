@@ -46,9 +46,8 @@ vi.mock('next/link', () => ({
     createElement('a', { href: props.href }, props.children as never),
 }));
 
-vi.mock('@/components/atlas-mark', () => ({
+vi.mock('@/components/dashboard-mark', () => ({
   DashboardMark: () => createElement('span', null, 'mark'),
-  AtlasMark: () => createElement('span', null, 'mark'),
 }));
 
 vi.mock('@/lib/supabase', async () => {

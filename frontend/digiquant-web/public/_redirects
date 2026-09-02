@@ -10,7 +10,7 @@
 /pricing                 /contact/                301
 /pricing/                /contact/                301
 
-# Subsystem slugs: atlas/hermes/kairos → research/portfolio/execution.
+# Subsystem slugs (legacy source paths are frozen; destinations are jobs).
 /subsystems/atlas        /subsystems/research/    301
 /subsystems/atlas/       /subsystems/research/    301
 /subsystems/hermes       /subsystems/portfolio/   301

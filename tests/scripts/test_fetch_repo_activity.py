@@ -402,7 +402,7 @@ def test_the_web_lane_runs_the_site_test_suite() -> None:
     """A vitest file no lane executes cannot fail, so it is not a test."""
     lane = WEB_LANE.read_text(encoding="utf-8")
     assert "npm run test --workspace digithings-web" in lane
-    # The digichat and olympus lanes also install rolldown at 1.0.0-rc.16, which the
+    # The digichat and dashboard lanes also install rolldown at 1.0.0-rc.16, which the
     # locked rolldown 1.2.2 has moved off — a stale duplicate. This lane must not
     # acquire it by someone copying that step across. Commands only: the lane's own
     # comment names that version while explaining why it is not installed.

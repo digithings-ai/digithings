@@ -14,7 +14,7 @@ storage). The login UI is the compact `AuthCard` from `@digithings/web`: tool
 mark + **`digiquant`** wordmark beside it, then email, password, and one row of
 icon-only OAuth (`[G][GH][X]`) plus **Sign in** / **Sign up**. Provider id for X
 is `x` (OAuth 2.0; the legacy Twitter OAuth 1.0a provider stays off); visible
-label/aria is **X** (never Twitter). No olympus branding. Compact has no live
+label/aria is **X** (never Twitter). No dashboard branding. Compact has no live
 password-strength meter (that lives on the desk specimen); signup still requires
 8+ characters in `LoginScreen`. Routes:
 

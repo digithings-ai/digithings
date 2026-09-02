@@ -1,5 +1,5 @@
 /**
- * Markdown renderers for the payload shapes the Atlas/Hermes pipeline publishes
+ * Markdown renderers for the payload shapes the research/portfolio pipeline publishes
  * to Supabase (`documents.payload`, `daily_snapshots.snapshot`).
  *
  * The pipeline writes validated Pydantic payloads (SIMP-013) and leaves
@@ -67,7 +67,7 @@ export function cleanMemoProse(text: string): string {
   if (!text) return text;
   const protectedChunks: string[] = [];
   const protect = (match: string) => {
-    const token = `__OLYMPUS_PROTECTED_${protectedChunks.length}__`;
+    const token = `__DASHBOARD_PROTECTED_${protectedChunks.length}__`;
     protectedChunks.push(match);
     return token;
   };
@@ -85,7 +85,7 @@ export function cleanMemoProse(text: string): string {
   }
 
   protectedChunks.forEach((chunk, index) => {
-    cleaned = cleaned.replace(`__OLYMPUS_PROTECTED_${index}__`, chunk);
+    cleaned = cleaned.replace(`__DASHBOARD_PROTECTED_${index}__`, chunk);
   });
   return cleaned;
 }
@@ -289,7 +289,7 @@ export function renderMasterDigestMarkdown(payload: unknown): string {
 
 /* ── PM rebalance ────────────────────────────────────────────────────────── */
 
-/** True for the Hermes `pm-rebalance` payload (`{notes, actions, recommended_portfolio}`). */
+/** True for the portfolio `pm-rebalance` payload (`{notes, actions, recommended_portfolio}`). */
 export function isRebalancePayload(payload: unknown, documentKey?: string): boolean {
   if (documentKey === 'pm-rebalance') return true;
   const p = asObj(payload);
@@ -396,7 +396,7 @@ export interface RegimeChip {
 
 // Directional read for risk assets: green = supportive, red = headwind, amber =
 // transitional/mixed, blue = steady-state neutral. Values are the `MacroRegimeReport`
-// Literal enums (`digiquant/olympus/atlas/phases/phase3_macro.py`).
+// Literal enums (`digiquant/research/phases/phase3_macro.py`).
 const GROWTH_CHIP_COLOR: Record<string, RegimeChipColor> = {
   expanding: 'green',
   slowing: 'amber',
@@ -455,7 +455,7 @@ export function regimeChipsFromMacroPayload(payload: unknown): RegimeChip[] {
 /* ── Analyst specialist report (Phase 7C) ────────────────────────────────── */
 
 /**
- * True for the Hermes per-ticker `SpecialistPayload` (`analyst/{ticker}`).
+ * True for the portfolio per-ticker `SpecialistPayload` (`analyst/{ticker}`).
  * Real DB shape (documents.payload, 2026-06-17):
  *   { ticker, thesis, stance, conviction_score (integer), sources }
  * Requires conviction_score (integer) OR both stance AND thesis to distinguish
@@ -524,7 +524,7 @@ export function chatTurnsFromDebatePayload(payload: unknown): Record<string, unk
   return fromRounds.map((r) => asObj(r) ?? {});
 }
 
-/** True for the Hermes per-ticker deliberation payload (`deliberation/{ticker}`). */
+/** True for the portfolio per-ticker deliberation payload (`deliberation/{ticker}`). */
 export function isDebateSummaryPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
@@ -603,7 +603,7 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
 
 /* ── Risk-temperament debate (Phase 7D) ───────────────────────────────────── */
 
-/** True for the Hermes `RiskDebateSummary` payload (`risk-debate`). */
+/** True for the portfolio `RiskDebateSummary` payload (`risk-debate`). */
 export function isRiskDebatePayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;

@@ -3,7 +3,7 @@
  *
  * The published-at timestamp on a `SnapshotEnvelope` is UTC. The frontend
  * shows a "stale" banner when the freshest envelope was assembled more than
- * `hours` ago. The default of 48h matches the Atlas weekly-baseline +
+ * `hours` ago. The default of 48h matches the research weekly-baseline +
  * weekday-delta cadence: a missing weekday delta should still be shown,
  * but anything older than two days warrants a visible warning.
  */
@@ -29,7 +29,7 @@ export function isStale(
   return ageMs > hours * 60 * 60 * 1000;
 }
 
-/** Default staleness threshold (hours) for the Atlas daily snapshot UI. */
+/** Default staleness threshold (hours) for the research daily snapshot UI. */
 export const DEFAULT_SNAPSHOT_STALENESS_HOURS = 48;
 
 /**

@@ -1,4 +1,4 @@
-"""Tier-filtered daily digest builder for K5 email (reads same views as Olympus dashboard)."""
+"""Tier-filtered daily digest builder for K5 email (reads same views as dashboard)."""
 
 from __future__ import annotations
 

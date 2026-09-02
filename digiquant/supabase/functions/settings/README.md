@@ -15,7 +15,7 @@ Writes to Profile / Pipeline / Keys require **effective** plan_tier ∈
 (`studio`, `enterprise`). Brokers require **desk+** (`desk`, `studio`,
 `enterprise`). Effective = `max(workspaces.plan_tier,
 entitlement_grants.plan_floor)` (migration **108**, ranks remapped in **115**).
-Creator seed (`chris.stefan@proton.me` → `studio`) unlocks Kairos Settings
+Creator seed (`chris.stefan@proton.me` → `studio`) unlocks execution Settings
 without Stripe. JWT claim alone is not authoritative.
 
 ## Deploy gate — blocked on K3 + tenancy migrations
@@ -82,7 +82,7 @@ Writes (PATCH profile, broker/key connect) use **effective** plan (see **Tier ga
 Profile GET returns `watchlist`, `themes`, and `research_budget_usd` from the tip
 payload (SETTINGS-IA Pipeline tab). PATCH accepts the same fields (budget ≥ 0 or null).
 
-See `docs/agent-backlog/kairos-tenancy/SETTINGS-IA.md`.
+See `docs/agent-backlog/execution-tenancy/SETTINGS-IA.md`.
 
 ## Secrets
 
@@ -98,7 +98,7 @@ supabase secrets set \
 `APP_URL` must be the **site origin** (`https://digiquant.io`) — never
 `http://127.0.0.1` and never a path that already includes `/dashboard`
 (helpers in `_shared/app-url.ts` strip a trailing `/dashboard`, and a leftover
-`/olympus` suffix, to avoid doubling `basePath`). Pinned OAuth callback:
+`/dashboard` suffix, to avoid doubling `basePath`). Pinned OAuth callback:
 `{origin}/dashboard/settings/brokers/callback/`. Billing return:
 `{origin}/dashboard/settings/?tab=billing`.
 

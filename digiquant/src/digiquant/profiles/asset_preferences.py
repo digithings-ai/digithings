@@ -50,7 +50,7 @@ class AssetPreferences(BaseModel):
         Named ticker baskets (e.g. ``{"core": ["SPY", "QQQ"], "thematic": ["NVDA"]}``).
         Each value is normalized to upper-case, de-duplicated, insertion-ordered.
     custom_universe
-        Tickers the user wants Atlas to consider beyond the default watchlist.
+        Tickers the user wants research to consider beyond the default watchlist.
         Same normalization as ``watchlists``.
     excluded_tickers
         Hard exclusions. Wins over inclusion on conflict — a ticker that
@@ -75,7 +75,7 @@ class AssetPreferences(BaseModel):
     )
     custom_universe: list[str] = Field(
         default_factory=list,
-        description="Additional tickers Atlas should consider.",
+        description="Additional tickers research should consider.",
     )
     excluded_tickers: list[str] = Field(
         default_factory=list,

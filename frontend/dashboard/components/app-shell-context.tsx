@@ -12,7 +12,7 @@ import {
 
 const STORAGE_KEY = 'dashboard-sidebar-collapsed';
 /** Pre-rebrand key. Read once so a collapsed sidebar survives the rename; never write. */
-const LEGACY_STORAGE_KEY = 'atlas-sidebar-collapsed';
+const LEGACY_STORAGE_KEY = 'research-sidebar-collapsed';
 
 type AppShellContextValue = {
   sidebarCollapsed: boolean;

@@ -32,7 +32,7 @@ score = _load_score()
 
 
 def test_agent_backlog_specs_are_not_scored_as_runtime_code():
-    assert score._skip_file("docs/agent-backlog/kairos-tenancy/K0.md")
+    assert score._skip_file("docs/agent-backlog/execution-tenancy/K0.md")
 
 
 def _unified_diff(added_lines: list[str]) -> str:

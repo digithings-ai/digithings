@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable react-hooks/set-state-in-effect -- async fetch lifecycle (mirrors olympus lib/hooks/use-async-data.ts) */
+/* eslint-disable react-hooks/set-state-in-effect -- async fetch lifecycle (mirrors dashboard lib/hooks/use-async-data.ts) */
 
 /**
  * useLivePortfolio (#1461/#1462) — reads the public portfolio book +

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { computeLivePerformanceKpis, MIN_OVERLAP_DAYS } from '@digithings/web';
 
-describe('shared live KPI path (digiquant-web + olympus Brief)', () => {
-  it('olympus Brief hook imports the same computeLivePerformanceKpis export', () => {
+describe('shared live KPI path (digiquant-web + dashboard Brief)', () => {
+  it('dashboard Brief hook imports the same computeLivePerformanceKpis export', () => {
     const kpis = computeLivePerformanceKpis({
       positions: [
         {

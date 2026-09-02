@@ -41,8 +41,8 @@ export interface PipelineNodeExplanation {
   behavior: 'Stage overview' | 'Parallel dispatch' | 'In-memory operation' | 'Run artifact';
 }
 
-// Mirrors the real backend graph: Atlas phases (preflight → research fan-outs →
-// consolidate → digest) then Hermes H1–H9 (thesis framing → screener → analysts →
+// Mirrors the real backend graph: research phases (preflight → research fan-outs →
+// consolidate → digest) then portfolio H1–H9 (thesis framing → screener → analysts →
 // deliberation → PM direction → risk sizing → commit) then the daily beliefs
 // fold (learning/beliefs_distillation.py, runs after the terminal publish).
 export const PIPELINE_TOPOLOGY: StageDef[] = [
@@ -95,7 +95,7 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       description: 'Dispatches parallel specialists across configured asset classes to produce comparable reads.',
       fanout: { id: 'asset-classes', label: 'Asset-classes', defaultCount: 6 },
     },
-    // 11 slugs in atlas/config/sectors.yaml (sector-technology … sector-comms).
+    // 11 slugs in research/config/sectors.yaml (sector-technology … sector-comms).
     {
       id: 'sectors',
       label: 'Sectors',
@@ -108,7 +108,7 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
     label: 'Synthesis',
     description: 'Reconciles the research set into one directional read and a daily narrative for decision-makers.',
     subSteps: [
-    // Phase 6 bias row is published as `bias-row` from Atlas publish_phase.
+    // Phase 6 bias row is published as `bias-row` from research publish_phase.
     {
       id: 'consolidate',
       label: 'Consolidate bias',

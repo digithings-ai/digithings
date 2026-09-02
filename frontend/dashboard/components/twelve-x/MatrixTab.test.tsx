@@ -17,7 +17,7 @@ function cell(partial: Partial<MatrixCell> & { broker: string; column: MatrixCel
 }
 
 const CELLS: MatrixCell[] = [
-  cell({ broker: 'Atlas Macro', column: 'USD', rationale: 'Dollar smile intact' }),
+  cell({ broker: 'research Macro', column: 'USD', rationale: 'Dollar smile intact' }),
   cell({ broker: 'Meridian FX', column: 'JPY', direction: 'bearish', currency: 'JPY' }),
 ];
 
@@ -31,7 +31,7 @@ describe('MatrixTab', () => {
   it('renders the desk grid with a row per broker', () => {
     const html = render();
     expect(html).toContain('Desk view matrix');
-    expect(html).toContain('Atlas Macro');
+    expect(html).toContain('research Macro');
     expect(html).toContain('Meridian FX');
   });
 
@@ -39,7 +39,7 @@ describe('MatrixTab', () => {
     const html = render();
     // The desk label is an interactive button (the drill-in affordance), and the
     // copy advertises it.
-    expect(html).toMatch(/<button[^>]*>\s*<span class="truncate">Atlas Macro<\/span>/);
+    expect(html).toMatch(/<button[^>]*>\s*<span class="truncate">research Macro<\/span>/);
     expect(html).toContain('desk name to see that broker');
   });
 
@@ -49,9 +49,9 @@ describe('MatrixTab', () => {
   });
 
   it('opens the broker-profile slide-over when a broker is pre-selected', () => {
-    const html = render('Atlas Macro');
+    const html = render('research Macro');
     expect(html).toContain('role="dialog"');
-    expect(html).toContain('Dollar smile intact'); // Atlas's view detail
+    expect(html).toContain('Dollar smile intact'); // research's view detail
     expect(html).toContain('1 view');
   });
 });

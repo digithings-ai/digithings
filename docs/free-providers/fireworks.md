@@ -79,7 +79,7 @@ model_list:
 | DIGI_LLM_MODE tier | `medium` (DeepSeek via Fireworks for privacy-safe research) |
 | Single-shot 100k | Yes — 131k–262k context on key models |
 | Privacy safe | Yes — US-hosted, no training |
-| Atlas/Hermes role | Privacy-safe DeepSeek R1 for quantitative reasoning; Kimi K2.5 for large filings |
+| research/portfolio role | Privacy-safe DeepSeek R1 for quantitative reasoning; Kimi K2.5 for large filings |
 
 ---
 

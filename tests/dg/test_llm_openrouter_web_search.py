@@ -1,4 +1,4 @@
-"""OpenRouter web search: native for Olympus grounding; Exa toolkit for non-native (#650 / #2567)."""
+"""OpenRouter web search: native for dashboard grounding; Exa toolkit for non-native (#650 / #2567)."""
 
 from __future__ import annotations
 

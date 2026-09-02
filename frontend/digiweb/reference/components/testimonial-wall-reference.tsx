@@ -20,7 +20,7 @@ const QUOTES: TestimonialQuote[] = [
     org: "Meridian Desk",
   },
   {
-    quote: "atlas proposes, digiquant proves, hermes ships. The loop is the product.",
+    quote: "research proposes, digiquant proves, portfolio ships. The loop is the product.",
     name: "S. Vance",
     role: "Quant Lead",
     org: "Cedar Street",

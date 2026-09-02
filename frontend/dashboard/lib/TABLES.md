@@ -1,7 +1,7 @@
 # Dashboard table inventory & SortableTable ruling (#1450 F4 batch D + F5 tables, epic #1414)
 
 > **Ruling: the promoted `<SortableTable/>` leaderboard (`@digithings/web`
-> finance-composites) is NOT adopted for the olympus portfolio tables or the
+> finance-composites) is NOT adopted for the dashboard portfolio tables or the
 > twelve-x tables.** Every batch-D and F5-tables target either has no tabular
 > render or is built around interactions the primitive's grammar cannot host.
 > Local code stays, per the migrate-vs-leave / honest-engineering contract

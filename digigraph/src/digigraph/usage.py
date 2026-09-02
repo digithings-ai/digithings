@@ -208,7 +208,7 @@ def logical_call_context(
     follow_up_no_artifact_reason: NoArtifactReason | None = None,
     defer_finalization: bool = False,
 ) -> Iterator[ProviderCallContextHandle]:
-    """Describe one generic provider invocation without requiring Olympus semantics."""
+    """Describe one generic provider invocation without requiring dashboard semantics."""
     handle = ProviderCallContextHandle()
     token = _LOGICAL_CALL_CONTEXT.set(
         LogicalCallContext(

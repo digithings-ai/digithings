@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.kairos.vendor_secret_apply import (  # noqa: E402
+from digiquant.execution.vendor_secret_apply import (  # noqa: E402
     run_vendor_secret_apply,
 )
 

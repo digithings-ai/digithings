@@ -1,6 +1,6 @@
 """Declarative pipeline builder for LangGraph sub-graphs.
 
-A sub-graph like digiquant Atlas (#176) is a sequence of phases; each phase
+A sub-graph like digiquant research (#176) is a sequence of phases; each phase
 has one or more nodes that may run in parallel, and every phase fully completes
 before the next begins. Instead of open-coding the edge plumbing per sub-graph,
 callers declare a ``list[PipelinePhase]`` and this builder compiles it into a
@@ -57,7 +57,7 @@ class FanOutPhase:
     """A phase that maps a runtime-computed item list to parallel workers via LangGraph ``Send``.
 
     Unlike :class:`PipelinePhase` — whose node set is fixed at build time — a fan-out phase
-    discovers its items at *run* time from the live state (e.g. the Hermes focus roster that H4
+    discovers its items at *run* time from the live state (e.g. the portfolio focus roster that H4
     computes mid-run). The builder wires a map-reduce::
 
         prev_exit --(conditional: one Send per item)--> worker (parallel) --> barrier --> next

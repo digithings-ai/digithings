@@ -3,7 +3,7 @@
 **Date:** 2026-06-20 · **Status:** Draft for review (not committed)  
 **Implementation plan:** [`2026-06-20-olympus-daily-thesis.md`](../plans/2026-06-20-olympus-daily-thesis.md) · **Tracking:** GitHub #930 (absorbs #924)  
 **Supersedes for graph topology:** [`2026-06-19-olympus-mvp-delta-design.md`](./2026-06-19-olympus-mvp-delta-design.md) — dual `run_type` graphs, `OLYMPUS_HERMES_LITE`, baseline-vs-delta as separate Hermes shapes, Jun-19 lite/collapse path (#931). Jun-19 forensics, cost targets, and ADR-0020 rationale remain valid (see §12.2).  
-**Builds on:** [ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md), [ADR-0020](../../../docs/adr/0020-olympus-mvp-daily-delta.md) (sizer + terminal-write *intent* — amend in `docs/adr-and-tracking` before Hermes work; lite/collapse bullets superseded), [HERMES_SUBGRAPH.md](../../../digiquant/src/digiquant/olympus/hermes/docs/HERMES_SUBGRAPH.md) (**historical topology reference** — `MAX_ROUNDS=6`, recess/deep_dive, and `PMAllocationMemo` weights are **not** in v1; see §10, §11, §17 #5)
+**Builds on:** [ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md), [ADR-0020](../../../docs/adr/0020-olympus-mvp-daily-delta.md) (sizer + terminal-write *intent* — amend in `docs/adr-and-tracking` before Hermes work; lite/collapse bullets superseded), [PORTFOLIO_SUBGRAPH.md](../../../digiquant/src/digiquant/portfolio/docs/PORTFOLIO_SUBGRAPH.md) (**historical topology reference** — `MAX_ROUNDS=6`, recess/deep_dive, and `PMAllocationMemo` weights are **not** in v1; see §10, §11, §17 #5)
 
 ---
 
@@ -40,7 +40,7 @@ This is the core cost-and-continuity mechanism: **selective LLM invocation and s
 
 ### 2.3 Cost control = model tier only
 
-Spend is controlled by **`OLYMPUS_MODEL_TIER`** and [`config/olympus_models.yaml`](../../../config/olympus_models.yaml) (`cheap` \| `balanced` \| `quality`). Model tier routes which pinned model each LLM node uses.
+Spend is controlled by **`OLYMPUS_MODEL_TIER`** and [`config/digiquant_models.yaml`](../../../config/digiquant_models.yaml) (`cheap` \| `balanced` \| `quality`). Model tier routes which pinned model each LLM node uses.
 
 **Not** acceptable for cost control:
 
@@ -715,7 +715,7 @@ H8 `risk_sizing` maps `PMDirectionMemo` + feasibility constraints → `recommend
 | **H8** | `risk_sizing` (7E) | **No LLM** — deterministic sizer; sole owner of weights (§11) |
 | **H9** | `commit_run` | Upsert positions/nav/theses; publish brief from **same** H8 weights; decision_log append |
 
-**Model tier (sole cost lever):** `OLYMPUS_MODEL_TIER=cheap|balanced|quality` routes all LLM nodes via [`config/olympus_models.yaml`](../../../config/olympus_models.yaml). Load-bearing schemas stay flat (`DocumentPatch`, `AnalystPayload`). Do **not** fork graph shape for cost (§2.3).
+**Model tier (sole cost lever):** `OLYMPUS_MODEL_TIER=cheap|balanced|quality` routes all LLM nodes via [`config/digiquant_models.yaml`](../../../config/digiquant_models.yaml). Load-bearing schemas stay flat (`DocumentPatch`, `AnalystPayload`). Do **not** fork graph shape for cost (§2.3).
 
 ### 13.3 Mermaid — full daily loop
 
@@ -935,9 +935,9 @@ Close #924 as merged into #930. Jun-19 spec/plan are historical. Do not merge un
 
 ## 18. References
 
-- `digiquant/src/digiquant/olympus/atlas/triage.py` — carry/regenerate rules
-- `digiquant/src/digiquant/olympus/atlas/phases/_node_factory.py` — carry gate, context diet
+- `digiquant/src/digiquant/research/triage.py` — carry/regenerate rules
+- `digiquant/src/digiquant/research/phases/_node_factory.py` — carry gate, context diet
 - `digiquant/scripts/atlas/materialize_snapshot.py:apply_ops` — merge primitive
-- `digiquant/src/digiquant/olympus/hermes/templates/schemas/document-delta.schema.json`
+- `digiquant/src/digiquant/portfolio/templates/schemas/document-delta.schema.json`
 - `docs/adr/0019-unified-atlas-workflow.md` — incremental patch intent (workflow half still valid)
 - `docs/superpowers/specs/2026-06-19-olympus-mvp-delta-design.md` — cost/continuity epic; **graph topology superseded by §12** (forensics + ADR-0020 rationale still valid)

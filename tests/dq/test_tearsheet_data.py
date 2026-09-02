@@ -92,7 +92,7 @@ def test_from_pine_maps_headline_kpis() -> None:
         _pine_summary(),
         _pine_trades(),
         equity_curve=[("2020-01-01", 1000.0), ("2020-03-01", 1200.0)],
-        data_source="Olympus price_history",
+        data_source="dashboard price_history",
     )
     assert ts.schema_version == SCHEMA_VERSION
     assert ts.engine == "pine"
@@ -104,7 +104,7 @@ def test_from_pine_maps_headline_kpis() -> None:
     assert ts.win_rate_pct == 75.0
     assert ts.total_trades == 4
     assert ts.profit_factor == pytest.approx(2.6667)
-    assert ts.data_source == "Olympus price_history"
+    assert ts.data_source == "dashboard price_history"
 
 
 def test_from_pine_directional_blocks() -> None:

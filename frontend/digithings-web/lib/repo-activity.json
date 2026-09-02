@@ -4,7 +4,7 @@
   "commits": 940,
   "features": [
     {
-      "scope": "olympus",
+      "scope": "dashboard",
       "summary": "trade idea continuity, levels ladder, formatting",
       "pr": 2574,
       "date": "2026-08-21T17:35:10Z"

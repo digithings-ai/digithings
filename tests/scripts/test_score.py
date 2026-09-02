@@ -179,7 +179,7 @@ def test_scan_skips_score_py_and_design_fragments() -> None:
 
 def test_scan_respects_legacy_path_suppression_for_pandas() -> None:
     diff = _unified(
-        "digiquant/scripts/atlas/preload-history.py",
+        "digiquant/scripts/research/preload-history.py",
         "+import pandas\n+x = pd.DataFrame()\n",
     )
     results = score.scan(diff)

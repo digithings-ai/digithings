@@ -6,7 +6,7 @@ import type { AnalystPayload } from '@/lib/types';
 /**
  * Renders the full H5 analyst payload (#1562 PR2, #1615 flat editorial workspace)
  * — every section the blueprint names, keyed off the exact backend field names
- * (`digiquant/.../hermes/models/analyst.py:AnalystPayload`).
+ * (`digiquant/.../portfolio/models/analyst.py:AnalystPayload`).
  *
  * Flat hairline-led editorial workspace (#1615): thesis/current call prominent,
  * bull/bear and tailwind/headwind evidence in deliberate columns. NOT a glass-card.

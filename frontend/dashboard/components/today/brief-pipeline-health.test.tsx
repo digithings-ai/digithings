@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { ResearchRunDiagnostics } from '@/lib/types';
 import {
   BriefPipelineHealth,
   buildLatestRunCards,
@@ -12,7 +12,7 @@ vi.mock('next/link', () => ({
   default: (props: { children?: unknown; href?: string }) => props.children,
 }));
 
-function diag(o: Partial<AtlasRunDiagnostics>): AtlasRunDiagnostics {
+function diag(o: Partial<ResearchRunDiagnostics>): ResearchRunDiagnostics {
   return {
     run_id: 'r',
     run_type: 'delta',
