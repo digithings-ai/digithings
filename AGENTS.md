@@ -185,10 +185,15 @@ carry none of them — it was refused for good, and the only ways out were advan
 For those, and only those, one more hatch applies: a comment carrying
 `<!-- in-session-review -->` **and** the commit's 8-char sha, on an issue or PR
 itself labelled `reviewed:agent`. Both halves are required — the marker alone would
-let one review clear every direct push in the range, the sha alone would let a
-passing mention in unrelated prose stand in for a review. It is deliberately
-unreachable for a commit that *has* a PR: that one is still judged by its own PR's
-state, so this is not a sixth way to clear a pull request.
+let one review clear every direct push in the range, the sha alone would let any
+prose quoting a sha stand in for a review. It is deliberately unreachable for a
+commit that *has* a PR: that one is still judged by its own PR's state, so this is
+not a sixth way to clear a pull request.
+
+Like `reviewed:owner`, it is an **accountability record, not proof**: a promotion
+review that names the range tip in its header table does clear that commit, and
+tightening past that means guessing at prose structure. What it buys is the
+reviewer's own words naming the sha, under a label they had to apply.
 
 **When Bugbot / CodeRabbit are unavailable or out of quota, review in-session —
 do not skip.** Bugbot `neutral` is not a review. Run `/review <N>`: tiered

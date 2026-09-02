@@ -847,6 +847,30 @@ def test_a_full_sha_in_the_comment_also_satisfies_the_short_sha_requirement(
     assert found
 
 
+def test_a_sha_named_only_in_a_review_header_table_still_clears_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A known, accepted limit — pinned so nobody reads the hatch as stronger.
+
+    Requiring marker AND sha narrows the claim; it does not prove this commit was
+    read. Every promotion review on #3256 names the range tip in its header table
+    ("`origin/develop` (reviewed tip) | `46c9ab76…`"), and that comment does clear
+    that commit. Tightening past this means guessing at prose structure, which
+    would refuse real reviews to catch a case the review author has no reason to
+    game. The honest framing is `reviewed:owner`'s: an accountability record.
+    """
+    found = _hatch(
+        monkeypatch,
+        body=(
+            f"{crc.AGENT_REVIEW_MARKER}\n"
+            "| ref | sha |\n|---|---|\n"
+            f"| `origin/develop` (reviewed tip) | `{_SHA}` |\n"
+        ),
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found, "documents the limit; see the docstring before tightening this"
+
+
 def test_no_candidate_mentions_the_sha_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (
         _hatch(

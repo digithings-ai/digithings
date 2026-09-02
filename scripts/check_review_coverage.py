@@ -404,8 +404,18 @@ def direct_push_review(sha: str) -> dict | None:
     is itself labelled `reviewed:agent`.
 
     Both halves are load-bearing. The marker alone would let one in-session review
-    clear every direct push in the range; the sha alone would let a passing mention
-    in unrelated prose stand in for a review.
+    clear every direct push in the range; the sha alone would let any prose that
+    quotes a sha stand in for a review.
+
+    Be honest about its strength, as `reviewed:owner` is: requiring both narrows
+    the claim, it does not prove this specific commit was read. A promotion review
+    routinely names the range tip in its header table ("origin/develop (reviewed
+    tip) | 46c9ab76…"), and such a comment does clear that commit. Tightening
+    further means guessing at prose structure, which would refuse real reviews to
+    catch a case the review author has no reason to game. So this is an
+    ACCOUNTABILITY record, like the label hatches: the reviewer's own words, on the
+    record, naming the sha, under a label they had to apply. A completed Bugbot run
+    remains the only hatch nobody can self-grant.
 
     Deliberately unreachable for a commit that HAS a source pull request — that one
     is still judged by its own PR's state and nothing else. This is a hatch for
