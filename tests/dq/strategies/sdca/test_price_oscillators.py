@@ -18,9 +18,12 @@ from digiquant.strategies.sdca.indicator_catalog import (
 )
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
+    agreement_scaled_blend,
     completed_monthly_closes,
     completed_weekly_closes,
+    daily_macd_z,
     daily_rsi_z,
+    macd_confluence_z,
     monthly_rsi_z,
     rsi_confluence_z,
     rsi_deadzone_z,
@@ -383,6 +386,222 @@ class TestOscillatorSpecDailyRsiLength:
         spec = SdcaOscillatorSpec(rsi_length=21, daily_rsi_length=7)
         assert spec.rsi_length == 21
         assert spec.daily_rsi_length == 7
+
+
+class TestAgreementScaledBlend:
+    def test_either_leg_zero_skips_amplify_damp(self) -> None:
+        """A silent leg (z == 0) is not a disagreement, so the multiplier
+        stays 1.0 -- but the weighted base blend (including the zero) still
+        applies, it is not a raw pass-through of the nonzero leg.
+        """
+        z = agreement_scaled_blend(
+            pl.Series([0.0, 2.0]),
+            pl.Series([1.5, 0.0]),
+            long_term_weight=0.5,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="x",
+        )
+        assert z.to_list() == pytest.approx([0.75, 1.0])
+
+    def test_agreement_amplifies_disagreement_damps(self) -> None:
+        agree = agreement_scaled_blend(
+            pl.Series([1.0]),
+            pl.Series([1.0]),
+            long_term_weight=0.5,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="x",
+        )
+        disagree = agreement_scaled_blend(
+            pl.Series([1.0]),
+            pl.Series([-1.0]),
+            long_term_weight=0.5,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="x",
+        )
+        assert agree[0] == pytest.approx(1.5)  # base 1.0 * (1 + 0.5*1.0)
+        assert disagree[0] == pytest.approx(0.0)  # base 0.0 * 0.5
+
+    def test_nulls_pass_through(self) -> None:
+        z = agreement_scaled_blend(
+            pl.Series([None, 1.0], dtype=pl.Float64),
+            pl.Series([None, None], dtype=pl.Float64),
+            long_term_weight=0.5,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="x",
+        )
+        assert z.to_list() == [None, 1.0]
+
+
+class TestDailyMacdZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 50.0 * math.sin(i / 9.0) for i in range(n)])
+        z = daily_macd_z(dates, close)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_is_causal_no_lookahead(self) -> None:
+        n = 300
+        dates = _dates(n)
+        base = [1000.0 + 50.0 * math.sin(i / 9.0) for i in range(n)]
+        z1 = daily_macd_z(dates, pl.Series(base))
+        spiked = base.copy()
+        spiked[-1] = 50_000.0
+        z2 = daily_macd_z(dates, pl.Series(spiked))
+        assert z1[100] == pytest.approx(z2[100])
+        assert z1[-1] != pytest.approx(z2[-1])
+
+    def test_sharp_dip_against_stable_regime_is_positive_z(self) -> None:
+        """A few-months momentum dip inside an otherwise-flat regime should
+        register against its own recent history -- exactly the medium-term
+        signal a whole-history/weekly-scale leg would miss.
+        """
+        stable = [1000.0 + 5.0 * math.sin(i / 11.0) for i in range(200)]
+        dip = [stable[-1] * (0.985**i) for i in range(1, 40)]
+        close = pl.Series(stable + dip)
+        dates = _dates(close.len())
+        z = daily_macd_z(dates, close, z_window=90, min_samples=30)
+        tail = [v for v in z.to_list()[-10:] if v is not None]
+        assert tail
+        assert sum(tail) / len(tail) > 0.5
+
+
+class TestMacdConfluenceZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 400
+        dates = _dates(n)
+        close = pl.Series([1000.0 - 0.5 * i + 15.0 * math.sin(i / 5.0) for i in range(n)])
+        z = macd_confluence_z(dates, close)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly = weekly_macd_z(dates, close)
+        daily = daily_macd_z(dates, close)
+        confluence = macd_confluence_z(dates, close)
+
+        saw_agreement = saw_disagreement = False
+        for w, d, c in zip(weekly.to_list(), daily.to_list(), confluence.to_list(), strict=True):
+            if w is None and d is None:
+                assert c is None
+                continue
+            if w is None:
+                assert c == pytest.approx(d, abs=1e-9)
+                continue
+            if d is None:
+                assert c == pytest.approx(w, abs=1e-9)
+                continue
+            base = 0.5 * w + 0.5 * d
+            if w == 0.0 or d == 0.0:
+                expected = base
+            elif (w > 0) == (d > 0):
+                frac = min(abs(w), abs(d)) / max(abs(w), abs(d))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
+
+    def test_agreement_amplifies_beyond_simple_average(self) -> None:
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly = weekly_macd_z(dates, close).to_list()
+        daily = daily_macd_z(dates, close).to_list()
+        confluence = macd_confluence_z(dates, close).to_list()
+        checked = 0
+        for w, d, c in zip(weekly, daily, confluence, strict=True):
+            if w is None or d is None or w == 0.0 or d == 0.0:
+                continue
+            base = 0.5 * w + 0.5 * d
+            if (w > 0) == (d > 0) and abs(base) < 2.9:
+                assert abs(c) >= abs(base) - 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced an unclipped agreement case"
+
+    def test_disagreement_damps_toward_zero(self) -> None:
+        n = 500
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 140.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        weekly = weekly_macd_z(dates, close).to_list()
+        daily = daily_macd_z(dates, close).to_list()
+        confluence = macd_confluence_z(dates, close).to_list()
+        checked = 0
+        for w, d, c in zip(weekly, daily, confluence, strict=True):
+            if w is None or d is None or w == 0.0 or d == 0.0:
+                continue
+            if (w > 0) != (d > 0):
+                base = 0.5 * w + 0.5 * d
+                assert abs(c) <= abs(base) + 1e-9
+                checked += 1
+        assert checked > 0, "fixture never produced a disagreement case"
+
+    def test_daily_leg_params_change_output(self) -> None:
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 - 0.3 * i + 20.0 * math.sin(i / 6.0) for i in range(n)])
+        z_short = macd_confluence_z(dates, close, daily_fast=5, daily_slow=10).to_list()
+        z_long = macd_confluence_z(dates, close, daily_fast=12, daily_slow=26).to_list()
+        assert z_short != z_long
+
+
+class TestOscillatorSpecDailyMacd:
+    def test_default_matches_weekly_fast_slow(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.macd_daily_fast == 12
+        assert spec.macd_daily_slow == 26
+
+    def test_daily_independent_of_weekly(self) -> None:
+        spec = SdcaOscillatorSpec(macd_fast=8, macd_slow=21, macd_daily_fast=5, macd_daily_slow=10)
+        assert spec.macd_fast == 8
+        assert spec.macd_slow == 21
+        assert spec.macd_daily_fast == 5
+        assert spec.macd_daily_slow == 10
+
+    def test_daily_slow_must_exceed_daily_fast(self) -> None:
+        with pytest.raises(ValueError, match="macd_daily_slow"):
+            SdcaOscillatorSpec(macd_daily_fast=10, macd_daily_slow=10)
+
+    def test_daily_min_samples_must_not_exceed_window(self) -> None:
+        with pytest.raises(ValueError, match="macd_daily_min_samples"):
+            SdcaOscillatorSpec(macd_daily_z_window=10, macd_daily_min_samples=20)
 
 
 class TestSmaBandZ:

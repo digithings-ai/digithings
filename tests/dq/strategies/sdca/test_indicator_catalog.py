@@ -24,7 +24,11 @@ from digiquant.strategies.sdca.indicator_catalog import (
     parse_indicator_weights_json,
     rs_eth_z,
 )
-from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, rsi_confluence_z
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    macd_confluence_z,
+    rsi_confluence_z,
+)
 from digiquant.strategies.sdca.risk_index import build_risk_index
 from digiquant.strategies.sdca.valuation import valuation_z_score
 
@@ -202,6 +206,25 @@ class TestBuildExtraIndicators:
         )
         assert len(extras) == 1
         expected = rsi_confluence_z(dates, close, weekly_length=10, daily_length=6)
+        assert extras[0].z.to_list() == expected.to_list()
+
+    def test_weekly_macd_slot_is_the_confluence_sub_aggregate(self) -> None:
+        """weekly_macd now wires to macd_confluence_z (weekly+daily), not weekly-only."""
+        n = 300
+        dates = _dates(n)
+        close = pl.Series([1000.0 + 3.0 * ((i % 40) - 20) - 0.5 * i for i in range(n)])
+        spec = SdcaOscillatorSpec(macd_fast=8, macd_slow=21, macd_daily_fast=5, macd_daily_slow=10)
+        extras = build_extra_indicators(
+            dates,
+            close,
+            SdcaCompositeWeights(valuation=1.0, weekly_macd=1.0),
+            ExtraIndicatorSources(),
+            oscillators=spec,
+        )
+        assert len(extras) == 1
+        expected = macd_confluence_z(
+            dates, close, weekly_fast=8, weekly_slow=21, daily_fast=5, daily_slow=10
+        )
         assert extras[0].z.to_list() == expected.to_list()
 
 

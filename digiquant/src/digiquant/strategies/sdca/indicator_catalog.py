@@ -34,10 +34,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
+    macd_confluence_z,
     price_oscillator_z_vectors,
     rsi_confluence_z,
     sma_band_z,
-    weekly_macd_z,
 )
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
@@ -326,13 +326,15 @@ def build_extra_indicators(
         extras.append(
             IndicatorWeight(
                 name="weekly_macd",
-                z=weekly_macd_z(
+                z=macd_confluence_z(
                     dates,
                     btc_price,
-                    fast=spec.macd_fast,
-                    slow=spec.macd_slow,
-                    signal=spec.macd_signal,
-                    z_window=spec.macd_z_window,
+                    weekly_fast=spec.macd_fast,
+                    weekly_slow=spec.macd_slow,
+                    daily_fast=spec.macd_daily_fast,
+                    daily_slow=spec.macd_daily_slow,
+                    daily_z_window=spec.macd_daily_z_window,
+                    daily_min_samples=spec.macd_daily_min_samples,
                 ),
                 weight=enabled["weekly_macd"],
             )
