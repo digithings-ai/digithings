@@ -10,7 +10,7 @@ FastAPI + MCP + CLI service layer. First consumer: the project documentation
 ## Read first
 
 1. `digivault/ARCHITECTURE.md` — module map, public API, design decisions.
-2. Root `AGENTS.md` and `CLAUDE.md` — stack-wide non-negotiables.
+2. Root `AGENTS.md` — stack-wide non-negotiables (`CLAUDE.md` is a pointer).
 3. `digifetch/ARCHITECTURE.md` — the library-conventions reference this mirrors.
 
 ## Pre-flight checklist

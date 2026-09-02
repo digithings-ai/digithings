@@ -2,8 +2,8 @@
 
 Binding behavior
 ----------------
-1. Entitlement: (paid Custom/Enterprise with ``subscription_status = active``)
-   **or** D1 ``entitlement_grants.plan_floor ∈ {custom, enterprise}`` (creator/ops
+1. Entitlement: (paid Studio/Enterprise with ``subscription_status = active``)
+   **or** D1 ``entitlement_grants.plan_floor ∈ {studio, enterprise}`` (creator/ops
    without Stripe), **and** BYOK present-and-unsealable. Otherwise a ``job_runs``
    row is written ``skipped`` with ``error`` = ``not_entitled`` / ``no_credentials``
    — visible, never silent.
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from digiquant.olympus.overlay.byok import ByokProbe
 
 JOB_TYPE_OVERLAY_DAILY = "overlay_daily"
-ENTITLED_TIERS: frozenset[str] = frozenset({PlanTier.CUSTOM.value, PlanTier.ENTERPRISE.value})
+ENTITLED_TIERS: frozenset[str] = frozenset({PlanTier.STUDIO.value, PlanTier.ENTERPRISE.value})
 
 
 class OverlaySkipReason(StrEnum):
@@ -252,7 +252,7 @@ def _now() -> datetime:
 
 
 def overlay_billing_entitled(workspace: WorkspaceEntitlement) -> bool:
-    """Paid Custom/Enterprise (Stripe active) or D1 custom+ ops grant (no Stripe)."""
+    """Paid Studio/Enterprise (Stripe active) or D1 studio+ ops grant (no Stripe)."""
     paid = (
         workspace.plan_tier.value in ENTITLED_TIERS
         and workspace.subscription_status is SubscriptionStatus.ACTIVE

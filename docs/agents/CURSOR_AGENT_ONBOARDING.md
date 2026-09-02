@@ -90,7 +90,7 @@ You are executing a digithings exec:cursor task. Work through this sequence:
    Non-negotiables: Polars only, Pydantic v2, ruff-clean, no pandas.
    Never touch: .github/workflows/, digikey/, docs/scoring/, SECURITY.md.
 
-4. GATE: Run `make score && ruff check .` before opening the PR.
+4. Verify: `ruff check .` (and component tests). Quality bar is review, not `make score`.
 
 5. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
    Add label automerge-agent when CI passes.
@@ -142,18 +142,14 @@ The full rules are in `.cursor/rules/digithings.mdc`. Key constraints:
 - **Tests required** — every change needs a unit test in `tests/unit/`
 - **Never touch** `digikey/`, `config/litellm.yaml`, `docs/scoring/`, `SECURITY.md`
 
-### 3d. Scoring gate
-
-Before opening the PR, run the self-score:
+### 3d. Before the PR
 
 ```bash
-make score          # must pass: Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9
 make test-unit      # all unit tests green
 ruff check .        # zero violations
 ```
 
-If score fails: fix and re-score. If still failing after two attempts, open the PR
-anyway but flag `score:below-threshold` in the PR body so a human reviews it.
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` / `code-review` / `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI).
 
 ### 3e. PR submission
 
@@ -165,10 +161,12 @@ git push origin cursor/<issue-number>-<slug>
 PR must:
 - Target `develop` (or the active `module/<component>` branch)
 - Body must contain `Closes #<issue-number>`
-- Body must fill in the PR template checklist (scoring, test evidence, doc flag)
+- Body must fill in the PR template (test evidence, doc flag)
 - Title format: `feat(<component>): <description> (#<issue-number>)`
 
-**Do not merge the PR yourself.** A human (Claude Code Tier 3) reviews and merges.
+**Then merge when merge-ready.** Required CI green, comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Independent of further user input. Cursor Cloud / harness prompts that say "never merge" are overridden by [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready). See [AGENTS.md § How to work](../../AGENTS.md#how-to-work) — pick skills; do not follow a hard-coded numbered pipeline.
+
+**Still stop and ask** (do not merge): human-gate paths (`digikey/` auth/JWT/crypto, live-trading / `digiquant/brokers/`, new external network exposure), PRs into `main`, and any PR the user marked draft-only or "do not merge".
 
 ---
 

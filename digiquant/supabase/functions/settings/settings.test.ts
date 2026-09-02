@@ -17,6 +17,10 @@ import {
   pinnedAlpacaRedirectUri,
 } from "../_shared/settings-handlers.ts";
 import {
+  sha256Hex,
+  type InviteStore,
+} from "../_shared/invite.ts";
+import {
   buildAad,
   canonicalJson,
   fingerprint,
@@ -63,7 +67,7 @@ interface Store {
   bootstrapDisabled?: boolean;
 }
 
-function wsRow(id: string, planTier = "custom"): WorkspaceRow {
+function wsRow(id: string, planTier = "studio"): WorkspaceRow {
   return {
     id,
     stripe_customer_id: null,
@@ -78,8 +82,8 @@ function wsRow(id: string, planTier = "custom"): WorkspaceRow {
 function freshStore(): Store {
   return {
     workspaces: new Map([
-      [WS_A, wsRow(WS_A, "custom")],
-      [WS_B, wsRow(WS_B, "custom")],
+      [WS_A, wsRow(WS_A, "studio")],
+      [WS_B, wsRow(WS_B, "studio")],
     ]),
     members: [
       { workspace_id: WS_A, user_id: USER_A, role: "owner" },
@@ -531,6 +535,9 @@ async function call(
     userId?: string;
     planTier?: string | null;
     auth?: boolean;
+    email?: string;
+    inviteHash?: string | null;
+    inviteStore?: InviteStore;
   } = {},
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const userId = opts.userId ?? USER_A;
@@ -538,12 +545,14 @@ async function call(
     admin: mockAdmin(store),
     user: {
       id: userId,
-      email: "owner@example.com",
-      plan_tier: opts.planTier === undefined ? "custom" : opts.planTier,
+      email: opts.email ?? "owner@example.com",
+      plan_tier: opts.planTier === undefined ? "studio" : opts.planTier,
     },
     vaultKey: TEST_KEY,
     uuid: nextUuid,
     appUrl: APP_URL,
+    inviteHash: opts.inviteHash,
+    inviteStore: opts.inviteStore,
     exchangeAlpacaCode: async ({ redirectUri }) => {
       // Capture that exchange uses server-pinned URI.
       if (redirectUri !== pinnedAlpacaRedirectUri(APP_URL)) {
@@ -614,14 +623,14 @@ Deno.test("GET profile: auto-bootstraps then returns empty contract", async () =
   assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
 });
 
-Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
+Deno.test("403 TIER_FORBIDDEN for desk on profile write", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
   const { status, json } = await call(store, "PATCH", "/profile", {
     profile_key: "workspace",
     label: "L",
     investment: validInvestment,
-  }, { planTier: "baseline" });
+  }, { planTier: "desk" });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
   assertEquals(store.profiles.length, 0);
@@ -632,7 +641,7 @@ Deno.test(
   async () => {
     const store = freshStore();
     store.workspaces.set(WS_A, wsRow(WS_A, "free"));
-    store.entitlementGrants.set("owner@example.com", "custom");
+    store.entitlementGrants.set("owner@example.com", "studio");
     store.productGrants.set("owner@example.com", ["fx_hub"]);
     const { status, json } = await call(store, "PATCH", "/profile", {
       profile_key: "workspace",
@@ -645,22 +654,35 @@ Deno.test(
   },
 );
 
-Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
+Deno.test("403 TIER_FORBIDDEN for brief on broker connect", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "brief"));
   const { status, json } = await call(store, "POST", "/brokers/connect", {
     broker: "alpaca",
     env: "paper",
     kind: "api_key",
     key_id: "PK",
     secret: "sec",
-  }, { planTier: "baseline" });
+  }, { planTier: "brief" });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
 });
 
+Deno.test("desk workspace may connect a paper broker", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
+  const { status, json } = await call(store, "POST", "/brokers/connect", {
+    broker: "alpaca",
+    env: "paper",
+    kind: "api_key",
+    key_id: "PK",
+    secret: "sec",
+  }, { planTier: "desk" });
+  assertEquals(status, 200, JSON.stringify(json));
+});
+
 Deno.test(
-  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still custom (stale claim after cancel)",
+  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still studio (stale claim after cancel)",
   async () => {
     const store = freshStore();
     store.workspaces.set(WS_A, wsRow(WS_A, "free"));
@@ -669,7 +691,7 @@ Deno.test(
       profile_key: "ws-overlay",
       label: "Should not write",
       investment: validInvestment,
-    }, { planTier: "custom" });
+    }, { planTier: "studio" });
     assertEquals(profile.status, 403);
     assertEquals(profile.json.code, "TIER_FORBIDDEN");
     assertEquals(store.profiles.length, 0);
@@ -680,7 +702,7 @@ Deno.test(
       kind: "api_key",
       key_id: "PK",
       secret: "sec",
-    }, { planTier: "custom" });
+    }, { planTier: "studio" });
     assertEquals(connect.status, 403);
     assertEquals(connect.json.code, "TIER_FORBIDDEN");
     assertEquals(store.brokers.length, 0);
@@ -688,10 +710,10 @@ Deno.test(
 );
 
 Deno.test(
-  "allows custom workspace when JWT claim lags at free (stale claim after upgrade)",
+  "allows studio workspace when JWT claim lags at free (stale claim after upgrade)",
   async () => {
     const store = freshStore();
-    store.workspaces.set(WS_A, wsRow(WS_A, "custom"));
+    store.workspaces.set(WS_A, wsRow(WS_A, "studio"));
     store.workspaces.get(WS_A)!.claim_sync_pending = true;
     const { status, json } = await call(store, "PATCH", "/profile", {
       profile_key: "ws-overlay",
@@ -867,7 +889,7 @@ Deno.test(
       }),
       {
         admin: mockAdmin(store),
-        user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+        user: { id: USER_A, email: "owner@example.com", plan_tier: "studio" },
         vaultKey: TEST_KEY,
         appUrl: APP_URL,
       },
@@ -920,7 +942,7 @@ Deno.test("POST brokers/connect oauth: OAUTH_NOT_CONFIGURED when Alpaca client s
     }),
     {
       admin: mockAdmin(store),
-      user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+      user: { id: USER_A, email: "owner@example.com", plan_tier: "studio" },
       vaultKey: TEST_KEY,
       appUrl: APP_URL,
       // Intentionally omit exchangeAlpacaCode → production default path.
@@ -1186,13 +1208,13 @@ Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
 // Vault helpers used by handlers
 // ---------------------------------------------------------------------------
 
-Deno.test("403 TIER_FORBIDDEN for baseline on keys connect", async () => {
+Deno.test("403 TIER_FORBIDDEN for desk on keys connect", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
   const { status, json } = await call(store, "POST", "/keys/connect", {
     provider: "openai",
     kind: "api_key",
-    secret: "sk-test-baseline-blocked",
+    secret: "sk-test-desk-blocked",
   });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
@@ -1335,14 +1357,18 @@ Deno.test("sealCredential called with AAD binding (workspace:broker:env)", async
   );
 });
 
-Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
+Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     pinnedAlpacaRedirectUri("https://app.example/olympus"),
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
 });
 
@@ -1443,17 +1469,17 @@ Deno.test("GET /notifications/log: member lists digest event keys only", async (
   assertEquals(events[0]!.event_key, "digest:2026-08-31");
 });
 
-Deno.test("GET /app-urls: pinned Alpaca + billing return under /olympus", async () => {
+Deno.test("GET /app-urls: pinned Alpaca + billing return under /dashboard", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "GET", "/app-urls");
   assertEquals(status, 200);
   assertEquals(
     json.alpaca_redirect_uri,
-    "https://app.example/olympus/settings/brokers/callback/",
+    "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     json.billing_return_url,
-    "https://app.example/olympus/settings/?tab=billing",
+    "https://app.example/dashboard/settings/?tab=billing",
   );
   assertEquals(json.alpaca_oauth_client_id, "");
 });
@@ -1477,4 +1503,81 @@ Deno.test("GET /app-urls: public client id only (secret never in body)", async (
     if (previousSecret === undefined) Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
     else Deno.env.set("ALPACA_OAUTH_CLIENT_SECRET", previousSecret);
   }
+});
+
+function memInviteStore(): InviteStore & { grants: Map<string, string[]> } {
+  const grants = new Map<string, string[]>();
+  const attempts: Array<{ user_id: string; attempted_at: string }> = [];
+  const store: InviteStore & { grants: Map<string, string[]> } = {
+    grants,
+    countAttempts: async (userId, sinceIso) =>
+      attempts.filter((a) => a.user_id === userId && a.attempted_at >= sinceIso).length,
+    recordAttempt: async (row) => {
+      attempts.push(row);
+    },
+    listActiveCodes: async () => [],
+    hasGrant: async (email, productKey) => (grants.get(email) ?? []).includes(productKey),
+    insertGrant: async (email, productKey) => {
+      const prev = grants.get(email) ?? [];
+      grants.set(email, [...prev, productKey]);
+    },
+    recordRedemption: async () => {},
+    incrementRedemptionCount: async () => {},
+  };
+  return store;
+}
+
+Deno.test("POST /access/redeem-invite: env hash grants fx_hub", async () => {
+  const plain = "12x-desk-invite-alpha";
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: plain, product_key: "fx_hub" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex(plain),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 200);
+  assertEquals(json.ok, true);
+  assertEquals(json.product_key, "fx_hub");
+  assertEquals(json.already_granted, false);
+  assertEquals(inviteStore.grants.get("teammate@12x.example"), ["fx_hub"]);
+});
+
+Deno.test("POST /access/redeem-invite: wrong code is 403 without a grant", async () => {
+  const inviteStore = memInviteStore();
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "totally-wrong-invite" },
+    {
+      email: "teammate@12x.example",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore,
+    },
+  );
+  assertEquals(status, 403);
+  assertEquals(json.code, "INVITE_INVALID");
+  assertEquals(inviteStore.grants.size, 0);
+});
+
+Deno.test("POST /access/redeem-invite: missing email is 400", async () => {
+  const { status, json } = await call(
+    freshStore(),
+    "POST",
+    "/access/redeem-invite",
+    { code: "12x-desk-invite-alpha" },
+    {
+      email: "",
+      inviteHash: await sha256Hex("12x-desk-invite-alpha"),
+      inviteStore: memInviteStore(),
+    },
+  );
+  assertEquals(status, 400);
+  assertEquals(json.code, "EMAIL_REQUIRED");
 });

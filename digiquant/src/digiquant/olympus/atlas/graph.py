@@ -147,7 +147,7 @@ def build_atlas_graph(
             build_phase4(),
             *build_phase5(),
             build_phase6(),
-            build_phase7(),
+            *build_phase7(),
         ]
     )
     if deps.publish is not None:

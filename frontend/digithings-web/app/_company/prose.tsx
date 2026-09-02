@@ -1,5 +1,5 @@
 /** Shared prose atoms for the company pages (/about, /team, /security,
- *  /quality, /services, /legal/*).
+ *  /quality, /services, /legal/*, /brand).
  *
  *  These are composition helpers, not a new UI family: every one of them emits
  *  existing canon classes (.kicker, .hero-title, .section, .wrap) plus

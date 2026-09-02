@@ -152,12 +152,11 @@ class TestPhase5FailSoftIntegration:
 
         final = AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
-        # Equity + 11 sectors all degraded to carried (the scorecard is deterministic).
+        # Equity + 11 sector memos all degraded to carried. No scorecard node.
         assert final.phase5_outputs["equity"].payload.source == "carried"
-        sector_slugs = [
-            k for k in final.phase5_outputs if k.startswith("sector-") and k != "sector-scorecard"
-        ]
+        sector_slugs = [k for k in final.phase5_outputs if k.startswith("sector-")]
         assert len(sector_slugs) == 11
+        assert "sector-scorecard" not in final.phase5_outputs
         assert all(final.phase5_outputs[s].payload.source == "carried" for s in sector_slugs)
 
         # Every failure is recorded (append reducer kept all 12 across the fan-in),
@@ -169,7 +168,3 @@ class TestPhase5FailSoftIntegration:
             for s in sector_slugs
         }
         assert carried_reasons == {NODE_FAILED_REASON}
-
-        # Deterministic scorecard still ran — with no fresh sectors it has 0 rows.
-        scorecard = final.phase5_outputs["sector-scorecard"].payload.body  # type: ignore[union-attr]
-        assert scorecard["rows"] == []

@@ -35,7 +35,7 @@ MAILGUN_REQUIRED_ENV: tuple[str, ...] = (
     NOTIFY_FROM_ENV,
 )
 
-DEFAULT_UNSUBSCRIBE_BASE = "https://digiquant.io/olympus/settings/notifications"
+DEFAULT_UNSUBSCRIBE_BASE = "https://digiquant.io/dashboard/settings/notifications"
 
 
 class MailgunTransportError(Exception):

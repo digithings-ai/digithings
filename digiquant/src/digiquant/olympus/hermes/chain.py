@@ -32,13 +32,15 @@ from digiquant.olympus.atlas.phases.preflight import (
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseError
+from digiquant.olympus.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
 )
 from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.olympus.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
 
 _logger = logging.getLogger(__name__)
 
@@ -58,8 +60,9 @@ class ChainDeps:
     Atlas-side deps (preflight, triage, preflight-reflect) come from
     :class:`AtlasGraphDeps`. Hermes-side deps (H1–H9 thesis path) come from
     :class:`HermesGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
-    daily graph — beliefs distillation is on-demand via
-    :func:`run_beliefs_distillation_if_triggered` (spec §11.1). The terminal
+    daily graph — beliefs distillation runs after publish via
+    :func:`run_beliefs_distillation_if_triggered` (daily short fold; full
+    rewrite on ``refresh_scope=beliefs`` or backlog). The terminal
     ``publish`` :class:`PublishDeps` is shared — one Supabase client writes
     everything at the end.
     """
@@ -97,9 +100,10 @@ OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
 
 
 def _outer_attempt() -> int:
-    """The CI outer-retry attempt number, from ``OLYMPUS_ATTEMPT``.
+    """The CI outer-retry attempt number, from ``DIGIQUANT_ATTEMPT``.
 
-    ``pipeline-olympus.yml``'s retry loop exports it per attempt (#1762). Falls back to 1 —
+    ``pipeline-olympus.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
+    per attempt (#1762). Readers accept both names. Falls back to 1 —
     a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
     the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
 
@@ -108,8 +112,8 @@ def _outer_attempt() -> int:
     and treated as attempt 1, which at worst re-collides two attempts the way the pre-#1762
     code always did.
     """
-    raw = os.environ.get(OUTER_ATTEMPT_ENV)
-    if raw is None or not raw.strip():
+    raw = env_lookup(ATTEMPT)
+    if not raw.strip():
         return 1
     try:
         attempt = int(raw)
@@ -193,7 +197,7 @@ def _invoke_resumable(
 def _degraded_run_pct() -> float:
     """``ATLAS_DEGRADED_RUN_PCT`` (failed-segment %% that marks a run degraded); default 50."""
     try:
-        return float(os.environ.get("ATLAS_DEGRADED_RUN_PCT", "") or 50.0)
+        return float(env_lookup(DEGRADED_RUN_PCT) or 50.0)
     except ValueError:
         return 50.0
 
@@ -240,6 +244,29 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseExceptio
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
+def _preflight_config(deps: ChainDeps) -> AtlasConfigBundle | None:
+    """Pin overlay workspace on initial state before fail-soft graph invoke.
+
+    Overlay identity is loaded in Atlas preflight. If Atlas raises at graph
+    level, ``_safe_invoke_graph`` returns the original state. Beliefs fold
+    then ran with ``workspace_id=None`` (house path) and stamped house
+    ``decision_log``. Call the preflight config loader once up front so a
+    private workspace skip is already on the last-good state. House loaders
+    that omit ``workspace_id`` still fold. Tests may pass ``atlas=None``.
+    """
+    atlas = getattr(deps, "atlas", None)
+    if atlas is None:
+        return None
+    preflight = getattr(atlas, "preflight", None)
+    if preflight is None:
+        return None
+    loader = getattr(preflight, "config_loader", None)
+    if not callable(loader):
+        return None
+    loaded = loader()
+    return loaded if isinstance(loaded, AtlasConfigBundle) else None
+
+
 def _safe_invoke_graph(
     graph: Any, state: AtlasResearchState, checkpointer: Any, thread_base: str | None, label: str
 ) -> AtlasResearchState:
@@ -249,6 +276,10 @@ def _safe_invoke_graph(
     the belt-and-suspenders for a rare whole-graph raise (infra / checkpointer)."""
     try:
         return _invoke_resumable(graph, state, checkpointer, thread_base, label)
+    except OverlayLegacyBookBlocked:
+        # Overlay leftover UNIQUE refuse must reach execute_overlay (FAILED +
+        # legacy_book_unique). House never raises this.
+        raise
     except Exception as exc:  # a late crash must still reach publish/materialize
         _logger.exception("chain: %s graph failed; continuing with last-good state", label)
         _record_chain_error(state, label, exc)
@@ -269,6 +300,8 @@ def _run_terminal_phase(
         return _coerce_atlas_state(
             build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
         )
+    except OverlayLegacyBookBlocked:
+        raise
     except Exception as exc:  # one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
@@ -291,21 +324,29 @@ def resolve_run_id(atlas_input: AtlasInput) -> str:
 def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
     """Fold the beliefs backlog, fail-soft (#1737).
 
-    Beliefs distillation is an *optional* on-demand backlog fold (spec §11.1), not a run
-    deliverable — yet both call sites were bare, so an LLM/Supabase error inside it escaped
+    Beliefs distillation is a daily short fold after publish (WP-I), not a graph node.
+    LLM/Supabase errors must not kill a run that already committed a book. Record it as
     ``run_atlas_then_hermes`` and killed a run that had already committed a book. Record it as
     a chain-level error (so the run reports ``degraded``, not ``ok``) and continue: the
     diagnostics row and the caller's exit code then describe what actually happened.
     """
     if deps.atlas.preflight.client is None:
         return
+    if skip_overlay_shared_register(state.config.workspace_id):
+        # Overlay persist-on still reaches this post-publish fold after a
+        # fail-soft H9 ``legacy_book_unique``. Distillation reads every
+        # unfolded house ``decision_log`` row and stamps ``beliefs_folded_at``
+        # by id — a shared-register smash, same class as ``resolve_pending``.
+        _logger.info("chain: overlay workspace skips beliefs fold (shared decision_log)")
+        return
     try:
         run_beliefs_distillation_if_triggered(
             client=deps.atlas.preflight.client,
             atlas_input=atlas_input,
             run_type=_legacy_run_type(atlas_input.refresh_scope),
+            workspace_id=state.config.workspace_id,
         )
-    except Exception as exc:  # an optional backlog fold must never kill a booked run
+    except Exception as exc:  # a daily fold must never kill a booked run
         _logger.exception("chain: beliefs distillation failed; continuing")
         _record_chain_error(state, "beliefs", exc)
 
@@ -345,7 +386,9 @@ def run_atlas_then_hermes(
     non-None overrides preferences.
 
     ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
-    (#2628 / WP4.1). Atlas preflight then pins one ``research_state_pin``
+    (#2628 / WP4.1) and, when the preflight ``config_loader`` is present, the
+    overlay ``workspace_id`` so a fail-soft Atlas crash cannot fold beliefs as
+    house. Atlas preflight then pins one ``research_state_pin``
     (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
     it does not re-call ``now()`` or re-select state as ingestion continues.
 
@@ -365,6 +408,12 @@ def run_atlas_then_hermes(
     if manage_usage:
         _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
+        pinned = _preflight_config(deps)
+        if pinned is not None:
+            # Preserve the already-pinned knowledge_cutoff_at. Overlay identity
+            # must be on last-good state before fail-soft graph invoke; a raising
+            # loader stays inside this envelope so diagnostics still flush.
+            state = state.model_copy(update={"config": pinned})
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
             _run_beliefs_fold(state, deps, atlas_input)
@@ -421,7 +470,7 @@ def run_atlas_then_hermes(
         # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
 
-        # Automatic beliefs backlog fold (on-demand — not a daily graph node).
+        # Daily short fold (WP-I) — always publishes a same-date beliefs document.
         _run_beliefs_fold(state, deps, atlas_input)
         return state
     except BaseException as exc:

@@ -6,7 +6,7 @@ with the K3 vault and inserts one active row. Never logs secret values.
 
 AAD is ``workspace_id:provider:llm`` — the same binding as ``byok.py`` / the
 settings Edge Function. House and system workspaces are refused. Overlay
-billing entitlement (paid Custom/Enterprise or D1 ``plan_floor``) is required.
+billing entitlement (paid Studio/Enterprise or D1 ``plan_floor``) is required.
 """
 
 from __future__ import annotations
@@ -175,7 +175,7 @@ def assert_workspace_may_receive_byok(workspace: WorkspaceEntitlement) -> None:
     if not overlay_billing_entitled(workspace):
         raise ByokSealError(
             "not_entitled",
-            "workspace is not overlay-billing entitled (paid custom/enterprise or plan_floor)",
+            "workspace is not overlay-billing entitled (paid studio/enterprise or plan_floor)",
         )
 
 

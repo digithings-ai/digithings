@@ -17,9 +17,10 @@ Usage::
 
     python digiquant/scripts/atlas/refresh_attribution.py [--date YYYY-MM-DD] [--window-days N]
 
-Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads positions + price_history,
-writes current_book_lookback (migrations 040 + 073 must be applied). Exit 0 = clean (no
-positions for the date is success); 1 = hard failure; 2 = bad ``--date``.
+Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads house ``positions`` +
+price_history (filters ``workspace_id`` so overlay same-date weights cannot seed
+the lookback), writes current_book_lookback (migrations 040 + 073 must be applied).
+Exit 0 = clean (no positions for the date is success); 1 = hard failure; 2 = bad ``--date``.
 """
 
 from __future__ import annotations
@@ -45,6 +46,18 @@ def _ensure_importable() -> None:
         path = str(_REPO_ROOT / rel)
         if path not in sys.path:
             sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+
+
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
 
 
 def _parse_date(value: str | None) -> date:
@@ -112,8 +125,7 @@ def refresh_attribution(
     start_iso = (as_of - timedelta(days=lookback_days)).isoformat()
 
     pos_resp = (
-        client.table("positions")
-        .select("ticker,weight_pct,sector_bucket")
+        _eq_house(client.table("positions").select("ticker,weight_pct,sector_bucket"))
         .eq("date", date_str)
         .execute()
     )

@@ -81,24 +81,17 @@ For each pair in watchlist:
 
 ## Output Format
 
+Write a markdown `body`. Suggested skeleton (skip empty sections). Inline [title](url) citations. Do **not** invent scores, a Signals section, or print `Bias:` at the top.
+
+```markdown
+# Forex — {as-of date of the data}
+
+## Dollar
+DXY level, trend, key level.
+
+## Major pairs
+EUR, JPY, GBP, CAD with the driver.
+
+## EM and carry
+Stress flags and yen-carry implications for risk assets.
 ```
-### 💱 FOREX
-**DXY**: [Level (±X%) | Trend: strengthening/weakening | Key level: ...]
-
-**Key Pairs**:
-- EUR/USD: X.XXXX (±X%) | [driver]
-- USD/JPY: XXX.XX (±X%) | [driver / intervention risk?]
-- GBP/USD: X.XXXX (±X%) | [driver]
-- USD/CAD: X.XXXX (±X%) | [oil/BoC driver]
-
-**EM FX Stress**: [Any EM currency crisis signal | USD/CNH fixing vs market]
-
-**FX Risk Signal**: [Risk-on / Risk-off / Mixed — rationale]
-
-**Carry Watch**: [Yen carry stable/stressed | implication for risk assets]
-
-**USD REER**: [Over/undervalued — implication for US multinational earnings]
-
-**Watch**: [Key FX event or level to monitor]
-```
-

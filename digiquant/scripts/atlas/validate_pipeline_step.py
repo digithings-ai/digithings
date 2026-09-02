@@ -20,7 +20,7 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple  # score:allow untyped any — duck-typed PostgREST rows
 
 try:
     import jsonschema  # type: ignore
@@ -45,8 +45,19 @@ except ImportError:
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMAS_DIR = ROOT / "templates" / "schemas"
 DIGEST_SNAPSHOT_SCHEMA = ROOT / "templates" / "digest-snapshot-schema.json"
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 DOC_TYPE_TO_SCHEMA = {
     "market_thesis_exploration": "market-thesis-exploration.schema.json",
@@ -92,13 +103,13 @@ def _pass(msg: str) -> None:
 
 
 def fetch_document_rows(sb, d: str) -> List[Dict[str, Any]]:
+    """House documents for ``d``. Overlay same-date rows must not pass step validation."""
     rows: List[Dict[str, Any]] = []
     start = 0
     page = 500
     while True:
         res = (
-            sb.table("documents")
-            .select("document_key,payload")
+            eq_house_workspace(sb.table("documents").select("document_key,payload"))
             .eq("date", d)
             .range(start, start + page - 1)
             .execute()

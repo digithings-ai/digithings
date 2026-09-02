@@ -3,14 +3,15 @@
 Exit 0 is allowed only when every hop here is proven from product state:
 
 - Stripe: ``subscription_status=active`` **and** ``has_stripe_subscription``
-  **and** ``plan_tier`` in ``{custom, enterprise}``. House is seeded
+  **and** ``plan_tier`` in ``{studio, enterprise}``. House is seeded
   ``enterprise``/``active`` without Stripe ids — that must not prove checkout.
-  A Baseline Stripe subscription also must not: broker connect and overlay
-  stay ``TIER_FORBIDDEN``. Ops grants with ``subscription_status=none`` do not.
+  Brief or Desk Stripe also must not: overlay stays Studio-gated. Ops grants
+  with ``subscription_status=none`` do not.
 - Alpaca: paper connection ``active`` with ``auth_kind=oauth``.
 - Overlay: ``job_type=overlay_daily`` with status ``succeeded`` (not
   ``running`` / ``skipped`` / ``persist_disabled`` / ``not_entitled``). A
-  stuck claim or persist-disabled finish must not prove the EPIC overlay hop.
+  stuck claim, persist-disabled finish, or ``legacy_book_unique`` fail
+  (cutover 113 not applied) must not prove the EPIC overlay hop.
 - Fill: at least one fingerprint with a symbol **and** an Alpaca paper
   ``auth_kind=oauth`` connection. An ``api_key`` row with fills must not prove
   the hop.
@@ -29,6 +30,8 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
+
 REMAINING_LIVE_HOPS: tuple[str, ...] = (
     "browser_stripe_checkout",
     "alpaca_paper_oauth_connect",
@@ -38,14 +41,15 @@ REMAINING_LIVE_HOPS: tuple[str, ...] = (
 )
 EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"succeeded"})
-STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"custom", "enterprise"})
+STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"studio", "enterprise"})
 REMAINING_HOP_BLOCKER_CODES: tuple[str, ...] = (
-    "plan_tier_not_custom",
+    "plan_tier_not_studio",
     "missing_stripe_ids",
     "subscription_not_active",
     "alpaca_api_key_not_oauth",
     "no_alpaca_paper_oauth",
     "overlay_persist_disabled",
+    "overlay_legacy_book_unique",
     "overlay_not_succeeded",
     "fill_without_oauth",
     "no_paper_fill",
@@ -65,6 +69,7 @@ class RemainingHopEvidence(BaseModel):
     plan_tier: str | None = None
     connections: tuple[tuple[str, str, str, str], ...] = Field(default_factory=tuple)
     jobs: tuple[tuple[str, str], ...] = Field(default_factory=tuple)
+    overlay_job_errors: tuple[str, ...] = Field(default_factory=tuple)
     fill_count: int = 0
     digest_event_keys: tuple[str, ...] = Field(default_factory=tuple)
     digest_inbox_confirmed: bool = False
@@ -79,7 +84,7 @@ def remaining_hops_unproven(proven: Mapping[str, object] | None = None) -> tuple
 
 
 def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
-    return f"KAIROS_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
+    return f"DIGIQUANT_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
 
 
 def _alpaca_paper_oauth(evidence: RemainingHopEvidence) -> bool:
@@ -133,7 +138,7 @@ def remaining_hop_blockers(evidence: RemainingHopEvidence) -> dict[str, str]:
     blockers: dict[str, str] = {}
     if not proven["browser_stripe_checkout"]:
         if evidence.plan_tier not in STRIPE_CHECKOUT_TIERS:
-            blockers["browser_stripe_checkout"] = "plan_tier_not_custom"
+            blockers["browser_stripe_checkout"] = "plan_tier_not_studio"
         elif not evidence.has_stripe_subscription:
             blockers["browser_stripe_checkout"] = "missing_stripe_ids"
         else:
@@ -148,11 +153,12 @@ def remaining_hop_blockers(evidence: RemainingHopEvidence) -> dict[str, str]:
         overlay_statuses = {
             status for job_type, status in evidence.jobs if job_type == "overlay_daily"
         }
-        blockers["overlay_daily_claimed"] = (
-            "overlay_persist_disabled"
-            if "persist_disabled" in overlay_statuses
-            else "overlay_not_succeeded"
-        )
+        if "persist_disabled" in overlay_statuses:
+            blockers["overlay_daily_claimed"] = "overlay_persist_disabled"
+        elif LEGACY_BOOK_UNIQUE_CODE in evidence.overlay_job_errors:
+            blockers["overlay_daily_claimed"] = "overlay_legacy_book_unique"
+        else:
+            blockers["overlay_daily_claimed"] = "overlay_not_succeeded"
     if not proven["paper_fill_mirrored"]:
         blockers["paper_fill_mirrored"] = (
             "fill_without_oauth" if evidence.fill_count > 0 else "no_paper_fill"

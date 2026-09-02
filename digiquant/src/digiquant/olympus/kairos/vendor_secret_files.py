@@ -117,24 +117,30 @@ def format_vendor_apply_blocked(report: VendorSecretLoad) -> str:
     )
 
 
-def secrets_set_argv(
-    environ: Mapping[str, str],
-    *,
-    project_ref: str = CORE_PROJECT_REF,
-) -> list[str]:
-    """``npx supabase secrets set`` argv. Callers must not print this list."""
-    pairs: list[str] = []
+def write_vendor_secret_env_file(environ: Mapping[str, str], path: Path) -> None:
+    """Write the selected vendor secrets to a mode-0600 CLI env file."""
+    lines: list[str] = []
     for name in (*KAIROS_STAGING_REQUIRED_SECRETS, *KAIROS_STAGING_OPTIONAL_SECRETS):
         value = environ.get(name, "").strip()
         if value:
-            pairs.append(f"{name}={value}")
+            lines.append(f"{name}={value}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
+def secrets_set_argv(
+    env_file: Path,
+    *,
+    project_ref: str = CORE_PROJECT_REF,
+) -> list[str]:
+    """Build ``supabase secrets set`` argv without exposing values via ``ps``."""
     return [
         "npx",
         "supabase",
         "secrets",
         "set",
         f"--project-ref={project_ref}",
-        *pairs,
+        f"--env-file={env_file}",
     ]
 
 
@@ -175,4 +181,5 @@ __all__ = [
     "parse_env_file",
     "secrets_set_argv",
     "vendor_secrets_dir",
+    "write_vendor_secret_env_file",
 ]

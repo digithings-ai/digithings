@@ -27,6 +27,7 @@ edit-mode continuity) → Hermes H1–H9 (thesis-first) → `commit_run`. Cost i
 ```
 JSON → validate → publish_document / in-graph publish_phase
 Operator close-out: python3 scripts/run_db_first.py
+Inspectable leaves (no LLM): `inputs`, `bias-row` from `olympus.atlas.inspectable_io`
 ```
 
 ### Key scripts
@@ -75,4 +76,4 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 - Platform setup: `docs/agentic/PLATFORMS.md`
 - Skills catalog: `docs/agentic/SKILLS-CATALOG.md`
 - Workflows: `docs/agentic/WORKFLOWS.md`
-- Development conventions: `CLAUDE.md`
+- Development conventions: root `AGENTS.md` (`CLAUDE.md` is a pointer)

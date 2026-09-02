@@ -278,7 +278,7 @@ def dispatch_workspace(
                 except MailgunTransportError as exc:
                     logger.warning("notify: holding-change send failed: %s", exc)
 
-    if pref.get("execution_alerts") and can(tier, ArtifactClass.PRIVATE_BOOK):
+    if pref.get("execution_alerts") and can(tier, ArtifactClass.BROKER_STATUS):
         for event in detect_execution_alerts(sb, workspace_id, run_date, mailgun_config):
             if _is_suppressed(client, email):
                 break

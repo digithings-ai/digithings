@@ -9,6 +9,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.segments import digest_briefing_for_hermes
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.thesis import MarketThesisExplorationOutput
 from digiquant.olympus.hermes.phases.thesis_common import (
@@ -20,6 +21,7 @@ from digiquant.olympus.hermes.writers.thesis_io import (
     persist_market_thesis_exploration,
     validate_market_thesis_proposals,
 )
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ def _run_h2_llm(state: HermesState) -> MarketThesisExplorationOutput:
         phase_inputs={
             "doc_type": DOC_TYPE,
             "segment": NODE_ID,
-            "digest": state.phase7_digest or {},
+            "digest": digest_briefing_for_hermes(state.phase7_digest),
             "active_theses": list(state.prior_context.active_theses),
             "thesis_review": state.phase_hermes.thesis_review,
             "meta": {"research_refs": []},
@@ -99,12 +101,17 @@ def _h2_node_factory(client: SupabaseClient | None):
             body=exploration.model_dump(mode="json"),
             meta={"research_refs": [], "validation_errors": validation_errors},
         )
-        if client is not None and exploration.theses:
+        if (
+            client is not None
+            and exploration.theses
+            and not skip_overlay_shared_register(state.config.workspace_id)
+        ):
             persist_market_thesis_exploration(
                 client,
                 run_date=state.run_date,
                 exploration=exploration,
                 status_by_id=_reviewed_status_by_id(state),
+                workspace_id=state.config.workspace_id,
             )
         return {
             "phase_hermes": state.phase_hermes.model_copy(

@@ -28,7 +28,7 @@
 |-------|------|-------------------|
 | **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
 | **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
-| **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); beliefs on-demand | `--refresh-scope beliefs` |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); daily beliefs short fold | `--refresh-scope beliefs` (full rewrite) |
 
 **Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
 synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
@@ -50,7 +50,7 @@ and **`documents`**.
 
 | Control | Behavior |
 |---------|----------|
-| **Cron** | `.github/workflows/pipeline-olympus.yml` — `0 12 * * *` UTC daily |
+| **Cron** | `.github/workflows/pipeline-olympus.yml` — `17 9/10/11/12 * * *` UTC (off-peak retries) |
 | **Sunday** | `refresh_scope=all` (operator full refresh) |
 | **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
 | **CLI** | `python -m digiquant.olympus.hermes.chain --cadence daily [--refresh-scope …]` |
@@ -178,7 +178,7 @@ published **no** `inst-*` document and records the count on
 `DataLayerSnapshot.institutional_absence_streak` (`institutional_data_available` is the
 boolean flag). On a **delta** run, once that streak reaches
 `phase2_institutional.ABSENCE_BREAKER_THRESHOLD` (3), Phase 2 skips the paid `inst-*`
-LLM/search nodes and writes a deterministic `data_quality="absent"` stub (zero search spend)
+LLM/search nodes and writes a deterministic empty-`body` stub (zero search spend)
 carrying a `circuit_breaker` marker; publish suppresses the empty stub and diagnostics records
 the skip + reason under `breakdown.phase2_outputs.circuit_breaker_skips`. **Baseline always
 runs Phase 2 fully** — a baseline re-probes the layer rather than inheriting a stale absence.
@@ -202,7 +202,9 @@ Skill: `skills/macro/SKILL.md`
 | **Policy** | Fed/ECB/BOJ stance, rate trajectory, QT pace |
 | **Risk Appetite** | VIX structure, credit spreads, EM flows, safe-haven demand |
 
-Output: a regime label (e.g., `Growth Slowing / Inflation Sticky / Policy Tightening / Risk-Off`) plus portfolio implications.
+Output: a markdown research memo (`body`) plus optional 4-factor chips
+(`growth` / `inflation` / `policy` / `risk_appetite`) and a short `regime_label`
+for the pipeline strip.
 
 ---
 
@@ -247,17 +249,12 @@ Supabase: asset-class segments → `documents`.
 | 5J | `skills/sector-materials/SKILL.md` |
 | 5K | `skills/sector-real-estate/SKILL.md` |
 | 5L | `skills/sector-comms/SKILL.md` |
-| 5M | *(orchestrator synthesis)* — sector scorecard in materialized digest / snapshot |
 
-Supabase: US equities + 11 sector documents → `documents`.
+Supabase: US equities + 11 sector **memos** → `documents`. There is no
+deterministic `sector-scorecard` step; digest and PM read the sector memos
+directly.
 
 **Phase 5A covers**: SPY/QQQ/IWM, market breadth (NYSE A/D line, new 52W highs/lows), factor performance (value, growth, momentum, quality, small cap).
-
-**Phase 5M** produces a final sector scorecard after all 11 agents complete:
-```
-SECTOR SCORECARD — {{DATE}}
-| Sector | ETF | Bias | Confidence | Key Driver |
-```
 
 ---
 
@@ -280,34 +277,36 @@ SECTOR SCORECARD — {{DATE}}
 
 ---
 
-### Phase 7 — Master Synthesis (digest snapshot)
+### Phase 7 — Master Synthesis (stitched markdown briefing)
 
-> Research-only synthesis. Pull the most important signals across all phases
-> into a coherent research brief. **No portfolio positioning** — that is Hermes's
+> Research-only synthesis. Subsection agents write topical markdown; a stitcher
+> assembles one long analyst-entry briefing. **No portfolio positioning** — that is Hermes's
 > domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
-**Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
+**Canonical output:** one `digest` / `digest-delta` document whose `body` is the stitched
+markdown. Thin envelope: `date`, `regime_label`, `sources`, `segment_freshness`.
+Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into
+Supabase `daily_snapshots` and `documents`. Markdown render prefers `body`; historical
+JSON slots fall back to `compose_legacy_digest_body` (no Overall bias / fake metrics).
 
-**Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
-1. **Market Regime Snapshot** — single dominant force today; cross-asset research themes (not positioning)
-2. **Alternative Data Dashboard** — sentiment + CTA + options + politician synthesis; lead with any contrarian signal
-3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
-4. **Macro** — full regime read (from published macro segment)
-5. **Asset Classes** — bonds, commodities, forex, crypto, international
-6. **US Equities** — overview + full sector scorecard (11 sectors, OW/UW/N + key driver each)
-7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
-8. **Risk Radar** — what could break the current bias in 24–72 hours
+**Subsection roster** (capped to current digest topics — not a second per-sector fan-out):
+`macro`, `alt-data`, `institutional`, `asset-classes`, `us-equities`. Each subsection
+reads only its upstream memos plus the last **two full** digest briefing bodies
+(not the #1559 300-char slim).
 
-**Deprecated / always empty on new runs** (kept in schema for backward compat with historical rows):
-- `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
-- `portfolio_recommendations` — Hermes phases 7D–7E own allocation
+**Required narrative coverage** (topical `##` headings in the stitched `body`):
+1. **Market regime** — single dominant force today; cross-asset research themes (not positioning)
+2. **Alt-data** — sentiment + CTA + options + politician synthesis
+3. **Institutional** — ETF flow direction, notable HF signal
+4. **Asset classes** — bonds, commodities, forex, crypto, international
+5. **US equities** — overview plus the 11 sector memos (operators pick leadership from those memos; no rolled-up scorecard)
+6. **Watchlist / risk radar** — evidence-based items to monitor; no trade verbs
 
-**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
+H1/H2 consume `digest_briefing_for_hermes` (`date` / `body` / `regime_label` only).
 
-- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` greedily fills the decision-relevant fields (identity + stance → findings → sources → notes) up to that allowance and drops verbose extension prose; a full 34-segment day assembles to ~30k tokens.
-- **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
+**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Subsection agents slim their upstream memo bodies under `_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS`. The stitcher sees subsections + two full prior briefing bodies (capped at `_DIGEST_PRIOR_BODY_MAX`, not 300 chars). `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`).
 
-**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
+**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`.
 
 ---
 
@@ -390,7 +389,7 @@ The Next.js frontend reads from Supabase where wired, with `frontend/public/dash
 
 ## Snapshot read path (frontend-consumable)
 
-**Goal:** the Atlas frontend (Next.js dashboard at `frontend/olympus/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
+**Goal:** the Atlas frontend (Next.js dashboard at `frontend/dashboard/`) and any other consumer can fetch a daily run's full state with one query and zero pipeline-runtime imports. Issue [#302](https://github.com/digithings-ai/digithings/issues/302).
 
 ### Source of truth
 
@@ -485,11 +484,11 @@ Supabase is the system's long-term intelligence layer. Research continuity acros
 | Table | Content |
 |-------|---------|
 | `daily_snapshots` | Per-date bias rows (14 columns: macro regime, equity/crypto/bond/commodity/forex bias, VIX, inst. flow, options sentiment, CTA direction, HF consensus, Fed odds, notes) |
-| `documents` | Per-segment research documents keyed by `(date, document_key)` — covers all 25 segments: macro, equity, crypto, bonds, commodities, forex, international, 11 sectors, 4 alt-data sub-segments, 2 institutional, portfolio, thesis data |
+| `documents` | Per-segment research documents keyed by `(workspace_id, date, document_key)` — covers all 25 segments plus inspectable pipeline leaves: `inputs` (preflight), `bias-row` (Phase 6), `attention-plan` (shadow planner), digest |
 
 **Research continuity protocol:**
 - Query Supabase at session start — retrieve last 3 entries per relevant segment for trend identification (handled by `phases/preflight.py` → `load_prior_context`)
-- Publish new documents at session end via the terminal `phases/publish_phase.py` (replaces legacy `publish_document.py` / `materialize_snapshot.py` scripts when running inside the LangGraph pipeline)
+- Publish new documents at session end via the terminal `phases/publish_phase.py` (replaces legacy `publish_document.py` / `materialize_snapshot.py` scripts when running inside the LangGraph pipeline). Fail-soft extras: `inputs` and `bias-row` via `olympus.atlas.inspectable_io` (no LLM).
 - Append-only semantics preserved in Supabase via unique `(date, document_key)` keys on `documents`
 - Creates compounding intelligence — each session builds on all prior research in every domain
 
@@ -505,7 +504,7 @@ config/hedge-funds.md ───────────────────�
 Supabase daily_snapshots/documents ───┐    │(all skills read)│
 (prior context queried at session start)│   │                 │
                                       ▼    ▼                 ▼
-         Phase 1 ─► segment JSON ──► Phase 2 ─► Phase 3 ─► Phase 4 ─► Phase 5
+         Phase 1 ─► markdown memo ──► Phase 2 ─► Phase 3 ─► Phase 4 ─► Phase 5
                                                     │
                                  (macro regime anchors all phases below)
                                                     │

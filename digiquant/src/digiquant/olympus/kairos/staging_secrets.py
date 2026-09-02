@@ -1,6 +1,6 @@
-"""Kairos staging E2E — required secret inventory (names only; never log values).
+"""Staging E2E — required secret inventory (names only; never log values).
 
-Agent-runnable probes (``scripts/kairos_staging_e2e.py``,
+Agent-runnable probes (``scripts/digiquant_staging_e2e.py``,
 ``tests/dq/olympus/kairos/test_staging_e2e.py``) call
 :func:`missing_kairos_staging_secrets` and **fail loudly** with the returned
 names when any required vendor secret is empty. They must never substitute
@@ -12,13 +12,16 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
+from digiquant.olympus.envcompat import STAGING_USER_JWT, env_lookup
+
 # Ordered for human/agent checklists — keep in sync with
 # docs/agent-backlog/kairos-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.
 KAIROS_STAGING_REQUIRED_SECRETS: tuple[str, ...] = (
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
-    "STRIPE_PRICE_BASELINE_MONTHLY",
-    "STRIPE_PRICE_CUSTOM_MONTHLY",
+    "STRIPE_PRICE_BRIEF_MONTHLY",
+    "STRIPE_PRICE_DESK_MONTHLY",
+    "STRIPE_PRICE_STUDIO_MONTHLY",
     "MAILGUN_API_KEY",
     "MAILGUN_DOMAIN",
     "NOTIFY_FROM",
@@ -28,8 +31,9 @@ KAIROS_STAGING_REQUIRED_SECRETS: tuple[str, ...] = (
 
 # Optional for signup path variety — Google Auth still Disabled on core.
 KAIROS_STAGING_OPTIONAL_SECRETS: tuple[str, ...] = (
-    "STRIPE_PRICE_BASELINE_ANNUAL",
-    "STRIPE_PRICE_CUSTOM_ANNUAL",
+    "STRIPE_PRICE_BRIEF_ANNUAL",
+    "STRIPE_PRICE_DESK_ANNUAL",
+    "STRIPE_PRICE_STUDIO_ANNUAL",
     "AUTH_GOOGLE_CLIENT_ID",
     "AUTH_GOOGLE_CLIENT_SECRET",
     "SUPABASE_ACCESS_TOKEN",
@@ -39,7 +43,7 @@ KAIROS_STAGING_OPTIONAL_SECRETS: tuple[str, ...] = (
 KAIROS_STAGING_RUNTIME_ENV: tuple[str, ...] = (
     "CORE_SUPABASE_URL",
     "CORE_SUPABASE_ANON_KEY",
-    "KAIROS_STAGING_USER_JWT",
+    STAGING_USER_JWT,
 )
 
 
@@ -62,14 +66,22 @@ def missing_kairos_staging_secrets(
     names = list(KAIROS_STAGING_REQUIRED_SECRETS)
     if include_runtime:
         names.extend(KAIROS_STAGING_RUNTIME_ENV)
-    return [name for name in names if not _nonempty(env.get(name))]
+    missing: list[str] = []
+    for name in names:
+        if name == STAGING_USER_JWT:
+            if not _nonempty(env_lookup(STAGING_USER_JWT, environ=env)):
+                missing.append(name)
+            continue
+        if not _nonempty(env.get(name)):
+            missing.append(name)
+    return missing
 
 
 def format_missing_secrets_failure(missing: list[str]) -> str:
     """Single-line failure message for pytest / CLI (names only)."""
     joined = ", ".join(missing)
     return (
-        "Kairos staging E2E blocked — missing required secrets: "
+        "digiquant staging E2E blocked — missing required secrets: "
         f"{joined}. Paste into Cursor Cloud env + core EF secrets; "
         "do not fake Stripe/Mailgun/Alpaca OAuth."
     )

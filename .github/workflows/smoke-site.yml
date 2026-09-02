@@ -75,9 +75,9 @@ jobs:
           # old path 404'd and kept #800 open as a daily false alarm.
           probe "https://digithings.ai/og.png" "image/png"
           # digiquant.io — Next.js static export (frontend/digiquant-web) +
-          # Olympus dashboard mounted at basePath /olympus.
+          # dashboard at basePath /dashboard. /olympus/ is retired (no 308).
           probe "https://digiquant.io/" "text/html"
-          probe "https://digiquant.io/olympus/" "text/html"
+          probe "https://digiquant.io/dashboard/" "text/html"
           probe "https://digiquant.io/og.png" "image/png"
           exit "$fail"
 

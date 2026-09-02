@@ -8,8 +8,13 @@
 --
 -- T1-train deferred rewriting anon_read to cutover 900 (DROP house teaser
 -- entirely). 900 is still human-gated and must not run on `core` from this
--- work. This file is the missing *narrowing* step so overlay persist can be
--- enabled without waiting for 900 and without leaking private books:
+-- work. This file is the missing *narrowing* step so overlay **document**
+-- persist can be enabled without waiting for 900 and without leaking private
+-- books via anon_read. positions/nav_history/ledger still collide on migration
+-- 097's legacy UNIQUE(date) / UNIQUE(date,ticker) / PRIMARY KEY (date) and
+-- 069's one-root-per-run_date — writers refuse those with legacy_book_unique
+-- until staged cutover 113 is applied on the target (not auto-applied; do not
+-- apply while origin/main house GHA writers still upsert on_conflict=date):
 --
 --   1. workspace-scoped private book (`positions`, `position_events`,
 --      `nav_history`, `portfolio_metrics`): anon SELECT = house workspace only.

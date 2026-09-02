@@ -54,7 +54,7 @@ _USER = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 def _ws(
     workspace_id: UUID | None = None,
     *,
-    tier: PlanTier = PlanTier.CUSTOM,
+    tier: PlanTier = PlanTier.STUDIO,
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
     plan_floor: PlanTier | None = None,
 ) -> WorkspaceEntitlement:
@@ -91,11 +91,11 @@ def test_parse_workspace_row_skips_invalid() -> None:
     )
     assert invalid is None
     parsed = parse_workspace_row(
-        {"id": str(_USER), "plan_tier": "custom", "subscription_status": "active"}
+        {"id": str(_USER), "plan_tier": "studio", "subscription_status": "active"}
     )
     assert parsed is not None
     assert parsed.workspace_id == _USER
-    assert parsed.plan_tier is PlanTier.CUSTOM
+    assert parsed.plan_tier is PlanTier.STUDIO
 
 
 def test_missing_overlay_cron_env_names_are_canonical() -> None:
@@ -172,7 +172,7 @@ def test_dry_run_does_not_write_job_runs() -> None:
     assert "byok_present=0" in logs[0]
 
 
-def test_dry_run_counts_plan_floor_custom_without_stripe() -> None:
+def test_dry_run_counts_plan_floor_studio_without_stripe() -> None:
     logs: list[str] = []
     rc = main(
         ["--dry-run", "--run-date", _RUN.isoformat()],
@@ -182,7 +182,7 @@ def test_dry_run_counts_plan_floor_custom_without_stripe() -> None:
                 _USER,
                 tier=PlanTier.FREE,
                 status=SubscriptionStatus.NONE,
-                plan_floor=PlanTier.CUSTOM,
+                plan_floor=PlanTier.STUDIO,
             ),
         ],
         log=logs.append,
@@ -200,12 +200,12 @@ def test_parse_workspace_row_reads_plan_floor() -> None:
             "id": str(_USER),
             "plan_tier": "free",
             "subscription_status": "none",
-            "plan_floor": "custom",
+            "plan_floor": "studio",
         }
     )
     assert parsed is not None
     assert parsed.plan_tier is PlanTier.FREE
-    assert parsed.plan_floor is PlanTier.CUSTOM
+    assert parsed.plan_floor is PlanTier.STUDIO
 
 
 def test_apply_without_store_and_missing_env_exits_2() -> None:
@@ -330,8 +330,8 @@ class _WorkspacesClient:
 def test_load_overlay_cron_workspaces_parses_valid_rows() -> None:
     client = _WorkspacesClient(
         [
-            {"id": str(_USER), "plan_tier": "custom", "subscription_status": "none"},
-            {"id": "not-a-uuid", "plan_tier": "custom", "subscription_status": "active"},
+            {"id": str(_USER), "plan_tier": "studio", "subscription_status": "none"},
+            {"id": "not-a-uuid", "plan_tier": "studio", "subscription_status": "active"},
         ]
     )
     loaded = load_overlay_cron_workspaces(client)
@@ -376,7 +376,7 @@ def test_load_overlay_cron_workspaces_attaches_owner_plan_floor() -> None:
         workspaces=[
             {"id": str(_USER), "plan_tier": "free", "subscription_status": "none"},
         ],
-        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "custom"}],
+        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "studio"}],
         members=[
             {
                 "workspace_id": str(_USER),
@@ -394,7 +394,7 @@ def test_load_overlay_cron_workspaces_attaches_owner_plan_floor() -> None:
     loaded = load_overlay_cron_workspaces(client)
     assert len(loaded) == 1
     assert loaded[0].plan_tier is PlanTier.FREE
-    assert loaded[0].plan_floor is PlanTier.CUSTOM
+    assert loaded[0].plan_floor is PlanTier.STUDIO
 
 
 def test_load_overlay_cron_workspaces_auth_admin_error_is_fail_soft() -> None:
@@ -405,7 +405,7 @@ def test_load_overlay_cron_workspaces_auth_admin_error_is_fail_soft() -> None:
         workspaces=[
             {"id": str(_USER), "plan_tier": "free", "subscription_status": "none"},
         ],
-        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "custom"}],
+        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "studio"}],
         members=[
             {
                 "workspace_id": str(_USER),
@@ -447,7 +447,7 @@ def test_dry_run_counts_byok_present_among_entitled() -> None:
                 _USER,
                 tier=PlanTier.FREE,
                 status=SubscriptionStatus.NONE,
-                plan_floor=PlanTier.CUSTOM,
+                plan_floor=PlanTier.STUDIO,
             ),
         ],
         byok_workspace_ids={_USER},
@@ -774,5 +774,5 @@ def test_execute_production_missing_persist_exits_2_before_dispatch() -> None:
     assert rc == 2
     assert err
     assert "OVERLAY_EXECUTE_NOT_CONFIGURED" in err[0]
-    assert "OLYMPUS_OVERLAY_PERSIST" in err[0]
+    assert "DIGIQUANT_OVERLAY_PERSIST" in err[0]
     assert "persist_disabled" not in "\n".join(err)

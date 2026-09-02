@@ -306,7 +306,7 @@ CREATE POLICY "authenticated_select_documents" ON public.documents
                 THEN COALESCE(
                     auth.jwt() -> 'app_metadata' ->> 'plan_tier',
                     'free'
-                ) IN ('baseline', 'custom', 'enterprise')
+                ) IN ('brief', 'desk', 'studio', 'enterprise')
                 ELSE TRUE
             END
         )
@@ -314,7 +314,7 @@ CREATE POLICY "authenticated_select_documents" ON public.documents
 
 COMMENT ON POLICY "authenticated_select_documents" ON public.documents IS
     'Cutover: house/system + own-workspace documents; weight-bearing keys '
-    'require JWT app_metadata.plan_tier in (baseline, custom, enterprise). '
+    'require JWT app_metadata.plan_tier in (brief, desk, studio, enterprise). '
     'Observer (free) uses public_daily_research + non-weight document keys.';
 
 -- ============================================================================

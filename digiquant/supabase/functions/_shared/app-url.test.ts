@@ -11,40 +11,50 @@ import {
   settingsBillingReturnUrl,
 } from "./app-url.ts";
 
-Deno.test("publicAppOrigin strips trailing slash and /olympus", () => {
+Deno.test("publicAppOrigin strips trailing slash and /dashboard (and retired /olympus)", () => {
   assertEquals(publicAppOrigin("https://digiquant.io"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/"), "https://digiquant.io");
+  assertEquals(publicAppOrigin("https://digiquant.io/dashboard"), "https://digiquant.io");
+  assertEquals(publicAppOrigin("https://digiquant.io/dashboard/"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/olympus"), "https://digiquant.io");
   assertEquals(publicAppOrigin("https://digiquant.io/olympus/"), "https://digiquant.io");
 });
 
-Deno.test("Alpaca redirect_uri is origin + /olympus callback", () => {
+Deno.test("Alpaca redirect_uri is origin + /dashboard callback", () => {
   assertEquals(
     pinnedAlpacaRedirectUriFromOrigin("https://digiquant.io"),
-    "https://digiquant.io/olympus/settings/brokers/callback/",
+    "https://digiquant.io/dashboard/settings/brokers/callback/",
+  );
+  assertEquals(
+    pinnedAlpacaRedirectUriFromOrigin("https://digiquant.io/dashboard"),
+    "https://digiquant.io/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     pinnedAlpacaRedirectUriFromOrigin("https://digiquant.io/olympus"),
-    "https://digiquant.io/olympus/settings/brokers/callback/",
+    "https://digiquant.io/dashboard/settings/brokers/callback/",
   );
   assertEquals(
     ALPACA_OAUTH_CALLBACK_PATH,
-    "/olympus/settings/brokers/callback/",
+    "/dashboard/settings/brokers/callback/",
   );
 });
 
 Deno.test("billing return URL lands on Settings billing tab", () => {
   assertEquals(
     settingsBillingReturnUrl("https://digiquant.io", "success"),
-    "https://digiquant.io/olympus/settings/?tab=billing&checkout=success",
+    "https://digiquant.io/dashboard/settings/?tab=billing&checkout=success",
+  );
+  assertEquals(
+    settingsBillingReturnUrl("https://digiquant.io/dashboard", "cancel"),
+    "https://digiquant.io/dashboard/settings/?tab=billing&checkout=cancel",
   );
   assertEquals(
     settingsBillingReturnUrl("https://digiquant.io/olympus", "cancel"),
-    "https://digiquant.io/olympus/settings/?tab=billing&checkout=cancel",
+    "https://digiquant.io/dashboard/settings/?tab=billing&checkout=cancel",
   );
   assertEquals(
     settingsBillingReturnUrl("https://digiquant.io"),
-    "https://digiquant.io/olympus/settings/?tab=billing",
+    "https://digiquant.io/dashboard/settings/?tab=billing",
   );
 });
 

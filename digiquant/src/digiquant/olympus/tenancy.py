@@ -44,12 +44,17 @@ class WorkspaceType(StrEnum):
 
 
 class PlanTier(StrEnum):
-    """Billing tier vocabulary (spec D1; supersedes the roadmap's ``free|pro|enterprise``
-    sketch — ``baseline``/``custom`` replace ``pro`` per the locked spec decision)."""
+    """Billing tier vocabulary (PRICING.md / migration 115).
+
+    Observer is ``free``. Paid SKUs are Brief / Desk / Studio. Enterprise is
+    invoice-only. D1 ``baseline``/``custom`` ids are gone — house-run jargon
+    ``baseline`` (Sunday ``run_type``) is unrelated.
+    """
 
     FREE = "free"
-    BASELINE = "baseline"
-    CUSTOM = "custom"
+    BRIEF = "brief"
+    DESK = "desk"
+    STUDIO = "studio"
     ENTERPRISE = "enterprise"
 
 
@@ -109,6 +114,15 @@ def resolved_workspace_id(raw: UUID | str | None) -> UUID:
     if not text:
         return house_workspace_id()
     return UUID(text)
+
+
+def eq_house_workspace(query: Any, workspace_id: UUID | str | None = None) -> Any:
+    """Pin a PostgREST query to one workspace. Omitted id means the house book.
+
+    Overlay same-date Group A rows must not leak into house ops readers. Duck-typed
+    for supabase-py and ``FakeSupabaseClient`` (both expose ``.eq``).
+    """
+    return query.eq("workspace_id", str(resolved_workspace_id(workspace_id)))
 
 
 class Workspace(BaseModel):
@@ -193,6 +207,7 @@ __all__ = [
     "WorkspaceMember",
     "WorkspaceMemberRole",
     "WorkspaceType",
+    "eq_house_workspace",
     "house_workspace_id",
     "house_workspace_row",
     "resolved_workspace_id",

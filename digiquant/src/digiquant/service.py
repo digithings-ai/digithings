@@ -88,6 +88,7 @@ def service_run_optimize(
     n_trials: int = 50,
     objective: str = "sharpe",
     constraints: OptimizationConstraints | None = None,
+    base_params: dict[str, float | int | str] | None = None,
 ) -> OptimizeResult:
     validate_data_paths(data_path=data_path, data_dir=data_dir)
     return run_optimize(
@@ -100,6 +101,7 @@ def service_run_optimize(
         n_trials=n_trials,
         objective=objective,
         constraints=constraints,
+        base_params=base_params,
     )
 
 

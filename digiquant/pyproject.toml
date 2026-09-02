@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
 indicators = ["statsmodels>=0.14", "numpy>=1.26"]
-visualization = ["plotly>=6.3.1"]
+visualization = ["plotly>=6.3.1", "matplotlib>=3.8"]
 data = ["yfinance>=0.2", "curl-cffi>=0.15.0"]
 prices = [
     "yfinance>=0.2",

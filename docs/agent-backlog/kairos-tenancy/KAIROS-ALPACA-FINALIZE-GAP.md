@@ -1,6 +1,11 @@
 # Kairos + Alpaca finalize — gap audit (2026-08-30)
 
-**Verdict: NOT COMPLETE** — do not mark the epic complete. Code gates for
+**Superseded 2026-09-01:** owner closed the epic as delivered without live E2E.
+Live-proof follow-up is [#3391](https://github.com/digithings-ai/digithings/issues/3391).
+The 2026-08-30 snapshot below is historical (vendor secrets / remaining hops still
+unproven; do not treat this file as an open epic).
+
+**Verdict (2026-08-30): NOT COMPLETE** — code gates for
 creator / free-teaser / FX Hub land in this turn; staging E2E and vendor secrets
 remain blocked.
 
@@ -8,9 +13,9 @@ remain blocked.
 
 | Rule | Status in code |
 |------|----------------|
-| Creator (GitHub / `chris.stefan@proton.me`) gets baseline+Kairos without Stripe | **Implemented** — `entitlement_grants.plan_floor=custom` + settings EF effective tier |
-| Everyone else needs subscription for full product | **Documented + gated** — free teaser matrix; Custom writes require paid or grant |
-| Free = teaser (digest summary + portfolio glimpse); no brokers/automations | **Implemented** — `digest_summary` / `portfolio_teaser` classes; brokers stay Custom+ |
+| Creator (GitHub / `chris.stefan@proton.me`) gets Studio overlay without Stripe | **Implemented** — `entitlement_grants.plan_floor=studio` + settings EF effective tier |
+| Everyone else needs subscription for full product | **Documented + gated** — free teaser matrix; Studio writes require paid or grant |
+| Free = teaser (digest summary + portfolio glimpse); no brokers/automations | **Implemented** — `digest_summary` / `portfolio_teaser` classes; brokers stay Desk+ |
 | FX Hub = creator + email allowlist | **Implemented** — `client_product_grants` + nav/page/`ClientProductGate` |
 | General client-product gate | **Plumbing** — same table + UI gate for future products |
 | SETTINGS-IA / D1 amended (supersede baseline-broker tension) | **Done** |
@@ -46,7 +51,7 @@ remain blocked.
 
 ## Human asks (blocking)
 
-1. **12x FX Hub email list** — insert into `client_product_grants (email, product_key='fx_hub')` once supplied.
+1. **12x FX Hub access** — creator email is already seeded. Remaining teammates either (a) get an ops INSERT into `client_product_grants` or (b) redeem the hashed invite (`FX_HUB_INVITE_HASH` + migration 112) after signing in. Do not ship a login-optional shared secret.
 2. **Vendor captchas** for digithings@ onboarding: Stripe hCaptcha, Mailgun reCAPTCHA, Alpaca Turnstile.
 3. After secrets: `supabase secrets set` + redeploy billing/settings EFs; re-run staging E2E.
 4. Confirm whether creator `plan_floor` should stay `custom` (ops / Kairos) or drop to `baseline` once Stripe works for self-serve.
@@ -55,7 +60,7 @@ remain blocked.
 
 - `digiquant/supabase/migrations/108_entitlement_grants_and_products.sql`
 - EF `_shared/access.ts` + settings effective-tier gate + Deno tests
-- Olympus entitlements free-teaser + `access.ts` / hooks + FX Hub UI gate
+- Dashboard entitlements free-teaser + `access.ts` / hooks + FX Hub UI gate
 - SETTINGS-IA + D1 amend + SCHEMA.md
 - Gap artifact: `/opt/cursor/artifacts/kairos-alpaca-finalize-gap.md`
 

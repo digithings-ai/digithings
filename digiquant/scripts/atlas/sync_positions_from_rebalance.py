@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from position_entry_from_events import first_open_add_mark
+from digiquant.olympus.tenancy import house_workspace_id
 
 try:
     from supabase import create_client  # type: ignore
@@ -45,6 +45,11 @@ try:
 except ImportError:
     pass
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from position_entry_from_events import first_open_add_mark  # noqa: E402
+
 
 def _sb():
     if not _HAS_SB:
@@ -56,10 +61,17 @@ def _sb():
     return create_client(url, key)
 
 
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
+def _eq_house(query: Any) -> Any:
+    return query.eq("workspace_id", _house_id())
+
+
 def _rebalance_payload_for_date(sb: Any, d: str) -> Optional[Dict[str, Any]]:
     res = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", d)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -72,8 +84,7 @@ def _rebalance_payload_for_date(sb: Any, d: str) -> Optional[Dict[str, Any]]:
             return p
 
     res2 = (
-        sb.table("documents")
-        .select("payload")
+        _eq_house(sb.table("documents").select("payload"))
         .eq("date", d)
         .order("document_key", desc=True)
         .execute()
@@ -85,14 +96,13 @@ def _rebalance_payload_for_date(sb: Any, d: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Upsert positions from rebalance_decision proposed_portfolio.")
-    ap.add_argument("--date", required=True, help="YYYY-MM-DD (documents.date)")
-    ap.add_argument("--dry-run", action="store_true", help="Print actions only")
-    args = ap.parse_args()
-    d = args.date
+def sync_positions_for_date(sb: Any, d: str, *, dry_run: bool = False) -> int:
+    """Upsert house ``positions`` from ``rebalance_decision`` for ``d``.
 
-    sb = _sb()
+    Returns the number of rows that would be / were upserted (0 = skip).
+    Stamps ``workspace_id`` and targets ``on_conflict='workspace_id,date,ticker'``
+    so a later P6 drop of 097's ``UNIQUE(date, ticker)`` does not 42P10 this path.
+    """
     payload = _rebalance_payload_for_date(sb, d)
     if not payload:
         print(f"sync_positions_from_rebalance: no rebalance_decision for {d} — skip")
@@ -127,6 +137,7 @@ def main() -> int:
         tid = p.get("thesis_id")
         pos_rows.append(
             {
+                "workspace_id": _house_id(),
                 "date": d,
                 "ticker": t,
                 "weight_pct": w,
@@ -149,6 +160,7 @@ def main() -> int:
         if not any(r["ticker"] == "CASH" for r in pos_rows):
             pos_rows.append(
                 {
+                    "workspace_id": _house_id(),
                     "date": d,
                     "ticker": "CASH",
                     "weight_pct": round(cash_f, 4),
@@ -183,21 +195,32 @@ def main() -> int:
 
     keep_tickers = {r["ticker"] for r in pos_rows if r.get("ticker")}
 
-    if args.dry_run:
+    if dry_run:
         print(f"[dry-run] would upsert {len(pos_rows)} position row(s) for {d}: {sorted(keep_tickers)}")
-        return 0
+        return len(pos_rows)
 
     CHUNK = 500
     for i in range(0, len(pos_rows), CHUNK):
-        sb.table("positions").upsert(pos_rows[i : i + CHUNK], on_conflict="date,ticker").execute()
+        sb.table("positions").upsert(
+            pos_rows[i : i + CHUNK], on_conflict="workspace_id,date,ticker"
+        ).execute()
 
-    existing = sb.table("positions").select("ticker").eq("date", d).execute()
+    existing = _eq_house(sb.table("positions").select("ticker")).eq("date", d).execute()
     for row in getattr(existing, "data", None) or []:
         tk = row.get("ticker")
         if tk and tk not in keep_tickers:
-            sb.table("positions").delete().eq("date", d).eq("ticker", tk).execute()
+            _eq_house(sb.table("positions").delete()).eq("date", d).eq("ticker", tk).execute()
 
     print(f"✅ sync_positions_from_rebalance: {len(pos_rows)} position row(s) for {d}")
+    return len(pos_rows)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Upsert positions from rebalance_decision proposed_portfolio.")
+    ap.add_argument("--date", required=True, help="YYYY-MM-DD (documents.date)")
+    ap.add_argument("--dry-run", action="store_true", help="Print actions only")
+    args = ap.parse_args()
+    sync_positions_for_date(_sb(), args.date, dry_run=args.dry_run)
     return 0
 
 

@@ -108,20 +108,20 @@ This 4-factor framework + recession probability + stagflation risk shape every d
 
 ## Output Format
 
+Write a markdown `body` — that is the operator artifact. Suggested skeleton (skip empty sections; variable depth is allowed). Cite with inline [title](url) links. Do **not** invent data-quality or confidence scores, emit a Signals section, or print `Bias:` at the top. Optional `internal_bias` is a non-rendered token; optional `growth` / `inflation` / `policy` / `risk_appetite` / `regime_label` chips feed the pipeline strip.
+
+```markdown
+# Macro — {as-of date of the data}
+
+## Regime
+Growth / inflation / policy / risk appetite in prose, with the data dated inline.
+
+## Overnight and today's data
+What moved while the user's market was closed; releases vs consensus.
+
+## Central banks
+Fed, ECB, BOJ, and notable divergences.
+
+## Curve, geopolitics, and cross-asset implication
+What this regime means for downstream research — not a trade list.
 ```
-### 🌍 MACRO
-**Regime**: Growth: [X] | Inflation: [X] | Policy: [X] | Risk appetite: [X]
-
-**Overnight**: [Key overnight developments in 2-3 sentences]
-
-**Today's Data**: [Releases, consensus vs actual if available, market reaction]
-
-**This Week**: [Upcoming key events and dates]
-
-**Central Banks**: [Fed stance | ECB | BOJ | Notable divergences]
-
-**Geopolitical**: [Active risks, if any]
-
-**Macro Implication**: [How the current regime should bias positioning across asset classes]
-```
-

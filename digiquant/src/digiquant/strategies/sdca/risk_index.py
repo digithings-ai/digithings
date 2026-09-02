@@ -86,18 +86,23 @@ def build_risk_index(
         *(extra_indicators or []),
     ]
     composite = compute_composite_risk(indicators)
-    return pl.DataFrame(
-        {
-            "date": dates,
-            "risk": composite["risk"],
-            "price": price,
-            "low": rails["low"],
-            "median": rails["median"],
-            "high": rails["high"],
-            "valuation_z": valuation_z,
-            "composite_z": composite["composite_z"],
-        }
-    ).select(list(_DIAGNOSTIC_COLUMNS))
+    payload: dict[str, pl.Series] = {
+        "date": dates,
+        "risk": composite["risk"],
+        "price": price,
+        "low": rails["low"],
+        "median": rails["median"],
+        "high": rails["high"],
+        "valuation_z": valuation_z,
+        "composite_z": composite["composite_z"],
+    }
+    extra_z_cols: list[str] = []
+    for ind in extra_indicators or []:
+        col = f"{ind.name}_z"
+        payload[col] = ind.z
+        if col not in _DIAGNOSTIC_COLUMNS:
+            extra_z_cols.append(col)
+    return pl.DataFrame(payload).select([*_DIAGNOSTIC_COLUMNS, *extra_z_cols])
 
 
 def write_risk_index(df: pl.DataFrame, path: Path | str) -> Path:

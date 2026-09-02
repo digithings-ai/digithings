@@ -38,7 +38,7 @@ relevance:
 
 **12-month roadmap:**
 - Standalone digistore module with clean backend registry
-- Full Supabase integration (strategies, research library, user profiles, Atlas data)
+- Full Supabase integration (strategies, research library, user profiles, research data)
 - MinIO/S3 integration for file storage
 - OpenBB integration as the data retrieval layer
 - Dockerized local dev stack (SQLite + MinIO + Postgres)

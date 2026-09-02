@@ -36,10 +36,8 @@ Two gates decide whether a provider call is attributed or orphaned:
 2. The call must originate inside a ``build_pipeline`` node, since only ``_instrumented`` opens
    a node scope. Atlas phases, Hermes phases, and the publish terminal phase all qualify. The
    beliefs-distillation fold does not: ``chain.py`` calls it directly, outside any graph. When
-   it runs, its provider calls are orphaned. It does not run on every run —
-   ``should_distill_beliefs`` gates it on ``refresh_scope == "beliefs"`` or an unfolded-decision
-   backlog above ``OLYMPUS_BELIEFS_BACKLOG`` (default 20) — so quarantine is an occasional path,
-   not a constant one.
+   the fold calls an LLM (daily short fold with new lessons, or a full rewrite), those provider
+   calls are orphaned. Empty-lesson carry-forward makes no provider call.
 
 So a flush can carry attributed records and orphaned attempts *together*, and eligibility is
 therefore decided per record rather than per flush.

@@ -15,8 +15,8 @@ Hermes consumes the daily Atlas digest (`DigestPayload`) and runs **H1–H9**:
 | H3–H4 | Vehicle map + opportunity screener | `thesis_vehicles`, focus roster |
 | H5 | Unified `AnalystPayload` per ticker | `phase_hermes.asset_analysts` |
 | H6 | PM↔analyst deliberation (per ticker) | deliberation transcript + summary |
-| H7 | PM direction memo | `PMDirectionMemo` — **no weights** |
-| H8 | Deterministic risk sizing (7E) | `phase_hermes.sized_book` |
+| H7 | PM direction memo | `PMDirectionMemo` — **no weights**; optional `confidence` ∈ [0, 1] |
+| H8 | Deterministic risk sizing (7E) | `phase_hermes.sized_book` (calibrated μ/σ × PM confidence; rank is order) |
 | H9 | Terminal `commit_run` | `positions`, nav, brief, `decision_log` |
 
 ## Entry points
@@ -51,12 +51,12 @@ full rewrite uses `*-full.md`.
 
 | Phase | Skills |
 |-------|--------|
-| H1 | `thesis` |
+| H1 | `thesis` — consumes `digest_briefing_for_hermes` (`date` / `body` / `regime_label`) |
 | H2 | `market-thesis-exploration` |
 | H3 | `thesis-vehicle-map` |
 | H4 | `opportunity-screener` (deterministic gate; skills for docs if needed) |
 | H5 | `asset-analyst` |
-| H6 | `deliberation` |
+| H6 | `deliberation` (PM), `deliberation-analyst-response` (analyst reply; not H5 `asset-analyst`) |
 | H7 | `pm-direction` |
 
 Cross-engine loads raise `SkillNotFoundError`.
@@ -70,11 +70,17 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 
 ## Persistence
 
-- **H1–H7 artifacts:** `documents` + optional `document_deltas` via phase writers
+- **H1–H7 artifacts:** `documents` + optional `document_deltas` via phase writers.
+  Inspectable pipeline leaves: H1 upserts `thesis/thesis-review`; H4 upserts
+  `opportunity-screener` (payload `doc_type=opportunity_screen`). Overlay prefixes
+  via `hermes_document_key`; house keys stay unprefixed.
 - **H9 terminal:** `commit_run` upserts `positions`, `nav_history`, syncs `theses` /
   `thesis_vehicles`, publishes brief, appends `decision_log`
-- **Atlas `publish_phase`:** research segments + digest only (chain terminal after Hermes)
-- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node
+- **Atlas `publish_phase`:** research segments + digest, plus inspectable `inputs`
+  and `bias-row` (fail-soft; chain terminal after Hermes)
+- **Beliefs:** daily short fold via `run_beliefs_distillation_if_triggered` after publish
+  (not an in-graph node). `refresh_scope=beliefs` is the full rewrite. Overlay nested
+  chain skips the fold so persist-on cannot stamp house `decision_log`.
 
 ## Testing
 

@@ -16,6 +16,7 @@ from digiquant.olympus.hermes.models.pm_direction import (
     TickerDirection,
     bind_forecast_references,
 )
+from digiquant.olympus.hermes.schemas import validate_payload
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -180,6 +181,106 @@ def test_bind_forecast_references_overwrites_model_supplied_ids() -> None:
     assert ref.effective_forecast_id == current_eff
     assert ref.base_forecast_id == current_base
     assert bound.roster[0].direction == "long"
+    assert bound.roster[0].conviction_rank == 1
+
+
+def test_ticker_direction_accepts_confidence_in_unit_interval() -> None:
+    row = TickerDirection(
+        ticker="GLD",
+        direction="long",
+        conviction_rank=1,
+        narrative="Gold as ballast.",
+        confidence=0.85,
+    )
+    assert row.confidence == 0.85
+
+
+def test_ticker_direction_rejects_confidence_outside_unit_interval() -> None:
+    for bad in (-0.01, 1.01, 2.0):
+        with pytest.raises(ValidationError) as exc:
+            TickerDirection.model_validate(
+                {
+                    "ticker": "SPY",
+                    "direction": "long",
+                    "conviction_rank": 1,
+                    "confidence": bad,
+                }
+            )
+        msg = str(exc.value).lower()
+        assert "confidence" in msg
+        assert "extra" not in msg
+
+
+def test_ticker_direction_confidence_optional_for_legacy_rows() -> None:
+    row = TickerDirection(ticker="SPY", direction="long", conviction_rank=1)
+    assert row.confidence is None
+
+
+def test_json_schema_accepts_roster_confidence() -> None:
+    validate_payload(
+        "pm-direction-memo",
+        {
+            "schema_version": "1.0",
+            "date": "2026-08-31",
+            "memo": "Long gold; fade stretched tech.",
+            "roster": [
+                {
+                    "ticker": "GLD",
+                    "direction": "long",
+                    "conviction_rank": 1,
+                    "narrative": "Ballast.",
+                    "confidence": 0.9,
+                }
+            ],
+        },
+    )
+
+
+def test_json_schema_accepts_legacy_roster_without_confidence() -> None:
+    validate_payload(
+        "pm-direction-memo",
+        {
+            "schema_version": "1.0",
+            "date": "2026-08-31",
+            "memo": "prior row",
+            "roster": [
+                {
+                    "ticker": "GLD",
+                    "direction": "long",
+                    "conviction_rank": 1,
+                    "narrative": "Ballast.",
+                }
+            ],
+        },
+    )
+
+
+def test_bind_forecast_references_preserves_confidence() -> None:
+    current_eff = uuid4()
+    current_base = uuid4()
+    memo = PMDirectionMemo(
+        date=date(2026, 8, 31),
+        roster=[
+            TickerDirection(
+                ticker="GLD",
+                direction="long",
+                conviction_rank=1,
+                narrative="Ballast.",
+                confidence=0.72,
+            )
+        ],
+    )
+    bound = bind_forecast_references(
+        memo,
+        deliberation_by_ticker={
+            "GLD": {
+                "effective_forecast_id": str(current_eff),
+                "base_forecast_id": str(current_base),
+            }
+        },
+    )
+    assert bound.roster[0].confidence == 0.72
+    assert bound.roster[0].narrative == "Ballast."
     assert bound.roster[0].conviction_rank == 1
 
 

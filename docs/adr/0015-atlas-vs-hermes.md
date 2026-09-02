@@ -1,6 +1,6 @@
 # ADR-0015 — Atlas vs Hermes responsibility boundary
 
-- **Status:** Accepted (amended 2026-06-20)
+- **Status:** Accepted (amended 2026-06-20; product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 - **Date:** 2026-04-28
 - **Related epic:** [#471](https://github.com/digithings-ai/digithings/issues/471) · [#930](https://github.com/digithings-ai/digithings/issues/930) (thesis-first Hermes)
 - **Amends:** [ADR-0014](0014-atlas-in-digiquant.md) (Atlas in `digiquant/` is preserved; this ADR splits the Atlas package itself).

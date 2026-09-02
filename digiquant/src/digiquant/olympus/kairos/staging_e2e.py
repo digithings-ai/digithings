@@ -2,6 +2,8 @@
 
 Phase A: Settings/checkout probes without vendor secrets. Observer writes
 must return ``TIER_FORBIDDEN``. Checkout may still be a named config miss.
+``POST /settings/access/redeem-invite`` with a short dummy code must be
+mounted (``INVITE_INVALID`` / ``EMAIL_REQUIRED``) — 404 means live v32.
 
 Phase A2: Settings GETs (profile billing, brokers, jobs, fills, digest log).
 Exit 0 only when all five remaining hops are proven from that product state.
@@ -22,6 +24,15 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.olympus.envcompat import (
+    STAGING_ANON_KEY,
+    STAGING_DIGEST_INBOX_CONFIRMED,
+    STAGING_EMAIL,
+    STAGING_FUNCTIONS_BASE,
+    STAGING_PASSWORD,
+    STAGING_USER_JWT,
+    env_lookup,
+)
 from digiquant.olympus.kairos.remaining_hops import (
     EXIT_REMAINING_HOPS_UNPROVEN,
     REMAINING_LIVE_HOPS,
@@ -49,13 +60,23 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
 
 DEFAULT_PUBLIC_APP_ORIGIN = "https://digiquant.io"
 _LOOPBACK_MARKERS: tuple[str, ...] = ("127.0.0.1", "localhost")
-# Broker connect + overlay + paper fill are Custom+. Baseline checkout would
-# prove Stripe then leave Observer TIER_FORBIDDEN on the remaining hops.
-STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "custom", "interval": "monthly"}
+# Broker connect + overlay + paper fill are Studio+. Brief/Desk checkout would
+# prove Stripe then leave Observer TIER_FORBIDDEN on the overlay hop.
+STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "studio", "interval": "monthly"}
+# Shorter than Deno INVITE_MIN_CODE_LENGTH (10). Handler returns INVITE_INVALID
+# without recording an attempt, so Observer probes cannot grant or burn the
+# rate-limit window. Live settings v32 has no this route (404).
+STAGING_REDEEM_INVITE_BODY: dict[str, object] = {"code": "short"}
+REDEEM_INVITE_MOUNTED_CODES: frozenset[str] = frozenset({"INVITE_INVALID", "EMAIL_REQUIRED"})
 
 
 def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
-    """Pinned core APP_URL must be the public origin, not loopback."""
+    """Pinned core APP_URL must be the public origin + ``/dashboard`` path.
+
+    Loopback and the retired ``/olympus`` prefix both fail. Do not weaken this
+    to accept live Pages while they still serve ``/olympus`` — that is a
+    deploy/path contract, not a remaining hop.
+    """
     if http != 200:
         return False
     alpaca = str(body.get("alpaca_redirect_uri") or "")
@@ -64,8 +85,8 @@ def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
     if any(marker in blob for marker in _LOOPBACK_MARKERS):
         return False
     return alpaca.startswith(
-        f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/brokers/callback"
-    ) and billing.startswith(f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/")
+        f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/brokers/callback"
+    ) and billing.startswith(f"{DEFAULT_PUBLIC_APP_ORIGIN}/dashboard/settings/")
 
 
 class HttpJson(Protocol):
@@ -88,6 +109,7 @@ class HopExpectation(StrEnum):
     NOT_FOUND = "not_found"
     PUBLIC_URLS_OK = "public_urls_ok"
     PREFS_DIGEST_ON = "prefs_digest_on"
+    REDEEM_INVITE_MOUNTED = "redeem_invite_mounted"
 
 
 class ObserverHop(BaseModel):
@@ -155,6 +177,13 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         kind=HopExpectation.PUBLIC_URLS_OK,
     ),
     ObserverHop(
+        label="POST /settings/access/redeem-invite",
+        method="POST",
+        path="/settings/access/redeem-invite",
+        kind=HopExpectation.REDEEM_INVITE_MOUNTED,
+        body=STAGING_REDEEM_INVITE_BODY,
+    ),
+    ObserverHop(
         label="PATCH /settings/profile",
         method="PATCH",
         path="/settings/profile",
@@ -217,6 +246,9 @@ def hop_ok(
         return public_app_urls_ok(http, body or {})
     if kind is HopExpectation.PREFS_DIGEST_ON:
         return http == 200 and (body or {}).get("daily_digest") is True
+    if kind is HopExpectation.REDEEM_INVITE_MOUNTED:
+        # 404 = live v32 (route missing). 200 would mean an accidental grant.
+        return http in {400, 403} and code in REDEEM_INVITE_MOUNTED_CODES
     unhandled: HopExpectation = kind
     raise AssertionError(f"unhandled hop kind {unhandled}")
 
@@ -263,8 +295,45 @@ def run_observer_hops(
 
 
 def _digest_inbox_confirmed(environ: Mapping[str, str]) -> bool:
-    raw = (environ.get("KAIROS_STAGING_DIGEST_INBOX_CONFIRMED") or "").strip().lower()
+    raw = env_lookup(STAGING_DIGEST_INBOX_CONFIRMED, environ=environ).strip().lower()
     return raw in {"1", "true", "yes"}
+
+
+def _emit_remaining_product_state(
+    *,
+    http: HttpJson,
+    jwt: str,
+    anon_key: str | None,
+    functions_base: str,
+    environ: Mapping[str, str],
+    log: Callable[[str], None],
+    log_err: Callable[[str], None],
+) -> tuple[str, ...] | None:
+    """Log remaining-hop product state. ``None`` when Settings GETs are not 200."""
+    evidence = collect_remaining_evidence(
+        http=http,
+        jwt=jwt,
+        anon_key=anon_key,
+        functions_base=functions_base,
+    )
+    if not evidence.surface_http_ok:
+        log_err(
+            "Remaining-hop Settings GETs failed "
+            "(profile/brokers/jobs/fills/notifications/log must be HTTP 200)."
+        )
+        return None
+    evidence = evidence.model_copy(
+        update={"digest_inbox_confirmed": _digest_inbox_confirmed(environ)}
+    )
+    proven = proven_remaining_hops(evidence)
+    blockers = remaining_hop_blockers(evidence)
+    log("kairos_staging_e2e: remaining hop product-state")
+    for name in REMAINING_LIVE_HOPS:
+        if proven[name]:
+            log(f"  {name} proven=True")
+        else:
+            log(f"  {name} proven=False blocker={blockers.get(name, '')}")
+    return remaining_hops_unproven(proven)
 
 
 def collect_remaining_evidence(
@@ -310,12 +379,17 @@ def collect_remaining_evidence(
                 )
             )
     jobs: list[tuple[str, str]] = []
+    overlay_errors: list[str] = []
     raw_jobs = jobs_body.get("jobs")
     if isinstance(raw_jobs, list):
         for row in raw_jobs:
             if not isinstance(row, dict):
                 continue
-            jobs.append((str(row.get("job_type") or ""), str(row.get("status") or "")))
+            job_type = str(row.get("job_type") or "")
+            jobs.append((job_type, str(row.get("status") or "")))
+            err = row.get("error")
+            if job_type == "overlay_daily" and isinstance(err, str) and err.strip():
+                overlay_errors.append(err)
     fill_count = 0
     fills = fills_body.get("fills")
     if isinstance(fills, list):
@@ -336,6 +410,7 @@ def collect_remaining_evidence(
         plan_tier=str(raw_tier) if isinstance(raw_tier, str) else None,
         connections=tuple(connections),
         jobs=tuple(jobs),
+        overlay_job_errors=tuple(overlay_errors),
         fill_count=fill_count,
         digest_event_keys=tuple(keys),
         daily_digest_enabled=prefs_body.get("daily_digest") is True,
@@ -378,11 +453,11 @@ def password_grant_access_token(
 
 def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> JwtResolution:
     """JWT from env, or password grant when email/password/anon are set."""
-    direct = (environ.get("KAIROS_STAGING_USER_JWT") or "").strip()
+    direct = env_lookup(STAGING_USER_JWT, environ=environ).strip()
     if direct:
         return JwtResolution(token=direct)
-    email = (environ.get("KAIROS_STAGING_EMAIL") or "").strip()
-    password = (environ.get("KAIROS_STAGING_PASSWORD") or "").strip()
+    email = env_lookup(STAGING_EMAIL, environ=environ).strip()
+    password = env_lookup(STAGING_PASSWORD, environ=environ).strip()
     anon = _anon_from_env(environ)
     supabase_url = (environ.get("CORE_SUPABASE_URL") or DEFAULT_SUPABASE_URL).strip()
     if not (email and password and anon):
@@ -398,11 +473,12 @@ def resolve_staging_jwt(*, http: HttpJson, environ: Mapping[str, str]) -> JwtRes
 
 
 def _anon_from_env(environ: Mapping[str, str]) -> str | None:
-    for name in ("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY", "KAIROS_STAGING_ANON_KEY"):
+    for name in ("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"):
         value = (environ.get(name) or "").strip()
         if value:
             return value
-    return None
+    alias = env_lookup(STAGING_ANON_KEY, environ=environ).strip()
+    return alias or None
 
 
 def run_staging_e2e(
@@ -415,16 +491,16 @@ def run_staging_e2e(
     """Run Observer hops (if JWT) then vendor-secret / checkout phases."""
     env = os.environ if environ is None else environ
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
-    functions_base = (env.get("KAIROS_STAGING_FUNCTIONS_BASE") or DEFAULT_FUNCTIONS_BASE).rstrip(
-        "/"
-    )
+    functions_base = (
+        env_lookup(STAGING_FUNCTIONS_BASE, environ=env) or DEFAULT_FUNCTIONS_BASE
+    ).rstrip("/")
 
     resolved = resolve_staging_jwt(http=http, environ=env)
     if resolved.attempted_grant and not resolved.token:
         err(
             "Password grant failed "
             f"HTTP {resolved.grant_http} — credentials not logged. "
-            "Check KAIROS_STAGING_EMAIL/PASSWORD."
+            "Check DIGIQUANT_STAGING_EMAIL/PASSWORD."
         )
         return 3
     jwt = resolved.token
@@ -442,40 +518,30 @@ def run_staging_e2e(
             log(f"  {row.label} http={row.http} code={code} ok={row.ok}")
             if not row.ok:
                 failed = True
-        if failed:
-            err("Observer hops failed — Settings EF TIER_FORBIDDEN / read contract regression.")
-            return 3
-        evidence = collect_remaining_evidence(
+        unproven = _emit_remaining_product_state(
             http=http,
             jwt=jwt,
             anon_key=_anon_from_env(env),
             functions_base=functions_base,
+            environ=env,
+            log=log,
+            log_err=err,
         )
-        if not evidence.surface_http_ok:
+        if failed:
             err(
-                "Remaining-hop Settings GETs failed "
-                "(profile/brokers/jobs/fills/notifications/log must be HTTP 200)."
+                "Observer hops failed — app-urls path contract, "
+                "redeem-invite not mounted, or TIER_FORBIDDEN / read regression."
             )
             return 3
-        evidence = evidence.model_copy(
-            update={"digest_inbox_confirmed": _digest_inbox_confirmed(env)}
-        )
-        proven = proven_remaining_hops(evidence)
-        blockers = remaining_hop_blockers(evidence)
-        log("kairos_staging_e2e: remaining hop product-state")
-        for name in REMAINING_LIVE_HOPS:
-            if proven[name]:
-                log(f"  {name} proven=True")
-            else:
-                log(f"  {name} proven=False blocker={blockers.get(name, '')}")
-        unproven = remaining_hops_unproven(proven)
+        if unproven is None:
+            return 3
         if not unproven:
             log("kairos_staging_e2e: all remaining hops proven from Settings reads")
             return 0
     else:
         log(
             "kairos_staging_e2e: Observer hops skipped "
-            "(set KAIROS_STAGING_USER_JWT or KAIROS_STAGING_EMAIL+PASSWORD+ANON)"
+            "(set DIGIQUANT_STAGING_USER_JWT or DIGIQUANT_STAGING_EMAIL+PASSWORD+ANON)"
         )
         unproven = remaining_hops_unproven()
 
@@ -488,7 +554,7 @@ def run_staging_e2e(
         return 2
 
     if not jwt:
-        err(format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"]))
+        err(format_missing_secrets_failure([STAGING_USER_JWT]))
         err(format_remaining_hops_failure(unproven))
         return 2
 
@@ -534,7 +600,9 @@ __all__ = [
     "DEFAULT_FUNCTIONS_BASE",
     "EXIT_REMAINING_HOPS_UNPROVEN",
     "OBSERVER_HOPS",
+    "REDEEM_INVITE_MOUNTED_CODES",
     "REMAINING_LIVE_HOPS",
+    "STAGING_REDEEM_INVITE_BODY",
     "HopExpectation",
     "HttpJson",
     "JwtResolution",
@@ -543,6 +611,7 @@ __all__ = [
     "RemainingHopEvidence",
     "STAGING_CHECKOUT_BODY",
     "_digest_inbox_confirmed",
+    "_emit_remaining_product_state",
     "collect_remaining_evidence",
     "format_remaining_hops_failure",
     "hop_ok",
