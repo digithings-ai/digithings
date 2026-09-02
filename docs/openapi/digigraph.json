@@ -20,6 +20,18 @@
             "description": "Optional tool allowlist for this completion. Overrides project/env when set. Also accepted via X-Allowed-Tools header (comma-separated).",
             "title": "Allowed Tools"
           },
+          "force_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional per-request locate tool to run with the user string as its query. Also accepted via X-Digi-Force-Tool. Aliases: search/digisearch, docs/digivault. Injected \u2014 the model is not asked to write the query.",
+            "title": "Force Tool"
+          },
           "messages": {
             "description": "Conversation messages",
             "items": {
@@ -286,6 +298,18 @@
             ],
             "description": "Preferred evidence_tier values (peer_reviewed, working_paper, \u2026) added as a filter.",
             "title": "Evidence Tier Preference"
+          },
+          "force_tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model is not hinted \u2014 the call is injected, then it synthesizes.",
+            "title": "Force Tool"
           },
           "prompt": {
             "description": "User idea, e.g. 'Build me a mean-reversion stat-arb on tech'",

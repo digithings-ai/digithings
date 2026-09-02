@@ -15,9 +15,11 @@
  *     silently re-point to `public_nav_history` in the browser.
  *
  * Live valuation uses a symbol's quote ONLY when it is a real (non-stale) tick;
- * otherwise the leg falls back to `current_price` and stays flat. With no live
- * ticks (dormant feed / market closed) `liveTotalValue` equals the published
- * `latestNav`. CASH and any priceless leg contribute flat.
+ * otherwise the leg falls back to `current_price` (or a stale
+ * `public_price_latest` seed when the book has not stamped a mark yet — #3447)
+ * and stays flat. With no live ticks (dormant feed / market closed)
+ * `liveTotalValue` equals the published `latestNav`. CASH and any priceless
+ * leg contribute flat.
  *
  * Null-client safe: returns an empty, `configured:false` result (the static
  * build path) with no crash. This book is always a research/paper portfolio —

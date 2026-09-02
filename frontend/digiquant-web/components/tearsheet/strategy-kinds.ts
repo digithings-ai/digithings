@@ -80,3 +80,11 @@ export function matchesPublicType(
   if (filter === "all") return true;
   return inferPublicType(strategyId, kind) === filter;
 }
+
+/**
+ * Tearsheet Charts → Indicators is an SDCA surface (composite risk extras).
+ * L/S P/L books never get the tab — gate on public type, not empty series.
+ */
+export function showsIndicatorsTab(strategyId: string, kind?: string): boolean {
+  return inferPublicType(strategyId, kind) === "sdca";
+}

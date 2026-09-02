@@ -50,6 +50,29 @@ export function chatAccessTokenAtSend(resolvedHost: string): string | null {
   return readChatAccessToken(resolvedHost);
 }
 
+/**
+ * `/search` / `/docs` force-tool, written at send() and read inside
+ * prepareSendMessagesRequest. Not a React ref — `react-hooks/refs` forbids
+ * `.current` inside the useMemo that builds DefaultChatTransport, and useChat
+ * never adopts a rebuilt transport (#1339). Keyed by embedHost so two
+ * widgets on one page cannot steal each other's slash.
+ */
+const pendingForceByHost = new Map<string, string>();
+
+export function setPendingForceTool(host: string, tool?: string): void {
+  const key = host.trim();
+  if (!key) return;
+  if (tool) pendingForceByHost.set(key, tool);
+  else pendingForceByHost.delete(key);
+}
+
+export function takePendingForceTool(host: string): string | undefined {
+  const key = host.trim();
+  const tool = pendingForceByHost.get(key);
+  pendingForceByHost.delete(key);
+  return tool;
+}
+
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
 
 function conversationStorageKey(host: string): string {
@@ -205,15 +228,18 @@ export function useEmbedDigiChat({
           // Send-time read — same freeze reason as isEmbedTrialUnlockedAtSend/
           // chatAccessTokenAtSend below (#1339): a language value closed over
           // by the transport at creation time would stay frozen at whatever
-          // detectBrowserLanguageCode() returned at mount, so picking a new
-          // language in the dropdown would never reach the header (#2103
-          // final review, Critical finding). Normalize against the curated
-          // list before forwarding — defense-in-depth for a hypothetical
+          // detectBrowserLanguageCode() returned at mount, so `/lang` would
+          // never reach the header (#2103 / #3418). Normalize against the
+          // curated list before forwarding — defense-in-depth for a hypothetical
           // future caller of this exported hook that doesn't already pass a
           // curated-safe value (see #2103 final review, Fix 6).
           const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
+          }
+          const forceTool = takePendingForceTool(embedHost);
+          if (forceTool) {
+            headers["X-Digi-Force-Tool"] = forceTool;
           }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
@@ -296,16 +322,31 @@ export function useEmbedDigiChat({
   }, [error, onGated]);
 
   const send = useCallback(
-    (question: string) => {
+    (question: string, opts?: { forceTool?: string }) => {
       const q = question.trim();
       if (!q || busy) return;
+      setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: q }],
       });
     },
-    [busy, sendMessage],
+    [busy, sendMessage, embedHost],
   );
+
+  const reset = useCallback(() => {
+    setMessages([]);
+    // /new must also drop backend conversation continuity (Foundry's
+    // X-External-Conversation) and any unused slash force-tool, not just the
+    // client transcript — otherwise "Start a new conversation" is a lie on
+    // adapters that key off the stored id.
+    setPendingForceTool(embedHost);
+    try {
+      window.sessionStorage.removeItem(conversationStorageKey(embedHost));
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, [setMessages, embedHost]);
 
   // Mid-stream: keep completed searches as running tool_call rows until
   // retrieve arrives (or the turn settles). Settling early flashes "no hits".
@@ -338,6 +379,7 @@ export function useEmbedDigiChat({
     /** Raw AI SDK error — for structured code detection (quota → BYOK). */
     rawError: error,
     send,
+    reset,
     stop: () => {
       void stop();
     },

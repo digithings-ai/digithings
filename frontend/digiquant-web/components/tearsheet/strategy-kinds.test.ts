@@ -5,6 +5,7 @@ import {
   matchesPublicType,
   publicTypeFilterOptions,
   publicTypeLabel,
+  showsIndicatorsTab,
 } from "./strategy-kinds";
 import { filterLibrary } from "./strategy-library";
 import { type StrategyIndexEntry } from "./types";
@@ -82,5 +83,17 @@ describe("public strategy type", () => {
       "sol_slapper",
     ]);
     expect(filterLibrary(catalog, "relative_strength", "cagr")).toEqual([]);
+  });
+});
+
+describe("showsIndicatorsTab", () => {
+  it("is on for SDCA and off for L/S P/L books, regardless of series presence", () => {
+    expect(showsIndicatorsTab("btc_sdca")).toBe(true);
+    expect(showsIndicatorsTab("btc_sdca", "dca")).toBe(true);
+    expect(showsIndicatorsTab("eth_sdca")).toBe(true);
+    expect(showsIndicatorsTab("btc_slapper")).toBe(false);
+    expect(showsIndicatorsTab("eth_slapper", "long_short")).toBe(false);
+    expect(showsIndicatorsTab("sol_slapper")).toBe(false);
+    expect(showsIndicatorsTab("btc_slapper", "long_short")).toBe(false);
   });
 });
