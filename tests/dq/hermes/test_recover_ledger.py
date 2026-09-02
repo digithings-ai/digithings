@@ -83,13 +83,17 @@ def _seed_booked_day(client: FakeSupabaseClient, *, moved_prices: bool = False) 
     client.canned_reads["documents"] = []
 
 
-def _mirror_writes(client: FakeSupabaseClient) -> None:
+def _mirror_writes(client: FakeSupabaseClient, *, new_rows_first: bool = False) -> None:
     """Fake reads come from canned_reads; production PostgREST reads inserted rows."""
     for table, rows in client.store.items():
-        client.canned_reads[table] = list(client.canned_reads.get(table, [])) + list(rows)
+        existing = list(client.canned_reads.get(table, []))
+        written = list(rows)
+        client.canned_reads[table] = written + existing if new_rows_first else existing + written
 
 
 HEAD_COMMIT_ID = "11111111-2222-3333-4444-555555555555"
+FORK_COMMIT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+NEWER_COMMIT_ID = "22222222-3333-4444-5555-666666666666"
 BOOK_WEIGHTS = {
     "EWZ": 5.0771,
     "FXI": 5.0,
@@ -99,6 +103,19 @@ BOOK_WEIGHTS = {
     "XLV": 14.8384,
 }
 BOOK_CASH = 20.663
+_APPROVED_IDS = {
+    "CASH": "aa000000-0000-4000-8000-000000000001",
+    "EWZ": "aa000000-0000-4000-8000-000000000002",
+    "FXI": "aa000000-0000-4000-8000-000000000003",
+    "GLD": "aa000000-0000-4000-8000-000000000004",
+    "VGK": "aa000000-0000-4000-8000-000000000005",
+    "XLF": "aa000000-0000-4000-8000-000000000006",
+    "XLV": "aa000000-0000-4000-8000-000000000007",
+}
+_SUPERSEDED_APPROVED_IDS = {
+    ticker: f"bb000000-0000-4000-8000-{index:012d}"
+    for index, ticker in enumerate(("CASH", *TICKERS), start=1)
+}
 
 
 def _seed_head_commit(client: FakeSupabaseClient) -> None:
@@ -115,10 +132,12 @@ def _seed_head_commit(client: FakeSupabaseClient) -> None:
 def _seed_approved(client: FakeSupabaseClient, weights: dict[str, float]) -> None:
     client.canned_reads[APPROVED_TARGETS] = [
         {
+            "id": _APPROVED_IDS[ticker],
             "run_date": RUN_DATE.isoformat(),
             "symbol": ticker,
             "approved_weight": pct / 100.0,
             "workspace_id": HOUSE,
+            "supersedes_id": None,
         }
         for ticker, pct in weights.items()
     ]
@@ -134,8 +153,24 @@ def _seed_order_intents(client: FakeSupabaseClient, symbols: tuple[str, ...] = T
             "status": "pending",
             "supersedes_id": None,
             "workspace_id": HOUSE,
+            "approved_target_id": _APPROVED_IDS[symbol],
         }
         for symbol in symbols
+    ]
+
+
+def _seed_hold_day(client: FakeSupabaseClient) -> None:
+    """Run-date book equals the prior book — every move is inside the no-trade band."""
+    _seed_booked_day(client)
+    prior = [
+        row for row in client.canned_reads["positions"] if row["date"] == PRIOR_DATE.isoformat()
+    ]
+    older = [row for row in client.canned_reads["positions"] if row["date"] != RUN_DATE.isoformat()]
+    client.canned_reads["positions"] = older + [
+        _pos(RUN_DATE, str(row["ticker"]), float(row["weight_pct"])) for row in prior
+    ]
+    client.canned_reads["nav_history"] = [
+        {**client.canned_reads["nav_history"][0], "cash_pct": 25.2189}
     ]
 
 
@@ -236,6 +271,86 @@ class TestRecoverLedgerFromBook:
         ]
         assert committed_over_partial == []
 
+    def test_hold_day_second_apply_is_already_committed(self) -> None:
+        """Zero order_intents is a finished hold, not a missing last-table insert."""
+        client = FakeSupabaseClient()
+        _seed_hold_day(client)
+        first = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert first.status == "committed"
+        assert first.commit_id
+        assert client.store.get(ORDER_INTENTS, []) == []
+        _mirror_writes(client, new_rows_first=True)
+        second = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert second.status == "already_committed"
+        assert second.commit_id == first.commit_id
+        assert [row["id"] for row in client.store.get(COMMITS, [])] == [first.commit_id]
+
+    def test_superseded_commit_orders_do_not_complete_head_without_orders(self) -> None:
+        """Orders on a superseded commit must not mark a head with no orders complete."""
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        client.canned_reads[COMMITS] = [
+            {
+                "id": HEAD_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+            {
+                "id": NEWER_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": HEAD_COMMIT_ID,
+            },
+        ]
+        head_approved = [
+            {
+                "id": _APPROVED_IDS[ticker],
+                "run_date": RUN_DATE.isoformat(),
+                "symbol": ticker,
+                "approved_weight": pct / 100.0,
+                "workspace_id": HOUSE,
+                "supersedes_id": _SUPERSEDED_APPROVED_IDS[ticker],
+            }
+            for ticker, pct in {**BOOK_WEIGHTS, "CASH": BOOK_CASH}.items()
+        ]
+        stale_approved = [
+            {
+                "id": _SUPERSEDED_APPROVED_IDS[ticker],
+                "run_date": RUN_DATE.isoformat(),
+                "symbol": ticker,
+                "approved_weight": pct / 100.0,
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            }
+            for ticker, pct in {**BOOK_WEIGHTS, "CASH": BOOK_CASH}.items()
+        ]
+        client.canned_reads[APPROVED_TARGETS] = stale_approved + head_approved
+        client.canned_reads[ORDER_INTENTS] = [
+            {
+                "id": str(uuid4()),
+                "run_date": RUN_DATE.isoformat(),
+                "symbol": symbol,
+                "quantity": 1.0,
+                "status": "pending",
+                "supersedes_id": None,
+                "workspace_id": HOUSE,
+                "approved_target_id": _SUPERSEDED_APPROVED_IDS[symbol],
+            }
+            for symbol in TICKERS
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status != "already_committed"
+        assert result.commit_id != NEWER_COMMIT_ID
+        committed_over_partial = [
+            row
+            for row in client.store.get("documents", [])
+            if str(row.get("document_key", "")).startswith("commit-run/")
+            and (row.get("payload") or {}).get("status") == "committed"
+            and (row.get("payload") or {}).get("ledger_commit_id") == NEWER_COMMIT_ID
+        ]
+        assert committed_over_partial == []
+
     def test_sub_threshold_cash_without_position_row_is_not_conflict(self) -> None:
         """Booking skips CASH at <= 0.01%; the chain still writes an approved CASH target."""
         client = FakeSupabaseClient()
@@ -313,14 +428,16 @@ class TestRecoverLedgerFromBook:
         first = recover_ledger_from_book(
             client=client, run_date=RUN_DATE, apply=True, force_recommit=True
         )
-        _mirror_writes(client)
+        _mirror_writes(client, new_rows_first=True)
         second = recover_ledger_from_book(
             client=client, run_date=RUN_DATE, apply=True, force_recommit=True
         )
         assert first.status == "committed"
+        assert first.commit_id
         assert second.status == "already_committed"
         assert second.commit_id == first.commit_id
-        assert len(client.store.get(COMMITS, [])) == 1
+        written_ids = [row["id"] for row in client.store.get(COMMITS, [])]
+        assert written_ids == [first.commit_id]
 
     def test_conflict_message_does_not_recommend_force_recommit(self) -> None:
         client = FakeSupabaseClient()
@@ -331,6 +448,62 @@ class TestRecoverLedgerFromBook:
         assert result.status == "conflict"
         assert "force-recommit" not in result.message.lower()
         assert "force_recommit" not in result.message.lower()
+
+    def test_force_recommit_on_fork_is_conflict(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        client.canned_reads[COMMITS] = [
+            {
+                "id": HEAD_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+            {
+                "id": FORK_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+        ]
+        result = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
+        assert result.status == "conflict"
+        assert "forked" in result.message
+        assert client.store.get(COMMITS, []) == []
+        assert client.store.get(APPROVED_TARGETS, []) == []
+        assert client.store.get("documents", []) == []
+
+    def test_cli_force_recommit_on_fork_exits_3(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        client.canned_reads[COMMITS] = [
+            {
+                "id": HEAD_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+            {
+                "id": FORK_COMMIT_ID,
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            },
+        ]
+        spec = importlib.util.spec_from_file_location(
+            "recover_ledger_cli", Path("digiquant/scripts/recover_ledger.py")
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.load_repo_env = lambda: None  # type: ignore[method-assign]
+        mod.SupabaseConfig.from_env = staticmethod(lambda: object())  # type: ignore[method-assign]
+        mod.build_client = lambda _cfg: client  # type: ignore[method-assign]
+        rc = mod.main(["--date", RUN_DATE.isoformat(), "--apply", "--force-recommit", "--yes"])
+        assert rc == 3
+        assert client.store.get(COMMITS, []) == []
 
     def test_cli_force_recommit_apply_requires_yes(self) -> None:
         spec = importlib.util.spec_from_file_location(

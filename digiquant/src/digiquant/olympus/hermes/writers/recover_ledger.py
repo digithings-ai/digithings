@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
@@ -22,6 +22,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     query_price_deltas,
 )
+from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
 from digiquant.olympus.hermes.writers.commit_io import (
     load_commit_manifests,
@@ -34,6 +35,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     COMMITS,
     ORDER_INTENTS,
     LedgerAppend,
+    _decision,
     _execute,
     _head_by_symbol,
     _heads,
@@ -236,15 +238,10 @@ def _write_recovery_manifest(
 
 def _approved_matches_book(
     *,
-    client: SupabaseClient,
-    run_date: date,
-    workspace_id: str | None,
+    approved: list[dict[str, Any]],
     weights: dict[str, float],
     cash_pct: float,
 ) -> bool:
-    approved = _rows_for_date(
-        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=workspace_id
-    )
     by_symbol = _head_by_symbol(_heads(approved))
     needed = {_symbol(ticker): round(float(pct), 4) for ticker, pct in weights.items()}
     cash = round(float(cash_pct), 4)
@@ -277,20 +274,54 @@ def _approved_matches_book(
     return True
 
 
-def _chain_has_order_intents(
+def _book_expects_orders(
     *,
-    client: SupabaseClient,
-    run_date: date,
-    workspace_id: str | None,
     weights: dict[str, float],
+    prior: dict[str, float],
+    preferences: dict[str, object],
 ) -> bool:
-    """Last FK table present, or the book has no tradeable names to order."""
-    if not weights:
+    """True when the writer would emit at least one order_intent for this book."""
+    book = {_symbol(ticker): float(pct) for ticker, pct in weights.items()}
+    baseline = {_symbol(ticker): float(pct) for ticker, pct in prior.items()}
+    symbols = {ticker for ticker in book if ticker != _CASH}
+    symbols |= {ticker for ticker, pct in baseline.items() if ticker != _CASH and abs(pct) > 1e-9}
+    for symbol in symbols:
+        action, _reason = _decision(
+            symbol=symbol,
+            prior_pct=baseline.get(symbol, 0.0),
+            target_pct=book.get(symbol, 0.0),
+            preferences=preferences,
+        )
+        if action is not DecisionAction.NO_OP:
+            return True
+    return False
+
+
+def _orders_for_head_approved(
+    *, approved: list[dict[str, Any]], orders: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    head_ids = {
+        str(row.get("id") or "")
+        for row in _head_by_symbol(_heads(approved)).values()
+        if row.get("id")
+    }
+    if not head_ids:
+        return []
+    return [row for row in _heads(orders) if str(row.get("approved_target_id") or "") in head_ids]
+
+
+def _head_chain_complete(
+    *,
+    approved: list[dict[str, Any]],
+    orders: list[dict[str, Any]],
+    weights: dict[str, float],
+    prior: dict[str, float],
+    preferences: dict[str, object],
+) -> bool:
+    """Hold days issue no orders; a trade day's orders must belong to the head."""
+    if not _book_expects_orders(weights=weights, prior=prior, preferences=preferences):
         return True
-    orders = _rows_for_date(
-        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=workspace_id
-    )
-    return bool(_heads(orders))
+    return bool(_orders_for_head_approved(approved=approved, orders=orders))
 
 
 def recover_ledger_from_book(
@@ -339,18 +370,24 @@ def recover_ledger_from_book(
         client=client, table=COMMITS, run_date=run_date, workspace_id=workspace_id
     )
     commit_heads = _heads(prior_commits)
+    approved_rows = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=workspace_id
+    )
+    order_rows = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=workspace_id
+    )
     approved_match = _approved_matches_book(
-        client=client,
-        run_date=run_date,
-        workspace_id=workspace_id,
+        approved=approved_rows,
         weights=weights,
         cash_pct=cash_pct,
     )
-    chain_complete = _chain_has_order_intents(
-        client=client,
-        run_date=run_date,
-        workspace_id=workspace_id,
+    prefs: dict[str, object] = dict(portfolio_preferences_static(_PORTFOLIO_JSON))
+    chain_complete = _head_chain_complete(
+        approved=approved_rows,
+        orders=order_rows,
         weights=weights,
+        prior=_prior_current_weights(client=client, run_date=run_date, workspace_id=workspace_id),
+        preferences=prefs,
     )
     book_fp = weights_fingerprint(weights)
     latest_id = str((latest or {}).get("ledger_commit_id") or "") or None
@@ -365,6 +402,11 @@ def recover_ledger_from_book(
         )
 
     head_id = str(commit_heads[0].get("id") or "") or None if commit_heads else None
+    if len(commit_heads) > 1:
+        return outcome(
+            "conflict",
+            f"forked commit chain for {run_date.isoformat()}; will not append",
+        )
     if not force_recommit:
         if latest is not None and latest.get("status") == "committed":
             manifest_fp = str(latest.get("weights_fingerprint") or "")
@@ -383,11 +425,6 @@ def recover_ledger_from_book(
                     commit_id=latest_id,
                     source_run_id=latest_source,
                 )
-        if len(commit_heads) > 1:
-            return outcome(
-                "conflict",
-                f"forked commit chain for {run_date.isoformat()}; will not append",
-            )
         if commit_heads and not (approved_match and head_id):
             return outcome(
                 "conflict",
