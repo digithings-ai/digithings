@@ -21,7 +21,7 @@ const FAMILIES = [
   { href: "/controls", label: "Controls", blurb: "Custom dropdown pane, search, nav buttons, form fields." },
   { href: "/layout-patterns", label: "Layout", blurb: "Feature cell, bento grid, scaled product frames." },
   { href: "/typography", label: "Typography", blurb: "Scroll-linked word reveals and the copy & voice grammar." },
-  { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, pricing, matrix." },
+  { href: "/data", label: "Data", blurb: "Dot matrix, count-up stats, card deck, repository activity, pricing, matrix." },
   { href: "/finance", label: "Finance", blurb: "Lightweight-Charts dashboards, order book, money metrics." },
   { href: "/tearsheet", label: "Tearsheet", blurb: "Print-grade SVG tearsheet: synced charts, matrix, trade log, cards." },
   { href: "/effects", label: "Effects", blurb: "Cursor-follow graph, terminals, pipeline, ambient mesh." },

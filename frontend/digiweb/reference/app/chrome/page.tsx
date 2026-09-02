@@ -6,6 +6,7 @@ import { ModuleCardReference } from "@/components/chrome/module-card-reference";
 import { NavMenuReference } from "@/components/chrome/nav-menu-reference";
 import { NavShellReference } from "@/components/chrome/nav-shell-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
+import { SocialsReference } from "@/components/socials-reference";
 import { TabsReference } from "@/components/tabs-reference";
 import { ToastStackReference } from "@/components/toast-stack-reference";
 
@@ -18,8 +19,8 @@ export default function ChromePage() {
           Site chrome, <em>quiet by default.</em>
         </h1>
         <p>
-          Navigation and footer grammar: scroll-aware bars, utility rows, and the one sanctioned
-          personality moment at the very bottom of the page.
+          Navigation, socials, and footer grammar: scroll-aware bars, a quiet profile row, and the
+          one sanctioned personality moment at the very bottom of the page.
         </p>
       </header>
 
@@ -31,6 +32,7 @@ export default function ChromePage() {
       <NavShellReference />
       <NavMenuReference />
       <ModuleCardReference />
+      <SocialsReference />
       <FooterReference />
     </main>
   );
