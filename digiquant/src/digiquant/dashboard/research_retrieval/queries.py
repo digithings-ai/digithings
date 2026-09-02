@@ -21,8 +21,6 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.research.decision_log import fetch_recent_lessons
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
     RetrievalPhase,
@@ -33,6 +31,8 @@ from digiquant.dashboard.research_retrieval.cache import ResearchCache, _parse_r
 from digiquant.dashboard.research_retrieval.context import ContextItemKind, ContextManifest
 from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.decision_log import fetch_recent_lessons
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

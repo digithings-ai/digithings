@@ -6,8 +6,8 @@ import logging
 from datetime import date
 from uuid import UUID
 
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

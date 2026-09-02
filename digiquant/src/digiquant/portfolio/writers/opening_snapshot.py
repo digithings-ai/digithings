@@ -21,7 +21,7 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -48,7 +48,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _rows_for_date,
     _symbol,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

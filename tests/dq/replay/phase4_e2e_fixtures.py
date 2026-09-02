@@ -13,30 +13,6 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from uuid import UUID
 
 from digiquant.dashboard.accounting.models import PeriodStatus
-from digiquant.research.phases.outcome_maturation import (
-    OutcomeMaturationDeps,
-    pin_outcome_lesson_for_preflight,
-)
-from digiquant.portfolio.allocation_hashes import sha256_hex
-from digiquant.portfolio.models.forecast_calibration import (
-    ForecastOutcome,
-    OutcomeStatus,
-    SessionPriceSnapshot,
-    forecast_outcome_content_hash,
-    forecast_outcome_id,
-)
-from digiquant.portfolio.models.portfolio_ledger import (
-    ApprovedTarget,
-    DecisionAction,
-    DecisionIntent,
-    DecisionReason,
-    OrderIntent,
-    OrderIntentStatus,
-    PaperExecution,
-    PortfolioCommit,
-    RequestedTarget,
-    paper_execution_id,
-)
 from digiquant.dashboard.learning.component_attribution import (
     ComponentAttributor,
     CostAttributionSlice,
@@ -122,6 +98,30 @@ from digiquant.dashboard.replay.walk_forward import (
     assign_episodes_to_fold,
     build_walk_forward_folds,
     verify_fold_assignments,
+)
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.portfolio.models.forecast_calibration import (
+    ForecastOutcome,
+    OutcomeStatus,
+    SessionPriceSnapshot,
+    forecast_outcome_content_hash,
+    forecast_outcome_id,
+)
+from digiquant.portfolio.models.portfolio_ledger import (
+    ApprovedTarget,
+    DecisionAction,
+    DecisionIntent,
+    DecisionReason,
+    OrderIntent,
+    OrderIntentStatus,
+    PaperExecution,
+    PortfolioCommit,
+    RequestedTarget,
+    paper_execution_id,
+)
+from digiquant.research.phases.outcome_maturation import (
+    OutcomeMaturationDeps,
+    pin_outcome_lesson_for_preflight,
 )
 
 PHASE4_RUN_ID = "run-phase4-3015"

@@ -14,13 +14,13 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
+from digiquant.profiles import AssetPreferences, InvestmentProfile
 from digiquant.research import (
     PersonalizedSnapshot,
     SnapshotEnvelope,
     personalize_snapshot,
 )
 from digiquant.research.snapshot import DigestPayload
-from digiquant.profiles import AssetPreferences, InvestmentProfile
 
 # ─── Helpers (mirror tests/dq/research/test_snapshot.py style) ────────────────
 

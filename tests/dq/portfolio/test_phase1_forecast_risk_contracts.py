@@ -12,15 +12,6 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.research import cost_liquidity_registry as clr
-from digiquant.research import forecast_registry as fr
-from digiquant.research import risk_policy_registry as rpr
-from digiquant.research.graph import ResearchGraphDeps, ResearchInput, build_research_graph
-from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
-from digiquant.research.phases.publish_phase import PublishDeps
-from digiquant.research.phases.triage_phase import TriageDeps
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
-from digiquant.research.testing.simulator import simulated_pipeline
 from digiquant.portfolio.graph import (
     PortfolioGraphDeps,
     ThesisGraphDeps,
@@ -40,13 +31,22 @@ from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, _manifest_pa
 from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from digiquant.portfolio.sizing import TickerRisk, size_portfolio
+from digiquant.research import cost_liquidity_registry as clr
+from digiquant.research import forecast_registry as fr
+from digiquant.research import risk_policy_registry as rpr
+from digiquant.research.graph import ResearchGraphDeps, ResearchInput, build_research_graph
+from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
+from digiquant.research.phases.publish_phase import PublishDeps
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
+from digiquant.research.testing.simulator import simulated_pipeline
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,
     load_incumbent_risk_fixture,
     sizing_result_snapshot,
 )
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

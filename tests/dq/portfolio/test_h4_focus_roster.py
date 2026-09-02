@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import FocusRosterEntry
 from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
+from digiquant.research.state import FocusRosterEntry
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -372,10 +372,10 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
     entries (the non-rostered ones) with non-empty reasons.  The rostered
     ticker must be absent from the ledger.
     """
-    from digiquant.research.state import ExcludedTicker
     from digiquant.portfolio.phases.h4_opportunity_screener import (
         compute_focus_roster_excluded,
     )
+    from digiquant.research.state import ExcludedTicker
 
     from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -488,8 +488,8 @@ def _make_min_portfolio_state(*, watchlist: list[str]) -> "object":
     """
     from datetime import date as _date
 
-    from digiquant.research.state import ResearchConfigBundle, PhasePortfolioState
     from digiquant.portfolio.state import PortfolioState
+    from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle
 
     state = PortfolioState(
         run_type="delta",
@@ -519,11 +519,11 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
     """WP13.4 (#2930): planner off/shadow/enforce must not mutate H4 roster."""
     import json
 
+    from digiquant.portfolio.phases import h4_opportunity_screener as h4
     from digiquant.research.research_attention import (
         OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
         reset_attention_stores,
     )
-    from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
     monkeypatch.setenv("PORTFOLIO_HELD_GATE", "off")
     state = _make_min_portfolio_state(watchlist=["AAA", "BBB", "SPY", "CCC"])

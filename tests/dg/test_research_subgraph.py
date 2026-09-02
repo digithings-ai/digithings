@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from digigraph.graph import ResearchState, research_subgraph, build_research_subgraph
+from digigraph.graph import ResearchState, build_research_subgraph, research_subgraph
 
 
 @pytest.mark.unit

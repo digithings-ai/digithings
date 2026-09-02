@@ -10,9 +10,9 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 
-from digiquant.research.state import PhasePortfolioState
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.edit_mode import artifact_document_key
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.portfolio.focus_roster import (
     fanout_ticker,
     focus_roster_tickers,
@@ -27,8 +27,8 @@ from digiquant.portfolio.roster_cap import capped_tickers
 from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.analyst_io import upsert_analyst_coverage
 from digiquant.portfolio.writers.thesis_io import upsert_vehicle_thesis_from_analyst
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.research.state import PhasePortfolioState
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

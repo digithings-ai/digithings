@@ -8,7 +8,6 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.asof_dataset import (
     VersionedBarSeries,
     build_asof_dataset,
@@ -36,6 +35,7 @@ from digiquant.dashboard.replay.policy_portfolio import (
     slice_series_for_eval_fold,
 )
 from digiquant.dashboard.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

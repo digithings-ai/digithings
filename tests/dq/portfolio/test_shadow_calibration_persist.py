@@ -7,8 +7,6 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.research import forecast_registry as fr
-from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio import forecast_calibration as fc
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
@@ -27,6 +25,8 @@ from digiquant.portfolio.models.forecast_calibration import (
     forecast_outcome_id,
 )
 from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.research import forecast_registry as fr
+from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
 from tests.dq.research.test_forecast_registry import RegistryFake, _assessment
 

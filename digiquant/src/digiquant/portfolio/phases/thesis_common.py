@@ -13,11 +13,6 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel, ValidationError
 
-from digiquant.research.phases._node_factory import (
-    _shared_context,
-    apply_web_grounding_to_inputs,
-)
-from digiquant.research.state import PhaseError, refresh_scope_forces_full
 from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
@@ -27,10 +22,15 @@ from digiquant.dashboard.edit_mode import (
     resolve_edit_mode,
 )
 from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch, section_index
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
 from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.thesis_grounding import build_thesis_grounding
-from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
+from digiquant.research.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+)
+from digiquant.research.state import PhaseError, refresh_scope_forces_full
 
 logger = logging.getLogger(__name__)
 

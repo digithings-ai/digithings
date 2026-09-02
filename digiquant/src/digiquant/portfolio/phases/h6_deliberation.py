@@ -12,18 +12,35 @@ from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhas
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
-from digiquant.research.phases._node_factory import (
-    _shared_context,
-    build_grounding,
-)
-from digiquant.research.state import PhaseError, PhasePortfolioState
-from digiquant.research.supabase_io import prior_book_current_weights
 from digiquant.dashboard.envcompat import (
     ATTEMPT,
     DELIBERATION_MAX_ROUNDS,
     DELIBERATION_MIN_ROUNDS,
     env_lookup,
 )
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
+from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
+from digiquant.dashboard.research_retrieval.h6_amendment import (
+    H6AmendmentOutcome,
+    H6AmendmentResult,
+    attempt_h6_evidence_amendment,
+)
+from digiquant.dashboard.research_retrieval.models import (
+    TickerEvidenceBundle,
+    TypedProvenance,
+)
+from digiquant.dashboard.research_retrieval.planner import (
+    H6Action,
+    H6Selection,
+    H6SelectionMode,
+    H6SelectionReason,
+    assert_no_materiality_in_prompt,
+    build_h6_decision_features,
+    incumbent_fallback_selection,
+    resolve_h6_selection_mode,
+    select_h6,
+)
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.focus_roster import (
     fanout_ticker,
@@ -58,29 +75,12 @@ from digiquant.portfolio.roster_cap import capped_tickers
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.ticker_fingerprint import deliberation_skip_signal
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
-from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
-from digiquant.dashboard.research_retrieval.h6_amendment import (
-    H6AmendmentOutcome,
-    H6AmendmentResult,
-    attempt_h6_evidence_amendment,
+from digiquant.research.phases._node_factory import (
+    _shared_context,
+    build_grounding,
 )
-from digiquant.dashboard.research_retrieval.models import (
-    TickerEvidenceBundle,
-    TypedProvenance,
-)
-from digiquant.dashboard.research_retrieval.planner import (
-    H6Action,
-    H6Selection,
-    H6SelectionMode,
-    H6SelectionReason,
-    assert_no_materiality_in_prompt,
-    build_h6_decision_features,
-    incumbent_fallback_selection,
-    resolve_h6_selection_mode,
-    select_h6,
-)
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.research.state import PhaseError, PhasePortfolioState
+from digiquant.research.supabase_io import prior_book_current_weights
 
 logger = logging.getLogger(__name__)
 

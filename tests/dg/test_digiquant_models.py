@@ -9,10 +9,10 @@ import digigraph.model_config as model_config
 import pytest
 from digigraph.model_config import (
     apply_digiquant_openrouter_env,
+    get_digiquant_tier,
     get_grounding_model,
     get_model_for_mode,
     get_model_for_phase,
-    get_digiquant_tier,
     is_flagship_allowed_models_entry,
     is_flagship_openrouter_model,
     is_native_search_only_model,

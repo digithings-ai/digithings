@@ -19,14 +19,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
+from digiquant.dashboard.edit_mode.content_identity import UNCHANGED_FLAG_KEY, UNCHANGED_SINCE_KEY
 from digiquant.research.phases._node_factory import EditSegmentResult, _delta_row
 from digiquant.research.phases.phase7_synthesis import _slot_freshness
 from digiquant.research.snapshot import SegmentFreshness as ReadPathFreshness
 from digiquant.research.snapshot import SnapshotEnvelope
-from digiquant.research.state import ResearchState, Carried, SegmentPayload
+from digiquant.research.state import Carried, ResearchState, SegmentPayload
 from digiquant.research.telemetry import CONTENT_FREEZE_KEY, content_freeze_breakdown
-from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
-from digiquant.dashboard.edit_mode.content_identity import UNCHANGED_FLAG_KEY, UNCHANGED_SINCE_KEY
 
 _HEALTHCARE_BODY = {
     "segment": "sector-healthcare",

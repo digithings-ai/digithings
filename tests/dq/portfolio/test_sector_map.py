@@ -9,7 +9,6 @@ exposure beats research fan-out): USO is a commodity, QQQ is broad equity.
 from __future__ import annotations
 
 import pytest
-from digiquant.research.sectors_config import load_sectors
 from digiquant.portfolio import sector_map
 from digiquant.portfolio.sector_map import (
     UNKNOWN_BUCKET,
@@ -19,6 +18,7 @@ from digiquant.portfolio.sector_map import (
     bucket,
     sector_bucket,
 )
+from digiquant.research.sectors_config import load_sectors
 
 pytestmark = pytest.mark.unit
 

@@ -20,8 +20,8 @@ from digiquant.research.phases.phase5_equities import (
     build_phase5,
 )
 from digiquant.research.state import (
-    ResearchState,
     PhaseError,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
     _merge_append_list,

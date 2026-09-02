@@ -8,6 +8,7 @@ from typing import Any
 
 import polars as pl
 import pytest
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.supabase_writer import (
     ohlcv_to_price_history_rows,
@@ -17,7 +18,6 @@ from digiquant.data.prices.supabase_writer import (
     upsert_price_history,
     upsert_price_technicals,
 )
-from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 
 # ─── Fake Supabase (ports the research pattern) ───────────────────────────
 

@@ -10,8 +10,8 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: provider jsonb payloads are heterogeneous
 )
 
-from digiquant.portfolio.sector_map import asset_class, sector_bucket
 from digiquant.dashboard.instrument_metadata import InstrumentMetadata
+from digiquant.portfolio.sector_map import asset_class, sector_bucket
 
 InfoLoader = Callable[[str], Mapping[str, Any]]
 

@@ -6,7 +6,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from digiquant.research.state import ResearchState, PhasePortfolioState
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastTerms,
@@ -17,6 +16,7 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
 from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
+from digiquant.research.state import PhasePortfolioState, ResearchState
 from pydantic import ValidationError
 
 from tests.dq.portfolio.phase1_e2e_fixtures import sample_forecast_terms_dict

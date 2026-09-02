@@ -19,7 +19,13 @@ from uuid import UUID
 
 import yaml
 
+from digiquant.dashboard.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.overlay.runner import pin_seam_config
+from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 from digiquant.data.onchain.hyperdash import get_onchain_cohort_positioning
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.turnover import mark_to_market_weights
 from digiquant.research.cost_liquidity_registry import (
     resolve_realized_action_cost_outcomes_from_state,
 )
@@ -32,10 +38,10 @@ from digiquant.research.decision_log import (
 from digiquant.research.forecast_outcomes import resolve_matured_forecast_outcomes
 from digiquant.research.sectors_config import load_sectors
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     DataLayerSnapshot,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
 from digiquant.research.supabase_io import (
     SupabaseClient,
@@ -52,12 +58,6 @@ from digiquant.research.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-from digiquant.dashboard.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
-from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.turnover import mark_to_market_weights
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
-from digiquant.dashboard.overlay.runner import pin_seam_config
-from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
@@ -356,9 +356,9 @@ def _hydrate_config(
     run_date: date,
 ) -> tuple[ResearchConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
+    from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
     from digiquant.research.dashboard_digest import portfolio_preferences_static
     from digiquant.research.graph import _research_config_root
-    from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
 
     try:
         prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)

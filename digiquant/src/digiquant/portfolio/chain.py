@@ -17,6 +17,17 @@ from typing import (
 
 from digigraph import usage as _usage
 
+from digiquant.dashboard.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
+from digiquant.dashboard.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.dashboard.overlay.persist import (
+    OverlayLegacyBookBlocked,
+    skip_overlay_shared_register,
+)
+from digiquant.portfolio.graph import (
+    PortfolioGraphDeps,
+    ThesisGraphDeps,
+    build_portfolio_graph,
+)
 from digiquant.research import diagnostics as _diagnostics
 from digiquant.research import provider_telemetry as _provider_telemetry
 from digiquant.research.graph import (
@@ -32,15 +43,7 @@ from digiquant.research.phases.preflight import (
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.research.phases.triage_phase import TriageDeps
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhaseError
-from digiquant.dashboard.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
-from digiquant.portfolio.graph import (
-    PortfolioGraphDeps,
-    ThesisGraphDeps,
-    build_portfolio_graph,
-)
-from digiquant.dashboard.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
-from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
+from digiquant.research.state import PhaseError, ResearchConfigBundle, ResearchState
 
 _logger = logging.getLogger(__name__)
 
@@ -720,8 +723,8 @@ def cli_main(argv: list[str] | None = None) -> int:
     # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
     _holdings: list[str] = []
     if not args.watchlist.strip():
-        from digiquant.research.supabase_io import load_prior_book
         from digiquant.portfolio.candidates import holdings_from_prior_book
+        from digiquant.research.supabase_io import load_prior_book
 
         _prior_book = load_prior_book(client, research_input.run_date)
         _holdings = holdings_from_prior_book(_prior_book)

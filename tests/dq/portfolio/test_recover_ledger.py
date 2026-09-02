@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from digiquant.research.state import ResearchConfigBundle, ResearchState
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.writers.commit_io import weights_fingerprint
 from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
@@ -22,7 +22,7 @@ from digiquant.portfolio.writers.recover_ledger import (
     _recovery_state,
     recover_ledger_from_book,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 

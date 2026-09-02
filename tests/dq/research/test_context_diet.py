@@ -20,11 +20,11 @@ from digiquant.research.phases._node_factory import (
     _shared_context,
 )
 from digiquant.research.state import (
-    ResearchState,
     DataLayerSnapshot,
     DeltaTriageDecision,
     DeltaTriageResult,
     PriorContext,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )

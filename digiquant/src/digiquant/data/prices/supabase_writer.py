@@ -18,11 +18,11 @@ from typing import Any, Protocol
 import polars as pl
 from digibase.audit import redact_mapping
 
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices._utils import call_with_retry as _call_with_retry
 from digiquant.data.prices._utils import safe_float as _safe_float
 from digiquant.data.prices._utils import safe_int as _safe_int
-from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 
 DEFAULT_CHUNK = 500
 

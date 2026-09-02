@@ -10,13 +10,13 @@ import re
 from pathlib import Path
 
 import pytest
+from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
 from digiquant.execution.remaining_hops import (
     OVERLAY_RUN_STATUSES,
     REMAINING_HOP_BLOCKER_CODES,
     REMAINING_LIVE_HOPS,
     STRIPE_CHECKOUT_TIERS,
 )
-from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
 
 pytestmark = pytest.mark.unit
 

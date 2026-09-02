@@ -19,8 +19,7 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.research.forecast_registry import AMENDMENTS, ASSESSMENTS
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastAmendment,
@@ -35,7 +34,8 @@ from digiquant.portfolio.models.forecast_calibration import (
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.forecast_registry import AMENDMENTS, ASSESSMENTS
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

@@ -231,13 +231,13 @@ class TestRosterBreakdownContributor:
 
     @staticmethod
     def _state(roster_len: int) -> object:
+        from digiquant.portfolio.state import PortfolioState
         from digiquant.research.state import (
-            ResearchConfigBundle,
             ExcludedTicker,
             FocusRosterEntry,
             PhasePortfolioState,
+            ResearchConfigBundle,
         )
-        from digiquant.portfolio.state import PortfolioState
 
         state = PortfolioState(
             run_type="delta",

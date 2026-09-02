@@ -13,15 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from digiquant.research.dashboard_digest import portfolio_preferences_static
-from digiquant.research.state import ResearchConfigBundle, ResearchState
-from digiquant.research.supabase_io import (
-    SupabaseClient,
-    load_prior_book,
-    prior_book_current_weights,
-    publish_document,
-    query_price_deltas,
-)
+from digiquant.dashboard.tenancy import resolved_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import DecisionAction
 from digiquant.portfolio.turnover import mark_to_market_weights
 from digiquant.portfolio.writers.commit_io import (
@@ -43,7 +35,15 @@ from digiquant.portfolio.writers.ledger_io import (
     _symbol,
     append_commit_chain,
 )
-from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.research.dashboard_digest import portfolio_preferences_static
+from digiquant.research.state import ResearchConfigBundle, ResearchState
+from digiquant.research.supabase_io import (
+    SupabaseClient,
+    load_prior_book,
+    prior_book_current_weights,
+    publish_document,
+    query_price_deltas,
+)
 
 logger = logging.getLogger(__name__)
 

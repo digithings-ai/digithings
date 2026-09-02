@@ -84,9 +84,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from digiquant.research.snapshot import SnapshotEnvelope
 from digiquant.profiles.asset_preferences import AssetPreferences
 from digiquant.profiles.investment_profile import InvestmentProfile
+from digiquant.research.snapshot import SnapshotEnvelope
 
 # Word-boundary upper-case 1..5 chars — captures "AAPL", "XOM", "TSLA",
 # also "USA", "UK". Trade-off documented in the module docstring.

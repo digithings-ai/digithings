@@ -9,14 +9,14 @@ from uuid import UUID
 
 import polars as pl
 import pytest
+from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 from digiquant.research import risk_policy_registry as rpr
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     PhasePortfolioState,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
-from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 

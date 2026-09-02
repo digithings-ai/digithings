@@ -11,12 +11,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any  # score:allow untyped any — documents.payload jsonb shape
 
+from digiquant.dashboard.attention_plan import AttentionPlanShadowResult
 from digiquant.research.supabase_io import (
     PublishedArtifact,
     SupabaseClient,
     publish_document,
 )
-from digiquant.dashboard.attention_plan import AttentionPlanShadowResult
 
 ATTENTION_PLAN_DOCUMENT_KEY = "attention-plan"
 ATTENTION_PLAN_DOC_TYPE_COLUMN = "Attention Plan"

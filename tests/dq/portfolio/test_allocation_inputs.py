@@ -446,14 +446,14 @@ def test_long_plus_flat_roster_pins_matching_covariance() -> None:
 
 
 def test_from_state_fills_missing_horizons_with_default() -> None:
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
         assemble_allocation_input_bundle_from_state,
+    )
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
     )
 
     policy = _risk_policy()
@@ -483,14 +483,14 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
 
 def test_from_state_derives_coherent_non_default_horizon() -> None:
     """#2814: coherent H6 horizon ≠ 21 must assemble — not reject via expected=21."""
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
         assemble_allocation_input_bundle_from_state,
+    )
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
     )
 
     policy = _risk_policy()

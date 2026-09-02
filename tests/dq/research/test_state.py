@@ -5,10 +5,14 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
+from digiquant.dashboard.temporal import (
+    KnowledgeCutoffError,
+    capture_knowledge_cutoff_at,
+    require_knowledge_cutoff_at,
+    require_utc_datetime,
+)
 from digiquant.research.graph import ResearchInput, initial_state
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Carried,
     DataLayerSnapshot,
     DeltaTriageDecision,
@@ -19,18 +23,14 @@ from digiquant.research.state import (
     PhasePortfolioState,
     PriorContext,
     PublishedArtifact,
+    ResearchConfigBundle,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
     SegmentSlotCollisionError,
     _merge_phase_portfolio,
     _merge_right_wins_dict,
     _merge_segment_dict,
-)
-from digiquant.dashboard.temporal import (
-    KnowledgeCutoffError,
-    capture_knowledge_cutoff_at,
-    require_knowledge_cutoff_at,
-    require_utc_datetime,
 )
 from pydantic import ValidationError
 

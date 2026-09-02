@@ -9,15 +9,15 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
+from digiquant.portfolio.phases.phase9_evolution import Phase9Artifacts, build_phase9
 from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
 from digiquant.research.phases.phase_monthly import MonthlyDigest, build_phase_monthly
 from digiquant.research.state import (
-    ResearchState,
     DataLayerSnapshot,
     PriorContext,
+    ResearchState,
 )
 from digiquant.research.triage import evaluate, make_triage_gate
-from digiquant.portfolio.phases.phase9_evolution import Phase9Artifacts, build_phase9
 
 
 def _delta_state(

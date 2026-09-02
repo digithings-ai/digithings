@@ -6,7 +6,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.asof_dataset import (
     AsOfDatasetBuildError,
     AsOfDatasetSnapshot,
@@ -25,6 +24,7 @@ from digiquant.dashboard.replay.models import (
     TargetWeight,
 )
 from digiquant.dashboard.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

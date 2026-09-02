@@ -8,13 +8,6 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
-from digiquant.portfolio.writers.commit_io import (
-    OVERLAY_MANIFEST_PREFIX,
-    book_portfolio,
-    load_commit_manifests,
-    manifest_document_key,
-)
 from digiquant.dashboard.overlay.byok import ByokProbe
 from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
@@ -43,9 +36,16 @@ from digiquant.dashboard.tenancy import (
     SubscriptionStatus,
     house_workspace_id,
 )
+from digiquant.portfolio.writers.commit_io import (
+    OVERLAY_MANIFEST_PREFIX,
+    book_portfolio,
+    load_commit_manifests,
+    manifest_document_key,
+)
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.dashboard.overlay._sealed import sealed_openai
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

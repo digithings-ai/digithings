@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any  # score:allow untyped any — MCP search result dicts
 
-from digisearch.research_ingest import RESEARCH_FILTERABLE_FIELDS, RESEARCH_INDEX_NAME
 from digisearch.core.models import Query
+from digisearch.research_ingest import RESEARCH_FILTERABLE_FIELDS, RESEARCH_INDEX_NAME
 from digisearch.search._stub import query_index
 
 

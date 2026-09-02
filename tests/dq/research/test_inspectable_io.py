@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.inspectable_io import (
     BIAS_ROW_DOCUMENT_KEY,
     INPUTS_DOCUMENT_KEY,
@@ -15,12 +16,11 @@ from digiquant.research.inspectable_io import (
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     DataLayerSnapshot,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
 from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
 from digiquant.portfolio.writers.thesis_io import (
@@ -15,6 +14,7 @@ from digiquant.portfolio.writers.thesis_io import (
     merge_review_with_invalidation_hits,
     normalize_thesis_status,
 )
+from digiquant.research.state import PriorContext, ResearchConfigBundle, ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

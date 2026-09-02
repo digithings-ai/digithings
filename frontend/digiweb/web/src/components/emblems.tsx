@@ -171,7 +171,7 @@ export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digikey: DigiKey, digismith: DigiSmith, digiclaw: DigiClaw, digibase: DigiBase,
   digivault: DigiVault,
   digistore: DigiStore, digilink: DigiLink,
-  research: research, portfolio: portfolio, execution: execution,
+  atlas: research, hermes: portfolio, kairos: execution,
   research: research, portfolio: portfolio, execution: execution,
 };
 

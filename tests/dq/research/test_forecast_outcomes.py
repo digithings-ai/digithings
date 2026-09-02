@@ -8,13 +8,6 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.research import forecast_outcomes as fo
-from digiquant.research import forecast_registry as fr
-from digiquant.research.phases.preflight import (
-    PreflightReflectDeps,
-    build_preflight_reflect_node,
-)
-from digiquant.research.state import ResearchState
 from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
@@ -25,6 +18,13 @@ from digiquant.portfolio.models.forecast import (
     materialize_forecast_amendment,
 )
 from digiquant.portfolio.models.forecast_calibration import OutcomeStatus
+from digiquant.research import forecast_outcomes as fo
+from digiquant.research import forecast_registry as fr
+from digiquant.research.phases.preflight import (
+    PreflightReflectDeps,
+    build_preflight_reflect_node,
+)
+from digiquant.research.state import ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 

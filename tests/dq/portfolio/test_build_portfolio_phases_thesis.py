@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.research.state import ResearchState, PhasePortfolioState
 from digiquant.portfolio.graph import build_portfolio_graph, build_portfolio_phases_thesis
+from digiquant.research.state import PhasePortfolioState, ResearchState
 
 
 @pytest.mark.unit
@@ -66,11 +66,11 @@ class TestBuildPortfolioPhasesThesis:
         from unittest.mock import patch
 
         from digigraph.graph.pipeline_builder import build_pipeline
-        from digiquant.research.state import ResearchConfigBundle
         from digiquant.portfolio.phases.h4_opportunity_screener import (
             build_h4_opportunity_screener,
         )
         from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
+        from digiquant.research.state import ResearchConfigBundle
 
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
         state = ResearchState(

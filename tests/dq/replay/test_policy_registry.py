@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.models import PolicyBundle, PolicyFamily, PolicyVersionRef
 from digiquant.dashboard.replay.policy_registry import (
     PolicyRegistry,
@@ -14,6 +13,7 @@ from digiquant.dashboard.replay.policy_registry import (
     PolicyRegistryUnavailableError,
     RegisteredPolicyVersion,
 )
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

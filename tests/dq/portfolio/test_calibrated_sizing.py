@@ -365,20 +365,20 @@ def test_identical_raw_weights_yield_identical_post_control_book() -> None:
 def test_calibrated_book_stamps_bundle_hash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0"), "MSFT": ("0.03", "0.02", "1.0")})
     policy = _risk_policy()
@@ -438,20 +438,20 @@ def test_calibrated_book_stamps_bundle_hash(
 def test_empty_calibrated_coverage_falls_back_to_incumbent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     # Bundle present but no usable calibrated scores → characterized incumbent_fallback.
     base = _bundle(returns={"AAPL": ("0.05", "0.02", "1.0")})

@@ -13,21 +13,6 @@ import pathlib
 from datetime import date
 
 import pytest
-from digiquant.research.graph import ResearchGraphDeps, build_research_graph
-from digiquant.research.phases.preflight import PreflightDeps
-from digiquant.research.phases.publish_phase import PublishDeps
-from digiquant.research.phases.triage_phase import TriageDeps
-from digiquant.research.research_attention import resolve_research_attention_rollout_mode
-from digiquant.research.state import ResearchConfigBundle
-from digiquant.portfolio.graph import (
-    PortfolioGraphDeps,
-    ThesisGraphDeps,
-    build_portfolio_graph,
-    build_portfolio_phases_thesis,
-)
-from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
-from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
-from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 from digiquant.dashboard.research_retrieval import (
     assert_blinded_h5_prompt,
     assert_blinded_h6_prompt,
@@ -44,14 +29,28 @@ from digiquant.dashboard.research_retrieval.planner import (
     resolve_h6_selection_mode,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.graph import (
+    PortfolioGraphDeps,
+    ThesisGraphDeps,
+    build_portfolio_graph,
+    build_portfolio_phases_thesis,
+)
+from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+from digiquant.research.graph import ResearchGraphDeps, build_research_graph
+from digiquant.research.phases.preflight import PreflightDeps
+from digiquant.research.phases.publish_phase import PublishDeps
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.research_attention import resolve_research_attention_rollout_mode
+from digiquant.research.state import ResearchConfigBundle
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.portfolio.phase3_e2e_fixtures import (
-    RESEARCH_COMPILED_NODES,
     FORBIDDEN_PHASE3_NODES,
-    PORTFOLIO_COMPILED_NODES,
     PHASE3_RUN_ID,
+    PORTFOLIO_COMPILED_NODES,
     PRODUCTION_GUARD_PATHS,
+    RESEARCH_COMPILED_NODES,
     assert_research_plan_preserves_h4_roster,
     phase3_attention_plan,
     phase3_h6_selection,
@@ -59,6 +58,7 @@ from tests.dq.portfolio.phase3_e2e_fixtures import (
     production_imports_enforce_promotion,
     run_phase3_composition,
 )
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

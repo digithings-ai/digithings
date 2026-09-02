@@ -9,20 +9,6 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    FocusRosterEntry,
-    PhasePortfolioState,
-    PriorContext,
-)
-from digiquant.portfolio.focus_roster import with_fanout_ticker
-from digiquant.portfolio.models.deliberation import (
-    DeliberationAnalystTurn,
-    DeliberationPmTurn,
-    MissingFactProposal,
-)
-from digiquant.portfolio.phases import h6_deliberation
 from digiquant.dashboard.research_retrieval.evidence_bundle import (
     H5EvidenceFact,
     build_h5_evidence_bundle,
@@ -30,6 +16,20 @@ from digiquant.dashboard.research_retrieval.evidence_bundle import (
 from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
 from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.focus_roster import with_fanout_ticker
+from digiquant.portfolio.models.deliberation import (
+    DeliberationAnalystTurn,
+    DeliberationPmTurn,
+    MissingFactProposal,
+)
+from digiquant.portfolio.phases import h6_deliberation
+from digiquant.research.state import (
+    FocusRosterEntry,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
 pytestmark = pytest.mark.unit
 

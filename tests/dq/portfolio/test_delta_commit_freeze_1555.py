@@ -30,7 +30,7 @@ from datetime import date
 import pytest
 from digiquant.research import diagnostics
 from digiquant.research.graph import ResearchInput
-from digiquant.research.state import ResearchState, PhasePortfolioState
+from digiquant.research.state import PhasePortfolioState, ResearchState
 from digiquant.research.testing.simulator import (
     build_quiet_day_canned_extras,
     simulated_pipeline,

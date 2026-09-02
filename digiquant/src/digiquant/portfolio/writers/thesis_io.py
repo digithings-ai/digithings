@@ -11,7 +11,7 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 from digiquant.portfolio.models.thesis import (
     MarketThesisExplorationOutput,
     ThesisProposal,
@@ -19,7 +19,7 @@ from digiquant.portfolio.models.thesis import (
     ThesisStatusUpdate,
     ThesisVehicleMapOutput,
 )
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

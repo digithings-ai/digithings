@@ -39,9 +39,12 @@ from typing import (
 )
 from uuid import UUID, uuid4
 
-from digiquant.research.state import ResearchState
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.envcompat import PORTFOLIO_LEDGER, env_lookup
+from digiquant.dashboard.overlay.persist import (
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.dashboard.tenancy import resolved_workspace_id
 from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -57,11 +60,8 @@ from digiquant.portfolio.models.portfolio_ledger import (
 from digiquant.portfolio.sizing import SizingCaps
 from digiquant.portfolio.sizing_events import SizingAdjustment
 from digiquant.portfolio.turnover import no_trade_band_pp
-from digiquant.dashboard.overlay.persist import (
-    require_overlay_legacy_book_safe,
-    require_overlay_persist,
-)
-from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.research.state import ResearchState
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

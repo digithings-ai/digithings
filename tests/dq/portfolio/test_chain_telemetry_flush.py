@@ -15,8 +15,8 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: opaque ChainDeps/monkeypatch args
 
 import pytest
-from digiquant.research.graph import ResearchInput
 from digiquant.portfolio import chain as chain_mod
+from digiquant.research.graph import ResearchInput
 
 from digigraph import usage as _usage
 

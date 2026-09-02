@@ -37,11 +37,11 @@ from digiquant.brokers.contracts import (
     BrokerPosition,
     OrderSide,
 )
-from digiquant.portfolio.writers.ledger_io import _insert
 from digiquant.execution.router import (
     BROKER_ORDERS,
     broker_order_status_id,
 )
+from digiquant.portfolio.writers.ledger_io import _insert
 
 logger = logging.getLogger(__name__)
 

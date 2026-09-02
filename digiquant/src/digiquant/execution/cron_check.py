@@ -11,10 +11,10 @@ from collections.abc import Callable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from digiquant.notify.mailgun import format_mailgun_not_configured, missing_mailgun_env_names
+from digiquant.dashboard.overlay.cron import main as overlay_main
 from digiquant.execution.route_cron import main as route_main
 from digiquant.execution.sync_cron import main as sync_main
-from digiquant.dashboard.overlay.cron import main as overlay_main
+from digiquant.notify.mailgun import format_mailgun_not_configured, missing_mailgun_env_names
 
 
 class CronCheckResult(BaseModel):

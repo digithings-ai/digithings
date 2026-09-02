@@ -15,12 +15,12 @@ from typing import (
 
 import polars as pl
 
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.data.prices.breadth import compute_breadth
 from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
-from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
 from digiquant.portfolio.ticker_fingerprint import (
     deliberation_skip_signal,
     news_hash_for_ticker,
     ticker_triage_signal,
 )
+from digiquant.research.state import PriorContext, ResearchConfigBundle, ResearchState
 
 
 @pytest.mark.unit

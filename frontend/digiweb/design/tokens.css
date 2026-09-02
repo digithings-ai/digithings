@@ -34,9 +34,9 @@
   --accent-research:      #6fbf94;
   --accent-portfolio:     #4a8f7b;
   --accent-execution:     #2f7a65;
-  --accent-research:   var(--accent-research);
-  --accent-portfolio:  var(--accent-portfolio);
-  --accent-execution:  var(--accent-execution);
+  --accent-atlas:   var(--accent-research);
+  --accent-hermes:  var(--accent-portfolio);
+  --accent-kairos:  var(--accent-execution);
   --accent-digisearch: #5aa3c4;
   --accent-digichat:   #e2708a; /* ruled 2026-07-06: digichat splits off digiquant's shared cyan —
                                    now a standalone consumer chat surface, it earns its own voice.
@@ -129,9 +129,9 @@
 .accent-research      { --accent: var(--accent-research); }
 .accent-portfolio     { --accent: var(--accent-portfolio); }
 .accent-execution     { --accent: var(--accent-execution); }
-.accent-research   { --accent: var(--accent-research); }
-.accent-portfolio  { --accent: var(--accent-portfolio); }
-.accent-execution  { --accent: var(--accent-execution); }
+.accent-atlas   { --accent: var(--accent-research); }
+.accent-hermes  { --accent: var(--accent-portfolio); }
+.accent-kairos  { --accent: var(--accent-execution); }
 .accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
@@ -305,9 +305,9 @@
   --accent-research: var(--ink);
   --accent-portfolio: var(--ink);
   --accent-execution: var(--ink);
-  --accent-research: var(--ink);
-  --accent-portfolio: var(--ink);
-  --accent-execution: var(--ink);
+  --accent-atlas: var(--ink);
+  --accent-hermes: var(--ink);
+  --accent-kairos: var(--ink);
 
   /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
      Serif/sans escape hatches set --font-display / --font-sans locally.

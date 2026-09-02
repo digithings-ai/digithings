@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — heterogeneous fake-row / fixture dicts
 
 import pytest
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
@@ -22,7 +23,6 @@ from digiquant.portfolio.writers.opening_snapshot import (
     cold_start_requires_seed,
     ensure_legacy_opening_snapshot,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 

@@ -8,17 +8,10 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.research_attention import (
-    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
-    attention_store_for_run,
-    reset_attention_stores,
-)
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    FocusRosterEntry,
-    PhasePortfolioState,
-    PriorContext,
+from digiquant.dashboard.research_retrieval.planner import (
+    AttentionMode,
+    AttentionPlan,
+    AttentionRolloutMode,
 )
 from digiquant.portfolio.models.analyst import AnalystPayload
 from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportunity_screener
@@ -30,10 +23,17 @@ from digiquant.portfolio.research_attention import (
     research_attention_h6_enforce_path,
     resolve_h6_attention_decision,
 )
-from digiquant.dashboard.research_retrieval.planner import (
-    AttentionMode,
-    AttentionPlan,
-    AttentionRolloutMode,
+from digiquant.research.research_attention import (
+    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+    attention_store_for_run,
+    reset_attention_stores,
+)
+from digiquant.research.state import (
+    FocusRosterEntry,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
 
 pytestmark = pytest.mark.unit

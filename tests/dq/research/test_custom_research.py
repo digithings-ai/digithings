@@ -29,9 +29,9 @@ from digiquant.research.graph import (
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
 from digiquant.research.state import (
+    Carried,  # noqa: F401 — re-export check
     ResearchConfigBundle,
     ResearchState,
-    Carried,  # noqa: F401 — re-export check
     SegmentPayload,
     SegmentSlot,
 )

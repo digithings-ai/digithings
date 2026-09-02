@@ -40,8 +40,8 @@ from digiquant.dashboard.research_retrieval.store import (
 from digiquant.dashboard.research_retrieval.tools import resolve_retrieval_manifest_mode
 from digiquant.dashboard.tenancy import house_workspace_id
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.dashboard.test_context_compiler import _evidence, _loaded_state
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 _TS = datetime(2026, 8, 26, 18, 0, tzinfo=UTC)
 

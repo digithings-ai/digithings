@@ -7,7 +7,6 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.thesis import MarketThesisExplorationOutput, ThesisProposal
 from digiquant.portfolio.phases.h2_market_thesis_exploration import _reviewed_status_by_id
 from digiquant.portfolio.writers.thesis_io import (
@@ -15,6 +14,7 @@ from digiquant.portfolio.writers.thesis_io import (
     upsert_thesis_row,
     validate_market_thesis_proposals,
 )
+from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 from pydantic import ValidationError
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient

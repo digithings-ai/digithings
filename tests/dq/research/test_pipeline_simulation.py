@@ -20,6 +20,14 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
+from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
+from digiquant.portfolio.models.deliberation import (
+    DeliberationAnalystTurn,
+    DeliberationPmTurn,
+    MissingFactProposal,
+)
 from digiquant.research.graph import ResearchInput
 from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.research.testing import (
@@ -28,14 +36,6 @@ from digiquant.research.testing import (
     parse_schema_name,
     simulated_pipeline,
 )
-from digiquant.portfolio.graph import PortfolioGraphDeps, ThesisGraphDeps
-from digiquant.portfolio.models.deliberation import (
-    DeliberationAnalystTurn,
-    DeliberationPmTurn,
-    MissingFactProposal,
-)
-from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -425,12 +425,12 @@ class TestPhase3ResearchComposition:
     """Integration 3.1 — one-graph Phase 3 lock surface (#3019)."""
 
     def test_simulator_graphs_exclude_planner_nodes(self) -> None:
-        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
-        from digiquant.research.phases.preflight import PreflightDeps
-        from digiquant.research.phases.triage_phase import TriageDeps
         from digiquant.portfolio.graph import build_portfolio_graph
         from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
         from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+        from digiquant.research.graph import ResearchGraphDeps, build_research_graph
+        from digiquant.research.phases.preflight import PreflightDeps
+        from digiquant.research.phases.triage_phase import TriageDeps
 
         from tests.dq.portfolio.phase3_e2e_fixtures import FORBIDDEN_PHASE3_NODES
 

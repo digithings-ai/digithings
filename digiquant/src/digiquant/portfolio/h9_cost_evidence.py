@@ -14,8 +14,7 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.research.state import ResearchState
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.action_cost_inputs import (
     ActionCostBindingError,
     action_cost_input_from_order,
@@ -34,7 +33,8 @@ from digiquant.portfolio.models.portfolio_ledger import (
     PortfolioCommit,
 )
 from digiquant.portfolio.models.risk_policy import RiskPolicy
-from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.state import ResearchState
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

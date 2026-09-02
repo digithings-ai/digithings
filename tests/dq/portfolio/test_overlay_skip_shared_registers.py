@@ -12,20 +12,9 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from digiquant.research.decision_log import (
-    ReflectorOutput,
-    persist_pending,
-    resolve_pending,
-)
-from digiquant.research.graph import ResearchGraphDeps, ResearchInput
-from digiquant.research.phases.preflight import (
-    PreflightDeps,
-    PreflightReflectDeps,
-    build_preflight_node,
-    build_preflight_reflect_node,
-)
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
-from digiquant.research.supabase_io import upsert_onchain_cohort_positioning
+from digiquant.dashboard.learning.beliefs_distillation import distill_beliefs
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.chain import ChainDeps, _run_beliefs_fold
 from digiquant.portfolio.graph import PortfolioGraphDeps
 from digiquant.portfolio.models.thesis import (
@@ -42,9 +31,20 @@ from digiquant.portfolio.writers.thesis_io import (
     upsert_thesis_row,
     upsert_thesis_vehicles,
 )
-from digiquant.dashboard.learning.beliefs_distillation import distill_beliefs
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.decision_log import (
+    ReflectorOutput,
+    persist_pending,
+    resolve_pending,
+)
+from digiquant.research.graph import ResearchGraphDeps, ResearchInput
+from digiquant.research.phases.preflight import (
+    PreflightDeps,
+    PreflightReflectDeps,
+    build_preflight_node,
+    build_preflight_reflect_node,
+)
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
+from digiquant.research.supabase_io import upsert_onchain_cohort_positioning
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -603,8 +603,8 @@ def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
     That state used to have ``workspace_id=None``, so beliefs fold took the
     house path and stamped ``beliefs_folded_at`` on every unfolded row.
     """
-    from digiquant.portfolio.chain import run_research_then_portfolio
     from digiquant.dashboard.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import run_research_then_portfolio
 
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
@@ -646,8 +646,8 @@ def test_overlay_beliefs_fold_skips_when_research_crashes_before_preflight(
 def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.portfolio.chain import DiagnosticsDeps, run_research_then_portfolio
     from digiquant.dashboard.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import DiagnosticsDeps, run_research_then_portfolio
 
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]

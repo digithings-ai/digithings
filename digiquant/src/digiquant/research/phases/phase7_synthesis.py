@@ -19,6 +19,15 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from digiquant.dashboard.edit_mode import DocumentPatch, MergeError, merge_document_patch
+from digiquant.dashboard.edit_mode.content_identity import (
+    UNCHANGED_FLAG_KEY,
+    UNCHANGED_SINCE_KEY,
+)
+from digiquant.dashboard.edit_mode.models import TriageSignal
+from digiquant.dashboard.edit_mode.prior import PriorPublished
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
 from digiquant.research.phases._node_factory import (
     _edit_phase_inputs,
     _shared_context,
@@ -37,19 +46,10 @@ from digiquant.research.segments import (
 )
 from digiquant.research.skills import load_skill, load_skill_edit
 from digiquant.research.state import (
-    ResearchState,
     PhaseError,
+    ResearchState,
     refresh_scope_forces_full,
 )
-from digiquant.dashboard.edit_mode import DocumentPatch, MergeError, merge_document_patch
-from digiquant.dashboard.edit_mode.content_identity import (
-    UNCHANGED_FLAG_KEY,
-    UNCHANGED_SINCE_KEY,
-)
-from digiquant.dashboard.edit_mode.models import TriageSignal
-from digiquant.dashboard.edit_mode.prior import PriorPublished
-from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
-from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 

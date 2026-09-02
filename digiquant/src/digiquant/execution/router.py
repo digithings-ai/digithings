@@ -37,17 +37,17 @@ from digiquant.brokers.contracts import (
     OrderType,
     TimeInForce,
 )
+from digiquant.execution.policy import (
+    ForeignWorkspaceIntentError,
+    InconsistentOrderChainError,
+    resolve_venue,
+)
 from digiquant.portfolio.models.portfolio_ledger import DecisionAction
 from digiquant.portfolio.writers.execution_io import (
     _directions_by_order,
     _pending_order_heads,
 )
 from digiquant.portfolio.writers.ledger_io import ORDER_INTENTS, _insert
-from digiquant.execution.policy import (
-    ForeignWorkspaceIntentError,
-    InconsistentOrderChainError,
-    resolve_venue,
-)
 
 logger = logging.getLogger(__name__)
 

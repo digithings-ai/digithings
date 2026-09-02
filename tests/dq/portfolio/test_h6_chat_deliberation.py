@@ -12,18 +12,18 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    FocusRosterEntry,
-    PhasePortfolioState,
-)
 from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
 )
 from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
 from digiquant.portfolio.skills import load_skill_full
+from digiquant.research.state import (
+    FocusRosterEntry,
+    PhasePortfolioState,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
 pytestmark = pytest.mark.unit
 

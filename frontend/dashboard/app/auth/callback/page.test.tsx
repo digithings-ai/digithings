@@ -48,7 +48,6 @@ vi.mock('next/link', () => ({
 
 vi.mock('@/components/dashboard-mark', () => ({
   DashboardMark: () => createElement('span', null, 'mark'),
-  DashboardMark: () => createElement('span', null, 'mark'),
 }));
 
 vi.mock('@/lib/supabase', async () => {

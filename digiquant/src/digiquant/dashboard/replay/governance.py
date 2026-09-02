@@ -19,7 +19,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.comparison import (
     EvidenceMode,
     MetricAvailability,
@@ -35,6 +34,7 @@ from digiquant.dashboard.replay.governance_models import (
 )
 from digiquant.dashboard.replay.store import PolicyReplayStore
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 HashHex64: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]

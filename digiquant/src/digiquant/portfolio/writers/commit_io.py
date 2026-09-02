@@ -11,6 +11,19 @@ from typing import (
 )
 from uuid import UUID
 
+from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
+from digiquant.dashboard.overlay.persist import (
+    is_private_workspace,
+    portfolio_document_key,
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.risk_envelope import risk_horizon_days
+from digiquant.portfolio.sector_map import sector_bucket
 from digiquant.research.decision_log import persist_pending
 from digiquant.research.pretrade_risk_registry import (
     PreTradeRiskRegistryConflict,
@@ -18,25 +31,12 @@ from digiquant.research.pretrade_risk_registry import (
     persist_pretrade_risk_report,
     pretrade_risk_report_id,
 )
-from digiquant.research.state import ResearchState, PublishedArtifact, RebalancePayload
+from digiquant.research.state import PublishedArtifact, RebalancePayload, ResearchState
 from digiquant.research.supabase_io import (
     SupabaseClient,
     load_prior_book,
     publish_document,
 )
-from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
-from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
-from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
-from digiquant.portfolio.risk_envelope import risk_horizon_days
-from digiquant.portfolio.sector_map import sector_bucket
-from digiquant.dashboard.overlay.persist import (
-    portfolio_document_key,
-    is_private_workspace,
-    require_overlay_legacy_book_safe,
-    require_overlay_persist,
-)
-from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 

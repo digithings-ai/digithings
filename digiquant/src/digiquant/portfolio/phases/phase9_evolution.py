@@ -30,11 +30,11 @@ from typing import (  # score:allow untyped any — used for JSON-derived dict s
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field, model_validator
 
+from digiquant.portfolio.state import PortfolioState
 from digiquant.research.decision_log import persist_pending
 from digiquant.research.phases._node_factory import _shared_context
 from digiquant.research.state import PhaseError
 from digiquant.research.supabase_io import SupabaseClient
-from digiquant.portfolio.state import PortfolioState
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
 

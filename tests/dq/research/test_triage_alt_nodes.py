@@ -19,9 +19,9 @@ from typing import Any  # score:allow untyped any — used for snapshot/injectio
 import pytest
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.research.state import (
-    ResearchState,
     DataLayerSnapshot,
     PriorContext,
+    ResearchState,
 )
 from digiquant.research.triage import evaluate
 

@@ -13,11 +13,11 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.learning.outcome_models import OutcomeEpisode
 from digiquant.dashboard.replay.canonical import walk_forward_fold_content_hash
 from digiquant.dashboard.replay.models import WalkForwardFold
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 __all__ = [
     "WalkForwardBuildResult",

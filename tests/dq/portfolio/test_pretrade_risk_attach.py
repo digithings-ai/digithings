@@ -34,18 +34,18 @@ def _run_h8(
     prior_book: list[dict[str, Any]] | None = None,
     current_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-        PriorContext,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        PriorContext,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
     from tests.dq.portfolio.test_calibrated_sizing import _bundle
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     returns = {t: ("0.06", "0.02", "1.0") for t in tickers}
     bundle = _bundle(returns=returns)
@@ -233,16 +233,16 @@ def test_builder_path_does_not_mutate_final_book_weights(
     book = result["book"]
     before = [dict(row) for row in book["recommended_portfolio"]]
     # Re-run attach helper against a mutable copy of the book payload.
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     run_date = date(2026, 6, 12)
     memo = PMDirectionMemo(
@@ -296,17 +296,17 @@ def test_report_failure_omits_report_without_changing_book(
         "build_pretrade_risk_report_for_final_book",
         lambda **_k: None,
     )
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
     from tests.dq.portfolio.test_calibrated_sizing import _bundle
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",)))

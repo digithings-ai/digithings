@@ -13,9 +13,9 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
 from digiquant.portfolio.phases.phase7d_pm import _load_pm_skill, _pm_node
 from digiquant.portfolio.skills import SkillNotFoundError
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
 
 pytestmark = pytest.mark.unit
 

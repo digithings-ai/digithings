@@ -7,8 +7,8 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from digiquant.portfolio.writers.ledger_io import _insert
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.writers.ledger_io import _insert
 
 pytestmark = pytest.mark.unit
 

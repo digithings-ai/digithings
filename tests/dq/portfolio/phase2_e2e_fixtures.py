@@ -14,6 +14,25 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
+from digiquant.dashboard.replay.allocation_comparison import (
+    ComparisonArm,
+    ComparisonArmInput,
+    ComparisonStatus,
+    build_shared_manifest,
+    compare_allocation_arms,
+    load_shadow_criteria,
+)
+from digiquant.dashboard.replay.models import (
+    ExecutionPolicy,
+    HoldingSnapshot,
+    InstrumentBarSeries,
+    OhlcvBar,
+    PortfolioReplayRequest,
+    PortfolioReplayResult,
+    PortfolioReplayStatus,
+    TargetWeight,
+    portfolio_replay_result_content_hash,
+)
 from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
@@ -59,25 +78,6 @@ from digiquant.portfolio.shadow_optimizer import (
     ShadowObjectiveParams,
     ShadowOptimizerRequest,
     evaluate_shadow_challenger,
-)
-from digiquant.dashboard.replay.allocation_comparison import (
-    ComparisonArm,
-    ComparisonArmInput,
-    ComparisonStatus,
-    build_shared_manifest,
-    compare_allocation_arms,
-    load_shadow_criteria,
-)
-from digiquant.dashboard.replay.models import (
-    ExecutionPolicy,
-    HoldingSnapshot,
-    InstrumentBarSeries,
-    OhlcvBar,
-    PortfolioReplayRequest,
-    PortfolioReplayResult,
-    PortfolioReplayStatus,
-    TargetWeight,
-    portfolio_replay_result_content_hash,
 )
 
 PHASE2_RUN_ID = "run-phase2-2820"

@@ -11,15 +11,6 @@ from uuid import UUID
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.cost_liquidity_registry import (
-    collect_cost_artifacts_from_bundles,
-    collect_risk_policy_from_state,
-    persist_cost_liquidity_bundles,
-)
-from digiquant.research.forecast_registry import persist_forecast_lineage_from_state
-from digiquant.research.risk_policy_registry import persist_h8_risk_snapshots_from_state
-from digiquant.research.state import PhaseError, PhasePortfolioState
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.h9_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
@@ -35,8 +26,8 @@ from digiquant.portfolio.writers.commit_io import (
     manifest_commit_seq,
     persist_decision_log,
     persist_validated_pretrade_risk_report,
-    publish_portfolio_documents,
     publish_portfolio_brief,
+    publish_portfolio_documents,
     resolve_prior_commit,
     save_commit_manifest,
     validate_pretrade_risk_report,
@@ -44,6 +35,15 @@ from digiquant.portfolio.writers.commit_io import (
     weights_from_sized_book,
 )
 from digiquant.portfolio.writers.ledger_io import LedgerAppend, append_commit_chain
+from digiquant.research.cost_liquidity_registry import (
+    collect_cost_artifacts_from_bundles,
+    collect_risk_policy_from_state,
+    persist_cost_liquidity_bundles,
+)
+from digiquant.research.forecast_registry import persist_forecast_lineage_from_state
+from digiquant.research.risk_policy_registry import persist_h8_risk_snapshots_from_state
+from digiquant.research.state import PhaseError, PhasePortfolioState
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

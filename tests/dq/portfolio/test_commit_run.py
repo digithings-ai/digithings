@@ -8,14 +8,7 @@ from datetime import date, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    ExcludedTicker,
-    FocusRosterEntry,
-    PhasePortfolioState,
-    PriorContext,
-)
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
 from digiquant.portfolio.writers.commit_io import (
@@ -37,7 +30,14 @@ from digiquant.portfolio.writers.ledger_io import (
 from digiquant.portfolio.writers.ledger_io import (
     _heads as _ledger_heads,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.state import (
+    ExcludedTicker,
+    FocusRosterEntry,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

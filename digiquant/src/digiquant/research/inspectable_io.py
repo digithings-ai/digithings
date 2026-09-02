@@ -13,7 +13,7 @@ from typing import Any  # score:allow untyped any — JSON-derived prior-context
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.research.state import ResearchState, Phase6BiasRow
+from digiquant.research.state import Phase6BiasRow, ResearchState
 from digiquant.research.supabase_io import (
     PublishedArtifact,
     SupabaseClient,

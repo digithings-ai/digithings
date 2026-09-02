@@ -10,14 +10,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PhasePortfolioState
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.portfolio_materialize import (
     MaterializeDeps,
     _default_invalidation,
     _upsert_portfolio_metrics,
     build_materialize_node,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.state import PhasePortfolioState, ResearchConfigBundle, ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

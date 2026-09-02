@@ -9,11 +9,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    PhasePortfolioState,
-)
 from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases import phase7e_risk_sizing
@@ -23,10 +18,15 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import (
 )
 from digiquant.portfolio.sizing import SizingCaps, TickerRisk, size_portfolio
 from digiquant.portfolio.skills import load_skill_full
+from digiquant.research.state import (
+    PhasePortfolioState,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
 from tests.dq.portfolio.test_calibrated_sizing import _bundle
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

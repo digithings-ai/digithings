@@ -13,11 +13,12 @@ from uuid import UUID
 
 import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 from digiquant.execution.sync_cron import (
     ALPACA_API_KEY_HOLD_REASON,
     SyncTarget,
-    format_execution_sync_not_configured,
     execution_sync_targets,
+    format_execution_sync_not_configured,
     load_execution_sync_targets,
     main,
     missing_execution_sync_apply_env_names,
@@ -25,7 +26,6 @@ from digiquant.execution.sync_cron import (
     parse_connection_row,
     plan_execution_sync,
 )
-from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
 pytestmark = pytest.mark.unit
 

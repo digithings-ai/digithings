@@ -27,8 +27,8 @@ from digiquant.dashboard.accounting.models import (
     PeriodStatus,
     TickerPeriodResult,
 )
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

@@ -11,13 +11,13 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
     TickerDirection,
 )
 from digiquant.portfolio.phases.h7_pm_direction import NODE_ID, _h7_node
+from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
 pytestmark = pytest.mark.unit
 

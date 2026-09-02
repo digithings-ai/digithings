@@ -8,7 +8,6 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.research.state import ResearchState, PhasePortfolioState, PriorContext
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
@@ -24,6 +23,7 @@ from digiquant.portfolio.models.pm_direction import (
     bind_forecast_references,
 )
 from digiquant.portfolio.phases.h7_pm_direction import _bind_forecast_references, _h7_node
+from digiquant.research.state import PhasePortfolioState, PriorContext, ResearchState
 
 pytestmark = pytest.mark.unit
 

@@ -6,6 +6,8 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
+from digiquant.dashboard.edit_mode.models import PriorPublished
+from digiquant.dashboard.research_retrieval.planner import AttentionMode, AttentionRolloutMode
 from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
 from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 from digiquant.research.research_attention import (
@@ -18,16 +20,14 @@ from digiquant.research.research_attention import (
     triage_phase_attention_update,
 )
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Carried,
     DeltaTriageDecision,
     DeltaTriageResult,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
     SegmentPayload,
 )
-from digiquant.dashboard.edit_mode.models import PriorPublished
-from digiquant.dashboard.research_retrieval.planner import AttentionMode, AttentionRolloutMode
 from pydantic import BaseModel
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient

@@ -61,6 +61,9 @@ from unittest.mock import patch
 # and duplicating it here would be drift-prone.
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
+from digiquant.portfolio.state import PortfolioState
 from digiquant.research.graph import (
     ResearchGraphDeps,
     ResearchInput,
@@ -71,16 +74,13 @@ from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectD
 from digiquant.research.phases.publish_phase import PublishDeps
 from digiquant.research.phases.triage_phase import TriageDeps
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Phase7DigestPayload,
     Phase9EvolutionPayload,
     RebalancePayload,
+    ResearchConfigBundle,
+    ResearchState,
     RiskDebatePayload,
 )
-from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
-from digiquant.portfolio.state import PortfolioState
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass

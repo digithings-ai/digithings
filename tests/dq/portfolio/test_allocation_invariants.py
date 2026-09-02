@@ -395,20 +395,20 @@ def test_identical_calibrated_raw_mix_yields_identical_post_control_book() -> No
 def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
-        PhasePortfolioState,
-    )
     from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
     from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
+    from digiquant.research.state import (
+        PhasePortfolioState,
+        ResearchConfigBundle,
+        ResearchState,
+    )
 
-    from tests.dq.research.test_supabase_io import FakeSupabaseClient
     from tests.dq.portfolio.test_allocation_inputs import _covariance, _risk_policy
+    from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     policy = _risk_policy()
@@ -471,13 +471,13 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
 
 
 def test_continuity_backstop_and_final_cap_invariants() -> None:
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
     from digiquant.research.state import (
-        ResearchConfigBundle,
-        ResearchState,
         PhasePortfolioState,
         PriorContext,
+        ResearchConfigBundle,
+        ResearchState,
     )
-    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     run_date = date(2026, 6, 12)
     state = ResearchState(

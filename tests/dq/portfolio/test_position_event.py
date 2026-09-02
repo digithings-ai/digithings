@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.portfolio.models.position_event import PositionEventRow
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.models.position_event import PositionEventRow
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

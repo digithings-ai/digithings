@@ -55,6 +55,30 @@ from digiquant.brokers.contracts import (
     LiveVenueNotAuthorizedError,
     OrderSide,
 )
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
+    JobStatus,
+    MemoryJobRunStore,
+    WorkspaceEntitlement,
+    dispatch_overlay_daily,
+)
+from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
+from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import (
+    PlanTier,
+    SubscriptionStatus,
+    WorkspaceType,
+    house_workspace_id,
+)
+from digiquant.execution.router import BROKER_ORDERS, broker_order_id, route_pending_orders
+from digiquant.execution.sync import (
+    BROKER_EXECUTIONS,
+    BROKER_POSITION_SNAPSHOTS,
+    SyncCursor,
+    broker_execution_id,
+    sync_connection,
+)
 from digiquant.notify.dispatch import dispatch_workspace
 from digiquant.notify.entitlements import ArtifactClass, can
 from digiquant.notify.entitlements import PlanTier as NotifyPlanTier
@@ -76,30 +100,6 @@ from digiquant.portfolio.writers.ledger_io import (
     ORDER_INTENTS,
     REQUESTED_TARGETS,
     _insert,
-)
-from digiquant.execution.router import BROKER_ORDERS, broker_order_id, route_pending_orders
-from digiquant.execution.sync import (
-    BROKER_EXECUTIONS,
-    BROKER_POSITION_SNAPSHOTS,
-    SyncCursor,
-    broker_execution_id,
-    sync_connection,
-)
-from digiquant.dashboard.overlay.byok import ByokProbe
-from digiquant.dashboard.overlay.dispatch import (
-    JobStatus,
-    MemoryJobRunStore,
-    WorkspaceEntitlement,
-    dispatch_overlay_daily,
-)
-from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
-from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
-from digiquant.dashboard.research_corpus import ResearchCorpusStore
-from digiquant.dashboard.tenancy import (
-    PlanTier,
-    SubscriptionStatus,
-    WorkspaceType,
-    house_workspace_id,
 )
 from digiquant.vault.envelope import ApiKeyCredential, MasterKey, fingerprint
 

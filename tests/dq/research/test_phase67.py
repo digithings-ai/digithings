@@ -11,6 +11,10 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
+from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision, build_phase7d
 from digiquant.research import diagnostics
 from digiquant.research.phases.phase6_consolidate import build_phase6
 from digiquant.research.phases.phase7_synthesis import (
@@ -29,19 +33,15 @@ from digiquant.research.phases.phase7_synthesis import (
 )
 from digiquant.research.skills import load_skill
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Carried,
     PhasePortfolioState,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )
 from digiquant.research.testing.simulator import parse_schema_name
-from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
-from digiquant.portfolio.models.analyst import AnalystPayload
-from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
-from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision, build_phase7d
 
 
 def _seed_state_through_phase5() -> ResearchState:

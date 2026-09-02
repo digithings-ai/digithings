@@ -9,7 +9,6 @@ from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
@@ -36,6 +35,7 @@ from digiquant.dashboard.replay.models import (
     build_replay_pair,
 )
 from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.service import set_policy_replay_store
 
 pytestmark = pytest.mark.unit

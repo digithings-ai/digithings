@@ -11,13 +11,6 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    FocusRosterEntry,
-    PhasePortfolioState,
-    PriorContext,
-)
 from digiquant.portfolio.focus_roster import with_fanout_ticker
 from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
@@ -30,6 +23,13 @@ from digiquant.portfolio.phases import h6_deliberation
 from digiquant.portfolio.phases.h6_deliberation import (
     build_h6_deliberation,
     build_h6_from_state,
+)
+from digiquant.research.state import (
+    FocusRosterEntry,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
 
 

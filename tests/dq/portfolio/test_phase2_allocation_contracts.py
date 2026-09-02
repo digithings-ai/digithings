@@ -14,11 +14,9 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    PhasePortfolioState,
-)
+from digiquant.dashboard.replay.allocation_comparison import ComparisonStatus
+from digiquant.dashboard.replay.models import PortfolioReplayStatus
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
 from digiquant.portfolio.allocation_hashes import weights_fingerprint
 from digiquant.portfolio.graph import (
@@ -37,15 +35,16 @@ from digiquant.portfolio.writers.commit_io import (
     PreTradeRiskMode,
     validate_pretrade_risk_report,
 )
-from digiquant.dashboard.replay.allocation_comparison import ComparisonStatus
-from digiquant.dashboard.replay.models import PortfolioReplayStatus
-from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
+from digiquant.research.state import (
+    PhasePortfolioState,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.portfolio.phase2_e2e_fixtures import (
     FORBIDDEN_PHASE2_NODES,
-    PORTFOLIO_COMPILED_NODES,
     PHASE2_RUN_ID,
+    PORTFOLIO_COMPILED_NODES,
     PRODUCTION_GUARD_PATHS,
     load_isolation_checker,
     phase2_comparison_report,
@@ -54,6 +53,7 @@ from tests.dq.portfolio.phase2_e2e_fixtures import (
     production_imports_challenger,
     run_phase2_composition,
 )
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

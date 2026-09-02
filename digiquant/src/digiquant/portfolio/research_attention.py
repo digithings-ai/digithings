@@ -16,18 +16,8 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 )
 from uuid import UUID
 
-from digiquant.research.research_attention import (
-    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
-    attention_store_for_run,
-    lookup_attention_decision,
-    resolve_research_attention_rollout_mode,
-)
-from digiquant.research.state import FocusRosterEntry
-from digiquant.research.supabase_io import prior_book_current_weights
 from digiquant.dashboard.edit_mode.models import PriorPublished
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
-from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.state import PortfolioState
 from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
@@ -40,6 +30,16 @@ from digiquant.dashboard.research_retrieval.planner import (
     plan_research_attention,
     route_attention,
 )
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.state import PortfolioState
+from digiquant.research.research_attention import (
+    OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+    attention_store_for_run,
+    lookup_attention_decision,
+    resolve_research_attention_rollout_mode,
+)
+from digiquant.research.state import FocusRosterEntry
+from digiquant.research.supabase_io import prior_book_current_weights
 
 logger = logging.getLogger(__name__)
 

@@ -198,8 +198,8 @@ class TestChainResearchGate:
     """
 
     def test_failed_research_skips_portfolio(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.research.state import PhaseError
         from digiquant.portfolio import chain as chain_mod
+        from digiquant.research.state import PhaseError
 
         portfolio_built: list[bool] = []
 
@@ -329,8 +329,8 @@ class TestChainKnowledgeCutoff:
     ) -> None:
         from datetime import UTC, datetime
 
-        from digiquant.portfolio import chain as chain_mod
         from digiquant.dashboard.temporal import require_knowledge_cutoff_at
+        from digiquant.portfolio import chain as chain_mod
 
         pinned = datetime(2026, 4, 26, 9, 15, 0, tzinfo=UTC)
 
@@ -378,9 +378,9 @@ def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
     chain records-and-continues, ``execute_overlay`` finishes succeeded and
     the remaining hop lights without cutover 113.
     """
-    from digiquant.research.state import ResearchState
-    from digiquant.portfolio.chain import _safe_invoke_graph
     from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked
+    from digiquant.portfolio.chain import _safe_invoke_graph
+    from digiquant.research.state import ResearchState
 
     class _Boom:
         def invoke(self, *_args: object, **_kwargs: object) -> None:

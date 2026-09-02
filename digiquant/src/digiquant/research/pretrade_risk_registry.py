@@ -21,8 +21,8 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

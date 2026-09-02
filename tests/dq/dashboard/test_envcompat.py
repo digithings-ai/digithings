@@ -13,8 +13,8 @@ from digiquant.dashboard.envcompat import (
     STAGING_USER_JWT,
     env_lookup,
 )
-from digiquant.execution.policy import routing_enabled, routing_enabled_in
 from digiquant.dashboard.overlay.persist import overlay_persist_enabled
+from digiquant.execution.policy import routing_enabled, routing_enabled_in
 
 pytestmark = pytest.mark.unit
 

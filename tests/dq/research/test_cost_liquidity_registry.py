@@ -8,7 +8,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.research import cost_liquidity_registry as clr
 from digiquant.portfolio.action_cost_inputs import ActionCostInput, ActionCostSide
 from digiquant.portfolio.cost_liquidity import (
     estimate_action_cost,
@@ -24,6 +23,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
     paper_execution_id,
 )
 from digiquant.portfolio.risk_policy import resolve_risk_policy
+from digiquant.research import cost_liquidity_registry as clr
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 

@@ -13,13 +13,13 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.portfolio.models.forecast import ForecastTerms
 from digiquant.dashboard.research_retrieval.models import (
     TypedProvenance,
     evidence_content_hash,
     evidence_record_id,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.models.forecast import ForecastTerms
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

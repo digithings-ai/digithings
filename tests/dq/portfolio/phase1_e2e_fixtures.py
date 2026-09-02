@@ -9,17 +9,17 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.research.testing.simulator import (
-    DEFAULT_RESPONSES,
-    parse_phase_inputs,
-    seed_supabase_client,
-)
 from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
     forecast_outcome_content_hash,
     forecast_outcome_id,
+)
+from digiquant.research.testing.simulator import (
+    DEFAULT_RESPONSES,
+    parse_phase_inputs,
+    seed_supabase_client,
 )
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse

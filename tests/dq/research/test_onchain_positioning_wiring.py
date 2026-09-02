@@ -23,9 +23,9 @@ from digiquant.data.onchain.hyperdash import CohortPositioning, cohort_summary_t
 from digiquant.research.phases.phase6_consolidate import build_phase6
 from digiquant.research.phases.phase7_synthesis import build_phase7
 from digiquant.research.state import (
+    DataLayerSnapshot,
     ResearchConfigBundle,
     ResearchState,
-    DataLayerSnapshot,
     SegmentPayload,
     SegmentSlot,
 )

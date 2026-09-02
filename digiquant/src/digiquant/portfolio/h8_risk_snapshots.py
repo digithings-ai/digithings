@@ -14,7 +14,7 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.research.state import ResearchState
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     PolicyArtifactStatus,
@@ -27,7 +27,7 @@ from digiquant.portfolio.models.risk_policy import (
     snapshot_hash_payload,
 )
 from digiquant.portfolio.risk_policy import resolve_covariance_snapshot, resolve_risk_policy
-from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.state import ResearchState
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from unittest.mock import patch
 
 import pytest
-from digiquant.research.state import ResearchConfigBundle, FocusRosterEntry, PriorContext
 from digiquant.portfolio.focus_roster import with_fanout_ticker
 from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
@@ -26,6 +25,7 @@ from digiquant.portfolio.models.forecast import (
 )
 from digiquant.portfolio.phases import h6_deliberation
 from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
+from digiquant.research.state import FocusRosterEntry, PriorContext, ResearchConfigBundle
 
 pytestmark = pytest.mark.unit
 
@@ -73,7 +73,7 @@ def _assessment() -> ForecastAssessment:
 
 
 def _state(*, assessment: ForecastAssessment | None = None) -> Any:
-    from digiquant.research.state import ResearchState, PhasePortfolioState
+    from digiquant.research.state import PhasePortfolioState, ResearchState
 
     fa = assessment or _assessment()
     return ResearchState(
@@ -150,7 +150,7 @@ class TestH6ForecastLineageCarry:
         assert summary.get("forecast_amendment") is not None
         assert summary["forecast_amendment"]["amendment_id"] == str(amendment.amendment_id)
         from digiquant.research.forecast_registry import collect_lineage_from_state
-        from digiquant.research.state import ResearchState, PhasePortfolioState
+        from digiquant.research.state import PhasePortfolioState, ResearchState
 
         collected_state = ResearchState(
             run_type="delta",
@@ -186,8 +186,8 @@ class TestH6ForecastLineageCarry:
 
 def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
     """Published debate shape must retain the amendment dump for registry retry."""
-    from digiquant.research.state import ResearchState, PhasePortfolioState
     from digiquant.portfolio.payloads import deliberation_summaries
+    from digiquant.research.state import PhasePortfolioState, ResearchState
 
     base = _assessment()
     amendment = materialize_forecast_amendment(

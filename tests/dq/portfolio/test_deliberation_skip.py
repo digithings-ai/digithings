@@ -7,15 +7,15 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
+from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     FocusRosterEntry,
     PhasePortfolioState,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
-from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
-from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker
 
 
 def _quiet_state() -> ResearchState:

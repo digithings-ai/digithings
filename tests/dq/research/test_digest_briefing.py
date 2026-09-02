@@ -23,7 +23,7 @@ from digiquant.research.skills import (
     load_skill,
     load_skill_edit,
 )
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
+from digiquant.research.state import PriorContext, ResearchConfigBundle, ResearchState
 
 pytestmark = pytest.mark.unit
 

@@ -25,10 +25,10 @@ from digiquant.research.phases.phase7_synthesis import (
     build_phase7,
 )
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Carried,
     DataLayerSnapshot,
+    ResearchConfigBundle,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )

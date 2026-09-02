@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.notify.mailgun import missing_mailgun_env_names
+from digiquant.dashboard.overlay.cron import missing_overlay_cron_env_names
 from digiquant.execution.cron_check import (
     cron_check_exit_code,
     format_cron_check_failure,
@@ -12,7 +12,7 @@ from digiquant.execution.cron_check import (
     run_cron_checks,
 )
 from digiquant.execution.sync_cron import missing_execution_sync_env_names
-from digiquant.dashboard.overlay.cron import missing_overlay_cron_env_names
+from digiquant.notify.mailgun import missing_mailgun_env_names
 
 pytestmark = pytest.mark.unit
 

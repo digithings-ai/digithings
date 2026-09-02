@@ -14,9 +14,9 @@ import pytest
 
 pytest.importorskip("openai")  # chain -> research.graph -> digigraph.llm needs openai
 
-from digiquant.research.state import ResearchState
-from digiquant.portfolio import chain
 from digiquant.dashboard.temporal import KnowledgeCutoffError, require_knowledge_cutoff_at
+from digiquant.portfolio import chain
+from digiquant.research.state import ResearchState
 
 
 @pytest.mark.unit

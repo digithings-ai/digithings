@@ -6,9 +6,9 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
 
-from digiquant.research.state import RebalancePayload
 from digiquant.portfolio.models.deliberation import is_unchallenged_carry
 from digiquant.portfolio.state import PortfolioState
+from digiquant.research.state import RebalancePayload
 
 
 def analyst_payloads(state: PortfolioState) -> dict[str, dict[str, Any]]:

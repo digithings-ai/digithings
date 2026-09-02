@@ -7,7 +7,6 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
@@ -52,6 +51,7 @@ from digiquant.dashboard.replay.store import (
     PolicyReplayStoreError,
     PolicyReplayStoreMissingError,
 )
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 pytestmark = pytest.mark.unit
 

@@ -54,7 +54,6 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     HoldingLot,
@@ -78,6 +77,7 @@ from digiquant.portfolio.writers.ledger_io import (
     _symbol,
     ledger_enabled,
 )
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

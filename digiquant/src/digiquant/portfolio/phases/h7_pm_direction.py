@@ -22,13 +22,8 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from pydantic import ValidationError
 
-from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
-from digiquant.research.phases._node_factory import (
-    _shared_context,
-    apply_web_grounding_to_inputs,
-)
-from digiquant.research.state import PhaseError, PhasePortfolioState
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.forecast_calibration import (
     ShadowCalibrationAttachment,
@@ -43,8 +38,13 @@ from digiquant.portfolio.payloads import analyst_payloads, deliberation_summarie
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
 from digiquant.portfolio.skills import load_skill_full
 from digiquant.portfolio.state import PortfolioState
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
-from digiquant.dashboard.research_retrieval.store import ResearchStateStore
+from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
+from digiquant.research.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+)
+from digiquant.research.state import PhaseError, PhasePortfolioState
+from digiquant.research.supabase_io import SupabaseClient
 
 NODE_ID = "portfolio/pm-direction"
 PHASE_NAME = "portfolio_h7_pm_direction"

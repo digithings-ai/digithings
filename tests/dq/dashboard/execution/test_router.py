@@ -26,11 +26,7 @@ from digiquant.brokers.contracts import (
     LiveVenueNotAuthorizedError,
     OrderSide,
 )
-from digiquant.portfolio.models.portfolio_ledger import DecisionAction
-from digiquant.portfolio.writers.execution_io import (
-    _pending_order_heads,
-    execute_pending_orders,
-)
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.execution.policy import (
     AmbiguousVenueError,
     ForeignWorkspaceIntentError,
@@ -45,7 +41,11 @@ from digiquant.execution.router import (
     route_pending_orders,
     side_from_action,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.models.portfolio_ledger import DecisionAction
+from digiquant.portfolio.writers.execution_io import (
+    _pending_order_heads,
+    execute_pending_orders,
+)
 
 pytestmark = pytest.mark.unit
 

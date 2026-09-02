@@ -8,9 +8,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
+from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
 
 configure_logging()

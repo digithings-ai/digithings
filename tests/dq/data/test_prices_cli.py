@@ -18,10 +18,10 @@ from digiquant.cli.prices import (
     fetch_quotes_cmd,
     recompute_technicals_cmd,
 )
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 from digiquant.data.prices import TECHNICAL_COLUMNS
 from digiquant.data.prices.instrument_metadata import InstrumentMetadataFetchResult
 from digiquant.data.prices.refresh import RefreshResult
-from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 
 pytestmark = pytest.mark.unit
 

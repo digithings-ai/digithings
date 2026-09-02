@@ -13,7 +13,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.research.supabase_io import load_portfolio_performance_snapshot
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.portfolio.portfolio_materialize import _prior_nav as materialize_prior_nav
 from digiquant.portfolio.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.portfolio.writers.commit_io import _compute_nav
@@ -23,10 +23,10 @@ from digiquant.portfolio.writers.opening_snapshot import (
     cold_start_requires_seed,
     ensure_legacy_opening_snapshot,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.research.supabase_io import load_portfolio_performance_snapshot
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
 from tests.dq.portfolio.test_opening_snapshot import BOOK_D, NOW, _book_client
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

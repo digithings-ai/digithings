@@ -18,11 +18,11 @@ import pytest
 from digiquant.research import diagnostics
 from digiquant.research.phases.fail_soft import NODE_FAILED_REASON
 from digiquant.research.state import (
-    ResearchState,
     Carried,
     PhaseError,
     PhasePortfolioState,
     PublishedArtifact,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )

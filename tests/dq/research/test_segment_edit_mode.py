@@ -10,6 +10,7 @@ from typing import (
 from unittest.mock import patch
 
 import pytest
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
@@ -19,15 +20,14 @@ from digiquant.research.phases.phase3_macro import MacroRegimeReport
 from digiquant.research.phases.phase5_equities import EquityOverviewReport
 from digiquant.research.skills import SkillNotFoundError, load_skill_edit
 from digiquant.research.state import (
-    ResearchState,
     Carried,
     DeltaTriageDecision,
     DeltaTriageResult,
     PriorContext,
+    ResearchState,
     SegmentPayload,
 )
 from digiquant.research.triage import evaluate
-from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 
 from tests.dq.research.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
@@ -493,8 +493,8 @@ class TestEditSchemaConstraintsReachTheModel:
     def test_stated_cap_matches_the_schema(self) -> None:
         """Drift guard: path stays capped; reason/summary must stay uncapped."""
         from annotated_types import MaxLen
-        from digiquant.research.skills import EDIT_SCHEMA_CONSTRAINTS
         from digiquant.dashboard.edit_mode.models import DocumentPatch, PatchOp
+        from digiquant.research.skills import EDIT_SCHEMA_CONSTRAINTS
 
         path_caps = [
             m.max_length for m in PatchOp.model_fields["path"].metadata if isinstance(m, MaxLen)

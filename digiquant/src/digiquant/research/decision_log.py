@@ -27,6 +27,8 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.portfolio.payloads import analyst_payloads
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import (
     SupabaseClient,
@@ -35,8 +37,6 @@ from digiquant.research.supabase_io import (
     query_returns_window,
     update_decision_resolution,
 )
-from digiquant.portfolio.payloads import analyst_payloads
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 

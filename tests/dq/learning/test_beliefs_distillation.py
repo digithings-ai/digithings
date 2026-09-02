@@ -8,11 +8,6 @@ from typing import (
 )
 
 import pytest
-from digiquant.research.phases.preflight import (
-    PreflightReflectDeps,
-    build_preflight_reflect_node,
-)
-from digiquant.research.state import ResearchState
 from digiquant.dashboard.learning.beliefs_distillation import (
     DAILY_BELIEFS_MAX_TOKENS,
     DEFAULT_BELIEFS_BACKLOG,
@@ -22,6 +17,11 @@ from digiquant.dashboard.learning.beliefs_distillation import (
     resolve_beliefs_fold_mode,
     should_distill_beliefs,
 )
+from digiquant.research.phases.preflight import (
+    PreflightReflectDeps,
+    build_preflight_reflect_node,
+)
+from digiquant.research.state import ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -261,8 +261,8 @@ class TestBeliefsDistillation:
     def test_chain_entry_daily_short_fold_writes_without_backlog(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.research.graph import ResearchInput
         from digiquant.dashboard.learning import beliefs_distillation as mod
+        from digiquant.research.graph import ResearchInput
 
         client = FakeSupabaseClient(canned_reads={"decision_log": []})
 
@@ -332,8 +332,8 @@ class TestChainBeliefsWiring:
     def test_refresh_scope_beliefs_runs_distillation_only(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.research.graph import ResearchInput
         from digiquant.portfolio import chain as chain_mod
+        from digiquant.research.graph import ResearchInput
 
         calls: dict[str, int] = {"beliefs": 0, "research": 0}
 

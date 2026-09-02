@@ -15,7 +15,6 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID, uuid5
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
@@ -28,6 +27,7 @@ from digiquant.dashboard.learning.outcome_models import (
 )
 from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 _BPS_SCALE = Decimal("10000")
 _REPORT_ID_NS = UUID("f3b4c5d6-7e8f-9a0b-1c2d-3e4f5a6b7c8d")

@@ -6,13 +6,13 @@ from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.research import cost_liquidity_registry as clr
-from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.portfolio.h9_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
 )
 from digiquant.portfolio.risk_policy import resolve_risk_policy
+from digiquant.research import cost_liquidity_registry as clr
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

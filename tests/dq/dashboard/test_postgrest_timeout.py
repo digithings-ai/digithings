@@ -11,14 +11,14 @@ from typing import Any
 import httpx
 import pytest
 import yaml
-from digiquant.research.supabase_io import SupabaseConfig, build_client
-from digiquant.portfolio.writers import ledger_io
 from digiquant.dashboard.postgrest_timeout import (
     CONNECT_TIMEOUT_SECONDS,
     POOL_TIMEOUT_SECONDS,
     READ_TIMEOUT_SECONDS,
     WRITE_TIMEOUT_SECONDS,
 )
+from digiquant.portfolio.writers import ledger_io
+from digiquant.research.supabase_io import SupabaseConfig, build_client
 
 pytestmark = pytest.mark.unit
 

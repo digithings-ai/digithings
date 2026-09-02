@@ -51,7 +51,11 @@ from uuid import UUID
 
 from digiquant.dashboard.envcompat import OVERLAY_PERSIST, env_lookup
 from digiquant.dashboard.overlay.dispatch import JobStatus
-from digiquant.dashboard.tenancy import house_workspace_id, resolved_workspace_id, system_workspace_id
+from digiquant.dashboard.tenancy import (
+    house_workspace_id,
+    resolved_workspace_id,
+    system_workspace_id,
+)
 
 OVERLAY_PERSIST_ENV = OVERLAY_PERSIST
 OVERLAY_DOC_PREFIX = "overlay/"

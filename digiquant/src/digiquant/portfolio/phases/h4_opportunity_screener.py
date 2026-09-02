@@ -18,14 +18,14 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.state import ExcludedTicker, FocusRosterEntry
-from digiquant.research.supabase_io import SupabaseClient, publish_document
+from digiquant.dashboard.overlay.persist import portfolio_document_key
 from digiquant.portfolio.budget_controller import assess_budget
 from digiquant.portfolio.candidates import holdings_from_prior_book, select_focus_tickers
 from digiquant.portfolio.research_attention import h4_phase_attention_update
 from digiquant.portfolio.roster_cap import capped_tickers, configured_max_analysts
 from digiquant.portfolio.state import PortfolioState
-from digiquant.dashboard.overlay.persist import portfolio_document_key
+from digiquant.research.state import ExcludedTicker, FocusRosterEntry
+from digiquant.research.supabase_io import SupabaseClient, publish_document
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,6 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from digiquant.portfolio.models.deliberation import MissingFactProposal
 from digiquant.dashboard.research_retrieval.evidence_bundle import build_h5_evidence_bundle
 from digiquant.dashboard.research_retrieval.h6_amendment import (
     H6_AMENDMENT_POLICY_MAX_PER_BASE,
@@ -26,6 +25,7 @@ from digiquant.dashboard.research_retrieval.models import (
     missing_fact_request_id,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.models.deliberation import MissingFactProposal
 
 pytestmark = pytest.mark.unit
 

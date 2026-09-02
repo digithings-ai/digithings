@@ -21,32 +21,6 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
-from digiquant.research.phases.fail_soft import run_segment_fail_soft
-from digiquant.research.research_attention import (
-    apply_segment_metric_patch,
-    artifact_target_key,
-    carry_segment_slot,
-    research_attention_enforce_path,
-    resolve_attention_plan_for_node,
-    resolve_research_attention_rollout_mode,
-)
-from digiquant.research.skills import load_skill, load_skill_edit
-from digiquant.research.state import (
-    ResearchState,
-    Carried,
-    PhaseError,
-    SegmentPayload,
-    SegmentSlot,
-    refresh_scope_forces_full,
-)
-
-# Imported for its registration side effect (#1741): ``telemetry`` registers the
-# merge-fallback ``breakdown`` contributor (#1736 seam) at import time. This module writes
-# ``state.merge_fallbacks`` and every phase module imports it, so the contributor is wired
-# on any compiled graph. Keep the import here rather than in ``diagnostics.py`` — the seam
-# exists so a new key costs one module plus one line, not an edit to the gate rules.
-from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
-from digiquant.research.triage import triage_decision_to_signal
 from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
@@ -63,6 +37,32 @@ from digiquant.dashboard.edit_mode.content_identity import (
 from digiquant.dashboard.edit_mode.merge import MergeError, merge_document_patch, section_index
 from digiquant.dashboard.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
 from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
+from digiquant.research.phases.fail_soft import run_segment_fail_soft
+from digiquant.research.research_attention import (
+    apply_segment_metric_patch,
+    artifact_target_key,
+    carry_segment_slot,
+    research_attention_enforce_path,
+    resolve_attention_plan_for_node,
+    resolve_research_attention_rollout_mode,
+)
+from digiquant.research.skills import load_skill, load_skill_edit
+from digiquant.research.state import (
+    Carried,
+    PhaseError,
+    ResearchState,
+    SegmentPayload,
+    SegmentSlot,
+    refresh_scope_forces_full,
+)
+
+# Imported for its registration side effect (#1741): ``telemetry`` registers the
+# merge-fallback ``breakdown`` contributor (#1736 seam) at import time. This module writes
+# ``state.merge_fallbacks`` and every phase module imports it, so the contributor is wired
+# on any compiled graph. Keep the import here rather than in ``diagnostics.py`` — the seam
+# exists so a new key costs one module plus one line, not an edit to the gate rules.
+from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
+from digiquant.research.triage import triage_decision_to_signal
 
 logger = logging.getLogger(__name__)
 

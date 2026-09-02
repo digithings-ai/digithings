@@ -16,7 +16,7 @@ from datetime import date
 import digiquant.portfolio.phases as portfolio_phases_pkg
 import pytest
 from digiquant.research.phases._node_factory import _shared_context
-from digiquant.research.state import ResearchConfigBundle, ResearchState, PriorContext
+from digiquant.research.state import PriorContext, ResearchConfigBundle, ResearchState
 
 
 def _state_with_latest_segments(latest_segments: dict) -> ResearchState:

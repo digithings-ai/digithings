@@ -7,6 +7,7 @@ from typing import Any  # score:allow untyped any — used for fake-payload dict
 from uuid import uuid4
 
 import pytest
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.phases.publish_phase import (
     PublishDeps,
     build_publish_node,
@@ -14,15 +15,14 @@ from digiquant.research.phases.publish_phase import (
     render_digest_markdown,
 )
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Carried,
     PhasePortfolioState,
     PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 

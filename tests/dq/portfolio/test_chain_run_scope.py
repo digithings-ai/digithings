@@ -11,8 +11,8 @@ from datetime import date
 from typing import Any
 
 import pytest
-from digiquant.research.graph import ResearchInput
 from digiquant.portfolio import chain as chain_mod
+from digiquant.research.graph import ResearchInput
 
 pytestmark = pytest.mark.unit
 

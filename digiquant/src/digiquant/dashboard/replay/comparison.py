@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.governance_models import (
     PolicyComparisonReport as GovernanceComparisonEnvelope,
 )
@@ -27,6 +26,7 @@ from digiquant.dashboard.replay.models import (
     max_drawdown_from_nav_path,
 )
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 __all__ = [
     "REQUIRED_METRIC_GROUPS",

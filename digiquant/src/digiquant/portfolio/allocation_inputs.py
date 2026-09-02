@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
@@ -38,7 +39,6 @@ from digiquant.portfolio.models.forecast_calibration import (
 )
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.models.risk_policy import CovarianceSnapshot, RiskPolicy
-from digiquant.dashboard.temporal import require_utc_datetime
 
 _CASH = "CASH"
 # Common portfolio forecast horizon (trading sessions). Used as shadow fill when H6

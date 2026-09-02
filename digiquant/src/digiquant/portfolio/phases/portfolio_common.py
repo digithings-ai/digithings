@@ -15,13 +15,6 @@ from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from digigraph.usage import provider_calls_snapshot
 from pydantic import BaseModel, ValidationError
 
-from digiquant.research.data.queries import MARKET_DATA_TABLES
-from digiquant.research.phases._node_factory import (
-    _shared_context,
-    apply_web_grounding_to_inputs,
-    build_grounding,
-)
-from digiquant.research.state import PhaseError, refresh_scope_forces_full
 from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
@@ -32,6 +25,18 @@ from digiquant.dashboard.edit_mode import (
 )
 from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch
 from digiquant.dashboard.envcompat import ATTEMPT, env_lookup
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
+    build_h5_evidence_bundle,
+    cite_evidence_bundle_on_forecast,
+    facts_from_phase_inputs,
+    publish_h5_evidence_bundle,
+    resolve_h5_state_version_id,
+)
+from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 from digiquant.portfolio.candidates import holdings_from_prior_book
 from digiquant.portfolio.models.analyst import AnalystPayload
 from digiquant.portfolio.models.forecast import (
@@ -49,18 +54,13 @@ from digiquant.portfolio.research_attention import (
 from digiquant.portfolio.skills import load_skill_edit, load_skill_full
 from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
-from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
-from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
-from digiquant.dashboard.research_retrieval.evidence_bundle import (
-    build_h5_evidence_bundle,
-    cite_evidence_bundle_on_forecast,
-    facts_from_phase_inputs,
-    publish_h5_evidence_bundle,
-    resolve_h5_state_version_id,
+from digiquant.research.data.queries import MARKET_DATA_TABLES
+from digiquant.research.phases._node_factory import (
+    _shared_context,
+    apply_web_grounding_to_inputs,
+    build_grounding,
 )
-from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
-from digiquant.dashboard.temporal import require_knowledge_cutoff_at
+from digiquant.research.state import PhaseError, refresh_scope_forces_full
 
 logger = logging.getLogger(__name__)
 

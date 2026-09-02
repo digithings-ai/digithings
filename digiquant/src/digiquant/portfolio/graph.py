@@ -15,8 +15,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec
 
-from digiquant.research.state import ResearchState
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
 from digiquant.portfolio.phases.h2_market_thesis_exploration import (
     build_h2_market_thesis_exploration,
@@ -34,7 +33,8 @@ from digiquant.portfolio.phases.phase7e_risk_sizing import (
 from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
 from digiquant.portfolio.pipeline_builder import PipelinePhase, build_pipeline
 from digiquant.portfolio.state import PortfolioState
-from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.research.state import ResearchState
+from digiquant.research.supabase_io import SupabaseClient
 
 __all__ = [
     "CommitRunDeps",

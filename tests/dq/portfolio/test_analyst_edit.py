@@ -11,16 +11,16 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    FocusRosterEntry,
-    PhasePortfolioState,
-    PriorContext,
-)
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 from digiquant.portfolio.models.analyst import AnalystPayload
 from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.research.state import (
+    FocusRosterEntry,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
+)
 
 
 def _state(*, prior: dict[str, Any] | None = None) -> ResearchState:
@@ -635,8 +635,8 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
     from unittest.mock import MagicMock
     from uuid import UUID, uuid4
 
-    from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
     from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+    from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
 
     store = EvidenceBundleStore()
     run_id = uuid4()

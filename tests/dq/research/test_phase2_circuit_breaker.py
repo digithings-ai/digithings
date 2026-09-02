@@ -30,8 +30,8 @@ from digiquant.research.phases.phase2_institutional import (
     build_phase2,
 )
 from digiquant.research.state import (
-    ResearchState,
     DataLayerSnapshot,
+    ResearchState,
 )
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
@@ -224,8 +224,8 @@ class TestInstitutionalAbsenceStreak:
         assert streak == 0
 
     def test_overlay_inst_row_does_not_clear_house_streak(self) -> None:
-        from digiquant.research.supabase_io import query_institutional_absence_streak
         from digiquant.dashboard.tenancy import house_workspace_id
+        from digiquant.research.supabase_io import query_institutional_absence_streak
 
         house = str(house_workspace_id())
         overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

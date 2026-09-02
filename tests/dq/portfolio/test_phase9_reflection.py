@@ -21,6 +21,7 @@ from typing import (
 from uuid import UUID
 
 import pytest
+from digiquant.portfolio.phases.phase9_evolution import Phase9Deps, build_phase9
 from digiquant.research.decision_log import (
     DEFAULT_BENCHMARK,
     DEFAULT_HOLDING_DAYS,
@@ -37,11 +38,10 @@ from digiquant.research.phases.preflight import (
     build_preflight_reflect_node,
 )
 from digiquant.research.state import (
+    PhasePortfolioState,
     ResearchConfigBundle,
     ResearchState,
-    PhasePortfolioState,
 )
-from digiquant.portfolio.phases.phase9_evolution import Phase9Deps, build_phase9
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
@@ -665,8 +665,8 @@ class TestLessonsInjection:
         """Phase 7D's _pm_node passes prior_context.decision_lessons as past_context."""
         from unittest.mock import patch
 
-        from digiquant.research.state import PriorContext
         from digiquant.portfolio.phases.phase7d_pm import _pm_node
+        from digiquant.research.state import PriorContext
 
         lessons = [{"ticker": "AAPL", "reflection": "Past lesson", "alpha": 0.02}]
         state = ResearchState(

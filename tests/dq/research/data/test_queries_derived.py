@@ -11,6 +11,7 @@ import json
 from datetime import date
 
 import pytest
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.data.queries import (
     ALLOWED_READ_TABLES,
     HOUSE_BOOK_READ_TABLES,
@@ -20,7 +21,6 @@ from digiquant.research.data.queries import (
     query_data,
 )
 from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
-from digiquant.dashboard.tenancy import house_workspace_id
 
 
 class _FakeTable:

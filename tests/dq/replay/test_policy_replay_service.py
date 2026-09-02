@@ -13,7 +13,6 @@ from uuid import uuid4
 
 import pytest
 from digikey.models import DigiAuthContext
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
@@ -64,6 +63,7 @@ from digiquant.dashboard.replay.models import (
     portfolio_replay_result_content_hash,
 )
 from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.service import (
     service_evaluate_policy_gate,
     service_get_policy_comparison,

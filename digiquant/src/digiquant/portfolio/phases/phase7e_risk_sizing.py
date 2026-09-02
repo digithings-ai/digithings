@@ -30,9 +30,6 @@ from typing import Any  # score:allow untyped any — scored-lint: duck-typed Su
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.data.queries import get_return_correlations
-from digiquant.research.state import ResearchState, PhasePortfolioState, RebalancePayload
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.portfolio.allocation_contracts import (
     AllocationInputBundle,
     AlteredTarget,
@@ -69,6 +66,9 @@ from digiquant.portfolio.turnover import (
     clamp_no_trade_band,
     no_trade_band_pp,
 )
+from digiquant.research.data.queries import get_return_correlations
+from digiquant.research.state import PhasePortfolioState, RebalancePayload, ResearchState
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 from digiquant.portfolio.models.thesis import ThesisVehicleMapOutput
 from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
@@ -17,7 +17,7 @@ from digiquant.portfolio.phases.thesis_common import (
 )
 from digiquant.portfolio.state import PortfolioState
 from digiquant.portfolio.writers.thesis_io import persist_thesis_vehicle_map
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

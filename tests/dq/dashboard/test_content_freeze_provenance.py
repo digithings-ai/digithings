@@ -27,7 +27,12 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp, PriorPublished, merge_document_patch
+from digiquant.dashboard.edit_mode import (
+    DocumentPatch,
+    PatchOp,
+    PriorPublished,
+    merge_document_patch,
+)
 from digiquant.dashboard.edit_mode.content_identity import (
     UNCHANGED_FLAG_KEY,
     UNCHANGED_SINCE_KEY,

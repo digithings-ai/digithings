@@ -13,7 +13,6 @@ from inspect import signature
 
 import polars as pl
 import pytest
-from digiquant.research.data.queries import get_return_correlations
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases.phase7e_risk_sizing import (
     _VOL_LOOKBACK_DAYS,
@@ -30,6 +29,7 @@ from digiquant.portfolio.sizing import (
     _vol_fraction,
     size_portfolio,
 )
+from digiquant.research.data.queries import get_return_correlations
 
 from tests.dq.portfolio.incumbent_risk_fixtures import (
     assert_book_matches_golden,

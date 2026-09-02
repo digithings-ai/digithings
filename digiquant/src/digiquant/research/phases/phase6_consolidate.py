@@ -7,15 +7,15 @@ from typing import Any  # score:allow untyped any — used for JSON-derived dict
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.research.state import (
-    ResearchState,
-    Phase6BiasRow,
-    refresh_scope_forces_full,
-)
 from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp, merge_document_patch
 from digiquant.dashboard.edit_mode.models import TriageSignal
 from digiquant.dashboard.edit_mode.prior import PriorPublished
 from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.research.state import (
+    Phase6BiasRow,
+    ResearchState,
+    refresh_scope_forces_full,
+)
 
 _BIAS_ROW_KEYS: tuple[str, ...] = (
     "macro_regime",

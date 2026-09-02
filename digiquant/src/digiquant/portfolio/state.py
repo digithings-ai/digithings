@@ -19,10 +19,10 @@ export is a one-way file boundary (not a state slot) — see ``shadow_artifact.p
 from __future__ import annotations
 
 from digiquant.research.state import (
-    ResearchState,
     Phase7DigestPayload,
     PhasePortfolioState,
     RebalancePayload,
+    ResearchState,
     RiskDebatePayload,
 )
 

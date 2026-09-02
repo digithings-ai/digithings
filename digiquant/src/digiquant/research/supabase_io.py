@@ -29,7 +29,6 @@ from uuid import UUID
 import httpx
 from digibase.audit import redact_mapping
 
-from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 from digiquant.dashboard.overlay.persist import (
     is_private_workspace,
     require_overlay_persist,
@@ -42,6 +41,7 @@ from digiquant.dashboard.postgrest_timeout import (
     WRITE_TIMEOUT_SECONDS,
 )
 from digiquant.dashboard.tenancy import resolved_workspace_id
+from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 
 logger = logging.getLogger(__name__)
 

@@ -9,16 +9,16 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    PhasePortfolioState,
-)
 from digiquant.portfolio.phases.phase7d_pm import (
     build_phase7d,
     build_phase7d_pm,
     build_phase7d_risk_aggressive,
     build_phase7d_risk_conservative,
+)
+from digiquant.research.state import (
+    PhasePortfolioState,
+    ResearchConfigBundle,
+    ResearchState,
 )
 
 

@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.action_cost_inputs import (
     ActionCostBindingError,
     realized_cost_input_from_execution,
@@ -30,7 +30,7 @@ from digiquant.portfolio.models.cost_liquidity import (
 )
 from digiquant.portfolio.models.portfolio_ledger import DecisionIntent, PaperExecution
 from digiquant.portfolio.models.risk_policy import RiskPolicy
-from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

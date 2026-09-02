@@ -25,12 +25,12 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.temporal import require_utc_datetime
 from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     RiskPolicy,
 )
-from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

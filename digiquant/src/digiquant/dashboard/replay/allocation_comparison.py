@@ -18,7 +18,6 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
@@ -31,6 +30,7 @@ from digiquant.dashboard.replay.models import (
     TargetWeight,
     max_drawdown_from_nav_path,
 )
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 FiniteDec: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]

@@ -24,6 +24,7 @@ from uuid import UUID
 
 from digigraph.graph.pipeline_builder import PipelinePhase, build_pipeline
 
+from digiquant.dashboard.temporal import capture_knowledge_cutoff_at, require_utc_datetime
 from digiquant.research.phases.phase1_altdata import build_phase1
 from digiquant.research.phases.phase2_institutional import build_phase2
 from digiquant.research.phases.phase3_macro import build_phase3
@@ -40,13 +41,12 @@ from digiquant.research.phases.preflight import (
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.research.phases.triage_phase import TriageDeps, build_triage_phase
 from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
     Cadence,
     RefreshScope,
+    ResearchConfigBundle,
+    ResearchState,
     RunType,
 )
-from digiquant.dashboard.temporal import capture_knowledge_cutoff_at, require_utc_datetime
 
 
 @dataclass(frozen=True)

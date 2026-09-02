@@ -29,6 +29,9 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from digigraph.graph.pipeline_builder import PipelinePhase
 
+from digiquant.dashboard.envcompat import BELIEFS_BACKLOG, env_lookup
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.portfolio.state import PortfolioState
 from digiquant.research.decision_log import fetch_recent_lessons
 from digiquant.research.graph import ResearchInput
 from digiquant.research.state import RefreshScope
@@ -40,9 +43,6 @@ from digiquant.research.supabase_io import (
     publish_document,
     query_unfolded_resolved_decisions,
 )
-from digiquant.dashboard.envcompat import BELIEFS_BACKLOG, env_lookup
-from digiquant.portfolio.state import PortfolioState
-from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 

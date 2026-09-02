@@ -17,7 +17,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from digiquant.portfolio.models.deliberation import MissingFactProposal
 from digiquant.dashboard.research_retrieval.blinding import research_document_allowed
 from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
 from digiquant.dashboard.research_retrieval.models import (
@@ -35,6 +34,7 @@ from digiquant.dashboard.research_retrieval.models import (
     missing_fact_request_id,
 )
 from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.models.deliberation import MissingFactProposal
 
 logger = logging.getLogger(__name__)
 

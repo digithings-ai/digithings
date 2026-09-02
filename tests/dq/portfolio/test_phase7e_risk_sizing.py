@@ -13,13 +13,6 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    ExcludedTicker,
-    PhasePortfolioState,
-    PriorContext,
-)
 from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.portfolio.phases import phase7e_risk_sizing
 from digiquant.portfolio.phases.phase7e_risk_sizing import (
@@ -36,6 +29,13 @@ from digiquant.portfolio.turnover import (
     apply_turnover_to_sized_book,
     clamp_no_trade_band,
     hold_drifted_book,
+)
+from digiquant.research.state import (
+    ExcludedTicker,
+    PhasePortfolioState,
+    PriorContext,
+    ResearchConfigBundle,
+    ResearchState,
 )
 
 from tests.dq.research.test_supabase_io import FakeSupabaseClient

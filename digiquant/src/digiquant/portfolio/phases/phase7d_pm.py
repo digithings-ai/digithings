@@ -26,6 +26,9 @@ from typing import Any, Literal  # score:allow untyped any — used for JSON-der
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.state import PortfolioState
 from digiquant.research.data.queries import MARKET_DATA_TABLES
 from digiquant.research.phases._node_factory import (
     _shared_context,
@@ -33,9 +36,6 @@ from digiquant.research.phases._node_factory import (
     build_grounding,
 )
 from digiquant.research.state import PhaseError
-from digiquant.portfolio.candidates import holdings_from_prior_book
-from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
-from digiquant.portfolio.state import PortfolioState
 
 logger = logging.getLogger(__name__)
 

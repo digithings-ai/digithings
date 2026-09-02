@@ -12,15 +12,18 @@ from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.dashboard.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.dashboard.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
+from digiquant.dashboard.overlay.persist import is_private_workspace
 from digiquant.research.inspectable_io import (
     publish_bias_row_document,
     publish_inputs_document,
 )
 from digiquant.research.segments import compose_legacy_digest_body
 from digiquant.research.state import (
-    ResearchState,
     Phase7DigestPayload,
     PublishedArtifact,
+    ResearchState,
     SegmentSlot,
 )
 from digiquant.research.supabase_io import (
@@ -29,9 +32,6 @@ from digiquant.research.supabase_io import (
     publish_document,
     publish_document_delta,
 )
-from digiquant.dashboard.attention_plan_graph import maybe_publish_attention_plan_shadow
-from digiquant.dashboard.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
-from digiquant.dashboard.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
 

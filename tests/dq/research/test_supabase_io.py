@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.supabase_io import (
     _DEFAULT_PRICE_LOOKBACK_DAYS,
     SupabaseConfig,
@@ -29,7 +30,6 @@ from digiquant.research.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-from digiquant.dashboard.tenancy import house_workspace_id
 
 # Canonical fake lives in tests.fixtures.fake_supabase (#1196); re-export so
 # existing ``from tests.dq.research.test_supabase_io import FakeSupabaseClient``

@@ -18,9 +18,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from digiquant.portfolio.chain import OUTER_ATTEMPT_ENV, DiagnosticsDeps, _outer_attempt
 from digiquant.research.diagnostics import _row, summarize_run
 from digiquant.research.state import ResearchState
-from digiquant.portfolio.chain import OUTER_ATTEMPT_ENV, DiagnosticsDeps, _outer_attempt
 
 pytestmark = pytest.mark.unit
 

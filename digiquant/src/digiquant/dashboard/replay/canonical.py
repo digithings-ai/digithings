@@ -10,7 +10,6 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.dashboard.replay.models import (
     POLICY_BUNDLE_FIELD_NAMES,
     ExecutionPolicy,
@@ -24,6 +23,7 @@ from digiquant.dashboard.replay.models import (
     SharedInputIdentity,
     WalkForwardFold,
 )
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 __all__ = [
     "cost_hash_from_execution",

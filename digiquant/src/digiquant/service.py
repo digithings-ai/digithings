@@ -6,8 +6,6 @@ from datetime import datetime
 from uuid import UUID
 
 from digiquant.backtest import run_backtest
-from digiquant.export import run_export
-from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.dashboard.replay.comparison import (
     PolicyComparisonReport as RichPolicyComparisonReport,
 )
@@ -26,6 +24,8 @@ from digiquant.dashboard.replay.governance_models import (
     PolicyGovernanceDecision,
 )
 from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.export import run_export
+from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.optimize import run_optimize
 from digiquant.paths import validate_data_paths
 from digiquant.strategies.registry import list_strategies

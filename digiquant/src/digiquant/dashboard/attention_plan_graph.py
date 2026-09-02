@@ -10,9 +10,6 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from digiquant.research.state import ResearchState, PublishedArtifact
-from digiquant.research.supabase_io import SupabaseClient
-from digiquant.research.triage import triage_decision_to_signal
 from digiquant.dashboard.attention_plan import PlannerMode, plan_attention_shadow
 from digiquant.dashboard.attention_plan_io import (
     AttentionPlanPublishError,
@@ -22,6 +19,9 @@ from digiquant.dashboard.edit_mode.content_identity import prior_content_date
 from digiquant.dashboard.edit_mode.models import ArtifactKey, PriorPublished, TriageSignal
 from digiquant.dashboard.edit_mode.prior import artifact_document_key
 from digiquant.dashboard.envcompat import PLANNER_MODE, env_lookup
+from digiquant.research.state import PublishedArtifact, ResearchState
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.research.triage import triage_decision_to_signal
 
 logger = logging.getLogger(__name__)
 

@@ -8,16 +8,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.research.graph import ResearchGraphDeps, build_research_graph
-from digiquant.research.phases.outcome_maturation import (
-    DEFAULT_OUTCOME_LESSON_COHORT,
-    DEFAULT_OUTCOME_LESSON_HORIZON,
-    DEFAULT_OUTCOME_LESSON_POLICY,
-    OutcomeMaturationDeps,
-    pin_outcome_lesson_for_preflight,
-)
-from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.research.state import ResearchConfigBundle, ResearchState
 from digiquant.dashboard.learning.lesson_registry import LessonCompiler
 from digiquant.dashboard.learning.outcome_assembly import (
     AssemblyPassResult,
@@ -44,11 +34,21 @@ from digiquant.dashboard.research_retrieval.h7_decision_context import (
     H7SectionKind,
     compile_h7_decision_context,
 )
+from digiquant.research.graph import ResearchGraphDeps, build_research_graph
+from digiquant.research.phases.outcome_maturation import (
+    DEFAULT_OUTCOME_LESSON_COHORT,
+    DEFAULT_OUTCOME_LESSON_HORIZON,
+    DEFAULT_OUTCOME_LESSON_POLICY,
+    OutcomeMaturationDeps,
+    pin_outcome_lesson_for_preflight,
+)
+from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant.research.state import ResearchConfigBundle, ResearchState
 
-from tests.dq.research.test_supabase_io import FakeSupabaseClient
-from tests.dq.portfolio.test_h7_context_compiler import _evidence, _loaded_state, _store_with_state
-from tests.dq.learning.test_lesson_registry import _report
 from tests.dq.dashboard.test_context_compiler import _bundle
+from tests.dq.learning.test_lesson_registry import _report
+from tests.dq.portfolio.test_h7_context_compiler import _evidence, _loaded_state, _store_with_state
+from tests.dq.research.test_supabase_io import FakeSupabaseClient
 
 pytestmark = pytest.mark.unit
 

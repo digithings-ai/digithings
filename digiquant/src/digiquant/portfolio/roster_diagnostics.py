@@ -27,8 +27,8 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: jsonb breakdown payload
 )
 
-from digiquant.research.state import ResearchState
 from digiquant.portfolio.roster_cap import configured_max_analysts
+from digiquant.research.state import ResearchState
 
 BREAKDOWN_KEY = "roster"
 

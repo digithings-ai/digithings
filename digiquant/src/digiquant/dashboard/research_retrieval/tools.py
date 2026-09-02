@@ -14,7 +14,6 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Callable,
 )
 
-from digiquant.research.supabase_io import SupabaseClient
 from digiquant.dashboard.envcompat import RETRIEVAL_MANIFEST_MODE, env_lookup
 from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 from digiquant.dashboard.research_retrieval.cache import ResearchCache
@@ -38,6 +37,7 @@ from digiquant.dashboard.research_retrieval.store import (
     role_context_manifest_record_id,
 )
 from digiquant.dashboard.temporal import require_utc_datetime
+from digiquant.research.supabase_io import SupabaseClient
 
 logger = logging.getLogger(__name__)
 

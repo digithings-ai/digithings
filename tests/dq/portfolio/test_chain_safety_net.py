@@ -11,16 +11,6 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-from digiquant.research import diagnostics
-from digiquant.research.graph import ResearchInput
-from digiquant.research.phases.preflight import PreflightDeps
-from digiquant.research.state import (
-    ResearchConfigBundle,
-    ResearchState,
-    PhasePortfolioState,
-    SegmentPayload,
-    SegmentSlot,
-)
 from digiquant.portfolio.chain import (
     ChainDeps,
     _coerce_research_state,
@@ -29,6 +19,16 @@ from digiquant.portfolio.chain import (
     _run_beliefs_fold,
     _run_terminal_phase,
     run_research_then_portfolio,
+)
+from digiquant.research import diagnostics
+from digiquant.research.graph import ResearchInput
+from digiquant.research.phases.preflight import PreflightDeps
+from digiquant.research.state import (
+    PhasePortfolioState,
+    ResearchConfigBundle,
+    ResearchState,
+    SegmentPayload,
+    SegmentSlot,
 )
 
 pytestmark = pytest.mark.unit
@@ -132,8 +132,8 @@ class _FakeClient:
 
 
 def _chain_deps() -> ChainDeps:
-    from digiquant.research.graph import ResearchGraphDeps
     from digiquant.portfolio.graph import PortfolioGraphDeps
+    from digiquant.research.graph import ResearchGraphDeps
 
     return ChainDeps(
         research=ResearchGraphDeps(
@@ -158,8 +158,8 @@ def test_beliefs_failure_is_recorded_and_swallowed() -> None:
 
 
 def test_beliefs_fold_skipped_without_a_client() -> None:
-    from digiquant.research.graph import ResearchGraphDeps
     from digiquant.portfolio.graph import PortfolioGraphDeps
+    from digiquant.research.graph import ResearchGraphDeps
 
     state = _state()
     deps = ChainDeps(
