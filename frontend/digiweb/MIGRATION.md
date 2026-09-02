@@ -40,8 +40,10 @@ Three rules that are load-bearing, learned the hard way:
    call-site utilities must override) and unlayered (state/structural rules
    that must keep outranking plain utilities) — `chat-core.css`,
    `chat-widgets.css`, `controls-core.css`, `controls-overlay.css` (#1418,
-   #1419), and `finance-tearsheet.css` (#1463 — its unlayered portion includes
-   the ENTIRE `@media print` grammar, the tearsheet family's differentiator).
+   #1419), `finance-tearsheet.css` (#1463 — its unlayered portion includes
+   the ENTIRE `@media print` grammar, the tearsheet family's differentiator),
+   and `repo-activity.css` (#3445 — hairline lists, two-column collapse, clone
+   box).
    Wrapping those in `layer(…)` demotes their state rules and breaks
    digichat's rendered-look parity (or, for the tearsheet, the PDF export).
 3. **`@source` any package component you render.** Without it the shared
@@ -78,7 +80,7 @@ review.
 Before writing new UI, check `frontend/digiweb/MANIFEST.json` (90 components,
 14 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
-PerfMetrics/StatCounter, TerminalManifest, the chat family (ChatTranscript/
+PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/
 Card/Input/Label/Avatar/DropdownMenu/Sheet/Tooltip/Collapsible on the `dress`
 axis), Terminal, Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,

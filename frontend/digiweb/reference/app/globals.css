@@ -19,6 +19,7 @@
 @import "@digithings/web/styles/finance-tearsheet.css";
 @import "@digithings/web/styles/finance-tearsheet-overlay.css";
 @import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/repo-activity.css";
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
 @import "@digithings/web/styles/command-palette.css";
@@ -41,6 +42,7 @@
 @source "../../web/src/components/finance-composites";
 @source "../../web/src/components/finance-tearsheet";
 @source "../../web/src/components/data-layout";
+@source "../../web/src/components/repo-activity";
 @source "../../web/src/components/deck";
 @source "../../web/src/components/effects-chrome";
 @source "../../web/src/components/command-palette";
