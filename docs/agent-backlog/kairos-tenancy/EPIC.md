@@ -254,8 +254,9 @@ free, not house/system, not ops-custom `studio`/`none` without a grant).
   `feat/` branch. Scheduled probe is installed as `.github/workflows/kairos-cron-check.yml`
   (#3380); `cursor/*` cannot rename it. Canonical CLI is `scripts/digiquant_cron_check.py`.
 
-**Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP
-still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
+**Auth (`core`):** GitHub Enabled + Email Enabled. Vendor consoles use
+`admin@digithings.ai` on Proton — not Agentmail and not a company Google account.
+See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **3** (Observer
 `GET /settings/app-urls` fails `public_app_urls_ok`: live EF still returns
