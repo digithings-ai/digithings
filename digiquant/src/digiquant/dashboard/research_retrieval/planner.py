@@ -400,9 +400,10 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
-_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_plan")
-_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_decision")
-_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_attention_evaluation")
+# Frozen identity strings. Do not rename with the package.
+_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
+_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
+_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_evaluation")
 _TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
 
 

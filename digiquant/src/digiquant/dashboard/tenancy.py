@@ -27,10 +27,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-# Fixed namespace for every deterministic id this module mints. Mirrors
-# ``profile_config._PROFILE_VERSION_NS`` / migration 075's house seed comment — any
-# stable literal works here, it only needs to never change between deploys.
-_TENANCY_NAMESPACE = uuid5(NAMESPACE_URL, "digithings.dashboard.tenancy")
+# Fixed namespace for every deterministic id this module mints. The URL string is
+# identity, not a package path: migration 096 seeds these UUIDs, so this literal
+# must stay ``digithings.olympus.tenancy`` even after the package rename.
+_TENANCY_NAMESPACE = uuid5(NAMESPACE_URL, "digithings.olympus.tenancy")
 
 SYSTEM_WORKSPACE_SLUG = "system"
 HOUSE_WORKSPACE_SLUG = "house"

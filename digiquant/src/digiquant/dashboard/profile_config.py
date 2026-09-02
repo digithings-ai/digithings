@@ -18,7 +18,8 @@ from digiquant.profiles.asset_preferences import AssetPreferences
 from digiquant.profiles.investment_profile import InvestmentProfile
 
 HOUSE_PROFILE_KEY = "house"
-_PROFILE_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.profile_config")
+# Frozen identity string (migration 075). Do not rename with the package.
+_PROFILE_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.profile_config")
 
 
 class ProfileConfigMissingError(LookupError):

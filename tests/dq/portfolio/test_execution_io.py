@@ -1131,9 +1131,9 @@ class TestSoleAuthority:
         # never inserts there, which ``test_h9_is_the_only_ledger_writer`` pins from the
         # other side.
         assert self._files_naming("portfolio_ledger_paper_executions") == [
-            "digiquant/src/digiquant/research/cost_liquidity_registry.py",
             f"{writers}/execution_io.py",
             f"{writers}/ledger_io.py",
+            "digiquant/src/digiquant/research/cost_liquidity_registry.py",
         ]
         # Executor + owned opening-snapshot helper (+ operator CLI that names the table).
         assert self._files_naming("portfolio_ledger_holding_lots") == [

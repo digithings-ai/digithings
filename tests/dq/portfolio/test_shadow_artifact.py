@@ -496,7 +496,6 @@ def test_shadow_artifact_and_chain_import_guard() -> None:
         / "digiquant"
         / "src"
         / "digiquant"
-        / "dashboard"
         / "portfolio"
         / "chain.py"
     )

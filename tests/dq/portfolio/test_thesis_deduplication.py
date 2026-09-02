@@ -26,7 +26,6 @@ SCHEMA_PATH = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "dashboard"
     / "portfolio"
     / "templates"
     / "schemas"

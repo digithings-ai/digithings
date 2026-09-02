@@ -16,7 +16,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 CORPUS_KEY_KINDS = frozenset({"theme", "asset", "segment"})
-_CORPUS_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.dashboard.research_corpus")
+# Frozen identity string. Do not rename with the package.
+_CORPUS_VERSION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_corpus")
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{0,198}$")
 # Reject tenant / profile markers in slug material (anti-fork).
 _TENANT_MARKER_RE = re.compile(

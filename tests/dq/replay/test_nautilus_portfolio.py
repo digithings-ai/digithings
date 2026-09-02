@@ -35,14 +35,12 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "dashboard"
     / "portfolio"
     / "chain.py",
     Path(__file__).resolve().parents[3]
     / "digiquant"
     / "src"
     / "digiquant"
-    / "dashboard"
     / "portfolio"
     / "phases"
     / "phase7e_risk_sizing.py",
@@ -50,7 +48,6 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "dashboard"
     / "portfolio"
     / "phases"
     / "h9_commit_run.py",
@@ -58,7 +55,6 @@ _PRODUCTION_GUARD_PATHS = (
     / "digiquant"
     / "src"
     / "digiquant"
-    / "dashboard"
     / "portfolio"
     / "shadow_artifact.py",
 )
