@@ -173,13 +173,16 @@ Share one reusable desk URL on the dashboard origin:
 `https://digiquant.io/dashboard?invite=<code>`
 
 (or the same `invite` query on `/dashboard/twelve-x`). Unsigned visitors stash the
-token in `sessionStorage`. After Google, GitHub, or email signup/login, the app
-POSTs that code to settings `POST /access/redeem-invite` (SHA-256 compare against
-`FX_HUB_INVITE_HASH` and/or `product_invite_codes`) and grants `fx_hub` for the
-**signed-in email**. No session / no email → no grant. Do not put a code field on
-the OAuth card. The FX Hub locked surface still has a paste-code form as fallback
-if someone forgets the link. Rate limit stays 8 attempts / hour. Rotate the code
-if the URL leaks. Ops can still `INSERT` emails into `client_product_grants`.
+token in `sessionStorage` (tab-scoped). After Google, GitHub, or email signup/login
+**in that same tab**, the app POSTs that code to settings `POST /access/redeem-invite`
+(SHA-256 compare against `FX_HUB_INVITE_HASH` and/or `product_invite_codes`) and
+grants `fx_hub` for the **signed-in email**.
+No session / no email → no grant. Do not put a code field on the OAuth card. The
+FX Hub locked surface still has a paste-code form as fallback if someone forgets
+the link, or if confirm-email opens a **new** tab (stash does not follow). Rate
+limit stays 8 attempts / hour. Rotate the code if the URL leaks. Ops can still
+`INSERT` emails into `client_product_grants`. Sign-out drops the stash so a later
+session on the same tab cannot inherit it.
 
 Operator steps:
 

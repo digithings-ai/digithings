@@ -5,11 +5,17 @@
  */
 
 import { redeemInvite, SettingsHttpError } from './settings-api';
-import { clearStashedInvite, peekStashedInvite, type InviteStorage } from './invite-stash';
+import {
+  clearStashedInvite,
+  peekStashedInvite,
+  type InviteStorage,
+} from './invite-stash';
 
 export type RedeemStashOutcome = 'granted' | 'skipped' | 'invalid' | 'failed';
 
 export type RedeemInviteFn = typeof redeemInvite;
+
+const inFlight = new WeakMap<object, Promise<RedeemStashOutcome>>();
 
 function hasEmail(email: string | null | undefined): boolean {
   const value = (email ?? '').trim();
@@ -18,6 +24,16 @@ function hasEmail(email: string | null | undefined): boolean {
 
 function isInvalidInvite(err: unknown): boolean {
   return err instanceof SettingsHttpError && (err.status === 403 || err.code === 'INVITE_INVALID');
+}
+
+function flightKey(storage?: InviteStorage): object | null {
+  if (storage) return storage;
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    return sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 export async function redeemStashedInvite(args: {
@@ -32,17 +48,30 @@ export async function redeemStashedInvite(args: {
   const accessToken = (args.accessToken ?? '').trim();
   if (!accessToken || !hasEmail(args.email)) return 'skipped';
 
-  const redeem = args.redeem ?? redeemInvite;
-  try {
-    await redeem({ accessToken }, { code, product_key: 'fx_hub' });
-    clearStashedInvite(args.storage);
-    args.refresh?.();
-    return 'granted';
-  } catch (err) {
-    if (isInvalidInvite(err)) {
-      clearStashedInvite(args.storage);
-      return 'invalid';
-    }
-    return 'failed';
+  const key = flightKey(args.storage);
+  if (key) {
+    const existing = inFlight.get(key);
+    if (existing) return existing;
   }
+
+  const redeem = args.redeem ?? redeemInvite;
+  const run = (async (): Promise<RedeemStashOutcome> => {
+    try {
+      await redeem({ accessToken }, { code, product_key: 'fx_hub' });
+      clearStashedInvite(args.storage);
+      args.refresh?.();
+      return 'granted';
+    } catch (err) {
+      if (isInvalidInvite(err)) {
+        clearStashedInvite(args.storage);
+        return 'invalid';
+      }
+      return 'failed';
+    } finally {
+      if (key) inFlight.delete(key);
+    }
+  })();
+
+  if (key) inFlight.set(key, run);
+  return run;
 }

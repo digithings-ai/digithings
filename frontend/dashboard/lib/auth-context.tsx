@@ -18,6 +18,7 @@ import {
   type OAuthProvider,
 } from './supabase';
 import { formatAuthError, isDuplicateSignupUser } from './auth-errors';
+import { clearStashedInvite } from './invite-stash';
 
 export type { OAuthProvider };
 
@@ -141,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    clearStashedInvite();
     const client = getSupabaseClient();
     if (!client) {
       setSession(null);

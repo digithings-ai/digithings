@@ -20,20 +20,22 @@ export function useInviteLink(): void {
 
   useEffect(() => {
     if (!authEnabled || typeof window === 'undefined') return;
-    const stored = stashInviteFromSearch(window.location.search);
-    if (!stored) return;
+    stashInviteFromSearch(window.location.search);
     const next = pathWithoutInviteParam(currentPath());
     if (next !== currentPath()) {
       window.history.replaceState(window.history.state, '', next);
     }
   }, [authEnabled]);
 
+  const accessToken = session?.access_token;
+  const email = session?.user?.email;
+
   useEffect(() => {
     if (!authEnabled || loading) return;
     void redeemStashedInvite({
-      accessToken: session?.access_token,
-      email: session?.user?.email,
+      accessToken,
+      email,
       refresh: requestAccessRefresh,
     });
-  }, [authEnabled, loading, session]);
+  }, [authEnabled, loading, accessToken, email]);
 }

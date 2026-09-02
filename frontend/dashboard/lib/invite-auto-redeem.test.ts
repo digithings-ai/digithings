@@ -147,4 +147,25 @@ describe('redeemStashedInvite', () => {
     expect(refresh).not.toHaveBeenCalled();
     expect(storage.getItem(FX_HUB_INVITE_STORAGE_KEY)).toBe('fx-hub-desk-token');
   });
+
+  it('coalesces concurrent redeems of the same stash into one POST', async () => {
+    const storage = memoryStorage();
+    stashInviteFromSearch('?invite=fx-hub-desk-token', storage);
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const redeem = vi.fn(async () => {
+      await gate;
+      return { ok: true as const, already_granted: false, product_key: 'fx_hub' };
+    });
+    const refresh = vi.fn();
+
+    const first = redeemStashedInvite({ ...SESSION, redeem, refresh, storage });
+    const second = redeemStashedInvite({ ...SESSION, redeem, refresh, storage });
+    release?.();
+    expect(await Promise.all([first, second])).toEqual(['granted', 'granted']);
+    expect(redeem).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
 });

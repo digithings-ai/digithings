@@ -136,4 +136,15 @@ describe('useInviteLink', () => {
     expect(refresh.fn).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(FX_HUB_INVITE_STORAGE_KEY)).toBeNull();
   });
+
+  it('strips invite from the URL even when the token is too short to stash', async () => {
+    window.history.replaceState(null, '', '/dashboard/?invite=short&tab=brief');
+    await act(async () => {
+      root.render(createElement(Probe));
+    });
+    expect(sessionStorage.getItem(FX_HUB_INVITE_STORAGE_KEY)).toBeNull();
+    expect(window.location.search).not.toContain('invite=');
+    expect(window.location.search).toContain('tab=brief');
+    expect(redeem.fn).not.toHaveBeenCalled();
+  });
 });
