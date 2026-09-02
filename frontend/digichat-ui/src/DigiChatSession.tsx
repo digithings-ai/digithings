@@ -277,7 +277,9 @@ export function DigiChatSession({
                         ))}
                       </ul>
                     ) : null}
-                    {!streaming && m.content ? (
+                    {/* No copy on embed: clipboard API is blocked in the
+                        cross-origin iframe, so the button would silently no-op. */}
+                    {layout !== "embed" && !streaming && m.content ? (
                       <CopyButton
                         text={stripFoundryCitationMarkers(m.content)}
                         className="dc-msg-copy"

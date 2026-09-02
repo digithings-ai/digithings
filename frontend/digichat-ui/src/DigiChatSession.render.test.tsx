@@ -10,7 +10,11 @@ import { describe, expect, it } from "vitest";
 import { DigiChatSession } from "./DigiChatSession";
 import type { DigiChatMessage, DigiChatSessionProps } from "./types";
 
-function sessionWith(messages: DigiChatMessage[], busy: boolean): string {
+function sessionWith(
+  messages: DigiChatMessage[],
+  busy: boolean,
+  layout: DigiChatSessionProps["layout"] = "page",
+): string {
   const chat: DigiChatSessionProps["chat"] = {
     messages,
     busy,
@@ -21,7 +25,9 @@ function sessionWith(messages: DigiChatMessage[], busy: boolean): string {
     onRetry: () => {},
     modelLabel: "test-model",
   };
-  return renderToStaticMarkup(<DigiChatSession chat={chat} showIntro={false} />);
+  return renderToStaticMarkup(
+    <DigiChatSession chat={chat} showIntro={false} layout={layout} />,
+  );
 }
 
 /** Typed step loader — must never appear; progress is the chain + Searching… row. */
@@ -134,6 +140,18 @@ describe("assistant turn — settled", () => {
     const copyIdx = html.indexOf("dc-msg-copy");
     expect(copyIdx).toBeGreaterThan(bodyIdx);
     expect(html).toContain("copy");
+  });
+
+  it("hides copy on embed — clipboard is blocked in the cross-origin iframe", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      false,
+      "embed",
+    );
+    expect(html).not.toContain("dc-msg-copy");
   });
 
   it("shows no caret when the turn is settled", () => {
