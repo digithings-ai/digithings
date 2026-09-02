@@ -16,16 +16,16 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AssetInputStatus,
     BookWeightsView,
     ReportWeightEntry,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     sha256_hex,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.shadow_artifact import ShadowAllocationArtifact
+from digiquant.portfolio.shadow_artifact import ShadowAllocationArtifact
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 FiniteNonNeg: TypeAlias = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -39,10 +39,10 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
         "cvxpy",
         "cvxopt",
         "digiquant.brokers",
-        "digiquant.olympus.hermes.writers",
-        "digiquant.olympus.hermes.phases.h9_commit_run",
-        "digiquant.olympus.hermes.phases.phase7e_risk_sizing",
-        "digiquant.olympus.atlas.supabase_io",
+        "digiquant.portfolio.writers",
+        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.phase7e_risk_sizing",
+        "digiquant.research.supabase_io",
         "nautilus_trader",
         "supabase",
         "httpx",

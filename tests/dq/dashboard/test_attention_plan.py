@@ -6,7 +6,7 @@ from datetime import date
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.attention_plan import (
+from digiquant.dashboard.attention_plan import (
     AttentionPlan,
     AttentionPlanError,
     AttentionPlanShadowResult,
@@ -18,8 +18,8 @@ from digiquant.olympus.attention_plan import (
     plan_attention_shadow,
     resolve_profile_pin_for_planner,
 )
-from digiquant.olympus.edit_mode.models import PriorPublished, TriageSignal
-from digiquant.olympus.profile_config import (
+from digiquant.dashboard.edit_mode.models import PriorPublished, TriageSignal
+from digiquant.dashboard.profile_config import (
     ProfileConfig,
     ProfileConfigMissingError,
     house_profile_config,

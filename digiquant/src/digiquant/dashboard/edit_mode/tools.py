@@ -8,8 +8,8 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Protocol,
 )
 
-from digiquant.olympus.research_retrieval import ResearchRetriever
-from digiquant.olympus.research_retrieval.queries import extract_section
+from digiquant.dashboard.research_retrieval import ResearchRetriever
+from digiquant.dashboard.research_retrieval.queries import extract_section
 
 __all__ = [
     "PriorDocumentFetcher",

@@ -12,9 +12,9 @@ from collections.abc import Callable
 from datetime import date
 from uuid import UUID
 
-from digiquant.olympus.atlas.state import AtlasConfigBundle
-from digiquant.olympus.overlay.models import OverlayError
-from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+from digiquant.research.state import AtlasConfigBundle
+from digiquant.dashboard.overlay.models import OverlayError
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
 OverlayInvoke = Callable[..., object]
 
@@ -73,14 +73,14 @@ def _overlay_chain_deps(
 ) -> object:
     """Build Atlas→Hermes deps with the overlay pin on the config loader."""
     # Dependency-isolation: hermes/atlas pull digillm; cron unit tests never call this.
-    from digiquant.olympus.atlas.graph import AtlasGraphDeps
-    from digiquant.olympus.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
-    from digiquant.olympus.atlas.phases.publish_phase import PublishDeps
-    from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-    from digiquant.olympus.hermes.chain import ChainDeps
-    from digiquant.olympus.hermes.graph import HermesGraphDeps, ThesisGraphDeps
-    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+    from digiquant.research.graph import AtlasGraphDeps
+    from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
+    from digiquant.research.phases.publish_phase import PublishDeps
+    from digiquant.research.phases.triage_phase import TriageDeps
+    from digiquant.portfolio.chain import ChainDeps
+    from digiquant.portfolio.graph import HermesGraphDeps, ThesisGraphDeps
+    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     def config_loader() -> AtlasConfigBundle:
         return overlay_config_bundle(
@@ -111,8 +111,8 @@ _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 
 def _overlay_held(client: object, run_date: date, workspace_id: UUID) -> tuple[str, ...]:
-    from digiquant.olympus.atlas.supabase_io import load_prior_book
-    from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+    from digiquant.research.supabase_io import load_prior_book
+    from digiquant.portfolio.candidates import holdings_from_prior_book
 
     try:
         prior = load_prior_book(client, run_date, workspace_id=str(workspace_id))
@@ -129,9 +129,9 @@ def _invoke_olympus_graph(
     manage_usage: bool = False,
 ) -> None:
     """Production graph invoke. Lazy-imports hermes so cron tests stay digillm-free."""
-    from digiquant.olympus.atlas.graph import AtlasInput
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
-    from digiquant.olympus.hermes.chain import run_atlas_then_hermes
+    from digiquant.research.graph import AtlasInput
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+    from digiquant.portfolio.chain import run_atlas_then_hermes
 
     overlay_config_bundle(workspace_id=workspace_id, profile_version_id=requested_version_id)
     client = build_client(SupabaseConfig.from_env())

@@ -12,34 +12,34 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas import cost_liquidity_registry as clr
-from digiquant.olympus.atlas import forecast_registry as fr
-from digiquant.olympus.atlas import risk_policy_registry as rpr
-from digiquant.olympus.atlas.graph import AtlasGraphDeps, AtlasInput, build_atlas_graph
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.atlas.testing.simulator import simulated_pipeline
-from digiquant.olympus.hermes.graph import (
+from digiquant.research import cost_liquidity_registry as clr
+from digiquant.research import forecast_registry as fr
+from digiquant.research import risk_policy_registry as rpr
+from digiquant.research.graph import AtlasGraphDeps, AtlasInput, build_atlas_graph
+from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
+from digiquant.research.phases.publish_phase import PublishDeps
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.testing.simulator import simulated_pipeline
+from digiquant.portfolio.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
     build_hermes_phases_thesis,
 )
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastTerms,
     PriceAnchor,
     PriceAnchorStatus,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import CalibrationArtifactStatus
-from digiquant.olympus.hermes.models.risk_policy import PolicyArtifactStatus
-from digiquant.olympus.hermes.phases.h6_deliberation import _resolve_from_debate
-from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, _manifest_payload
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
-from digiquant.olympus.hermes.phases.portfolio_common import materialize_forecast_assessment
-from digiquant.olympus.hermes.sizing import TickerRisk, size_portfolio
+from digiquant.portfolio.models.forecast_calibration import CalibrationArtifactStatus
+from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
+from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, _manifest_payload
+from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
+from digiquant.portfolio.sizing import TickerRisk, size_portfolio
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.incumbent_risk_fixtures import (
@@ -174,9 +174,9 @@ def test_incumbent_sized_book_golden_unchanged_in_phase1() -> None:
 
 
 def test_phase1_registry_modules_export_cutoff_reads() -> None:
-    from digiquant.olympus.atlas import cost_liquidity_registry as clr
-    from digiquant.olympus.atlas import forecast_registry as fr
-    from digiquant.olympus.atlas import risk_policy_registry as rpr
+    from digiquant.research import cost_liquidity_registry as clr
+    from digiquant.research import forecast_registry as fr
+    from digiquant.research import risk_policy_registry as rpr
 
     cutoff = datetime(2026, 8, 25, 16, 0, tzinfo=UTC)
     client = FakeSupabaseClient()
@@ -194,7 +194,7 @@ def test_phase1_registry_modules_export_cutoff_reads() -> None:
 
 
 def test_knowledge_cutoff_bounds_cost_estimate_visibility() -> None:
-    from digiquant.olympus.atlas import cost_liquidity_registry as clr
+    from digiquant.research import cost_liquidity_registry as clr
 
     from tests.dq.atlas.test_cost_liquidity_registry import CostRegistryFake, _bundle
 
@@ -227,7 +227,7 @@ def _run_phase1_pipeline(*, canned_extras: dict | None = None, overrides: dict |
     extras = dict(canned_extras or {})
     merged_overrides = {"AnalystPayload": analyst_payload_override, **(overrides or {})}
     with patch(
-        "digiquant.olympus.atlas.testing.simulator.seed_supabase_client",
+        "digiquant.research.testing.simulator.seed_supabase_client",
         side_effect=seed_phase1_client,
     ):
         with simulated_pipeline(
@@ -428,7 +428,7 @@ def test_phase1_unpriceable_action_is_typed_not_zero() -> None:
 
 def test_phase1_degraded_risk_registry_keeps_book(monkeypatch: pytest.MonkeyPatch) -> None:
 
-    from digiquant.olympus.hermes.phases import h9_commit_run as h9
+    from digiquant.portfolio.phases import h9_commit_run as h9
 
     from tests.dq.hermes.test_commit_run import _run, _state
 

@@ -59,7 +59,7 @@ optimize = ["optuna>=3.0"]
 # Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
 m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
-# Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
+# Pulls in atlas runtime deps too, so `pytest tests/dq/research/` works whenever
 # digigraph is also on the path (via install-workspace.sh or editable install).
 # Test/lint tooling (pytest, ruff, ...) lives in [dependency-groups] below, not
 # here -- a uv dependency-group syncs by default with plain `uv sync`, while an
@@ -99,10 +99,10 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Skills, templates, config, and docs live alongside the engine packages
-# (digiquant.olympus.atlas, digiquant.olympus.hermes) so they ship inside the wheel —
+# (digiquant.research, digiquant.portfolio) so they ship inside the wheel —
 # pip-installs are self-contained, no path-walking outside the package.
 # See issue #486 for the consolidation rationale.
-"digiquant.olympus.atlas" = [
+"digiquant.research" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "config/**/*.yaml",
@@ -112,12 +112,12 @@ where = ["src"]
     "config/**/*.example",
     "docs/**/*.md",
 ]
-"digiquant.olympus.hermes" = [
+"digiquant.portfolio" = [
     "skills/**/*.md",
     "templates/**/*.json",
     "docs/**/*.md",
 ]
-"digiquant.olympus.replay" = [
+"digiquant.dashboard.replay" = [
     "shadow_criteria/**/*.json",
 ]
 "digiquant.notify" = [

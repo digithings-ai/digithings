@@ -8,12 +8,12 @@ from typing import (
 )
 
 import pytest
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
 )
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.learning.beliefs_distillation import (
+from digiquant.research.state import AtlasResearchState
+from digiquant.dashboard.learning.beliefs_distillation import (
     DAILY_BELIEFS_MAX_TOKENS,
     DEFAULT_BELIEFS_BACKLOG,
     beliefs_backlog_threshold,
@@ -77,7 +77,7 @@ class TestBeliefsTrigger:
 @pytest.mark.unit
 class TestBeliefsDistillation:
     def test_distill_writes_beliefs_document(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         rows = [_resolved_row(row_id=f"r{i}") for i in range(2)]
         client = FakeSupabaseClient(canned_reads={"decision_log": rows})
@@ -116,7 +116,7 @@ class TestBeliefsDistillation:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """WP-I: empty lesson day still writes a same-date beliefs document."""
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         prior_body = "Yesterday's durable beliefs about duration risk."
         prior = {
@@ -153,7 +153,7 @@ class TestBeliefsDistillation:
     def test_short_fold_llm_gets_prior_body_and_todays_lessons(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         rows = [_resolved_row(row_id="r0")]
         prior_body = "Prior beliefs body."
@@ -193,7 +193,7 @@ class TestBeliefsDistillation:
         assert captured.get("max_tokens") == DAILY_BELIEFS_MAX_TOKENS
 
     def test_full_rewrite_omits_short_fold_token_cap(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         rows = [_resolved_row(row_id="r0")]
         client = FakeSupabaseClient(canned_reads={"decision_log": rows})
@@ -227,7 +227,7 @@ class TestBeliefsDistillation:
     def test_distill_marks_only_lessons_passed_to_llm(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         all_rows = [_resolved_row(row_id=f"r{i}") for i in range(5)]
         client = FakeSupabaseClient(canned_reads={"decision_log": all_rows})
@@ -261,8 +261,8 @@ class TestBeliefsDistillation:
     def test_chain_entry_daily_short_fold_writes_without_backlog(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.atlas.graph import AtlasInput
-        from digiquant.olympus.learning import beliefs_distillation as mod
+        from digiquant.research.graph import AtlasInput
+        from digiquant.dashboard.learning import beliefs_distillation as mod
 
         client = FakeSupabaseClient(canned_reads={"decision_log": []})
 
@@ -289,9 +289,9 @@ class TestBeliefsDistillation:
 @pytest.mark.unit
 class TestPreflightReflectDaily:
     def test_atlas_graph_includes_preflight_reflect_when_wired(self) -> None:
-        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-        from digiquant.olympus.atlas.state import AtlasConfigBundle
+        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.phases.preflight import PreflightDeps
+        from digiquant.research.state import AtlasConfigBundle
 
         client = FakeSupabaseClient()
         deps = AtlasGraphDeps(
@@ -309,7 +309,7 @@ class TestPreflightReflectDaily:
     def test_preflight_reflect_node_still_resolves_pending(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.atlas.phases import preflight as preflight_module
+        from digiquant.research.phases import preflight as preflight_module
 
         called: dict[str, int] = {"resolve": 0}
 
@@ -332,8 +332,8 @@ class TestChainBeliefsWiring:
     def test_refresh_scope_beliefs_runs_distillation_only(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.atlas.graph import AtlasInput
-        from digiquant.olympus.hermes import chain as chain_mod
+        from digiquant.research.graph import AtlasInput
+        from digiquant.portfolio import chain as chain_mod
 
         calls: dict[str, int] = {"beliefs": 0, "atlas": 0}
 
@@ -348,7 +348,7 @@ class TestChainBeliefsWiring:
         monkeypatch.setattr(chain_mod, "run_beliefs_distillation_if_triggered", _stub_beliefs)
         monkeypatch.setattr(chain_mod, "build_atlas_graph", _stub_atlas)
 
-        from digiquant.olympus.atlas.testing.simulator import simulated_pipeline
+        from digiquant.research.testing.simulator import simulated_pipeline
 
         with simulated_pipeline(watchlist=("AAPL",)) as run:
             chain_mod.run_atlas_then_hermes(
@@ -364,7 +364,7 @@ class TestChainBeliefsWiring:
         assert calls["atlas"] == 0
 
     def test_daily_hermes_graph_excludes_phase9_evolution(self) -> None:
-        from digiquant.olympus.hermes.graph import build_hermes_phases_thesis
+        from digiquant.portfolio.graph import build_hermes_phases_thesis
 
         names = [p.name for p in build_hermes_phases_thesis(watchlist=["AAPL"])]
         assert "phase9_evolution" not in names

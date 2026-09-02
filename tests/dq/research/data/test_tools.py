@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
 from tests.dq.atlas.data.test_queries import _FakeClient
 
@@ -30,7 +30,7 @@ def test_tool_definitions_shape():
 
 @pytest.mark.unit
 def test_coerce_bool_handles_string_args():
-    from digiquant.olympus.atlas.data.tools import _coerce_bool
+    from digiquant.research.data.tools import _coerce_bool
 
     assert _coerce_bool(True) is True
     assert _coerce_bool(False) is False

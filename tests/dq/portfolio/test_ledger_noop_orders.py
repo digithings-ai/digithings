@@ -11,8 +11,8 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.models.portfolio_ledger import DecisionAction
+from digiquant.portfolio.writers.ledger_io import (
     _decision,
     _order_quantity_for_move,
     _shares,

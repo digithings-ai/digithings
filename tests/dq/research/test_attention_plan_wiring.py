@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_node
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     DeltaTriageDecision,
@@ -14,12 +14,12 @@ from digiquant.olympus.atlas.state import (
     FocusRosterEntry,
     PhaseHermesState,
 )
-from digiquant.olympus.attention_plan_graph import (
+from digiquant.dashboard.attention_plan_graph import (
     OLYMPUS_PLANNER_MODE_ENV,
     maybe_publish_attention_plan_shadow,
     planner_mode_from_env,
 )
-from digiquant.olympus.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
+from digiquant.dashboard.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

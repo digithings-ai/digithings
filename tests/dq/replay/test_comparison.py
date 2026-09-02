@@ -13,8 +13,8 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -23,7 +23,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     REQUIRED_METRIC_GROUPS,
     ArmFoldEvidence,
     ComparisonReportStatus,
@@ -37,10 +37,10 @@ from digiquant.olympus.replay.comparison import (
     compare_policy_pair,
     policy_comparison_report_content_hash,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     PolicyComparisonReport as GovernanceComparisonEnvelope,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     FillRecord,
     HoldingSnapshot,
@@ -62,7 +62,7 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -798,7 +798,7 @@ def test_governance_envelope_persists_via_store() -> None:
 
 
 def test_metric_leaf_rejects_available_without_values() -> None:
-    from digiquant.olympus.replay.comparison import ComparisonMetric, MetricAvailability
+    from digiquant.dashboard.replay.comparison import ComparisonMetric, MetricAvailability
 
     with pytest.raises(ValidationError):
         ComparisonMetric(

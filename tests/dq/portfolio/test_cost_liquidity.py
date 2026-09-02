@@ -8,25 +8,25 @@ from uuid import uuid4
 
 import polars as pl
 import pytest
-from digiquant.olympus.hermes.action_cost_inputs import (
+from digiquant.portfolio.action_cost_inputs import (
     ActionCostInput,
     ActionCostSide,
     RealizedCostInput,
 )
-from digiquant.olympus.hermes.cost_liquidity import (
+from digiquant.portfolio.cost_liquidity import (
     METHOD_VERSION,
     adv_from_price_history,
     compare_action_cost,
     estimate_action_cost,
     prospective_observations_from_row,
 )
-from digiquant.olympus.hermes.models.cost_liquidity import (
+from digiquant.portfolio.models.cost_liquidity import (
     CostComponentKind,
     CostEstimateStatus,
     CostOutcomeStatus,
     SpreadProxyMethod,
 )
-from digiquant.olympus.hermes.risk_policy import resolve_risk_policy
+from digiquant.portfolio.risk_policy import resolve_risk_policy
 
 pytestmark = pytest.mark.unit
 

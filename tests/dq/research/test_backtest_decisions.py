@@ -41,7 +41,7 @@ def _fake_returns_window(returns_by_ticker):
 
 
 def test_build_trades_filters_and_maps(monkeypatch) -> None:
-    import digiquant.olympus.atlas.supabase_io as sio
+    import digiquant.research.supabase_io as sio
 
     monkeypatch.setattr(
         sio,
@@ -81,7 +81,7 @@ def test_build_trades_filters_and_maps(monkeypatch) -> None:
 
 
 def test_build_trades_skips_unpriced_window(monkeypatch) -> None:
-    import digiquant.olympus.atlas.supabase_io as sio
+    import digiquant.research.supabase_io as sio
 
     # AAPL has a window but SPY (benchmark) does not → the decision is skipped.
     monkeypatch.setattr(sio, "query_returns_window", _fake_returns_window({"AAPL": 0.10}))

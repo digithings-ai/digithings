@@ -9,14 +9,14 @@ from uuid import UUID
 
 import polars as pl
 import pytest
-from digiquant.olympus.atlas import risk_policy_registry as rpr
-from digiquant.olympus.atlas.state import (
+from digiquant.research import risk_policy_registry as rpr
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.h8_risk_snapshots import resolve_h8_risk_artifacts
+from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 

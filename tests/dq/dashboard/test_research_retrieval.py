@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval import (
+from digiquant.dashboard.research_retrieval import (
     ResearchCache,
     ResearchRetriever,
     assert_blinded_h5_prompt,
@@ -21,24 +21,24 @@ from digiquant.olympus.research_retrieval import (
     research_document_allowed,
     strip_blinded_forbidden_keys,
 )
-from digiquant.olympus.research_retrieval.context import (
+from digiquant.dashboard.research_retrieval.context import (
     ContextCompileInput,
     ContextRole,
     compile_context_capsule,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     LegacyDocumentRef,
     content_digest,
     legacy_document_ref_id,
 )
-from digiquant.olympus.research_retrieval.queries import RetrievalManifestMode
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.queries import RetrievalManifestMode
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     LoadedResearchState,
     RoleRetrievalManifestStore,
 )
-from digiquant.olympus.research_retrieval.tools import resolve_retrieval_manifest_mode
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.research_retrieval.tools import resolve_retrieval_manifest_mode
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.olympus.test_context_compiler import _evidence, _loaded_state

@@ -23,13 +23,13 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.envcompat import SHADOW_ARTIFACT_DIR, SHADOW_ARTIFACT_MODE, env_lookup
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.dashboard.envcompat import SHADOW_ARTIFACT_DIR, SHADOW_ARTIFACT_MODE, env_lookup
+from digiquant.portfolio.allocation_contracts import (
     AllocationInputBundle,
     BookWeightsView,
     PreTradeRiskReport,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     canonical_json,
     shadow_allocation_artifact_content_hash,
     shadow_allocation_artifact_hash_payload,
@@ -43,8 +43,8 @@ NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 # the production chain export wiring. WP10.2+/10.3 modules stay unreachable.
 FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
     {
-        "digiquant.olympus.hermes.shadow_optimizer",
-        "digiquant.olympus.replay",
+        "digiquant.portfolio.shadow_optimizer",
+        "digiquant.dashboard.replay",
         "digiquant.brokers",
         "nautilus_trader",
     }

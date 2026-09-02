@@ -1,6 +1,6 @@
 """House GHA Group A reads ignore overlay nav_history / positions / metrics.
 
-Hermes chain (`python -m digiquant.olympus.hermes.chain`) filters
+Hermes chain (`python -m digiquant.portfolio.chain`) filters
 ``workspace_id`` on Group A tables so an overlay same-calendar row cannot
 seed house NAV, trip the drawdown breaker, or open lots from a private book.
 Omitted ``workspace_id`` means house.
@@ -13,17 +13,17 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.supabase_io import load_portfolio_performance_snapshot
-from digiquant.olympus.hermes.portfolio_materialize import _prior_nav as materialize_prior_nav
-from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
-from digiquant.olympus.hermes.writers.commit_io import _compute_nav
-from digiquant.olympus.hermes.writers.commit_io import _prior_nav as commit_prior_nav
-from digiquant.olympus.hermes.writers.opening_snapshot import (
+from digiquant.research.supabase_io import load_portfolio_performance_snapshot
+from digiquant.portfolio.portfolio_materialize import _prior_nav as materialize_prior_nav
+from digiquant.portfolio.risk_controls import BreakerConfig, breaker_scale_from_nav_history
+from digiquant.portfolio.writers.commit_io import _compute_nav
+from digiquant.portfolio.writers.commit_io import _prior_nav as commit_prior_nav
+from digiquant.portfolio.writers.opening_snapshot import (
     HOLDING_LOTS,
     cold_start_requires_seed,
     ensure_legacy_opening_snapshot,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.test_opening_snapshot import BOOK_D, NOW, _book_client

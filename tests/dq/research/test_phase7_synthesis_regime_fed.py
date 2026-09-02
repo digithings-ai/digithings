@@ -18,13 +18,13 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
-from digiquant.olympus.atlas.phases.phase7_synthesis import (
+from digiquant.research.phases.phase6_consolidate import build_phase6
+from digiquant.research.phases.phase7_synthesis import (
     DigestSnapshot,
     _regime_label_from_phase3,
     build_phase7,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -32,7 +32,7 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.atlas.testing.simulator import parse_schema_name
+from digiquant.research.testing.simulator import parse_schema_name
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -229,7 +229,7 @@ def _fed_odds_rows() -> list[dict[str, Any]]:
 class TestFedOddsWiring:
     def _preflight_deps(self, fed_rows: list[dict[str, Any]]) -> Any:
         """Build PreflightDeps backed by a FakeSupabaseClient with canned fed rows."""
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+        from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient(
             canned_reads={
@@ -246,7 +246,7 @@ class TestFedOddsWiring:
 
     def test_fed_odds_populated_in_market_context(self) -> None:
         """When macro_series_observations has FEDPROB rows, market_context['fed_odds'] is set."""
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        from digiquant.research.phases.preflight import build_preflight_node
 
         deps = self._preflight_deps(_fed_odds_rows())
         node = build_preflight_node(deps)
@@ -258,7 +258,7 @@ class TestFedOddsWiring:
 
     def test_fed_odds_absent_when_no_rows(self) -> None:
         """No FEDPROB rows → fed_odds must NOT appear in market_context (not even None)."""
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        from digiquant.research.phases.preflight import build_preflight_node
 
         deps = self._preflight_deps([])
         node = build_preflight_node(deps)
@@ -269,8 +269,8 @@ class TestFedOddsWiring:
 
     def test_fed_odds_fail_soft_on_db_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A database error in get_fed_rate_probabilities must not crash preflight."""
-        import digiquant.olympus.atlas.phases.preflight as pf_mod
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        import digiquant.research.phases.preflight as pf_mod
+        from digiquant.research.phases.preflight import build_preflight_node
 
         deps = self._preflight_deps([])
         node = build_preflight_node(deps)

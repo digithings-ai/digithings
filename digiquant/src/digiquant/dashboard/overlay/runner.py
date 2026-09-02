@@ -11,27 +11,27 @@ from collections.abc import Callable
 from decimal import Decimal
 from uuid import UUID
 
-from digiquant.olympus.overlay.byok import (
+from digiquant.dashboard.overlay.byok import (
     ByokProbe,
     ProviderCredential,
     load_active_credential,
     probe_byok,
 )
-from digiquant.olympus.overlay.dispatch import JobRun, JobRunStore
-from digiquant.olympus.overlay.execute import (
+from digiquant.dashboard.overlay.dispatch import JobRun, JobRunStore
+from digiquant.dashboard.overlay.execute import (
     assert_tenant_agnostic_corpus_key,
     execute_overlay,
     publish_overlay_corpus_pin,
     skipped_no_credentials,
 )
-from digiquant.olympus.overlay.models import (
+from digiquant.dashboard.overlay.models import (
     OverlayError,
     OverlayRunRequest,
     OverlayRunResult,
     PinSeamConfig,
 )
-from digiquant.olympus.research_corpus import ResearchCorpusStore
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.vault.envelope import MasterKey
 
 

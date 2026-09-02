@@ -20,24 +20,24 @@ from uuid import UUID
 import yaml
 
 from digiquant.data.onchain.hyperdash import get_onchain_cohort_positioning
-from digiquant.olympus.atlas.cost_liquidity_registry import (
+from digiquant.research.cost_liquidity_registry import (
     resolve_realized_action_cost_outcomes_from_state,
 )
-from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities, get_market_context
-from digiquant.olympus.atlas.decision_log import (
+from digiquant.research.data.queries import get_fed_rate_probabilities, get_market_context
+from digiquant.research.decision_log import (
     ReflectorOutput,
     fetch_recent_lessons,
     resolve_pending,
 )
-from digiquant.olympus.atlas.forecast_outcomes import resolve_matured_forecast_outcomes
-from digiquant.olympus.atlas.sectors_config import load_sectors
-from digiquant.olympus.atlas.state import (
+from digiquant.research.forecast_outcomes import resolve_matured_forecast_outcomes
+from digiquant.research.sectors_config import load_sectors
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.supabase_io import (
     SupabaseClient,
     load_active_theses_rows,
     load_portfolio_performance_snapshot,
@@ -52,12 +52,12 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-from digiquant.olympus.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.turnover import mark_to_market_weights
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
-from digiquant.olympus.overlay.runner import pin_seam_config
-from digiquant.olympus.temporal import require_knowledge_cutoff_at
+from digiquant.dashboard.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.turnover import mark_to_market_weights
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.overlay.runner import pin_seam_config
+from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
@@ -356,9 +356,9 @@ def _hydrate_config(
     run_date: date,
 ) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
-    from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
-    from digiquant.olympus.atlas.graph import _atlas_config_root
-    from digiquant.olympus.profile_config import pin_profile_config_for_preflight
+    from digiquant.research.dashboard_digest import portfolio_preferences_static
+    from digiquant.research.graph import _atlas_config_root
+    from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
 
     try:
         prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)
@@ -440,12 +440,12 @@ def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -
     """
     from uuid import UUID
 
-    from digiquant.olympus.research_retrieval.models import ResearchStatePin
-    from digiquant.olympus.research_retrieval.pin import (
+    from digiquant.dashboard.research_retrieval.models import ResearchStatePin
+    from digiquant.dashboard.research_retrieval.pin import (
         STATE_UNAVAILABLE,
         pin_research_state_for_preflight,
     )
-    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+    from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
     # Checkpoint / mid-run resume already has the authoritative pin.
     if state.research_state_pin is not None and state.research_state_status == "pinned":
@@ -517,7 +517,7 @@ def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -
 
 def _outcome_maturation_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
     """WP15.6: mature prior outcomes and pin one structured lesson at cutoff."""
-    from digiquant.olympus.atlas.phases.outcome_maturation import (
+    from digiquant.research.phases.outcome_maturation import (
         OutcomeMaturationDeps,
         outcome_lesson_preflight_update,
         pin_outcome_lesson_for_preflight,
@@ -622,7 +622,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         update.update(_pin_research_state_update(deps, state))
         update.update(_outcome_maturation_update(deps, state))
 
-        from digiquant.olympus.research_retrieval.h7_prerequisites import (
+        from digiquant.dashboard.research_retrieval.h7_prerequisites import (
             build_h7_prerequisite_snapshot,
         )
 

@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases import phase5_equities
-from digiquant.olympus.atlas.sectors_config import load_sectors
-from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
+from digiquant.research.phases import phase5_equities
+from digiquant.research.sectors_config import load_sectors
+from digiquant.research.state import AtlasResearchState, SegmentPayload, SegmentSlot
 
 
 def _equity_payload() -> str:

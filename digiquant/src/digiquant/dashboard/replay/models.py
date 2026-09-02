@@ -14,7 +14,7 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 FiniteNonNegDec: TypeAlias = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
@@ -25,10 +25,10 @@ UnitInterval: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=Fal
 FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
     {
         "digiquant.brokers",
-        "digiquant.olympus.hermes.writers",
-        "digiquant.olympus.hermes.phases.h9_commit_run",
-        "digiquant.olympus.hermes.phases.phase7e_risk_sizing",
-        "digiquant.olympus.atlas.supabase_io",
+        "digiquant.portfolio.writers",
+        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.phase7e_risk_sizing",
+        "digiquant.research.supabase_io",
         "digiquant.nautilus_runner",
         "supabase",
         "httpx",
@@ -521,7 +521,7 @@ class ReplayInputManifest(ReplayContractModel):
         if len(sort_keys) != len(set(sort_keys)):
             raise ValueError("source_refs must be unique per family+version_id")
 
-        from digiquant.olympus.replay.canonical import replay_input_manifest_content_hash
+        from digiquant.dashboard.replay.canonical import replay_input_manifest_content_hash
 
         expected = replay_input_manifest_content_hash(
             manifest_id=self.manifest_id,
@@ -558,7 +558,7 @@ class ReplayArmSpec(ReplayContractModel):
 
     @model_validator(mode="after")
     def _validate_arm(self) -> ReplayArmSpec:
-        from digiquant.olympus.replay.canonical import policy_bundle_content_hash
+        from digiquant.dashboard.replay.canonical import policy_bundle_content_hash
 
         expected = policy_bundle_content_hash(
             self.policy_bundle,
@@ -599,7 +599,7 @@ class ReplayPairSpec(ReplayContractModel):
         if self.incumbent.manifest_content_hash != self.challenger.manifest_content_hash:
             raise ValueError("paired arms require identical shared manifest")
 
-        from digiquant.olympus.replay.canonical import replay_pair_content_hash
+        from digiquant.dashboard.replay.canonical import replay_pair_content_hash
 
         expected = replay_pair_content_hash(
             pair_id=self.pair_id,
@@ -628,7 +628,7 @@ def build_replay_pair(
     if incumbent.manifest_content_hash != challenger.manifest_content_hash:
         raise ValueError("paired arms require identical shared manifest")
 
-    from digiquant.olympus.replay.canonical import replay_pair_content_hash
+    from digiquant.dashboard.replay.canonical import replay_pair_content_hash
 
     pair_hash = replay_pair_content_hash(
         pair_id=pair_id,

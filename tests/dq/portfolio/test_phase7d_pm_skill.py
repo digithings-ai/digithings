@@ -13,9 +13,9 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.phases.phase7d_pm import _load_pm_skill, _pm_node
-from digiquant.olympus.hermes.skills import SkillNotFoundError
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.phases.phase7d_pm import _load_pm_skill, _pm_node
+from digiquant.portfolio.skills import SkillNotFoundError
 
 pytestmark = pytest.mark.unit
 
@@ -61,7 +61,7 @@ class TestLoadPmSkill:
             _load_pm_skill(loader)
 
     def test_pm_direction_skill_file_present(self) -> None:
-        from digiquant.olympus.hermes.skills import load_skill_full, load_skill_with_frontmatter
+        from digiquant.portfolio.skills import load_skill_full, load_skill_with_frontmatter
 
         fm, _stub = load_skill_with_frontmatter("pm-direction")
         assert fm.get("name") == "pm-direction"
@@ -141,7 +141,7 @@ class TestPmNodeContract:
             )
 
         monkeypatch.setattr(
-            "digiquant.olympus.hermes.phases.phase7d_pm.build_grounding", fake_build_grounding
+            "digiquant.portfolio.phases.phase7d_pm.build_grounding", fake_build_grounding
         )
         called = {"run_tools": False}
 

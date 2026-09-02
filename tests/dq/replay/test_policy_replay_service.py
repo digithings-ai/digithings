@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 from digikey.models import DigiAuthContext
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -23,7 +23,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     ArmFoldEvidence,
     EvidenceMode,
     MetricDirection,
@@ -32,7 +32,7 @@ from digiquant.olympus.replay.comparison import (
     SignalQualityTelemetry,
     compare_policy_pair,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     ConfidenceBoundRule,
     GateCriterion,
@@ -42,8 +42,8 @@ from digiquant.olympus.replay.governance import (
     MissingDataRule,
     gate_criteria_content_hash,
 )
-from digiquant.olympus.replay.governance_models import GovernanceDecisionKind
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.governance_models import GovernanceDecisionKind
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingSnapshot,
     InstrumentBarSeries,
@@ -63,7 +63,7 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
 from digiquant.service import (
     service_evaluate_policy_gate,
     service_get_policy_comparison,

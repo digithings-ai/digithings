@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases.phase1_altdata import (
+from digiquant.research.phases.phase1_altdata import (
     AiPortfoliosReport,
     CtaPositioningReport,
     OnchainCohortPositioningReport,
@@ -25,12 +25,12 @@ from digiquant.olympus.atlas.phases.phase1_altdata import (
     SentimentNewsReport,
     build_phase1,
 )
-from digiquant.olympus.atlas.phases.phase2_institutional import (
+from digiquant.research.phases.phase2_institutional import (
     HedgeFundIntelReport,
     InstitutionalFlowsReport,
     build_phase2,
 )
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.state import AtlasResearchState
 from pydantic import BaseModel
 
 
@@ -86,7 +86,7 @@ class TestBiasNormalization:
     def test_positive_maps_to_bullish(self) -> None:
         from datetime import date
 
-        from digiquant.olympus.atlas.segments import SegmentReport
+        from digiquant.research.segments import SegmentReport
 
         r = SegmentReport(
             segment="test",
@@ -99,7 +99,7 @@ class TestBiasNormalization:
     def test_negative_maps_to_bearish(self) -> None:
         from datetime import date
 
-        from digiquant.olympus.atlas.segments import SegmentReport
+        from digiquant.research.segments import SegmentReport
 
         r = SegmentReport(
             segment="test",
@@ -112,7 +112,7 @@ class TestBiasNormalization:
     def test_canonical_values_pass_through(self) -> None:
         from datetime import date
 
-        from digiquant.olympus.atlas.segments import SegmentReport
+        from digiquant.research.segments import SegmentReport
 
         for val in ("strong_bullish", "bullish", "neutral", "bearish", "strong_bearish", "mixed"):
             r = SegmentReport(
@@ -126,7 +126,7 @@ class TestBiasNormalization:
     def test_cta_flow_bias_accepts_mixed(self) -> None:
         from datetime import date
 
-        from digiquant.olympus.atlas.phases.phase1_altdata import CtaPositioningReport
+        from digiquant.research.phases.phase1_altdata import CtaPositioningReport
 
         r = CtaPositioningReport(
             segment="alt-cta-positioning",

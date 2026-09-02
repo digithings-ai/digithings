@@ -20,20 +20,20 @@ from uuid import UUID
 
 from pydantic import ConfigDict
 
-from digiquant.olympus.learning.component_attribution import ComponentAttributor
-from digiquant.olympus.learning.lesson_registry import (
+from digiquant.dashboard.learning.component_attribution import ComponentAttributor
+from digiquant.dashboard.learning.lesson_registry import (
     LessonCompilationError,
     LessonCompilationPolicy,
     LessonCompiler,
 )
-from digiquant.olympus.learning.outcome_assembly import OutcomeEpisodeAssembler
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_assembly import OutcomeEpisodeAssembler
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     OutcomeLearningModel,
     OutcomeLessonVersion,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

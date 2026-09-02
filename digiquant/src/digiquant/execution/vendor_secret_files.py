@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.kairos.staging_secrets import (
+from digiquant.execution.staging_secrets import (
     KAIROS_STAGING_OPTIONAL_SECRETS,
     KAIROS_STAGING_REQUIRED_SECRETS,
     missing_kairos_staging_secrets,

@@ -30,11 +30,11 @@ from typing import (  # score:allow untyped any — used for JSON-derived dict s
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field, model_validator
 
-from digiquant.olympus.atlas.decision_log import persist_pending
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.state import PhaseError
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.research.decision_log import persist_pending
+from digiquant.research.phases._node_factory import _shared_context
+from digiquant.research.state import PhaseError
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.state import HermesState
 
 # ─── 9A Sources Scorecard ──────────────────────────────────────────────────
 
@@ -126,7 +126,7 @@ class Phase9Deps:
     untouched).
 
     Production CLI populates this with the same client used by preflight,
-    publish, and the resolver — see :func:`digiquant.olympus.atlas.graph.cli_main`.
+    publish, and the resolver — see :func:`digiquant.research.graph.cli_main`.
     """
 
     client: SupabaseClient
@@ -169,7 +169,7 @@ def _phase9_node_factory(
         # ── Phase 9A/B/C: LLM evolution artifacts ─────────────────────
         from digigraph.graph.research_agent import run_research_agent
 
-        from digiquant.olympus.hermes.skills import load_skill
+        from digiquant.portfolio.skills import load_skill
 
         # Phase 9 is scheduled and deterministic — if pipeline-evolution is
         # missing that's a packaging regression, not a normal operating state.

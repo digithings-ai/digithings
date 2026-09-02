@@ -14,7 +14,7 @@ from uuid import UUID
 
 import polars as pl
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -25,13 +25,13 @@ from digiquant.olympus.hermes.allocation_contracts import (
     PriorBookSnapshot,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import allocation_bundle_content_hash
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.risk_controls import BreakerConfig, compute_breaker_scale
-from digiquant.olympus.hermes.risk_policy import INCUMBENT_CONTROL_ORDER
-from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
-from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
-from digiquant.olympus.hermes.turnover import (
+from digiquant.portfolio.allocation_hashes import allocation_bundle_content_hash
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.risk_controls import BreakerConfig, compute_breaker_scale
+from digiquant.portfolio.risk_policy import INCUMBENT_CONTROL_ORDER
+from digiquant.portfolio.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.portfolio.sizing_events import SizingAdjustment, SizingAdjustmentType
+from digiquant.portfolio.turnover import (
     apply_rebalancing_cadence,
     apply_turnover_to_sized_book,
     should_rebalance_today,
@@ -219,7 +219,7 @@ def test_control_order_docs_match_source_signature_order() -> None:
     """Fail if someone reorders the reduce-only shell inside size_portfolio."""
     import inspect
 
-    from digiquant.olympus.hermes import sizing as sizing_mod
+    from digiquant.portfolio import sizing as sizing_mod
 
     src = inspect.getsource(sizing_mod.size_portfolio)
     # Skip the docstring — early narrative mentions breaker before the live calls.
@@ -395,14 +395,14 @@ def test_identical_calibrated_raw_mix_yields_identical_post_control_book() -> No
 def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
@@ -415,11 +415,11 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
     cov = _covariance(("AAPL",))
     artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
 
@@ -471,13 +471,13 @@ def test_calibrated_mode_stamps_and_fallback_when_coverage_empty(
 
 
 def test_continuity_backstop_and_final_cap_invariants() -> None:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
         PriorContext,
     )
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     run_date = date(2026, 6, 12)
     state = AtlasResearchState(

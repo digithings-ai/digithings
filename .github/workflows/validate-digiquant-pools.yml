@@ -9,10 +9,10 @@ name: "Validate: Olympus model pools"
 on:
   pull_request:
     paths:
-      - 'config/olympus_models.yaml'
+      - 'config/digiquant_models.yaml'
       - 'config/model_modes.yaml'
-      - 'scripts/validate_olympus_pools.py'
-      - '.github/workflows/validate-olympus-pools.yml'
+      - 'scripts/validate_digiquant_pools.py'
+      - '.github/workflows/validate-digiquant-pools.yml'
   workflow_dispatch:
 
 permissions:
@@ -39,4 +39,4 @@ jobs:
       - name: Validate pooled slugs against live OpenRouter endpoints
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: uv run --frozen --no-sync python scripts/validate_olympus_pools.py
+        run: uv run --frozen --no-sync python scripts/validate_digiquant_pools.py

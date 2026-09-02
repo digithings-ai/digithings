@@ -24,7 +24,7 @@ from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.envcompat import (
+from digiquant.dashboard.envcompat import (
     STAGING_ANON_KEY,
     STAGING_DIGEST_INBOX_CONFIRMED,
     STAGING_EMAIL,
@@ -33,7 +33,7 @@ from digiquant.olympus.envcompat import (
     STAGING_USER_JWT,
     env_lookup,
 )
-from digiquant.olympus.kairos.remaining_hops import (
+from digiquant.execution.remaining_hops import (
     EXIT_REMAINING_HOPS_UNPROVEN,
     REMAINING_LIVE_HOPS,
     RemainingHopEvidence,
@@ -42,7 +42,7 @@ from digiquant.olympus.kairos.remaining_hops import (
     remaining_hop_blockers,
     remaining_hops_unproven,
 )
-from digiquant.olympus.kairos.staging_secrets import (
+from digiquant.execution.staging_secrets import (
     KAIROS_STAGING_REQUIRED_SECRETS,
     format_missing_secrets_failure,
     missing_kairos_staging_secrets,

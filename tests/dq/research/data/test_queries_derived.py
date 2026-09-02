@@ -11,7 +11,7 @@ import json
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.data.queries import (
+from digiquant.research.data.queries import (
     ALLOWED_READ_TABLES,
     HOUSE_BOOK_READ_TABLES,
     get_market_breadth,
@@ -19,8 +19,8 @@ from digiquant.olympus.atlas.data.queries import (
     get_vix_term_structure,
     query_data,
 )
-from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+from digiquant.dashboard.tenancy import house_workspace_id
 
 
 class _FakeTable:
@@ -215,7 +215,7 @@ class TestQueryData:
         assert {"price_history", "price_technicals", "positions"} <= ALLOWED_READ_TABLES
 
     def test_allowed_tables_scope_blinds_callers_from_the_book(self) -> None:
-        from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
+        from digiquant.research.data.queries import MARKET_DATA_TABLES
 
         # A blinded caller (MARKET_DATA_TABLES scope) cannot read the book even though
         # positions is in the global whitelist.

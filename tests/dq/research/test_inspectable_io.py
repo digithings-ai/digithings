@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.inspectable_io import (
+from digiquant.research.inspectable_io import (
     BIAS_ROW_DOCUMENT_KEY,
     INPUTS_DOCUMENT_KEY,
     build_bias_row_payload,
@@ -13,14 +13,14 @@ from digiquant.olympus.atlas.inspectable_io import (
     render_bias_row_markdown,
     render_inputs_markdown,
 )
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_node
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

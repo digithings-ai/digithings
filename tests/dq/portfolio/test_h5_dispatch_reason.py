@@ -1,8 +1,8 @@
 """Unit tests for the _resolve_linked_thesis helper in portfolio_common."""
 
 import pytest
-from digiquant.olympus.hermes.phases.h5_asset_analyst import _should_backfill_vehicle_thesis
-from digiquant.olympus.hermes.phases.portfolio_common import _resolve_linked_thesis
+from digiquant.portfolio.phases.h5_asset_analyst import _should_backfill_vehicle_thesis
+from digiquant.portfolio.phases.portfolio_common import _resolve_linked_thesis
 
 
 @pytest.mark.unit

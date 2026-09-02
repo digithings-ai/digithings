@@ -27,7 +27,7 @@ from datetime import date
 
 from pydantic import BaseModel
 
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     Carried,
     PhaseError,
     SegmentPayload,

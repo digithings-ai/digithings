@@ -3,10 +3,10 @@
 Defines immutable prospective labels and versioned calibration artifacts for
 Olympus Phase 1. Schema + strict Pydantic only — the deterministic calibrator
 and H6→H7 attach helpers live in
-:mod:`digiquant.olympus.hermes.forecast_calibration` (WP5.3/5.4); table writers
-in :mod:`digiquant.olympus.atlas.forecast_registry` (WP5.4). No H8 consumption.
+:mod:`digiquant.portfolio.forecast_calibration` (WP5.3/5.4); table writers
+in :mod:`digiquant.research.forecast_registry` (WP5.4). No H8 consumption.
 
-Style mirrors :mod:`digiquant.olympus.hermes.models.forecast`: frozen,
+Style mirrors :mod:`digiquant.portfolio.models.forecast`: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, Decimal economics, UUID5
 idempotent identity, content hashes.
 """

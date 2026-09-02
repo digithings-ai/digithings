@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { PerformanceTearsheetView } from './OlympusTearsheetView';
+import { PerformanceTearsheetView } from './DashboardTearsheetView';
 import type { PerformanceTearsheet } from './types';
 
 const sample: PerformanceTearsheet = {

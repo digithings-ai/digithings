@@ -36,7 +36,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from digiquant.olympus.tenancy import eq_house_workspace, house_workspace_id
+from digiquant.dashboard.tenancy import eq_house_workspace, house_workspace_id
 
 try:
     from supabase import create_client  # type: ignore

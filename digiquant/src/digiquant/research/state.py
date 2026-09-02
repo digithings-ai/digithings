@@ -633,7 +633,7 @@ class AtlasResearchState(BaseModel):
     baseline_date: date | None = None
     # WP4.1 (#2628): one UTC knowledge boundary per run. Optional only so legacy
     # checkpoints deserialize; new readers must call
-    # ``digiquant.olympus.temporal.require_knowledge_cutoff_at`` (no ``now()`` fallback).
+    # ``digiquant.dashboard.temporal.require_knowledge_cutoff_at`` (no ``now()`` fallback).
     knowledge_cutoff_at: AwareDatetime | None = Field(
         default=None,
         description=(

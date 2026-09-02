@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     FillRecord,
     HoldingSnapshot,
     InstrumentBarSeries,

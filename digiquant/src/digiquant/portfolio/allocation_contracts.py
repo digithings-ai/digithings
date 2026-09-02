@@ -24,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     allocation_bundle_hash_payload,
     pretrade_risk_report_content_hash,
@@ -690,7 +690,7 @@ class PreTradeRiskReport(AllocationContractModel):
     """Final-book risk/cost/liquidity explanation for H9 and operators.
 
     Observational only — constructing or hashing a report never mutates weights.
-    Metric computation lives in :mod:`digiquant.olympus.hermes.pretrade_risk`
+    Metric computation lives in :mod:`digiquant.portfolio.pretrade_risk`
     (WP9.2); attachment is WP9.3; H9 persistence is WP9.4. The contract may remain
     shadow until those land.
     """

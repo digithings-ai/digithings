@@ -11,7 +11,7 @@ Uses Supabase price_history closes + positions snapshot rows to populate:
   - portfolio_metrics: one row per calendar day for continuity (computed_from=refresh_script).
     Rows from update_tearsheet.py (computed_from=tearsheet) are never overwritten.
 
-Scheduled cron policy (no flags — .github/workflows/pipeline-atlas-metrics.yml):
+Scheduled cron policy (no flags — .github/workflows/pipeline-research-metrics.yml):
   Processes **today (UTC)** only, and exits 3 when no positions book exists for that
   date instead of silently re-processing the previous one. Re-processing upserts
   on_conflict='workspace_id,date', so it re-stamps generated_at on a row whose as_of_date never
@@ -48,15 +48,15 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from digiquant.olympus.accounting.io import (
+from digiquant.dashboard.accounting.io import (
     period_day_return_pct,
     select_final_period,
 )
-from digiquant.olympus.performance_returns import (
+from digiquant.dashboard.performance_returns import (
     PerformanceReturns,
     calculate_performance_returns,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
 _METRIC_CLEAR = (

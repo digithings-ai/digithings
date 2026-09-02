@@ -35,7 +35,7 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
     const hook = join(repoRoot, 'frontend/digiquant-web/lib/live/useLivePortfolio.ts');
     const panel = join(
       repoRoot,
-      'frontend/digiquant-web/components/landing/OlympusPortfolioPanel.tsx'
+      'frontend/digiquant-web/components/landing/DashboardPortfolioPanel.tsx'
     );
     const contract = join(
       repoRoot,

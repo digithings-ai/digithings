@@ -1,6 +1,6 @@
 """Hermes-side JSON-Schema loader.
 
-Mirrors :mod:`digiquant.olympus.atlas.schemas` but resolves paths under
+Mirrors :mod:`digiquant.research.schemas` but resolves paths under
 ``digiquant/src/digiquant/olympus/hermes/templates/``. Each engine's ``load_schema()`` only finds
 its own templates. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
 """
@@ -16,7 +16,7 @@ import jsonschema
 
 # Re-export the shared exception so callers can catch a single class
 # regardless of which engine raised.
-from digiquant.olympus.atlas.schemas import SchemaNotFoundError
+from digiquant.research.schemas import SchemaNotFoundError
 
 __all__ = [
     "SchemaNotFoundError",

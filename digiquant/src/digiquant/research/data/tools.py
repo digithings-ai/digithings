@@ -14,7 +14,7 @@ from typing import (  # score:allow untyped any — scored-lint suppression: duc
     Callable,
 )
 
-from digiquant.olympus.atlas.data.queries import (
+from digiquant.research.data.queries import (
     get_etf_flows_proxy,
     get_fed_rate_probabilities,
     get_macro_series,

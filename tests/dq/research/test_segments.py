@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.research.segments import SegmentReport
 
 pytestmark = pytest.mark.unit
 
@@ -83,7 +83,7 @@ class TestInternalBiasSynonyms:
         ],
     )
     def test_internal_bias_synonyms_map(self, raw: str, expected: str) -> None:
-        from digiquant.olympus.atlas.phases.phase2_institutional import (
+        from digiquant.research.phases.phase2_institutional import (
             InstitutionalFlowsReport,
         )
 
@@ -98,7 +98,7 @@ class TestInternalBiasSynonyms:
         assert report.internal_bias == expected
 
     def test_legacy_flow_direction_does_not_fail_validate(self) -> None:
-        from digiquant.olympus.atlas.phases.phase2_institutional import (
+        from digiquant.research.phases.phase2_institutional import (
             InstitutionalFlowsReport,
         )
 

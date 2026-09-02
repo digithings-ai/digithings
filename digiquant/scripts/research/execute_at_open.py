@@ -31,12 +31,12 @@ def _ensure_importable() -> None:
 
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
-from digiquant.olympus.atlas.supabase_io import (  # noqa: E402
+from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
     build_client,
 )
-from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 
 
 def _house_id() -> str:
@@ -475,7 +475,7 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     _ensure_importable()
     from uuid import UUID
 
-    from digiquant.olympus.kairos.policy import resolve_venue
+    from digiquant.execution.policy import resolve_venue
 
     resolved: Optional[UUID] = None
     raw = (workspace_id or "").strip()
@@ -525,18 +525,18 @@ def build_events_from_paper_fills(
     """
     _ensure_importable()
     try:
-        from digiquant.olympus.hermes.models.position_event import (
+        from digiquant.portfolio.models.position_event import (
             PositionEventKind,
             PositionEventRow,
         )
-        from digiquant.olympus.hermes.writers.execution_io import (
+        from digiquant.portfolio.writers.execution_io import (
             approved_weights,
             execute_pending_orders,
             ledger_is_authoritative,
             pending_symbols,
         )
-        from digiquant.olympus.hermes.writers.ledger_io import ledger_enabled
-        from digiquant.olympus.hermes.writers.opening_snapshot import (
+        from digiquant.portfolio.writers.ledger_io import ledger_enabled
+        from digiquant.portfolio.writers.opening_snapshot import (
             COLD_START_DECLINE,
             cold_start_requires_seed,
             ensure_legacy_opening_snapshot,
@@ -939,7 +939,7 @@ def main() -> int:
     # Execution venue-dispatch seam. House path: workspace_id is unset →
     # paper_internal → existing ledger paper fills, unchanged. External routing
     # is env-gated inside resolve_venue; this script does not submit to brokers.
-    from digiquant.olympus.envcompat import EXECUTION_WORKSPACE_ID, env_lookup
+    from digiquant.dashboard.envcompat import EXECUTION_WORKSPACE_ID, env_lookup
 
     venue = resolve_execution_venue_for_run(env_lookup(EXECUTION_WORKSPACE_ID) or None)
     if venue != "paper_internal":

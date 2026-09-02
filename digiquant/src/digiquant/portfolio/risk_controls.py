@@ -10,7 +10,7 @@ The pure half — :func:`compute_breaker_scale` — takes a chronological NAV se
 config; the I/O half — :func:`breaker_scale_from_nav_history` — reads the recent
 ``nav_history`` window (fail-soft → a neutral 1.0 scale) and computes it. The phase7e
 enforcement node calls the I/O half and passes ``scale`` to
-:func:`~digiquant.olympus.hermes.sizing.size_portfolio`.
+:func:`~digiquant.portfolio.sizing.size_portfolio`.
 
 NAV is the base-100 paper index written by ``portfolio_materialize`` (``nav_history.nav``);
 drawdown is measured against the peak within a bounded lookback window so a single ancient
@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 from uuid import UUID
 
-from digiquant.olympus.tenancy import resolved_workspace_id
+from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 

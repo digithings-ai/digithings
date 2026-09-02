@@ -41,9 +41,9 @@ exists to stop. ``test_no_client_role_may_execute_the_claim`` is the security as
 module.
 
 ``pytestmark = pytest.mark.unit`` is mandatory, not decorative. The lane that collects this
-directory is ``test-atlas-graph.yml`` (``pytest -m unit tests/dq/atlas/ …``); the plain
+directory is ``test-research-graph.yml`` (``pytest -m unit tests/dq/research/ …``); the plain
 ``digiquant tests`` job installs only ``digiquant[dev]``, so digigraph is absent and
-``tests/dq/atlas/conftest.py`` ignores the whole directory there. An unmarked file is not an
+``tests/dq/research/conftest.py`` ignores the whole directory there. An unmarked file is not an
 error, it is silently deselected — it would run in no lane at all.
 """
 

@@ -16,9 +16,9 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 |------|------|---------|---------|--------|-------------|
 | `agent-backlog-snapshot.yml` | Agent: backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
 | `agent-quota-reset.yml` | Agent: quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
-| `pipeline-olympus.yml` | Pipeline: Olympus research | schedule (`17 9/10/11/12 * * *`, off-peak retries before NY open), `repository_dispatch` `olympus-daily`, dispatch | Unified Atlas+Hermes pipeline; skip-if-already-succeeded on later crons; `resolve` picks Sunday `all` / else `none` | Working | none |
-| *(spec, not installed)* `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` | Pipeline: Kairos cron check | schedule (daily 12:15 UTC), dispatch | Overlay + kairos sync + Mailgun `--check`/`--dry-run` probe; **must not** share the house Hermes job. Copy to `.github/workflows/kairos-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_kairos_cron_workflow.py` | none |
-| `test-atlas-graph.yml` | Test: Atlas graph | workflow_call | Unit tests + lint for Atlas + Hermes trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-olympus.yml` |
+| `pipeline-digiquant.yml` | Pipeline: Olympus research | schedule (`17 9/10/11/12 * * *`, off-peak retries before NY open), `repository_dispatch` `olympus-daily`, dispatch | Unified Atlas+Hermes pipeline; skip-if-already-succeeded on later crons; `resolve` picks Sunday `all` / else `none` | Working | none |
+| *(spec, not installed)* `docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml` | Pipeline: Kairos cron check | schedule (daily 12:15 UTC), dispatch | Overlay + kairos sync + Mailgun `--check`/`--dry-run` probe; **must not** share the house Hermes job. Copy to `.github/workflows/execution-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_kairos_cron_workflow.py` | none |
+| `test-research-graph.yml` | Test: Atlas graph | workflow_call | Unit tests + lint for Atlas + Hermes trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-digiquant.yml` |
 | `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `exec:cursor` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
@@ -60,7 +60,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
 | `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/docs/`, stable `/og.png` canaries (SPA-fallback MIME masking, #671 / #800); one further job per site (`freshness`, `freshness-digithings`) checks that site's deploy build stamp so a frozen Pages project is detected rather than discovered (#1759) | Working | none |
 | `smoke-langsmith.yml` | Smoke: LangSmith | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
-| `pipeline-atlas-metrics.yml` | Pipeline: Atlas metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
+| `pipeline-research-metrics.yml` | Pipeline: Atlas metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
 | `pipeline-digiquant-backfill.yml` | Pipeline: digiquant backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |
 | `db-migrate.yml` | db-migrate | push (`main`), dispatch | Apply pending Olympus Supabase migrations to prod; forward-only, the `olympus_schema_migrations` ledger is the SOLE skip gate (the `BASELINE_THROUGH` baseline branch was deleted in #1814 — it silently recorded a new low-numbered file as applied without running its DDL); one transaction per file on the unwrapped path; `production` env (human gate) (#1016) | Working | `digiquant/supabase/migrations/**` |
 | `deploy-digithings-cloudflare.yml` | Deploy: digithings.ai build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
@@ -177,7 +177,7 @@ All content inside a `run: |` block must be indented at or beyond the block's in
           gh issue create --body-file /tmp/body.md
 ```
 
-This pattern is used by the Olympus pipeline workflow (`pipeline-olympus.yml`) and is now required for all new issue/comment creation steps.
+This pattern is used by the Olympus pipeline workflow (`pipeline-digiquant.yml`) and is now required for all new issue/comment creation steps.
 
 ### 5. Secret guards
 

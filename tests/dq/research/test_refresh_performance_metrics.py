@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -691,7 +691,7 @@ class TestMetricsCronRunsEveryDay:
             Path(__file__).resolve().parents[3]
             / ".github"
             / "workflows"
-            / "pipeline-atlas-metrics.yml"
+            / "pipeline-research-metrics.yml"
         )
         doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
         crons = [s["cron"] for s in doc[True]["schedule"]]  # `on:` parses as boolean True
@@ -712,7 +712,7 @@ class TestMetricsCronRunsEveryDay:
             Path(__file__).resolve().parents[3]
             / ".github"
             / "workflows"
-            / "pipeline-atlas-metrics.yml"
+            / "pipeline-research-metrics.yml"
         )
         doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
         for cron in [s["cron"] for s in doc[True]["schedule"]]:
@@ -794,7 +794,7 @@ class TestResolveScheduledMetricsDate:
 
 
 class TestMetricsWorkflowStepOrder:
-    """Pins finalizer → metrics → lookback in ``pipeline-atlas-metrics.yml``.
+    """Pins finalizer → metrics → lookback in ``pipeline-research-metrics.yml``.
 
     After #2598, ``pnl_pct`` never reads ``current_book_lookback`` / legacy
     ``position_attribution``, so lookback job order cannot alter daily semantics.
@@ -810,7 +810,7 @@ class TestMetricsWorkflowStepOrder:
             Path(__file__).resolve().parents[3]
             / ".github"
             / "workflows"
-            / "pipeline-atlas-metrics.yml"
+            / "pipeline-research-metrics.yml"
         )
         spec = yaml.safe_load(workflow.read_text(encoding="utf-8"))
         return [str(step.get("name", "")) for step in spec["jobs"]["refresh"]["steps"]]

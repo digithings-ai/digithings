@@ -20,9 +20,9 @@ from typing import Iterator
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.testing import simulated_pipeline
-from digiquant.olympus.atlas.testing.simulator import (
+from digiquant.research.graph import AtlasInput
+from digiquant.research.testing import simulated_pipeline
+from digiquant.research.testing.simulator import (
     QUIET_DAY_LLM_BUDGET,
     QUIET_DAY_MIN_PATCH_RATIO,
     QUIET_ONCHAIN_INJECTION,
@@ -32,7 +32,7 @@ from digiquant.olympus.atlas.testing.simulator import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-olympus.yml"
+_OLYMPUS_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
 
 
 @contextmanager
@@ -48,7 +48,7 @@ def _stub_quiet_onchain() -> Iterator[None]:
         )
 
     with patch(
-        "digiquant.olympus.atlas.phases.preflight.get_onchain_cohort_positioning",
+        "digiquant.research.phases.preflight.get_onchain_cohort_positioning",
         _fake_onchain,
     ):
         yield
@@ -165,7 +165,7 @@ class TestThreeDayContinuityScaffold:
         day3 = day2 + timedelta(days=1)
         watchlist = ("AAPL",)
 
-        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in pipeline-olympus.yml).
+        # Day 1 — operator ``refresh_scope=all`` (Sunday / forced full in pipeline-digiquant.yml).
         with _stub_quiet_onchain(), simulated_pipeline(watchlist=watchlist, publish=True) as run1:
             run1.invoke(
                 AtlasInput(
@@ -232,7 +232,7 @@ class TestThreeDayContinuityScaffold:
 
 @pytest.mark.unit
 class TestOlympusWorkflowDailyCadence:
-    """Verify ``pipeline-olympus.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
+    """Verify ``pipeline-digiquant.yml`` matches ``orchestrator/daily-cadence`` CLI surface."""
 
     def test_olympus_workflow_uses_daily_cadence_not_legacy_run_types(self) -> None:
         text = _OLYMPUS_WORKFLOW.read_text(encoding="utf-8")

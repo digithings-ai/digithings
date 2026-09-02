@@ -27,8 +27,8 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: jsonb breakdown payload
 )
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.roster_cap import configured_max_analysts
+from digiquant.research.state import AtlasResearchState
+from digiquant.portfolio.roster_cap import configured_max_analysts
 
 BREAKDOWN_KEY = "roster"
 

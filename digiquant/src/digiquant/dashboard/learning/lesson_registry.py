@@ -17,7 +17,7 @@ from uuid import UUID
 import polars as pl
 from pydantic import ConfigDict
 
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     ComponentAttributionReport,
@@ -28,8 +28,8 @@ from digiquant.olympus.learning.outcome_models import (
     lesson_content_hash,
     lesson_version_id,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.temporal import require_utc_datetime
 
 _ZERO = Decimal("0")
 _ONE = Decimal("1")

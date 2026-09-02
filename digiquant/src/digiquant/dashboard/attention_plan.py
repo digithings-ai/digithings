@@ -17,10 +17,10 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.edit_mode.models import ArtifactKey, EditMode, TriageSignal
-from digiquant.olympus.edit_mode.prior import PriorLoader
-from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
-from digiquant.olympus.profile_config import (
+from digiquant.dashboard.edit_mode.models import ArtifactKey, EditMode, TriageSignal
+from digiquant.dashboard.edit_mode.prior import PriorLoader
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.profile_config import (
     HOUSE_PROFILE_KEY,
     ProfileConfig,
     ProfileConfigMissingError,

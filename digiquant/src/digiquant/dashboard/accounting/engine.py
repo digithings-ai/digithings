@@ -18,7 +18,7 @@ from uuid import UUID, uuid5
 
 import polars as pl
 
-from digiquant.olympus.accounting.models import (
+from digiquant.dashboard.accounting.models import (
     AccountingPeriod,
     AccountingPolicy,
     ClosingHolding,

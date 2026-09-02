@@ -7,15 +7,15 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.accounting.models import FillSide, PeriodFill
-from digiquant.olympus.hermes.action_cost_inputs import (
+from digiquant.dashboard.accounting.models import FillSide, PeriodFill
+from digiquant.portfolio.action_cost_inputs import (
     ActionCostBindingError,
     ActionCostSide,
     action_cost_input_from_order,
     realized_cost_input_from_execution,
     realized_cost_input_from_period_fill,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     DecisionReason,
     OrderIntent,

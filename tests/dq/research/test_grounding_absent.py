@@ -18,12 +18,12 @@ from typing import (
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.segments import SegmentReport
+from digiquant.research.state import AtlasResearchState
 
 
 class _MinimalReport(SegmentReport):
@@ -106,11 +106,11 @@ class TestGroundingAbsentFlag:
         node = build_segment_node(spec)
         with (
             patch(
-                "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+                "digiquant.research.phases._node_factory.build_grounding",
                 return_value=(None, None, web_grounding),
             ),
             patch(
-                "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+                "digiquant.research.phases._node_factory.run_research_agent",
                 side_effect=_fake_research_agent,
             ),
         ):

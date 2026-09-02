@@ -158,9 +158,9 @@ jobs:
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
-              - 'digiquant/scripts/atlas/**'
+              - 'digiquant/scripts/research/**'
               - 'digiquant/supabase/**'
-              - 'tests/dq/atlas/**'
+              - 'tests/dq/research/**'
               - 'digiquant/src/digiquant/olympus/edit_mode/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'digiquant/src/digiquant/olympus/learning/**'
@@ -168,10 +168,10 @@ jobs:
               - 'tests/dq/replay/test_walk_forward.py'
               - 'tests/dq/replay/phase4_e2e_fixtures.py'
               - 'tests/dq/replay/test_phase4_end_to_end.py'
-              - 'tests/dq/hermes/**'
+              - 'tests/dq/portfolio/**'
               - 'tests/dq/learning/**'
-              - '.github/workflows/test-atlas-graph.yml'
-              - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/test-research-graph.yml'
+              - '.github/workflows/pipeline-digiquant.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -194,7 +194,7 @@ jobs:
               - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/db-migrate.yml'
-              - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/pipeline-digiquant.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
               - '.github/workflows/deploy-digiquant-cloudflare.yml'
               - '.github/workflows/**'
@@ -328,7 +328,7 @@ jobs:
   atlas-graph:
     needs: changes
     if: needs.changes.outputs.atlas_graph == 'true'
-    uses: ./.github/workflows/test-atlas-graph.yml
+    uses: ./.github/workflows/test-research-graph.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
@@ -391,8 +391,8 @@ jobs:
 
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
   # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
-  # edits to ci.yml itself. The predecessor was a job inside test-atlas-graph.yml
-  # with `files: ".github/workflows/pipeline-olympus.yml"`, invoked only from the
+  # edits to ci.yml itself. The predecessor was a job inside test-research-graph.yml
+  # with `files: ".github/workflows/pipeline-digiquant.yml"`, invoked only from the
   # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
   # actionlint at all. Suppressions live in .github/actionlint.yaml.
   actionlint:

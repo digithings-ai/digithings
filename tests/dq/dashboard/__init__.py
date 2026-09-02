@@ -1,1 +1,1 @@
-"""Unit tests for digiquant.olympus cross-cutting modules (edit_mode, etc.)."""
+"""Unit tests for digiquant.dashboard cross-cutting modules (edit_mode, etc.)."""

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.overlay.dispatch import JobStatus, OverlaySkipReason
+from digiquant.dashboard.overlay.dispatch import JobStatus, OverlaySkipReason
 
 
 class OverlayRunRequest(BaseModel):

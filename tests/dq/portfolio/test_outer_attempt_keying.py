@@ -1,6 +1,6 @@
 """Per-attempt diagnostics keying (#1762).
 
-``pipeline-olympus.yml`` retries the chain up to 3 times inside ONE job, so every attempt sees
+``pipeline-digiquant.yml`` retries the chain up to 3 times inside ONE job, so every attempt sees
 the same ``GITHUB_RUN_ID``. That was the whole upsert key, so the last attempt — usually the
 cheap checkpoint-resumed one — replaced the expensive attempt's tokens and cost. 28 of the 54
 rows in production carry a ``created_at`` that predates their own ``started_at``, which is only
@@ -18,9 +18,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.diagnostics import _row, summarize_run
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.chain import OUTER_ATTEMPT_ENV, DiagnosticsDeps, _outer_attempt
+from digiquant.research.diagnostics import _row, summarize_run
+from digiquant.research.state import AtlasResearchState
+from digiquant.portfolio.chain import OUTER_ATTEMPT_ENV, DiagnosticsDeps, _outer_attempt
 
 pytestmark = pytest.mark.unit
 

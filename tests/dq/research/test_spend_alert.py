@@ -1,6 +1,6 @@
 """Spend alert (#1764) — alert only, never block.
 
-Before this the only bound on a day's LLM spend was `pipeline-olympus.yml`'s 240-minute
+Before this the only bound on a day's LLM spend was `pipeline-digiquant.yml`'s 240-minute
 ``timeout-minutes``. The owner's decision (2026-08-04) is **alert only**: record the breach and
 surface it, but never abort a run and never refuse a segment — a mid-run abort would leave a
 partially-published run, and #1749/#1751 established that partial states are where the silent
@@ -19,9 +19,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.diagnostics import _row, summarize_run
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.telemetry import (
+from digiquant.research.diagnostics import _row, summarize_run
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.telemetry import (
     SPEND_ALERT_DEFAULT_USD,
     SPEND_ALERT_ENV,
     SPEND_ALERT_KEY,
@@ -201,7 +201,7 @@ class TestTheCIAnnotation:
         command that is not line-initial, so what matters is the bytes that actually reach
         stdout — a stray prefix or leading whitespace is invisible to a mock.
         """
-        from digiquant.olympus.atlas import diagnostics
+        from digiquant.research import diagnostics
 
         if in_ci:
             monkeypatch.setenv("GITHUB_ACTIONS", "true")
@@ -247,7 +247,7 @@ class TestAnnouncingNeverCostsTheRow:
     def test_announce_runs_after_the_upsert(self) -> None:
         import inspect
 
-        from digiquant.olympus.atlas import diagnostics
+        from digiquant.research import diagnostics
 
         body = inspect.getsource(diagnostics.write_row)
         assert body.index(".upsert(") < body.index("_announce_spend_alert(")
@@ -257,14 +257,14 @@ class TestAnnouncingNeverCostsTheRow:
         [{}, {"breakdown": None}, {"breakdown": "nope"}, {"breakdown": {"spend_alert": 1}}],
     )
     def test_announce_swallows_a_malformed_row(self, bad: dict[str, object]) -> None:
-        from digiquant.olympus.atlas import diagnostics
+        from digiquant.research import diagnostics
 
         diagnostics._announce_spend_alert(bad)  # must not raise
 
     def test_announce_emits_for_a_well_formed_alert(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        from digiquant.olympus.atlas import diagnostics
+        from digiquant.research import diagnostics
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         capsys.readouterr()

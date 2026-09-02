@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.research_corpus import (
+from digiquant.dashboard.research_corpus import (
     CorpusKey,
     CorpusKeyKind,
     ResearchCorpusKeyError,

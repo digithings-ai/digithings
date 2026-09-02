@@ -21,7 +21,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 PositionEventKind = Literal["OPEN", "EXIT", "HOLD", "TRIM", "ADD"]
 PositionEventBookSource = Literal["legacy", "authoritative"]

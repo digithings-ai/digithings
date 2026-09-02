@@ -14,7 +14,7 @@ Splits the two-phase reflection mechanic into testable units:
 - :func:`fetch_recent_lessons` — preflight context loader. Returns the
   recent resolved rows the PM should see in PriorContext.
 
-The Supabase wire calls live in :mod:`digiquant.olympus.atlas.supabase_io` so the LLM
+The Supabase wire calls live in :mod:`digiquant.research.supabase_io` so the LLM
 and DB seams are independently testable.
 """
 
@@ -27,16 +27,16 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.supabase_io import (
     SupabaseClient,
     query_pending_decisions,
     query_recent_lessons,
     query_returns_window,
     update_decision_resolution,
 )
-from digiquant.olympus.hermes.payloads import analyst_payloads
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.portfolio.payloads import analyst_payloads
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +350,7 @@ def _default_reflector(prompt_inputs: dict[str, Any]) -> ReflectorOutput:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.atlas.skills import load_skill
+    from digiquant.research.skills import load_skill
 
     skill_text = load_skill("decision-reflector")
     return run_research_agent(

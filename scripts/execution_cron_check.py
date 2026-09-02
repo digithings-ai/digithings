@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GHA pin for ``.github/workflows/kairos-cron-check.yml``.
+"""GHA pin for ``.github/workflows/execution-cron-check.yml``.
 
 cursor/* cannot rewrite workflow files. The canonical CLI is
 ``scripts/digiquant_cron_check.py``. This wrapper keeps the installed probe
@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.kairos.cron_check import main  # noqa: E402
+from digiquant.execution.cron_check import main  # noqa: E402
 
 if __name__ == "__main__":
     raise SystemExit(main())

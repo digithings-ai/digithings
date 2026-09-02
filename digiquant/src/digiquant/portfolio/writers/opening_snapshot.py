@@ -21,8 +21,8 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
     DecisionIntent,
@@ -36,7 +36,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     RequestedTarget,
     paper_execution_id,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     DECISION_INTENTS,
@@ -48,7 +48,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     _rows_for_date,
     _symbol,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

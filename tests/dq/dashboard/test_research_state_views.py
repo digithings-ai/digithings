@@ -11,7 +11,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
     EvidenceRecord,
@@ -30,8 +30,8 @@ from digiquant.olympus.research_retrieval.models import (
     manifest_content_hash,
     research_state_version_id,
 )
-from digiquant.olympus.research_retrieval.store import ResearchStateStore
-from digiquant.olympus.research_retrieval.views import (
+from digiquant.dashboard.research_retrieval.store import ResearchStateStore
+from digiquant.dashboard.research_retrieval.views import (
     COMPILED_BRIEF_DOCUMENT_KEY,
     COMPILED_DIGEST_DOCUMENT_KEY,
     VIEW_SCHEMA_VERSION,

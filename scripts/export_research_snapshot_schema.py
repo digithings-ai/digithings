@@ -3,12 +3,12 @@
 
 The serialized JSON Schema is the artifact frontend / TypeScript consumers
 read to generate types or runtime validators. Re-run after any field change
-to ``digiquant.olympus.atlas.snapshot.SnapshotEnvelope``.
+to ``digiquant.research.snapshot.SnapshotEnvelope``.
 
 Usage::
 
-    python3 scripts/export_atlas_snapshot_schema.py
-    python3 scripts/export_atlas_snapshot_schema.py --output /tmp/snapshot.json
+    python3 scripts/export_research_snapshot_schema.py
+    python3 scripts/export_research_snapshot_schema.py --output /tmp/snapshot.json
 
 The default output path is
 ``digiquant/docs/schemas/atlas_snapshot.v{SCHEMA_VERSION}.json``.
@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "digiquant" / "src"))
 
-from digiquant.olympus.atlas.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa: E402
+from digiquant.research.snapshot import SCHEMA_VERSION, SnapshotEnvelope  # noqa: E402
 
 
 def _default_output_path() -> Path:
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         if existing != rendered:
             print(
                 f"schema drift: {args.output} is stale; "
-                "re-run scripts/export_atlas_snapshot_schema.py",
+                "re-run scripts/export_research_snapshot_schema.py",
                 file=sys.stderr,
             )
             return 1

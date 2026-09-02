@@ -17,13 +17,13 @@ from datetime import date
 from typing import Any  # score:allow untyped any — used for snapshot/injection dict shape
 
 import pytest
-from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
+from digiquant.research.state import (
     AtlasResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
-from digiquant.olympus.atlas.triage import evaluate
+from digiquant.research.triage import evaluate
 
 # A compact onchain-positioning summary shaped like ``compact_summary()`` output
 # (overall divergence + a couple of top markets). Equality is what triage tests.

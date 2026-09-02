@@ -5,7 +5,7 @@ Atlas provider validation — run before triggering a real pipeline run.
 Checks (in order):
   1. Required env vars are present
   2. OpenRouter connectivity (short ping via digillm, pinned to a known-good model)
-     Note: phases route on PINNED per-capability models from config/olympus_models.yaml
+     Note: phases route on PINNED per-capability models from config/digiquant_models.yaml
      (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
      deliberately in check 3 below, not as the connectivity probe.
   3. OpenRouter structured-output routing (real digillm json_schema call)
@@ -99,7 +99,7 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_ROLE_KEY": "Supabase service-role key",
-        "OPENROUTER_API_KEY": "OpenRouter API key (phases route on pinned models per tier — see config/olympus_models.yaml)",
+        "OPENROUTER_API_KEY": "OpenRouter API key (phases route on pinned models per tier — see config/digiquant_models.yaml)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -281,7 +281,7 @@ def check_openrouter_function_tools() -> bool:
         from digigraph.model_config import _load_olympus_models, get_olympus_tier
         from digillm.client import completion
 
-        from digiquant.olympus.atlas.data.tools import DATA_TOOLS
+        from digiquant.research.data.tools import DATA_TOOLS
 
         tier = get_olympus_tier()
         tier_cfg = _load_olympus_models().tiers.get(tier)
@@ -324,7 +324,7 @@ def check_openrouter_function_tools() -> bool:
                 # research pipeline" step, so a real run tolerates the identical substitution;
                 # substitution here does not predict a broken run. It's also the documented,
                 # EXPECTED trigger for ordinary transient provider load-shedding
-                # (pipeline-olympus.yml's own comment on this env var), not just genuine
+                # (pipeline-digiquant.yml's own comment on this env var), not just genuine
                 # incapability — so treating every substitution as a hard failure would
                 # reintroduce exactly the fragile-preflight failure mode #2374/#2517 already
                 # fixed once. Report it instead of failing on it: the served model
@@ -410,7 +410,7 @@ def check_supabase() -> bool:
         return False
     try:
         _ensure_importable()
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         t0 = time.monotonic()
         client = build_client(SupabaseConfig.from_env())
@@ -459,7 +459,7 @@ def check_dry_run(run_type: str) -> bool:
     cmd = [
         sys.executable,
         "-m",
-        "digiquant.olympus.atlas.graph",
+        "digiquant.research.graph",
         "--run-type",
         run_type,
         "--run-date",

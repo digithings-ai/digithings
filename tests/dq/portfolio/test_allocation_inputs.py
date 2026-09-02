@@ -6,26 +6,26 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AssetInputStatus,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     h7_memo_hash_payload,
     sha256_hex,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.allocation_inputs import (
+from digiquant.portfolio.allocation_inputs import (
     AllocationInputAssemblyError,
     assemble_allocation_input_bundle,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     CalibratedForecast,
     CalibrationArtifactStatus,
     calibrated_forecast_content_hash,
     calibrated_forecast_id,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.models.risk_policy import (
     CapabilityLimit,
     CovarianceSnapshot,
     PolicyArtifactStatus,
@@ -222,7 +222,7 @@ def _memo(*tickers: str, directions: dict[str, str] | None = None) -> PMDirectio
         for idx, ticker in enumerate(tickers, start=1)
     ]
     # Attach degraded forecast refs so memo validates without inventing IDs
-    from digiquant.olympus.hermes.models.pm_direction import ForecastReference
+    from digiquant.portfolio.models.pm_direction import ForecastReference
 
     roster = [
         entry.model_copy(
@@ -446,12 +446,12 @@ def test_long_plus_flat_roster_pins_matching_covariance() -> None:
 
 
 def test_from_state_fills_missing_horizons_with_default() -> None:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.allocation_inputs import (
+    from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
         assemble_allocation_input_bundle_from_state,
     )
@@ -483,12 +483,12 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
 
 def test_from_state_derives_coherent_non_default_horizon() -> None:
     """#2814: coherent H6 horizon ≠ 21 must assemble — not reject via expected=21."""
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.allocation_inputs import (
+    from digiquant.portfolio.allocation_inputs import (
         DEFAULT_FORECAST_HORIZON_SESSIONS,
         assemble_allocation_input_bundle_from_state,
     )

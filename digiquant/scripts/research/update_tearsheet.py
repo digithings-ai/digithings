@@ -44,9 +44,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-from digiquant.olympus.atlas import dashboard_digest as _digest  # noqa: E402
-from digiquant.olympus.performance_returns import calculate_performance_returns  # noqa: E402
-from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+from digiquant.research import dashboard_digest as _digest  # noqa: E402
+from digiquant.dashboard.performance_returns import calculate_performance_returns  # noqa: E402
+from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 
 _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)

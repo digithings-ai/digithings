@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
-from digiquant.olympus.atlas.phases import _node_factory
-from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
-from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
-from digiquant.olympus.atlas.phases.phase3_macro import _SPEC as MACRO
-from digiquant.olympus.atlas.phases.phase4_assetclass import _SPECS as ASSET_SPECS
+from digiquant.research.phases import _node_factory
+from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
+from digiquant.research.phases.phase2_institutional import _SPECS as INST_SPECS
+from digiquant.research.phases.phase3_macro import _SPEC as MACRO
+from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
 
 
 @pytest.mark.unit
@@ -63,7 +63,7 @@ def test_asset_classes_use_data_tools():
 def test_build_grounding_respects_kill_switch(monkeypatch):
     monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "x", "sources": [], "as_of": "2026-06-08"},
     )
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
@@ -98,7 +98,7 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
     def _fail(**_k):  # a paid web_search call here would be the bug
         raise AssertionError("options segment must not call fetch_web_grounding")
 
-    monkeypatch.setattr("digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding", _fail)
+    monkeypatch.setattr("digiquant.research.data.web_grounding.fetch_web_grounding", _fail)
     _tools, _execute, grounding = _node_factory.build_grounding(
         use_data_tools=True,
         live_search=False,
@@ -113,7 +113,7 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
 def test_macro_series_yaml_has_volatility_complex():
     # The FRED vol series alt-options-derivatives reads must be in the manifest.
     import yaml
-    from digiquant.olympus.atlas.graph import _atlas_config_root
+    from digiquant.research.graph import _atlas_config_root
 
     raw = yaml.safe_load((_atlas_config_root() / "macro_series.yaml").read_text())
     ids = {s["id"] for s in raw["fred"]["series"]}
@@ -126,7 +126,7 @@ def test_build_grounding_degrades_when_client_unavailable(monkeypatch):
     # dropped, but web grounding (which needs no Supabase client) still works.
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "x", "sources": [], "as_of": "2026-06-08"},
     )
 
@@ -160,7 +160,7 @@ def _stub_freshness(monkeypatch, value):
         def _impl(**_k):
             return value
 
-    monkeypatch.setattr("digiquant.olympus.atlas.supabase_io.query_macro_series_freshness", _impl)
+    monkeypatch.setattr("digiquant.research.supabase_io.query_macro_series_freshness", _impl)
 
 
 @pytest.mark.unit
@@ -175,7 +175,7 @@ def test_macro_fallback_skips_paid_search_when_layer_fresh(monkeypatch):
     def _fail(**_k):
         raise AssertionError("fresh ingested layer must not fire the paid fallback web_search")
 
-    monkeypatch.setattr("digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding", _fail)
+    monkeypatch.setattr("digiquant.research.data.web_grounding.fetch_web_grounding", _fail)
     _tools, _execute, grounding = _node_factory.build_grounding(
         use_data_tools=True,
         live_search=True,
@@ -195,7 +195,7 @@ def test_macro_fallback_fires_paid_search_when_layer_stale(monkeypatch):
     monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, date(2026, 5, 1))  # >7 days stale
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "fallback", "sources": [], "as_of": "2026-06-13"},
     )
     _tools, _execute, grounding = _node_factory.build_grounding(
@@ -218,7 +218,7 @@ def test_macro_fallback_fires_when_layer_unknown_or_probe_errors(monkeypatch, fr
     monkeypatch.setattr(_node_factory, "_atlas_data_client", object)
     _stub_freshness(monkeypatch, freshness)
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "fallback", "sources": [], "as_of": "2026-06-13"},
     )
     _tools, _execute, grounding = _node_factory.build_grounding(
@@ -277,7 +277,7 @@ def test_non_fallback_live_search_ignores_freshness(monkeypatch):
 
     monkeypatch.setattr(_node_factory, "_ingested_macro_stale", _probe_should_not_run)
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_k: {"summary": "always", "sources": [], "as_of": "2026-06-13"},
     )
     _tools, _execute, grounding = _node_factory.build_grounding(

@@ -11,8 +11,8 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes import shadow_artifact as sa
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio import shadow_artifact as sa
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -41,13 +41,13 @@ from digiquant.olympus.hermes.allocation_contracts import (
     TradeDeltaEntry,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     pretrade_risk_report_content_hash,
     shadow_allocation_artifact_content_hash,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.shadow_artifact import (
+from digiquant.portfolio.shadow_artifact import (
     FORBIDDEN_IMPORT_PREFIXES,
     ShadowAllocationArtifact,
     ShadowArtifactMode,

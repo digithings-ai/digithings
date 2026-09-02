@@ -14,8 +14,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.temporal import require_utc_datetime
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 HashHex64: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]

@@ -13,9 +13,9 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.telemetry import MERGE_FALLBACK_KEY, merge_fallback_breakdown
+from digiquant.research import diagnostics
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.telemetry import MERGE_FALLBACK_KEY, merge_fallback_breakdown
 
 pytestmark = pytest.mark.unit
 

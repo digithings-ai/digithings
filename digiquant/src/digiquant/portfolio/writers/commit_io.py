@@ -11,32 +11,32 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.decision_log import persist_pending
-from digiquant.olympus.atlas.pretrade_risk_registry import (
+from digiquant.research.decision_log import persist_pending
+from digiquant.research.pretrade_risk_registry import (
     PreTradeRiskRegistryConflict,
     PreTradeRiskRegistryWriteResult,
     persist_pretrade_risk_report,
     pretrade_risk_report_id,
 )
-from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.state import AtlasResearchState, PublishedArtifact, RebalancePayload
+from digiquant.research.supabase_io import (
     SupabaseClient,
     load_prior_book,
     publish_document,
 )
-from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
-from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
-from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
-from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.overlay.persist import (
+from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
+from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.risk_envelope import risk_horizon_days
+from digiquant.portfolio.sector_map import sector_bucket
+from digiquant.dashboard.overlay.persist import (
     hermes_document_key,
     is_private_workspace,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
-from digiquant.olympus.tenancy import resolved_workspace_id
+from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -385,7 +385,7 @@ def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str
 
 def weights_fingerprint(weights: dict[str, float]) -> str:
     """Stable hash for idempotency comparisons."""
-    from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint as _weights_fp
+    from digiquant.portfolio.allocation_hashes import weights_fingerprint as _weights_fp
 
     return _weights_fp(weights)
 

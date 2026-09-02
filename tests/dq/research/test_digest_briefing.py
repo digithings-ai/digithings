@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases.phase7_synthesis import (
+from digiquant.research.phases.phase7_synthesis import (
     DIGEST_SUBSECTION_SPECS,
     DigestSnapshot,
     _digest_phase_inputs,
@@ -13,17 +13,17 @@ from digiquant.olympus.atlas.phases.phase7_synthesis import (
     _prior_digest_bodies,
     build_phase7,
 )
-from digiquant.olympus.atlas.segments import (
+from digiquant.research.segments import (
     compose_legacy_digest_body,
     digest_briefing_for_hermes,
 )
-from digiquant.olympus.atlas.skills import (
+from digiquant.research.skills import (
     DIGEST_BRIEFING_RULES,
     RESEARCH_MEMO_RULES,
     load_skill,
     load_skill_edit,
 )
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
 
 pytestmark = pytest.mark.unit
 

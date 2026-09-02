@@ -11,7 +11,7 @@
 
 ## End-to-end flow (chain)
 
-Production cron invokes `python -m digiquant.olympus.hermes.chain --cadence daily`:
+Production cron invokes `python -m digiquant.portfolio.chain --cadence daily`:
 
 ```
 preflight + preflight_reflect (Atlas)
@@ -79,16 +79,16 @@ under `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
 `OLYMPUS_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
 `maybe_export_shadow_allocation_artifact` after Hermes returns (fail-soft; never
 reruns or mutates H8/H9). The module must not import challenger optimizer, replay,
-or broker surfaces. `pipeline-olympus.yml` uploads `shadow-allocation-*.json` with
+or broker surfaces. `pipeline-digiquant.yml` uploads `shadow-allocation-*.json` with
 other run artifacts.
 
 **Write-denied allocation shadow workflow (#2762 / WP10.2):**
-`.github/workflows/pipeline-olympus-allocation-shadow.yml` consumes WP10.1 artifacts
+`.github/workflows/pipeline-digiquant-allocation-shadow.yml` consumes WP10.1 artifacts
 only. It declares `permissions: contents: read` + `actions: read`, never
 `secrets: inherit`, and never production Supabase / provider / broker /
 checkpointer secrets. Producer trust is gated to workflow
 `Pipeline: Olympus research` on `main`.
-`digiquant/scripts/atlas/check_allocation_shadow_isolation.py` statically rejects
+`digiquant/scripts/research/check_allocation_shadow_isolation.py` statically rejects
 forbidden imports (Supabase, H9 commit I/O, network clients, live Nautilus,
 brokers), write permissions, secret references, untrusted source/branch/schema/hash,
 and non-file sinks; results are written as a local JSON report artifact only.
@@ -121,18 +121,18 @@ visible when return is stronger; unavailable/inconclusive metrics are explicit.
 Never wired into production H8/H9; no auto-promotion or config write.
 
 **Phase 2 lock surface (#2820 / Integration 2.1):**
-`tests/dq/hermes/test_phase2_allocation_contracts.py` and
+`tests/dq/portfolio/test_phase2_allocation_contracts.py` and
 `phase2_e2e_fixtures.py` lock Gate 2 composition for WP8–WP10 (calibrated H8,
 PreTradeRiskReport identity, shadow isolation + comparison) without enabling
 challenger selection or changing Hermes graph topology.
 
 **Phase 3 lock surface (#3019 / Integration 3.1):**
-`tests/dq/hermes/test_phase3_research_contracts.py` and
+`tests/dq/portfolio/test_phase3_research_contracts.py` and
 `phase3_e2e_fixtures.py` lock Gate 3 composition for WP11–WP14 (immutable
 evidence bundles/amendments, pinned research state, shadow attention planner,
 blinded role contexts, H6 selection round floor, telemetry reconciliation)
 without planner graph nodes or enforce-mode promotion. Pipeline simulation
-(`tests/dq/atlas/test_pipeline_simulation.py`) extends the WP11.5 durable
+(`tests/dq/research/test_pipeline_simulation.py`) extends the WP11.5 durable
 H5/H6 lineage round-trip with graph-level planner-node guards.
 
 ### H1 review persistence
@@ -560,7 +560,7 @@ this book gap.)
    restate every published performance number — NAV, Sharpe, volatility, drawdown, alpha and
    attribution are all computed over this series.
 2. **The only tool that could do it structurally cannot.**
-   `digiquant/scripts/atlas/refresh_performance_metrics.py`'s `fill_calendar_through`
+   `digiquant/scripts/research/refresh_performance_metrics.py`'s `fill_calendar_through`
    (`:578-596`) resolves its start from `_max_positions_date` (`:580`, `:101-107`) and then walks
    **forward only** (`:593-596`). A target date earlier than the latest snapshot degrades to a
    single-day refresh (`:584-590`). It provably cannot reach a hole that sits *behind*
@@ -660,4 +660,4 @@ Three holes are closed:
 
 **Adding a `breakdown` key?** Do not edit `diagnostics._segment_counts`. Write a contributor
 and pass it to `diagnostics.register_breakdown_contributor`; the `breakdown_contributor`
-fixture in `tests/dq/atlas/conftest.py` registers one for the duration of a test.
+fixture in `tests/dq/research/conftest.py` registers one for the duration of a test.

@@ -8,14 +8,14 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas import cost_liquidity_registry as clr
-from digiquant.olympus.hermes.action_cost_inputs import ActionCostInput, ActionCostSide
-from digiquant.olympus.hermes.cost_liquidity import (
+from digiquant.research import cost_liquidity_registry as clr
+from digiquant.portfolio.action_cost_inputs import ActionCostInput, ActionCostSide
+from digiquant.portfolio.cost_liquidity import (
     estimate_action_cost,
     prospective_observations_from_row,
 )
-from digiquant.olympus.hermes.models.cost_liquidity import CostOutcomeStatus
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.cost_liquidity import CostOutcomeStatus
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     DecisionIntent,
     DecisionReason,
@@ -23,7 +23,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     PaperExecution,
     paper_execution_id,
 )
-from digiquant.olympus.hermes.risk_policy import resolve_risk_policy
+from digiquant.portfolio.risk_policy import resolve_risk_policy
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 

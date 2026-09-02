@@ -6,7 +6,7 @@ from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import pytest
-from digiquant.olympus.profile_config import (
+from digiquant.dashboard.profile_config import (
     HOUSE_PROFILE_KEY,
     ProfileConfig,
     ProfileConfigMissingError,
@@ -121,7 +121,7 @@ def test_deterministic_version_id_for_house() -> None:
 
 
 def test_preflight_pin_defaults_to_house() -> None:
-    from digiquant.olympus.profile_config import pin_profile_config_for_preflight
+    from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
 
     pinned = pin_profile_config_for_preflight(requested_version_id=None)
     assert pinned.is_house_default is True
@@ -129,7 +129,7 @@ def test_preflight_pin_defaults_to_house() -> None:
 
 
 def test_preflight_pin_missing_store_fails_closed() -> None:
-    from digiquant.olympus.profile_config import pin_profile_config_for_preflight
+    from digiquant.dashboard.profile_config import pin_profile_config_for_preflight
 
     with pytest.raises(ProfileConfigMissingError):
         pin_profile_config_for_preflight(

@@ -21,7 +21,7 @@ from typing import (
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.decision_log import (
+from digiquant.research.decision_log import (
     DEFAULT_BENCHMARK,
     DEFAULT_HOLDING_DAYS,
     ReflectorOutput,
@@ -30,18 +30,18 @@ from digiquant.olympus.atlas.decision_log import (
     persist_pending,
     resolve_pending,
 )
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
     build_preflight_node,
     build_preflight_reflect_node,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     PhaseHermesState,
 )
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps, build_phase9
+from digiquant.portfolio.phases.phase9_evolution import Phase9Deps, build_phase9
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -175,7 +175,7 @@ class TestPhaseAWritesPending:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Integration: the Phase 9 node calls persist_pending when Phase9Deps is provided."""
-        from digiquant.olympus.hermes.phases import phase9_evolution
+        from digiquant.portfolio.phases import phase9_evolution
 
         client = FakeSupabaseClient()
         state = _seed_state_with_analysts(watchlist=("AAPL",))
@@ -210,7 +210,7 @@ class TestPhaseAWritesPending:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Default behaviour preserved: deps=None means no Supabase write."""
-        from digiquant.olympus.hermes.phases import phase9_evolution
+        from digiquant.portfolio.phases import phase9_evolution
 
         called: dict[str, int] = {"persist": 0}
 
@@ -665,8 +665,8 @@ class TestLessonsInjection:
         """Phase 7D's _pm_node passes prior_context.decision_lessons as past_context."""
         from unittest.mock import patch
 
-        from digiquant.olympus.atlas.state import PriorContext
-        from digiquant.olympus.hermes.phases.phase7d_pm import _pm_node
+        from digiquant.research.state import PriorContext
+        from digiquant.portfolio.phases.phase7d_pm import _pm_node
 
         lessons = [{"ticker": "AAPL", "reflection": "Past lesson", "alpha": 0.02}]
         state = AtlasResearchState(
@@ -692,7 +692,7 @@ class TestLessonsInjection:
 
         def fake_run(skill_text, phase_inputs, **kw):
             captured.update(phase_inputs)
-            from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision
+            from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision
 
             return RebalanceDecision()
 
@@ -710,7 +710,7 @@ class TestLessonsInjection:
 class TestPreflightReflectNode:
     def test_reflect_node_invokes_resolve_pending(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The reflect node calls resolve_pending and returns an empty update."""
-        from digiquant.olympus.atlas.phases import preflight as preflight_module
+        from digiquant.research.phases import preflight as preflight_module
 
         called: dict[str, int] = {"resolve": 0}
 
@@ -818,7 +818,7 @@ class TestConvictionDerivedHoldingDays:
 class TestGraphDepsWiring:
     def test_phase9_deps_threaded_through_build_hermes_graph(self) -> None:
         """build_hermes_graph compiles cleanly when Phase9Deps is wired (#473)."""
-        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_graph
+        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_graph
 
         client = FakeSupabaseClient()
         deps = HermesGraphDeps(phase9=Phase9Deps(client=client))

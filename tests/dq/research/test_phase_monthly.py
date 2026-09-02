@@ -16,8 +16,8 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.phases.phase_monthly import MonthlyDigest, _monthly_node
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.phases.phase_monthly import MonthlyDigest, _monthly_node
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -153,7 +153,7 @@ class TestMonthlyNodePassesPhaseSlug:
                 side_effect=fake_chat,
             ),
             patch(
-                "digiquant.olympus.atlas.skills.load_skill",
+                "digiquant.research.skills.load_skill",
                 return_value="Monthly synthesis skill text",
             ),
         ):

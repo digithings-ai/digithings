@@ -13,8 +13,8 @@ from typing import Any  # score:allow untyped any — JSON-derived prior-context
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.atlas.state import AtlasResearchState, Phase6BiasRow
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.state import AtlasResearchState, Phase6BiasRow
+from digiquant.research.supabase_io import (
     PublishedArtifact,
     SupabaseClient,
     publish_document,

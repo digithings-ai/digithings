@@ -12,18 +12,18 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
 )
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
 )
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation
-from digiquant.olympus.hermes.skills import load_skill_full
+from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.skills import load_skill_full
 
 pytestmark = pytest.mark.unit
 
@@ -114,7 +114,7 @@ class TestH6AnalystSkillLoad:
 
         with (
             patch(
-                "digiquant.olympus.hermes.phases.h6_deliberation.load_skill_full",
+                "digiquant.portfolio.phases.h6_deliberation.load_skill_full",
                 side_effect=fake_load,
             ),
             patch("digigraph.graph.research_agent.completion_text", side_effect=fake),

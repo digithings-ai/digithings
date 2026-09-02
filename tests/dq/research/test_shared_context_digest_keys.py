@@ -13,10 +13,10 @@ from __future__ import annotations
 import pathlib
 from datetime import date
 
-import digiquant.olympus.hermes.phases as hermes_phases_pkg
+import digiquant.portfolio.phases as hermes_phases_pkg
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.research.phases._node_factory import _shared_context
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
 
 
 def _state_with_latest_segments(latest_segments: dict) -> AtlasResearchState:

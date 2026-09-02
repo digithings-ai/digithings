@@ -6,7 +6,7 @@ import http.client
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.kairos.pages_dashboard_gate import (
+from digiquant.execution.pages_dashboard_gate import (
     DASHBOARD_PATHS,
     DASHBOARD_URL_FUNCTIONS,
     EXIT_APPLY_FAILED,
@@ -23,7 +23,7 @@ from digiquant.olympus.kairos.pages_dashboard_gate import (
     run_pages_dashboard_gate,
     settings_bundle_ready,
 )
-from digiquant.olympus.kairos.vendor_secret_files import function_deploy_argv
+from digiquant.execution.vendor_secret_files import function_deploy_argv
 
 pytestmark = pytest.mark.unit
 
@@ -485,7 +485,7 @@ def test_incomplete_read_maps_to_fetch_error(monkeypatch: pytest.MonkeyPatch) ->
         raise http.client.IncompleteRead(partial=b"x")
 
     monkeypatch.setattr(
-        "digiquant.olympus.kairos.pages_dashboard_gate.urllib.request.urlopen",
+        "digiquant.execution.pages_dashboard_gate.urllib.request.urlopen",
         boom,
     )
     with pytest.raises(LiveSettingsFetchError, match="fetch failed"):

@@ -10,11 +10,11 @@ means `find_spec("digigraph")` succeeds even when digigraph is not
 pip-installed. So we must actually attempt the import to know whether the
 chain is wired up.
 
-The full Atlas test set runs in `test-atlas-graph.yml` where
+The full Atlas test set runs in `test-research-graph.yml` where
 install-workspace.sh has installed digigraph + its deps first.
 
 `data/test_*.py` was dropped from the glob below (#2183): of the five files
-under `tests/dq/atlas/data/`, only `test_ai_portfolios.py` and
+under `tests/dq/research/data/`, only `test_ai_portfolios.py` and
 `test_web_grounding.py` actually need digigraph, and both already guard
 themselves with a module-level `pytest.importorskip("openai")` — the same
 absent dependency this docstring's second paragraph names, and the actual
@@ -27,7 +27,7 @@ for no reason — verified empirically: removing this entry runs all three
 files' ~29 tests clean in the digiquant-only lane, while the two
 digigraph-dependent files still report as skipped, not errored.
 
-`phases/test_*.py` is removed outright: there is no `tests/dq/atlas/phases/`
+`phases/test_*.py` is removed outright: there is no `tests/dq/research/phases/`
 directory in this repo, so the pattern has never matched anything.
 """
 
@@ -60,7 +60,7 @@ def breakdown_contributor() -> Iterator[Callable[..., None]]:
     Shared here (rather than in ``test_diagnostics.py``) because every package that adds a
     breakdown key needs it — see ``diagnostics.register_breakdown_contributor`` (#1736).
     """
-    from digiquant.olympus.atlas import diagnostics
+    from digiquant.research import diagnostics
 
     saved = list(diagnostics._BREAKDOWN_CONTRIBUTORS)
 

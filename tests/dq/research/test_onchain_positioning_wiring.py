@@ -20,16 +20,16 @@ from uuid import uuid4
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
 from digiquant.data.onchain.hyperdash import CohortPositioning, cohort_summary_to_positioning
-from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
-from digiquant.olympus.atlas.phases.phase7_synthesis import build_phase7
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.phase6_consolidate import build_phase6
+from digiquant.research.phases.phase7_synthesis import build_phase7
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     DataLayerSnapshot,
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.atlas.testing.simulator import parse_schema_name
+from digiquant.research.testing.simulator import parse_schema_name
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -84,7 +84,7 @@ def _canned_positioning() -> CohortPositioning:
 @pytest.mark.unit
 class TestPreflightOnchain:
     def _deps(self) -> Any:
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+        from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient(
             canned_reads={
@@ -97,8 +97,8 @@ class TestPreflightOnchain:
         return PreflightDeps(client=client, config_loader=AtlasConfigBundle)
 
     def test_populates_market_context_and_persists_rows(self) -> None:
-        import digiquant.olympus.atlas.phases.preflight as pf_mod
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        import digiquant.research.phases.preflight as pf_mod
+        from digiquant.research.phases.preflight import build_preflight_node
 
         deps = self._deps()
         node = build_preflight_node(deps)
@@ -119,8 +119,8 @@ class TestPreflightOnchain:
     def test_overlay_injects_market_context_without_persisting(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import digiquant.olympus.atlas.phases.preflight as pf_mod
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
+        import digiquant.research.phases.preflight as pf_mod
+        from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
 
         overlay = uuid4()
         monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
@@ -150,8 +150,8 @@ class TestPreflightOnchain:
         assert client.store.get("onchain_cohort_positioning", []) == []
 
     def test_absent_when_provider_returns_empty(self) -> None:
-        import digiquant.olympus.atlas.phases.preflight as pf_mod
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        import digiquant.research.phases.preflight as pf_mod
+        from digiquant.research.phases.preflight import build_preflight_node
 
         node = build_preflight_node(self._deps())
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
@@ -160,8 +160,8 @@ class TestPreflightOnchain:
         assert "onchain_positioning" not in out["data_layer"].market_context
 
     def test_fail_soft_on_provider_exception(self) -> None:
-        import digiquant.olympus.atlas.phases.preflight as pf_mod
-        from digiquant.olympus.atlas.phases.preflight import build_preflight_node
+        import digiquant.research.phases.preflight as pf_mod
+        from digiquant.research.phases.preflight import build_preflight_node
 
         def _boom() -> CohortPositioning:
             raise OSError("hyperdash unreachable")

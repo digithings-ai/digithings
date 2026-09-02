@@ -3,7 +3,7 @@
 Covers content idempotency, changed-content append, as-of selection, run pins,
 exact load after newer rows, child-parent checks, and strict exclusion of
 future-known / legacy-null-known rows. Migration privacy contracts live in
-``tests/dq/atlas/test_migration_088.py``.
+``tests/dq/research/test_migration_088.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
     EvidenceRecord,
@@ -40,7 +40,7 @@ from digiquant.olympus.research_retrieval.models import (
     research_patch_id,
     research_state_version_id,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ResearchStateConflict,
     ResearchStateError,
     ResearchStateMissingError,

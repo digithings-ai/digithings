@@ -1,6 +1,6 @@
 """LangGraph orchestration: supervisor + sub-graph pattern (Phase 1+)."""
 
-from digigraph.graph.atlas_subgraph import (
+from digigraph.graph.research_spike_subgraph import (
     AtlasResearchState,
     atlas_subgraph,
     build_atlas_subgraph,

@@ -1,6 +1,6 @@
 """Kairos broker-mirror sync cron — paper Alpaca OAuth only (K4).
 
-Production entry: ``python -m digiquant.olympus.kairos.sync_cron``. House and
+Production entry: ``python -m digiquant.execution.sync_cron``. House and
 system workspaces, live env rows, and inactive connections are never synced.
 IBKR paper is listed then held (brokerage session is not opened from cron).
 Alpaca ``auth_kind=api_key`` is listed then held (polling that row cannot prove
@@ -25,7 +25,7 @@ from digiquant.brokers.connections import (
     ConnectionEnv,
     ConnectionStatus,
 )
-from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 from digiquant.vault.envelope import MASTER_KEY_ENV
 
 _FINGERPRINT_SELECT = "id,workspace_id,broker,env,auth_kind,status,fingerprint"
@@ -170,7 +170,7 @@ def load_kairos_sync_targets(client: object) -> list[SyncTarget]:
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="python -m digiquant.olympus.kairos.sync_cron")
+    parser = argparse.ArgumentParser(prog="python -m digiquant.execution.sync_cron")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -273,7 +273,7 @@ def main(
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
-    """CLI entry used by ``python -m digiquant.olympus.kairos.sync_cron``."""
+    """CLI entry used by ``python -m digiquant.execution.sync_cron``."""
     args = _parse_args(argv)
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
     env = os.environ if environ is None else environ
@@ -352,7 +352,7 @@ def _production_sync_batch(
     from digiquant.brokers.alpaca import AlpacaAdapter, OAuthAuth
     from digiquant.brokers.base import BrokerAdapter
     from digiquant.brokers.connections import BrokerConnection, get_connection, open_credential
-    from digiquant.olympus.kairos.sync import SyncCursor, run_sync_batch
+    from digiquant.execution.sync import SyncCursor, run_sync_batch
     from digiquant.vault.envelope import OAuthCredential
 
     client = _supabase_client_from_env(environ)

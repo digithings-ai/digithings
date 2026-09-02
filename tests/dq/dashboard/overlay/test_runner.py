@@ -8,22 +8,22 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.writers.commit_io import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.writers.commit_io import (
     OVERLAY_MANIFEST_PREFIX,
     book_portfolio,
     load_commit_manifests,
     manifest_document_key,
 )
-from digiquant.olympus.overlay.byok import ByokProbe
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
-from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE, OverlayLegacyBookBlocked
-from digiquant.olympus.overlay.runner import (
+from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE, OverlayLegacyBookBlocked
+from digiquant.dashboard.overlay.runner import (
     OverlayError,
     OverlayRunRequest,
     assert_tenant_agnostic_corpus_key,
@@ -31,14 +31,14 @@ from digiquant.olympus.overlay.runner import (
     publish_overlay_corpus_pin,
     run_overlay,
 )
-from digiquant.olympus.research_corpus import (
+from digiquant.dashboard.research_corpus import (
     ResearchCorpusKeyError,
     ResearchCorpusPin,
     ResearchCorpusStore,
     corpus_pin_version_id,
     house_corpus_pin,
 )
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.tenancy import (
     PlanTier,
     SubscriptionStatus,
     house_workspace_id,

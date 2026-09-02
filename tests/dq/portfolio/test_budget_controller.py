@@ -4,7 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import pytest
-from digiquant.olympus.hermes.budget_controller import (
+from digiquant.portfolio.budget_controller import (
     RegimeAssessment,
     assess_budget,
     budget_for,
@@ -126,18 +126,18 @@ class TestAssessBudget:
             raise RuntimeError("db down")
 
         monkeypatch.setattr(
-            "digiquant.olympus.hermes.budget_controller.get_vix_term_structure", boom
+            "digiquant.portfolio.budget_controller.get_vix_term_structure", boom
         )
         b, floor, a = assess_budget(_state({"A": 0.01}), object(), static_cap=15)
         assert (b, floor) == (15, 1) and a is None
 
     def test_stress_signals_tighten_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "digiquant.olympus.hermes.budget_controller.get_vix_term_structure",
+            "digiquant.portfolio.budget_controller.get_vix_term_structure",
             lambda **_k: {"state": "backwardation", "ratio": 1.2},
         )
         monkeypatch.setattr(
-            "digiquant.olympus.hermes.budget_controller.get_market_breadth",
+            "digiquant.portfolio.budget_controller.get_market_breadth",
             lambda **_k: {"pct_above_50dma": 35.0, "universe_size": 50},
         )
         b, floor, a = assess_budget(_state({"A": 0.001, "B": -0.001}), object(), static_cap=20)

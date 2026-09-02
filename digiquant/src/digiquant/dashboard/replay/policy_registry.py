@@ -1,6 +1,6 @@
 """WP16.3 — allowlisted registered policy resolution (#2987).
 
-Resolves only :class:`~digiquant.olympus.replay.models.PolicyVersionRef`
+Resolves only :class:`~digiquant.dashboard.replay.models.PolicyVersionRef`
 entries registered in-memory (or injected store). Cutoff-bound reads filter
 ``known_at <= replay_as_of``. Missing research output is typed unavailable —
 never fabricate H5/H6 counterfactuals. No network/provider calls.
@@ -12,13 +12,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     POLICY_BUNDLE_FIELD_NAMES,
     PolicyBundle,
     PolicyFamily,
     PolicyVersionRef,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 __all__ = [
     "PolicyRegistry",

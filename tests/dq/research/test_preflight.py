@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.olympus.atlas.phases.preflight."""
+"""Unit tests for digiquant.research.phases.preflight."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 from digiquant.data.prices import refresh as refresh_mod
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -319,7 +319,7 @@ class TestPreflightDataStarvation:
 
     def test_full_coverage_has_no_basket_gap(self) -> None:
         """When every expected basket ticker has at least one row, gap is empty."""
-        from digiquant.olympus.atlas.phases.preflight import _market_context_tickers
+        from digiquant.research.phases.preflight import _market_context_tickers
 
         tickers = _market_context_tickers()
         pt_rows = [{"date": "2026-06-19", "ticker": t} for t in tickers]
@@ -434,7 +434,7 @@ def _seed_research_store():
     from decimal import Decimal
     from uuid import UUID
 
-    from digiquant.olympus.research_retrieval.models import (
+    from digiquant.dashboard.research_retrieval.models import (
         BeliefStatus,
         BeliefVersion,
         EvidenceRecord,
@@ -449,7 +449,7 @@ def _seed_research_store():
         manifest_content_hash,
         research_state_version_id,
     )
-    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+    from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
     ts = datetime(2026, 4, 26, 12, 0, tzinfo=UTC)
     prov = TypedProvenance(
@@ -595,7 +595,7 @@ class TestResearchStatePreflightPin:
         from decimal import Decimal
         from uuid import UUID
 
-        from digiquant.olympus.research_retrieval.models import (
+        from digiquant.dashboard.research_retrieval.models import (
             BeliefStatus,
             BeliefVersion,
             EvidenceRecord,
@@ -611,7 +611,7 @@ class TestResearchStatePreflightPin:
             manifest_content_hash,
             research_state_version_id,
         )
-        from digiquant.olympus.research_retrieval.pin import child_version_must_name_parent
+        from digiquant.dashboard.research_retrieval.pin import child_version_must_name_parent
 
         store, root, ts = _seed_research_store()
         client = FakeSupabaseClient(
@@ -836,7 +836,7 @@ class TestResearchStatePreflightPin:
         """WP12.2 hardenings (#2867): store pin reject → typed state_unavailable."""
         from datetime import timedelta
 
-        from digiquant.olympus.research_retrieval.pin import pin_research_state_for_preflight
+        from digiquant.dashboard.research_retrieval.pin import pin_research_state_for_preflight
 
         store, root, ts = _seed_research_store()
         # Preflight defaults requested_as_of to cutoff; exercise the WP12.3 helper
@@ -860,7 +860,7 @@ class TestResearchStatePreflightPin:
         """WP12.2 hardenings (#2867): drifted future-known child → state_unavailable."""
         from datetime import timedelta
 
-        from digiquant.olympus.research_retrieval.models import EvidenceRecord
+        from digiquant.dashboard.research_retrieval.models import EvidenceRecord
 
         store, root, ts = _seed_research_store()
         # Simulate durable drift: evidence known_at moves past cutoff after append.

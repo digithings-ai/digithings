@@ -10,25 +10,25 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import PhaseHermesState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.edit_mode import artifact_document_key
-from digiquant.olympus.hermes.focus_roster import (
+from digiquant.research.state import PhaseHermesState
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.edit_mode import artifact_document_key
+from digiquant.portfolio.focus_roster import (
     fanout_ticker,
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
 )
-from digiquant.olympus.hermes.phases.portfolio_common import (
+from digiquant.portfolio.phases.portfolio_common import (
     analyst_artifact_key,
     run_asset_analyst_llm,
 )
-from digiquant.olympus.hermes.roster_cap import capped_tickers
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.writers.analyst_io import upsert_analyst_coverage
-from digiquant.olympus.hermes.writers.thesis_io import upsert_vehicle_thesis_from_analyst
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.portfolio.roster_cap import capped_tickers
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.writers.analyst_io import upsert_analyst_coverage
+from digiquant.portfolio.writers.thesis_io import upsert_vehicle_thesis_from_analyst
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 

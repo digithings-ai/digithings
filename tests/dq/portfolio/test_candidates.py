@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.candidates import (
+from digiquant.portfolio.candidates import (
     load_portfolio_holdings,
     score_technicals,
     select_focus_tickers,

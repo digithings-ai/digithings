@@ -7,10 +7,10 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
-from digiquant.olympus.research_retrieval.cache import ResearchCache
-from digiquant.olympus.research_retrieval.queries import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
+from digiquant.dashboard.research_retrieval.cache import ResearchCache
+from digiquant.dashboard.research_retrieval.queries import (
     RetrievalQueryPin,
     extract_section,
     query_portfolio,

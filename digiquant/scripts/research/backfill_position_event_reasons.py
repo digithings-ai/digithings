@@ -48,7 +48,7 @@ _ensure_importable()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import execute_at_open as eat  # noqa: E402
 
-from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _house_event_page(sb, start: int, page: int) -> List[Dict[str, Any]]:

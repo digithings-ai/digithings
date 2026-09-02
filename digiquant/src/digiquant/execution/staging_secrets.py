@@ -1,7 +1,7 @@
 """Staging E2E — required secret inventory (names only; never log values).
 
 Agent-runnable probes (``scripts/digiquant_staging_e2e.py``,
-``tests/dq/olympus/kairos/test_staging_e2e.py``) call
+``tests/dq/dashboard/kairos/test_staging_e2e.py``) call
 :func:`missing_kairos_staging_secrets` and **fail loudly** with the returned
 names when any required vendor secret is empty. They must never substitute
 fakes for Stripe / Mailgun / Alpaca OAuth and claim staging E2E pass.
@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 
-from digiquant.olympus.envcompat import STAGING_USER_JWT, env_lookup
+from digiquant.dashboard.envcompat import STAGING_USER_JWT, env_lookup
 
 # Ordered for human/agent checklists — keep in sync with
 # docs/agent-backlog/kairos-tenancy/HUMAN-UNBLOCK.md and WAITING-ON-SECRETS.json.

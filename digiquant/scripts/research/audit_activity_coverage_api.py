@@ -37,7 +37,7 @@ def _ensure_importable() -> None:
 
 
 _ensure_importable()
-from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
 _GROUP_A_TABLES = frozenset({"position_events", "positions", "nav_history"})
 

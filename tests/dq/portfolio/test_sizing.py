@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.sizing import (
     SizingCaps,
     TickerRisk,
     size_portfolio,
 )
-from digiquant.olympus.hermes.sizing_events import SizingAdjustmentType, validate_sizing_lineage
+from digiquant.portfolio.sizing_events import SizingAdjustmentType, validate_sizing_lineage
 
 pytestmark = pytest.mark.unit
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from digiquant.olympus.edit_mode.config import stale_full_days
-from digiquant.olympus.edit_mode.models import ArtifactKey, EditMode, TriageSignal
-from digiquant.olympus.edit_mode.prior import PriorLoader
+from digiquant.dashboard.edit_mode.config import stale_full_days
+from digiquant.dashboard.edit_mode.models import ArtifactKey, EditMode, TriageSignal
+from digiquant.dashboard.edit_mode.prior import PriorLoader
 
 
 def resolve_edit_mode(
@@ -34,7 +34,7 @@ def resolve_edit_mode(
     #
     # This is NOT the verbatim guard §5.3.1 rejects: the trigger is still purely the elapsed
     # day count against ``stale_full_days()``, unchanged. Only what "elapsed since" means is
-    # corrected. See :mod:`digiquant.olympus.edit_mode.content_identity`.
+    # corrected. See :mod:`digiquant.dashboard.edit_mode.content_identity`.
     content_date = prior.content_date or prior.date
     gap_days = (run_date - content_date).days
     if gap_days > stale_full_days():

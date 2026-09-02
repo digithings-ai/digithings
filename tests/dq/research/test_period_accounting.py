@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from digiquant.olympus.accounting import (
+from digiquant.dashboard.accounting import (
     AccountingPeriod,
     AccountingPolicy,
     BenchmarkBoundary,
@@ -420,7 +420,7 @@ def test_non_zero_residual_never_final() -> None:
     The pure engine reconciles by construction; residual is the gate for future
     persistence/replay corruption. Missing opening marks stay non-final as well.
     """
-    from digiquant.olympus.accounting.engine import _resolve_status
+    from digiquant.dashboard.accounting.engine import _resolve_status
 
     assert (
         _resolve_status([QualityReason.RESIDUAL_EXCEEDED], Decimal("1.00"), Decimal("0.01"))

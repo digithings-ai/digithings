@@ -12,7 +12,7 @@ pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-
 
 import digillm.client as digillm_client
 from digillm.client import get_byok
-from digiquant.olympus.overlay.byok import (
+from digiquant.dashboard.overlay.byok import (
     BYOK_AAD_PURPOSE,
     LLM_PROVIDERS,
     TABLE_NAME,
@@ -26,16 +26,16 @@ from digiquant.olympus.overlay.byok import (
     probe_byok,
     provider_base_url,
 )
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     OverlaySkipReason,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
-from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
-from digiquant.olympus.research_corpus import ResearchCorpusStore
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 from digiquant.vault.envelope import (
     ApiKeyCredential,
     MasterKey,

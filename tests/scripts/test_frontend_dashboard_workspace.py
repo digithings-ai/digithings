@@ -1,6 +1,6 @@
 """Pin wave 3: the dashboard workspace lives at frontend/dashboard.
 
-ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.olympus
+ADR-0026 wave 3. Public URL is /dashboard/ only; Python digiquant.dashboard
 and CSS .oly-* are unchanged. /olympus/ has no source twin; Pages redirects it.
 """
 
@@ -24,7 +24,7 @@ CANON = REPO_ROOT / "scripts" / "check_frontend_canon.py"
 
 def test_workspace_folder_is_frontend_dashboard() -> None:
     assert PKG.is_file(), "frontend/dashboard/package.json must exist"
-    assert not OLD.exists(), "frontend/olympus must be gone (git mv, not a copy)"
+    assert not OLD.exists(), "frontend/dashboard must be gone (git mv, not a copy)"
     pkg = json.loads(PKG.read_text(encoding="utf-8"))
     assert pkg["name"] == "dashboard"
 
@@ -32,14 +32,14 @@ def test_workspace_folder_is_frontend_dashboard() -> None:
 def test_build_copies_from_frontend_dashboard() -> None:
     text = BUILD.read_text(encoding="utf-8")
     assert "cp -r frontend/dashboard/out/. dist/dashboard/" in text
-    assert "frontend/olympus" not in text
+    assert "frontend/dashboard" not in text
 
 
 def test_ci_lane_is_dashboard() -> None:
     text = CI_PATHS.read_text(encoding="utf-8")
     assert "frontend/dashboard/**" in text
     assert "test-dashboard.yml" in text
-    assert "frontend/olympus/**" not in text
+    assert "frontend/dashboard/**" not in text
 
 
 def test_reusable_workflow_uses_dashboard_workspace() -> None:
@@ -54,7 +54,7 @@ def test_canon_census_app_is_dashboard_folder() -> None:
     text = CANON.read_text(encoding="utf-8")
     assert '"dashboard"' in text or "'dashboard'" in text
     assert "frontend/dashboard/lib/chart-colors.ts" in text
-    assert "frontend/olympus/" not in text
+    assert "frontend/dashboard/" not in text
 
 
 def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
@@ -74,13 +74,13 @@ def test_dockerfiles_copy_dashboard_package_json() -> None:
     for rel in ("frontend/digichat/Dockerfile", "Dockerfile.digichat-cloudflare"):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "frontend/dashboard/package.json" in text
-        assert "frontend/olympus/package.json" not in text
+        assert "frontend/dashboard/package.json" not in text
 
 
 def test_gitignore_ignores_dashboard_static_portfolio() -> None:
     text = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert "frontend/dashboard/public/dashboard-data.json" in text
-    assert "frontend/olympus/public/dashboard-data.json" not in text
+    assert "frontend/dashboard/public/dashboard-data.json" not in text
 
 
 def test_dashboard_has_no_nested_lockfile() -> None:

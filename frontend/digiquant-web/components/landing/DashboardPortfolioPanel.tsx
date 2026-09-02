@@ -369,4 +369,4 @@ export function LivePortfolioPanel() {
 }
 
 /** @deprecated Use LivePortfolioPanel. One-release alias (ADR-0026 wave 3). */
-export const OlympusPortfolioPanel = LivePortfolioPanel;
+export const DashboardPortfolioPanel = LivePortfolioPanel;

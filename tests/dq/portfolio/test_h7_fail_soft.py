@@ -11,13 +11,13 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, PriorContext
-from digiquant.olympus.hermes.models.pm_direction import (
+from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.portfolio.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
     TickerDirection,
 )
-from digiquant.olympus.hermes.phases.h7_pm_direction import NODE_ID, _h7_node
+from digiquant.portfolio.phases.h7_pm_direction import NODE_ID, _h7_node
 
 pytestmark = pytest.mark.unit
 
@@ -72,7 +72,7 @@ class TestH7FailSoft:
     def test_llm_failure_carries_prior_memo_without_raising(self) -> None:
         state = _state(with_prior_memo=True)
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 201 column 1 (char 1100)"),
         ):
             out = _h7_node(state)
@@ -94,7 +94,7 @@ class TestH7FailSoft:
     def test_llm_failure_without_prior_memo_degrades_to_none(self) -> None:
         state = _state(with_prior_memo=False)
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
             out = _h7_node(state)
@@ -106,7 +106,7 @@ class TestH7FailSoft:
     def test_llm_failure_rebinds_current_forecast_ids_not_prior(self) -> None:
         state = _state(with_prior_memo=True, with_current_forecast=True)
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             side_effect=ValueError("Expecting value: line 1 column 1 (char 0)"),
         ):
             out = _h7_node(state)
@@ -147,7 +147,7 @@ class TestH7BindOnSuccess:
             memo="fresh",
         )
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             return_value=llm_memo,
         ):
             out = _h7_node(state)

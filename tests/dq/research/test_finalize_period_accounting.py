@@ -17,8 +17,8 @@ from typing import Any  # score:allow untyped any — fake Supabase row dicts in
 from unittest.mock import MagicMock
 
 import pytest
-from digiquant.olympus.accounting.engine import compute_period
-from digiquant.olympus.accounting.io import (
+from digiquant.dashboard.accounting.engine import compute_period
+from digiquant.dashboard.accounting.io import (
     CONTRIBUTIONS,
     HOLDINGS,
     PERIODS,
@@ -30,7 +30,7 @@ from digiquant.olympus.accounting.io import (
     persist_period,
     select_final_period,
 )
-from digiquant.olympus.accounting.models import (
+from digiquant.dashboard.accounting.models import (
     AccountingPolicy,
     MarkObservation,
     OpeningHolding,
@@ -363,7 +363,7 @@ def test_resolve_mode_dry_run_and_shadow() -> None:
 
 def test_cold_ledger_declines_without_write() -> None:
     mod = _load_finalize_mod()
-    from digiquant.olympus.hermes.writers.execution_io import HOLDING_LOTS
+    from digiquant.portfolio.writers.execution_io import HOLDING_LOTS
 
     client = MergingFake(
         canned_reads={
@@ -388,7 +388,7 @@ def test_cold_ledger_declines_without_write() -> None:
 
 def test_dry_run_writes_nothing() -> None:
     mod = _load_finalize_mod()
-    from digiquant.olympus.hermes.writers.execution_io import HOLDING_LOTS
+    from digiquant.portfolio.writers.execution_io import HOLDING_LOTS
 
     client = MergingFake(
         canned_reads={
@@ -413,8 +413,8 @@ def test_dry_run_writes_nothing() -> None:
 def test_opening_quantities_pages_past_postgrest_max_rows() -> None:
     """Closed-lot history >1000 must not drop a later open lot (#2776 / WP3 review)."""
     mod = _load_finalize_mod()
-    from digiquant.olympus.hermes.models.portfolio_ledger import HoldingLotStatus
-    from digiquant.olympus.hermes.writers.execution_io import HOLDING_LOTS
+    from digiquant.portfolio.models.portfolio_ledger import HoldingLotStatus
+    from digiquant.portfolio.writers.execution_io import HOLDING_LOTS
 
     closed_lots = [
         {
@@ -447,7 +447,7 @@ def test_opening_quantities_pages_past_postgrest_max_rows() -> None:
 
 
 def test_legacy_nav_day_return_ignores_overlay_nav() -> None:
-    from digiquant.olympus.tenancy import house_workspace_id
+    from digiquant.dashboard.tenancy import house_workspace_id
 
     mod = _load_finalize_mod()
     overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -467,7 +467,7 @@ def test_legacy_nav_day_return_ignores_overlay_nav() -> None:
 
 
 def test_opening_cash_ignores_overlay_nav_and_cash_weight() -> None:
-    from digiquant.olympus.tenancy import house_workspace_id
+    from digiquant.dashboard.tenancy import house_workspace_id
 
     mod = _load_finalize_mod()
     overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

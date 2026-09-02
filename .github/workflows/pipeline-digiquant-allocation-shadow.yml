@@ -2,7 +2,7 @@ name: "Pipeline: Olympus allocation shadow"
 
 # WP10.2 (#2762) — write-denied shadow evaluation surface for WP10.1 artifacts.
 #
-# Isolation contract (enforced by digiquant/scripts/atlas/check_allocation_shadow_isolation.py):
+# Isolation contract (enforced by digiquant/scripts/research/check_allocation_shadow_isolation.py):
 #   - artifact-in / file-out only
 #   - no production Supabase / provider / broker / checkpointer secrets
 #   - no secrets: inherit
@@ -167,7 +167,7 @@ jobs:
               args+=("$token")
             done < artifacts/shadow-artifact-args.txt
           fi
-          uv run --frozen --no-sync python digiquant/scripts/atlas/check_allocation_shadow_isolation.py \
+          uv run --frozen --no-sync python digiquant/scripts/research/check_allocation_shadow_isolation.py \
             --source-workflow "${SOURCE_WORKFLOW}" \
             --source-branch "${SOURCE_BRANCH}" \
             --output artifacts/allocation-shadow-isolation-report.json \

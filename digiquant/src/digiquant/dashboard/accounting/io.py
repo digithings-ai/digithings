@@ -21,14 +21,14 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.olympus.accounting.models import (
+from digiquant.dashboard.accounting.models import (
     AccountingPeriod,
     ClosingHolding,
     PeriodStatus,
     TickerPeriodResult,
 )
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

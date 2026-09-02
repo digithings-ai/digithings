@@ -6,7 +6,7 @@ Operator truth for **when to run what** remains [`RUNBOOK.md`](../../RUNBOOK.md)
 
 | Script | Role |
 |--------|------|
-| [`digiquant/scripts/atlas/verify-supabase-migrations.sh`](../../../../../../scripts/atlas/verify-supabase-migrations.sh) | CI/local: `supabase/config.toml` exists, `supabase/migrations/*.sql` named `NNN_name.sql`, no duplicate numeric prefix (not an ordering check). First step of `test-digiquant.yml`; locally `make supabase-migrations-check` |
+| [`digiquant/scripts/research/verify-supabase-migrations.sh`](../../../../../../scripts/atlas/verify-supabase-migrations.sh) | CI/local: `supabase/config.toml` exists, `supabase/migrations/*.sql` named `NNN_name.sql`, no duplicate numeric prefix (not an ordering check). First step of `test-digiquant.yml`; locally `make supabase-migrations-check` |
 | [`scripts/run_db_first.py`](../../scripts/run_db_first.py) | After publish: optionally validate local JSON mirrors if present → **`sync_positions_from_rebalance.py`** (if `--validate-mode` full|pm) → **`refresh_performance_metrics.py`** → `execute_at_open.py` (unless `--skip-execute`) → **`validate_db_first.py`** (DB-only runs skip local JSON; see [`data/README.md`](../../data/README.md)) |
 | [`scripts/validate_db_first.py`](../../scripts/validate_db_first.py) | Supabase row checks (`--mode full\|research\|pm`) |
 | [`scripts/validate_pipeline_step.py`](../../scripts/validate_pipeline_step.py) | After each pipeline step: `--step` or `--chain research\|track_b\|full` + `--date`; validates row presence + JSON Schema for thesis/deliberation/rebalance artifacts |

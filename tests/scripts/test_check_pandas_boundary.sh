@@ -57,7 +57,7 @@ mkdir -p "$FIXTURE/scripts" \
   "$FIXTURE/digiquant/src/digiquant" \
   "$FIXTURE/digiquant/src/digiquant/charts" \
   "$FIXTURE/digiquant/src/digiquant/strategies" \
-  "$FIXTURE/digiquant/scripts/atlas" \
+  "$FIXTURE/digiquant/scripts/research" \
   "$FIXTURE/digiquant/sandbox/pandas_ta"
 
 # Mirror the production script so ROOT resolves to the fixture.

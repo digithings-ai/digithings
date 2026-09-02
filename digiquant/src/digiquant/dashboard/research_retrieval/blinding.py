@@ -8,7 +8,7 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
     Literal,
 )
 
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     assert_no_materiality_in_prompt,
 )

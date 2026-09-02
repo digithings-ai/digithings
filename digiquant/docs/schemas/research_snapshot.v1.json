@@ -29,7 +29,7 @@
     },
     "DigestPayload": {
       "additionalProperties": true,
-      "description": "Frontend-facing copy of the Phase 7 master briefing payload.\n\n**This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: markdown ``body`` plus a thin envelope. Historical JSON slots are\nallowed extras so old ``daily_snapshots`` rows still validate.\n\n``actionable_summary`` / ``risk_radar`` / ``material_findings`` stay typed\nso read-path personalization (#312) still sees ActionableItem / RiskItem /\nFinding objects. The stitcher ``DigestSnapshot`` does not require them.",
+      "description": "Frontend-facing copy of the Phase 7 master briefing payload.\n\n**This duplicates** ``digiquant.research.phases.phase7_synthesis.DigestSnapshot``\non purpose \u2014 see module docstring for the import-direction rationale. The\nparity test enforces drift detection.\n\nLayout: markdown ``body`` plus a thin envelope. Historical JSON slots are\nallowed extras so old ``daily_snapshots`` rows still validate.\n\n``actionable_summary`` / ``risk_radar`` / ``material_findings`` stay typed\nso read-path personalization (#312) still sees ActionableItem / RiskItem /\nFinding objects. The stitcher ``DigestSnapshot`` does not require them.",
       "properties": {
         "actionable_summary": {
           "items": {
@@ -96,7 +96,7 @@
     },
     "Finding": {
       "additionalProperties": false,
-      "description": "One material finding. Mirrors digiquant.olympus.atlas.segments.Finding.",
+      "description": "One material finding. Mirrors digiquant.research.segments.Finding.",
       "properties": {
         "label": {
           "title": "Label",
@@ -150,7 +150,7 @@
     },
     "SegmentFreshness": {
       "additionalProperties": false,
-      "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.\n\n``frozen`` (#1749): regenerated today, but the edit merge changed nothing, so ``as_of`` is\nthe date the content last materially changed. This model is the READ-path validator and is\n``extra=\"forbid\"`` \u2014 a value the writer can emit but this ``Literal`` does not list is a\n``ValidationError`` on every subsequent read of the row, not a soft ignore. Widen both\ncopies in the same change.",
+      "description": "Per-segment provenance marker used by the dashboard.\n\nMirrors :class:`digiquant.research.phases.phase7_synthesis.SegmentFreshness`.\n\n``frozen`` (#1749): regenerated today, but the edit merge changed nothing, so ``as_of`` is\nthe date the content last materially changed. This model is the READ-path validator and is\n``extra=\"forbid\"`` \u2014 a value the writer can emit but this ``Literal`` does not list is a\n``ValidationError`` on every subsequent read of the row, not a soft ignore. Widen both\ncopies in the same change.",
       "properties": {
         "as_of": {
           "description": "ISO date string ('' if unknown)",
@@ -176,7 +176,7 @@
     },
     "Source": {
       "additionalProperties": false,
-      "description": "One cited source. Mirrors digiquant.olympus.atlas.segments.Source.",
+      "description": "One cited source. Mirrors digiquant.research.segments.Source.",
       "properties": {
         "id": {
           "title": "Id",

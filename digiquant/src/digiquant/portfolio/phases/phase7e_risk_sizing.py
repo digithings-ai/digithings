@@ -3,7 +3,7 @@
 H7 ``PMDirectionMemo`` supplies direction (long|flat), conviction ranks (order only),
 and optional ``confidence`` ∈ [0, 1]. This phase maps those inputs plus H5/H6 analyst
 context into deterministic, risk-managed weights via
-:func:`~digiquant.olympus.hermes.sizing.size_portfolio` — the sole weight owner on the
+:func:`~digiquant.portfolio.sizing.size_portfolio` — the sole weight owner on the
 thesis-first path (ADR-0020).
 
 **WP8.4 (#2734):** on the memo path, when ``h8_sizing_input_mode=calibrated`` (default)
@@ -30,41 +30,41 @@ from typing import Any  # score:allow untyped any — scored-lint: duck-typed Su
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.data.queries import get_return_correlations
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.research.data.queries import get_return_correlations
+from digiquant.research.state import AtlasResearchState, PhaseHermesState, RebalancePayload
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.allocation_contracts import (
     AllocationInputBundle,
     AlteredTarget,
     AssetInputStatus,
     BindingConstraint,
     RejectedTarget,
 )
-from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint
-from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
-from digiquant.olympus.hermes.pretrade_risk import (
+from digiquant.portfolio.allocation_hashes import weights_fingerprint
+from digiquant.portfolio.models.deliberation import is_unchallenged_carry
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.pretrade_risk import (
     CostLiquidityScalars,
     ForecastQualityScalars,
     PreTradeRiskBuildRequest,
     build_pretrade_risk_report,
 )
-from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
-from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.risk_controls import BreakerConfig, breaker_scale_from_nav_history
+from digiquant.portfolio.sector_map import asset_class, sector_bucket
+from digiquant.portfolio.sizing import (
     SizingCaps,
     TickerRisk,
     calibrated_raw_score,
     size_portfolio,
 )
-from digiquant.olympus.hermes.sizing_events import (
+from digiquant.portfolio.sizing_events import (
     LineageValidationError,
     SizingAdjustment,
     SizingAdjustmentType,
     validate_sizing_lineage,
 )
-from digiquant.olympus.hermes.turnover import (
+from digiquant.portfolio.turnover import (
     apply_rebalancing_cadence,
     clamp_no_trade_band,
     no_trade_band_pp,
@@ -525,7 +525,7 @@ def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
       entirely (neither ``long`` nor ``flat``) — memo coverage is LLM discipline,
       and an owned position with no explicit instruction defaults to "hold".
 
-    Scoped to :func:`~digiquant.olympus.hermes.writers.commit_io.carried_held_tickers`
+    Scoped to :func:`~digiquant.portfolio.writers.commit_io.carried_held_tickers`
     — reusing the exact set H9's coherence check exempts so the carry set and the
     exemption set can never diverge into a new silent mismatch. A PM-exited name
     (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
@@ -538,7 +538,7 @@ def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
     CodeRabbit review on #2434) — the caller emits it only when the carry sticks.
     """
     # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
-    from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+    from digiquant.portfolio.writers.commit_io import carried_held_tickers
 
     gated = carried_held_tickers(state)
     if not gated:
@@ -582,7 +582,7 @@ def _apply_held_continuity_backstop(
     with NO recoverable weight stays out and H9 still fails closed — that case
     genuinely needs eyes.
     """
-    from digiquant.olympus.hermes.writers.commit_io import (
+    from digiquant.portfolio.writers.commit_io import (
         flat_tickers_from_memo,
         held_tickers,
         memo_addressed_tickers,
@@ -752,7 +752,7 @@ def _build_sized_book(
 
     Third element is the WP8.3 shadow ``AllocationInputBundle`` (or ``None``).
     """
-    from digiquant.olympus.hermes.h8_risk_snapshots import resolve_h8_risk_artifacts
+    from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
     caps = SizingCaps.from_preferences(state.config.preferences)
     memo = state.phase_hermes.pm_direction_memo
@@ -800,7 +800,7 @@ def _build_sized_book(
     allocation_bundle = None
     if memo is not None and risk_artifacts is not None:
         try:
-            from digiquant.olympus.hermes.allocation_inputs import (
+            from digiquant.portfolio.allocation_inputs import (
                 assemble_allocation_input_bundle_from_state,
             )
 
@@ -1023,7 +1023,7 @@ def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float],
     fingerprint equals the book H9 will validate and commit (#2824 / WP9 review).
     """
     # Lazy import: commit_io pulls atlas/hermes writers; avoid module-cycle at import.
-    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+    from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
     risky = weights_from_sized_book(sized_book)
     invested = sum(risky.values())

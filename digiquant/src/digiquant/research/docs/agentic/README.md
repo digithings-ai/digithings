@@ -24,7 +24,7 @@ python3 scripts/run_db_first.py
 
 **Track A — generic research only (no portfolio preferences):**
 
-- Run: `python -m digiquant.olympus.hermes.chain --cadence daily`
+- Run: `python -m digiquant.portfolio.chain --cadence daily`
 - Prompt: [`scripts/cowork-research-prompt.txt`](../../scripts/cowork-research-prompt.txt)
 - After publish: `python3 scripts/run_db_first.py --skip-execute --validate-mode research`
 
@@ -34,7 +34,7 @@ python3 scripts/run_db_first.py
 - Cowork: [`cowork/README.md`](../../cowork/README.md), [`cowork/tasks/README.md`](../../cowork/tasks/README.md)
 - Validate: `--validate-mode pm` or `full`
 
-**Full pipeline (combined):** `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday: `--refresh-scope all` via cron).
+**Full pipeline (combined):** `python -m digiquant.portfolio.chain --cadence daily` (Sunday: `--refresh-scope all` via cron).
 
 **Single segment:** read `skills/{segment}/SKILL.md`, write **JSON** where the skill specifies, publish to Supabase per [`RUNBOOK.md`](../../RUNBOOK.md).
 

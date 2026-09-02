@@ -1,7 +1,7 @@
 """WP16.3 — cutoff-bound as-of dataset materialization (#2987).
 
 Builds identical historical replay inputs (bars, calendar, cash, costs, timing,
-seed) and :class:`~digiquant.olympus.replay.models.ReplayInputManifest`
+seed) and :class:`~digiquant.dashboard.replay.models.ReplayInputManifest`
 envelopes. All source reads filter ``known_at <= replay_as_of``. Later source
 mutations cannot change a historical manifest when the cutoff is unchanged.
 """
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from digiquant.olympus.replay.canonical import (
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_series,
     execution_policy_hash,
@@ -20,7 +20,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingQuantity,
     InstrumentBarSeries,
@@ -32,11 +32,11 @@ from digiquant.olympus.replay.models import (
     TargetWeight,
     WalkForwardFold,
 )
-from digiquant.olympus.replay.policy_registry import (
+from digiquant.dashboard.replay.policy_registry import (
     PolicyRegistry,
     RegisteredPolicyVersion,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 __all__ = [
     "AsOfDatasetBuildError",

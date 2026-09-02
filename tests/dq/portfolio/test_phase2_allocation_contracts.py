@@ -14,32 +14,32 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     PhaseHermesState,
 )
-from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
-from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint
-from digiquant.olympus.hermes.graph import (
+from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
+from digiquant.portfolio.allocation_hashes import weights_fingerprint
+from digiquant.portfolio.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
     build_hermes_phases_thesis,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
-from digiquant.olympus.hermes.risk_policy import INCUMBENT_CONTROL_ORDER
-from digiquant.olympus.hermes.shadow_optimizer import ShadowOptimizerStatus, book_to_weight_map
-from digiquant.olympus.hermes.writers.commit_io import (
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+from digiquant.portfolio.risk_policy import INCUMBENT_CONTROL_ORDER
+from digiquant.portfolio.shadow_optimizer import ShadowOptimizerStatus, book_to_weight_map
+from digiquant.portfolio.writers.commit_io import (
     PreTradeRiskMode,
     validate_pretrade_risk_report,
 )
-from digiquant.olympus.replay.allocation_comparison import ComparisonStatus
-from digiquant.olympus.replay.models import PortfolioReplayStatus
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.allocation_comparison import ComparisonStatus
+from digiquant.dashboard.replay.models import PortfolioReplayStatus
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.phase2_e2e_fixtures import (
@@ -73,8 +73,8 @@ def _final_weights(book: dict[str, Any]) -> dict[str, float]:
 
 def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """H8 calibrated cutover with PreTradeRiskReport attach (WP8.4 + WP9.3)."""
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import build_risk_sizing_node
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.phases.phase7e_risk_sizing import build_risk_sizing_node
 
     from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
     from tests.dq.hermes.test_calibrated_sizing import _bundle
@@ -86,11 +86,11 @@ def _run_calibrated_h8(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     cov = _covariance(tickers)
     artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
     run_date = date(2026, 6, 12)
@@ -199,7 +199,7 @@ def test_incumbent_control_order_preserved() -> None:
         "drawdown_breaker",
         "grid_rounding",
     ]
-    from digiquant.olympus.hermes import sizing as sizing_mod
+    from digiquant.portfolio import sizing as sizing_mod
 
     src = inspect.getsource(sizing_mod.size_portfolio)
     body = src.split('"""', 2)[-1]
@@ -233,8 +233,8 @@ def test_calibrated_h8_report_binds_final_book(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_h9_validates_hashes_never_recomputes_report() -> None:
-    import digiquant.olympus.hermes.phases.h9_commit_run as h9
-    import digiquant.olympus.hermes.writers.commit_io as commit_io
+    import digiquant.portfolio.phases.h9_commit_run as h9
+    import digiquant.portfolio.writers.commit_io as commit_io
 
     for module in (h9, commit_io):
         src = pathlib.Path(module.__file__).read_text(encoding="utf-8")
@@ -243,8 +243,8 @@ def test_h9_validates_hashes_never_recomputes_report() -> None:
             node.module for node in ast.walk(ast.parse(src)) if getattr(node, "module", None)
         }
         assert not any(
-            m == "digiquant.olympus.hermes.pretrade_risk"
-            or (m or "").startswith("digiquant.olympus.hermes.pretrade_risk.")
+            m == "digiquant.portfolio.pretrade_risk"
+            or (m or "").startswith("digiquant.portfolio.pretrade_risk.")
             for m in tree_imports
         )
 
@@ -301,7 +301,7 @@ def test_phase2_full_fixture_byte_stable_artifacts() -> None:
         == artifact.incumbent_final_weights.weights_fingerprint
     )
 
-    from digiquant.olympus.hermes import shadow_artifact as sa
+    from digiquant.portfolio import shadow_artifact as sa
 
     sa._assert_no_forbidden_payload_keys(artifact.model_dump(mode="json"))
 
@@ -380,7 +380,7 @@ def test_replay_hard_failure_is_visible(tmp_path: pathlib.Path, monkeypatch) -> 
             return None
 
     monkeypatch.setattr(
-        "digiquant.olympus.replay.worker._SPAWN_CTX.Process",
+        "digiquant.dashboard.replay.worker._SPAWN_CTX.Process",
         _CrashProcess,
     )
     result = run_portfolio_replay_isolated(

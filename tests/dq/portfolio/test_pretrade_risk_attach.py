@@ -6,22 +6,22 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
-from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
+from digiquant.portfolio.allocation_hashes import weights_fingerprint
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_pretrade_risk_report_for_final_book,
     build_risk_sizing_node,
 )
-from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
+from digiquant.portfolio.sizing_events import SizingAdjustment, SizingAdjustmentType
 
 pytestmark = pytest.mark.unit
 
 
 def _final_weights(book: dict[str, Any]) -> dict[str, float]:
     """Match H9 commit extraction — report fingerprint must equal this map."""
-    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+    from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
     return weights_from_sized_book(book)
 
@@ -34,14 +34,14 @@ def _run_h8(
     prior_book: list[dict[str, Any]] | None = None,
     current_weights: dict[str, float] | None = None,
 ) -> dict[str, Any]:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
         PriorContext,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
     from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
@@ -53,11 +53,11 @@ def _run_h8(
     cov = _covariance(tickers)
     artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
 
@@ -121,8 +121,8 @@ def test_report_fingerprint_matches_final_book_after_controls(
 
 def test_final_book_weights_matches_h9_extractor_on_divergent_shapes() -> None:
     """H8 report binding and H9 validation must share one weight extractor (#2824)."""
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import _final_book_weights
-    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+    from digiquant.portfolio.phases.phase7e_risk_sizing import _final_book_weights
+    from digiquant.portfolio.writers.commit_io import weights_from_sized_book
 
     gross_gt_100 = {
         "recommended_portfolio": [
@@ -233,13 +233,13 @@ def test_builder_path_does_not_mutate_final_book_weights(
     book = result["book"]
     before = [dict(row) for row in book["recommended_portfolio"]]
     # Re-run attach helper against a mutable copy of the book payload.
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
     from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
@@ -296,13 +296,13 @@ def test_report_failure_omits_report_without_changing_book(
         "build_pretrade_risk_report_for_final_book",
         lambda **_k: None,
     )
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
     from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
@@ -311,11 +311,11 @@ def test_report_failure_omits_report_without_changing_book(
     bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0")})
     artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(("AAPL",)))
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
     run_date = date(2026, 6, 12)

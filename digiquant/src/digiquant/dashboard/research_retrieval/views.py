@@ -1,7 +1,7 @@
 """Deterministic prose views from exact research-state versions (#2877 / WP12.5).
 
 Compiled briefs/digests are presentation only. The pinned
-:class:`~digiquant.olympus.research_retrieval.models.ResearchStateVersion`
+:class:`~digiquant.dashboard.research_retrieval.models.ResearchStateVersion`
 remains authoritative. Never parse prose into claims; never ``load_latest``.
 
 Entity order is canonical (sorted by UUID hex). Every view embeds
@@ -17,7 +17,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefVersion,
     EvidenceRecord,
     ExpectedEventVersion,
@@ -27,7 +27,7 @@ from digiquant.olympus.research_retrieval.models import (
     SchemaVersion,
     content_digest,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     LoadedResearchState,
     ResearchStateStore,
 )

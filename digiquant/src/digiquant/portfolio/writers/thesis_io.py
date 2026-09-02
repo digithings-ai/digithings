@@ -11,15 +11,15 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.thesis import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.thesis import (
     MarketThesisExplorationOutput,
     ThesisProposal,
     ThesisReviewOutput,
     ThesisStatusUpdate,
     ThesisVehicleMapOutput,
 )
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 

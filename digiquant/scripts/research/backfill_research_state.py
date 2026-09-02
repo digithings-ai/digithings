@@ -6,14 +6,14 @@ Never fabricates evidence, beliefs, expected events, patches, or known times.
 Strict readers exclude the inventory (WP12.2).
 
 Default mode is dry-run (count only). Pass ``--apply`` to append via the
-in-memory :class:`~digiquant.olympus.research_retrieval.store.ResearchStateStore`
+in-memory :class:`~digiquant.dashboard.research_retrieval.store.ResearchStateStore`
 (SQL IO adapter later — does not INSERT ``olympus_research_legacy_refs`` yet).
 
 Usage:
-  python digiquant/scripts/atlas/backfill_research_state.py
-  python digiquant/scripts/atlas/backfill_research_state.py --apply
-  python digiquant/scripts/atlas/backfill_research_state.py --documents-json path.json
-  python digiquant/scripts/atlas/backfill_research_state.py --supabase --apply
+  python digiquant/scripts/research/backfill_research_state.py
+  python digiquant/scripts/research/backfill_research_state.py --apply
+  python digiquant/scripts/research/backfill_research_state.py --documents-json path.json
+  python digiquant/scripts/research/backfill_research_state.py --supabase --apply
 
 Environment (``--supabase``): CORE_SUPABASE_URL / CORE_SUPABASE_SERVICE_KEY
 (or legacy SUPABASE_* names).
@@ -45,7 +45,7 @@ def _ensure_src_path() -> None:
 
 
 _ensure_src_path()
-from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _sb():
@@ -61,7 +61,7 @@ def _sb():
 
 
 def _load_sources_from_json(path: Path) -> list[Any]:
-    from digiquant.olympus.research_retrieval.legacy_backfill import LegacySourceDocument
+    from digiquant.dashboard.research_retrieval.legacy_backfill import LegacySourceDocument
 
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, list):
@@ -71,7 +71,7 @@ def _load_sources_from_json(path: Path) -> list[Any]:
 
 def _load_sources_from_supabase(*, page_size: int = 1000, client: Any | None = None) -> list[Any]:
     """House ``documents`` pages. Overlay rows must not seed the house inventory."""
-    from digiquant.olympus.research_retrieval.legacy_backfill import LegacySourceDocument
+    from digiquant.dashboard.research_retrieval.legacy_backfill import LegacySourceDocument
 
     sb = client if client is not None else _sb()
     sources: list[LegacySourceDocument] = []
@@ -134,8 +134,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _ensure_src_path()
-    from digiquant.olympus.research_retrieval.legacy_backfill import backfill_legacy_manifests
-    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+    from digiquant.dashboard.research_retrieval.legacy_backfill import backfill_legacy_manifests
+    from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
     if args.documents_json is not None:
         sources = _load_sources_from_json(args.documents_json)

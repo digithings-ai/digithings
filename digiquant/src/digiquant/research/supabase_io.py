@@ -29,19 +29,19 @@ from uuid import UUID
 import httpx
 from digibase.audit import redact_mapping
 
-from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
-from digiquant.olympus.overlay.persist import (
+from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
+from digiquant.dashboard.overlay.persist import (
     is_private_workspace,
     require_overlay_persist,
     skip_overlay_shared_register,
 )
-from digiquant.olympus.postgrest_timeout import (
+from digiquant.dashboard.postgrest_timeout import (
     CONNECT_TIMEOUT_SECONDS,
     POOL_TIMEOUT_SECONDS,
     READ_TIMEOUT_SECONDS,
     WRITE_TIMEOUT_SECONDS,
 )
-from digiquant.olympus.tenancy import resolved_workspace_id
+from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 

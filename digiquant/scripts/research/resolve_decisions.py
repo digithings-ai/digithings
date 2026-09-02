@@ -3,7 +3,7 @@
 
 Resolves every *due* ``decision_log`` row — computes realized alpha vs the benchmark and
 writes the reflection lesson — by calling
-:func:`digiquant.olympus.atlas.decision_log.resolve_pending`. This decouples resolution
+:func:`digiquant.research.decision_log.resolve_pending`. This decouples resolution
 from the research pipeline so it can run on its own cron (daily, after EOD prices land),
 independent of a baseline/delta run. The in-graph ``preflight_reflect`` stays as a
 belt-and-suspenders path; this script is the authoritative, schedulable resolver.
@@ -13,7 +13,7 @@ a due row whose price window hasn't landed yet (it stays pending for the next ru
 
 Usage::
 
-    python digiquant/scripts/atlas/resolve_decisions.py [--run-date YYYY-MM-DD]
+    python digiquant/scripts/research/resolve_decisions.py [--run-date YYYY-MM-DD]
 
 Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY`` (reads/writes ``decision_log``);
 ``OPENROUTER_API_KEY`` for the reflector LLM (~1 cheap call per resolved decision).
@@ -29,7 +29,7 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-# repo root: .../digiquant/scripts/atlas/resolve_decisions.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/resolve_decisions.py → up 4 (atlas → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -66,8 +66,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _ensure_importable()
-    from digiquant.olympus.atlas.decision_log import resolve_pending
-    from digiquant.olympus.atlas.supabase_io import (
+    from digiquant.research.decision_log import resolve_pending
+    from digiquant.research.supabase_io import (
         SupabaseConfig,
         build_client,
         query_pending_decisions,

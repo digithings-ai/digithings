@@ -1,6 +1,6 @@
 """Hermes skill-file loader.
 
-Mirrors :mod:`digiquant.olympus.atlas.skills` but resolves paths under
+Mirrors :mod:`digiquant.research.skills` but resolves paths under
 ``digiquant/src/digiquant/olympus/hermes/skills/``. Each engine's ``load_skill()`` only finds
 its own skills — Atlas cannot resolve Hermes-side analyst / debate / PM
 skills and vice versa. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
@@ -14,7 +14,7 @@ from pathlib import Path
 # Re-export the shared exception types from Atlas's loader so callers can
 # catch a single class regardless of which engine raised. Hermes's loader
 # is a path-only fork; the parser logic is intentionally identical.
-from digiquant.olympus.atlas.skills import (
+from digiquant.research.skills import (
     EDIT_SCHEMA_CONSTRAINTS,
     MalformedFrontmatterError,
     SkillNotFoundError,

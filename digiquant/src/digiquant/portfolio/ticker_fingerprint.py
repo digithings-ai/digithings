@@ -5,8 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 
-from digiquant.olympus.edit_mode.models import TriageSignal
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.dashboard.edit_mode.models import TriageSignal
+from digiquant.portfolio.state import HermesState
 
 DEFAULT_PRICE_QUIET_THRESHOLD = 0.015
 

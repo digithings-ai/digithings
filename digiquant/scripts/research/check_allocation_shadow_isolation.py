@@ -21,7 +21,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-WORKFLOW_RELPATH = Path(".github/workflows/pipeline-olympus-allocation-shadow.yml")
+WORKFLOW_RELPATH = Path(".github/workflows/pipeline-digiquant-allocation-shadow.yml")
 
 TRUSTED_SOURCE_WORKFLOWS: frozenset[str] = frozenset({"Pipeline: Olympus research"})
 TRUSTED_SOURCE_BRANCHES: frozenset[str] = frozenset({"main"})
@@ -56,20 +56,20 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
         "urllib3",
         "nautilus_trader",
         "digiquant.brokers",
-        "digiquant.olympus.atlas.supabase_io",
-        "digiquant.olympus.hermes.writers",
-        "digiquant.olympus.hermes.writers.commit_io",
-        "digiquant.olympus.hermes.writers.execution_io",
-        "digiquant.olympus.hermes.writers.opening_snapshot",
-        "digiquant.olympus.hermes.phases.h9_commit_run",
+        "digiquant.research.supabase_io",
+        "digiquant.portfolio.writers",
+        "digiquant.portfolio.writers.commit_io",
+        "digiquant.portfolio.writers.execution_io",
+        "digiquant.portfolio.writers.opening_snapshot",
+        "digiquant.portfolio.phases.h9_commit_run",
     }
 )
 
 # Surface scanned for forbidden imports when present in-tree.
 # shadow_optimizer.py is the WP10.3 challenger — still write-denied / no network.
 DEFAULT_SCAN_RELPATHS: tuple[str, ...] = (
-    "digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
-    "digiquant/scripts/atlas/compare_allocation_shadow.py",
+    "digiquant/scripts/research/check_allocation_shadow_isolation.py",
+    "digiquant/scripts/research/compare_allocation_shadow.py",
     "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",
     "digiquant/src/digiquant/olympus/hermes/shadow_optimizer.py",
     "digiquant/src/digiquant/olympus/replay/allocation_comparison.py",
@@ -500,7 +500,7 @@ def check_artifact_trust(
 
     if require_hash and isinstance(content_hash, str) and schema in ALLOWED_SCHEMA_VERSIONS:
         try:
-            from digiquant.olympus.hermes.shadow_artifact import (
+            from digiquant.portfolio.shadow_artifact import (
                 ShadowAllocationArtifact,
             )
 
@@ -618,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         "--workflow",
         type=Path,
         default=None,
-        help="Path to pipeline-olympus-allocation-shadow.yml",
+        help="Path to pipeline-digiquant-allocation-shadow.yml",
     )
     parser.add_argument(
         "--artifact",

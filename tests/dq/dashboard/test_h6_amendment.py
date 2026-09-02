@@ -11,21 +11,21 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.models.deliberation import MissingFactProposal
-from digiquant.olympus.research_retrieval.evidence_bundle import build_h5_evidence_bundle
-from digiquant.olympus.research_retrieval.h6_amendment import (
+from digiquant.portfolio.models.deliberation import MissingFactProposal
+from digiquant.dashboard.research_retrieval.evidence_bundle import build_h5_evidence_bundle
+from digiquant.dashboard.research_retrieval.h6_amendment import (
     H6_AMENDMENT_POLICY_MAX_PER_BASE,
     H6AmendmentOutcome,
     attempt_h6_evidence_amendment,
     document_key_for_source_kind,
     validate_missing_fact_proposal,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     TypedProvenance,
     missing_fact_request_content_hash,
     missing_fact_request_id,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 pytestmark = pytest.mark.unit
 
@@ -39,7 +39,7 @@ _PROV = TypedProvenance(
 
 
 def _base_bundle(*, evidence_count: int = 1):
-    from digiquant.olympus.research_retrieval.evidence_bundle import H5EvidenceFact
+    from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
 
     facts = tuple(
         H5EvidenceFact(

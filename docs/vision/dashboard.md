@@ -15,7 +15,7 @@ This page used to be titled olympus. Product names are now digiquant plus job wo
 
 ## What it is
 
-The dashboard frontend (`frontend/dashboard`) for the finance sub-graphs that live inside digiquant as `digiquant.olympus`. It turns pipeline output into a navigable, daily decision surface rather than raw research dumps: a "Morning Read" overview, surfaced bull/bear theses and risk debate, portfolio/NAV tracking, and entry points into strategy work.
+The dashboard frontend (`frontend/dashboard`) for the finance sub-graphs that live inside digiquant as `digiquant.dashboard`. It turns pipeline output into a navigable, daily decision surface rather than raw research dumps: a "Morning Read" overview, surfaced bull/bear theses and risk debate, portfolio/NAV tracking, and entry points into strategy work.
 
 Where digichat is the general-purpose chat UI, this is the purpose-built operator view for quantitative finance — the place a researcher starts their day and where deliberations are published for human review.
 
@@ -25,12 +25,12 @@ Autonomous research and portfolio deliberation generate a firehose of structured
 
 ## How it fits in the ecosystem
 
-It reads from the `digiquant.olympus` sub-graphs (research, portfolio, execution), which orchestrate through digigraph and persist their state and outputs. It is served under `digiquant.io` and sits behind an access gate (it is not anonymously reachable). The research vs portfolio boundary is defined in ADR-0015; the research package's move into `digiquant` is ADR-0014. Product names in those ADRs are historical (ADR-0026).
+It reads from the `digiquant.dashboard` sub-graphs (research, portfolio, execution), which orchestrate through digigraph and persist their state and outputs. It is served under `digiquant.io` and sits behind an access gate (it is not anonymously reachable). The research vs portfolio boundary is defined in ADR-0015; the research package's move into `digiquant` is ADR-0014. Product names in those ADRs are historical (ADR-0026).
 
 The three jobs it surfaces:
-- **Research** — fundamental/research engine; daily batch research, structured and persisted. Package path: `digiquant.olympus.atlas`.
-- **Portfolio** — deliberation (bull/bear theses, risk debate) with a human approval gate before any allocation change. Package path: `digiquant.olympus.hermes`.
-- **Execution** — order-intent routing and broker mirroring. Package path: `digiquant.olympus.kairos`. Live venue cutover stays human-gated.
+- **Research** — fundamental/research engine; daily batch research, structured and persisted. Package path: `digiquant.research`.
+- **Portfolio** — deliberation (bull/bear theses, risk debate) with a human approval gate before any allocation change. Package path: `digiquant.portfolio`.
+- **Execution** — order-intent routing and broker mirroring. Package path: `digiquant.execution`. Live venue cutover stays human-gated.
 
 ## Capabilities — Current
 

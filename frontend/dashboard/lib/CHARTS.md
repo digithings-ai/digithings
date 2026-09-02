@@ -64,7 +64,7 @@ priceFormat.
 | `components/observability/DecisionScorecardTab.tsx` | Hit-rate by conviction bucket bars | Categorical (x = conviction bucket). |
 | `components/twelve-x/ConsensusTab.tsx` | Consensus score lines (x = run_date) + position-split stacked area | The stacked split is composition (no lw grammar) and both panes share one currency-selection/smoothing state; splitting one view across two engines costs more than canon buys. Honest note: the score-lines pane *is* time-indexed — if it is ever decoupled from the split pane it becomes a migrate candidate. |
 
-`components/tearsheet/OlympusTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
+`components/tearsheet/DashboardTearsheetView.tsx` (`PerformanceTearsheetView`) renders the shared
 finance-tearsheet family's print-oriented SVG charts (`TimeSeries`,
 `SignedBars` from `@digithings/web`, #1463) and is out of scope for both
 engines here — print-grade surfaces are pure SVG by hard constraint (the PDF

@@ -15,26 +15,26 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.phases.h1_thesis_review import build_h1_thesis_review
-from digiquant.olympus.hermes.phases.h2_market_thesis_exploration import (
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.phases.h1_thesis_review import build_h1_thesis_review
+from digiquant.portfolio.phases.h2_market_thesis_exploration import (
     build_h2_market_thesis_exploration,
 )
-from digiquant.olympus.hermes.phases.h3_thesis_vehicle_map import build_h3_thesis_vehicle_map
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import build_h4_opportunity_screener
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_from_state
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_from_state
-from digiquant.olympus.hermes.phases.h7_pm_direction import build_h7_pm_direction
-from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_h9_commit_run
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.phases.h3_thesis_vehicle_map import build_h3_thesis_vehicle_map
+from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportunity_screener
+from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
+from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
+from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, build_h9_commit_run
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_risk_sizing_phase,
 )
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
-from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
+from digiquant.portfolio.pipeline_builder import PipelinePhase, build_pipeline
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 __all__ = [
     "CommitRunDeps",
@@ -174,7 +174,7 @@ def _build_cli_parser():
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog="python -m digiquant.olympus.hermes.graph",
+        prog="python -m digiquant.portfolio.graph",
         description="Run the Hermes analysis sub-graph against a saved Atlas digest.",
     )
     parser.add_argument("--from-digest", required=True)

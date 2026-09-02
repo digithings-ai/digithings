@@ -11,14 +11,14 @@ from typing import Any  # score:allow untyped any — used for dict shape typing
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     InputsBuilder,
     SegmentNodeSpec,
     build_segment_node,
 )
-from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
-from digiquant.olympus.atlas.segments import ResearchMemo
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.sectors_config import SectorConfig, load_sectors
+from digiquant.research.segments import ResearchMemo
+from digiquant.research.state import AtlasResearchState
 
 # ─── Output models ──────────────────────────────────────────────────────────
 

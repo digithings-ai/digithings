@@ -2,7 +2,7 @@
 
 An edit-mode patch can be *structurally* successful and *materially* empty: the
 model emits ``set`` ops whose values already hold, or declares
-``status="skipped"``, and :func:`~digiquant.olympus.edit_mode.merge.merge_document_patch`
+``status="skipped"``, and :func:`~digiquant.dashboard.edit_mode.merge.merge_document_patch`
 returns a body byte-identical to the prior one. The pipeline then republishes it
 under the run date marked ``source="today"``.
 
@@ -20,13 +20,13 @@ to ``full``… Rely on getting good patches consistently instead", and lists
 
 Nothing here triggers a rewrite, and the distinction matters. What these markers
 do is give the *existing* deterministic staleness cap — §5.3.2's hard cap,
-``OLYMPUS_STALE_FULL_DAYS`` (default 7, see :mod:`digiquant.olympus.edit_mode.config`)
+``OLYMPUS_STALE_FULL_DAYS`` (default 7, see :mod:`digiquant.dashboard.edit_mode.config`)
 — an honest input. ``gap_days`` is measured from the last date the content
 materially changed instead of the last date a row happened to be written.
 
 That mattered because a no-op republish *reset* the clock. ``prior.date`` comes
 from the newest ``documents`` row for the key
-(:func:`digiquant.olympus.atlas.supabase_io.load_prior_context`), no-op or not, so
+(:func:`digiquant.research.supabase_io.load_prior_context`), no-op or not, so
 ``alt-politician-signals`` published five rows carrying one body across seven days
 (2026-07-17 → 07-24) at ``gap_days=1`` every run: the documented hard cap could
 never fire, and the loop only broke when the model happened to emit real ops on
@@ -55,7 +55,7 @@ from typing import (
 #
 # Both live in ``documents.payload`` (JSONB), so neither needs a migration — the same
 # property #1559 relied on for the digest's ``carried_from`` / ``continuity`` markers. The
-# segment models (:mod:`digiquant.olympus.atlas.segments`) declare no ``model_config``, so
+# segment models (:mod:`digiquant.research.segments`) declare no ``model_config``, so
 # Pydantic's default ``extra="ignore"`` applies and ``spec.output_model.model_validate(body)``
 # accepts a marked body rather than rejecting it.
 #

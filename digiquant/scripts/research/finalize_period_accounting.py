@@ -43,13 +43,13 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — heterogeneous Supabase client / row dicts
 from uuid import UUID
 
-from digiquant.olympus.accounting.engine import compute_period
-from digiquant.olympus.accounting.io import (
+from digiquant.dashboard.accounting.engine import compute_period
+from digiquant.dashboard.accounting.io import (
     PersistResult,
     period_head,
     persist_period,
 )
-from digiquant.olympus.accounting.models import (
+from digiquant.dashboard.accounting.models import (
     AccountingPeriod,
     AccountingPolicy,
     BenchmarkBoundary,
@@ -60,16 +60,16 @@ from digiquant.olympus.accounting.models import (
     PeriodFill,
     PeriodStatus,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     HoldingLotStatus,
 )
-from digiquant.olympus.hermes.writers.execution_io import (
+from digiquant.portfolio.writers.execution_io import (
     HOLDING_LOTS,
     _decimal,
     _symbol,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     DECISION_INTENTS,
     ORDER_INTENTS,
@@ -77,8 +77,8 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     REQUESTED_TARGETS,
     _rows_for_date,
 )
-from digiquant.olympus.hermes.writers.opening_snapshot import cold_start_requires_seed
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.portfolio.writers.opening_snapshot import cold_start_requires_seed
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

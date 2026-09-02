@@ -15,14 +15,14 @@ from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from digigraph.usage import provider_calls_snapshot
 from pydantic import BaseModel, ValidationError
 
-from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.data.queries import MARKET_DATA_TABLES
+from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
     build_grounding,
 )
-from digiquant.olympus.atlas.state import PhaseError, refresh_scope_forces_full
-from digiquant.olympus.edit_mode import (
+from digiquant.research.state import PhaseError, refresh_scope_forces_full
+from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
     PriorPublished,
@@ -30,11 +30,11 @@ from digiquant.olympus.edit_mode import (
     merge_document_patch,
     resolve_edit_mode,
 )
-from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch
-from digiquant.olympus.envcompat import ATTEMPT, env_lookup
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.models.analyst import AnalystPayload
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch
+from digiquant.dashboard.envcompat import ATTEMPT, env_lookup
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
     PriceAnchor,
@@ -42,25 +42,25 @@ from digiquant.olympus.hermes.models.forecast import (
     forecast_assessment_id,
     forecast_terms_content_hash,
 )
-from digiquant.olympus.hermes.research_attention import (
+from digiquant.portfolio.research_attention import (
     apply_analyst_metric_patch,
     research_attention_h5_enforce_path,
 )
-from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
-from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
-from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
-from digiquant.olympus.research_retrieval.evidence_bundle import (
+from digiquant.portfolio.skills import load_skill_edit, load_skill_full
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
     build_h5_evidence_bundle,
     cite_evidence_bundle_on_forecast,
     facts_from_phase_inputs,
     publish_h5_evidence_bundle,
     resolve_h5_state_version_id,
 )
-from digiquant.olympus.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
-from digiquant.olympus.temporal import require_knowledge_cutoff_at
+from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 
 logger = logging.getLogger(__name__)
 

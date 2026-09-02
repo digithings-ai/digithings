@@ -12,8 +12,8 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.research_retrieval.context_wiring import wire_h7_phase_inputs
-from digiquant.olympus.research_retrieval.h7_decision_context import (
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.dashboard.research_retrieval.h7_decision_context import (
     H7DecisionContextCompileInput,
     H7PrerequisiteSnapshot,
     H7SectionAvailability,
@@ -21,7 +21,7 @@ from digiquant.olympus.research_retrieval.h7_decision_context import (
     assert_h7_no_target_weights,
     compile_h7_decision_context,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
     EvidenceRecord,
@@ -36,7 +36,7 @@ from digiquant.olympus.research_retrieval.models import (
     manifest_content_hash,
     research_state_version_id,
 )
-from digiquant.olympus.research_retrieval.store import LoadedResearchState, ResearchStateStore
+from digiquant.dashboard.research_retrieval.store import LoadedResearchState, ResearchStateStore
 
 pytestmark = pytest.mark.unit
 

@@ -14,9 +14,9 @@ from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
-from digiquant.olympus.envcompat import EVIDENCE_BUNDLE_WRITER, env_lookup
-from digiquant.olympus.hermes.models.forecast import ForecastTerms
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.envcompat import EVIDENCE_BUNDLE_WRITER, env_lookup
+from digiquant.portfolio.models.forecast import ForecastTerms
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceRecord,
     NonEmptyStr,
     NonEmptyText,
@@ -27,7 +27,7 @@ from digiquant.olympus.research_retrieval.models import (
     ticker_evidence_bundle_content_hash,
     ticker_evidence_bundle_id,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV = "OLYMPUS_EVIDENCE_BUNDLE_WRITER"
 _H5_BASE_SOURCE = "h5:base"

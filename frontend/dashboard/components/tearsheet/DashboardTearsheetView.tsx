@@ -278,4 +278,4 @@ export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet 
 }
 
 /** @deprecated Use PerformanceTearsheetView. One-release alias (ADR-0026 wave 3). */
-export const OlympusTearsheetView = PerformanceTearsheetView;
+export const DashboardTearsheetView = PerformanceTearsheetView;

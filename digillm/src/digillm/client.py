@@ -199,7 +199,7 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
 #
 # Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
 # write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
-# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
+# diagnostics under ``digiquant/scripts/research/``; no tier config lists it), but a BYOK
 # caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
 # prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
 # the middleware and the resolver from disagreeing about a hostile header. So the single-

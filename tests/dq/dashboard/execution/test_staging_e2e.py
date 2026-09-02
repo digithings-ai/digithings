@@ -17,13 +17,13 @@ import urllib.request
 from typing import Any  # score:allow test doubles model external JSON
 
 import pytest
-from digiquant.olympus.envcompat import STAGING_FUNCTIONS_BASE, STAGING_USER_JWT, env_lookup
-from digiquant.olympus.kairos.remaining_hops import (
+from digiquant.dashboard.envcompat import STAGING_FUNCTIONS_BASE, STAGING_USER_JWT, env_lookup
+from digiquant.execution.remaining_hops import (
     RemainingHopEvidence,
     proven_remaining_hops,
     remaining_hop_blockers,
 )
-from digiquant.olympus.kairos.staging_e2e import (
+from digiquant.execution.staging_e2e import (
     OBSERVER_HOPS,
     REDEEM_INVITE_MOUNTED_CODES,
     REMAINING_LIVE_HOPS,
@@ -39,7 +39,7 @@ from digiquant.olympus.kairos.staging_e2e import (
     run_observer_hops,
     run_staging_e2e,
 )
-from digiquant.olympus.kairos.staging_secrets import (
+from digiquant.execution.staging_secrets import (
     KAIROS_STAGING_OPTIONAL_SECRETS,
     KAIROS_STAGING_REQUIRED_SECRETS,
     format_missing_secrets_failure,
@@ -844,7 +844,7 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
 
     Run explicitly::
 
-        pytest -m staging_e2e tests/dq/olympus/kairos/test_staging_e2e.py
+        pytest -m staging_e2e tests/dq/dashboard/kairos/test_staging_e2e.py
 
     Or::
 

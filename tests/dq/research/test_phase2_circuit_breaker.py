@@ -21,15 +21,15 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.diagnostics import summarize_run
-from digiquant.olympus.atlas.phases.phase2_institutional import (
+from digiquant.research.diagnostics import summarize_run
+from digiquant.research.phases.phase2_institutional import (
     ABSENCE_BREAKER_THRESHOLD,
     INST_ABSENT_REASON,
     HedgeFundIntelReport,
     InstitutionalFlowsReport,
     build_phase2,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasResearchState,
     DataLayerSnapshot,
 )
@@ -78,7 +78,7 @@ def _invoke_phase2(state: AtlasResearchState) -> AtlasResearchState:
             "digigraph.graph.research_agent.completion_text",
             side_effect=_fake_completion,
         ) as agent_call,
-        patch("digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding") as web_search,
+        patch("digiquant.research.data.web_grounding.fetch_web_grounding") as web_search,
     ):
         result = compiled.invoke(state)
         state.__dict__["_agent_call"] = agent_call
@@ -190,14 +190,14 @@ class TestInstitutionalAbsenceStreak:
         return [{"date": d, "document_key": k} for d, k in rows]
 
     def test_no_documents_returns_zero(self) -> None:
-        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
+        from digiquant.research.supabase_io import query_institutional_absence_streak
 
         client = FakeSupabaseClient(canned_reads={"documents": []})
         streak = query_institutional_absence_streak(client=client, run_date=date(2026, 6, 20))
         assert streak == 0
 
     def test_three_consecutive_absent_runs(self) -> None:
-        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
+        from digiquant.research.supabase_io import query_institutional_absence_streak
 
         # Three recent run-dates published other docs but no inst-*; an older one did.
         docs = self._docs(
@@ -212,7 +212,7 @@ class TestInstitutionalAbsenceStreak:
         assert streak == 3
 
     def test_streak_breaks_when_latest_run_has_inst(self) -> None:
-        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
+        from digiquant.research.supabase_io import query_institutional_absence_streak
 
         docs = self._docs(
             ("2026-06-19", "inst-hedge-fund-intel"),  # most recent published inst-*
@@ -224,8 +224,8 @@ class TestInstitutionalAbsenceStreak:
         assert streak == 0
 
     def test_overlay_inst_row_does_not_clear_house_streak(self) -> None:
-        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
-        from digiquant.olympus.tenancy import house_workspace_id
+        from digiquant.research.supabase_io import query_institutional_absence_streak
+        from digiquant.dashboard.tenancy import house_workspace_id
 
         house = str(house_workspace_id())
         overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"

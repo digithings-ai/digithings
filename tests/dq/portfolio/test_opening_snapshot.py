@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — heterogeneous fake-row / fixture dicts
 
 import pytest
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     DECISION_INTENTS,
@@ -15,14 +15,14 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     PAPER_EXECUTIONS,
     REQUESTED_TARGETS,
 )
-from digiquant.olympus.hermes.writers.opening_snapshot import (
+from digiquant.portfolio.writers.opening_snapshot import (
     COLD_START_DECLINE,
     HOLDING_LOTS,
     POLICY_VERSION_ID,
     cold_start_requires_seed,
     ensure_legacy_opening_snapshot,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 

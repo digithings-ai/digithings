@@ -6,9 +6,9 @@ Public API for Atlas/Hermes nodes (spec §4–§5). Wraps the proven
 
 from __future__ import annotations
 
-from digiquant.olympus.edit_mode.config import OLYMPUS_STALE_FULL_DAYS_ENV, stale_full_days
-from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch
-from digiquant.olympus.edit_mode.models import (
+from digiquant.dashboard.edit_mode.config import OLYMPUS_STALE_FULL_DAYS_ENV, stale_full_days
+from digiquant.dashboard.edit_mode.merge import MergeError, merge_document_patch
+from digiquant.dashboard.edit_mode.models import (
     ArtifactEditOutput,
     ArtifactKey,
     DocumentPatch,
@@ -20,17 +20,17 @@ from digiquant.olympus.edit_mode.models import (
     PriorPublished,
     TriageSignal,
 )
-from digiquant.olympus.edit_mode.ops import apply_ops
-from digiquant.olympus.edit_mode.prior import PriorLoader, artifact_document_key
-from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
-from digiquant.olympus.edit_mode.tools import (
+from digiquant.dashboard.edit_mode.ops import apply_ops
+from digiquant.dashboard.edit_mode.prior import PriorLoader, artifact_document_key
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.edit_mode.tools import (
     PriorDocumentFetcher,
     QueryResearch,
     ResearchRetriever,
     StubPriorDocumentFetcher,
     StubQueryResearch,
 )
-from digiquant.olympus.research_retrieval import (
+from digiquant.dashboard.research_retrieval import (
     RESEARCH_TOOLS,
     ResearchCache,
     build_research_tool_dispatcher,

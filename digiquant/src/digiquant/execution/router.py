@@ -1,17 +1,17 @@
 """Order-intent router: submit approved intents to an external venue (K4).
 
 Builds a :class:`~digiquant.brokers.contracts.BrokerOrderRequest` from a pending
-Hermes :class:`~digiquant.olympus.hermes.models.portfolio_ledger.OrderIntent`,
+Hermes :class:`~digiquant.portfolio.models.portfolio_ledger.OrderIntent`,
 submits via a :class:`~digiquant.brokers.base.BrokerAdapter`, and appends one
 ``broker_orders`` row with a deterministic id. Retries collide on the primary
 key — never duplicate.
 
 Direction comes from ``DecisionIntent.action`` via the same
-:func:`~digiquant.olympus.hermes.writers.execution_io._directions_by_order`
+:func:`~digiquant.portfolio.writers.execution_io._directions_by_order`
 walk the paper executor uses. The positions book is never consulted for side.
 
 ``upsert`` must not appear in this module (append-only mirror, same rule as
-:mod:`digiquant.olympus.hermes.writers.execution_io`).
+:mod:`digiquant.portfolio.writers.execution_io`).
 """
 
 from __future__ import annotations
@@ -37,13 +37,13 @@ from digiquant.brokers.contracts import (
     OrderType,
     TimeInForce,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
-from digiquant.olympus.hermes.writers.execution_io import (
+from digiquant.portfolio.models.portfolio_ledger import DecisionAction
+from digiquant.portfolio.writers.execution_io import (
     _directions_by_order,
     _pending_order_heads,
 )
-from digiquant.olympus.hermes.writers.ledger_io import ORDER_INTENTS, _insert
-from digiquant.olympus.kairos.policy import (
+from digiquant.portfolio.writers.ledger_io import ORDER_INTENTS, _insert
+from digiquant.execution.policy import (
     ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
     resolve_venue,

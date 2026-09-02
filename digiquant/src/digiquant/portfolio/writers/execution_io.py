@@ -54,8 +54,8 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     HoldingLot,
     HoldingLotStatus,
@@ -65,7 +65,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     PaperExecution,
     paper_execution_id,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     DECISION_INTENTS,

@@ -7,7 +7,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -21,13 +21,13 @@ from digiquant.olympus.hermes.allocation_contracts import (
     PriorWeightEntry,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     allocation_bundle_hash_payload,
     canonical_json,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.writers.commit_io import weights_fingerprint as commit_io_weights_fp
+from digiquant.portfolio.writers.commit_io import weights_fingerprint as commit_io_weights_fp
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

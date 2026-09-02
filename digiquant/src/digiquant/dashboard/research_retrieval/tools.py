@@ -14,13 +14,13 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     Callable,
 )
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.envcompat import RETRIEVAL_MANIFEST_MODE, env_lookup
-from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
-from digiquant.olympus.research_retrieval.cache import ResearchCache
-from digiquant.olympus.research_retrieval.context import ContextCapsule, ContextManifest
-from digiquant.olympus.research_retrieval.context_wiring import RoleContextWireResult
-from digiquant.olympus.research_retrieval.queries import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.envcompat import RETRIEVAL_MANIFEST_MODE, env_lookup
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
+from digiquant.dashboard.research_retrieval.cache import ResearchCache
+from digiquant.dashboard.research_retrieval.context import ContextCapsule, ContextManifest
+from digiquant.dashboard.research_retrieval.context_wiring import RoleContextWireResult
+from digiquant.dashboard.research_retrieval.queries import (
     RetrievalManifestMode,
     RetrievalQueryPin,
     build_retrieval_query_pin,
@@ -28,7 +28,7 @@ from digiquant.olympus.research_retrieval.queries import (
     query_portfolio,
     query_research,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     LoadedResearchState,
     PersistedRoleContextManifest,
@@ -37,7 +37,7 @@ from digiquant.olympus.research_retrieval.store import (
     provider_attempt_token_link_id,
     role_context_manifest_record_id,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

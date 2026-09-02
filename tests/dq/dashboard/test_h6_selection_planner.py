@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     H6Action,
     H6DecisionFeatures,
     H6Selection,

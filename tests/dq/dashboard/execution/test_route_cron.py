@@ -10,13 +10,13 @@ from uuid import UUID
 
 import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
-from digiquant.olympus.kairos.route_cron import (
+from digiquant.execution.route_cron import (
     EXIT_ROUTING_DISABLED,
     KAIROS_ROUTING_DISABLED,
     main,
 )
-from digiquant.olympus.kairos.sync_cron import SyncTarget
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.execution.sync_cron import SyncTarget
+from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 

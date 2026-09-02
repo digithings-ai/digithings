@@ -1,6 +1,6 @@
 """Overlay daily cron — dispatch ``job_runs`` for non-house workspaces (T4).
 
-Production entry: ``python -m digiquant.olympus.overlay``. House and system
+Production entry: ``python -m digiquant.dashboard.overlay``. House and system
 workspaces are never overlay targets. This module does not import ``byok`` /
 digillm so the digiquant-only CI lane can unit-test candidate selection.
 ``--execute`` runs claimed jobs through the one Olympus graph (lazy import);
@@ -19,14 +19,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.overlay.cron_execute import (
+from digiquant.dashboard.overlay.cron_execute import (
     OverlayChainFactory,
     OverlayRunner,
     execute_claimed_rows,
     format_overlay_execute_not_configured,
     missing_overlay_execute_env_names,
 )
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.dispatch import (
     DispatchResult,
     JobRunStore,
     SupabaseJobRunStore,
@@ -34,8 +34,8 @@ from digiquant.olympus.overlay.dispatch import (
     dispatch_overlay_daily,
     overlay_billing_entitled,
 )
-from digiquant.olympus.overlay.persist import overlay_persist_enabled
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.overlay.persist import overlay_persist_enabled
+from digiquant.dashboard.tenancy import (
     PlanTier,
     SubscriptionStatus,
     house_workspace_id,
@@ -328,7 +328,7 @@ def _supabase_client_from_env(environ: Mapping[str, str]) -> object:
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="python -m digiquant.olympus.overlay")
+    parser = argparse.ArgumentParser(prog="python -m digiquant.dashboard.overlay")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -436,7 +436,7 @@ def main(
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
-    """CLI entry used by ``python -m digiquant.olympus.overlay``."""
+    """CLI entry used by ``python -m digiquant.dashboard.overlay``."""
     args = _parse_args(argv)
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
     env = os.environ if environ is None else environ

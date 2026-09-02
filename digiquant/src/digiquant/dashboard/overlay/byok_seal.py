@@ -19,13 +19,13 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.kairos.vendor_secret_files import parse_env_file, vendor_secrets_dir
-from digiquant.olympus.overlay.cron import (
+from digiquant.execution.vendor_secret_files import parse_env_file, vendor_secrets_dir
+from digiquant.dashboard.overlay.cron import (
     load_workspace_plan_floors,
     reserved_overlay_workspace_ids,
 )
-from digiquant.olympus.overlay.dispatch import WorkspaceEntitlement, overlay_billing_entitled
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+from digiquant.dashboard.overlay.dispatch import WorkspaceEntitlement, overlay_billing_entitled
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 from digiquant.vault.envelope import (
     ApiKeyCredential,
     MasterKey,

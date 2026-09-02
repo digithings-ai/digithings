@@ -14,8 +14,8 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -24,7 +24,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     ArmFoldEvidence,
     EvidenceMode,
     MetricDirection,
@@ -34,7 +34,7 @@ from digiquant.olympus.replay.comparison import (
     SignalQualityTelemetry,
     compare_policy_pair,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     ConfidenceBoundRule,
     CriterionOutcome,
     GateCriterion,
@@ -47,7 +47,7 @@ from digiquant.olympus.replay.governance import (
     persist_gate_evaluation,
     to_store_criteria_version,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingSnapshot,
     InstrumentBarSeries,
@@ -67,7 +67,7 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -400,7 +400,7 @@ def test_empty_criteria_fails_closed() -> None:
 
 def test_evaluator_cannot_author_criteria() -> None:
     assert not hasattr(evaluate_gate_criteria, "author_criteria")
-    from digiquant.olympus.replay import governance as gov
+    from digiquant.dashboard.replay import governance as gov
 
     assert not hasattr(gov, "author_gate_criteria")
     assert not hasattr(gov, "mint_criteria_from_report")

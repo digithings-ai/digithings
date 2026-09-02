@@ -5,18 +5,18 @@ the secrets it needs, how to test locally, and rollback / monitoring procedures.
 
 Companion workflows (in `.github/workflows/`):
 
-A single workflow, `pipeline-olympus.yml`, drives all scheduled research + portfolio runs. The
+A single workflow, `pipeline-digiquant.yml`, drives all scheduled research + portfolio runs. The
 `resolve` job sets `refresh_scope` (Sunday → `all`, weekdays → `none`); the `run` job
 executes the unified Atlas+Hermes pipeline via
-`python -m digiquant.olympus.hermes.chain --cadence daily`.
+`python -m digiquant.portfolio.chain --cadence daily`.
 
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
-| `pipeline-olympus.yml` | `cron '17 9/10/11/12 * * *'` (off-peak UTC retries) | Sunday → `all`; else `none` | 240 min |
-| `pipeline-olympus.yml` | `repository_dispatch` `olympus-daily` | same as schedule | 240 min |
-| `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
-| Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
-| `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff | 15 min |
+| `pipeline-digiquant.yml` | `cron '17 9/10/11/12 * * *'` (off-peak UTC retries) | Sunday → `all`; else `none` | 240 min |
+| `pipeline-digiquant.yml` | `repository_dispatch` `olympus-daily` | same as schedule | 240 min |
+| `pipeline-digiquant.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
+| Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
+| `test-research-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-digiquant.yml` | unit tests + ruff | 15 min |
 | `ci.yml` → `actionlint` job | `push` / `pull_request` touching `.github/workflows/**` | `actionlint` over **every** workflow | 5 min |
 
 **Removed (historical):** separate `atlas-baseline.yml` / `atlas-delta.yml` /
@@ -24,17 +24,17 @@ executes the unified Atlas+Hermes pipeline via
 one daily graph ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
 Non-secret tunables (OpenRouter routing, analyst cap, feature flags,
-checkpointer, tracing) live in `.github/olympus-pipeline.yml` and are loaded
+checkpointer, tracing) live in `.github/digiquant-pipeline.yml` and are loaded
 into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 
 ## Olympus environment variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/olympus_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
+| `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/digiquant_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `OLYMPUS_BELIEFS_BACKLOG` | `20` | Additional trigger for a **full** beliefs rewrite when unfolded `decision_log` rows exceed the threshold. House runs already publish a **daily short fold**. |
-| `ATLAS_MAX_ANALYSTS` | `30` (`.github/olympus-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
+| `ATLAS_MAX_ANALYSTS` | `30` (`.github/digiquant-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 `--refresh-scope all` — not a separate graph or cron.
@@ -78,7 +78,7 @@ On a fresh Supabase project, the first daily run uses `full` mode for all artifa
 (no prior materialized rows). Trigger manually:
 
 ```bash
-gh workflow run pipeline-olympus.yml \
+gh workflow run pipeline-digiquant.yml \
   -f refresh_scope=all \
   -f run_date="$(date -u +%Y-%m-%d)"
 gh run watch --exit-status
@@ -87,7 +87,7 @@ gh run watch --exit-status
 Verify research landed:
 
 ```bash
-python3 digiquant/scripts/atlas/fetch_research_library.py \
+python3 digiquant/scripts/research/fetch_research_library.py \
   --category digest --limit 1
 ```
 
@@ -100,7 +100,7 @@ Subsequent weekday cron ticks use `refresh_scope=none` and edit-mode continuity.
 Dry-run (compiles the graph, prints a JSON summary, no LLM calls / no writes):
 
 ```bash
-gh workflow run pipeline-olympus.yml \
+gh workflow run pipeline-digiquant.yml \
   -f refresh_scope=none \
   -f run_date=2026-04-20 \
   -f dry_run=true
@@ -115,7 +115,7 @@ gh run watch --exit-status
 Operator full-refresh dry-run:
 
 ```bash
-gh workflow run pipeline-olympus.yml \
+gh workflow run pipeline-digiquant.yml \
   -f refresh_scope=all \
   -f run_date=2026-04-20 \
   -f dry_run=true
@@ -124,7 +124,7 @@ gh workflow run pipeline-olympus.yml \
 Beliefs-only run:
 
 ```bash
-gh workflow run pipeline-olympus.yml \
+gh workflow run pipeline-digiquant.yml \
   -f refresh_scope=beliefs \
   -f run_date=2026-04-20
 ```
@@ -133,7 +133,7 @@ gh workflow run pipeline-olympus.yml \
 
 ```bash
 brew install act
-act -W .github/workflows/pipeline-olympus.yml \
+act -W .github/workflows/pipeline-digiquant.yml \
     -j run \
     --secret-file .secrets \
     -e <(echo '{"inputs":{"refresh_scope":"none","run_date":"2026-04-20","dry_run":"true"}}')
@@ -146,7 +146,7 @@ act -W .github/workflows/pipeline-olympus.yml \
 ```bash
 brew install actionlint shellcheck
 actionlint                                    # every workflow, repo-wide
-actionlint .github/workflows/pipeline-olympus.yml   # just this one
+actionlint .github/workflows/pipeline-digiquant.yml   # just this one
 ```
 
 Bare `actionlint` is the form CI runs and the one to trust before pushing — it
@@ -160,7 +160,7 @@ shellcheck version in particular is part of the gate's contract.
 
 CI runs it on every PR touching `.github/workflows/**`, via the `actionlint` job
 in `ci.yml` (gated by the `workflows` filter in `scripts/ci_paths.yaml`). It used
-to live in `test-atlas-graph.yml` pinned to `pipeline-olympus.yml` alone; that
+to live in `test-research-graph.yml` pinned to `pipeline-digiquant.yml` alone; that
 job is gone, since it left every other workflow unlinted and was itself skipped
 on workflow-only PRs.
 
@@ -177,7 +177,7 @@ A run can fail in two shapes:
    overwrite partial rows. If rollback is still required:
 
    ```bash
-   python3 digiquant/scripts/atlas/validate_db_first.py \
+   python3 digiquant/scripts/research/validate_db_first.py \
      --date <run-date> --mode full
    ```
 
@@ -191,7 +191,7 @@ A run can fail in two shapes:
    Then re-trigger via `workflow_dispatch` with the original `run_date`.
 
 3. **Scheduler is the problem** (bad cron, runaway cost): disable the
-   workflow from the Actions UI or `gh workflow disable pipeline-olympus.yml`.
+   workflow from the Actions UI or `gh workflow disable pipeline-digiquant.yml`.
 
 ## Failure issue convention
 
@@ -200,7 +200,7 @@ The pipeline opens (or comments on) a single rolling issue titled
 
 ## Cost monitoring
 
-Per-run token counts land in `atlas_run_diagnostics` via `digiquant.olympus.atlas.diagnostics`
+Per-run token counts land in `atlas_run_diagnostics` via `digiquant.research.diagnostics`
 (LLM usage snapshot from `digigraph.usage`). Target **≤20 LLM calls** on a quiet day
 (re-baselined after thesis-first H1–H9 wiring).
 
@@ -211,7 +211,7 @@ Quiet-day cost is controlled by `OLYMPUS_MODEL_TIER` + edit-mode — not graph f
 
 ## Changing the schedule
 
-Cron strings: `17 9/10/11/12 * * *` UTC in `pipeline-olympus.yml` (off-peak
+Cron strings: `17 9/10/11/12 * * *` UTC in `pipeline-digiquant.yml` (off-peak
 minute, hourly retries; later slots skip after a success). After edits, re-run
 `actionlint`. Do not `workflow_dispatch` the house pipeline from an agent.
 

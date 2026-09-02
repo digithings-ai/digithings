@@ -1,10 +1,10 @@
 """Canonical DIGIQUANT_* env names with retired aliases.
 
-Python packages stay ``digiquant.olympus.*``. Operator secrets, kill switches,
+Python packages stay ``digiquant.dashboard.*``. Operator secrets, kill switches,
 and flags use DIGIQUANT_* first. Retired OLYMPUS_* / KAIROS_* / ATLAS_* names
 remain readable so live empty kill-switches stay off until rotated.
 
-``pipeline-olympus.yml`` still exports ``OLYMPUS_ATTEMPT``; do not rename that
+``pipeline-digiquant.yml`` still exports ``OLYMPUS_ATTEMPT``; do not rename that
 workflow until after the scheduled house proof. Readers accept both names.
 """
 

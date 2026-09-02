@@ -8,7 +8,7 @@ import { DigiquantMark } from '@digithings/web';
  * mark's own currentColor presentation attribute, exactly as before.
  * CSS class names stay until the path wave.
  *
- * Default export remains this component so `import … from '@/components/AtlasLoader'`
+ * Default export remains this component so `import … from '@/components/DashboardLoader'`
  * keeps working. Prefer `DigiquantLoader` at new call sites.
  */
 function DigiquantLoader(props: { fullScreen?: boolean }) {
@@ -30,4 +30,4 @@ function DigiquantLoader(props: { fullScreen?: boolean }) {
 }
 
 export default DigiquantLoader;
-export { DigiquantLoader, DigiquantLoader as AtlasLoader };
+export { DigiquantLoader, DigiquantLoader as DashboardLoader };

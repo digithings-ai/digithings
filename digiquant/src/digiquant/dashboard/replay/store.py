@@ -23,7 +23,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GateCriteriaVersion,
     GateEvaluation,
     PolicyComparisonReport,
@@ -31,12 +31,12 @@ from digiquant.olympus.replay.governance_models import (
     ReplayRunEvent,
     ReplayRunEventKind,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     PortfolioReplayResult,
     ReplayInputManifest,
     ReplayPairSpec,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 T = TypeVar("T", bound=BaseModel)
 

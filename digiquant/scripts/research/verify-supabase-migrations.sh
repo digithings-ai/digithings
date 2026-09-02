@@ -11,7 +11,7 @@
 # the "not in version order" branch below is unreachable belt-and-braces — don't
 # document this script as an order check.
 set -euo pipefail
-# This file lives at digiquant/scripts/atlas/, so the digiquant/ package root —
+# This file lives at digiquant/scripts/research/, so the digiquant/ package root —
 # which is what holds supabase/ — is two levels up, not one (#1807).
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MIG="${ROOT}/supabase/migrations"

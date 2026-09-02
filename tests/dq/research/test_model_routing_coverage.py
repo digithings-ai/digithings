@@ -1,4 +1,4 @@
-"""Model-routing coverage: every phase slug must resolve via olympus_models.yaml.
+"""Model-routing coverage: every phase slug must resolve via digiquant_models.yaml.
 
 A slug without olympus capability mapping (and without a non-flagship ``phase_models``
 override) falls back through ``get_model_for_mode()`` to the hard-coded ``gpt-4o-mini``
@@ -14,11 +14,11 @@ from pathlib import Path
 
 import digigraph.model_config as model_config
 import pytest
-from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
-from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
-from digiquant.olympus.atlas.phases.phase3_macro import _SPEC as MACRO_SPEC
-from digiquant.olympus.atlas.phases.phase4_assetclass import _SPECS as ASSET_SPECS
-from digiquant.olympus.atlas.sectors_config import load_sectors
+from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
+from digiquant.research.phases.phase2_institutional import _SPECS as INST_SPECS
+from digiquant.research.phases.phase3_macro import _SPEC as MACRO_SPEC
+from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
+from digiquant.research.sectors_config import load_sectors
 
 _REPO_CONFIG = str(Path(__file__).parents[3] / "config")
 
@@ -37,7 +37,7 @@ _STATIC_PHASE_SLUGS = (
     "beliefs-distillation",
 )
 
-# Dynamic per-ticker slugs, prefix-matched in olympus_models.yaml ("<prefix>-").
+# Dynamic per-ticker slugs, prefix-matched in digiquant_models.yaml ("<prefix>-").
 _DYNAMIC_SLUG_EXAMPLES = (
     "technical-analyst-AAPL",
     "sentiment-analyst-AAPL",
@@ -87,7 +87,7 @@ def test_every_phase_slug_has_model_routing(monkeypatch):
         slug for slug in _all_slugs() if model_config.get_model_for_phase(slug) is None
     )
     assert not missing, (
-        f"phase slugs missing olympus_models.yaml capability routing: {missing} — "
+        f"phase slugs missing digiquant_models.yaml capability routing: {missing} — "
         "without a mapping they fall back to the unauthenticated gpt-4o-mini "
         "default and 401 in CI (#678)"
     )

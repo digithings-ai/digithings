@@ -14,7 +14,7 @@ from types import ModuleType
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionMode,
     AttentionRolloutMode,
     AttentionTargetKind,
@@ -23,7 +23,7 @@ from digiquant.olympus.research_retrieval.planner import (
     load_research_attention_policy,
     plan_research_attention,
 )
-from digiquant.olympus.research_retrieval.shadow_evaluation import ShadowProviderAttemptDetail
+from digiquant.dashboard.research_retrieval.shadow_evaluation import ShadowProviderAttemptDetail
 
 pytestmark = pytest.mark.unit
 
@@ -48,7 +48,7 @@ def cli() -> ModuleType:
 
 
 def _plan_bundle(tmp_path: Path) -> tuple[Path, Path, Path]:
-    from digiquant.olympus.research_retrieval.planner import AttentionFeatures
+    from digiquant.dashboard.research_retrieval.planner import AttentionFeatures
 
     policy = load_research_attention_policy(default_research_policy_path())
     features = AttentionFeatures(

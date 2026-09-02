@@ -41,4 +41,4 @@ jobs:
           LANGSMITH_TRACING: "true"
           LANGSMITH_PROJECT: atlas-langsmith-smoke
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/smoke_langsmith.py
+          uv run --frozen --no-sync python digiquant/scripts/research/smoke_langsmith.py

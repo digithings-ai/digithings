@@ -7,10 +7,10 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas import forecast_registry as fr
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, PriorContext
-from digiquant.olympus.hermes import forecast_calibration as fc
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research import forecast_registry as fr
+from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.portfolio import forecast_calibration as fc
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
     EffectiveSource,
@@ -18,7 +18,7 @@ from digiquant.olympus.hermes.models.forecast import (
     RawUncertainty,
     forecast_terms_content_hash,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     CalibrationArtifactStatus,
     ForecastOutcome,
     OutcomeStatus,
@@ -26,7 +26,7 @@ from digiquant.olympus.hermes.models.forecast_calibration import (
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.olympus.hermes.phases.h7_pm_direction import build_h7_pm_direction
+from digiquant.portfolio.phases.h7_pm_direction import build_h7_pm_direction
 
 from tests.dq.atlas.test_forecast_registry import RegistryFake, _assessment
 
@@ -348,7 +348,7 @@ class TestH7BoundaryAttach:
     def test_h7_attaches_shadow_without_feeding_memo_economics(self) -> None:
         from unittest.mock import patch
 
-        from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+        from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
         state = _state_with_effective()
         phase = build_h7_pm_direction(client=None)
@@ -358,7 +358,7 @@ class TestH7BoundaryAttach:
             roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
         )
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             return_value=memo,
         ):
             out = node(state)

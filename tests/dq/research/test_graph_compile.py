@@ -11,14 +11,14 @@ from datetime import date
 from typing import Any  # score:allow untyped any — used for fake-client shape
 
 import pytest
-from digiquant.olympus.atlas.graph import (
+from digiquant.research.graph import (
     AtlasGraphDeps,
     AtlasInput,
     build_atlas_graph,
     initial_state,
 )
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-from digiquant.olympus.atlas.state import AtlasConfigBundle
+from digiquant.research.phases.preflight import PreflightDeps
+from digiquant.research.state import AtlasConfigBundle
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -72,7 +72,7 @@ class TestBuildGraph:
         g = build_atlas_graph(deps=_deps(), watchlist=("AAPL",))
         names = set(g.get_graph().nodes.keys())
         # Atlas is research-only after #473 — H-phase nodes (analyst,
-        # debate, PM, evolution) live in digiquant.olympus.hermes.graph and are
+        # debate, PM, evolution) live in digiquant.portfolio.graph and are
         # asserted by the chain test below.
         for expected in (
             "preflight",
@@ -112,7 +112,7 @@ class TestBuildGraph:
         assert "triage" in names
 
     def test_hermes_graph_compiles(self) -> None:
-        from digiquant.olympus.hermes.graph import build_hermes_graph
+        from digiquant.portfolio.graph import build_hermes_graph
 
         g = build_hermes_graph(watchlist=["AAPL"])
         names = set(g.get_graph().nodes.keys())

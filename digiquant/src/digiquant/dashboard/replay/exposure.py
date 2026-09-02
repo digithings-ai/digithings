@@ -13,10 +13,10 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     PolicyComparisonReport as RichPolicyComparisonReport,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     HumanAuthoredGateCriteria,
     evaluate_gate_criteria,
@@ -24,17 +24,17 @@ from digiquant.olympus.replay.governance import (
     record_policy_governance_decision,
     to_store_criteria_version,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GovernanceDecisionKind,
     PolicyGovernanceDecision,
     ReplayRunEvent,
     ReplayRunEventKind,
 )
-from digiquant.olympus.replay.store import (
+from digiquant.dashboard.replay.store import (
     PolicyReplayStore,
     PolicyReplayStoreMissingError,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 HashHex64: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]

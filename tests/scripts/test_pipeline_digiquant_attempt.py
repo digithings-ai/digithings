@@ -1,4 +1,4 @@
-"""pipeline-olympus.yml must thread its retry counter into the process (#1762).
+"""pipeline-digiquant.yml must thread its retry counter into the process (#1762).
 
 The workflow retries the chain up to ``MAX_OUTER_ATTEMPTS`` times inside ONE job, all sharing
 one ``GITHUB_RUN_ID``. Since migration 065 the diagnostics row is keyed on
@@ -29,7 +29,7 @@ import yaml
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-olympus.yml"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant.yml"
 CHAIN = REPO_ROOT / "digiquant" / "src" / "digiquant" / "olympus" / "hermes" / "chain.py"
 DIAGNOSTICS = REPO_ROOT / "digiquant" / "src" / "digiquant" / "olympus" / "atlas" / "diagnostics.py"
 MIGRATION = (

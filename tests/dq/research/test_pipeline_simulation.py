@@ -1,7 +1,7 @@
 """End-to-end Atlas pipeline simulation tests.
 
 These tests exercise the full LangGraph pipeline (preflight → all 9
-phases → publish) using ``digiquant.olympus.atlas.testing.simulator`` to mock
+phases → publish) using ``digiquant.research.testing.simulator`` to mock
 both the LLM provider and Supabase. Zero network calls, zero token
 spend, zero DB writes.
 
@@ -20,22 +20,22 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-from digiquant.olympus.atlas.testing import (
+from digiquant.research.graph import AtlasInput
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.testing import (
     DEFAULT_RESPONSES,
     parse_phase_inputs,
     parse_schema_name,
     simulated_pipeline,
 )
-from digiquant.olympus.hermes.graph import HermesGraphDeps, ThesisGraphDeps
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.graph import HermesGraphDeps, ThesisGraphDeps
+from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     MissingFactProposal,
 )
-from digiquant.olympus.research_retrieval.h6_amendment import H6AmendmentOutcome
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -183,7 +183,7 @@ class TestOverrides:
         seen_tickers: list[str] = []
 
         def custom_analyst(messages: list[dict], _kwargs: dict) -> dict:
-            from digiquant.olympus.atlas.testing.simulator import parse_phase_inputs
+            from digiquant.research.testing.simulator import parse_phase_inputs
 
             inputs = parse_phase_inputs(messages)
             ticker = str(inputs.get("ticker", "?"))
@@ -228,7 +228,7 @@ class TestNoNetworkOrTokens:
         """
         from pathlib import Path
 
-        import digiquant.olympus.atlas.testing.simulator as simulator_module
+        import digiquant.research.testing.simulator as simulator_module
 
         source = Path(simulator_module.__file__).read_text(encoding="utf-8")
         assert "from supabase import" not in source
@@ -344,11 +344,11 @@ class TestDurableH5H6LineageRoundTrip:
         ) as run:
             with (
                 patch(
-                    "digiquant.olympus.hermes.phases.h6_deliberation.run_research_agent",
+                    "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
                     side_effect=fake_research_agent,
                 ),
                 patch(
-                    "digiquant.olympus.hermes.phases.h6_deliberation.build_grounding",
+                    "digiquant.portfolio.phases.h6_deliberation.build_grounding",
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
@@ -386,11 +386,11 @@ class TestDurableH5H6LineageRoundTrip:
 
             with (
                 patch(
-                    "digiquant.olympus.hermes.phases.h6_deliberation.run_research_agent",
+                    "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
                     side_effect=fake_research_agent,
                 ),
                 patch(
-                    "digiquant.olympus.hermes.phases.h6_deliberation.build_grounding",
+                    "digiquant.portfolio.phases.h6_deliberation.build_grounding",
                     side_effect=_grounding_with_search_flag,
                 ),
             ):
@@ -425,12 +425,12 @@ class TestPhase3ResearchComposition:
     """Integration 3.1 — one-graph Phase 3 lock surface (#3019)."""
 
     def test_simulator_graphs_exclude_planner_nodes(self) -> None:
-        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-        from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-        from digiquant.olympus.hermes.graph import build_hermes_graph
-        from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-        from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.phases.preflight import PreflightDeps
+        from digiquant.research.phases.triage_phase import TriageDeps
+        from digiquant.portfolio.graph import build_hermes_graph
+        from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+        from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
         from tests.dq.hermes.phase3_e2e_fixtures import FORBIDDEN_PHASE3_NODES
 

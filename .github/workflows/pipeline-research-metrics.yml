@@ -14,7 +14,7 @@ name: "Pipeline: Atlas metrics refresh"
 # (finalized accounting), never the 21-day lookback.
 #
 # SEVEN days a week since #1833. It was MON-SAT, but the book cron
-# (pipeline-olympus.yml, `17 9/10/11/12 * * *`) is daily — so a Sunday book was written and then never
+# (pipeline-digiquant.yml, `17 9/10/11/12 * * *`) is daily — so a Sunday book was written and then never
 # enriched, keeping current_price / unrealized_pnl_pct / metrics_as_of NULL *permanently*
 # rather than until the next run. Measured in prod: both Sundays in the window (2026-07-26,
 # 2026-08-02) had 0 of N rows marked, while trading days had 8-11 of 9-12. The live-price
@@ -94,9 +94,9 @@ jobs:
           RUN_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            uv run --frozen --no-sync python digiquant/scripts/atlas/finalize_period_accounting.py --supabase --date "$RUN_DATE"
+            uv run --frozen --no-sync python digiquant/scripts/research/finalize_period_accounting.py --supabase --date "$RUN_DATE"
           else
-            uv run --frozen --no-sync python digiquant/scripts/atlas/finalize_period_accounting.py --supabase
+            uv run --frozen --no-sync python digiquant/scripts/research/finalize_period_accounting.py --supabase
           fi
         continue-on-error: true
 
@@ -111,9 +111,9 @@ jobs:
           RUN_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase --date "$RUN_DATE"
+            uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase --date "$RUN_DATE"
           else
-            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_performance_metrics.py --supabase
+            uv run --frozen --no-sync python digiquant/scripts/research/refresh_performance_metrics.py --supabase
           fi
 
       - name: Refresh current_book_lookback (21-day diagnostic; not realized)
@@ -128,7 +128,7 @@ jobs:
           RUN_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$RUN_DATE" ]; then
-            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_attribution.py --date "$RUN_DATE"
+            uv run --frozen --no-sync python digiquant/scripts/research/refresh_attribution.py --date "$RUN_DATE"
           else
-            uv run --frozen --no-sync python digiquant/scripts/atlas/refresh_attribution.py
+            uv run --frozen --no-sync python digiquant/scripts/research/refresh_attribution.py
           fi

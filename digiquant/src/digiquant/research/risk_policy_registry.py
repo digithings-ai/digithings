@@ -1,7 +1,7 @@
 """Private append-only H8 risk policy / covariance snapshot registry (#2698 / WP6.3).
 
-Persists immutable :class:`~digiquant.olympus.hermes.models.risk_policy.RiskPolicy`
-and :class:`~digiquant.olympus.hermes.models.risk_policy.CovarianceSnapshot` rows
+Persists immutable :class:`~digiquant.portfolio.models.risk_policy.RiskPolicy`
+and :class:`~digiquant.portfolio.models.risk_policy.CovarianceSnapshot` rows
 from migration ``081_olympus_risk_policy_snapshots.sql``, plus one run ref per
 ``source_run_id``.
 
@@ -25,12 +25,12 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     RiskPolicy,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

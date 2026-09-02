@@ -21,18 +21,18 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.decision_log import fetch_recent_lessons
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.research_retrieval.blinding import (
+from digiquant.research.decision_log import fetch_recent_lessons
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
     RetrievalPhase,
     portfolio_tool_allowed,
     research_document_allowed,
 )
-from digiquant.olympus.research_retrieval.cache import ResearchCache, _parse_row_date
-from digiquant.olympus.research_retrieval.context import ContextItemKind, ContextManifest
-from digiquant.olympus.research_retrieval.store import LoadedResearchState
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.research_retrieval.cache import ResearchCache, _parse_row_date
+from digiquant.dashboard.research_retrieval.context import ContextItemKind, ContextManifest
+from digiquant.dashboard.research_retrieval.store import LoadedResearchState
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

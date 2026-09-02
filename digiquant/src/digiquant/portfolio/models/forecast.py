@@ -5,7 +5,7 @@ identity and audit metadata (:class:`ForecastAssessment`). Legacy
 ``conviction_score`` / ``price_targets`` on :class:`~.analyst.AnalystPayload`
 remain for compatibility and **must never** be used to synthesize these terms.
 
-Style mirrors :mod:`digiquant.olympus.hermes.models.portfolio_ledger`: frozen,
+Style mirrors :mod:`digiquant.portfolio.models.portfolio_ledger`: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, Decimal economics, UUID5
 idempotent identity.
 """

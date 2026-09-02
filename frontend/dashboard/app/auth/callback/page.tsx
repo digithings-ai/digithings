@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { DashboardMark } from '@/components/atlas-mark';
+import { DashboardMark } from '@/components/dashboard-mark';
 import {
   getSupabaseClient,
   oauthCallbackErrorFromLocation,

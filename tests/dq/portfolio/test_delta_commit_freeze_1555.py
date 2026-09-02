@@ -28,10 +28,10 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
-from digiquant.olympus.atlas.testing.simulator import (
+from digiquant.research import diagnostics
+from digiquant.research.graph import AtlasInput
+from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.research.testing.simulator import (
     build_quiet_day_canned_extras,
     simulated_pipeline,
 )
@@ -130,7 +130,7 @@ class TestUncommittedBookIsLoud:
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
         # A fresh research segment so the base verdict would otherwise be "ok".
-        from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+        from digiquant.research.state import SegmentPayload, SegmentSlot
 
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
@@ -150,7 +150,7 @@ class TestUncommittedBookIsLoud:
         # ("sized_book missing but H7 pm_direction_memo present"). Here ``book_materialized``
         # is False, so the materialized-but-uncommitted trigger alone would miss it — the
         # escalation must also fire on any ``hermes_h9_commit_run`` PhaseError (#1555 3a).
-        from digiquant.olympus.atlas.state import PhaseError, SegmentPayload, SegmentSlot
+        from digiquant.research.state import PhaseError, SegmentPayload, SegmentSlot
 
         state = AtlasResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
@@ -175,7 +175,7 @@ class TestUncommittedBookIsLoud:
         state = AtlasResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
-        from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+        from digiquant.research.state import SegmentPayload, SegmentSlot
 
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))
@@ -194,7 +194,7 @@ class TestUncommittedBookIsLoud:
         state = AtlasResearchState(
             run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 26)
         )
-        from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+        from digiquant.research.state import SegmentPayload, SegmentSlot
 
         state.phase1_outputs = {
             "macro": SegmentSlot(payload=SegmentPayload(segment="macro", body={}, as_of=RUN_DATE))

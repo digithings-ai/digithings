@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.portfolio.state import HermesState
 
 
 def ticker_in_focus_roster(state: HermesState, ticker: str) -> bool:

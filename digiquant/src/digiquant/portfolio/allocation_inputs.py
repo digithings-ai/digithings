@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -27,18 +27,18 @@ from digiquant.olympus.hermes.allocation_contracts import (
     PriorWeightEntry,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     h7_memo_hash_payload,
     sha256_hex,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     CalibratedForecast,
     CalibrationArtifactStatus,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.models.risk_policy import CovarianceSnapshot, RiskPolicy
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.models.risk_policy import CovarianceSnapshot, RiskPolicy
+from digiquant.dashboard.temporal import require_utc_datetime
 
 _CASH = "CASH"
 # Common Hermes forecast horizon (trading sessions). Used as shadow fill when H6

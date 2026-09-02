@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.olympus.atlas.personalization.
+"""Unit tests for digiquant.research.personalization.
 
 Covers anonymous pass-through, ticker exclusion, custom-universe boosting,
 risk-tolerance filtering, ESG sector exclusion, the return-shape contract,
@@ -14,15 +14,15 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
-from digiquant.olympus.atlas import (
+from digiquant.research import (
     PersonalizedSnapshot,
     SnapshotEnvelope,
     personalize_snapshot,
 )
-from digiquant.olympus.atlas.snapshot import DigestPayload
+from digiquant.research.snapshot import DigestPayload
 from digiquant.profiles import AssetPreferences, InvestmentProfile
 
-# ─── Helpers (mirror tests/dq/atlas/test_snapshot.py style) ────────────────
+# ─── Helpers (mirror tests/dq/research/test_snapshot.py style) ────────────────
 
 
 def _digest_payload_kwargs() -> dict[str, Any]:
@@ -282,7 +282,7 @@ def test_strict_esg_drops_excluded_sector_mentions() -> None:
 def test_returns_envelope_subclass_or_envelope() -> None:
     """Asserts the return type contract: PersonalizedSnapshot wrapping a SnapshotEnvelope.
 
-    See module docstring of digiquant.olympus.atlas.personalization for the rationale —
+    See module docstring of digiquant.research.personalization for the rationale —
     we picked the sibling-dataclass form over a v2 envelope bump because
     SnapshotEnvelope/DigestPayload are extra="forbid" end-to-end.
     """

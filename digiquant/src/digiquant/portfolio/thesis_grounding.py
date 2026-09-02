@@ -6,9 +6,9 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
 
-from digiquant.olympus.atlas.phases._node_factory import build_grounding
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
+from digiquant.research.phases._node_factory import build_grounding
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 
 
 def build_thesis_grounding(

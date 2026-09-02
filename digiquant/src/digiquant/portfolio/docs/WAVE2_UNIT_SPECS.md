@@ -48,7 +48,7 @@ W2-H — parallel after W2-A
   - `upsert_theses(rows: list[ThesisRow]) -> list[PublishedArtifact]` (may already exist). Writes **only** the canonical `theses` columns from migration 001: `date`, `thesis_id`, `name`, `vehicle`, `invalidation`, `status`, `notes`. There is **no** `evidence_log` column on `theses` — the per-day evidence trail lives in the `'Thesis Review'` document payload (`body.reviewed_theses[].evidence[]`), not in a relational column. Do NOT add an `evidence_log` column; if a future reader wants indexed evidence, propose it in a separate migration.
 - Create: `digiquant/supabase/migrations/025_hermes_doc_types.sql` — extends `chk_documents_doc_type` to include `'Thesis Review'` and `'Opportunity Screen'` (see [HERMES_SUBGRAPH §5.1](HERMES_SUBGRAPH.md#51-migration-025--hermes-doc_type-additions-stub-implemented-in-w2-a)). Keep every existing token from migration 023 in the new CHECK. Apply to dev DB before W2-B / W2-D start.
 - Create: `digiquant/src/digiquant/olympus/atlas/supabase_rows.py` — typed dataclasses/Pydantic for the five row types above.
-- Modify: tests FakeSupabaseClient in `tests/dq/atlas/conftest.py` — record writes per-table for assertion.
+- Modify: tests FakeSupabaseClient in `tests/dq/research/conftest.py` — record writes per-table for assertion.
 
 **Tests:**
 
@@ -372,7 +372,7 @@ Every Wave 2 unit prompt should include:
 1. Read [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) and your unit's section in this file.
 2. Read the skill file(s) your phase loads.
 3. Follow the `task/<slug>` branch convention. (Archival: the PR target was `module/digiquant-atlas`, now dormant — see [`BRANCHING.md`](../../../../../../BRANCHING.md) for current routing.)
-4. Tests pass: `pytest tests/dq/atlas -m unit -v`.
+4. Tests pass: `pytest tests/dq/research -m unit -v`.
 5. `make doc-check` passes (no link regressions).
 6. `make score` passes the 4-dim gate.
 7. Commit message: `feat(atlas): <unit title>` + `Refs #178`.

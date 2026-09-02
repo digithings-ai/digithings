@@ -4,7 +4,7 @@
 Computes the single-benchmark trailing-window diagnostic for one date and upserts it to
 ``current_book_lookback``: reads the booked ``positions`` weights, each holding's trailing-
 window return + the benchmark's return from ``price_history``, runs the pure
-:func:`digiquant.olympus.atlas.attribution.compute_current_book_lookback`, and writes the
+:func:`digiquant.research.attribution.compute_current_book_lookback`, and writes the
 rows. Decoupled from the research pipeline so it can run on its own daily cron after EOD
 prices land. Idempotent (upsert on ``(date, ticker)``).
 
@@ -15,7 +15,7 @@ irrelevant for daily semantics.
 
 Usage::
 
-    python digiquant/scripts/atlas/refresh_attribution.py [--date YYYY-MM-DD] [--window-days N]
+    python digiquant/scripts/research/refresh_attribution.py [--date YYYY-MM-DD] [--window-days N]
 
 Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Reads house ``positions`` +
 price_history (filters ``workspace_id`` so overlay same-date weights cannot seed
@@ -32,7 +32,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
-# repo root: .../digiquant/scripts/atlas/refresh_attribution.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/refresh_attribution.py → up 4 (atlas → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -49,7 +49,7 @@ def _ensure_importable() -> None:
 
 
 _ensure_importable()
-from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
 
 
 def _house_id() -> str:
@@ -114,7 +114,7 @@ def refresh_attribution(
 
     Writes only to ``current_book_lookback``. Never writes daily realized contribution.
     """
-    from digiquant.olympus.atlas.attribution import (
+    from digiquant.research.attribution import (
         Holding,
         compute_current_book_lookback,
         lookback_rows_to_records,
@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _ensure_importable()
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     try:
         client = build_client(SupabaseConfig.from_env())

@@ -29,10 +29,10 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from digigraph.graph.pipeline_builder import PipelinePhase
 
-from digiquant.olympus.atlas.decision_log import fetch_recent_lessons
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.state import RefreshScope
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.decision_log import fetch_recent_lessons
+from digiquant.research.graph import AtlasInput
+from digiquant.research.state import RefreshScope
+from digiquant.research.supabase_io import (
     SupabaseClient,
     load_active_theses_rows,
     load_latest_beliefs_document,
@@ -40,9 +40,9 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     query_unfolded_resolved_decisions,
 )
-from digiquant.olympus.envcompat import BELIEFS_BACKLOG, env_lookup
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.envcompat import BELIEFS_BACKLOG, env_lookup
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 
@@ -150,9 +150,9 @@ def _run_beliefs_llm(
     from digigraph.graph.research_agent import run_research_agent
     from digigraph.model_config import get_grounding_model
 
-    from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
-    from digiquant.olympus.atlas.phases._node_factory import apply_web_grounding_to_inputs
-    from digiquant.olympus.atlas.skills import load_skill
+    from digiquant.research.data.web_grounding import fetch_web_grounding
+    from digiquant.research.phases._node_factory import apply_web_grounding_to_inputs
+    from digiquant.research.skills import load_skill
 
     skill_slug = "beliefs-distillation-daily" if fold_mode == "short" else "beliefs-distillation"
     skill_text = load_skill(skill_slug)

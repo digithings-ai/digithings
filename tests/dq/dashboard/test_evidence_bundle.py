@@ -2,7 +2,7 @@
 
 Red coverage: canonical dedupe; event/known/source times; conflicts/missing
 fields; forecast cites bundle/evidence IDs; durable writer disable retains
-typed in-run bundle. H5 provider-path wiring lives in ``tests/dq/hermes/``
+typed in-run bundle. H5 provider-path wiring lives in ``tests/dq/portfolio/``
 (atlas-graph CI has digigraph deps).
 """
 
@@ -13,13 +13,13 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.models.forecast import ForecastTerms
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.portfolio.models.forecast import ForecastTerms
+from digiquant.dashboard.research_retrieval.models import (
     TypedProvenance,
     evidence_content_hash,
     evidence_record_id,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -55,7 +55,7 @@ def _terms(**overrides: object) -> ForecastTerms:
 
 
 def test_build_dedupes_identical_facts() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
     )
@@ -83,7 +83,7 @@ def test_build_dedupes_identical_facts() -> None:
 
 
 def test_build_records_conflicts_and_missing_fields() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
     )
@@ -126,7 +126,7 @@ def test_build_records_conflicts_and_missing_fields() -> None:
 
 
 def test_facts_from_phase_inputs_skip_portfolio_leakage() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import facts_from_phase_inputs
+    from digiquant.dashboard.research_retrieval.evidence_bundle import facts_from_phase_inputs
 
     facts, missing = facts_from_phase_inputs(
         ticker="AAPL",
@@ -155,7 +155,7 @@ def test_facts_from_phase_inputs_skip_portfolio_leakage() -> None:
 
 
 def test_publish_persists_when_writer_on() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
         publish_h5_evidence_bundle,
@@ -191,7 +191,7 @@ def test_publish_persists_when_writer_on() -> None:
 
 
 def test_publish_skips_store_when_writer_off_retains_typed() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
         publish_h5_evidence_bundle,
@@ -227,7 +227,7 @@ def test_publish_skips_store_when_writer_off_retains_typed() -> None:
 
 
 def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
         cite_evidence_bundle_on_forecast,
@@ -258,7 +258,7 @@ def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
 
 def test_evidence_record_ids_reuse_wp12_helpers() -> None:
     """Bundle evidence leaves use WP12 EvidenceRecord identity — no parallel scheme."""
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         build_h5_evidence_bundle,
     )
@@ -294,7 +294,7 @@ def test_evidence_record_ids_reuse_wp12_helpers() -> None:
 
 
 def test_h5_evidence_fact_rejects_blank_summary() -> None:
-    from digiquant.olympus.research_retrieval.evidence_bundle import H5EvidenceFact
+    from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
 
     with pytest.raises(ValidationError):
         H5EvidenceFact(
@@ -309,7 +309,7 @@ def test_h5_evidence_fact_rejects_blank_summary() -> None:
 
 def test_facts_from_phase_inputs_preserves_long_web_grounding_summary() -> None:
     """Long web_grounding prose must pass without max_length/truncate (#3063)."""
-    from digiquant.olympus.research_retrieval.evidence_bundle import (
+    from digiquant.dashboard.research_retrieval.evidence_bundle import (
         H5EvidenceFact,
         facts_from_phase_inputs,
     )

@@ -6,14 +6,14 @@ H8/H9 booking, commit writers, or live-trading surfaces.
 
 from __future__ import annotations
 
-from digiquant.olympus.replay.allocation_comparison import (
+from digiquant.dashboard.replay.allocation_comparison import (
     AllocationComparisonReport,
     ComparisonStatus,
     compare_allocation_arms,
     load_shadow_criteria,
     write_comparison_report,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     FillRecord,
     HoldingQuantity,
@@ -26,7 +26,7 @@ from digiquant.olympus.replay.models import (
     TargetWeight,
     inconclusive_result,
 )
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 __all__ = [
     "AllocationComparisonReport",

@@ -2,7 +2,7 @@
 
 Typed contract for publishing WP13-class shadow plans under
 ``document_key='attention-plan'``. Daily graph call-site:
-``digiquant.olympus.attention_plan_graph.maybe_publish_attention_plan_shadow``
+``digiquant.dashboard.attention_plan_graph.maybe_publish_attention_plan_shadow``
 (invoked from Atlas ``publish_phase``).
 """
 
@@ -11,12 +11,12 @@ from __future__ import annotations
 from datetime import date
 from typing import Any  # score:allow untyped any — documents.payload jsonb shape
 
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.supabase_io import (
     PublishedArtifact,
     SupabaseClient,
     publish_document,
 )
-from digiquant.olympus.attention_plan import AttentionPlanShadowResult
+from digiquant.dashboard.attention_plan import AttentionPlanShadowResult
 
 ATTENTION_PLAN_DOCUMENT_KEY = "attention-plan"
 ATTENTION_PLAN_DOC_TYPE_COLUMN = "Attention Plan"

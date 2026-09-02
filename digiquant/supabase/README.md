@@ -8,7 +8,7 @@ portfolio, market data, strategy store — see
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
-`digiquant/scripts/atlas/verify-supabase-migrations.sh` guards the chain's shape:
+`digiquant/scripts/research/verify-supabase-migrations.sh` guards the chain's shape:
 `config.toml` is present, every file matches `NNN_name.sql`, and no two files share
 a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make

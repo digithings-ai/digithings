@@ -1,6 +1,6 @@
 """Atlas → Hermes chain integration test.
 
-Exercises :func:`digiquant.olympus.hermes.chain.run_atlas_then_hermes` end-to-end
+Exercises :func:`digiquant.portfolio.chain.run_atlas_then_hermes` end-to-end
 through the same simulator harness the per-phase tests use. Validates the
 chain's three responsibilities:
 
@@ -28,8 +28,8 @@ from typing import Any  # score:allow untyped any — scored-lint suppression: t
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.testing.simulator import simulated_pipeline
+from digiquant.research.graph import AtlasInput
+from digiquant.research.testing.simulator import simulated_pipeline
 
 
 @pytest.mark.unit
@@ -198,8 +198,8 @@ class TestChainResearchGate:
     """
 
     def test_failed_atlas_skips_hermes(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.olympus.atlas.state import PhaseError
-        from digiquant.olympus.hermes import chain as chain_mod
+        from digiquant.research.state import PhaseError
+        from digiquant.portfolio import chain as chain_mod
 
         hermes_built: list[bool] = []
 
@@ -255,7 +255,7 @@ class TestChainHeldInvariant:
     """
 
     def test_hermes_held_reaches_build_hermes_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.olympus.hermes import chain as chain_mod
+        from digiquant.portfolio import chain as chain_mod
 
         captured: dict[str, Any] = {}
 
@@ -274,7 +274,7 @@ class TestChainHeldInvariant:
         def _atlas_produces_research(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
             label = _a[-1] if _a else _k.get("label")
             if label == "atlas":
-                from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+                from digiquant.research.state import SegmentPayload, SegmentSlot
 
                 state.phase3_output = SegmentSlot(
                     payload=SegmentPayload(segment="macro", body={}, as_of=state.run_date)
@@ -329,15 +329,15 @@ class TestChainKnowledgeCutoff:
     ) -> None:
         from datetime import UTC, datetime
 
-        from digiquant.olympus.hermes import chain as chain_mod
-        from digiquant.olympus.temporal import require_knowledge_cutoff_at
+        from digiquant.portfolio import chain as chain_mod
+        from digiquant.dashboard.temporal import require_knowledge_cutoff_at
 
         pinned = datetime(2026, 4, 26, 9, 15, 0, tzinfo=UTC)
 
         def _atlas_then_hermes(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
             label = _a[-1] if _a else _k.get("label")
             if label == "atlas":
-                from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+                from digiquant.research.state import SegmentPayload, SegmentSlot
 
                 state.phase3_output = SegmentSlot(
                     payload=SegmentPayload(segment="macro", body={}, as_of=state.run_date)
@@ -352,7 +352,7 @@ class TestChainKnowledgeCutoff:
         monkeypatch.setattr(chain_mod, "build_hermes_graph", lambda *_a, **_k: object())
 
         with patch(
-            "digiquant.olympus.atlas.graph.capture_knowledge_cutoff_at",
+            "digiquant.research.graph.capture_knowledge_cutoff_at",
             return_value=pinned,
         ):
             with simulated_pipeline(watchlist=("AAPL",)) as run:
@@ -378,9 +378,9 @@ def test_safe_invoke_graph_reraises_overlay_legacy_book_blocked() -> None:
     chain records-and-continues, ``execute_overlay`` finishes succeeded and
     the remaining hop lights without cutover 113.
     """
-    from digiquant.olympus.atlas.state import AtlasResearchState
-    from digiquant.olympus.hermes.chain import _safe_invoke_graph
-    from digiquant.olympus.overlay.persist import OverlayLegacyBookBlocked
+    from digiquant.research.state import AtlasResearchState
+    from digiquant.portfolio.chain import _safe_invoke_graph
+    from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked
 
     class _Boom:
         def invoke(self, *_args: object, **_kwargs: object) -> None:

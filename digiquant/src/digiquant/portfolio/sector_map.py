@@ -6,7 +6,7 @@ to bucket *every* ticker the PM can hold — not just the GICS equity sectors th
 international, and cash sleeves too. This module unifies both sources:
 
 - Equity single-names + GICS sector ETFs resolve to their sector slug (via
-  :func:`~digiquant.olympus.atlas.sectors_config.load_sectors`), coarse class ``EQUITY``.
+  :func:`~digiquant.research.sectors_config.load_sectors`), coarse class ``EQUITY``.
 - Everything else resolves via ``config/asset_classes.yaml``.
 
 **Authority on conflict:** ``sectors.yaml`` drives the *research* fan-out (what Atlas
@@ -40,7 +40,7 @@ from pathlib import Path
 
 import yaml
 
-from digiquant.olympus.atlas.sectors_config import load_sectors
+from digiquant.research.sectors_config import load_sectors
 
 UNKNOWN_BUCKET = "unknown"
 UNKNOWN_CLASS = "UNKNOWN"

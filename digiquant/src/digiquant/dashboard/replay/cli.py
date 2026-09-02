@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import click
 
-from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
 from digiquant.service import (
     service_evaluate_policy_gate,
     service_get_policy_comparison,

@@ -17,7 +17,7 @@ from digiquant.data.prices.supabase_writer import (
     upsert_price_history,
     upsert_price_technicals,
 )
-from digiquant.olympus.instrument_metadata import InstrumentMetadata
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 
 # ─── Fake Supabase (ports the Atlas pattern) ───────────────────────────
 

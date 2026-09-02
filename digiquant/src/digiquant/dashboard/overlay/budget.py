@@ -27,7 +27,7 @@ from digigraph.usage import snapshot as usage_snapshot
 from digigraph.usage import start as usage_start
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from digiquant.olympus.overlay.dispatch import JobStatus
+from digiquant.dashboard.overlay.dispatch import JobStatus
 
 
 class BudgetExhausted(Exception):

@@ -1,6 +1,6 @@
 """WP15.3 — assemble authoritative outcome episodes (#2963).
 
-Builds one deterministic :class:`~digiquant.olympus.learning.outcome_models.OutcomeEpisode`
+Builds one deterministic :class:`~digiquant.dashboard.learning.outcome_models.OutcomeEpisode`
 for every matured typed forecast by joining typed reader protocols only — never
 direct legacy-table queries or current-book inference.
 
@@ -17,16 +17,16 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from digiquant.olympus.accounting.io import contribution_row_id
-from digiquant.olympus.accounting.models import PeriodStatus
-from digiquant.olympus.hermes.models.forecast_calibration import ForecastOutcome
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.dashboard.accounting.io import contribution_row_id
+from digiquant.dashboard.accounting.models import PeriodStatus
+from digiquant.portfolio.models.forecast_calibration import ForecastOutcome
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     OrderIntentStatus,
     PortfolioCommit,
     TargetAdjustment,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     ComponentEligibility,
     EpisodeDisposition,
@@ -41,8 +41,8 @@ from digiquant.olympus.learning.outcome_models import (
     episode_content_hash,
     episode_version_id,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.temporal import require_utc_datetime
 
 _SESSION_CLOSE_HOUR_UTC = 20
 

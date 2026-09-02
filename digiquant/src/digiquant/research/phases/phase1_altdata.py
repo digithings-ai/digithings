@@ -1,17 +1,17 @@
 """Phase 1 — alternative data & positioning (6 parallel segment nodes).
 
-Per-skill Pydantic models extend :class:`digiquant.olympus.atlas.segments.ResearchMemo`.
+Per-skill Pydantic models extend :class:`digiquant.research.segments.ResearchMemo`.
 """
 
 from __future__ import annotations
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
 )
-from digiquant.olympus.atlas.segments import ResearchMemo
+from digiquant.research.segments import ResearchMemo
 
 
 class SentimentNewsReport(ResearchMemo):

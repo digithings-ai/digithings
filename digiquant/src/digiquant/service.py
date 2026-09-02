@@ -8,24 +8,24 @@ from uuid import UUID
 from digiquant.backtest import run_backtest
 from digiquant.export import run_export
 from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     PolicyComparisonReport as RichPolicyComparisonReport,
 )
-from digiquant.olympus.replay.exposure import (
+from digiquant.dashboard.replay.exposure import (
     PolicyComparisonSummary,
     PolicyGateEvaluationSummary,
     PolicyReplayFacade,
     PolicyReplayRunSummary,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     HumanAuthoredGateCriteria,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GovernanceDecisionKind,
     PolicyGovernanceDecision,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
 from digiquant.optimize import run_optimize
 from digiquant.paths import validate_data_paths
 from digiquant.strategies.registry import list_strategies

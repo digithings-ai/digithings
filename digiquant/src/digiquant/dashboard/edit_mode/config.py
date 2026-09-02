@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from digiquant.olympus.envcompat import STALE_FULL_DAYS, env_lookup
+from digiquant.dashboard.envcompat import STALE_FULL_DAYS, env_lookup
 
 OLYMPUS_STALE_FULL_DAYS_ENV = "OLYMPUS_STALE_FULL_DAYS"
 _DEFAULT_STALE_FULL_DAYS = 7

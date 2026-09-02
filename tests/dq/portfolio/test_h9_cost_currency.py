@@ -6,13 +6,13 @@ from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas import cost_liquidity_registry as clr
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-from digiquant.olympus.hermes.h9_cost_evidence import (
+from digiquant.research import cost_liquidity_registry as clr
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.portfolio.h9_cost_evidence import (
     build_cost_bundles_for_commit,
     investor_currency_from_state,
 )
-from digiquant.olympus.hermes.risk_policy import resolve_risk_policy
+from digiquant.portfolio.risk_policy import resolve_risk_policy
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -33,7 +33,7 @@ def _state(*, preferences: dict | None = None, with_policy: bool = False) -> Atl
         config=AtlasConfigBundle(preferences=preferences or {}),
     )
     if with_policy:
-        from digiquant.olympus.atlas.state import PhaseHermesState
+        from digiquant.research.state import PhaseHermesState
 
         state.phase_hermes = PhaseHermesState(
             risk_policy=_policy().model_dump(mode="json"),

@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 /**
  * Brand marks — promoted from the design reference (symbols/marks) as pure,
  * props-driven components. The four-stroke digiquant signature was previously
- * copied verbatim in four places (dashboard atlas-mark.tsx + AtlasLoader.tsx,
+ * copied verbatim in four places (dashboard dashboard-mark.tsx + DashboardLoader.tsx,
  * digiquant-web's DigiquantMark, the reference specimen) — this file is the
  * canonical copy. Everything draws in currentColor so a mark inherits the
  * ink/accent of its livery scope. No CSS ships with this family: the marks

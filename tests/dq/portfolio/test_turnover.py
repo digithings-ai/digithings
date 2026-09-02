@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book, clamp_no_trade_band
+from digiquant.portfolio.turnover import apply_turnover_to_sized_book, clamp_no_trade_band
 
 pytestmark = pytest.mark.unit
 

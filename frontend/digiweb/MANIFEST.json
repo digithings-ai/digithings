@@ -509,8 +509,8 @@
       },
       {
         "name": "PhoneOlympus",
-        "id": "phone-olympus",
-        "path": "reference/components/phone-olympus.tsx",
+        "id": "phone-dashboard",
+        "path": "reference/components/phone-dashboard.tsx",
         "summary": "Phone mockup showcasing the digiquant app — a device frame (matte bezel, dynamic-island, side buttons) wrapping a mock digiquant mobile dashboard."
       },
       {

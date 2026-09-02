@@ -57,7 +57,7 @@ def _skill_edit_path(slug: str) -> Path:
 #
 # Appended at the single load chokepoint rather than copied into 17 heterogeneous
 # files, so it cannot drift between them. Keep in sync with
-# digiquant.olympus.edit_mode.models.PatchOp / DocumentPatch — there is a test
+# digiquant.dashboard.edit_mode.models.PatchOp / DocumentPatch — there is a test
 # asserting path caps and that reason/summary have no max_length (#1740 / #3063).
 EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
 

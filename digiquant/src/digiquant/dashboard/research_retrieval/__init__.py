@@ -1,52 +1,52 @@
 """Olympus unified research + portfolio retrieval (spec §6.1).
 
 Phase 3 WP12.1 frozen research-state contracts live in
-:mod:`digiquant.olympus.research_retrieval.models` (prose remains a view).
-WP12.2 append-only store: :mod:`digiquant.olympus.research_retrieval.store`.
-WP12.3 preflight pin: :mod:`digiquant.olympus.research_retrieval.pin`.
+:mod:`digiquant.dashboard.research_retrieval.models` (prose remains a view).
+WP12.2 append-only store: :mod:`digiquant.dashboard.research_retrieval.store`.
+WP12.3 preflight pin: :mod:`digiquant.dashboard.research_retrieval.pin`.
 WP12.4 legacy inventory backfill:
-:mod:`digiquant.olympus.research_retrieval.legacy_backfill`.
+:mod:`digiquant.dashboard.research_retrieval.legacy_backfill`.
 WP12.5 compiled prose views:
-:mod:`digiquant.olympus.research_retrieval.views`.
+:mod:`digiquant.dashboard.research_retrieval.views`.
 WP11.1 ticker evidence bundles + amendments:
-:class:`~digiquant.olympus.research_retrieval.store.EvidenceBundleStore`
+:class:`~digiquant.dashboard.research_retrieval.store.EvidenceBundleStore`
 (models in the same ``models`` module; H6 selection cutover is WP11.3+;
 WP13.1 research attention policy extends ``research_retrieval/planner.py``).
 WP11.2 H5 publish:
-:mod:`digiquant.olympus.research_retrieval.evidence_bundle`
+:mod:`digiquant.dashboard.research_retrieval.evidence_bundle`
 (one base bundle per H5-attempted ticker before the provider call).
 WP11.3 deterministic H6 selection:
-:mod:`digiquant.olympus.research_retrieval.planner`
+:mod:`digiquant.dashboard.research_retrieval.planner`
 (``H6Selection`` reasons/features/budget; ``OLYMPUS_H6_SELECTION_MODE``).
 WP11.4 bounded H6 missing-fact amendment:
-:mod:`digiquant.olympus.research_retrieval.h6_amendment`
+:mod:`digiquant.dashboard.research_retrieval.h6_amendment`
 (one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
 WP13.2 attention persistence:
-:class:`~digiquant.olympus.research_retrieval.store.AttentionStore`
+:class:`~digiquant.dashboard.research_retrieval.store.AttentionStore`
 (plans/decisions/context manifests/policy evaluations; migration
 ``092_olympus_attention_context.sql``; storage only — WP13.3+ runtime wiring).
 WP13.5 shadow evaluation:
-:mod:`digiquant.olympus.research_retrieval.shadow_evaluation`
+:mod:`digiquant.dashboard.research_retrieval.shadow_evaluation`
 (reconcile plans to WP1 attempts + downstream artifacts; evidence-only).
 WP14.1 role context compiler:
-:mod:`digiquant.olympus.research_retrieval.context`
+:mod:`digiquant.dashboard.research_retrieval.context`
 (``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
 WP14.2 blinded H5/H6 context wiring:
-:mod:`digiquant.olympus.research_retrieval.context_wiring`
+:mod:`digiquant.dashboard.research_retrieval.context_wiring`
 (``OLYMPUS_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
 WP14.3 H7 decision context wiring:
-:mod:`digiquant.olympus.research_retrieval.h7_decision_context`
+:mod:`digiquant.dashboard.research_retrieval.h7_decision_context`
 (typed mandate/calibration/contribution/risk/authorization/forecast sections;
-:mod:`digiquant.olympus.research_retrieval.h7_prerequisites` preflight snapshot).
+:mod:`digiquant.dashboard.research_retrieval.h7_prerequisites` preflight snapshot).
 WP14.4 drill-down manifest pinning:
-:mod:`digiquant.olympus.research_retrieval.tools`
+:mod:`digiquant.dashboard.research_retrieval.tools`
 (``OLYMPUS_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
-WP1 token linkage via :class:`~digiquant.olympus.research_retrieval.store.RoleRetrievalManifestStore`).
+WP1 token linkage via :class:`~digiquant.dashboard.research_retrieval.store.RoleRetrievalManifestStore`).
 """
 
 from __future__ import annotations
 
-from digiquant.olympus.research_retrieval.blinding import (
+from digiquant.dashboard.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
     PromptRole,
     RetrievalPhase,
@@ -57,8 +57,8 @@ from digiquant.olympus.research_retrieval.blinding import (
     research_document_allowed,
     strip_blinded_forbidden_keys,
 )
-from digiquant.olympus.research_retrieval.cache import ResearchCache
-from digiquant.olympus.research_retrieval.context import (
+from digiquant.dashboard.research_retrieval.cache import ResearchCache
+from digiquant.dashboard.research_retrieval.context import (
     CONTEXT_SCHEMA_VERSION,
     ContextCapsule,
     ContextCompileInput,
@@ -74,7 +74,7 @@ from digiquant.olympus.research_retrieval.context import (
     default_role_context_policy,
     role_context_policy_content_hash,
 )
-from digiquant.olympus.research_retrieval.context_wiring import (
+from digiquant.dashboard.research_retrieval.context_wiring import (
     OLYMPUS_CONTEXT_COMPILER_MODE_ENV,
     ContextCompilerMode,
     RoleContextWireResult,
@@ -88,7 +88,7 @@ from digiquant.olympus.research_retrieval.context_wiring import (
     wire_h6_phase_inputs,
     wire_h7_phase_inputs,
 )
-from digiquant.olympus.research_retrieval.evidence_bundle import (
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
     OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
     EvidenceConflict,
     H5EvidenceBundleBuild,
@@ -101,7 +101,7 @@ from digiquant.olympus.research_retrieval.evidence_bundle import (
     publish_h5_evidence_bundle,
     resolve_h5_state_version_id,
 )
-from digiquant.olympus.research_retrieval.h6_amendment import (
+from digiquant.dashboard.research_retrieval.h6_amendment import (
     H6_AMENDMENT_POLICY_MAX_PER_BASE,
     H6AmendmentOutcome,
     H6AmendmentResult,
@@ -110,7 +110,7 @@ from digiquant.olympus.research_retrieval.h6_amendment import (
     retrieve_missing_fact_evidence,
     validate_missing_fact_proposal,
 )
-from digiquant.olympus.research_retrieval.h7_decision_context import (
+from digiquant.dashboard.research_retrieval.h7_decision_context import (
     H7ContextSection,
     H7DecisionContext,
     H7DecisionContextCompileInput,
@@ -121,14 +121,14 @@ from digiquant.olympus.research_retrieval.h7_decision_context import (
     compile_h7_decision_context,
     strip_h7_weight_keys,
 )
-from digiquant.olympus.research_retrieval.h7_prerequisites import build_h7_prerequisite_snapshot
-from digiquant.olympus.research_retrieval.legacy_backfill import (
+from digiquant.dashboard.research_retrieval.h7_prerequisites import build_h7_prerequisite_snapshot
+from digiquant.dashboard.research_retrieval.legacy_backfill import (
     BackfillCounts,
     LegacySourceDocument,
     backfill_legacy_manifests,
     build_legacy_document_ref,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
     EvidenceBundleAmendment,
@@ -146,7 +146,7 @@ from digiquant.olympus.research_retrieval.models import (
     TickerEvidenceBundle,
     TypedProvenance,
 )
-from digiquant.olympus.research_retrieval.pin import (
+from digiquant.dashboard.research_retrieval.pin import (
     STATE_UNAVAILABLE,
     ResearchStatePinResult,
     ResearchStateUnavailableError,
@@ -154,7 +154,7 @@ from digiquant.olympus.research_retrieval.pin import (
     pin_research_state_for_preflight,
     require_research_state_pin,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     OLYMPUS_H6_SELECTION_MODE_ENV,
     AttentionBudgetEstimate,
@@ -183,7 +183,7 @@ from digiquant.olympus.research_retrieval.planner import (
     resolve_h6_selection_mode,
     select_h6,
 )
-from digiquant.olympus.research_retrieval.queries import (
+from digiquant.dashboard.research_retrieval.queries import (
     RetrievalDocumentAllowlist,
     RetrievalManifestMode,
     RetrievalQueryPin,
@@ -193,8 +193,8 @@ from digiquant.olympus.research_retrieval.queries import (
     query_portfolio,
     query_research,
 )
-from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
-from digiquant.olympus.research_retrieval.shadow_evaluation import (
+from digiquant.dashboard.research_retrieval.retriever import ResearchRetriever
+from digiquant.dashboard.research_retrieval.shadow_evaluation import (
     AttentionDownstreamOutcomes,
     ResearchPolicyShadowEvaluationReport,
     ShadowDecisionEvaluationRow,
@@ -202,7 +202,7 @@ from digiquant.olympus.research_retrieval.shadow_evaluation import (
     evaluate_research_policy_shadow,
     write_shadow_evaluation_report,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     AttentionStore,
     AttentionStoreConflict,
@@ -226,7 +226,7 @@ from digiquant.olympus.research_retrieval.store import (
     provider_attempt_token_link_id,
     role_context_manifest_record_id,
 )
-from digiquant.olympus.research_retrieval.tools import (
+from digiquant.dashboard.research_retrieval.tools import (
     OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV,
     RESEARCH_TOOLS,
     build_research_tool_dispatcher,
@@ -235,7 +235,7 @@ from digiquant.olympus.research_retrieval.tools import (
     resolve_retrieval_manifest_mode,
     retrieval_pin_from_wire_result,
 )
-from digiquant.olympus.research_retrieval.views import (
+from digiquant.dashboard.research_retrieval.views import (
     COMPILED_BRIEF_DOCUMENT_KEY,
     COMPILED_DIGEST_DOCUMENT_KEY,
     VIEW_SCHEMA_VERSION,

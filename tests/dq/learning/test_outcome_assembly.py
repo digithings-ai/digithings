@@ -14,15 +14,15 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.accounting.models import PeriodStatus
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.dashboard.accounting.models import PeriodStatus
+from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
     DecisionIntent,
@@ -37,7 +37,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     TargetAdjustmentType,
     paper_execution_id,
 )
-from digiquant.olympus.learning.outcome_assembly import (
+from digiquant.dashboard.learning.outcome_assembly import (
     AccountingSlice,
     AssemblyPassResult,
     CostEvidenceRef,
@@ -47,13 +47,13 @@ from digiquant.olympus.learning.outcome_assembly import (
     SymbolLineage,
     session_close_utc,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     EpisodeDisposition,
     OutcomeQualityCode,
     UnavailableReason,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
 
 pytestmark = pytest.mark.unit
 

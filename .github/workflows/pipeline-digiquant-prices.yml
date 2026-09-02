@@ -40,7 +40,7 @@ on:
     #   * NOT a multiple of 15, so it never shares a minute with an intraday tick —
     #     `digiquant-prices-intraday` is a per-job concurrency group and does not
     #     cover this job, and two concurrent yfinance pulls are a rate-limit risk;
-    #   * done before 22:00 UTC, because pipeline-atlas-metrics.yml's `0 22` cron
+    #   * done before 22:00 UTC, because pipeline-research-metrics.yml's `0 22` cron
     #     documents that it must run after this ingest. Worst case at the 20-minute
     #     timeout is 21:45, leaving ~15 min of margin (was ~40 min).
     # Disjoint MINUTES is not disjoint RUNS: the 21:30 / 21:45 intraday ticks now
@@ -240,7 +240,7 @@ jobs:
           if [ "$FORCE_IN_WINDOW" = "true" ]; then
             ARGS+=(--force)
           fi
-          python3 digiquant/scripts/atlas/market_open_gate.py "${ARGS[@]}" >> "$GITHUB_OUTPUT"
+          python3 digiquant/scripts/research/market_open_gate.py "${ARGS[@]}" >> "$GITHUB_OUTPUT"
 
   at-open:
     name: Execute at open (position_events)
@@ -277,7 +277,7 @@ jobs:
         # invent OPEN/EXIT into append-only 069 rows. `--require-ledger` turns a decline into
         # exit 3 instead of silently falling back to prose.
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance --require-ledger
+          uv run --frozen --no-sync python digiquant/scripts/research/execute_at_open.py --prior-trading-day-rebalance --require-ledger
 
   eod-macro:
     name: EOD macro ingest

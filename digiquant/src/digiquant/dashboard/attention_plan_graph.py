@@ -10,18 +10,18 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.atlas.triage import triage_decision_to_signal
-from digiquant.olympus.attention_plan import PlannerMode, plan_attention_shadow
-from digiquant.olympus.attention_plan_io import (
+from digiquant.research.state import AtlasResearchState, PublishedArtifact
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.research.triage import triage_decision_to_signal
+from digiquant.dashboard.attention_plan import PlannerMode, plan_attention_shadow
+from digiquant.dashboard.attention_plan_io import (
     AttentionPlanPublishError,
     publish_attention_plan_shadow,
 )
-from digiquant.olympus.edit_mode.content_identity import prior_content_date
-from digiquant.olympus.edit_mode.models import ArtifactKey, PriorPublished, TriageSignal
-from digiquant.olympus.edit_mode.prior import artifact_document_key
-from digiquant.olympus.envcompat import PLANNER_MODE, env_lookup
+from digiquant.dashboard.edit_mode.content_identity import prior_content_date
+from digiquant.dashboard.edit_mode.models import ArtifactKey, PriorPublished, TriageSignal
+from digiquant.dashboard.edit_mode.prior import artifact_document_key
+from digiquant.dashboard.envcompat import PLANNER_MODE, env_lookup
 
 logger = logging.getLogger(__name__)
 

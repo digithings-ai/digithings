@@ -21,8 +21,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.accounting.models import FillSide, PeriodFill
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.dashboard.accounting.models import FillSide, PeriodFill
+from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
     DecisionIntent,
     OrderIntent,

@@ -7,15 +7,15 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation
-from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker
+from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.ticker_fingerprint import news_hash_for_ticker
 
 
 def _quiet_state() -> AtlasResearchState:

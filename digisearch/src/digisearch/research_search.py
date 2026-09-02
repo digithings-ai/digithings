@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any  # score:allow untyped any — MCP search result dicts
 
-from digisearch.atlas_ingest import ATLAS_FILTERABLE_FIELDS, ATLAS_INDEX_NAME
+from digisearch.research_ingest import ATLAS_FILTERABLE_FIELDS, ATLAS_INDEX_NAME
 from digisearch.core.models import Query
 from digisearch.search._stub import query_index
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.envcompat import (
+from digiquant.dashboard.envcompat import (
     ATTEMPT,
     EXECUTION_ROUTING,
     OVERLAY_PERSIST,
@@ -13,8 +13,8 @@ from digiquant.olympus.envcompat import (
     STAGING_USER_JWT,
     env_lookup,
 )
-from digiquant.olympus.kairos.policy import routing_enabled, routing_enabled_in
-from digiquant.olympus.overlay.persist import overlay_persist_enabled
+from digiquant.execution.policy import routing_enabled, routing_enabled_in
+from digiquant.dashboard.overlay.persist import overlay_persist_enabled
 
 pytestmark = pytest.mark.unit
 
@@ -76,7 +76,7 @@ def test_staging_jwt_alias() -> None:
 
 
 def test_attempt_alias_for_house_workflow_export() -> None:
-    """pipeline-olympus.yml still exports OLYMPUS_ATTEMPT; do not rename that file today."""
+    """pipeline-digiquant.yml still exports OLYMPUS_ATTEMPT; do not rename that file today."""
     env = {"OLYMPUS_ATTEMPT": "3"}
     assert env_lookup(ATTEMPT, environ=env) == "3"
 
@@ -94,20 +94,20 @@ def test_operator_scripts_use_digiquant_prefix() -> None:
     )
     for name in expected:
         assert (scripts / name).is_file(), name
-    # GHA ``kairos-cron-check.yml`` is protected on cursor/*; wrapper stays until
+    # GHA ``execution-cron-check.yml`` is protected on cursor/*; wrapper stays until
     # a feat/ hop renames the workflow.
-    leftover = [p.name for p in scripts.glob("kairos_*.py") if p.name != "kairos_cron_check.py"]
+    leftover = [p.name for p in scripts.glob("kairos_*.py") if p.name != "execution_cron_check.py"]
     assert leftover == [], leftover
-    assert (scripts / "kairos_cron_check.py").is_file()
+    assert (scripts / "execution_cron_check.py").is_file()
 
 
 def test_cron_probe_workflow_keeps_house_pipeline_separate() -> None:
-    installed = REPO_ROOT / ".github" / "workflows" / "kairos-cron-check.yml"
+    installed = REPO_ROOT / ".github" / "workflows" / "execution-cron-check.yml"
     spec = (
-        REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
+        REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "execution-cron-check.workflow.yml"
     )
     assert installed.is_file()
     assert spec.is_file()
     blob = installed.read_text(encoding="utf-8")
-    assert "pipeline-olympus.yml" in blob
-    assert "scripts/kairos_cron_check.py" in blob or "scripts/digiquant_cron_check.py" in blob
+    assert "pipeline-digiquant.yml" in blob
+    assert "scripts/execution_cron_check.py" in blob or "scripts/digiquant_cron_check.py" in blob

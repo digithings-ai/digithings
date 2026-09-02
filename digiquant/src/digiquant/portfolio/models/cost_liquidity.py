@@ -1,10 +1,10 @@
 """Observational cost and liquidity contracts (#2703 / WP7.2).
 
 Strict Pydantic v2 models for prospective trade economics and expected-vs-realized
-comparison. Pure estimation lives in :mod:`digiquant.olympus.hermes.cost_liquidity`.
+comparison. Pure estimation lives in :mod:`digiquant.portfolio.cost_liquidity`.
 Phase 1 is observational only — estimates do not veto or resize actions.
 
-Style mirrors :mod:`digiquant.olympus.hermes.models.forecast_calibration`: frozen,
+Style mirrors :mod:`digiquant.portfolio.models.forecast_calibration`: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, Decimal economics, UUID5 identity,
 content hashes.
 """
@@ -27,7 +27,7 @@ from pydantic import (
     model_validator,
 )
 
-from digiquant.olympus.hermes.action_cost_inputs import ActionCostSide
+from digiquant.portfolio.action_cost_inputs import ActionCostSide
 
 _ACTION_COST_ESTIMATE_ID_NAMESPACE = UUID("a903c14e-6d2f-7a18-9e4b-1c2d3e4f5a60")
 _LIQUIDITY_SNAPSHOT_ID_NAMESPACE = UUID("b014d25f-7e30-8b29-af5c-2d3e4f607b71")

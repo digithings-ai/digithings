@@ -12,39 +12,39 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.decision_log import (
+from digiquant.research.decision_log import (
     ReflectorOutput,
     persist_pending,
     resolve_pending,
 )
-from digiquant.olympus.atlas.graph import AtlasGraphDeps, AtlasInput
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.graph import AtlasGraphDeps, AtlasInput
+from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
     build_preflight_node,
     build_preflight_reflect_node,
 )
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.atlas.supabase_io import upsert_onchain_cohort_positioning
-from digiquant.olympus.hermes.chain import ChainDeps, _run_beliefs_fold
-from digiquant.olympus.hermes.graph import HermesGraphDeps
-from digiquant.olympus.hermes.models.thesis import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.research.supabase_io import upsert_onchain_cohort_positioning
+from digiquant.portfolio.chain import ChainDeps, _run_beliefs_fold
+from digiquant.portfolio.graph import HermesGraphDeps
+from digiquant.portfolio.models.thesis import (
     ThesisReviewOutput,
     ThesisStatusUpdate,
     ThesisVehicleMapOutput,
     ThesisVehicleMapping,
 )
-from digiquant.olympus.hermes.portfolio_materialize import MaterializeDeps, build_materialize_node
-from digiquant.olympus.hermes.writers.analyst_io import upsert_analyst_coverage
-from digiquant.olympus.hermes.writers.thesis_io import (
+from digiquant.portfolio.portfolio_materialize import MaterializeDeps, build_materialize_node
+from digiquant.portfolio.writers.analyst_io import upsert_analyst_coverage
+from digiquant.portfolio.writers.thesis_io import (
     persist_thesis_review,
     persist_thesis_vehicle_map,
     upsert_thesis_row,
     upsert_thesis_vehicles,
 )
-from digiquant.olympus.learning.beliefs_distillation import distill_beliefs
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.learning.beliefs_distillation import distill_beliefs
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -346,7 +346,7 @@ def test_overlay_preflight_reflect_skips_decision_log(
         return 0
 
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases.preflight.resolve_pending",
+        "digiquant.research.phases.preflight.resolve_pending",
         fake_resolve_pending,
     )
     node = build_preflight_reflect_node(PreflightReflectDeps(client=FakeSupabaseClient()))
@@ -446,7 +446,7 @@ def test_overlay_preflight_injects_onchain_without_persisting(
         config=AtlasConfigBundle(workspace_id=str(overlay)),
     )
     with patch(
-        "digiquant.olympus.atlas.phases.preflight.get_onchain_cohort_positioning",
+        "digiquant.research.phases.preflight.get_onchain_cohort_positioning",
         lambda: cohort_summary_to_positioning(summary),
     ):
         out = node(overlay_state)
@@ -490,7 +490,7 @@ def test_overlay_beliefs_fold_does_not_run(
         config=AtlasConfigBundle(workspace_id=str(overlay)),
     )
     with patch(
-        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         side_effect=AssertionError("overlay must not fold house decision_log"),
     ):
         _run_beliefs_fold(
@@ -512,7 +512,7 @@ def test_overlay_beliefs_fold_does_not_run(
         config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
     )
     with patch(
-        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         house_fold,
     ):
         _run_beliefs_fold(
@@ -522,7 +522,7 @@ def test_overlay_beliefs_fold_does_not_run(
         )
     omitted_state = AtlasResearchState(run_type="delta", run_date=_RUN)
     with patch(
-        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         house_fold,
     ):
         _run_beliefs_fold(
@@ -536,7 +536,7 @@ def test_overlay_beliefs_fold_does_not_run(
 def test_overlay_distill_beliefs_does_not_stamp_house_rows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.learning import beliefs_distillation as mod
+    from digiquant.dashboard.learning import beliefs_distillation as mod
 
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
@@ -603,8 +603,8 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
     That state used to have ``workspace_id=None``, so beliefs fold took the
     house path and stamped ``beliefs_folded_at`` on every unfolded row.
     """
-    from digiquant.olympus.hermes.chain import run_atlas_then_hermes
-    from digiquant.olympus.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import run_atlas_then_hermes
+    from digiquant.dashboard.learning import beliefs_distillation as mod
 
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
@@ -631,7 +631,7 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
         hermes=HermesGraphDeps(),
     )
     with patch(
-        "digiquant.olympus.hermes.chain.build_atlas_graph",
+        "digiquant.portfolio.chain.build_atlas_graph",
         return_value=_BoomAtlasGraph(),
     ):
         run_atlas_then_hermes(
@@ -646,8 +646,8 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
 def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.hermes.chain import DiagnosticsDeps, run_atlas_then_hermes
-    from digiquant.olympus.learning import beliefs_distillation as mod
+    from digiquant.portfolio.chain import DiagnosticsDeps, run_atlas_then_hermes
+    from digiquant.dashboard.learning import beliefs_distillation as mod
 
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
@@ -676,7 +676,7 @@ def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
         diagnostics=DiagnosticsDeps(client=object(), run_id="r1"),
     )
     with (
-        patch("digiquant.olympus.atlas.diagnostics.write_row", _capture),
+        patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(RuntimeError, match="loader exploded"),
     ):
         run_atlas_then_hermes(

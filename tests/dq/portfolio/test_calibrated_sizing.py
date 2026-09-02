@@ -11,7 +11,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -22,9 +22,9 @@ from digiquant.olympus.hermes.allocation_contracts import (
     PriorBookSnapshot,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import allocation_bundle_content_hash
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.allocation_hashes import allocation_bundle_content_hash
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.sizing import (
     SizingCaps,
     TickerRisk,
     calibrated_raw_score,
@@ -233,7 +233,7 @@ def test_rank_gap_change_with_fixed_forecasts_does_not_change_raw_weights() -> N
 
 def test_h5_stance_does_not_affect_calibrated_eligibility() -> None:
     """H7 memo path stamps buy even when H5 says sell; calibrated sizing uses that map."""
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     memo = PMDirectionMemo(
         date=_SESSION,
@@ -365,14 +365,14 @@ def test_identical_raw_weights_yield_identical_post_control_book() -> None:
 def test_calibrated_book_stamps_bundle_hash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
@@ -386,11 +386,11 @@ def test_calibrated_book_stamps_bundle_hash(
     artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
 
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
 
@@ -438,14 +438,14 @@ def test_calibrated_book_stamps_bundle_hash(
 def test_empty_calibrated_coverage_falls_back_to_incumbent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.atlas.state import (
+    from digiquant.research.state import (
         AtlasConfigBundle,
         AtlasResearchState,
         PhaseHermesState,
     )
-    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+    from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.phases.phase7e_risk_sizing import (
         RiskSizingDeps,
         build_risk_sizing_node,
     )
@@ -459,11 +459,11 @@ def test_empty_calibrated_coverage_falls_back_to_incumbent(
     cov = _covariance(("AAPL",))
     artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: base,
     )
     monkeypatch.setattr(

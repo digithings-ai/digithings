@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 from digiquant.notify.mailgun import missing_mailgun_env_names
-from digiquant.olympus.kairos.cron_check import (
+from digiquant.execution.cron_check import (
     cron_check_exit_code,
     format_cron_check_failure,
     mailgun_check_exit_code,
     main,
     run_cron_checks,
 )
-from digiquant.olympus.kairos.sync_cron import missing_kairos_sync_env_names
-from digiquant.olympus.overlay.cron import missing_overlay_cron_env_names
+from digiquant.execution.sync_cron import missing_kairos_sync_env_names
+from digiquant.dashboard.overlay.cron import missing_overlay_cron_env_names
 
 pytestmark = pytest.mark.unit
 

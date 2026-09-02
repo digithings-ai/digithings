@@ -9,7 +9,7 @@ reconciliation identity: Σ total_attribution == portfolio_return − benchmark_
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.attribution import (
+from digiquant.research.attribution import (
     Holding,
     attribution_rows_to_records,
     compute_current_book_lookback,

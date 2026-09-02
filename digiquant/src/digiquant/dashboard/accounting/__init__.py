@@ -5,8 +5,8 @@ views are Task 3.4. Portfolio/accounting tables are user-private — never grant
 base-table access.
 """
 
-from digiquant.olympus.accounting.engine import compute_period, period_id_for_input
-from digiquant.olympus.accounting.io import (
+from digiquant.dashboard.accounting.engine import compute_period, period_id_for_input
+from digiquant.dashboard.accounting.io import (
     AccountingPersistError,
     PersistResult,
     contribution_row_id,
@@ -17,7 +17,7 @@ from digiquant.olympus.accounting.io import (
     persist_period,
     select_final_period,
 )
-from digiquant.olympus.accounting.models import (
+from digiquant.dashboard.accounting.models import (
     AccountingPeriod,
     AccountingPolicy,
     BenchmarkBoundary,

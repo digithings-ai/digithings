@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,

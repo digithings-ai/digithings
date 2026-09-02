@@ -7,10 +7,10 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, PriorContext
-from digiquant.olympus.hermes.models.thesis import MarketThesisExplorationOutput, ThesisProposal
-from digiquant.olympus.hermes.phases.h2_market_thesis_exploration import _reviewed_status_by_id
-from digiquant.olympus.hermes.writers.thesis_io import (
+from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.portfolio.models.thesis import MarketThesisExplorationOutput, ThesisProposal
+from digiquant.portfolio.phases.h2_market_thesis_exploration import _reviewed_status_by_id
+from digiquant.portfolio.writers.thesis_io import (
     persist_market_thesis_exploration,
     upsert_thesis_row,
     validate_market_thesis_proposals,

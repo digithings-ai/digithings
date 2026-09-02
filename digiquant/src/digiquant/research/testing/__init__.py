@@ -11,7 +11,7 @@ See ``simulator.py`` for the dispatch table + override mechanism.
 
 from __future__ import annotations
 
-from digiquant.olympus.atlas.testing.simulator import (
+from digiquant.research.testing.simulator import (
     DEFAULT_RESPONSES,
     QUIET_DAY_LLM_BUDGET,
     QUIET_DAY_MIN_PATCH_RATIO,

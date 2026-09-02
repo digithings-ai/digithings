@@ -8,14 +8,14 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.olympus.atlas import forecast_outcomes as fo
-from digiquant.olympus.atlas import forecast_registry as fr
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research import forecast_outcomes as fo
+from digiquant.research import forecast_registry as fr
+from digiquant.research.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
 )
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.state import AtlasResearchState
+from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
     PriceAnchor,
@@ -24,7 +24,7 @@ from digiquant.olympus.hermes.models.forecast import (
     forecast_terms_content_hash,
     materialize_forecast_amendment,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import OutcomeStatus
+from digiquant.portfolio.models.forecast_calibration import OutcomeStatus
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient, _FakeQuery, _FakeResponse
 
@@ -117,7 +117,7 @@ def _assessment(
 ) -> ForecastAssessment:
     terms = _terms(horizon=horizon)
     ch = forecast_terms_content_hash(terms)
-    from digiquant.olympus.hermes.models.forecast import forecast_assessment_id
+    from digiquant.portfolio.models.forecast import forecast_assessment_id
 
     if observed_anchor:
         anchor = PriceAnchor(
@@ -417,11 +417,11 @@ class TestPreflightReflectWiring:
             return fo.OutcomeResolveResult(resolved=0)
 
         monkeypatch.setattr(
-            "digiquant.olympus.atlas.phases.preflight.resolve_pending",
+            "digiquant.research.phases.preflight.resolve_pending",
             fake_resolve_pending,
         )
         monkeypatch.setattr(
-            "digiquant.olympus.atlas.phases.preflight.resolve_matured_forecast_outcomes",
+            "digiquant.research.phases.preflight.resolve_matured_forecast_outcomes",
             fake_resolve_outcomes,
         )
         node = build_preflight_reflect_node(PreflightReflectDeps(client=OutcomesFake()))

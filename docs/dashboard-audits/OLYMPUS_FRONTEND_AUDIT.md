@@ -1,6 +1,6 @@
 # Olympus Architecture Audit — Step 2 (Frontend / Dashboard)
 
-> **Scope.** Page-by-page audit of the Olympus dashboard (`frontend/olympus/`, Next.js static
+> **Scope.** Page-by-page audit of the Olympus dashboard (`frontend/dashboard/`, Next.js static
 > export, reads prod Supabase via anon key): is every view rendering the right data, correctly,
 > and optimally for a PM to review the research/deliberation/decisions and decide whether to
 > follow the book? Cross-referenced against the Step-1 persistence map (`OLYMPUS_ARCHITECTURE_AUDIT.md`).
@@ -119,7 +119,7 @@ pieces, and add a one-line "enabled after <X>" note to each gated EmptyState.
    **Obsolete 2026-08-01:** there is no Analysis tab to replace this with — the redesign reduced
    Portfolio to Holdings · Theses · Performance · Attribution (`PortfolioSectionNav.tsx`), `analysis`
    survives only as a legacy URL alias redirecting to `theses`, and no Track-B artifact filtering
-   remains anywhere in `frontend/olympus`.
+   remains anywhere in `frontend/dashboard`.
 8. *(minor)* `PerformanceToPortfolioRedirectPage` lacks the Suspense boundary its siblings have;
    `NEXT_PUBLIC_OLYMPUS_VERSION` defaults to `"v0.1 · dev"` in chrome if unset; command-palette digest
    path filter checks `d.path === 'digest'`.

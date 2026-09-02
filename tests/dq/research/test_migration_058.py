@@ -27,8 +27,8 @@ from types import ModuleType
 
 import pytest
 
-# Explicit, because tests/dq/atlas/test_migration_051.py omits it and has therefore never
-# run in test-atlas-graph.yml (`pytest -m unit tests/dq/atlas/`). Do not drop this line.
+# Explicit, because tests/dq/research/test_migration_051.py omits it and has therefore never
+# run in test-research-graph.yml (`pytest -m unit tests/dq/research/`). Do not drop this line.
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -73,7 +73,7 @@ def statements(sql: str) -> str:
 
 @pytest.fixture(scope="module")
 def tearsheet() -> ModuleType:
-    """``digiquant/scripts/atlas/update_tearsheet.py``, imported the way test_etl.py does."""
+    """``digiquant/scripts/research/update_tearsheet.py``, imported the way test_etl.py does."""
     if str(ATLAS_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(ATLAS_SCRIPTS))
     return importlib.import_module("update_tearsheet")

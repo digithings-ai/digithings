@@ -1150,11 +1150,11 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   selects the digithings **house** default (always-on, immutable); an overlay pin
   fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
   not fork the graph or cancel the house run. Models:
-  `digiquant.olympus.profile_config`.
+  `digiquant.dashboard.profile_config`.
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
-  research trees. Models/store: `digiquant.olympus.research_corpus`.
+  research trees. Models/store: `digiquant.dashboard.research_corpus`.
   **Phase 3 research-state contracts (#2841 / WP12.1, hardened #2856).** Frozen/extra-forbid
   Pydantic models in `olympus/research_retrieval/models.py`
   (`EvidenceRecord`, `BeliefVersion`, `ExpectedEventVersion`, `ResearchPatch`,
@@ -1248,19 +1248,19 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   ``DeliberationSummary`` and continue on the H5 base. WP11.5
   (`EvidenceBundleStore.dump_snapshot` / `from_snapshot`, simulator
   `evidence_bundle_store` + `invoke_through_h5` / `invoke_hermes_from_h6`,
-  `tests/dq/atlas/test_pipeline_simulation.py::TestDurableH5H6LineageRoundTrip`)
+  `tests/dq/research/test_pipeline_simulation.py::TestDurableH5H6LineageRoundTrip`)
   proves H5 bases + H6 amendments survive store serialize/reload across the
   H5→H6 checkpoint boundary with byte-equivalent lineage, two-round floor,
   accepted/invalid amendment provenance, and no generic H6 ``live_search``.
   WP11 closes on develop when this lands.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
-  decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
+  decisions + stable `RefreshReasonCode`s via `digiquant.dashboard.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
   `off` \| `shadow` only (no enforce); `actuated` is always false. House
   ProfileConfig is the default pin; overlay pins fail closed when missing. The
   planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
   **Research attention policy (#2918 / WP13.1).** Versioned YAML at
-  `digiquant/config/olympus_research_policy.yaml` (override via
+  `digiquant/config/research_policy.yaml` (override via
   `OLYMPUS_RESEARCH_POLICY_PATH`) defines thresholds, session budgets, mode
   estimates, and exploration floor — not hard-coded in planner source.
   `research_retrieval/planner.py` exposes `AttentionFeatures`,
@@ -1377,7 +1377,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   prior-authorization sections when pinned; consuming-run episodes are excluded. Unwired
   `outcome_maturation_deps` → typed `store_unavailable` (legacy paths continue).
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
-  graph construction (`digiquant.olympus.temporal`). Registry readers must call
+  graph construction (`digiquant.dashboard.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
   fallback). Checkpoint resume preserves the pinned value; naive / non-UTC
   stamps are rejected at capture and on the state field validator.
@@ -1492,7 +1492,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   missing → 0.5). Downstream caps/corr/vol/breaker/grid/continuity stay in the
   same order; confidence is a reduce-only haircut after vol-target so leftover
   cash is not redistributed. WP8.5 locks that shell in
-  `tests/dq/hermes/test_allocation_invariants.py` (explicit
+  `tests/dq/portfolio/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
   **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** the same
@@ -1526,11 +1526,11 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `OLYMPUS_SHADOW_ARTIFACT_MODE=export` (default) into
   `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Fail-soft — export
   failure never reruns or mutates H8/H9. No challenger optimizer, replay, or
-  broker imports on the production path; `pipeline-olympus.yml` uploads
+  broker imports on the production path; `pipeline-digiquant.yml` uploads
   `shadow-allocation-*.json` with run artifacts for WP10.2+ isolation.
   **Write-denied shadow workflow (#2762 / WP10.2):**
-  `pipeline-olympus-allocation-shadow.yml` +
-  `digiquant/scripts/atlas/check_allocation_shadow_isolation.py` enforce
+  `pipeline-digiquant-allocation-shadow.yml` +
+  `digiquant/scripts/research/check_allocation_shadow_isolation.py` enforce
   artifact-in / file-out isolation (no `secrets: inherit`, no production
   credentials, read-only permissions, trusted producer workflow/branch,
   schema/hash gates). Disable the shadow workflow to roll back without
@@ -1550,7 +1550,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   **Paired shadow comparison evidence (#2799 / WP10.5):**
   `olympus/replay/allocation_comparison.py` + packaged
   `replay/shadow_criteria/v1.json` + CLI
-  `digiquant/scripts/atlas/compare_allocation_shadow.py`. Loads frozen criteria
+  `digiquant/scripts/research/compare_allocation_shadow.py`. Loads frozen criteria
   before inspecting arm results; requires identical data/cost/execution hashes;
   emits absolute + paired metrics with explicit unavailable/inconclusive leaves;
   hard-constraint breaches stay visible even when challenger return is stronger;
@@ -1666,7 +1666,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   approval without activation, and byte-stable rerun hashes. Production policy
   activation remains external.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
-  `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
+  `tests/dq/portfolio/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
   ownership, rank-gap independence of calibrated magnitude, final-book report
   bind, H9 hash validation without report rebuild, byte-stable shadow artifacts,
@@ -1674,8 +1674,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   and hard-failure visibility on shared-cash replay. Challenger selection and
   live trading remain disabled.
   **Phase 3 lock surface (#3019 / Integration 3.1):**
-  `tests/dq/hermes/test_phase3_research_contracts.py` (+
-  `phase3_e2e_fixtures.py`, extended `tests/dq/atlas/test_pipeline_simulation.py`)
+  `tests/dq/portfolio/test_phase3_research_contracts.py` (+
+  `phase3_e2e_fixtures.py`, extended `tests/dq/research/test_pipeline_simulation.py`)
   pins Gate 3 composition across WP11–WP14 — one A0–A4/H1–H9 graph with no
   planner node/service, H4 roster preservation under shadow attention routing,
   immutable H5 bundles + H6 amendments (no broad live search), H6 two-round floor
@@ -1683,7 +1683,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   pinned research-state version, byte-identical exact-version replay and evidence
   bundle serialize/reload, and pre-call manifest → WP1 token reconciliation.
   Rollout stays `off`/`shadow` only — no runtime policy promotion or second graph.
-  Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
+  Glass-box persistence (#1945 / #2622): `digiquant.dashboard.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
   `attention_plan_graph.maybe_publish_attention_plan_shadow` runs inside Atlas
@@ -1699,7 +1699,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `opportunity_screen`). Overlay uses `hermes_document_key` for Hermes keys; Atlas
   inspectable keys stay unprefixed with `workspace_id` on the row.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
-  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
+  `edit` emits `DocumentPatch` ops merged via `digiquant.dashboard.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
   appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
   LLM `PatchOp.op='add'` (RFC 6902's name for that write) maps onto `set` so a
@@ -1778,7 +1778,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Roster width lands in `atlas_run_diagnostics.breakdown` via
   `hermes/roster_diagnostics.roster_breakdown`.
 
-The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload` — the only symbol
+The handoff seam is `digiquant.research.snapshot.DigestPayload` — the only symbol
 Hermes imports from Atlas runtime.
 
 **Not in v1:** `OLYMPUS_HERMES_LITE`, `build_hermes_phases_lite`, `run_type=baseline|delta`
@@ -1908,7 +1908,7 @@ portfolio return. `net_return_pct` is the simple return between the first and la
 stored NAV observations; `benchmark_return_pct` uses the first and latest benchmark
 closes available inside that NAV date range; `relative_return_pct` is their arithmetic
 difference in percentage points. All metric writers use
-`digiquant.olympus.performance_returns.calculate_performance_returns`; frontend clients
+`digiquant.dashboard.performance_returns.calculate_performance_returns`; frontend clients
 must read these fields when present. The Olympus Performance view fills only missing
 fields with the same deterministic first/latest calculation over live `nav_history` and
 the benchmark closes inside that exact NAV window, and labels the result as a live-history
@@ -1974,14 +1974,14 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 
 ### Atlas (research)
 
-- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(deps, watchlist)`
-  plus `digiquant.olympus.atlas.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
+- Entry point: `digiquant.research.graph.build_atlas_graph(deps, watchlist)`
+  plus `digiquant.research.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
 - **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
   `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
-  or Sunday cron (see `.github/workflows/pipeline-olympus.yml`).
+  or Sunday cron (see `.github/workflows/pipeline-digiquant.yml`).
 - Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
-  Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+  Loaded via `digiquant.research.skills.load_skill`.
   **Two shared instruction blocks are appended at the loader, not copied into the ~20 SKILL.md
   files** — a single chokepoint cannot drift between them. `EDIT_SCHEMA_CONSTRAINTS` (#1740) goes
   on edit skills only; `QUANTITATIVE_FINDING_RULES` (#1750) goes on **both** variants, because
@@ -1999,25 +1999,25 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   not carry the sector baseline; summary/label fill only from explicit prose aliases
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.
-- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
+- Standalone CLI: `python -m digiquant.research.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
 
 ### Hermes (thesis-aware portfolio loop)
 
 - Entry points:
-  - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+  - `digiquant.portfolio.chain.run_atlas_then_hermes(atlas_input, deps)` —
     end-to-end: Atlas (no publish) → Hermes H1–H9 → `publish_phase` (Atlas only).
-    Cron: `python -m digiquant.olympus.hermes.chain --cadence daily`
-    (`.github/workflows/pipeline-olympus.yml`).
-  - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
-    `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
+    Cron: `python -m digiquant.portfolio.chain --cadence daily`
+    (`.github/workflows/pipeline-digiquant.yml`).
+  - `digiquant.portfolio.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.portfolio.graph --from-digest <state.json>` for
     isolated Hermes runs.
 - Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (thesis, market-thesis-exploration,
   thesis-vehicle-map, opportunity-screener, asset-analyst, deliberation, pm-direction, …).
   Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
-  `digiquant.olympus.hermes.schemas.load_schema`.
+  `digiquant.portfolio.schemas.load_schema`.
 - **H7** emits `PMDirectionMemo` (direction + conviction rank + optional
   `confidence` in `[0, 1]` — no weights). Rank is order, not size.
   Each roster row may carry a deterministic `ForecastReference` to the effective
@@ -2040,7 +2040,7 @@ Implements the FinPos direction/sizing split: **H7** owns direction + conviction
 narrative + confidence; **H8** deterministic code owns sizing, caps, and risk. Rank is
 order only — it is not a size input on the calibrated path.
 
-- `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
+- `digiquant.portfolio.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
   conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
   raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
   (√(wᵀΣw), pure-Python) → drawdown-breaker scale → **PM confidence scale** (reduce-only /
@@ -2054,13 +2054,13 @@ order only — it is not a size input on the calibrated path.
   `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
   A 12% portfolio vol budget plus the 5% weight grid can pin a name near 10% without
   rank driving size (operator 2026-08-31 gold observation; rank unused on calibrated).
-- `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
+- `digiquant.portfolio.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
   international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
-- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
+- `digiquant.portfolio.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
   `PMDirectionMemo` (direction + ranks + confidence), assembles `AllocationInputBundle`,
   and on the calibrated path feeds bundle scores into `size_portfolio` (rank→conviction
   unused). H8 then scales each long by H7 `confidence` (`H8_MISSING_CONFIDENCE_DEFAULT=0.5`
@@ -2079,7 +2079,7 @@ order only — it is not a size input on the calibrated path.
   `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
   the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
   positions at their drifted weight, still honoring an explicit PM exit, #955).
-- `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
+- `digiquant.portfolio.risk_controls` — the drawdown circuit breaker. Pure
   `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
   gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
   to the floor at the hard drawdown — only ever *reduces* gross, never levers up);
@@ -2091,7 +2091,7 @@ order only — it is not a size input on the calibrated path.
 #### H8 adjustment-event taxonomy (#2417)
 
 Explanation-only at emission time: every place H8 moves a ticker away from its raw
-requested value emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment`
+requested value emits an in-memory `digiquant.portfolio.sizing_events.SizingAdjustment`
 (frozen, `extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it
 computes — never fed back into the weight math, and never reordering or renaming an
 existing control. Since #2768, H9 persists `unit="pct"` events as durable
@@ -2164,7 +2164,7 @@ assuming it is always present.
   logical-call lineage; #1978 supplies the node identity that lineage hangs from, so logical calls
   are produced in process — not merely producible — for every call originating inside a
   `build_pipeline` node.
-- `digiquant.olympus.atlas.provider_telemetry` — the durable writer for that ledger (#1979).
+- `digiquant.research.provider_telemetry` — the durable writer for that ledger (#1979).
   `flush_run_telemetry` drains the `digigraph.usage` buffers and appends them in foreign-key
   order: node runs, then logical calls with parents ahead of children, then physical attempts.
   Called from `hermes/chain.py`'s `finally`, ahead of both `write_row` and `_usage.reset()` —
@@ -2196,7 +2196,7 @@ assuming it is always present.
   - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
     its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
     over to these tables; the aggregate remains the active read path (plan Invariant 14).
-- `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
+- `digiquant.research.diagnostics` — writes one `atlas_run_diagnostics` row per run
   **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
   segment counts from
   state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
@@ -2258,7 +2258,7 @@ assuming it is always present.
   `pipeline-digiquant-prices.yml` is an ET wall-clock event (09:30 open, 16:00 close) while
   GitHub cron is fixed UTC, so each schedule is the **union** of the two ET offsets:
   intraday `*/15 13-21`, EOD `25 21` (after the close in both, off the 15-minute grid so it
-  never shares a minute with an intraday tick, done before `pipeline-atlas-metrics.yml`'s
+  never shares a minute with an intraday tick, done before `pipeline-research-metrics.yml`'s
   `0 22`). One-sided constraints are solved by the window alone; the two-sided at-open
   constraint cannot be — the offsets differ by exactly one hour — so **both** `35 13` and
   `35 14` ship and an `at-open-clock` gate job admits whichever is 09:35 ET. That gate is
@@ -2266,7 +2266,7 @@ assuming it is always present.
   helper would lag the schedule it guards by one promotion. Invariants are asserted in
   `tests/scripts/test_prices_cron_dst.py` against derived ET times in both offsets.
 - **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
-  into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
+  into `macro_series_observations`. Ingested by `.github/workflows/pipeline-digiquant.yml` (daily,
   before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
   Preflight injects `market_context["fed_odds"]`; phase6 consolidates into the bias row.
 
@@ -2286,7 +2286,7 @@ under the 240-minute job cap. `_insert` raises if `workspace_id` is missing
 on a row. No client-level retries on this path (disconnect retries are a
 separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation publishes a same-date document on every house run (short fold;
-full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/atlas/publish_document.py`
+full rewrite on `refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`). Legacy `digiquant/scripts/research/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
 Skills as injected context: each phase loads a `SKILL.md` file and passes
@@ -2387,9 +2387,9 @@ not a row the approval chains through.
   at-open job does. It is safe because a chain that stops growing makes that read *decline*
   and hand the day back to the prose builders, so the cost is lineage rather than correctness.
   That stops being true the moment `--require-ledger` joins the pipeline invocation.
-- **Tests**: `tests/dq/hermes/test_portfolio_ledger.py` (model/fixture behavior — add,
+- **Tests**: `tests/dq/portfolio/test_portfolio_ledger.py` (model/fixture behavior — add,
   trim, exit, no-op, rejection, cap, rounding, carry, supersession, immutability,
-  idempotency) and `tests/dq/atlas/test_migration_069.py` (structural: RLS, grants,
+  idempotency) and `tests/dq/research/test_migration_069.py` (structural: RLS, grants,
   triggers, closed vocab, nullability), mirroring the `test_migration_067.py` pattern.
 
 #### H9 appends the commit chain (#2418)
@@ -2467,7 +2467,7 @@ manifest field only — there is no such column on any ledger table.
 untouched. The polarity is deliberately the inverse of `OLYMPUS_POSITION_RISK_FIELDS` (opt-in) —
 a dark schema needs opting into, a live writer needs an escape hatch.
 
-- **Tests**: `tests/dq/hermes/test_commit_run.py::TestCommitChainLedger` — every final ticker
+- **Tests**: `tests/dq/portfolio/test_commit_run.py::TestCommitChainLedger` — every final ticker
   plus cash appears; inserts are never upserts; `ledger_io` is the only ledger writer
   (pipeline caller H9, operator recovery caller `recover_ledger`); an identical
   same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
@@ -2485,9 +2485,9 @@ a dark schema needs opting into, a live writer needs an escape hatch.
 H9 records what the portfolio *decided*; this is what it *did*.
 `digiquant/src/digiquant/olympus/hermes/writers/execution_io.py` is the only writer into
 `portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots`, and
-`execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/atlas/execute_at_open.py`,
+`execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/research/execute_at_open.py`,
 the job the prices pipeline runs at 09:35 ET. Two structural tests hold both halves of that
-(`tests/dq/hermes/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
+(`tests/dq/portfolio/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
 position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
 from a legitimate one.
 
@@ -2568,7 +2568,7 @@ switch defaults *on*. After #2589 the morning job and backfill run the ledger pa
    `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
    rows, and prose cannot hide the handover.
 
-Ops can also run `digiquant/scripts/atlas/seed_ledger_opening_snapshot.py` (`--date` optional,
+Ops can also run `digiquant/scripts/research/seed_ledger_opening_snapshot.py` (`--date` optional,
 `--dry-run` supported). Deleting the two prose builders remains a further follow-up gated on
 prod reaching 070.
 
@@ -2593,10 +2593,10 @@ New consumers that require lineage must use the authoritative view (or filter). 
 projection writers are retired only after holding_lots seed + `--no-ledger` removal + named
 readers pass retention checks — not as part of #2422.
 
-- **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
+- **Tests**: `tests/dq/portfolio/test_execution_io.py` (`TestResidualIsMeasured`,
   `TestSoleAuthority`, plus rejection/idempotency/lot coverage),
-  `tests/dq/hermes/test_opening_snapshot.py` (seed idempotency / cold-start), and
-  `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
+  `tests/dq/portfolio/test_opening_snapshot.py` (seed idempotency / cold-start), and
+  `tests/dq/research/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
   `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
   prose builders are never called when the ledger speaks, that HOLD continuity survives, and
   that both new exit codes are reachable). The atlas module imports the table names from the
@@ -2627,12 +2627,12 @@ that metrics/attribution job order cannot alter meaning.
   complete head with `status=final` — provisional H9 `nav_history`/`positions` rows are
   continuity data and are never selected as final. A crash after the period INSERT leaves
   an incomplete child set that is not selectable as final until retry repairs it.
-- **Finalizer**: `digiquant/scripts/atlas/finalize_period_accounting.py` — assembles ledger
+- **Finalizer**: `digiquant/scripts/research/finalize_period_accounting.py` — assembles ledger
   fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
   reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
   ledger declines with exit 3 (no partial final). Wired ahead of metrics in
-  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
+  `pipeline-research-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
   page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
   truncate the opening book (#2776).
 - **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
@@ -2671,14 +2671,14 @@ that metrics/attribution job order cannot alter meaning.
   `E1 = E0 + Σ NetPnL_i + CashPnL`;
   `E1 = ClosingCash + Σ q_i,1 P_i,1`;
   `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
-- **Tests**: `tests/dq/atlas/test_period_accounting.py`,
-  `tests/dq/atlas/test_migration_072.py`,
-  `tests/dq/atlas/test_finalize_period_accounting.py`,
-  `tests/dq/atlas/test_migration_073.py`,
-  `tests/dq/atlas/test_lookback_vs_realized.py`,
-  `tests/dq/atlas/test_migration_074.py`,
-  `tests/dq/atlas/test_migration_084.py`,
-  `tests/dq/atlas/test_migration_085.py`.
+- **Tests**: `tests/dq/research/test_period_accounting.py`,
+  `tests/dq/research/test_migration_072.py`,
+  `tests/dq/research/test_finalize_period_accounting.py`,
+  `tests/dq/research/test_migration_073.py`,
+  `tests/dq/research/test_lookback_vs_realized.py`,
+  `tests/dq/research/test_migration_074.py`,
+  `tests/dq/research/test_migration_084.py`,
+  `tests/dq/research/test_migration_085.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
   selecting provisional rows as final, in-place period correction,
@@ -2955,7 +2955,7 @@ returns it, which is why that function's name no longer matches the health verdi
 
 ### One row per retry ATTEMPT, not per workflow run (#1762)
 
-`pipeline-olympus.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+`pipeline-digiquant.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
 so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
 attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
 cost, `status` and `error_summary`. 28 of 54 production rows were affected.
@@ -3022,7 +3022,7 @@ but that needs a query, so a daily aggregate belongs in a separate check.
 contributor rather than editing `summarize_run`:
 
 ```python
-from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
+from digiquant.research.diagnostics import register_breakdown_contributor
 
 register_breakdown_contributor(lambda state: {"roster": _roster_tally(state)})
 ```
@@ -3042,11 +3042,11 @@ side, quantity, order_type)` call. This work package is **contracts and typing o
 HTTP client, no broker SDK, no database access, and no venue router — a later work package
 (K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
 
-Operator env names live in `digiquant.olympus.envcompat`. Canonical names are
+Operator env names live in `digiquant.dashboard.envcompat`. Canonical names are
 `DIGIQUANT_*` (execution routing, overlay persist, staging JWT, research knobs).
 Retired `OLYMPUS_*` / `KAIROS_*` / `ATLAS_*` names remain readable so live empty
 kill-switches stay off. `DIGIQUANT_EXECUTION_ROUTING` defaults **off** — do not
-enable it without an explicit human decision. `pipeline-olympus.yml` still
+enable it without an explicit human decision. `pipeline-digiquant.yml` still
 exports `OLYMPUS_ATTEMPT`; readers accept `DIGIQUANT_ATTEMPT` first.
 
 ### Vocabulary and models
@@ -3282,7 +3282,7 @@ Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverge
 structured report on the snapshot row + log; **never** auto-submit corrective orders
 (`SyncResult.refused_corrective_orders` is always true).
 
-**Cron CLI (`route_cron.py`, `python -m digiquant.olympus.kairos.route_cron`).**
+**Cron CLI (`route_cron.py`, `python -m digiquant.execution.route_cron`).**
 Overlay persist writes order intents; this is the production submit seam
 (`route_pending_orders` was library-only). Same eligibility as sync: Alpaca
 paper OAuth only; house/system never; `env=live` refused; IBKR held; Alpaca
@@ -3296,7 +3296,7 @@ when store env names are missing. `--dry-run` never unseals. `--all` /
 vendor EF secrets). Paper-fill remaining hop can still prove via sync of
 Alpaca UI fills without this cron.
 
-**Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
+**Cron CLI (`sync_cron.py`, `python -m digiquant.execution.sync_cron`).**
 Production entry that polls **Alpaca paper OAuth** connections only. House and
 system workspace ids are never sync targets; `env=live` is refused; inactive
 rows are dropped. IBKR paper is counted then held
@@ -3317,7 +3317,7 @@ requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
 invalid / empty `DIGIQUANT_EXECUTION_WORKSPACE_ID` (alias `OLYMPUS_KAIROS_WORKSPACE_ID`) warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
-`build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
+`build_events_from_paper_fills`. Migration 102 + `tests/dq/dashboard/kairos/`.
 
 ## Notifications (email v0)
 
@@ -3351,7 +3351,7 @@ never calls `submit_order`. The copy-paste GHA spec also runs
 ``python -m digiquant.notify.dispatch --dry-run`` (no send, no
 ``notification_log`` claim).
 Staging inventory also covers these names in
-`digiquant.olympus.kairos.staging_secrets`. `scripts/digiquant_staging_e2e.py` runs
+`digiquant.execution.staging_secrets`. `scripts/digiquant_staging_e2e.py` runs
 Observer Settings hops first (when `DIGIQUANT_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
 vendor secrets are missing (and prints `DIGIQUANT_STAGING_E2E_REMAINING_HOPS` so
@@ -3391,7 +3391,7 @@ Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
-`pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
+`pipeline-digiquant.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
 on `develop` `207dd0a68`; fail-close while `main` is `3601f72df`
 [#3383](https://github.com/digithings-ai/digithings/pull/3383) `6785c44d4`).
 Exit **5** while `origin/main` is still UUID-hotfix `3601f72df` — merge
@@ -3414,16 +3414,16 @@ schedule fails. The CLI refuses `--dispatch` / `--apply`.
 | Caller | Function | Digest hour gate |
 |--------|----------|------------------|
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
-| House CLI `python -m digiquant.olympus.hermes.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
+| House CLI `python -m digiquant.portfolio.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
 | Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
 | Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
 | Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
-House GHA (`pipeline-olympus.yml`) does not yet pass `MAILGUN_API_KEY` /
+House GHA (`pipeline-digiquant.yml`) does not yet pass `MAILGUN_API_KEY` /
 `MAILGUN_DOMAIN` / `NOTIFY_FROM` into the chain step. Splice
-`docs/agent-backlog/kairos-tenancy/pipeline-olympus-mailgun.env.yml` on a
+`docs/agent-backlog/kairos-tenancy/pipeline-digiquant-mailgun.env.yml` on a
 `chore/` or `feat/` branch (`cursor/*` cannot write workflows). Until then the
 close-out is fail-soft skip.
 
@@ -3492,7 +3492,7 @@ and/or `product_invite_codes` (migration 112). A match INSERTs
 `product_invite_redemptions` for the operator. This is not a login-optional
 passphrase — the static export still bakes the anon key.
 
-Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
+Structural SQL coverage: `tests/dq/dashboard/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.
 
@@ -3512,7 +3512,7 @@ is insert-first + skip-locked (first claimer wins). Production persistence is
 `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`);
 `MemoryJobRunStore` is the test seam. Overlay failures never write house job rows.
 
-**Cron CLI (`cron.py`, `python -m digiquant.olympus.overlay`).** Production
+**Cron CLI (`cron.py`, `python -m digiquant.dashboard.overlay`).** Production
 entry that writes `job_runs` via `SupabaseJobRunStore`. House and system
 workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
 `--check` exits **2** with `OVERLAY_STORE_NOT_CONFIGURED` listing missing env
@@ -3546,12 +3546,12 @@ not import `byok`/`digillm` (digiquant-only CI). Production apply passes
 `byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
 
 **Scheduled probe (separate process).** Overlay must never share
-`pipeline-olympus.yml`'s Hermes chain job (`usage.start` is process-global).
+`pipeline-digiquant.yml`'s Hermes chain job (`usage.start` is process-global).
 The fail-closed GHA spec is
-`docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
+`docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml`
 (`15 12 * * *`, `make digiquant-cron-check` / overlay `--dry-run` / sync
 `--dry-run`). `cursor/*` cannot write `.github/workflows/`; the installed
-job still runs `scripts/kairos_cron_check.py` (wrapper) until a `chore/` or
+job still runs `scripts/execution_cron_check.py` (wrapper) until a `chore/` or
 `feat/` hop copies a renamed spec. Missing
 `CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
 must never pass `--execute`, `--all`, or invoke `hermes.chain`.
@@ -3599,7 +3599,7 @@ member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting
 view rewrite).
 
 **Test-fake vs PostgREST `eq` (workspace_id).** The in-memory `_FakeQuery` in
-`tests/dq/atlas/test_supabase_io.py` treats a missing `workspace_id` column as
+`tests/dq/research/test_supabase_io.py` treats a missing `workspace_id` column as
 matching `house_workspace_id()` when filtering — a **TEST-FAKE courtesy** for
 legacy house fixtures only. Production PostgREST does not: `.eq("workspace_id",
 house)` matches only rows where the column equals `house`. Migration 097's
@@ -3743,5 +3743,5 @@ helpers is house (same as `_rows_for_date`). `documents.workspace_id` landed in
 migration 105; overlay isolation is the column plus the
 `overlay/{workspace_id}/…` key prefix.
 
-Tests: `tests/dq/olympus/overlay/`.
+Tests: `tests/dq/dashboard/overlay/`.
 

@@ -10,13 +10,13 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.hermes.models.pm_direction import (
+from digiquant.portfolio.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
     TickerDirection,
     bind_forecast_references,
 )
-from digiquant.olympus.hermes.schemas import validate_payload
+from digiquant.portfolio.schemas import validate_payload
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

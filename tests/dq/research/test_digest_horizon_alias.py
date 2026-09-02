@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.phases.phase7_synthesis import RiskItem
-from digiquant.olympus.atlas.snapshot import DigestPayload
+from digiquant.research.phases.phase7_synthesis import RiskItem
+from digiquant.research.snapshot import DigestPayload
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

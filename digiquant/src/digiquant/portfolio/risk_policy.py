@@ -15,7 +15,7 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 import polars as pl
 
-from digiquant.olympus.hermes.cost_liquidity import (
+from digiquant.portfolio.cost_liquidity import (
     COST_CONFIG_KEYS,
     DEFAULT_ADV_LOOKBACK_DAYS,
     DEFAULT_CONSERVATIVE_MULTIPLIER,
@@ -24,7 +24,7 @@ from digiquant.olympus.hermes.cost_liquidity import (
     DEFAULT_MAX_ADV_PARTICIPATION_PCT,
     DEFAULT_SPREAD_RANGE_FRACTION,
 )
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.portfolio.models.risk_policy import (
     CapabilityLimit,
     CorrelationBucketEntry,
     CovarianceSnapshot,
@@ -41,19 +41,19 @@ from digiquant.olympus.hermes.models.risk_policy import (
     risk_policy_id,
     snapshot_hash_payload,
 )
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     _VOL_LOOKBACK_DAYS,
     _rank_to_conviction,
 )
-from digiquant.olympus.hermes.risk_controls import BreakerConfig
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.risk_controls import BreakerConfig
+from digiquant.portfolio.sizing import (
     _ANNUALIZE,
     SizingCaps,
     TickerRisk,
     _bucket_corr,
     _vol_fraction,
 )
-from digiquant.olympus.hermes.turnover import _VALID_CADENCES
+from digiquant.portfolio.turnover import _VALID_CADENCES
 
 METHOD_VERSION = "incumbent-risk-policy@v2"
 """Implementation version stamped on every resolved policy.

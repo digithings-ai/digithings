@@ -15,7 +15,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
     DecisionIntent,
@@ -32,7 +32,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     TargetAdjustmentType,
     paper_execution_id,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

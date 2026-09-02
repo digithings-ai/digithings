@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.segments import ResearchMemo, Source
-from digiquant.olympus.atlas.skills import RESEARCH_MEMO_RULES, load_skill, load_skill_edit
+from digiquant.research.segments import ResearchMemo, Source
+from digiquant.research.skills import RESEARCH_MEMO_RULES, load_skill, load_skill_edit
 
 pytestmark = pytest.mark.unit
 

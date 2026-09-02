@@ -10,13 +10,13 @@ Fixes #1045
 Usage::
 
     SUPABASE_URL=https://...  SUPABASE_SERVICE_ROLE_KEY=service_...  \\
-        python scripts/seed_olympus_demo.py
+        python scripts/seed_digiquant_demo.py
 
     # Preview without writing:
-    python scripts/seed_olympus_demo.py --dry-run
+    python scripts/seed_digiquant_demo.py --dry-run
 
     # Wipe all seeded rows first (uses the demo marker):
-    python scripts/seed_olympus_demo.py --clear
+    python scripts/seed_digiquant_demo.py --clear
 
 Idempotency
 -----------

@@ -1,6 +1,6 @@
 """Kairos order-intent route cron — Alpaca paper OAuth only (K4).
 
-Production entry: ``python -m digiquant.olympus.kairos.route_cron``. Overlay
+Production entry: ``python -m digiquant.execution.route_cron``. Overlay
 books persist order intents; this CLI is the missing submit seam. House and
 system workspaces, live env rows, IBKR paper, and Alpaca ``api_key`` rows are
 never submitted. ``DIGIQUANT_EXECUTION_ROUTING`` (alias ``OLYMPUS_KAIROS_ROUTING``)
@@ -18,9 +18,9 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
-from digiquant.olympus.envcompat import EXECUTION_ROUTING
-from digiquant.olympus.kairos.policy import routing_enabled_in
-from digiquant.olympus.kairos.sync_cron import (
+from digiquant.dashboard.envcompat import EXECUTION_ROUTING
+from digiquant.execution.policy import routing_enabled_in
+from digiquant.execution.sync_cron import (
     ALPACA_API_KEY_HOLD_REASON,
     IBKR_HOLD_REASON,
     SyncTarget,
@@ -45,7 +45,7 @@ RouteBatchFn = Callable[[Sequence[SyncTarget]], int]
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="python -m digiquant.olympus.kairos.route_cron")
+    parser = argparse.ArgumentParser(prog="python -m digiquant.execution.route_cron")
     parser.add_argument(
         "--check",
         action="store_true",
@@ -107,7 +107,7 @@ def main(
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
-    """CLI entry used by ``python -m digiquant.olympus.kairos.route_cron``."""
+    """CLI entry used by ``python -m digiquant.execution.route_cron``."""
     err = log_err or (lambda msg: print(msg, file=sys.stderr))
     if argv is None:
         args_list = sys.argv[1:]
@@ -212,7 +212,7 @@ def _production_route_batch(
     # Deferred: unit tests inject route_batch and must not construct adapters.
     from digiquant.brokers.alpaca import AlpacaAdapter, OAuthAuth
     from digiquant.brokers.connections import get_connection, open_credential
-    from digiquant.olympus.kairos.router import route_pending_orders
+    from digiquant.execution.router import route_pending_orders
     from digiquant.vault.envelope import OAuthCredential
 
     client = _supabase_client_from_env(environ)

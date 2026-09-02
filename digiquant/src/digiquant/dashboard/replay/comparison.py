@@ -15,18 +15,18 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.governance_models import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.governance_models import (
     PolicyComparisonReport as GovernanceComparisonEnvelope,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     PortfolioReplayResult,
     PortfolioReplayStatus,
     ReplayArmLabel,
     ReplayPairSpec,
     max_drawdown_from_nav_path,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 __all__ = [
     "REQUIRED_METRIC_GROUPS",

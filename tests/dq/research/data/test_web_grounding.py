@@ -9,7 +9,7 @@ import pytest
 # in the digiquant-only CI job). Skip cleanly there; runs in atlas-graph-ci / locally.
 pytest.importorskip("openai")
 
-from digiquant.olympus.atlas.data import web_grounding
+from digiquant.research.data import web_grounding
 
 
 def _query_for(segment: str) -> str:
@@ -113,12 +113,12 @@ def test_fetch_web_grounding_raises_when_required(monkeypatch: pytest.MonkeyPatc
 @pytest.mark.unit
 def test_build_grounding_live_search_without_data_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     """Web grounding must not be gated on ATLAS_DATA_TOOLS (#946)."""
-    from digiquant.olympus.atlas.phases import _node_factory as nf
+    from digiquant.research.phases import _node_factory as nf
 
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "0")
     grounding = {"summary": "ok", "sources": [], "as_of": "2026-06-09"}
     with patch(
-        "digiquant.olympus.atlas.data.web_grounding.fetch_web_grounding",
+        "digiquant.research.data.web_grounding.fetch_web_grounding",
         return_value=grounding,
     ):
         tools, execute_tool, web_grounding = nf.build_grounding(

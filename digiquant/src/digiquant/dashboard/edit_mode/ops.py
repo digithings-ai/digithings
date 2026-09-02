@@ -1,6 +1,6 @@
 """JSON Pointer patch ops — canonical merge primitive for Olympus edit-mode.
 
-Logic originally mirrored ``digiquant/scripts/atlas/materialize_snapshot.py:apply_ops``
+Logic originally mirrored ``digiquant/scripts/research/materialize_snapshot.py:apply_ops``
 (now frozen). This copy additionally implements the RFC 6901 ``-`` append token and
 fail-soft list-index handling (#1641): the patch-emitting models routinely write
 ``set /material_findings/-`` meaning "append" and past-end indices, and a merge

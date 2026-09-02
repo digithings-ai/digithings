@@ -11,23 +11,23 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.focus_roster import with_fanout_ticker
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.focus_roster import with_fanout_ticker
+from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,
     DeliberationTurn,
 )
-from digiquant.olympus.hermes.payloads import deliberation_summaries
-from digiquant.olympus.hermes.phases import h6_deliberation
-from digiquant.olympus.hermes.phases.h6_deliberation import (
+from digiquant.portfolio.payloads import deliberation_summaries
+from digiquant.portfolio.phases import h6_deliberation
+from digiquant.portfolio.phases.h6_deliberation import (
     build_h6_deliberation,
     build_h6_from_state,
 )

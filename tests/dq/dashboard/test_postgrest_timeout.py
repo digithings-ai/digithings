@@ -11,9 +11,9 @@ from typing import Any
 import httpx
 import pytest
 import yaml
-from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
-from digiquant.olympus.hermes.writers import ledger_io
-from digiquant.olympus.postgrest_timeout import (
+from digiquant.research.supabase_io import SupabaseConfig, build_client
+from digiquant.portfolio.writers import ledger_io
+from digiquant.dashboard.postgrest_timeout import (
     CONNECT_TIMEOUT_SECONDS,
     POOL_TIMEOUT_SECONDS,
     READ_TIMEOUT_SECONDS,
@@ -23,7 +23,7 @@ from digiquant.olympus.postgrest_timeout import (
 pytestmark = pytest.mark.unit
 
 _REPO = Path(__file__).resolve().parents[3]
-_WORKFLOW = _REPO / ".github" / "workflows" / "pipeline-olympus.yml"
+_WORKFLOW = _REPO / ".github" / "workflows" / "pipeline-digiquant.yml"
 _AT_OPEN = _REPO / "digiquant" / "scripts" / "atlas" / "execute_at_open.py"
 
 

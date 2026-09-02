@@ -764,7 +764,7 @@ def v1_olympus_record_policy_governance_decision(
     request: Request,
 ) -> dict[str, Any]:
     """Record an authenticated human decision (DigiAuth principal — no MCP)."""
-    from digiquant.olympus.replay.governance import (
+    from digiquant.dashboard.replay.governance import (
         AuthenticatedPrincipal,
         GovernanceDecisionError,
     )

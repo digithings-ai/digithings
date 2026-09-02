@@ -8,21 +8,21 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-from digiquant.olympus.atlas.phases.outcome_maturation import (
+from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+from digiquant.research.phases.outcome_maturation import (
     DEFAULT_OUTCOME_LESSON_COHORT,
     DEFAULT_OUTCOME_LESSON_HORIZON,
     DEFAULT_OUTCOME_LESSON_POLICY,
     OutcomeMaturationDeps,
     pin_outcome_lesson_for_preflight,
 )
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-from digiquant.olympus.learning.lesson_registry import LessonCompiler
-from digiquant.olympus.learning.outcome_assembly import (
+from digiquant.research.phases.preflight import PreflightDeps, build_preflight_node
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.dashboard.learning.lesson_registry import LessonCompiler
+from digiquant.dashboard.learning.outcome_assembly import (
     AssemblyPassResult,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     EpisodeDisposition,
     H8TargetLineage,
@@ -33,12 +33,12 @@ from digiquant.olympus.learning.outcome_models import (
     episode_content_hash,
     episode_version_id,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
-from digiquant.olympus.research_retrieval.context_wiring import (
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.research_retrieval.context_wiring import (
     wire_h5_phase_inputs,
     wire_h7_phase_inputs,
 )
-from digiquant.olympus.research_retrieval.h7_decision_context import (
+from digiquant.dashboard.research_retrieval.h7_decision_context import (
     H7DecisionContextCompileInput,
     H7PrerequisiteSnapshot,
     H7SectionKind,
@@ -157,7 +157,7 @@ class _StubAssembler:
         as_of: datetime,
         knowledge_cutoff_at: datetime,
     ) -> AssemblyPassResult:
-        from digiquant.olympus.learning.outcome_assembly import EpisodeAssemblyResult
+        from digiquant.dashboard.learning.outcome_assembly import EpisodeAssemblyResult
 
         results: list[EpisodeAssemblyResult] = []
         count = 0

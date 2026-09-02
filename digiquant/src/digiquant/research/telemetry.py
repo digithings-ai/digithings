@@ -23,8 +23,8 @@ from typing import (
     Any,  # score:allow untyped any — jsonb breakdown fragment shape
 )
 
-from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.diagnostics import register_breakdown_contributor
+from digiquant.research.state import AtlasResearchState
 
 logger = logging.getLogger(__name__)
 

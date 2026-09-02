@@ -18,7 +18,7 @@ from typing import (
     Any,  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
 )
 
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.olympus.edit_mode (spec §4–§5, §16)."""
+"""Unit tests for digiquant.dashboard.edit_mode (spec §4–§5, §16)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.edit_mode import (
+from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     MergeError,
     PatchOp,
@@ -244,7 +244,7 @@ class TestMergeAppendTokenAndClamps:
     """
 
     def test_set_on_append_token_appends(self) -> None:
-        from digiquant.olympus.edit_mode import apply_ops
+        from digiquant.dashboard.edit_mode import apply_ops
 
         doc = apply_ops(
             {"material_findings": [{"t": "old"}]},
@@ -277,7 +277,7 @@ class TestMergeAppendTokenAndClamps:
             )
 
     def test_set_past_end_index_appends_instead_of_index_error(self) -> None:
-        from digiquant.olympus.edit_mode import apply_ops
+        from digiquant.dashboard.edit_mode import apply_ops
 
         doc = apply_ops(
             {"notable_filings": ["a", "b"]},
@@ -286,7 +286,7 @@ class TestMergeAppendTokenAndClamps:
         assert doc["notable_filings"] == ["a", "b", "c"]
 
     def test_append_via_append_token_targets_the_list_itself(self) -> None:
-        from digiquant.olympus.edit_mode import apply_ops
+        from digiquant.dashboard.edit_mode import apply_ops
 
         doc = apply_ops(
             {"material_findings": ["a"]},
@@ -295,7 +295,7 @@ class TestMergeAppendTokenAndClamps:
         assert doc["material_findings"] == ["a", "b"]
 
     def test_remove_append_token_pops_last_and_oor_is_noop(self) -> None:
-        from digiquant.olympus.edit_mode import apply_ops
+        from digiquant.dashboard.edit_mode import apply_ops
 
         doc = apply_ops(
             {"xs": ["a", "b", "c"]},
@@ -307,7 +307,7 @@ class TestMergeAppendTokenAndClamps:
         assert doc["xs"] == ["a", "b"]
 
     def test_mid_path_append_token_addresses_last_element(self) -> None:
-        from digiquant.olympus.edit_mode import apply_ops
+        from digiquant.dashboard.edit_mode import apply_ops
 
         doc = apply_ops(
             {"material_findings": [{"note": "old1"}, {"note": "old2"}]},

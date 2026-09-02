@@ -9,12 +9,12 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.overlay.graph_invoke import (
+from digiquant.dashboard.overlay.graph_invoke import (
     build_overlay_chain,
     overlay_config_bundle,
 )
-from digiquant.olympus.overlay.models import OverlayError
-from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+from digiquant.dashboard.overlay.models import OverlayError
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
 pytestmark = pytest.mark.unit
 

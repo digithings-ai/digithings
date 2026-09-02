@@ -246,7 +246,7 @@ class OlympusTierConfig(BaseModel):
 
 
 class OlympusModelsConfig(BaseModel):
-    """Parsed ``olympus_models.yaml`` — centralized Atlas/Hermes model policy."""
+    """Parsed ``digiquant_models.yaml`` — centralized Atlas/Hermes model policy."""
 
     default_tier: str = "cheap"
     openrouter_defaults: OlympusOpenRouterTierConfig = Field(
@@ -299,11 +299,11 @@ def _load_model_modes() -> ModelModesConfig:
 
 def _olympus_models_path() -> Path:
     config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
-    return Path(config_dir) / "olympus_models.yaml"
+    return Path(config_dir) / "digiquant_models.yaml"
 
 
 def _load_olympus_models() -> OlympusModelsConfig:
-    """Load ``olympus_models.yaml`` (mtime-cached)."""
+    """Load ``digiquant_models.yaml`` (mtime-cached)."""
     global _olympus_models_cache
     path = _olympus_models_path()
     if not path.exists():
@@ -431,7 +431,7 @@ def _effective_openrouter_config(
 
 
 def _warn_flagship_models_in_olympus_config(cfg: OlympusModelsConfig) -> None:
-    """Log when olympus_models.yaml pools a frontier model on a restricted tier."""
+    """Log when digiquant_models.yaml pools a frontier model on a restricted tier."""
     for tier_name, tier_cfg in cfg.tiers.items():
         if tier_name == "quality":
             continue
@@ -465,7 +465,7 @@ def _phase_models_override(phase_slug: str, phase_models: dict[str, str]) -> str
 
 
 def get_olympus_tier() -> str:
-    """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``olympus_models.yaml`` default."""
+    """Active Olympus tier from ``OLYMPUS_MODEL_TIER`` or ``digiquant_models.yaml`` default."""
     if "DIGIQUANT_MODEL_TIER" in os.environ:
         raw = os.environ.get("DIGIQUANT_MODEL_TIER", "").strip().lower()
     else:
@@ -591,12 +591,12 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
 
     Sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF`` when
     unset (or when *force*). Called at chain startup so CI picks up tier policy
-    without duplicating values in ``olympus-pipeline.yml``.
+    without duplicating values in ``digiquant-pipeline.yml``.
     """
     tier = get_olympus_tier()
     tier_cfg = _load_olympus_models().tiers.get(tier)
     if tier_cfg is None:
-        logger.warning("olympus tier %r not found in olympus_models.yaml", tier)
+        logger.warning("olympus tier %r not found in digiquant_models.yaml", tier)
         return tier
     olympus = _load_olympus_models()
     or_cfg = _effective_openrouter_config(tier, tier_cfg, olympus)
@@ -796,7 +796,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
 
     Resolution order:
     1. ``model_modes.yaml`` ``phase_models`` — explicit per-phase override (frontier escape hatch).
-    2. ``olympus_models.yaml`` — capability tier × ``OLYMPUS_MODEL_TIER``.
+    2. ``digiquant_models.yaml`` — capability tier × ``OLYMPUS_MODEL_TIER``.
     3. ``None`` → caller uses :func:`get_model_for_mode`.
 
     Prefix match in ``phase_models``: a key ending in '-' (e.g. 'analyst-') matches any
@@ -811,7 +811,7 @@ def get_model_for_phase(phase_slug: str) -> str | None:
             return _apply_byok_model_override(override)
         logger.warning(
             "Rejecting phase_models override for %s (%r) on tier %s; "
-            "using olympus_models.yaml instead",
+            "using digiquant_models.yaml instead",
             phase_slug,
             override,
             tier,

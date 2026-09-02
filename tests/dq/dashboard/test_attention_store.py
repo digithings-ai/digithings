@@ -7,7 +7,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionContextManifest,
     AttentionDecisionReconciliation,
     AttentionMode,
@@ -22,7 +22,7 @@ from digiquant.olympus.research_retrieval.planner import (
     load_research_attention_policy,
     plan_research_attention,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     AttentionStore,
     AttentionStoreConflict,
@@ -39,7 +39,7 @@ _STATE = UUID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
 
 
 def _ticker_features(ticker: str = "AAPL", **overrides: object):
-    from digiquant.olympus.research_retrieval.planner import AttentionFeatures
+    from digiquant.dashboard.research_retrieval.planner import AttentionFeatures
 
     h6_base: dict[str, object] = {
         "ticker": ticker,

@@ -47,7 +47,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
+from digiquant.portfolio.sizing_events import SizingAdjustment, SizingAdjustmentType
 
 
 @dataclass(frozen=True)

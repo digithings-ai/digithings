@@ -7,10 +7,10 @@ from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.atlas.forecast_outcomes import list_resolved_outcomes_as_of
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

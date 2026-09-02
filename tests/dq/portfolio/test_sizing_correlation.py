@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.sizing import (
     SizingCaps,
     TickerRisk,
     _bucket_corr,

@@ -19,22 +19,22 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.comparison import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.comparison import (
     EvidenceMode,
     MetricAvailability,
     MetricDirection,
     PolicyComparisonReport,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GateCriteriaVersion,
     GateEvaluation,
     GovernanceDecisionKind,
     PolicyGovernanceDecision,
     governance_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.dashboard.temporal import require_utc_datetime
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 HashHex64: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]

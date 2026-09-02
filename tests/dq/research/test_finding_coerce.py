@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.research.segments import SegmentReport
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

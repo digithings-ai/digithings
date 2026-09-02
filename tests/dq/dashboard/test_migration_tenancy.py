@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.tenancy import (
     house_workspace_id,
     house_workspace_row,
     system_workspace_id,

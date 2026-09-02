@@ -1,7 +1,7 @@
 """Non-fabricating legacy research-state inventory backfill (#2870 / WP12.4).
 
 Maps existing ``documents`` (or equivalent) rows into
-:class:`~digiquant.olympus.research_retrieval.models.LegacyDocumentRef` inventory
+:class:`~digiquant.dashboard.research_retrieval.models.LegacyDocumentRef` inventory
 pointers only. Never invents evidence, beliefs, expected events, patches, or
 ``known_at``. Strict readers continue to exclude the output (WP12.2).
 
@@ -18,12 +18,12 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     LegacyDocumentRef,
     content_digest,
     legacy_document_ref_id,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ResearchStateConflict,
     ResearchStateStore,
 )

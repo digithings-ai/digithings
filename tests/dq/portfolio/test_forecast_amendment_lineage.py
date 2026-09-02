@@ -8,9 +8,9 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, FocusRosterEntry, PriorContext
-from digiquant.olympus.hermes.focus_roster import with_fanout_ticker
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.state import AtlasConfigBundle, FocusRosterEntry, PriorContext
+from digiquant.portfolio.focus_roster import with_fanout_ticker
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
     EffectiveSource,
@@ -24,8 +24,8 @@ from digiquant.olympus.hermes.models.forecast import (
     materialize_forecast_amendment,
     resolve_effective_forecast,
 )
-from digiquant.olympus.hermes.phases import h6_deliberation
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_from_state
+from digiquant.portfolio.phases import h6_deliberation
+from digiquant.portfolio.phases.h6_deliberation import build_h6_from_state
 
 pytestmark = pytest.mark.unit
 
@@ -73,7 +73,7 @@ def _assessment() -> ForecastAssessment:
 
 
 def _state(*, assessment: ForecastAssessment | None = None) -> Any:
-    from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
+    from digiquant.research.state import AtlasResearchState, PhaseHermesState
 
     fa = assessment or _assessment()
     return AtlasResearchState(
@@ -149,8 +149,8 @@ class TestH6ForecastLineageCarry:
         assert carried.known_at == prior_eff.known_at
         assert summary.get("forecast_amendment") is not None
         assert summary["forecast_amendment"]["amendment_id"] == str(amendment.amendment_id)
-        from digiquant.olympus.atlas.forecast_registry import collect_lineage_from_state
-        from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
+        from digiquant.research.forecast_registry import collect_lineage_from_state
+        from digiquant.research.state import AtlasResearchState, PhaseHermesState
 
         collected_state = AtlasResearchState(
             run_type="delta",
@@ -186,8 +186,8 @@ class TestH6ForecastLineageCarry:
 
 def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
     """Published debate shape must retain the amendment dump for registry retry."""
-    from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
-    from digiquant.olympus.hermes.payloads import deliberation_summaries
+    from digiquant.research.state import AtlasResearchState, PhaseHermesState
+    from digiquant.portfolio.payloads import deliberation_summaries
 
     base = _assessment()
     amendment = materialize_forecast_amendment(
@@ -221,7 +221,7 @@ def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
 
 
 def test_slim_deliberation_preserves_forecast_amendment() -> None:
-    from digiquant.olympus.atlas.supabase_io import _slim_deliberation_summary
+    from digiquant.research.supabase_io import _slim_deliberation_summary
 
     slim = _slim_deliberation_summary(
         {

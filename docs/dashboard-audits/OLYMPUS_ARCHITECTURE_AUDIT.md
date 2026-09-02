@@ -8,8 +8,8 @@
 > - [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 > - [`digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/olympus/hermes/docs/ARCHITECTURE.md)
 >
-> **Current entry point:** `python -m digiquant.olympus.hermes.chain --cadence daily`
-> (`.github/workflows/pipeline-olympus.yml`). Hermes terminal = **H9 `commit_run`**.
+> **Current entry point:** `python -m digiquant.portfolio.chain --cadence daily`
+> (`.github/workflows/pipeline-digiquant.yml`). Hermes terminal = **H9 `commit_run`**.
 
 > **Scope (historical).** A read-only, end-to-end map of the Olympus backend as of 2026-06-16.
 
@@ -17,7 +17,7 @@
 
 ## 1. Entry points & run shapes
 
-Cron entry point: **`python -m digiquant.olympus.hermes.chain --run-type {baseline|delta|monthly}`**
+Cron entry point: **`python -m digiquant.portfolio.chain --run-type {baseline|delta|monthly}`**
 (`digiquant/src/digiquant/olympus/hermes/chain.py::cli_main`).
 
 | Run type | Cron (`.github/workflows`) | Shape |
@@ -32,7 +32,7 @@ single names), and `13:35`/`14:35` (`execute_at_open.py --prior-trading-day-reba
 These are UTC but every deadline they serve is ET wall-clock, so the windows are the union
 of both offsets and the at-open pair is narrowed to one run by an ET gate job (#1775).
 
-There is also a standalone Atlas CLI (`python -m digiquant.olympus.atlas.graph`) that runs
+There is also a standalone Atlas CLI (`python -m digiquant.research.graph`) that runs
 research-only and publishes — used by tests/dry-runs; production uses the chain.
 
 ---

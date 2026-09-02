@@ -1,6 +1,6 @@
 """Unit tests for Atlas research-document ingest into digisearch.
 
-Validates the contract surfaced by ``digisearch.atlas_ingest`` and the
+Validates the contract surfaced by ``digisearch.research_ingest`` and the
 ``search_strategies`` MCP tool: chunks land in the configured index with
 filterable metadata, repeats are idempotent, and the MCP tool returns typed
 hits filtered by Atlas-specific structured clauses.
@@ -14,14 +14,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digisearch.atlas_ingest import (
+from digisearch.research_ingest import (
     ATLAS_INDEX_NAME,
     IndexedDocument,
     fetch_atlas_row,
     ingest_atlas_document,
     ingest_atlas_payload,
 )
-from digisearch.atlas_search import search_strategies
+from digisearch.research_search import search_strategies
 from digisearch.core.models import Query
 from digisearch.search import query_index
 from digisearch.search._stub import _stub_index

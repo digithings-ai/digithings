@@ -6,7 +6,7 @@
 #            slug here (OpenRouter free roster rotates).
 #   test / medium / best → tier semantics; defaults below are local-dev fallbacks.
 #
-# Atlas/Hermes phase routing is centralized in config/olympus_models.yaml
+# Atlas/Hermes phase routing is centralized in config/digiquant_models.yaml
 # (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when
 # you need to pin a model for a single phase — frontier models (openai/*, anthropic/*,
 # GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime; see model_config.py.
@@ -24,7 +24,7 @@ defaults:
   medium: ollama/qwen3:8b
   best: ollama/qwen3:8b
 
-# Optional per-phase overrides — empty by default; olympus_models.yaml owns routing.
+# Optional per-phase overrides — empty by default; digiquant_models.yaml owns routing.
 phase_models:
   # #1006: pin H6 deliberation. The cheap ``research`` pool also holds llama-4-maverick,
   # which returns empty completions under STRICT json_schema — so the ~40% of watchlist

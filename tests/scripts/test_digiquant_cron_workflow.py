@@ -1,12 +1,12 @@
 """Kairos cron GHA spec is probe-only and stays off the house pipeline.
 
 Overlay ``usage.start`` is process-global, so overlay / kairos sync / route /
-digest / Mailgun must never share ``pipeline-olympus.yml``'s Hermes chain job. The spec in
-``docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`` is
+digest / Mailgun must never share ``pipeline-digiquant.yml``'s Hermes chain job. The spec in
+``docs/agent-backlog/kairos-tenancy/execution-cron-check.workflow.yml`` is
 fail-closed ``--check`` / ``--dry-run`` only: ``--execute``, ``--all``, and
 ``hermes.chain`` on that job would be a production apply against Observer.
 
-Install is ``.github/workflows/kairos-cron-check.yml`` copied from the spec
+Install is ``.github/workflows/execution-cron-check.yml`` copied from the spec
 byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
 """
 
@@ -21,11 +21,11 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
-INSTALLED = WORKFLOW_DIR / "kairos-cron-check.yml"
-HOUSE = WORKFLOW_DIR / "pipeline-olympus.yml"
+SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "execution-cron-check.workflow.yml"
+INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
+HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
 MAILGUN_FRAGMENT = (
-    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
+    REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-digiquant-mailgun.env.yml"
 )
 MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
 
@@ -86,8 +86,8 @@ class TestKairosCronSpecIsProbeOnly:
 
     def test_timeout_and_concurrency_are_set(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
-        assert doc["concurrency"]["group"] == "kairos-cron-check"
-        assert doc["concurrency"]["group"] != "olympus-pipeline"
+        assert doc["concurrency"]["group"] == "execution-cron-check"
+        assert doc["concurrency"]["group"] != "digiquant-pipeline"
         assert doc["concurrency"]["cancel-in-progress"] is False
         for name, job in doc["jobs"].items():
             assert job.get("timeout-minutes"), name
@@ -105,10 +105,10 @@ class TestKairosCronSpecIsProbeOnly:
 
     def test_run_steps_are_check_or_dry_run_only(self) -> None:
         blob = _blob(SPEC)
-        assert "scripts/kairos_cron_check.py" in blob
-        assert "digiquant.olympus.overlay --dry-run" in blob
-        assert "digiquant.olympus.kairos.sync_cron --dry-run" in blob
-        assert "digiquant.olympus.kairos.route_cron --dry-run" in blob
+        assert "scripts/execution_cron_check.py" in blob
+        assert "digiquant.dashboard.overlay --dry-run" in blob
+        assert "digiquant.execution.sync_cron --dry-run" in blob
+        assert "digiquant.execution.route_cron --dry-run" in blob
         assert "digiquant.notify.dispatch --dry-run" in blob
         for token in FORBIDDEN_APPLY:
             assert token not in blob, token
@@ -162,11 +162,11 @@ class TestHouseScheduleRetriesOffPeak:
 class TestHousePipelineDoesNotRunOverlay:
     def test_house_run_scripts_omit_kairos_and_overlay(self) -> None:
         blob = _blob(HOUSE)
-        assert "digiquant.olympus.hermes.chain" in blob
+        assert "digiquant.portfolio.chain" in blob
         assert "olympus.overlay" not in blob
         assert "kairos.sync_cron" not in blob
         assert "kairos.route_cron" not in blob
-        assert "kairos_cron_check" not in blob
+        assert "execution_cron_check" not in blob
         assert "notify.dispatch" not in blob
 
 
@@ -207,6 +207,6 @@ class TestHousePipelineMailgunEnvFragment:
         unblock = (
             REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "HUMAN-UNBLOCK.md"
         ).read_text(encoding="utf-8")
-        assert "pipeline-olympus-mailgun.env.yml" in unblock
+        assert "pipeline-digiquant-mailgun.env.yml" in unblock
         for key in MAILGUN_KEYS:
             assert key in unblock

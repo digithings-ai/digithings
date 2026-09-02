@@ -4,7 +4,7 @@
 Model-page capability claims are not sufficient: a slug's *serving endpoints* must
 actually accept function tools and strict ``json_schema``, or phase calls 404 or come
 back empty (#987 mistral-small; #1006 llama-4-maverick). For every distinct bare slug
-pooled in ``config/olympus_models.yaml`` (plus ``openrouter/`` pins in
+pooled in ``config/digiquant_models.yaml`` (plus ``openrouter/`` pins in
 ``config/model_modes.yaml`` ``phase_models``), this script verifies:
 
 1. **Endpoint metadata** (`GET /api/v1/models/{slug}/endpoints`): at least one endpoint
@@ -36,8 +36,8 @@ of a few cents — nine distinct bare slugs x two live calls each, several again
 frontier-tier models at up to 2000 max_tokens.
 
 Usage:
-    OPENROUTER_API_KEY=... python3 scripts/validate_olympus_pools.py
-    python3 scripts/validate_olympus_pools.py --metadata-only   # no live calls
+    OPENROUTER_API_KEY=... python3 scripts/validate_digiquant_pools.py
+    python3 scripts/validate_digiquant_pools.py --metadata-only   # no live calls
 """
 
 from __future__ import annotations
@@ -98,7 +98,7 @@ def collect_pool_slugs(config_dir: Path) -> list[str]:
     phases (they would legitimately fail this check).
     """
     slugs: set[str] = set()
-    olympus = yaml.safe_load((config_dir / "olympus_models.yaml").read_text()) or {}
+    olympus = yaml.safe_load((config_dir / "digiquant_models.yaml").read_text()) or {}
     for tier in (olympus.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             for model in pool or []:

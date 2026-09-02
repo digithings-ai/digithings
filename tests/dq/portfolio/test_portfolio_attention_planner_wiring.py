@@ -8,29 +8,29 @@ from typing import Any  # score:allow untyped any — scored-lint: heterogeneous
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.research_attention import (
+from digiquant.research.research_attention import (
     OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
     attention_store_for_run,
     reset_attention_stores,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.models.analyst import AnalystPayload
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import build_h4_opportunity_screener
-from digiquant.olympus.hermes.phases.portfolio_common import run_asset_analyst_llm
-from digiquant.olympus.hermes.research_attention import (
+from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.phases.h4_opportunity_screener import build_h4_opportunity_screener
+from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
+from digiquant.portfolio.research_attention import (
     h4_phase_attention_update,
     plan_hermes_research_attention,
     research_attention_h5_enforce_path,
     research_attention_h6_enforce_path,
     resolve_h6_attention_decision,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionMode,
     AttentionPlan,
     AttentionRolloutMode,
@@ -178,7 +178,7 @@ def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> Non
         return AnalystPayload.model_validate(_prior_analyst("SPY"))
 
     with patch(
-        "digiquant.olympus.hermes.phases.portfolio_common.run_research_agent",
+        "digiquant.portfolio.phases.portfolio_common.run_research_agent",
         side_effect=_fail_agent,
     ):
         payload, _doc, _errors, _bundle = run_asset_analyst_llm(
@@ -196,7 +196,7 @@ def test_enforce_h5_carry_skips_provider(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_graph_node_order_unchanged() -> None:
-    from digiquant.olympus.hermes.graph import build_hermes_phases_thesis
+    from digiquant.portfolio.graph import build_hermes_phases_thesis
 
     phases = build_hermes_phases_thesis(watchlist=["SPY"], held={"SPY"})
     names = [p.name for p in phases]

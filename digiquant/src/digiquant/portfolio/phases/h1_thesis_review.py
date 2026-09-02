@@ -9,21 +9,21 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.segments import digest_briefing_for_hermes
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, publish_document
-from digiquant.olympus.edit_mode.prior import artifact_document_key
-from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput
-from digiquant.olympus.hermes.phases.thesis_common import (
+from digiquant.research.segments import digest_briefing_for_hermes
+from digiquant.research.supabase_io import SupabaseClient, publish_document
+from digiquant.dashboard.edit_mode.prior import artifact_document_key
+from digiquant.portfolio.models.thesis import ThesisReviewOutput
+from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
     run_thesis_phase_llm,
 )
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.writers.thesis_io import (
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.writers.thesis_io import (
     invalidation_hits_from_signals,
     merge_review_with_invalidation_hits,
     persist_thesis_review,
 )
-from digiquant.olympus.overlay.persist import hermes_document_key, skip_overlay_shared_register
+from digiquant.dashboard.overlay.persist import hermes_document_key, skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 import yaml
-from digiquant.olympus.accounting.engine import compute_period
-from digiquant.olympus.accounting.io import persist_period
+from digiquant.dashboard.accounting.engine import compute_period
+from digiquant.dashboard.accounting.io import persist_period
 
 from tests.dq.atlas.test_finalize_period_accounting import (
     EFFECTIVE,
@@ -106,7 +106,7 @@ def test_final_accounting_still_beats_lookback_and_nav() -> None:
 
 
 def test_workflow_documents_lookback_as_diagnostic() -> None:
-    workflow = REPO / ".github" / "workflows" / "pipeline-atlas-metrics.yml"
+    workflow = REPO / ".github" / "workflows" / "pipeline-research-metrics.yml"
     text = workflow.read_text(encoding="utf-8")
     assert "current_book_lookback" in text
     assert "diagnostic" in text.lower()

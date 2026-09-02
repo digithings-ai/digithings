@@ -8,31 +8,31 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from digiquant.olympus.overlay.budget import (
+from digiquant.dashboard.overlay.budget import (
     BudgetExhausted,
     OverlayBudget,
     attributed_spend_usd,
     overlay_usage_scope,
 )
-from digiquant.olympus.overlay.byok import (
+from digiquant.dashboard.overlay.byok import (
     ByokError,
     ProviderCredential,
     invoke_overlay_chain,
 )
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.dispatch import (
     JobRun,
     JobRunStore,
     JobStatus,
     OverlaySkipReason,
 )
-from digiquant.olympus.overlay.models import OverlayRunRequest, OverlayRunResult
-from digiquant.olympus.overlay.persist import (
+from digiquant.dashboard.overlay.models import OverlayRunRequest, OverlayRunResult
+from digiquant.dashboard.overlay.persist import (
     OverlayLegacyBookBlocked,
     OverlayPersistDisabled,
     require_overlay_legacy_book_safe,
     require_overlay_persist,
 )
-from digiquant.olympus.research_corpus import (
+from digiquant.dashboard.research_corpus import (
     CorpusKey,
     ResearchCorpusKeyError,
     ResearchCorpusPin,

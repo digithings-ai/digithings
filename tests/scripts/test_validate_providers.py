@@ -218,7 +218,7 @@ def test_function_tools_pass_but_reports_substitution(vp: Any) -> None:
     substitution must NOT hard-fail the preflight, but must be visible in the detail text.
 
     Uses a real three-segment pool slug (``openrouter/deepseek/deepseek-v4-flash``, matching
-    config/olympus_models.yaml) rather than a two-segment stand-in: a two-segment fixture
+    config/digiquant_models.yaml) rather than a two-segment stand-in: a two-segment fixture
     can't distinguish a correct ``removeprefix("openrouter/")`` from a broken
     ``model.split("/")[-1]``-style implementation, since both happen to agree on two segments.
     """

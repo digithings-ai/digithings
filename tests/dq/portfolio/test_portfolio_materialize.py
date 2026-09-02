@@ -10,14 +10,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.portfolio_materialize import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.portfolio_materialize import (
     MaterializeDeps,
     _default_invalidation,
     _upsert_portfolio_metrics,
     build_materialize_node,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -464,7 +464,7 @@ class TestPositionRiskFields:
     def test_enrichment_failure_books_plain_weights(self, monkeypatch) -> None:
         # An enrichment error (e.g. malformed asset_classes.yaml → sector_bucket raises) must
         # never block the book: it degrades to plain {date,ticker,weight_pct} rows.
-        import digiquant.olympus.hermes.portfolio_materialize as pm
+        import digiquant.portfolio.portfolio_materialize as pm
 
         def _boom(*_a, **_k):
             raise RuntimeError("asset_classes.yaml parse error")
@@ -488,7 +488,7 @@ class TestPositionRiskFields:
 
     def test_enrichment_failure_preserves_thesis_id(self, monkeypatch) -> None:
         # thesis_id is set before enrichment; enrichment failure must not strip it (#814).
-        import digiquant.olympus.hermes.portfolio_materialize as pm
+        import digiquant.portfolio.portfolio_materialize as pm
 
         def _boom(*_a, **_k):
             raise RuntimeError("enrichment error")

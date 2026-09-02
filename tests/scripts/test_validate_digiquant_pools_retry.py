@@ -1,4 +1,4 @@
-"""Unit tests for `_request` retry behaviour in scripts/validate_olympus_pools.py (#1717).
+"""Unit tests for `_request` retry behaviour in scripts/validate_digiquant_pools.py (#1717).
 
 The pool gate talks to a live OpenRouter API, so a slow upstream call must not fail the
 sweep on its own. `_request` retried transient *statuses* but not timeouts: a timeout
@@ -20,13 +20,13 @@ import httpx
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "scripts" / "validate_olympus_pools.py"
+_SCRIPT = REPO_ROOT / "scripts" / "validate_digiquant_pools.py"
 
 pytestmark = pytest.mark.unit
 
 
 def _load_module() -> Any:
-    spec = importlib.util.spec_from_file_location("validate_olympus_pools", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("validate_digiquant_pools", _SCRIPT)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod

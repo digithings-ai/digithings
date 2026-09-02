@@ -11,9 +11,9 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
-from digiquant.olympus.atlas.phases.phase7_synthesis import (
+from digiquant.research import diagnostics
+from digiquant.research.phases.phase6_consolidate import build_phase6
+from digiquant.research.phases.phase7_synthesis import (
     _DIGEST_MODEL_CONTEXT_TOKENS,
     _DIGEST_SEGMENT_MIN_CHARS,
     DigestSnapshot,
@@ -27,8 +27,8 @@ from digiquant.olympus.atlas.phases.phase7_synthesis import (
     _subsection_phase_inputs,
     build_phase7,
 )
-from digiquant.olympus.atlas.skills import load_skill
-from digiquant.olympus.atlas.state import (
+from digiquant.research.skills import load_skill
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -37,11 +37,11 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.atlas.testing.simulator import parse_schema_name
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
-from digiquant.olympus.hermes.models.analyst import AnalystPayload
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
-from digiquant.olympus.hermes.phases.phase7d_pm import RebalanceDecision, build_phase7d
+from digiquant.research.testing.simulator import parse_schema_name
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
+from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.phase7d_pm import RebalanceDecision, build_phase7d
 
 
 def _seed_state_through_phase5() -> AtlasResearchState:
@@ -133,7 +133,7 @@ class TestPhase6BiasRow:
         state.phase2_outputs = {slug: _carried_slot(slug) for slug in state.phase2_outputs}
         state.phase3_output = _carried_slot("macro")
         state.phase5_outputs = {"equity": _carried_slot("equity")}
-        from digiquant.olympus.atlas.state import DeltaTriageDecision, DeltaTriageResult
+        from digiquant.research.state import DeltaTriageDecision, DeltaTriageResult
 
         state.triage = DeltaTriageResult(
             evaluated_at=date(2026, 4, 26),
@@ -340,7 +340,7 @@ class TestPhase7Synthesis:
             ],
         )
 
-        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSubsection
+        from digiquant.research.phases.phase7_synthesis import DigestSubsection
 
         def fake_agent(*, output_model: type, **kwargs: Any) -> Any:
             del kwargs
@@ -357,7 +357,7 @@ class TestPhase7Synthesis:
         compiled = build_pipeline(AtlasResearchState, [build_phase6(), *build_phase7()])
 
         with patch(
-            "digiquant.olympus.atlas.phases.phase7_synthesis.run_research_agent",
+            "digiquant.research.phases.phase7_synthesis.run_research_agent",
             side_effect=fake_agent,
         ):
             final = AtlasResearchState.model_validate(compiled.invoke(state))
@@ -982,7 +982,7 @@ class TestDigestFailureVisibility:
             "BadRequestError 400: endpoint maximum context length is 64000 tokens, requested ~90690"
         )
         with patch(
-            "digiquant.olympus.atlas.phases.phase7_synthesis.run_research_agent",
+            "digiquant.research.phases.phase7_synthesis.run_research_agent",
             side_effect=overflow,
         ):
             final = AtlasResearchState.model_validate(compiled.invoke(state))

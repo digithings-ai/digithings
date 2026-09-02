@@ -9,12 +9,12 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.atlas.testing.simulator import (
+from digiquant.research.testing.simulator import (
     DEFAULT_RESPONSES,
     parse_phase_inputs,
     seed_supabase_client,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,

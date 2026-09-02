@@ -8,14 +8,14 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.asof_dataset import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.asof_dataset import (
     VersionedBarSeries,
     build_asof_dataset,
     build_replay_input_manifest,
 )
-from digiquant.olympus.replay.canonical import policy_bundle_content_hash
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.canonical import policy_bundle_content_hash
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingQuantity,
     InstrumentBarSeries,
@@ -28,14 +28,14 @@ from digiquant.olympus.replay.models import (
     ReplayArmSpec,
     WalkForwardFold,
 )
-from digiquant.olympus.replay.policy_portfolio import (
+from digiquant.dashboard.replay.policy_portfolio import (
     PolicyArmReplayError,
     build_policy_arm_request,
     reconcile_portfolio_replay_result,
     run_policy_arm_replay_isolated,
     slice_series_for_eval_fold,
 )
-from digiquant.olympus.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
+from digiquant.dashboard.replay.policy_registry import PolicyRegistry, RegisteredPolicyVersion
 
 pytestmark = pytest.mark.unit
 
@@ -354,7 +354,7 @@ def test_run_policy_arm_replay_hold_add_trim_exit_noop_partial(tmp_path) -> None
             registry=registry,
             initial_holdings=initial,
         )
-        from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+        from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
         return run_portfolio_replay_isolated(request, work_dir=tmp_path / arm_id)
 
@@ -407,7 +407,7 @@ def test_run_policy_arm_replay_hold_add_trim_exit_noop_partial(tmp_path) -> None
         arm=partial_arm,
         registry=registry,
     )
-    from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+    from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
     partial = run_portfolio_replay_isolated(partial_req, work_dir=tmp_path / "partial")
     full = _run((("AAPL", "0.8"), ("MSFT", "0.0")), "full")
@@ -455,7 +455,7 @@ def test_unavailable_portfolio_policy_fails_closed(tmp_path) -> None:
 
 
 def test_reconcile_rejects_inconsistent_nav() -> None:
-    from digiquant.olympus.replay.models import (
+    from digiquant.dashboard.replay.models import (
         HoldingSnapshot,
         PortfolioReplayResult,
         portfolio_replay_result_content_hash,
@@ -523,7 +523,7 @@ def test_reconcile_failure_returns_typed_error(tmp_path) -> None:
         portfolio_ref=ref,
     )
     with patch(
-        "digiquant.olympus.replay.policy_portfolio.reconcile_portfolio_replay_result",
+        "digiquant.dashboard.replay.policy_portfolio.reconcile_portfolio_replay_result",
         side_effect=ValueError("synthetic reconcile failure"),
     ):
         result = run_policy_arm_replay_isolated(

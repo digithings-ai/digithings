@@ -19,7 +19,7 @@ keys go through :func:`register_breakdown_contributor` rather than editing this 
 
 Segment accounting reads the discriminated ``SegmentSlot`` payloads: ``today`` = freshly
 generated, ``carried`` = fell back to the baseline. A carry whose reason is
-:data:`~digiquant.olympus.atlas.phases.fail_soft.NODE_FAILED_REASON` is a *node failure*
+:data:`~digiquant.research.phases.fail_soft.NODE_FAILED_REASON` is a *node failure*
 (counted as failed), distinct from a deliberate below-threshold carry.
 """
 
@@ -32,8 +32,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
-from digiquant.olympus.atlas.phases.fail_soft import NODE_FAILED_REASON
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.phases.fail_soft import NODE_FAILED_REASON
+from digiquant.research.state import AtlasResearchState
 
 logger = logging.getLogger(__name__)
 
@@ -522,7 +522,7 @@ def _announce_spend_alert(row: Mapping[str, Any]) -> None:
     Guarded end-to-end anyway — this is decoration, and no shape of ``row`` should reach the
     caller as an exception.
     """
-    from digiquant.olympus.atlas import telemetry as _telemetry
+    from digiquant.research import telemetry as _telemetry
 
     try:
         breakdown = row.get("breakdown") or {}
@@ -606,7 +606,7 @@ def _row(
     # Deferred import, not module-level: ``telemetry`` imports ``register_breakdown_contributor``
     # from THIS module, so a top-level import here is a cycle. ``_row`` runs once per run, so the
     # cached-module lookup costs nothing measurable.
-    from digiquant.olympus.atlas import telemetry as _telemetry
+    from digiquant.research import telemetry as _telemetry
 
     # Only the breakdown key is written here. The log line and the CI annotation are side effects
     # and fire from ``write_row`` AFTER the upsert succeeds — ``_row`` runs inside ``write_row``'s
@@ -673,7 +673,7 @@ def write_row(
     """Upsert one ``atlas_run_diagnostics`` row (on ``run_id, attempt``). Fail-soft → ``None``
     on any error (telemetry never breaks a run). Returns the :class:`RunSummary` on success.
 
-    The conflict key is per-ATTEMPT since #1762. ``pipeline-olympus.yml`` retries the chain up
+    The conflict key is per-ATTEMPT since #1762. ``pipeline-digiquant.yml`` retries the chain up
     to 3 times inside one job, so ``run_id`` alone made the last attempt's row overwrite the
     expensive attempt's tokens and cost — 28 of 54 production rows, and it also collapsed
     ``run-episodes.ts``'s ``attempts`` count to 1 and made its ``recovered`` outcome

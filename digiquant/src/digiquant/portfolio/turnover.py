@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint suppression: entry_date coercion
 
-from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
+from digiquant.portfolio.sizing_events import SizingAdjustment, SizingAdjustmentType
 
 # Cadence values read from config preferences (``preferences["rebalancing_cadence"]``),
 # sourced from portfolio.json ``constraints`` during preflight. Default "daily".

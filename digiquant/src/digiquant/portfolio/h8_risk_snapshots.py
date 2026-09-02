@@ -1,7 +1,7 @@
 """H8 risk snapshot attachment at the sizing entry boundary (#2698 / WP6.3).
 
-Keeps :mod:`digiquant.olympus.hermes.risk_policy` free of
-:mod:`digiquant.olympus.hermes.phases.phase7e_risk_sizing` import cycles.
+Keeps :mod:`digiquant.portfolio.risk_policy` free of
+:mod:`digiquant.portfolio.phases.phase7e_risk_sizing` import cycles.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.research.state import AtlasResearchState
+from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     PolicyArtifactStatus,
     RiskPolicy,
@@ -26,8 +26,8 @@ from digiquant.olympus.hermes.models.risk_policy import (
     risk_policy_id,
     snapshot_hash_payload,
 )
-from digiquant.olympus.hermes.risk_policy import resolve_covariance_snapshot, resolve_risk_policy
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.portfolio.risk_policy import resolve_covariance_snapshot, resolve_risk_policy
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

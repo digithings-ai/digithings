@@ -9,7 +9,7 @@ mapping and asserts every category the publish path can emit is allow-listed.
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.phases.publish_phase import _segment_category
+from digiquant.research.phases.publish_phase import _segment_category
 
 # Source of truth: chk_documents_category in
 # digiquant/supabase/migrations/{002_schema_hardening,011_unpartition_snapshots_documents,
@@ -93,6 +93,6 @@ class TestPublishCategoryConstraint:
         """Regression for #1383 — beliefs distillation publishes category="learning",
         which migration 043 forgot to add to chk_documents_category, crashing the
         Olympus daily pipeline for 11 runs. Pin the value the writer actually emits."""
-        from digiquant.olympus.learning.beliefs_distillation import BELIEFS_CATEGORY
+        from digiquant.dashboard.learning.beliefs_distillation import BELIEFS_CATEGORY
 
         assert BELIEFS_CATEGORY in ALLOWED_CATEGORIES

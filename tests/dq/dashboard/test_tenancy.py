@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.olympus.tenancy (T0, Kairos + tenancy program)."""
+"""Unit tests for digiquant.dashboard.tenancy (T0, Kairos + tenancy program)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.tenancy import (
     HOUSE_WORKSPACE_SLUG,
     SYSTEM_WORKSPACE_SLUG,
     PlanTier,

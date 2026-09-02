@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-from digiquant.olympus.atlas.data.queries import (
+from digiquant.research.data.queries import (
     get_market_breadth,
     get_vix_term_structure,
 )

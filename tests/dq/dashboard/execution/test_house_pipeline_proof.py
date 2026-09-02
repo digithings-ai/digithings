@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from digiquant.olympus.kairos.house_pipeline_proof import (
+from digiquant.execution.house_pipeline_proof import (
     EXIT_LIST_FAILED,
     EXIT_MAIN_MISSING_FAILSOFTS,
     EXIT_PROVEN,

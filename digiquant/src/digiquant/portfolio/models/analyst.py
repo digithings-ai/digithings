@@ -11,7 +11,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 from pydantic import BaseModel, Field, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
-from digiquant.olympus.hermes.models.forecast import ForecastAssessment, ForecastTerms
+from digiquant.portfolio.models.forecast import ForecastAssessment, ForecastTerms
 
 
 class EvidenceAssessment(BaseModel):

@@ -12,21 +12,21 @@ pytest.importorskip("digigraph.usage", reason="digiquant-only CI lane omits full
 from digigraph.usage import record as usage_record
 from digigraph.usage import reset as usage_reset
 from digigraph.usage import start as usage_start
-from digiquant.olympus.overlay.budget import (
+from digiquant.dashboard.overlay.budget import (
     BudgetExhausted,
     OverlayBudget,
     attributed_spend_usd,
 )
-from digiquant.olympus.overlay.byok import ByokProbe
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
-from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
-from digiquant.olympus.research_corpus import ResearchCorpusStore
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 
 from tests.dq.olympus.overlay._sealed import sealed_openai
 

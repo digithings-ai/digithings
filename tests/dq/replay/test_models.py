@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     FORBIDDEN_IMPORT_PREFIXES,
     ExecutionPolicy,
     HoldingQuantity,

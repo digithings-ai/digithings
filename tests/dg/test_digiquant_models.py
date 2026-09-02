@@ -1,4 +1,4 @@
-"""Olympus model tier policy (config/olympus_models.yaml)."""
+"""Olympus model tier policy (config/digiquant_models.yaml)."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ _TIER_PHASE_MODELS = {
     "quality": _QUALITY_PHASE_MODELS,
 }
 
-# Retired OpenRouter IDs — must not appear in olympus_models.yaml pins or pools.
+# Retired OpenRouter IDs — must not appear in digiquant_models.yaml pins or pools.
 _BANNED_QWEN_MODEL_MARKERS = (
     "qwen3-235b",
     "qwen/qwen3",
@@ -297,8 +297,8 @@ def test_phase_models_flagship_override_rejected_on_cheap(
     (tmp_path / "model_modes.yaml").write_text(
         'phase_models:\n  macro: "openrouter/openai/gpt-4o-mini"\n'
     )
-    (tmp_path / "olympus_models.yaml").write_text(
-        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    (tmp_path / "digiquant_models.yaml").write_text(
+        Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
@@ -315,8 +315,8 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
     (tmp_path / "model_modes.yaml").write_text(
         'phase_models:\n  macro: "openrouter/openai/gpt-5.6-luna"\n'
     )
-    (tmp_path / "olympus_models.yaml").write_text(
-        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    (tmp_path / "digiquant_models.yaml").write_text(
+        Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
@@ -334,8 +334,8 @@ def test_phase_models_open_weight_override_wins(
     (tmp_path / "model_modes.yaml").write_text(
         'phase_models:\n  macro: "openrouter/deepseek/deepseek-r1"\n'
     )
-    (tmp_path / "olympus_models.yaml").write_text(
-        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    (tmp_path / "digiquant_models.yaml").write_text(
+        Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
@@ -350,13 +350,13 @@ def test_phase_models_online_override_rejected(
     """Regression: a ``:online`` override is web-search-only and must NOT route a phase.
 
     The override is rejected (not tool-capable) and routing falls back to the tier's
-    bare phase pool from olympus_models.yaml.
+    bare phase pool from digiquant_models.yaml.
     """
     (tmp_path / "model_modes.yaml").write_text(
         'phase_models:\n  macro: "openrouter/mistralai/mistral-small-3.1-24b-instruct:online"\n'
     )
-    (tmp_path / "olympus_models.yaml").write_text(
-        Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
+    (tmp_path / "digiquant_models.yaml").write_text(
+        Path(_REPO_CONFIG, "digiquant_models.yaml").read_text()
     )
     monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
@@ -461,9 +461,9 @@ def test_perplexity_only_in_web_search_pools_not_phase_pools() -> None:
 @pytest.mark.unit
 def test_no_stale_qwen_model_ids_in_olympus_config() -> None:
     """Regression: retired qwen/qwen3-235b slugs 400 on OpenRouter (CI run 27950332738)."""
-    yaml_text = Path(_REPO_CONFIG, "olympus_models.yaml").read_text().lower()
+    yaml_text = Path(_REPO_CONFIG, "digiquant_models.yaml").read_text().lower()
     hits = [marker for marker in _BANNED_QWEN_MODEL_MARKERS if marker in yaml_text]
-    assert not hits, f"olympus_models.yaml still references banned Qwen slugs: {hits}"
+    assert not hits, f"digiquant_models.yaml still references banned Qwen slugs: {hits}"
 
     cfg = model_config._load_olympus_models()
     for tier_name, tier_cfg in cfg.tiers.items():

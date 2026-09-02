@@ -21,12 +21,12 @@ Hermes consumes the daily Atlas digest (`DigestPayload`) and runs **H1–H9**:
 
 ## Entry points
 
-- **Production:** `python -m digiquant.olympus.hermes.chain --cadence daily`
+- **Production:** `python -m digiquant.portfolio.chain --cadence daily`
   (`--refresh-scope` for operator full refresh: `none|all|segments|hermes|digest|beliefs`).
   Deprecated shim: `--run-type baseline|delta` (warns; `monthly` rejected).
   After a non-retry exit, fail-soft K5 digest close-out runs (`force_digest=True`).
-- **Standalone:** `python -m digiquant.olympus.hermes.graph --from-digest <state.json>`
-- **Library:** `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)`
+- **Standalone:** `python -m digiquant.portfolio.graph --from-digest <state.json>`
+- **Library:** `digiquant.portfolio.chain.run_atlas_then_hermes(atlas_input, deps)`
   (overlay nested path — does **not** send house mail)
 
 ## Extension checklist (§9–§11)
@@ -41,12 +41,12 @@ Before adding or changing a Hermes phase:
 - [ ] H7 phases: assert no weight fields (`test_pm_no_weights`)
 - [ ] H8 remains deterministic — no LLM in sizing path
 - [ ] Terminal booking only via H9 `commit_run` — do not reintroduce `portfolio_materialize` on daily path
-- [ ] Add/update unit tests under `tests/dq/hermes/` or `tests/dq/olympus/`
+- [ ] Add/update unit tests under `tests/dq/portfolio/` or `tests/dq/dashboard/`
 
 ## Skills
 
 Each LLM phase loads from `digiquant/src/digiquant/olympus/hermes/skills/<slug>/`
-via `digiquant.olympus.hermes.skills.load_skill`. Edit-mode skills use `*-edit.md`;
+via `digiquant.portfolio.skills.load_skill`. Edit-mode skills use `*-edit.md`;
 full rewrite uses `*-full.md`.
 
 | Phase | Skills |
@@ -66,7 +66,7 @@ Cross-engine loads raise `SkillNotFoundError`.
 Hermes JSON schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`:
 `document-delta`, `AnalystPayload`, `PMDirectionMemo`, deliberation schemas,
 `market-thesis-exploration`, `thesis-vehicle-map`, etc.
-Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
+Loaded via `digiquant.portfolio.schemas.load_schema(name)`.
 
 ## Persistence
 
@@ -85,12 +85,12 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 ## Testing
 
 ```bash
-pytest tests/dq/hermes/ -m unit -v
-pytest tests/dq/olympus/ -m unit -v
-pytest tests/dq/atlas/ -m unit -v
+pytest tests/dq/portfolio/ -m unit -v
+pytest tests/dq/dashboard/ -m unit -v
+pytest tests/dq/research/ -m unit -v
 ```
 
-Hermes tests gate on `tests/dq/hermes/conftest.py` (full set in `test-atlas-graph.yml`).
+Hermes tests gate on `tests/dq/portfolio/conftest.py` (full set in `test-research-graph.yml`).
 
 ## Useful files
 

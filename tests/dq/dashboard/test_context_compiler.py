@@ -12,7 +12,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4, uuid5
 
 import pytest
-from digiquant.olympus.research_retrieval.context import (
+from digiquant.dashboard.research_retrieval.context import (
     CONTEXT_SCHEMA_VERSION,
     ContextCompileInput,
     ContextItem,
@@ -25,7 +25,7 @@ from digiquant.olympus.research_retrieval.context import (
     default_role_context_policy,
     role_context_policy_content_hash,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
     EvidenceRecord,
@@ -54,7 +54,7 @@ from digiquant.olympus.research_retrieval.models import (
     ticker_evidence_bundle_content_hash,
     ticker_evidence_bundle_id,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionBudgetEstimate,
     AttentionDecision,
     AttentionFeatures,
@@ -66,7 +66,7 @@ from digiquant.olympus.research_retrieval.planner import (
     H6DecisionFeatures,
     attention_plan_id,
 )
-from digiquant.olympus.research_retrieval.store import LoadedResearchState, ResearchStateStore
+from digiquant.dashboard.research_retrieval.store import LoadedResearchState, ResearchStateStore
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -629,7 +629,7 @@ def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) ->
         "prior_book": [{"ticker": "MSFT", "weight_pct": 5.0}],
         "active_theses": [{"thesis_id": "t1"}],
     }
-    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
 
     result = wire_h5_phase_inputs(
         incumbent,
@@ -652,7 +652,7 @@ def test_wire_h5_shadow_records_manifest_beside_incumbent(
     store, pin, version_id = _seed_loaded_state(loaded)
     bundle = _bundle(state_version_id=version_id)
     incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
-    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
 
     result = wire_h5_phase_inputs(
         incumbent,
@@ -686,7 +686,7 @@ def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
         "held_in_prior_book": True,
         "weight_pct": 12.0,
     }
-    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_h5_phase_inputs
 
     result = wire_h5_phase_inputs(
         incumbent,
@@ -718,7 +718,7 @@ def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
         "prior_book": [{"ticker": "MSFT"}],
         "base_evidence_bundle": bundle.model_dump(mode="json"),
     }
-    from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
 
     result = wire_h6_phase_inputs(
         incumbent,
@@ -742,7 +742,7 @@ def test_wire_h6_rejects_unpinned_bundle_state_version(
     loaded = _loaded_state(evidence=(ev,))
     wrong_bundle = _bundle(state_version_id=uuid4())
     store, pin, _version_id = _seed_loaded_state(loaded)
-    from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
+    from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
 
     with pytest.raises(ValueError, match="state_version_id"):
         wire_h6_phase_inputs(

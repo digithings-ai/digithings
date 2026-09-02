@@ -1,10 +1,10 @@
 """Where a content freeze becomes visible (#1749, #1751) — the Atlas-side surfaces.
 
-Split from ``tests/dq/olympus/test_content_freeze_provenance.py``, which holds the pure
+Split from ``tests/dq/dashboard/test_content_freeze_provenance.py``, which holds the pure
 ``edit_mode`` half. These tests import Atlas phases, which pull ``digigraph`` →
-``openai``, so they must live here: ``tests/dq/atlas/conftest.py`` gates collection on
+``openai``, so they must live here: ``tests/dq/research/conftest.py`` gates collection on
 ``digigraph`` being importable, and the ``digiquant`` CI lane installs only
-``digiquant[dev]``. A test importing ``_node_factory`` from ``tests/dq/olympus/`` is a
+``digiquant[dev]``. A test importing ``_node_factory`` from ``tests/dq/dashboard/`` is a
 collection error in that lane, not a skip.
 
 Three surfaces, each of which reported a frozen segment as fresh:
@@ -19,14 +19,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import EditSegmentResult, _delta_row
-from digiquant.olympus.atlas.phases.phase7_synthesis import _slot_freshness
-from digiquant.olympus.atlas.snapshot import SegmentFreshness as ReadPathFreshness
-from digiquant.olympus.atlas.snapshot import SnapshotEnvelope
-from digiquant.olympus.atlas.state import AtlasResearchState, Carried, SegmentPayload
-from digiquant.olympus.atlas.telemetry import CONTENT_FREEZE_KEY, content_freeze_breakdown
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
-from digiquant.olympus.edit_mode.content_identity import UNCHANGED_FLAG_KEY, UNCHANGED_SINCE_KEY
+from digiquant.research.phases._node_factory import EditSegmentResult, _delta_row
+from digiquant.research.phases.phase7_synthesis import _slot_freshness
+from digiquant.research.snapshot import SegmentFreshness as ReadPathFreshness
+from digiquant.research.snapshot import SnapshotEnvelope
+from digiquant.research.state import AtlasResearchState, Carried, SegmentPayload
+from digiquant.research.telemetry import CONTENT_FREEZE_KEY, content_freeze_breakdown
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
+from digiquant.dashboard.edit_mode.content_identity import UNCHANGED_FLAG_KEY, UNCHANGED_SINCE_KEY
 
 _HEALTHCARE_BODY = {
     "segment": "sector-healthcare",
@@ -170,7 +170,7 @@ class TestFreezeTelemetry:
         assert content_freeze_breakdown(state) == {}
 
     def test_the_contributor_is_registered(self) -> None:
-        from digiquant.olympus.atlas.diagnostics import _BREAKDOWN_CONTRIBUTORS
+        from digiquant.research.diagnostics import _BREAKDOWN_CONTRIBUTORS
 
         assert content_freeze_breakdown in _BREAKDOWN_CONTRIBUTORS
 

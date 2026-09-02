@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.state import FocusRosterEntry
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import compute_focus_roster
+from digiquant.research.state import FocusRosterEntry
+from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -112,7 +112,7 @@ def test_compute_focus_roster_passes_client_to_technical_screen(
         return watchlist[:1]
 
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.phases.h4_opportunity_screener.select_focus_tickers",
+        "digiquant.portfolio.phases.h4_opportunity_screener.select_focus_tickers",
         stub_select,
     )
     roster = compute_focus_roster(
@@ -273,7 +273,7 @@ def test_technical_entry_carries_rationale(monkeypatch: pytest.MonkeyPatch) -> N
 
 @pytest.mark.unit
 def test_excluded_ticker_and_state_slot() -> None:
-    from digiquant.olympus.atlas.state import ExcludedTicker, PhaseHermesState
+    from digiquant.research.state import ExcludedTicker, PhaseHermesState
 
     e = ExcludedTicker(ticker="TLT", reason="held, no material change (Δ<0.5%)")
     assert e.ticker == "TLT" and e.reason
@@ -282,7 +282,7 @@ def test_excluded_ticker_and_state_slot() -> None:
 
 @pytest.mark.unit
 def test_extract_thesis_mappings_carries_rationale() -> None:
-    from digiquant.olympus.hermes.phases.h4_opportunity_screener import extract_thesis_mappings
+    from digiquant.portfolio.phases.h4_opportunity_screener import extract_thesis_mappings
 
     vmap = {
         "body": {
@@ -372,8 +372,8 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
     entries (the non-rostered ones) with non-empty reasons.  The rostered
     ticker must be absent from the ledger.
     """
-    from digiquant.olympus.atlas.state import ExcludedTicker
-    from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+    from digiquant.research.state import ExcludedTicker
+    from digiquant.portfolio.phases.h4_opportunity_screener import (
         compute_focus_roster_excluded,
     )
 
@@ -387,7 +387,7 @@ def test_compute_focus_roster_excluded_ledger(monkeypatch: pytest.MonkeyPatch) -
         return []
 
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.phases.h4_opportunity_screener.select_focus_tickers",
+        "digiquant.portfolio.phases.h4_opportunity_screener.select_focus_tickers",
         _stub_select,
     )
 
@@ -440,7 +440,7 @@ def test_excluded_ledger_records_gated_held_absent_from_watchlist() -> None:
     ledger to carry it instead of failing closed on a missing analyst doc. Iterating
     only the watchlist silently dropped it.
     """
-    from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+    from digiquant.portfolio.phases.h4_opportunity_screener import (
         compute_focus_roster_excluded,
     )
 
@@ -488,8 +488,8 @@ def _make_min_hermes_state(*, watchlist: list[str]) -> "object":
     """
     from datetime import date as _date
 
-    from digiquant.olympus.atlas.state import AtlasConfigBundle, PhaseHermesState
-    from digiquant.olympus.hermes.state import HermesState
+    from digiquant.research.state import AtlasConfigBundle, PhaseHermesState
+    from digiquant.portfolio.state import HermesState
 
     state = HermesState(
         run_type="delta",
@@ -502,7 +502,7 @@ def _make_min_hermes_state(*, watchlist: list[str]) -> "object":
 
 @pytest.mark.unit
 def test_h4_node_applies_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
+    from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
     monkeypatch.setenv("HERMES_HELD_GATE", "off")
     monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (1, 0, None))
@@ -519,11 +519,11 @@ def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPa
     """WP13.4 (#2930): planner off/shadow/enforce must not mutate H4 roster."""
     import json
 
-    from digiquant.olympus.atlas.research_attention import (
+    from digiquant.research.research_attention import (
         OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
         reset_attention_stores,
     )
-    from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
+    from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
     monkeypatch.setenv("HERMES_HELD_GATE", "off")
     state = _make_min_hermes_state(watchlist=["AAA", "BBB", "SPY", "CCC"])

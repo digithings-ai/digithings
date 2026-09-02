@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from digiquant.olympus.instrument_metadata import InstrumentMetadata
+from digiquant.dashboard.instrument_metadata import InstrumentMetadata
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit

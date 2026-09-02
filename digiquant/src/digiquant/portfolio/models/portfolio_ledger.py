@@ -32,7 +32,7 @@ A run that short-circuits as ``status="noop"`` returns before the append — "no
 that path is intentional, not a missing producer.
 
 They are also **read back** now, which they were not before #2420:
-``digiquant/scripts/atlas/execute_at_open.py`` walks the chain forward from
+``digiquant/scripts/research/execute_at_open.py`` walks the chain forward from
 ``PortfolioCommit`` through ``OrderIntent``, ``ApprovedTarget``, ``PaperExecution`` and
 ``HoldingLot``, and projects it into the public ``position_events`` table — naming each
 event from the lots it can see rather than from a diff of two snapshots, which is the
@@ -64,7 +64,7 @@ from uuid import UUID, uuid5
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 # Fixed namespace for PaperExecution's deterministic idempotency key. Any stable literal
 # UUID works here — it only needs to never change between deploys.
@@ -244,7 +244,7 @@ class PortfolioLedgerModel(BaseModel):
     schema already enforces at the database layer: construct a brand-new instance
     (going through ``__init__`` and full validation) whose ``supersedes_id`` points at
     the prior row. See ``TestPortfolioLedgerModel::test_model_copy_bypasses_freeze_and_validation``
-    in ``tests/dq/hermes/test_portfolio_ledger.py`` for a regression test pinning this
+    in ``tests/dq/portfolio/test_portfolio_ledger.py`` for a regression test pinning this
     as expected (if unfortunate) upstream behavior rather than a silently-forgotten bug.
     """
 

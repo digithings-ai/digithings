@@ -7,7 +7,7 @@ target-version = "py312"
 
 # Trees we don't want linted as part of the main stack.
 #   apps/                       — downstream applications built on digithings.
-#   digiquant/scripts/atlas/    — legacy operator scripts (pandas/yfinance), exempted
+#   digiquant/scripts/research/    — legacy operator scripts (pandas/yfinance), exempted
 #                                 from the Polars-only policy. Migrated from
 #                                 apps/digiquant-atlas/scripts/ in issue #316; not
 #                                 actively maintained.
@@ -17,7 +17,7 @@ target-version = "py312"
 #   docs/openapi/               — generated API specs
 extend-exclude = [
   "apps",
-  "digiquant/scripts/atlas",
+  "digiquant/scripts/research",
   ".venv",
   ".venv-ci",
   "node_modules",
@@ -28,7 +28,7 @@ extend-exclude = [
 [format]
 # Markdown is NOT source. ruff 0.16 began formatting Python code blocks inside
 # `.md` files — 0.15.8 reported "No Python files found" for the same paths — which
-# turned the atlas-graph format check red on unchanged docs (#1705, same unpinned
+# turned the research-graph format check red on unchanged docs (#1705, same unpinned
 # -upgrade root cause as #1701).
 #
 # The snippets in docs/ are illustrative specification excerpts with deliberate
@@ -69,8 +69,8 @@ select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 #     would append "+00:00" and the assertion would be testing a different contract.
 #   test_strategy_store — `as_of` is serialized by production code under test.
 #   test_phase_tool_flags — stubs a freshness timestamp compared against naive values.
-"tests/dq/atlas/test_phase_tool_flags.py" = ["DTZ001"]
-"tests/dq/atlas/test_supabase_io.py" = ["DTZ001"]
+"tests/dq/research/test_phase_tool_flags.py" = ["DTZ001"]
+"tests/dq/research/test_supabase_io.py" = ["DTZ001"]
 "tests/dq/data/test_technicals.py" = ["DTZ001"]
 "tests/dq/data/test_trading_days_filter.py" = ["DTZ001"]
 "tests/dq/store/test_strategy_store.py" = ["DTZ001"]

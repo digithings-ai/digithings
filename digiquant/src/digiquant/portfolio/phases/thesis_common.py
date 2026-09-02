@@ -13,12 +13,12 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel, ValidationError
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
 )
-from digiquant.olympus.atlas.state import PhaseError, refresh_scope_forces_full
-from digiquant.olympus.edit_mode import (
+from digiquant.research.state import PhaseError, refresh_scope_forces_full
+from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
     PriorPublished,
@@ -26,11 +26,11 @@ from digiquant.olympus.edit_mode import (
     merge_document_patch,
     resolve_edit_mode,
 )
-from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch, section_index
-from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.thesis_grounding import build_thesis_grounding
-from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
+from digiquant.dashboard.edit_mode.merge import MergeError, coerce_document_patch, section_index
+from digiquant.portfolio.skills import load_skill_edit, load_skill_full
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.thesis_grounding import build_thesis_grounding
+from digiquant.dashboard.research_retrieval.blinding import RetrievalPhase
 
 logger = logging.getLogger(__name__)
 

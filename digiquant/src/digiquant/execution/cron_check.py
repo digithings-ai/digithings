@@ -12,9 +12,9 @@ from collections.abc import Callable, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from digiquant.notify.mailgun import format_mailgun_not_configured, missing_mailgun_env_names
-from digiquant.olympus.kairos.route_cron import main as route_main
-from digiquant.olympus.kairos.sync_cron import main as sync_main
-from digiquant.olympus.overlay.cron import main as overlay_main
+from digiquant.execution.route_cron import main as route_main
+from digiquant.execution.sync_cron import main as sync_main
+from digiquant.dashboard.overlay.cron import main as overlay_main
 
 
 class CronCheckResult(BaseModel):
@@ -73,7 +73,7 @@ def main(
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
-    """CLI used by ``scripts/kairos_cron_check.py``."""
+    """CLI used by ``scripts/execution_cron_check.py``."""
     del argv
     err = log_err or log
     overlay_rc = overlay_main(["--check"], environ=environ, log=log, log_err=err)

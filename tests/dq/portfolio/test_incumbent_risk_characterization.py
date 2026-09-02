@@ -13,16 +13,16 @@ from inspect import signature
 
 import polars as pl
 import pytest
-from digiquant.olympus.atlas.data.queries import get_return_correlations
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.research.data.queries import get_return_correlations
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     _VOL_LOOKBACK_DAYS,
     _effective_inputs,
     _memo_effective_inputs,
     _rank_to_conviction,
 )
-from digiquant.olympus.hermes.risk_controls import BreakerConfig, compute_breaker_scale
-from digiquant.olympus.hermes.sizing import (
+from digiquant.portfolio.risk_controls import BreakerConfig, compute_breaker_scale
+from digiquant.portfolio.sizing import (
     _ANNUALIZE,
     SizingCaps,
     TickerRisk,

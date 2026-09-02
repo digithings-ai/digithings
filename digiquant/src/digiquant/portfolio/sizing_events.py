@@ -3,7 +3,7 @@
 (#2768).
 
 These events remain a deliberately separate type from the persisted portfolio-lineage
-ledger models in :mod:`digiquant.olympus.hermes.models.portfolio_ledger`
+ledger models in :mod:`digiquant.portfolio.models.portfolio_ledger`
 (``TargetAdjustmentType`` / ``TargetAdjustment``, #2415): that ledger is append-only
 and H9 is its sole writer. H8 applies caps upstream of H9 and returns these events
 plus ``SizingResult.requested_pct`` on the sized book; H9 maps ``unit="pct"`` events

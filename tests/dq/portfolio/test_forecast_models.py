@@ -13,8 +13,8 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.hermes.models.analyst import AnalystPayload, EvidenceAssessment
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.portfolio.models.analyst import AnalystPayload, EvidenceAssessment
+from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
     PriceAnchor,
@@ -268,7 +268,7 @@ class TestLegacyAnalystDoesNotDeriveForecast:
 
 class TestForecastAmendmentAndEffective:
     def test_accepted_amendment_preserves_immutable_base(self) -> None:
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             AmendmentOutcome,
             EffectiveSource,
             materialize_forecast_amendment,
@@ -303,7 +303,7 @@ class TestForecastAmendmentAndEffective:
         assert base.terms.base_return == Decimal("0.04")
 
     def test_rejected_amendment_keeps_base_effective(self) -> None:
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             AmendmentOutcome,
             EffectiveSource,
             materialize_forecast_amendment,
@@ -333,7 +333,7 @@ class TestForecastAmendmentAndEffective:
         assert effective.degradation_reason == "amendment_rejected"
 
     def test_knowledge_cutoff_excludes_future_known_amendment(self) -> None:
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             AmendmentOutcome,
             EffectiveSource,
             materialize_forecast_amendment,

@@ -12,26 +12,26 @@ from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.inspectable_io import (
+from digiquant.research.inspectable_io import (
     publish_bias_row_document,
     publish_inputs_document,
 )
-from digiquant.olympus.atlas.segments import compose_legacy_digest_body
-from digiquant.olympus.atlas.state import (
+from digiquant.research.segments import compose_legacy_digest_body
+from digiquant.research.state import (
     AtlasResearchState,
     Phase7DigestPayload,
     PublishedArtifact,
     SegmentSlot,
 )
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.supabase_io import (
     SupabaseClient,
     publish_daily_snapshot,
     publish_document,
     publish_document_delta,
 )
-from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
-from digiquant.olympus.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
-from digiquant.olympus.overlay.persist import is_private_workspace
+from digiquant.dashboard.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.dashboard.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
+from digiquant.dashboard.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -254,9 +254,9 @@ def _maybe_publish_compiled_research_views(
     if store is None:
         return []
 
-    from digiquant.olympus.research_retrieval.models import ResearchStatePin
-    from digiquant.olympus.research_retrieval.store import ResearchStateStore
-    from digiquant.olympus.research_retrieval.views import (
+    from digiquant.dashboard.research_retrieval.models import ResearchStatePin
+    from digiquant.dashboard.research_retrieval.store import ResearchStateStore
+    from digiquant.dashboard.research_retrieval.views import (
         compile_views_from_store,
         document_key_for_view,
         publish_compiled_views,

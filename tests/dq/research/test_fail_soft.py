@@ -11,15 +11,15 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases.fail_soft import (
+from digiquant.research.phases.fail_soft import (
     NODE_FAILED_REASON,
     run_segment_fail_soft,
 )
-from digiquant.olympus.atlas.phases.phase5_equities import (
+from digiquant.research.phases.phase5_equities import (
     EquityOverviewReport,
     build_phase5,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasResearchState,
     PhaseError,
     SegmentPayload,

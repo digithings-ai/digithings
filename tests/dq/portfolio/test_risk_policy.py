@@ -7,18 +7,18 @@ from datetime import UTC, date, datetime
 
 import polars as pl
 import pytest
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.portfolio.models.risk_policy import (
     PolicyArtifactStatus,
     ProvenanceSource,
     risk_policy_content_hash,
     risk_policy_id,
 )
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     _effective_inputs,
     _memo_effective_inputs,
 )
-from digiquant.olympus.hermes.risk_controls import BreakerConfig
-from digiquant.olympus.hermes.risk_policy import (
+from digiquant.portfolio.risk_controls import BreakerConfig
+from digiquant.portfolio.risk_policy import (
     INCUMBENT_CONTROL_ORDER,
     METHOD_VERSION,
     breaker_config_from_policy,
@@ -26,7 +26,7 @@ from digiquant.olympus.hermes.risk_policy import (
     resolve_risk_policy,
     sizing_caps_from_policy,
 )
-from digiquant.olympus.hermes.sizing import SizingCaps, size_portfolio
+from digiquant.portfolio.sizing import SizingCaps, size_portfolio
 from pydantic import ValidationError
 
 from tests.dq.hermes.incumbent_risk_fixtures import (
@@ -302,7 +302,7 @@ def test_invalid_policy_hash_rejected() -> None:
 def test_memo_and_effective_inputs_unchanged_under_resolver() -> None:
     from datetime import date as date_cls
 
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     memo = PMDirectionMemo(
         date=date_cls(2026, 6, 12),

@@ -37,7 +37,7 @@ from uuid import UUID, uuid5
 
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     BeliefVersion,
     EvidenceBundleAmendment,
     EvidenceRecord,
@@ -50,7 +50,7 @@ from digiquant.olympus.research_retrieval.models import (
     TickerEvidenceBundle,
     content_digest,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionBudgetEstimate,
     AttentionContextManifest,
     AttentionDecisionReconciliation,
@@ -62,7 +62,7 @@ from digiquant.olympus.research_retrieval.planner import (
     attention_decision_id,
     attention_evaluation_id,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 T = TypeVar("T", bound=BaseModel)
 

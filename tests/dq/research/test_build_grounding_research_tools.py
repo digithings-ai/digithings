@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases import _node_factory
-from digiquant.olympus.research_retrieval import RESEARCH_TOOLS
+from digiquant.research.phases import _node_factory
+from digiquant.dashboard.research_retrieval import RESEARCH_TOOLS
 
 
 @pytest.mark.unit

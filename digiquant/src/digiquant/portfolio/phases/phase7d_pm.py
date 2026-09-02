@@ -26,16 +26,16 @@ from typing import Any, Literal  # score:allow untyped any — used for JSON-der
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import BaseModel, Field
 
-from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.data.queries import MARKET_DATA_TABLES
+from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
     build_grounding,
 )
-from digiquant.olympus.atlas.state import PhaseError
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.research.state import PhaseError
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.state import HermesState
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ def _risk_aggressive_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.hermes.skills import load_skill
+    from digiquant.portfolio.skills import load_skill
 
     skill_text = load_skill("risk-aggressive")
     tools, execute_tool, web_grounding = _risk_tools(state, segment="risk-aggressive")
@@ -191,7 +191,7 @@ def _risk_conservative_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.hermes.skills import load_skill
+    from digiquant.portfolio.skills import load_skill
 
     aggressive = (state.phase7d_risk_debate or {}).get("aggressive_case", "")
     inputs = _build_risk_phase_inputs(state, role="conservative")
@@ -272,7 +272,7 @@ def _pm_node(state: HermesState) -> dict[str, Any]:
     """
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.hermes.skills import load_skill
+    from digiquant.portfolio.skills import load_skill
 
     # Prefer the dedicated pm skill; fall back to portfolio-manager if present.
     skill_text = _load_pm_skill(load_skill)
@@ -367,7 +367,7 @@ def _load_pm_skill(loader: Any) -> str:
     we must not pretend the skill is "missing" when the real issue is
     corruption on disk.
     """
-    from digiquant.olympus.hermes.skills import SkillNotFoundError
+    from digiquant.portfolio.skills import SkillNotFoundError
 
     tried = ("pm-rebalance-decision", "portfolio-manager", "pm-allocation-memo")
     for slug in tried:

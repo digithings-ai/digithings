@@ -13,37 +13,37 @@ import pathlib
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.research_attention import resolve_research_attention_rollout_mode
-from digiquant.olympus.atlas.state import AtlasConfigBundle
-from digiquant.olympus.hermes.graph import (
+from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+from digiquant.research.phases.preflight import PreflightDeps
+from digiquant.research.phases.publish_phase import PublishDeps
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.research_attention import resolve_research_attention_rollout_mode
+from digiquant.research.state import AtlasConfigBundle
+from digiquant.portfolio.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
     build_hermes_phases_thesis,
 )
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import compute_focus_roster
-from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
-from digiquant.olympus.research_retrieval import (
+from digiquant.portfolio.phases.h4_opportunity_screener import compute_focus_roster
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
+from digiquant.dashboard.research_retrieval import (
     assert_blinded_h5_prompt,
     assert_blinded_h6_prompt,
     strip_blinded_forbidden_keys,
 )
-from digiquant.olympus.research_retrieval.context import ContextRole
-from digiquant.olympus.research_retrieval.context_wiring import resolve_context_compiler_mode
-from digiquant.olympus.research_retrieval.h7_decision_context import assert_h7_no_target_weights
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.context import ContextRole
+from digiquant.dashboard.research_retrieval.context_wiring import resolve_context_compiler_mode
+from digiquant.dashboard.research_retrieval.h7_decision_context import assert_h7_no_target_weights
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionRolloutMode,
     H6Action,
     H6SelectionMode,
     incumbent_fallback_selection,
     resolve_h6_selection_mode,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.phase3_e2e_fixtures import (

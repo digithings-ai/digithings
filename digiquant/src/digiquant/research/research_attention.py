@@ -15,21 +15,21 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasResearchState,
     Carried,
     DeltaTriageDecision,
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.atlas.triage import triage_decision_to_signal
-from digiquant.olympus.atlas.triage_signals import max_abs_move_for_segment, segment_tickers
-from digiquant.olympus.edit_mode.content_identity import prior_content_date
-from digiquant.olympus.edit_mode.models import PriorPublished, TriageSignal
-from digiquant.olympus.edit_mode.prior import artifact_document_key
-from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
-from digiquant.olympus.envcompat import RESEARCH_ATTENTION_MODE, env_lookup
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.research.triage import triage_decision_to_signal
+from digiquant.research.triage_signals import max_abs_move_for_segment, segment_tickers
+from digiquant.dashboard.edit_mode.content_identity import prior_content_date
+from digiquant.dashboard.edit_mode.models import PriorPublished, TriageSignal
+from digiquant.dashboard.edit_mode.prior import artifact_document_key
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.envcompat import RESEARCH_ATTENTION_MODE, env_lookup
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
     AttentionMode,
@@ -38,7 +38,7 @@ from digiquant.olympus.research_retrieval.planner import (
     AttentionTargetKind,
     plan_research_attention,
 )
-from digiquant.olympus.research_retrieval.store import AttentionStore
+from digiquant.dashboard.research_retrieval.store import AttentionStore
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ def collect_atlas_attention_features(state: AtlasResearchState) -> tuple[Attenti
     if state.triage is not None:
         for decision in state.triage.decisions:
             features.append(build_segment_attention_features(state, decision.segment, decision))
-    from digiquant.olympus.atlas.phases.phase7_synthesis import (
+    from digiquant.research.phases.phase7_synthesis import (
         _digest_document_key,
         _digest_triage_signal,
     )
@@ -386,7 +386,7 @@ def incumbent_segment_edit_mode(state: AtlasResearchState, segment: str) -> str:
         decision = next((d for d in state.triage.decisions if d.segment == segment), None)
         if decision is not None:
             triage_signal = triage_decision_to_signal(decision)
-    from digiquant.olympus.atlas.state import refresh_scope_forces_full
+    from digiquant.research.state import refresh_scope_forces_full
 
     return resolve_edit_mode(
         artifact_key=("segment", segment),

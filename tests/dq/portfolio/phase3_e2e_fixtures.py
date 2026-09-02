@@ -13,14 +13,14 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID, uuid4
 
-from digiquant.olympus.research_retrieval.context_wiring import (
+from digiquant.dashboard.research_retrieval.context_wiring import (
     compile_h5_role_context,
     compile_h6_role_context,
     compile_h7_role_context,
     wire_h5_phase_inputs,
 )
-from digiquant.olympus.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.h7_decision_context import H7PrerequisiteSnapshot
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     MissingFactRequest,
     ResearchStatePin,
@@ -33,7 +33,7 @@ from digiquant.olympus.research_retrieval.models import (
     ticker_evidence_bundle_content_hash,
     ticker_evidence_bundle_id,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionFeatures,
     AttentionRolloutMode,
     AttentionTargetKind,
@@ -43,14 +43,14 @@ from digiquant.olympus.research_retrieval.planner import (
     plan_research_attention,
     select_h6,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     EvidenceBundleStore,
     LoadedResearchState,
     ResearchStateStore,
     RoleRetrievalManifestStore,
 )
-from digiquant.olympus.research_retrieval.tools import (
+from digiquant.dashboard.research_retrieval.tools import (
     link_manifest_provider_tokens,
     persist_pre_call_role_manifest,
 )
@@ -238,7 +238,7 @@ def phase3_pinned_research_state() -> tuple[
     ResearchStateStore, ResearchStatePin, LoadedResearchState
 ]:
     """Seed store, pin one version, return strict load."""
-    from digiquant.olympus.research_retrieval.models import (
+    from digiquant.dashboard.research_retrieval.models import (
         ResearchStateManifest,
         ResearchStateVersion,
         content_digest,

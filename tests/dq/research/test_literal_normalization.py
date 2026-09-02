@@ -25,7 +25,7 @@ from typing import (
 )
 
 import pytest
-from digiquant.olympus.atlas.phases import (
+from digiquant.research.phases import (
     phase1_altdata,
     phase2_institutional,
     phase3_macro,
@@ -33,10 +33,10 @@ from digiquant.olympus.atlas.phases import (
     phase5_equities,
     phase7_synthesis,
 )
-from digiquant.olympus.atlas.phases.phase1_altdata import SentimentNewsReport
-from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport
-from digiquant.olympus.atlas.phases.phase5_equities import SectorReport
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.research.phases.phase1_altdata import SentimentNewsReport
+from digiquant.research.phases.phase3_macro import MacroRegimeReport
+from digiquant.research.phases.phase5_equities import SectorReport
+from digiquant.research.segments import SegmentReport
 from pydantic import BaseModel, ValidationError
 
 pytestmark = pytest.mark.unit
@@ -112,7 +112,7 @@ def _minimal_body(model: type[BaseModel]) -> dict[str, Any]:
 
 
 def _segment_report_models() -> list[type[BaseModel]]:
-    from digiquant.olympus.atlas.segments import ResearchMemo, SegmentReport
+    from digiquant.research.segments import ResearchMemo, SegmentReport
 
     seen: dict[str, type[BaseModel]] = {}
     for module in _PHASE_MODULES:
@@ -186,7 +186,7 @@ class TestFailSoftTiers:
         body = {**_minimal_body(SegmentReport), "bias": "stable"}
         with pytest.raises(ValidationError, match="bias"):
             SegmentReport.model_validate(body)
-        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
+        from digiquant.research.phases.phase7_synthesis import DigestSnapshot
 
         DigestSnapshot.model_validate(
             {**_minimal_body(DigestSnapshot), "bias": "stable", "body": "# Daily Digest\n"}

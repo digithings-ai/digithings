@@ -23,13 +23,13 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     ComponentAttributionReport,
     OutcomeEpisode,
     OutcomeLessonVersion,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 T = TypeVar("T", bound=BaseModel)
 

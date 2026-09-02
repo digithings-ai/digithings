@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     ExcludedTicker,
@@ -16,9 +16,9 @@ from digiquant.olympus.atlas.state import (
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
-from digiquant.olympus.hermes.writers.commit_io import (
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
+from digiquant.portfolio.writers.commit_io import (
     _NAV_INTERVAL_TICKER_BATCH,
     _NAV_INTERVAL_WINDOW_DAYS,
     OVERLAY_MANIFEST_PREFIX,
@@ -28,16 +28,16 @@ from digiquant.olympus.hermes.writers.commit_io import (
     manifest_document_key,
     resolve_prior_commit,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     _CLOSE_LOOKBACK_DAYS,
     _CLOSE_TICKER_BATCH,
     _frozen_symbols,
     _last_closes,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     _heads as _ledger_heads,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -172,7 +172,7 @@ class TestCommitRunBooking:
         # theses clipped at ~1200 chars mid-word with no risks — that was the *deployed*
         # old model; the thesis-first AnalystPayload carries the full thesis + risks, and
         # this test pins that the persistence path never re-introduces a clip.
-        from digiquant.olympus.hermes.writers.commit_io import publish_hermes_documents
+        from digiquant.portfolio.writers.commit_io import publish_hermes_documents
 
         long_thesis = "SPY rides broad risk-on participation with constructive breadth. " * 40
         assert len(long_thesis) > 1200
@@ -835,7 +835,7 @@ class TestMemoUnaddressedHeldCarry:
 
     def test_memo_flat_held_name_is_addressed_not_carried(self) -> None:
         """An explicit ``flat`` is memo-addressed: exits are honored, never resurrected."""
-        from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+        from digiquant.portfolio.writers.commit_io import carried_held_tickers
 
         client = FakeSupabaseClient()
         state = _state(
@@ -862,8 +862,8 @@ class TestMemoUnaddressedHeldCarry:
 
     def test_carried_set_is_held_only_and_sizing_carries_drifted_weight(self) -> None:
         """The carry set never widens beyond held names; H8 injects the drifted weight."""
-        from digiquant.olympus.hermes.phases.phase7e_risk_sizing import _held_carry_weights
-        from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
+        from digiquant.portfolio.phases.phase7e_risk_sizing import _held_carry_weights
+        from digiquant.portfolio.writers.commit_io import carried_held_tickers
 
         state = _state(
             with_sized_book=False,
@@ -1126,7 +1126,7 @@ class TestCommitChainLedger:
     def test_partial_ledger_failure_does_not_masquerade_as_committed(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.writers import ledger_io
+        from digiquant.portfolio.writers import ledger_io
 
         real_insert = ledger_io._insert
 
@@ -1590,8 +1590,8 @@ class TestLedgerRowsSatisfyMigration069:
     BETWEEN 1 AND 20``, ``_ACTION_REASONS`` repeats the action/reason pairing CHECK.
     A mirror can drift **loose** — widen the Python side, or narrow the SQL side
     without it, and the model accepts a row Postgres answers with a 23514. Neither
-    existing suite sees that: ``tests/dq/atlas/test_migration_069.py`` reads the DDL
-    but no Python, and ``tests/dq/hermes/test_portfolio_ledger.py`` checks the models
+    existing suite sees that: ``tests/dq/research/test_migration_069.py`` reads the DDL
+    but no Python, and ``tests/dq/portfolio/test_portfolio_ledger.py`` checks the models
     against their own literals. The failure would land in the nightly pipeline after
     promotion rather than on the PR, which is how this class of bug reached production
     three times already (#628, #1005, #1383).
@@ -1879,7 +1879,7 @@ class TestForecastRegistryInH9:
         from datetime import UTC, datetime
         from decimal import Decimal
 
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             ForecastAssessment,
             ForecastTerms,
             PriceAnchor,
@@ -1949,7 +1949,7 @@ class TestForecastRegistryInH9:
         assert len(client.store.get("positions", [])) >= 1
 
     def test_registry_failure_keeps_book_and_does_not_rebook(self, monkeypatch) -> None:
-        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import h9_commit_run as h9
 
         client = FakeSupabaseClient()
         state = _state(
@@ -1988,7 +1988,7 @@ class TestRiskPolicyRegistryH9:
         from datetime import UTC, datetime
 
         import polars as pl
-        from digiquant.olympus.hermes.h8_risk_snapshots import resolve_h8_risk_artifacts
+        from digiquant.portfolio.h8_risk_snapshots import resolve_h8_risk_artifacts
 
         from tests.dq.atlas.test_risk_policy_registry import RiskRegistryFake
 
@@ -2015,7 +2015,7 @@ class TestRiskPolicyRegistryH9:
         assert len(client.store.get("olympus_h8_risk_run_refs", [])) == 1
 
     def test_risk_registry_failure_keeps_book(self, monkeypatch) -> None:
-        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.portfolio.phases import h9_commit_run as h9
 
         client = FakeSupabaseClient()
         state = _state()
@@ -2037,8 +2037,8 @@ class TestCostLiquidityRegistryH9Noop:
     def test_fingerprint_noop_retries_cost_with_prior_ledger_commit_id(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.phases import h9_commit_run as h9
-        from digiquant.olympus.hermes.writers.ledger_io import LedgerAppend
+        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.writers.ledger_io import LedgerAppend
 
         client = _ledger_client(SPY=100.0)
         state = _state()
@@ -2070,8 +2070,8 @@ class TestCostLiquidityRegistryH9Noop:
     def test_noop_without_prior_ledger_commit_id_stays_skipped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.phases import h9_commit_run as h9
-        from digiquant.olympus.hermes.writers.commit_io import (
+        from digiquant.portfolio.phases import h9_commit_run as h9
+        from digiquant.portfolio.writers.commit_io import (
             weights_fingerprint,
             weights_from_sized_book,
         )
@@ -2123,7 +2123,7 @@ class TestPreTradeRiskH9:
     """WP9.4 — H9 hash validation + append-only PreTradeRiskReport persistence (#2754)."""
 
     def _spy_report_payload(self, *, run_id: str = str(_SOURCE_RUN_ID)) -> dict:
-        from digiquant.olympus.hermes.pretrade_risk import (
+        from digiquant.portfolio.pretrade_risk import (
             PreTradeRiskBuildRequest,
             build_pretrade_risk_report,
         )
@@ -2162,7 +2162,7 @@ class TestPreTradeRiskH9:
             Any,  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
         )
 
-        from digiquant.olympus.atlas import pretrade_risk_registry as ptr
+        from digiquant.research import pretrade_risk_registry as ptr
 
         from tests.dq.atlas.test_supabase_io import _FakeQuery, _FakeResponse
 
@@ -2345,8 +2345,8 @@ class TestPreTradeRiskH9:
     def test_h9_never_imports_or_calls_report_builder(self) -> None:
         import ast
 
-        import digiquant.olympus.hermes.phases.h9_commit_run as h9
-        import digiquant.olympus.hermes.writers.commit_io as commit_io
+        import digiquant.portfolio.phases.h9_commit_run as h9
+        import digiquant.portfolio.writers.commit_io as commit_io
 
         for module in (h9, commit_io):
             src = pathlib.Path(module.__file__).read_text(encoding="utf-8")
@@ -2360,6 +2360,6 @@ class TestPreTradeRiskH9:
                     for alias in node.names:
                         imported.add(alias.name)
             assert not any(
-                name == "digiquant.olympus.hermes.pretrade_risk" or name.endswith(".pretrade_risk")
+                name == "digiquant.portfolio.pretrade_risk" or name.endswith(".pretrade_risk")
                 for name in imported
             )

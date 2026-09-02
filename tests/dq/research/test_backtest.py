@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.backtest import Trade, backtest_decisions
+from digiquant.research.backtest import Trade, backtest_decisions
 
 pytestmark = pytest.mark.unit
 

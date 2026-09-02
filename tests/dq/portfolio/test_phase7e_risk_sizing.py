@@ -13,26 +13,26 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     ExcludedTicker,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_risk_sizing_node,
 )
-from digiquant.olympus.hermes.sizing_events import (
+from digiquant.portfolio.sizing_events import (
     SizingAdjustment,
     SizingAdjustmentType,
     UnexplainedDeltaError,
     validate_sizing_lineage,
 )
-from digiquant.olympus.hermes.turnover import (
+from digiquant.portfolio.turnover import (
     apply_turnover_to_sized_book,
     clamp_no_trade_band,
     hold_drifted_book,
@@ -719,7 +719,7 @@ def test_corr_frame_passed_to_sizer_triggers_dedup(monkeypatch: pytest.MonkeyPat
 
 def test_correlation_reader_error_falls_back_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
     """Correlation read failure must not crash phase7e; corr=None is the safe fallback."""
-    from digiquant.olympus.atlas.data import queries as _queries_mod
+    from digiquant.research.data import queries as _queries_mod
 
     def _boom(**_kwargs):
         raise RuntimeError("price_history table gone")
@@ -1300,7 +1300,7 @@ def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
     """
     from datetime import date
 
-    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
 
     from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
 
@@ -1339,7 +1339,7 @@ def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
 
 def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
     """Representative H8 end-state under default ``SizingCaps`` stays golden."""
-    from digiquant.olympus.hermes.sizing import TickerRisk, size_portfolio
+    from digiquant.portfolio.sizing import TickerRisk, size_portfolio
 
     from tests.dq.hermes.incumbent_risk_fixtures import (
         assert_book_matches_golden,
@@ -1361,7 +1361,7 @@ def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
 
 def test_h8_attaches_risk_snapshots_without_changing_book() -> None:
     """WP6.3 (#2698): resolver runs before sizing; incumbent weights unchanged."""
-    from digiquant.olympus.hermes.models.risk_policy import PolicyArtifactStatus
+    from digiquant.portfolio.models.risk_policy import PolicyArtifactStatus
 
     client = FakeSupabaseClient(
         canned_reads={"price_technicals": _tech_rows({"SPY": 15, "TLT": 15})}

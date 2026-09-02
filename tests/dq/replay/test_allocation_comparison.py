@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.allocation_comparison import (
+from digiquant.dashboard.replay.allocation_comparison import (
     FORBIDDEN_IMPORT_PREFIXES,
     ComparisonArm,
     ComparisonArmInput,
@@ -23,7 +23,7 @@ from digiquant.olympus.replay.allocation_comparison import (
     load_shadow_criteria,
     write_comparison_report,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     FillRecord,
     HoldingSnapshot,

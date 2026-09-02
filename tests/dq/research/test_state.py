@@ -1,12 +1,12 @@
-"""Unit tests for digiquant.olympus.atlas.state."""
+"""Unit tests for digiquant.research.state."""
 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
-from digiquant.olympus.atlas.graph import AtlasInput, initial_state
-from digiquant.olympus.atlas.state import (
+from digiquant.research.graph import AtlasInput, initial_state
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -26,7 +26,7 @@ from digiquant.olympus.atlas.state import (
     _merge_right_wins_dict,
     _merge_segment_dict,
 )
-from digiquant.olympus.temporal import (
+from digiquant.dashboard.temporal import (
     KnowledgeCutoffError,
     capture_knowledge_cutoff_at,
     require_knowledge_cutoff_at,

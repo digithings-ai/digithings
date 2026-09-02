@@ -1,1 +1,1 @@
-export { PipelineScene, PipelineScene as OlympusScene } from "./PipelineScene";
+export { PipelineScene, PipelineScene as DashboardScene } from "./PipelineScene";

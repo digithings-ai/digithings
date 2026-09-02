@@ -14,13 +14,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.research_retrieval.models import ResearchStatePin, ResearchStateVersion
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.models import ResearchStatePin, ResearchStateVersion
+from digiquant.dashboard.research_retrieval.store import (
     ResearchStateError,
     ResearchStateMissingError,
     ResearchStateStore,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 STATE_UNAVAILABLE: Literal["state_unavailable"] = "state_unavailable"
 

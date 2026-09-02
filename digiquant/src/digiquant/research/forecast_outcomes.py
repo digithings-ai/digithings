@@ -19,23 +19,23 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.forecast_registry import AMENDMENTS, ASSESSMENTS
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.forecast_registry import AMENDMENTS, ASSESSMENTS
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastAmendment,
     ForecastAssessment,
     PriceAnchorStatus,
     resolve_effective_forecast,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

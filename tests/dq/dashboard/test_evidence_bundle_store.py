@@ -2,7 +2,7 @@
 
 Covers immutable base append, content-idempotent retry, run/ticker uniqueness,
 amendment linkage to one base + one missing-fact request, and zero unlinked
-amendments. Migration privacy contracts live in ``tests/dq/atlas/test_migration_090.py``.
+amendments. Migration privacy contracts live in ``tests/dq/research/test_migration_090.py``.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     MissingFactRequest,
     TickerEvidenceBundle,
@@ -23,7 +23,7 @@ from digiquant.olympus.research_retrieval.models import (
     ticker_evidence_bundle_content_hash,
     ticker_evidence_bundle_id,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     EvidenceBundleConflict,
     EvidenceBundleError,
     EvidenceBundleMissingError,

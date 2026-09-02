@@ -20,13 +20,13 @@ from typing import (  # score:allow untyped any — used for node-update dict sh
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
     dict_slot_write_adapter,
 )
-from digiquant.olympus.atlas.segments import ResearchMemo
-from digiquant.olympus.atlas.state import (
+from digiquant.research.segments import ResearchMemo
+from digiquant.research.state import (
     AtlasResearchState,
     SegmentPayload,
     SegmentSlot,

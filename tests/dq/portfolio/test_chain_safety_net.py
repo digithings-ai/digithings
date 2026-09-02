@@ -11,17 +11,17 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-from digiquant.olympus.atlas.state import (
+from digiquant.research import diagnostics
+from digiquant.research.graph import AtlasInput
+from digiquant.research.phases.preflight import PreflightDeps
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     PhaseHermesState,
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.hermes.chain import (
+from digiquant.portfolio.chain import (
     ChainDeps,
     _coerce_atlas_state,
     _record_chain_error,
@@ -132,8 +132,8 @@ class _FakeClient:
 
 
 def _chain_deps() -> ChainDeps:
-    from digiquant.olympus.atlas.graph import AtlasGraphDeps
-    from digiquant.olympus.hermes.graph import HermesGraphDeps
+    from digiquant.research.graph import AtlasGraphDeps
+    from digiquant.portfolio.graph import HermesGraphDeps
 
     return ChainDeps(
         atlas=AtlasGraphDeps(
@@ -149,7 +149,7 @@ def test_beliefs_failure_is_recorded_and_swallowed() -> None:
     # killed a run whose book had already committed.
     state = _state()
     with patch(
-        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         side_effect=RuntimeError("beliefs LLM 500"),
     ):
         _run_beliefs_fold(state, _chain_deps(), AtlasInput(run_date=state.run_date))
@@ -158,8 +158,8 @@ def test_beliefs_failure_is_recorded_and_swallowed() -> None:
 
 
 def test_beliefs_fold_skipped_without_a_client() -> None:
-    from digiquant.olympus.atlas.graph import AtlasGraphDeps
-    from digiquant.olympus.hermes.graph import HermesGraphDeps
+    from digiquant.research.graph import AtlasGraphDeps
+    from digiquant.portfolio.graph import HermesGraphDeps
 
     state = _state()
     deps = ChainDeps(
@@ -167,7 +167,7 @@ def test_beliefs_fold_skipped_without_a_client() -> None:
         hermes=HermesGraphDeps(),
     )
     with patch(
-        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        "digiquant.portfolio.chain.run_beliefs_distillation_if_triggered",
         side_effect=AssertionError("must not be called"),
     ):
         _run_beliefs_fold(state, deps, AtlasInput(run_date=state.run_date))
@@ -188,7 +188,7 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
         written["status"] = diagnostics.summarize_run(state).status
         return None
 
-    from digiquant.olympus.hermes.chain import DiagnosticsDeps
+    from digiquant.portfolio.chain import DiagnosticsDeps
 
     deps = _chain_deps()
     deps = ChainDeps(
@@ -197,8 +197,8 @@ def test_terminating_crash_is_recorded_in_the_diagnostics_row_then_reraised() ->
         diagnostics=DiagnosticsDeps(client=_FakeClient(), run_id="r1"),
     )
     with (
-        patch("digiquant.olympus.hermes.chain.build_atlas_graph", side_effect=KeyboardInterrupt),
-        patch("digiquant.olympus.atlas.diagnostics.write_row", _capture),
+        patch("digiquant.portfolio.chain.build_atlas_graph", side_effect=KeyboardInterrupt),
+        patch("digiquant.research.diagnostics.write_row", _capture),
         pytest.raises(KeyboardInterrupt),
     ):
         run_atlas_then_hermes(atlas_input=AtlasInput(run_date=date(2026, 6, 12)), deps=deps)

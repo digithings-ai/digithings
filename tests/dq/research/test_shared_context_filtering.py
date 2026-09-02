@@ -10,11 +10,11 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
-from digiquant.olympus.atlas.phases.phase3_macro import _SPEC as MACRO_SPEC
-from digiquant.olympus.atlas.phases.phase4_assetclass import _SPECS as ASSET_SPECS
-from digiquant.olympus.atlas.state import AtlasResearchState, PriorContext
+from digiquant.research.phases._node_factory import _shared_context
+from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
+from digiquant.research.phases.phase3_macro import _SPEC as MACRO_SPEC
+from digiquant.research.phases.phase4_assetclass import _SPECS as ASSET_SPECS
+from digiquant.research.state import AtlasResearchState, PriorContext
 
 pytestmark = pytest.mark.unit
 

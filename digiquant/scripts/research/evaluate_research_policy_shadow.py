@@ -15,14 +15,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from digiquant.olympus.research_retrieval.planner import AttentionPlan, attention_decision_id
-from digiquant.olympus.research_retrieval.shadow_evaluation import (
+from digiquant.dashboard.research_retrieval.planner import AttentionPlan, attention_decision_id
+from digiquant.dashboard.research_retrieval.shadow_evaluation import (
     AttentionDownstreamOutcomes,
     ShadowProviderAttemptDetail,
     evaluate_research_policy_shadow,
     write_shadow_evaluation_report,
 )
-from digiquant.olympus.research_retrieval.store import AttentionStore
+from digiquant.dashboard.research_retrieval.store import AttentionStore
 
 
 def _load_json(path: Path) -> object:

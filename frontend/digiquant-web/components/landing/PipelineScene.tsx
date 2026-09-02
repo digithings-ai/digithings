@@ -13,7 +13,7 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
-import { DigiquantMark } from "./OlympusMark";
+import { DigiquantMark } from "./DashboardMark";
 
 type Phase = [id: string, name: string, detail: string];
 
@@ -326,4 +326,4 @@ export function PipelineScene() {
 }
 
 /** @deprecated Use PipelineScene. One-release alias (ADR-0026 wave 3). */
-export const OlympusScene = PipelineScene;
+export const DashboardScene = PipelineScene;

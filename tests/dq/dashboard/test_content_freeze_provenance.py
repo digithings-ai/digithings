@@ -16,8 +16,8 @@ The production shapes these tests encode are real, from the 2026-07-31 review:
 across seven days (07-17 → 07-24) at ``gap_days=1`` every run.
 
 The Atlas-side surfaces (freshness badge, diagnostics ``breakdown``, published delta row)
-are in ``tests/dq/atlas/test_content_freeze_surfaces.py``. They import Atlas phases, which
-pull ``digigraph`` → ``openai``, and only ``tests/dq/atlas/conftest.py`` gates collection on
+are in ``tests/dq/research/test_content_freeze_surfaces.py``. They import Atlas phases, which
+pull ``digigraph`` → ``openai``, and only ``tests/dq/research/conftest.py`` gates collection on
 that being installed — so an Atlas import from *this* directory is a collection error in the
 ``digiquant`` CI lane rather than a skip.
 """
@@ -27,8 +27,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp, PriorPublished, merge_document_patch
-from digiquant.olympus.edit_mode.content_identity import (
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp, PriorPublished, merge_document_patch
+from digiquant.dashboard.edit_mode.content_identity import (
     UNCHANGED_FLAG_KEY,
     UNCHANGED_SINCE_KEY,
     bodies_match,
@@ -36,7 +36,7 @@ from digiquant.olympus.edit_mode.content_identity import (
     mark_unchanged,
     prior_content_date,
 )
-from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
 
 from .test_edit_mode import _FakePriorLoader
 

@@ -22,7 +22,7 @@ Picked up by:
 
 * full-repo ``pytest -m unit`` / ``make test-unit`` (``testpaths`` includes ``tests/``)
 * digiquant regression lane when pointed at this path; the WP suites under
-  ``tests/dq/olympus/``, ``tests/dq/brokers/``, ``tests/dq/notify`` remain the
+  ``tests/dq/dashboard/``, ``tests/dq/brokers/``, ``tests/dq/notify`` remain the
   per-component gates
 
 Not the staging E2E workflow; not HTTP; no live services.
@@ -59,7 +59,7 @@ from digiquant.notify.dispatch import dispatch_workspace
 from digiquant.notify.entitlements import ArtifactClass, can
 from digiquant.notify.entitlements import PlanTier as NotifyPlanTier
 from digiquant.notify.mailgun import MailgunConfig
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
     DecisionIntent,
@@ -69,7 +69,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     PortfolioCommit,
     RequestedTarget,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     DECISION_INTENTS,
@@ -77,25 +77,25 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     REQUESTED_TARGETS,
     _insert,
 )
-from digiquant.olympus.kairos.router import BROKER_ORDERS, broker_order_id, route_pending_orders
-from digiquant.olympus.kairos.sync import (
+from digiquant.execution.router import BROKER_ORDERS, broker_order_id, route_pending_orders
+from digiquant.execution.sync import (
     BROKER_EXECUTIONS,
     BROKER_POSITION_SNAPSHOTS,
     SyncCursor,
     broker_execution_id,
     sync_connection,
 )
-from digiquant.olympus.overlay.byok import ByokProbe
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
-from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
-from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
-from digiquant.olympus.research_corpus import ResearchCorpusStore
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
+from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import (
     PlanTier,
     SubscriptionStatus,
     WorkspaceType,

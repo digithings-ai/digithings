@@ -6,8 +6,8 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     ForecastTerms,
     PriceAnchor,
@@ -15,8 +15,8 @@ from digiquant.olympus.hermes.models.forecast import (
     fill_forecast_tenor_from_base,
     unwrap_forecast_terms_payload,
 )
-from digiquant.olympus.hermes.phases.h6_deliberation import _resolve_from_debate
-from digiquant.olympus.hermes.phases.portfolio_common import materialize_forecast_assessment
+from digiquant.portfolio.phases.h6_deliberation import _resolve_from_debate
+from digiquant.portfolio.phases.portfolio_common import materialize_forecast_assessment
 from pydantic import ValidationError
 
 from tests.dq.hermes.phase1_e2e_fixtures import sample_forecast_terms_dict

@@ -18,13 +18,13 @@ from typing import Annotated, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     PortfolioReplayRequest,
     PortfolioReplayResult,
     PortfolioReplayStatus,
@@ -40,10 +40,10 @@ FiniteNonNegDec: TypeAlias = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)
 FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
     {
         "digiquant.brokers",
-        "digiquant.olympus.hermes.writers",
-        "digiquant.olympus.hermes.phases.h9_commit_run",
-        "digiquant.olympus.hermes.phases.phase7e_risk_sizing",
-        "digiquant.olympus.atlas.supabase_io",
+        "digiquant.portfolio.writers",
+        "digiquant.portfolio.phases.h9_commit_run",
+        "digiquant.portfolio.phases.phase7e_risk_sizing",
+        "digiquant.research.supabase_io",
         "digiquant.nautilus_runner",
         "supabase",
         "httpx",

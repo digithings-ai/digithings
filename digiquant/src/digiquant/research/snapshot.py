@@ -3,7 +3,7 @@
 This module defines :class:`SnapshotEnvelope`, the Pydantic v2 contract the
 Atlas frontend (and any other consumer) uses to validate a row read from the
 Supabase ``daily_snapshots`` table. The envelope wraps the digest payload
-(produced by :class:`digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot`)
+(produced by :class:`digiquant.research.phases.phase7_synthesis.DigestSnapshot`)
 with run-level metadata (``schema_version``, ``run_date``, ``run_type``,
 ``baseline_date``, ``published_at``).
 
@@ -15,8 +15,8 @@ skills, supabase, …) — unacceptable for a serverless BFF or lightweight
 validation library that just wants to validate JSON.
 
 Instead :class:`DigestPayload` mirrors the field set of
-:class:`digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot` exactly. A
-parity test (`tests/dq/atlas/test_snapshot.py::test_payload_matches_pipeline_digest`)
+:class:`digiquant.research.phases.phase7_synthesis.DigestSnapshot` exactly. A
+parity test (`tests/dq/research/test_snapshot.py::test_payload_matches_pipeline_digest`)
 imports both when the pipeline extras are installed and asserts field-name
 parity — drift fails loud rather than silently. Historical JSON slots are
 ``extra="allow"`` so old ``daily_snapshots`` rows still validate.
@@ -24,7 +24,7 @@ parity — drift fails loud rather than silently. Historical JSON slots are
 Read path (Option A — see PR #441 follow-up)
 --------------------------------------------
 1. The Atlas pipeline writes a row to ``daily_snapshots`` via
-   ``digiquant.olympus.atlas.supabase_io.publish_daily_snapshot``.
+   ``digiquant.research.supabase_io.publish_daily_snapshot``.
 2. The frontend (or any consumer) reads that row directly using the Supabase
    anon key under the ``anon_read`` RLS policy installed by migration 011.
 3. The row JSON is loaded into :class:`SnapshotEnvelope` for validation, then
@@ -37,7 +37,7 @@ Schema versioning
 -----------------
 ``schema_version`` is at the top of the envelope so future migrations are
 tractable: bump ``SCHEMA_VERSION`` here when the field set or semantics
-change, regenerate ``digiquant/docs/schemas/atlas_snapshot.v1.json`` (and
+change, regenerate ``digiquant/docs/schemas/research_snapshot.v1.json`` (and
 add a ``.v2.json`` sibling for breaking changes), and ship a frontend
 update in lockstep.
 """
@@ -50,7 +50,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.atlas.segments import compose_legacy_digest_body
+from digiquant.research.segments import compose_legacy_digest_body
 
 # Bump when fields are added/removed/renamed or semantics change.
 # The on-disk schema export lives at ``digiquant/docs/schemas/atlas_snapshot.v{N}.json``.
@@ -63,7 +63,7 @@ SCHEMA_VERSION: int = 1
 class SegmentFreshness(BaseModel):
     """Per-segment provenance marker used by the dashboard.
 
-    Mirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.
+    Mirrors :class:`digiquant.research.phases.phase7_synthesis.SegmentFreshness`.
 
     ``frozen`` (#1749): regenerated today, but the edit merge changed nothing, so ``as_of`` is
     the date the content last materially changed. This model is the READ-path validator and is
@@ -112,11 +112,11 @@ class RiskItem(BaseModel):
         return out
 
 
-# ─── Source citation primitives (mirrors digiquant.olympus.atlas.segments) ──────────
+# ─── Source citation primitives (mirrors digiquant.research.segments) ──────────
 
 
 class Finding(BaseModel):
-    """One material finding. Mirrors digiquant.olympus.atlas.segments.Finding."""
+    """One material finding. Mirrors digiquant.research.segments.Finding."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -126,7 +126,7 @@ class Finding(BaseModel):
 
 
 class Source(BaseModel):
-    """One cited source. Mirrors digiquant.olympus.atlas.segments.Source."""
+    """One cited source. Mirrors digiquant.research.segments.Source."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +135,7 @@ class Source(BaseModel):
     url: str | None = Field(default=None)
 
 
-# Bias vocabulary — kept in sync with digiquant.olympus.atlas.segments.Bias.
+# Bias vocabulary — kept in sync with digiquant.research.segments.Bias.
 Bias = Literal[
     "strong_bullish",
     "bullish",
@@ -145,7 +145,7 @@ Bias = Literal[
     "mixed",
 ]
 
-# Evidence grade — kept in sync with digiquant.olympus.atlas.segments.DataQuality.
+# Evidence grade — kept in sync with digiquant.research.segments.DataQuality.
 DataQuality = Literal["high", "medium", "low", "absent"]
 
 
@@ -155,7 +155,7 @@ DataQuality = Literal["high", "medium", "low", "absent"]
 class DigestPayload(BaseModel):
     """Frontend-facing copy of the Phase 7 master briefing payload.
 
-    **This duplicates** ``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``
+    **This duplicates** ``digiquant.research.phases.phase7_synthesis.DigestSnapshot``
     on purpose — see module docstring for the import-direction rationale. The
     parity test enforces drift detection.
 

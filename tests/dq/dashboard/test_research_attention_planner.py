@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 import yaml
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
     AttentionMode,

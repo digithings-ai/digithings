@@ -17,8 +17,8 @@ from typing import Sequence
 
 import polars as pl
 
-from digiquant.olympus.hermes.action_cost_inputs import ActionCostInput, RealizedCostInput
-from digiquant.olympus.hermes.models.cost_liquidity import (
+from digiquant.portfolio.action_cost_inputs import ActionCostInput, RealizedCostInput
+from digiquant.portfolio.models.cost_liquidity import (
     ActionCostEstimate,
     ActionCostOutcome,
     CostComponent,
@@ -38,7 +38,7 @@ from digiquant.olympus.hermes.models.cost_liquidity import (
     outcome_hash_payload,
     snapshot_hash_payload,
 )
-from digiquant.olympus.hermes.models.risk_policy import RiskPolicy
+from digiquant.portfolio.models.risk_policy import RiskPolicy
 
 METHOD_VERSION = "observational-cost@v1"
 """Implementation version stamped on every estimate and liquidity snapshot."""

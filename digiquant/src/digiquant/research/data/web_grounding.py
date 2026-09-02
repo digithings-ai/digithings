@@ -25,7 +25,7 @@ from typing import (
 
 import yaml
 
-from digiquant.olympus.envcompat import WEB_SEARCH, env_lookup
+from digiquant.dashboard.envcompat import WEB_SEARCH, env_lookup
 
 _CONFIG = Path(__file__).resolve().parent.parent / "config" / "search_domains.yaml"
 

@@ -9,20 +9,20 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-from digiquant.olympus.hermes.writers.commit_io import weights_fingerprint
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.portfolio.writers.commit_io import weights_fingerprint
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     ORDER_INTENTS,
     _policy_version_id,
 )
-from digiquant.olympus.hermes.writers.recover_ledger import (
+from digiquant.portfolio.writers.recover_ledger import (
     _prior_current_weights,
     _recovery_state,
     recover_ledger_from_book,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 

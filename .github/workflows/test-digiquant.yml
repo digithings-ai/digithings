@@ -46,7 +46,7 @@ jobs:
       # (#1811). The `digiquant/**` filter in ci.yml covers supabase/migrations/**,
       # so every PR touching the chain reaches this step.
       - name: Supabase migration chain guard
-        run: bash digiquant/scripts/atlas/verify-supabase-migrations.sh
+        run: bash digiquant/scripts/research/verify-supabase-migrations.sh
 
       - uses: astral-sh/setup-uv@v5
         with:

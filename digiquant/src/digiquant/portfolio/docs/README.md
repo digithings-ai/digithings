@@ -36,9 +36,9 @@ digiquant/src/digiquant/olympus/hermes/
 
 ## CLI entry points
 
-- `python -m digiquant.olympus.hermes.chain --cadence daily` — full Atlas A0–A4 → Hermes H1–H9. **Cron uses this** (`.github/workflows/pipeline-olympus.yml`).
+- `python -m digiquant.portfolio.chain --cadence daily` — full Atlas A0–A4 → Hermes H1–H9. **Cron uses this** (`.github/workflows/pipeline-digiquant.yml`).
 - `--refresh-scope` — operator full refresh (`all`, `segments`, `hermes`, `digest`, `beliefs`)
-- `python -m digiquant.olympus.hermes.graph --from-digest <path>` — Hermes only
+- `python -m digiquant.portfolio.graph --from-digest <path>` — Hermes only
 - Deprecated: `--run-type baseline|delta` (warns); `monthly` rejected
 
 ## Documents
@@ -51,6 +51,6 @@ digiquant/src/digiquant/olympus/hermes/
 ## Tests
 
 ```
-tests/dq/hermes/          ← H-path phase tests + chain integration
-tests/dq/olympus/         ← edit-mode, commit_run, simulator gates
+tests/dq/portfolio/          ← H-path phase tests + chain integration
+tests/dq/dashboard/         ← edit-mode, commit_run, simulator gates
 ```

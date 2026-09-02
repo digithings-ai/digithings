@@ -1,7 +1,7 @@
 """WP16.1 — canonical SHA-256 digests for policy replay manifests (#2979).
 
 Centralizes stable hashing for shared replay inputs. Reuses
-:func:`digiquant.olympus.hermes.allocation_hashes.sha256_hex` so portfolio
+:func:`digiquant.portfolio.allocation_hashes.sha256_hex` so portfolio
 shadow comparison and policy replay share one dialect.
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.models import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.models import (
     POLICY_BUNDLE_FIELD_NAMES,
     ExecutionPolicy,
     InstrumentBarSeries,

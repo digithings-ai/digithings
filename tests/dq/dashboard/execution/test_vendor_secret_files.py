@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.kairos.staging_secrets import KAIROS_STAGING_REQUIRED_SECRETS
-from digiquant.olympus.kairos.vendor_secret_apply import run_vendor_secret_apply
-from digiquant.olympus.kairos.vendor_secret_files import (
+from digiquant.execution.staging_secrets import KAIROS_STAGING_REQUIRED_SECRETS
+from digiquant.execution.vendor_secret_apply import run_vendor_secret_apply
+from digiquant.execution.vendor_secret_files import (
     EXIT_VENDOR_FILES_OR_KEYS_MISSING,
     VENDOR_SECRET_FILENAMES,
     format_vendor_apply_blocked,

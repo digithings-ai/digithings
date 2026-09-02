@@ -9,7 +9,7 @@ the PM not to auto-flat a held name solely because it is absent from
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.hermes.skills import load_skill_full
+from digiquant.portfolio.skills import load_skill_full
 
 pytestmark = pytest.mark.unit
 

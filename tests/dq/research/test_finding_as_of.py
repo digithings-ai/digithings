@@ -22,8 +22,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.segments import Finding, SegmentReport
-from digiquant.olympus.atlas.skills import (
+from digiquant.research.segments import Finding, SegmentReport
+from digiquant.research.skills import (
     QUANTITATIVE_FINDING_RULES,
     load_skill,
     load_skill_edit,
@@ -123,7 +123,7 @@ class TestTheInstructionReachesTheModel:
 
     def test_the_edit_skill_still_carries_the_schema_constraints(self) -> None:
         """Appending one shared block must not displace the other."""
-        from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
+        from digiquant.research.skills import EDIT_SCHEMA_CONSTRAINTS
 
         body = load_skill_edit("sector-research")
         assert EDIT_SCHEMA_CONSTRAINTS in body

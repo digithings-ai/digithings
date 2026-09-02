@@ -1,4 +1,4 @@
-"""REM-059: digiquant.olympus.hermes.pipeline_builder re-exports digigraph builder."""
+"""REM-059: digiquant.portfolio.pipeline_builder re-exports digigraph builder."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def _digigraph_importable() -> bool:
     reason="digigraph runtime deps not installed (CI digiquant-test job)",
 )
 def test_hermes_pipeline_builder_shim_exports() -> None:
-    from digiquant.olympus.hermes import pipeline_builder as shim
+    from digiquant.portfolio import pipeline_builder as shim
 
     assert shim.NodeSpec is not None
     assert shim.PipelinePhase is not None

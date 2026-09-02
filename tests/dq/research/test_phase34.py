@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport, build_phase3
-from digiquant.olympus.atlas.phases.phase4_assetclass import (
+from digiquant.research.phases.phase3_macro import MacroRegimeReport, build_phase3
+from digiquant.research.phases.phase4_assetclass import (
     BondsReport,
     CommoditiesReport,
     CryptoReport,
@@ -18,7 +18,7 @@ from digiquant.olympus.atlas.phases.phase4_assetclass import (
     InternationalReport,
     build_phase4,
 )
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.state import AtlasResearchState
 
 
 def _macro_payload() -> str:

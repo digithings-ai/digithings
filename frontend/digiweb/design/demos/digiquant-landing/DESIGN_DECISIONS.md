@@ -6,7 +6,7 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 
 ## Canonical sources (deployed)
 - digithings.ai → `frontend/digithings-web` (Next.js static export)
-- digiquant.io  → `frontend/digiquant-web` (+ `frontend/olympus` at `/olympus`)
+- digiquant.io  → `frontend/digiquant-web` (+ `frontend/dashboard` at `/olympus`)
 - Shared design system → `frontend/digiweb/design` (tokens.css, site/site.css, components.css)
   and `frontend/digiweb/web` (`@digithings/web` — ThemeProvider, web-theme.css)
 - LEGACY / not deployed: `frontend/digithings`, `frontend/digiquant` (old static HTML)
@@ -230,7 +230,7 @@ GENERAL: whole-page scrolling must be smooth/continuous (Apple-like), no pausing
 
 #1214's AC framed this as *demoting* scroll sections into a bento and keeping "only
 one pinned section." Against the live landing that was stale + risky: digiquant.io
-runs **two** intentional pinned scrollies — `OlympusScene` (the #1205 flagship, which
+runs **two** intentional pinned scrollies — `DashboardScene` (the #1205 flagship, which
 #1215 then *enhances* with a progress rail) and `StrategySuite` (#1198). Demoting
 either regresses a good element. Per sign-off we went **additive**: a
 `Pipeline · Strategies · Pricing` `.bento` after the hero (teal marketing accent, real

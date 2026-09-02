@@ -6,7 +6,7 @@ import warnings
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes import chain as chain_mod
+from digiquant.portfolio import chain as chain_mod
 
 pytestmark = pytest.mark.unit
 
@@ -35,7 +35,7 @@ def test_refresh_scope_explicit():
 
 
 def test_deprecated_run_type_baseline_maps_refresh_scope_all():
-    from digiquant.olympus.atlas.graph import resolve_cli_inputs
+    from digiquant.research.graph import resolve_cli_inputs
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -47,7 +47,7 @@ def test_deprecated_run_type_baseline_maps_refresh_scope_all():
 
 
 def test_deprecated_run_type_delta_defaults_daily_none():
-    from digiquant.olympus.atlas.graph import resolve_cli_inputs
+    from digiquant.research.graph import resolve_cli_inputs
 
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
@@ -58,7 +58,7 @@ def test_deprecated_run_type_delta_defaults_daily_none():
 
 
 def test_deprecated_run_type_monthly_rejected():
-    from digiquant.olympus.atlas.graph import resolve_cli_inputs
+    from digiquant.research.graph import resolve_cli_inputs
 
     args = _parse("--run-type", "monthly", "--run-date", "2026-04-20")
     with pytest.raises(SystemExit):
@@ -84,7 +84,7 @@ def test_simulated_chain_initial_state_exposes_research_pin_fields():
     from datetime import UTC, datetime
     from uuid import uuid4
 
-    from digiquant.olympus.atlas.graph import AtlasInput, initial_state
+    from digiquant.research.graph import AtlasInput, initial_state
 
     state = initial_state(
         AtlasInput(run_date=date(2026, 4, 26), cadence="daily"),

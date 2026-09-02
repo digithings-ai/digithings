@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -501,7 +501,7 @@ def _ledger_tables() -> dict[str, str]:
     is what puts the writers on ``sys.path``, so calling it here also covers that.
     """
     _mod._ensure_importable()
-    from digiquant.olympus.hermes.writers import execution_io, ledger_io
+    from digiquant.portfolio.writers import execution_io, ledger_io
 
     return {
         "commits": ledger_io.COMMITS,
@@ -1067,7 +1067,7 @@ class TestBuildEventsFromPaperFillsDeclines:
             return False, "nav_history.nav missing or non-positive for 2026-07-29"
 
         monkeypatch.setattr(
-            "digiquant.olympus.hermes.writers.opening_snapshot.ensure_legacy_opening_snapshot",
+            "digiquant.portfolio.writers.opening_snapshot.ensure_legacy_opening_snapshot",
             _fail,
         )
         # Pending trim, no lots — cold-start without a successful seed.

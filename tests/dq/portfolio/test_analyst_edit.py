@@ -11,16 +11,16 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
-from digiquant.olympus.hermes.models.analyst import AnalystPayload
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
+from digiquant.portfolio.models.analyst import AnalystPayload
+from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
 
 
 def _state(*, prior: dict[str, Any] | None = None) -> AtlasResearchState:
@@ -62,12 +62,12 @@ class TestAnalystEdit:
     def test_stale_fingerprint_uses_document_patch(self) -> None:
         from datetime import UTC, datetime
 
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             ForecastTerms,
             PriceAnchor,
             PriceAnchorStatus,
         )
-        from digiquant.olympus.hermes.phases.portfolio_common import (
+        from digiquant.portfolio.phases.portfolio_common import (
             materialize_forecast_assessment,
         )
 
@@ -163,7 +163,7 @@ class TestEvidenceDerivedConviction:
 
     @staticmethod
     def _payload(stance: str, **ev: object) -> "AnalystPayload":
-        from digiquant.olympus.hermes.models.analyst import AnalystPayload
+        from digiquant.portfolio.models.analyst import AnalystPayload
 
         base = {
             "independent_confirming_signals": 3,
@@ -249,7 +249,7 @@ class TestEvidenceDerivedConviction:
         assert high > 0, "high must remain reachable"
 
     def test_legacy_payload_without_evidence_keeps_stored_score(self) -> None:
-        from digiquant.olympus.hermes.models.analyst import AnalystPayload
+        from digiquant.portfolio.models.analyst import AnalystPayload
 
         p = AnalystPayload.model_validate({"ticker": "SPY", "conviction_score": 4, "stance": "buy"})
         assert p.conviction_score == 4, "legacy docs keep their stored score"
@@ -282,15 +282,15 @@ class TestH5ForecastMaterialization:
         from datetime import UTC, datetime
         from decimal import Decimal
 
-        from digiquant.olympus.hermes.models.analyst import AnalystPayload
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.analyst import AnalystPayload
+        from digiquant.portfolio.models.forecast import (
             ForecastTerms,
             PriceAnchor,
             PriceAnchorStatus,
             forecast_assessment_id,
             forecast_terms_content_hash,
         )
-        from digiquant.olympus.hermes.phases.portfolio_common import (
+        from digiquant.portfolio.phases.portfolio_common import (
             analyst_body_from_payload,
             materialize_forecast_assessment,
         )
@@ -338,7 +338,7 @@ class TestH5ForecastMaterialization:
         assert Decimal(str(body["forecast"]["base_return"])) == Decimal("0.03")
 
     def test_legacy_prior_forces_full(self) -> None:
-        from digiquant.olympus.hermes.phases.portfolio_common import resolve_analyst_edit_mode
+        from digiquant.portfolio.phases.portfolio_common import resolve_analyst_edit_mode
 
         state = _state(
             prior={
@@ -355,12 +355,12 @@ class TestH5ForecastMaterialization:
     def test_skip_preserves_forecast_identity(self) -> None:
         from datetime import UTC, datetime
 
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             ForecastTerms,
             PriceAnchor,
             PriceAnchorStatus,
         )
-        from digiquant.olympus.hermes.phases.portfolio_common import (
+        from digiquant.portfolio.phases.portfolio_common import (
             materialize_forecast_assessment,
             run_asset_analyst_llm,
         )
@@ -427,10 +427,10 @@ class TestH5ForecastMaterialization:
         )
         # Align news hash so triage stays quiet (triage reads ticker_fingerprint).
         with patch(
-            "digiquant.olympus.hermes.ticker_fingerprint.news_hash_for_ticker",
+            "digiquant.portfolio.ticker_fingerprint.news_hash_for_ticker",
             return_value="abc",
         ):
-            from digiquant.olympus.hermes.phases.portfolio_common import (
+            from digiquant.portfolio.phases.portfolio_common import (
                 resolve_analyst_edit_mode,
             )
 
@@ -451,12 +451,12 @@ class TestH5ForecastMaterialization:
     def test_partial_nested_forecast_edit_rejected(self) -> None:
         from datetime import UTC, datetime
 
-        from digiquant.olympus.hermes.models.forecast import (
+        from digiquant.portfolio.models.forecast import (
             ForecastTerms,
             PriceAnchor,
             PriceAnchorStatus,
         )
-        from digiquant.olympus.hermes.phases.portfolio_common import (
+        from digiquant.portfolio.phases.portfolio_common import (
             materialize_forecast_assessment,
             run_asset_analyst_llm,
         )
@@ -635,8 +635,8 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
     from unittest.mock import MagicMock
     from uuid import UUID, uuid4
 
-    from digiquant.olympus.hermes.phases.portfolio_common import run_asset_analyst_llm
-    from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+    from digiquant.portfolio.phases.portfolio_common import run_asset_analyst_llm
+    from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
     store = EvidenceBundleStore()
     run_id = uuid4()
@@ -663,7 +663,7 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
     with (
         patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.build_grounding",
+            "digiquant.portfolio.phases.portfolio_common.build_grounding",
             return_value=(
                 [],
                 MagicMock(),
@@ -671,7 +671,7 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
             ),
         ),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.apply_web_grounding_to_inputs",
+            "digiquant.portfolio.phases.portfolio_common.apply_web_grounding_to_inputs",
             side_effect=lambda inputs, **_k: {
                 **inputs,
                 "web_grounding": {
@@ -682,15 +682,15 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
             },
         ),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.resolve_analyst_edit_mode",
+            "digiquant.portfolio.phases.portfolio_common.resolve_analyst_edit_mode",
             return_value="full",
         ),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.run_research_agent",
+            "digiquant.portfolio.phases.portfolio_common.run_research_agent",
             side_effect=_boom,
         ),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.load_skill_full",
+            "digiquant.portfolio.phases.portfolio_common.load_skill_full",
             return_value="skill",
         ),
     ):

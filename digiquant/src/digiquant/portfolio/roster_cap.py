@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Collection, Sequence
 
-from digiquant.olympus.envcompat import MAX_ANALYSTS, env_lookup
+from digiquant.dashboard.envcompat import MAX_ANALYSTS, env_lookup
 
 logger = logging.getLogger(__name__)
 

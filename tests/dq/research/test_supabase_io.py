@@ -1,4 +1,4 @@
-"""Unit tests for digiquant.olympus.atlas.supabase_io — no live Supabase."""
+"""Unit tests for digiquant.research.supabase_io — no live Supabase."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.supabase_io import (
     _DEFAULT_PRICE_LOOKBACK_DAYS,
     SupabaseConfig,
     SupabaseNotConfiguredError,
@@ -29,7 +29,7 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 # Canonical fake lives in tests.fixtures.fake_supabase (#1196); re-export so
 # existing ``from tests.dq.atlas.test_supabase_io import FakeSupabaseClient``
@@ -184,7 +184,7 @@ class TestPublishDocument:
         import logging
 
         client = FakeSupabaseClient()
-        with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
+        with caplog.at_level(logging.INFO, logger="digiquant.research.supabase_io"):
             publish_document(
                 client=client,
                 document_key="macro/2026-04-20.json",
@@ -204,9 +204,9 @@ class TestPublishDocument:
         there today, but the contract must hold."""
         import logging
 
-        from digiquant.olympus.atlas.supabase_io import _audit
+        from digiquant.research.supabase_io import _audit
 
-        with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
+        with caplog.at_level(logging.INFO, logger="digiquant.research.supabase_io"):
             _audit("test", {"document_key": "k", "api_key": "sk-should-not-appear"})
         msg = caplog.records[-1].message
         assert "sk-should-not-appear" not in msg

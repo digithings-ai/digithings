@@ -13,8 +13,8 @@ Runs three checks, cheapest first, and prints a verdict:
                   came back empty (the failure mode we hunt).
 
 Usage:
-  python digiquant/scripts/atlas/openrouter_diagnose.py            # full run
-  python digiquant/scripts/atlas/openrouter_diagnose.py --no-ping  # account state only (free)
+  python digiquant/scripts/research/openrouter_diagnose.py            # full run
+  python digiquant/scripts/research/openrouter_diagnose.py --no-ping  # account state only (free)
 
 Exit 0 = key reachable and (unless --no-ping) the strict ping produced a non-empty body.
 Exit 1 = key unreachable, or the strict ping came back empty (the degraded-run signature).

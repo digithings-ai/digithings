@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("openai")  # ai_portfolios -> digigraph.llm needs openai (absent in dq-only CI)
 
-from digiquant.olympus.atlas.data import ai_portfolios
+from digiquant.research.data import ai_portfolios
 
 
 @pytest.mark.unit

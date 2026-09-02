@@ -3,7 +3,7 @@
 This module turns the global Atlas digest into a per-user view by applying
 :class:`digiquant.profiles.investment_profile.InvestmentProfile` and
 :class:`digiquant.profiles.asset_preferences.AssetPreferences` to a
-:class:`digiquant.olympus.atlas.snapshot.SnapshotEnvelope`. It is the read-time helper
+:class:`digiquant.research.snapshot.SnapshotEnvelope`. It is the read-time helper
 the Atlas BFF / dashboard calls before rendering — the upstream pipeline still
 writes one canonical row per day to ``daily_snapshots`` (Phase 7), and this
 function adapts that row for the calling user.
@@ -84,7 +84,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from digiquant.olympus.atlas.snapshot import SnapshotEnvelope
+from digiquant.research.snapshot import SnapshotEnvelope
 from digiquant.profiles.asset_preferences import AssetPreferences
 from digiquant.profiles.investment_profile import InvestmentProfile
 

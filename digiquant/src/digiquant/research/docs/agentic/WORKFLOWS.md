@@ -13,7 +13,7 @@ Step-by-step procedures for every recurring workflow.
 
 **Weekly digest:** no scheduled GitHub job — use [`scripts/weekly-rollup.sh`](../../scripts/weekly-rollup.sh) when you need the operator prompt.
 
-**Olympus daily pipeline:** `.github/workflows/pipeline-olympus.yml` — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday `refresh_scope=all`).
+**Olympus daily pipeline:** `.github/workflows/pipeline-digiquant.yml` — `python -m digiquant.portfolio.chain --cadence daily` (Sunday `refresh_scope=all`).
 
 **Co-work / operator** runs ([`RUNBOOK.md`](../../RUNBOOK.md)): research + portfolio JSON → `run_db_first.py` → Supabase. Cowork setup: [`cowork/README.md`](../../cowork/README.md), project prompt [`cowork/PROJECT-PROMPT.md`](../../cowork/PROJECT-PROMPT.md), task list [`cowork/tasks/README.md`](../../cowork/tasks/README.md).
 
@@ -34,7 +34,7 @@ Step-by-step procedures for every recurring workflow.
 
 ```bash
 # 2. Run the unified daily chain (Atlas A0–A4 → Hermes H1–H9 → commit_run)
-python -m digiquant.olympus.hermes.chain --cadence daily
+python -m digiquant.portfolio.chain --cadence daily
 #    Sunday full refresh: --refresh-scope all (cron sets this automatically)
 #    Beliefs only: --refresh-scope beliefs
 python3 scripts/run_db_first.py
@@ -44,7 +44,7 @@ python3 scripts/run_db_first.py
 **Manual prompt for full digest:**
 ```
 Today is YYYY-MM-DD.
-Run `python -m digiquant.olympus.hermes.chain --cadence daily` (add `--refresh-scope all` for operator full refresh).
+Run `python -m digiquant.portfolio.chain --cadence daily` (add `--refresh-scope all` for operator full refresh).
 Read config/watchlist.md; for portfolio work also preferences + investment-profile.
 Load prior context from Supabase daily_snapshots and documents for recent dates.
 DB-first: in-graph publish + H9 commit_run; close with run_db_first.py.

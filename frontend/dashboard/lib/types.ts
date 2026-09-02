@@ -243,7 +243,7 @@ export interface ServerPortfolioMetrics {
 export interface AtlasRunDiagnostics {
   run_id: string;
   /**
-   * Outer-retry attempt within one workflow run, 1-based (#1762). `pipeline-olympus.yml`
+   * Outer-retry attempt within one workflow run, 1-based (#1762). `pipeline-digiquant.yml`
    * retries the chain up to 3 times inside ONE job, so `run_id` is identical across attempts
    * and used to be the whole key — the last attempt's row overwrote the earlier ones, which
    * is why `groupRunEpisodes` saw one row per date and reported `attempts: 1` for dates that

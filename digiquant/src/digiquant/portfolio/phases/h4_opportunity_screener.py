@@ -18,14 +18,14 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, publish_document
-from digiquant.olympus.hermes.budget_controller import assess_budget
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book, select_focus_tickers
-from digiquant.olympus.hermes.research_attention import h4_phase_attention_update
-from digiquant.olympus.hermes.roster_cap import capped_tickers, configured_max_analysts
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.overlay.persist import hermes_document_key
+from digiquant.research.state import ExcludedTicker, FocusRosterEntry
+from digiquant.research.supabase_io import SupabaseClient, publish_document
+from digiquant.portfolio.budget_controller import assess_budget
+from digiquant.portfolio.candidates import holdings_from_prior_book, select_focus_tickers
+from digiquant.portfolio.research_attention import h4_phase_attention_update
+from digiquant.portfolio.roster_cap import capped_tickers, configured_max_analysts
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.overlay.persist import hermes_document_key
 
 logger = logging.getLogger(__name__)
 

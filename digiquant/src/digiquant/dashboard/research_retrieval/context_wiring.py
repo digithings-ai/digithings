@@ -8,20 +8,20 @@ from enum import StrEnum
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.envcompat import CONTEXT_COMPILER_MODE, env_lookup
-from digiquant.olympus.research_retrieval.blinding import (
+from digiquant.dashboard.envcompat import CONTEXT_COMPILER_MODE, env_lookup
+from digiquant.dashboard.research_retrieval.blinding import (
     assert_blinded_h5_prompt,
     assert_blinded_h6_prompt,
     strip_blinded_forbidden_keys,
 )
-from digiquant.olympus.research_retrieval.context import (
+from digiquant.dashboard.research_retrieval.context import (
     ContextCapsule,
     ContextCompileInput,
     ContextManifest,
     ContextRole,
     compile_context_capsule,
 )
-from digiquant.olympus.research_retrieval.h7_decision_context import (
+from digiquant.dashboard.research_retrieval.h7_decision_context import (
     H7DecisionContext,
     H7DecisionContextCompileInput,
     H7PrerequisiteSnapshot,
@@ -29,12 +29,12 @@ from digiquant.olympus.research_retrieval.h7_decision_context import (
     compile_h7_decision_context,
     strip_h7_weight_keys,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     TickerEvidenceBundle,
 )
-from digiquant.olympus.research_retrieval.planner import AttentionPlan
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.planner import AttentionPlan
+from digiquant.dashboard.research_retrieval.store import (
     LoadedResearchState,
     ResearchStateMissingError,
     ResearchStateStore,

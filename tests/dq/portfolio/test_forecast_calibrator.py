@@ -7,12 +7,12 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes import forecast_calibration as fc
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.portfolio import forecast_calibration as fc
+from digiquant.portfolio.models.forecast import (
     ForecastTerms,
     RawUncertainty,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     CalibrationArtifactStatus,
     ForecastOutcome,
     OutcomeStatus,
@@ -362,7 +362,7 @@ class TestDeclaredPriorMetadata:
 
 class TestNoH8Coupling:
     def test_module_does_not_import_sizing(self) -> None:
-        import digiquant.olympus.hermes.forecast_calibration as mod
+        import digiquant.portfolio.forecast_calibration as mod
 
         src = open(mod.__file__, encoding="utf-8").read()
         assert "sizing" not in src

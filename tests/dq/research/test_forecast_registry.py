@@ -8,9 +8,9 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.olympus.atlas import forecast_registry as fr
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research import forecast_registry as fr
+from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.models.forecast import (
     ForecastAssessment,
     ForecastTerms,
     PriceAnchor,
@@ -135,7 +135,7 @@ def _terms(**over: Any) -> ForecastTerms:
 def _assessment(*, ticker: str = "SPY", content_hash: str | None = None) -> ForecastAssessment:
     terms = _terms()
     ch = content_hash or forecast_terms_content_hash(terms)
-    from digiquant.olympus.hermes.models.forecast import forecast_assessment_id
+    from digiquant.portfolio.models.forecast import forecast_assessment_id
 
     return ForecastAssessment(
         forecast_id=forecast_assessment_id(ticker=ticker, source_run_id=RUN_ID, content_hash=ch),

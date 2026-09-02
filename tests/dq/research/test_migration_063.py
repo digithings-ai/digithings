@@ -41,10 +41,10 @@ invocation, splits the ledger INSERT into its own call, and lets the DDL commit 
 in ``olympus_schema_migrations``. Nothing but this test sees that.
 
 ``pytestmark = pytest.mark.unit`` is mandatory, not decorative. The lane that collects this
-directory is ``test-atlas-graph.yml`` (``pytest -m unit tests/dq/atlas/ …``); the plain
+directory is ``test-research-graph.yml`` (``pytest -m unit tests/dq/research/ …``); the plain
 ``digiquant tests`` job installs only ``digiquant[dev]``, so digigraph is absent and
-``tests/dq/atlas/conftest.py`` ignores the whole directory there. An unmarked file is not an
-error, it is silently deselected — ``pytest tests/dq/atlas/test_migration_061.py -m unit
+``tests/dq/research/conftest.py`` ignores the whole directory there. An unmarked file is not an
+error, it is silently deselected — ``pytest tests/dq/research/test_migration_061.py -m unit
 --co`` reports ``23 deselected, 0 selected``, which is the state 051 and 061 are in today.
 Without the marker this file would run in no lane at all.
 """

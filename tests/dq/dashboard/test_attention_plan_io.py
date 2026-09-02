@@ -6,8 +6,8 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.attention_plan import plan_attention_shadow
-from digiquant.olympus.attention_plan_io import (
+from digiquant.dashboard.attention_plan import plan_attention_shadow
+from digiquant.dashboard.attention_plan_io import (
     ATTENTION_PLAN_DOC_TYPE_COLUMN,
     ATTENTION_PLAN_DOCUMENT_KEY,
     ATTENTION_PLAN_PAYLOAD_DOC_TYPE,
@@ -15,7 +15,7 @@ from digiquant.olympus.attention_plan_io import (
     attention_plan_document_payload,
     publish_attention_plan_shadow,
 )
-from digiquant.olympus.edit_mode.models import PriorPublished
+from digiquant.dashboard.edit_mode.models import PriorPublished
 
 pytestmark = pytest.mark.unit
 

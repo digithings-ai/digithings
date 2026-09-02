@@ -30,7 +30,7 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
+from digiquant.dashboard.overlay.persist import LEGACY_BOOK_UNIQUE_CODE
 
 REMAINING_LIVE_HOPS: tuple[str, ...] = (
     "browser_stripe_checkout",

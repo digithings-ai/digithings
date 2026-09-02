@@ -8,16 +8,16 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.writers.commit_io import book_portfolio, publish_hermes_documents
-from digiquant.olympus.overlay.byok import ByokProbe
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.writers.commit_io import book_portfolio, publish_hermes_documents
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
-from digiquant.olympus.overlay.persist import (
+from digiquant.dashboard.overlay.persist import (
     LEGACY_BOOK_UNIQUE_CODE,
     OverlayLegacyBookBlocked,
     OverlayPersistDisabled,
@@ -26,9 +26,9 @@ from digiquant.olympus.overlay.persist import (
     require_overlay_persist,
     skip_overlay_shared_register,
 )
-from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
-from digiquant.olympus.research_corpus import ResearchCorpusStore
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus, house_workspace_id
+from digiquant.dashboard.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.dashboard.research_corpus import ResearchCorpusStore
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus, house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

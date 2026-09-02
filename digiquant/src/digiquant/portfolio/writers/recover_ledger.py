@@ -13,23 +13,23 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import (
+from digiquant.research.dashboard_digest import portfolio_preferences_static
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.supabase_io import (
     SupabaseClient,
     load_prior_book,
     prior_book_current_weights,
     publish_document,
     query_price_deltas,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
-from digiquant.olympus.hermes.turnover import mark_to_market_weights
-from digiquant.olympus.hermes.writers.commit_io import (
+from digiquant.portfolio.models.portfolio_ledger import DecisionAction
+from digiquant.portfolio.turnover import mark_to_market_weights
+from digiquant.portfolio.writers.commit_io import (
     load_commit_manifests,
     resolve_prior_commit,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     _CASH,
     APPROVED_TARGETS,
     COMMITS,
@@ -43,7 +43,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
     _symbol,
     append_commit_chain,
 )
-from digiquant.olympus.tenancy import resolved_workspace_id
+from digiquant.dashboard.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 

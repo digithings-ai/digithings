@@ -9,15 +9,15 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.phases._node_factory import SegmentNodeSpec, build_segment_node
-from digiquant.olympus.atlas.phases.phase_monthly import MonthlyDigest, build_phase_monthly
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
+from digiquant.research.phases.phase_monthly import MonthlyDigest, build_phase_monthly
+from digiquant.research.state import (
     AtlasResearchState,
     DataLayerSnapshot,
     PriorContext,
 )
-from digiquant.olympus.atlas.triage import evaluate, make_triage_gate
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Artifacts, build_phase9
+from digiquant.research.triage import evaluate, make_triage_gate
+from digiquant.portfolio.phases.phase9_evolution import Phase9Artifacts, build_phase9
 
 
 def _delta_state(
@@ -75,7 +75,7 @@ def _quiet_bias_for_all_segments() -> dict[str, str]:
     Used by tests that want to verify low-tier carry behavior — every
     segment must report neutral for the low-tier rule to evaluate as carry.
     """
-    from digiquant.olympus.atlas.sectors_config import load_sectors
+    from digiquant.research.sectors_config import load_sectors
 
     slugs = [
         "alt-sentiment-news",
@@ -418,7 +418,7 @@ class TestTriagePhaseNode:
     """End-to-end behaviour of the triage phase node (deps wiring + LLM-free)."""
 
     def test_node_runs_on_baseline_run(self) -> None:
-        from digiquant.olympus.atlas.phases.triage_phase import build_triage_node
+        from digiquant.research.phases.triage_phase import build_triage_node
 
         node = build_triage_node(deps=None)
         state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
@@ -430,7 +430,7 @@ class TestTriagePhaseNode:
         """Without a Supabase client we still produce triage decisions —
         just with no price-delta signal. High-tier segments regen by
         default (matches the conservative-default contract)."""
-        from digiquant.olympus.atlas.phases.triage_phase import build_triage_node
+        from digiquant.research.phases.triage_phase import build_triage_node
 
         node = build_triage_node(deps=None)
         state = _delta_state(date(2026, 4, 27), date(2026, 4, 26))
@@ -445,7 +445,7 @@ class TestTriagePhaseNode:
     def test_node_with_deps_loads_price_history_and_carries_quiet_segments(self) -> None:
         """Happy path: Supabase returns flat-tape rows for high-tier ETFs and
         the bonds segment carries while a sharp single-ETF mover regens."""
-        from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_node
+        from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -480,7 +480,7 @@ class TestTriagePhaseNode:
 
     def test_node_handles_missing_price_history_gracefully(self) -> None:
         """price_history empty → empty deltas → conservative regen everywhere."""
-        from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_node
+        from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
 
         from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

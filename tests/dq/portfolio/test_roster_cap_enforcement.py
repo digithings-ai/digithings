@@ -12,12 +12,12 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+from digiquant.portfolio.phases.h4_opportunity_screener import (
     compute_focus_roster,
     compute_focus_roster_excluded,
     thesis_priority_order,
 )
-from digiquant.olympus.hermes.roster_cap import capped_tickers, configured_max_analysts
+from digiquant.portfolio.roster_cap import capped_tickers, configured_max_analysts
 
 _RUN_DATE = date(2026, 7, 31)
 
@@ -231,13 +231,13 @@ class TestRosterBreakdownContributor:
 
     @staticmethod
     def _state(roster_len: int) -> object:
-        from digiquant.olympus.atlas.state import (
+        from digiquant.research.state import (
             AtlasConfigBundle,
             ExcludedTicker,
             FocusRosterEntry,
             PhaseHermesState,
         )
-        from digiquant.olympus.hermes.state import HermesState
+        from digiquant.portfolio.state import HermesState
 
         state = HermesState(
             run_type="delta",
@@ -260,7 +260,7 @@ class TestRosterBreakdownContributor:
     def test_breakdown_reports_width_by_reason_and_cap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.roster_diagnostics import roster_breakdown
+        from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "30")
         payload = roster_breakdown(self._state(5))["roster"]
@@ -274,7 +274,7 @@ class TestRosterBreakdownContributor:
         }
 
     def test_breakdown_flags_a_breach(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from digiquant.olympus.hermes.roster_diagnostics import roster_breakdown
+        from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "3")
         assert roster_breakdown(self._state(5))["roster"]["over_cap"] is True
@@ -282,7 +282,7 @@ class TestRosterBreakdownContributor:
     def test_breakdown_never_flags_a_breach_without_a_cap(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.roster_diagnostics import roster_breakdown
+        from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "0")
         payload = roster_breakdown(self._state(5))["roster"]
@@ -291,7 +291,7 @@ class TestRosterBreakdownContributor:
 
     def test_breakdown_tolerates_a_stateless_object(self) -> None:
         """Contributors run on the run-summary path and must never raise."""
-        from digiquant.olympus.hermes.roster_diagnostics import roster_breakdown
+        from digiquant.portfolio.roster_diagnostics import roster_breakdown
 
         payload = roster_breakdown(object())["roster"]  # type: ignore[arg-type]
         assert payload["width"] == 0

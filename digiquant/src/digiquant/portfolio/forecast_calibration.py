@@ -24,8 +24,8 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.olympus.hermes.models.forecast import EffectiveForecast, ForecastTerms
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast import EffectiveForecast, ForecastTerms
+from digiquant.portfolio.models.forecast_calibration import (
     CalibratedForecast,
     CalibrationArtifactStatus,
     ForecastCalibration,
@@ -36,7 +36,7 @@ from digiquant.olympus.hermes.models.forecast_calibration import (
     forecast_calibration_content_hash,
     forecast_calibration_id,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 # ---------------------------------------------------------------------------
 # Declared prior / method — persisted verbatim on every artifact.

@@ -7,8 +7,8 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -17,7 +17,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance_models import (
     GateCriteriaVersion,
     GateEvaluation,
     GovernanceDecisionKind,
@@ -27,7 +27,7 @@ from digiquant.olympus.replay.governance_models import (
     ReplayRunEventKind,
     governance_content_hash,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     InstrumentBarSeries,
     OhlcvBar,
@@ -45,7 +45,7 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import (
+from digiquant.dashboard.replay.store import (
     LoadedGateEvidence,
     PolicyReplayStore,
     PolicyReplayStoreConflict,

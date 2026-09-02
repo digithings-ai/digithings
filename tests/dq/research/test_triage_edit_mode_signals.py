@@ -5,15 +5,15 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.phases.triage_phase import build_triage_node
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.triage_phase import build_triage_node
+from digiquant.research.state import (
     AtlasResearchState,
     DataLayerSnapshot,
     DeltaTriageDecision,
     PriorContext,
 )
-from digiquant.olympus.atlas.triage import evaluate, triage_decision_to_signal
-from digiquant.olympus.edit_mode import PriorLoader, PriorPublished, TriageSignal, resolve_edit_mode
+from digiquant.research.triage import evaluate, triage_decision_to_signal
+from digiquant.dashboard.edit_mode import PriorLoader, PriorPublished, TriageSignal, resolve_edit_mode
 
 from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 

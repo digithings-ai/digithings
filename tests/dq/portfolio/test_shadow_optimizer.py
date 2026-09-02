@@ -9,7 +9,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -38,16 +38,16 @@ from digiquant.olympus.hermes.allocation_contracts import (
     TradeDeltaEntry,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     pretrade_risk_report_content_hash,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.shadow_artifact import (
+from digiquant.portfolio.shadow_artifact import (
     ShadowCommitMetadata,
     build_shadow_allocation_artifact,
 )
-from digiquant.olympus.hermes.shadow_optimizer import (
+from digiquant.portfolio.shadow_optimizer import (
     CASH_TOKEN,
     FORBIDDEN_IMPORT_PREFIXES,
     OBJECTIVE_TOLERANCE,

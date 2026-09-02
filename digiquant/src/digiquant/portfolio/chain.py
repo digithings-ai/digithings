@@ -1,7 +1,7 @@
 """Atlas → Hermes chain orchestrator (ADR-0015).
 
 Atlas research-only → Hermes analyst/debate/PM → ``publish_phase``.
-Cron entry point: ``python -m digiquant.olympus.hermes.chain``.
+Cron entry point: ``python -m digiquant.portfolio.chain``.
 """
 
 from __future__ import annotations
@@ -17,30 +17,30 @@ from typing import (
 
 from digigraph import usage as _usage
 
-from digiquant.olympus.atlas import diagnostics as _diagnostics
-from digiquant.olympus.atlas import provider_telemetry as _provider_telemetry
-from digiquant.olympus.atlas.graph import (
+from digiquant.research import diagnostics as _diagnostics
+from digiquant.research import provider_telemetry as _provider_telemetry
+from digiquant.research.graph import (
     AtlasGraphDeps,
     AtlasInput,
     _legacy_run_type,
     build_atlas_graph,
     initial_state,
 )
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
 )
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseError
-from digiquant.olympus.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
-from digiquant.olympus.hermes.graph import (
+from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PhaseError
+from digiquant.dashboard.envcompat import ATTEMPT, DEGRADED_RUN_PCT, env_lookup
+from digiquant.portfolio.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
     build_hermes_graph,
 )
-from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
-from digiquant.olympus.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
+from digiquant.dashboard.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.dashboard.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
 
 _logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class DiagnosticsDeps:
     client: Any
     run_id: str
     model: str | None = None
-    # Outer-retry attempt number (#1762). ``pipeline-olympus.yml`` retries the chain up to 3
+    # Outer-retry attempt number (#1762). ``pipeline-digiquant.yml`` retries the chain up to 3
     # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
     # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
     # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows
@@ -102,7 +102,7 @@ OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
 def _outer_attempt() -> int:
     """The CI outer-retry attempt number, from ``DIGIQUANT_ATTEMPT``.
 
-    ``pipeline-olympus.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
+    ``pipeline-digiquant.yml``'s retry loop still exports ``OLYMPUS_ATTEMPT``
     per attempt (#1762). Readers accept both names. Falls back to 1 —
     a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
     the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
@@ -134,7 +134,7 @@ def _coerce_atlas_state(result: Any) -> AtlasResearchState:
 def _maybe_export_shadow_allocation_artifact(state: Any) -> None:
     """WP10.1 fail-soft export — never imports challenger/replay/broker code."""
     try:
-        from digiquant.olympus.hermes.shadow_artifact import (
+        from digiquant.portfolio.shadow_artifact import (
             maybe_export_shadow_allocation_artifact,
         )
 
@@ -294,7 +294,7 @@ def _run_terminal_phase(
     diagnostics write."""
     if phase_deps is None:
         return state
-    from digiquant.olympus.hermes.pipeline_builder import build_pipeline
+    from digiquant.portfolio.pipeline_builder import build_pipeline
 
     try:
         return _coerce_atlas_state(
@@ -539,7 +539,7 @@ def run_atlas_then_hermes(
 
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
-# Invoked as ``python -m digiquant.olympus.hermes.chain --cadence daily …`` by
+# Invoked as ``python -m digiquant.portfolio.chain --cadence daily …`` by
 # the unified cron workflow (.github/workflows/olympus.yml). Mirrors the Atlas
 # CLI cadence surface so the workflow YAML stays thin.
 
@@ -556,10 +556,10 @@ def _parse_cli_date(value: str) -> date:
 def _build_cli_parser():
     import argparse
 
-    from digiquant.olympus.atlas.graph import _add_cadence_cli_args
+    from digiquant.research.graph import _add_cadence_cli_args
 
     parser = argparse.ArgumentParser(
-        prog="python -m digiquant.olympus.hermes.chain",
+        prog="python -m digiquant.portfolio.chain",
         description="Run Atlas → Hermes end-to-end (research + analysis + PM + reflection).",
     )
     _add_cadence_cli_args(parser)
@@ -648,7 +648,7 @@ def cli_main(argv: list[str] | None = None) -> int:
 
     # Re-use Atlas's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.
-    from digiquant.olympus.atlas.graph import _make_default_config_loader, resolve_cli_inputs
+    from digiquant.research.graph import _make_default_config_loader, resolve_cli_inputs
 
     parser = _build_cli_parser()
     args = parser.parse_args(argv)
@@ -683,7 +683,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
 
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     client = build_client(SupabaseConfig.from_env())
     atlas_deps = AtlasGraphDeps(
@@ -695,8 +695,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         triage=TriageDeps(client=client),
         preflight_reflect=PreflightReflectDeps(client=client),
     )
-    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     hermes_deps = HermesGraphDeps(
         thesis=ThesisGraphDeps(client=client),
@@ -720,8 +720,8 @@ def cli_main(argv: list[str] | None = None) -> int:
     # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
     _holdings: list[str] = []
     if not args.watchlist.strip():
-        from digiquant.olympus.atlas.supabase_io import load_prior_book
-        from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+        from digiquant.research.supabase_io import load_prior_book
+        from digiquant.portfolio.candidates import holdings_from_prior_book
 
         _prior_book = load_prior_book(client, atlas_input.run_date)
         _holdings = holdings_from_prior_book(_prior_book)

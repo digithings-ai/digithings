@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.hermes import chain as chain_mod
+from digiquant.portfolio import chain as chain_mod
 
 pytestmark = pytest.mark.unit
 
@@ -57,5 +57,5 @@ def test_cli_main_dispatches_only_when_not_retry_worthy() -> None:
     cli = _CHAIN_SRC[_CHAIN_SRC.index("def cli_main") :]
     assert "if not retry_worthy:" in cli
     assert "dispatch_house_notifications_after_chain(atlas_input.run_date)" in cli
-    dry = cli[cli.index("if args.dry_run:") : cli.index("from digiquant.olympus.atlas.supabase_io")]
+    dry = cli[cli.index("if args.dry_run:") : cli.index("from digiquant.research.supabase_io")]
     assert "dispatch_house_notifications_after_chain" not in dry

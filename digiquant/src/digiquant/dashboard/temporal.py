@@ -45,7 +45,7 @@ def capture_knowledge_cutoff_at(
 ) -> datetime:
     """Capture the run's knowledge cutoff as timezone-aware UTC.
 
-    Call **before** constructing :class:`~digiquant.olympus.atlas.state.AtlasResearchState`.
+    Call **before** constructing :class:`~digiquant.research.state.AtlasResearchState`.
     Inject ``now`` only in tests — production always uses ``datetime.now(UTC)``.
     """
     stamp = now() if now is not None else datetime.now(UTC)

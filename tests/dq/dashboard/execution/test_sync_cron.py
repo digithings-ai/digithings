@@ -13,7 +13,7 @@ from uuid import UUID
 
 import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
-from digiquant.olympus.kairos.sync_cron import (
+from digiquant.execution.sync_cron import (
     ALPACA_API_KEY_HOLD_REASON,
     SyncTarget,
     format_kairos_sync_not_configured,
@@ -25,7 +25,7 @@ from digiquant.olympus.kairos.sync_cron import (
     parse_connection_row,
     plan_kairos_sync,
 )
-from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -246,7 +246,7 @@ def test_apply_with_vault_uses_production_callback(
         return 4
 
     monkeypatch.setattr(
-        "digiquant.olympus.kairos.sync_cron._production_sync_batch",
+        "digiquant.execution.sync_cron._production_sync_batch",
         _fake_prod,
     )
     logs: list[str] = []
@@ -331,7 +331,7 @@ def test_connection_id_invalid_exits_3() -> None:
 
 
 def test_production_empty_does_not_import_alpaca(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+    from digiquant.execution.sync_cron import _production_sync_batch
 
     monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     synced = _production_sync_batch([], environ={})
@@ -340,7 +340,7 @@ def test_production_empty_does_not_import_alpaca(monkeypatch: pytest.MonkeyPatch
 
 
 def test_production_refuses_house_and_ibkr_before_unseal(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+    from digiquant.execution.sync_cron import _production_sync_batch
 
     monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     house = _target(workspace_id=house_workspace_id())
@@ -351,7 +351,7 @@ def test_production_refuses_house_and_ibkr_before_unseal(monkeypatch: pytest.Mon
 
 
 def test_production_refuses_alpaca_api_key_before_unseal(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+    from digiquant.execution.sync_cron import _production_sync_batch
 
     monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     api_key = _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)

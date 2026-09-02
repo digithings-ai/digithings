@@ -1,7 +1,7 @@
 """Triage helpers — segment ↔ ticker mapping + price-delta aggregation.
 
-Used by ``digiquant.olympus.atlas.triage`` to convert raw per-ticker percentage
-moves (computed in :func:`digiquant.olympus.atlas.supabase_io.query_price_deltas`)
+Used by ``digiquant.research.triage`` to convert raw per-ticker percentage
+moves (computed in :func:`digiquant.research.supabase_io.query_price_deltas`)
 into per-segment signals the rule evaluators consume.
 
 The mapping below is the load-bearing source of truth for ticker→segment
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from digiquant.olympus.atlas.sectors_config import load_sectors
+from digiquant.research.sectors_config import load_sectors
 
 # Bonds: TLT/IEF/SHY span the curve; AGG is the broad index; LQD/HYG/TIP/EMB
 # cover credit, inflation-linked, and EM.
@@ -96,7 +96,7 @@ def max_abs_move_for_segment(
     tickers, or ``None`` if no ticker has a delta.
 
     ``deltas`` is the keyed-by-ticker output of
-    :func:`digiquant.olympus.atlas.supabase_io.query_price_deltas` — values are
+    :func:`digiquant.research.supabase_io.query_price_deltas` — values are
     fractional pct changes (``0.0123`` means +1.23%). A ticker missing from
     the dict is treated as "no signal," not "zero move" — caller decides
     what to do (the high-tier rule defaults to regenerate).

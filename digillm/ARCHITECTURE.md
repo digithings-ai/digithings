@@ -180,7 +180,7 @@ chat_completion(
   OpenRouter's auto-router breaks that: its id *is* `openrouter/auto`, so its
   litellm form carries the prefix twice (`openrouter/openrouter/auto` — the form
   operators write in the README and in the Atlas provider diagnostics under
-  `digiquant/scripts/atlas/`; no tier config lists it) and stripping one still has
+  `digiquant/scripts/research/`; no tier config lists it) and stripping one still has
   to leave one behind. Ids listed in the table are restored after the
   split, so **both spellings reach the wire as `openrouter/auto`**.
 

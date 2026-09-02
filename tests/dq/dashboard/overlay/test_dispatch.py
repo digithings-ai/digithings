@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 
 pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
-from digiquant.olympus.overlay.byok import ByokProbe
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.byok import ByokProbe
+from digiquant.dashboard.overlay.dispatch import (
     JOB_TYPE_OVERLAY_DAILY,
     DispatchResult,
     JobRun,
@@ -21,7 +21,7 @@ from digiquant.olympus.overlay.dispatch import (
     dispatch_overlay_daily,
     overlay_idempotency_key,
 )
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 
 pytestmark = pytest.mark.unit
 

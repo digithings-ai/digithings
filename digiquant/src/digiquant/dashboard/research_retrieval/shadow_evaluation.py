@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, field_validator
 
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecisionReconciliation,
     AttentionMode,
     AttentionPolicyEvaluation,
@@ -23,11 +23,11 @@ from digiquant.olympus.research_retrieval.planner import (
     H6PlannerModel,
     NonEmptyStr,
 )
-from digiquant.olympus.research_retrieval.store import (
+from digiquant.dashboard.research_retrieval.store import (
     ActualProviderAttemptUsage,
     AttentionStore,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 FiniteRate: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
 

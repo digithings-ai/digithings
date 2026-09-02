@@ -9,7 +9,7 @@ from typing import (
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
+from digiquant.portfolio.sector_map import asset_class, sector_bucket
 
 
 class InstrumentMetadata(BaseModel):

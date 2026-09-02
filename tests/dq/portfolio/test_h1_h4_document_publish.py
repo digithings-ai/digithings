@@ -7,12 +7,12 @@ from unittest.mock import patch
 
 import pytest
 from digigraph.graph.pipeline_builder import build_pipeline
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
-from digiquant.olympus.edit_mode.prior import artifact_document_key
-from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
-from digiquant.olympus.hermes.phases import h1_thesis_review as h1
-from digiquant.olympus.hermes.phases.h1_thesis_review import ARTIFACT_KEY, build_h1_thesis_review
-from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.dashboard.edit_mode.prior import artifact_document_key
+from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
+from digiquant.portfolio.phases import h1_thesis_review as h1
+from digiquant.portfolio.phases.h1_thesis_review import ARTIFACT_KEY, build_h1_thesis_review
+from digiquant.portfolio.phases.h4_opportunity_screener import (
     OPPORTUNITY_SCREENER_DOCUMENT_KEY,
     build_h4_opportunity_screener,
 )
@@ -53,7 +53,7 @@ class TestH1PublishesThesisReviewDocument:
             notes="Gold remains the hedge.",
         )
         with patch(
-            "digiquant.olympus.hermes.phases.h1_thesis_review._run_h1_llm",
+            "digiquant.portfolio.phases.h1_thesis_review._run_h1_llm",
             return_value=llm_review,
         ):
             compiled.invoke(state)
@@ -141,7 +141,7 @@ class TestH4PublishesOpportunityScreener:
     def test_h4_upserts_flat_opportunity_screener_key(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
+        from digiquant.portfolio.phases import h4_opportunity_screener as h4
 
         monkeypatch.setenv("HERMES_HELD_GATE", "off")
         monkeypatch.setattr(h4, "assess_budget", lambda *a, **k: (2, 0, None))

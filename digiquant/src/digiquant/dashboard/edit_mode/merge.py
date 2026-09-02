@@ -1,4 +1,4 @@
-"""Patch merge — wraps :func:`digiquant.olympus.edit_mode.ops.apply_ops`."""
+"""Patch merge — wraps :func:`digiquant.dashboard.edit_mode.ops.apply_ops`."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from typing import (
 
 from pydantic import BaseModel
 
-from digiquant.olympus.edit_mode.content_identity import bodies_match
-from digiquant.olympus.edit_mode.models import DocumentPatch, MergeResult, MergeStats
-from digiquant.olympus.edit_mode.ops import apply_ops
+from digiquant.dashboard.edit_mode.content_identity import bodies_match
+from digiquant.dashboard.edit_mode.models import DocumentPatch, MergeResult, MergeStats
+from digiquant.dashboard.edit_mode.ops import apply_ops
 
 
 class MergeError(ValueError):

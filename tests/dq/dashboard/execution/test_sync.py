@@ -25,8 +25,8 @@ from digiquant.brokers.contracts import (
     BrokerOrderStatus,
     BrokerPosition,
 )
-from digiquant.olympus.kairos.router import BROKER_ORDERS, broker_order_status_id
-from digiquant.olympus.kairos.sync import (
+from digiquant.execution.router import BROKER_ORDERS, broker_order_status_id
+from digiquant.execution.sync import (
     ALPACA_MAX_CALLS_PER_CYCLE,
     BROKER_EXECUTIONS,
     BROKER_POSITION_SNAPSHOTS,

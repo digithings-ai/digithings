@@ -15,20 +15,20 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from digiquant.olympus.research_retrieval.context import (
+from digiquant.dashboard.research_retrieval.context import (
     ContextCapsule,
     ContextCompileInput,
     ContextManifest,
     ContextRole,
     compile_context_capsule,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     NonEmptyStr,
     ResearchStateModel,
     content_digest,
 )
-from digiquant.olympus.research_retrieval.planner import AttentionPlan
-from digiquant.olympus.research_retrieval.store import LoadedResearchState
+from digiquant.dashboard.research_retrieval.planner import AttentionPlan
+from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 
 H7_SECTION_SCHEMA_VERSION: int = 1
 

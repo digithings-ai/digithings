@@ -9,15 +9,15 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.thesis import ThesisVehicleMapOutput
-from digiquant.olympus.hermes.phases.thesis_common import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.thesis import ThesisVehicleMapOutput
+from digiquant.portfolio.phases.thesis_common import (
     build_thesis_document,
     run_thesis_phase_llm,
 )
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.writers.thesis_io import persist_thesis_vehicle_map
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.writers.thesis_io import persist_thesis_vehicle_map
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
 
 logger = logging.getLogger(__name__)
 

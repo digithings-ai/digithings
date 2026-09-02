@@ -163,7 +163,7 @@ themes / budgets; they must not claim the house key or cancel/replace the house 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_profile_config_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/loader:
-`digiquant.olympus.profile_config`. Preflight pins via
+`digiquant.dashboard.profile_config`. Preflight pins via
 `pin_profile_config_for_preflight` into `AtlasConfigBundle.profile_config*`.
 
 ### Shared research corpus — migration 076 (#2613 / Track B WP12-class)
@@ -180,7 +180,7 @@ layer). Portfolio/book data does not belong here.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_research_corpus_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
-`digiquant.olympus.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
+`digiquant.dashboard.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
 
 ### Research-state store — migration 088 (#2854 / WP12.2)
 
@@ -189,7 +189,7 @@ Private append-only exact-version research memory for Phase 3 WP12 contracts
 `LegacyDocumentRef`, `ResearchStateVersion`, `ResearchStatePin`). Distinct from
 Track B corpus pins (theme/asset/segment identity). Dark launch: no public base
 view, no historical backfill, no prose parsing. Application boundary:
-`digiquant.olympus.research_retrieval.store.ResearchStateStore` (in-memory for
+`digiquant.dashboard.research_retrieval.store.ResearchStateStore` (in-memory for
 unit tests; migration 088 is the durable schema — SQL IO adapter later). Pin
 temporal ordering is also enforced in SQL via migration 089
 (`requested_as_of <= knowledge_cutoff_at <= pinned_at`).
@@ -217,7 +217,7 @@ callers inject the store.
 
 Private append-only H5 base evidence bundles and H6 missing-fact amendments.
 Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
-`EvidenceBundleAmendment` in `digiquant.olympus.research_retrieval.models`.
+`EvidenceBundleAmendment` in `digiquant.dashboard.research_retrieval.models`.
 Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
 adapter later). WP11.2 builds typed H5 bases into
 `phase_hermes.ticker_evidence_bundles` before the provider call; default Hermes
@@ -260,13 +260,13 @@ activation in 13.2 — storage boundary only; no public base view.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_attention_context_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/reader:
-`digiquant.olympus.research_retrieval.store.AttentionStore`.
+`digiquant.dashboard.research_retrieval.store.AttentionStore`.
 
 ### Outcome learning — migration 093 (#2959 / WP15.2)
 
 Private append-only outcome episodes, component attribution reports, and structured
 lesson versions. Contracts: `OutcomeEpisode`, `ComponentAttributionReport`,
-`OutcomeLessonVersion` in `digiquant.olympus.learning.outcome_models`.
+`OutcomeLessonVersion` in `digiquant.dashboard.learning.outcome_models`.
 Application boundary: `OutcomeLearningStore` (in-memory for unit tests; SQL IO
 adapter later). Dark launch: no public base view, no historical backfill, no
 assembler/compiler wiring (WP15.3+). Supersession appends child versions;
@@ -288,7 +288,7 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 Private append-only policy replay manifests, pairs, run lifecycle events, arm
 results, comparison reports, gate criteria versions, evaluations, and human
 governance decisions. Contracts: WP16.1 replay models plus
-`digiquant.olympus.replay.governance_models` persistence envelopes.
+`digiquant.dashboard.replay.governance_models` persistence envelopes.
 Application boundary: `PolicyReplayStore` (in-memory for unit tests; SQL IO
 adapter later). Dark launch: no public base view, no historical backfill, no
 worker/governance evaluator wiring (WP16.3+). Run status is derived from
@@ -324,16 +324,16 @@ backfill, no prompt/reasoning bodies, no public base view.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_registry_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
-`digiquant.olympus.atlas.forecast_registry`.
+`digiquant.research.forecast_registry`.
 
 ### Forecast calibration registry — migration 080 (#2672 / WP5.1, writers #2676+#2680+#2684)
 
 Private append-only prospective outcome labels and shadow calibration versions.
 No historical backfill, no portfolio-contribution columns, no public base view.
 WP5.1 shipped schema + Pydantic contracts; WP5.2 adds the trading-session outcome
-resolver (`digiquant.olympus.atlas.forecast_outcomes`) writing
+resolver (`digiquant.research.forecast_outcomes`) writing
 `olympus_forecast_outcomes` only. WP5.3 adds the pure deterministic shrinkage
-calibrator (`digiquant.olympus.hermes.forecast_calibration`). WP5.4 attaches at the
+calibrator (`digiquant.portfolio.forecast_calibration`). WP5.4 attaches at the
 H6→H7 boundary and persists via `forecast_registry.persist_shadow_calibrations`
 into `olympus_forecast_calibrations` + `olympus_calibrated_forecasts` (H9 fail-soft).
 H8 cutover remains later.
@@ -347,16 +347,16 @@ H8 cutover remains later.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_calibration_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
-`digiquant.olympus.hermes.models.forecast_calibration`. Outcome writer:
-`digiquant.olympus.atlas.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
-`digiquant.olympus.hermes.forecast_calibration` (WP5.3/5.4). Calibration table writers:
-`digiquant.olympus.atlas.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
+`digiquant.portfolio.models.forecast_calibration`. Outcome writer:
+`digiquant.research.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
+`digiquant.portfolio.forecast_calibration` (WP5.3/5.4). Calibration table writers:
+`digiquant.research.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
 
 ### Risk policy snapshot registry — migration 081 (#2698 / WP6.3)
 
 Private append-only resolved H8 risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
 per run, plus a run ref binding `source_run_id`. Resolver runs at the H8 entry boundary;
-H9 fail-soft persistence via `digiquant.olympus.atlas.risk_policy_registry` after booking.
+H9 fail-soft persistence via `digiquant.research.risk_policy_registry` after booking.
 Phase 1 audit artifact for policy/covariance; WP8.4 may consume the paired
 `AllocationInputBundle` for calibrated raw weights while leaving these registry
 tables observational.
@@ -368,8 +368,8 @@ tables observational.
 | `olympus_h8_risk_run_refs` | `(source_run_id text)` | One ref per run: run_date, policy_id FK, snapshot_id FK, effective_at. |
 
 RLS enabled with **zero** policies; append-only via `reject_olympus_risk_policy_snapshot_mutation()`.
-Models: `digiquant.olympus.hermes.models.risk_policy`. Resolver: `digiquant.olympus.hermes.risk_policy`.
-Registry: `digiquant.olympus.atlas.risk_policy_registry` (exact-ID reads only).
+Models: `digiquant.portfolio.models.risk_policy`. Resolver: `digiquant.portfolio.risk_policy`.
+Registry: `digiquant.research.risk_policy_registry` (exact-ID reads only).
 
 ### Pre-trade risk report registry — migration 083 (#2754 / WP9.4)
 
@@ -384,8 +384,8 @@ Rollout: `OLYMPUS_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
 | `olympus_pretrade_risk_reports` | `(report_id UUID)` | Immutable report: source_run_id, session_date, status, report_content_hash, allocation_input_bundle_hash, final_book_weights_fingerprint, optional ledger_commit_id, full `report_body` jsonb. |
 
 RLS enabled with **zero** policies; append-only via `reject_olympus_pretrade_risk_report_mutation()`.
-Contract: `digiquant.olympus.hermes.allocation_contracts.PreTradeRiskReport`.
-Registry: `digiquant.olympus.atlas.pretrade_risk_registry`.
+Contract: `digiquant.portfolio.allocation_contracts.PreTradeRiskReport`.
+Registry: `digiquant.research.pretrade_risk_registry`.
 H9 surface: `hermes.writers.commit_io.validate_pretrade_risk_report` /
 `persist_validated_pretrade_risk_report`.
 
@@ -539,7 +539,7 @@ RLS enabled with **zero anon policies**; T0 migration 098 adds workspace-scoped
 SELECT only via 098. `service_role` reset then `SELECT, INSERT` only;
 `reject_olympus_accounting_mutation()` blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial
 unique indexes enforce one current root period per `period_date` and at most one
-superseder per prior id. Models/engine/io: `digiquant.olympus.accounting`.
+superseder per prior id. Models/engine/io: `digiquant.dashboard.accounting`.
 
 **Finalizer semantics (`accounting/io.py` + `scripts/atlas/finalize_period_accounting.py`):**
 
@@ -623,7 +623,7 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
 ## Tenancy — migrations 096–098 (T0, Kairos + tenancy program)
 
 Multi-tenant privacy boundary. Typed contracts live in
-`digiquant.olympus.tenancy` (`Workspace`, `PlanTier`, deterministic
+`digiquant.dashboard.tenancy` (`Workspace`, `PlanTier`, deterministic
 `system_workspace_id()` / `house_workspace_id()`). **Do not apply these migrations to
 live Supabase from this WP alone** — schema files + structural tests only until the
 T0/T1 release train is reviewed.
@@ -726,7 +726,7 @@ target the widened UNIQUEs. P6 stages the 097 legacy date-only drop in
 it on `core` until `main` house GHA writers are on the widened conflict
 (`origin/main` `commit_io` / `portfolio_materialize` still `on_conflict=date`).
 `require_overlay_legacy_book_safe` stays until 113 is actually applied.
-Proof: `tests/dq/olympus/test_cutover_113.py`.
+Proof: `tests/dq/dashboard/test_cutover_113.py`.
 
 ### Authenticated RLS (098) — anon untouched until T1
 
@@ -737,7 +737,7 @@ on `workspaces` (`type='system'`) and `olympus_profile_config` (house-default ov
 both marked `TODO(T5)` for the tier CHECK. **No existing `anon_read` policy is dropped
 or narrowed in this WP** — that cutover ships inside T1's release train. Two-JWT
 executable proof is documented in the 098 header; structural assertions live in
-`tests/dq/olympus/test_migration_tenancy.py`.
+`tests/dq/dashboard/test_migration_tenancy.py`.
 
 ### Authenticated house teaser read — migration 109 (hotfix)
 
@@ -751,7 +751,7 @@ cutover here), migration 109 adds:
 | `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
 
 `anon_read` on those book tables was **USING (true)** until **110**. Proof:
-`tests/dq/olympus/test_migration_109_house_teaser.py`. Numbering: **108** is
+`tests/dq/dashboard/test_migration_109_house_teaser.py`. Numbering: **108** is
 creator/product grants (independent); **109** is this RLS hotfix.
 
 ### Anon house-only private books — migration 110
@@ -780,16 +780,16 @@ widens the 069 one-root indexes to `(workspace_id, run_date[, symbol])`. It is
 `main` house GHA writers are also widened. Staging 113 does **not** lift
 `require_overlay_legacy_book_safe`. This is **not** cutover 900: anon can still
 read house weights/NAV. `daily_snapshots` `UNIQUE(date)` is kept (house-only).
-Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py`,
-`tests/dq/olympus/overlay/test_persist.py`, and
-`tests/dq/olympus/test_cutover_113.py`.
+Proof: `tests/dq/dashboard/test_migration_110_anon_house_only.py`,
+`tests/dq/dashboard/overlay/test_persist.py`, and
+`tests/dq/dashboard/test_cutover_113.py`.
 
 Staged cutover **900** section A2 restores 098 membership-only
 `authenticated_select_own_workspace` on the four book tables and drops
 `authenticated_read_house_teaser` on `daily_snapshots` (SELECT already REVOKEd
 in 900 §B). `theses` / `instruments` teasers stay (T5 research). 900 is not
 auto-applied; do not promote it to `core` until T1-train cutover. Proof:
-`tests/dq/olympus/test_cutover_900.py` plus `scripts/rls_proof/` (59/59 with
+`tests/dq/dashboard/test_cutover_900.py` plus `scripts/rls_proof/` (59/59 with
 900 applied on a throwaway DB).
 
 ### Broker credential vault — migration 099 (K3, Kairos tenancy)
@@ -861,7 +861,7 @@ only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migr
 number 102 originally skipped 100/101 for the sibling T2 branch; those migrations
 now live in-tree (`100_workspaces_claim_sync_pending.sql`,
 `101_stripe_webhook_applied_and_ordering.sql`). Structural tests:
-`tests/dq/olympus/kairos/test_migration_102.py`.
+`tests/dq/dashboard/kairos/test_migration_102.py`.
 
 ### BYOK LLM keys + job_runs status — migration 104 (T4)
 
@@ -875,7 +875,7 @@ credential-column immutability trigger. Crypto is K3's envelope unchanged.
 
 `job_runs.status` CHECK is extended to `skipped` (reason in `error`:
 `not_entitled` / `no_credentials`) and `budget_exhausted` (research budget hard
-stop). Structural tests: `tests/dq/olympus/overlay/test_migration_104.py`.
+stop). Structural tests: `tests/dq/dashboard/overlay/test_migration_104.py`.
 
 ### Documents workspace_id — migration 105 (T4)
 
@@ -890,7 +890,7 @@ own-member only. **`anon_read` is not dropped or rewritten** (T1-train).
 `job_runs.status` CHECK is extended with `persist_disabled` (overlay
 private-phase refuse when `OLYMPUS_OVERLAY_PERSIST` is off). Production may set
 that flag only after the T1-train anon-policy drop. Structural tests:
-`tests/dq/olympus/overlay/test_migration_105.py`.
+`tests/dq/dashboard/overlay/test_migration_105.py`.
 
 Every live `documents` upsert writer is enumerated in the migration header and
 updated to `on_conflict="workspace_id,date,document_key"` plus a workspace stamp
@@ -1074,7 +1074,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 | `langgraph-checkpoint-vacuum` | `50 5 * * *` | plain `VACUUM (ANALYZE)` over the three tables |
 
 - **Retention is 14 days** by user ruling (D6, 2026-08-01). It is also the cap on
-  `pipeline-olympus.yml`'s `resume_run_id` input — a run older than the window can no
+  `pipeline-digiquant.yml`'s `resume_run_id` input — a run older than the window can no
   longer be resumed from its checkpoint. `retain_days` is validated `>= 1`.
 - **Pruning is thread-scoped, not checkpoint-scoped.** `checkpoint_blobs` is keyed
   `(thread_id, checkpoint_ns, channel, version)` with no `checkpoint_id`, so anything
@@ -1133,6 +1133,6 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 3. If the new table holds a structured projection of a `documents` payload,
    add a reference to it in this file under the "Hermes deliberation"
    section pattern and cite the source ADR.
-4. Add a test under `tests/dq/atlas/test_migration_NNN.py`
+4. Add a test under `tests/dq/research/test_migration_NNN.py`
    following the pattern in `test_migration_024.py` — pure-SQL parse check
    for offline unit tests, or `psycopg` round-trip for integration.

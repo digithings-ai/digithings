@@ -26,12 +26,12 @@ from digiquant.brokers.contracts import (
     LiveVenueNotAuthorizedError,
     OrderSide,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
-from digiquant.olympus.hermes.writers.execution_io import (
+from digiquant.portfolio.models.portfolio_ledger import DecisionAction
+from digiquant.portfolio.writers.execution_io import (
     _pending_order_heads,
     execute_pending_orders,
 )
-from digiquant.olympus.kairos.policy import (
+from digiquant.execution.policy import (
     AmbiguousVenueError,
     ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
@@ -39,13 +39,13 @@ from digiquant.olympus.kairos.policy import (
     routing_enabled,
     routing_enabled_in,
 )
-from digiquant.olympus.kairos.router import (
+from digiquant.execution.router import (
     BROKER_ORDERS,
     broker_order_id,
     route_pending_orders,
     side_from_action,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -217,7 +217,7 @@ def test_ambiguous_brokers_raise(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_live_venue_raises() -> None:
     """Test-pinned invariant: resolve_venue never returns *_LIVE."""
-    from digiquant.olympus.kairos import policy as policy_mod
+    from digiquant.execution import policy as policy_mod
 
     with pytest.raises(LiveVenueNotAuthorizedError):
         policy_mod._assert_not_live(ExecutionVenue.ALPACA_LIVE)
@@ -486,7 +486,7 @@ def test_workspace_none_never_substituted_with_connection(
 def test_house_and_system_uuids_never_route_externally(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+    from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
     assert (

@@ -10,11 +10,11 @@ from typing import Any  # score:allow untyped any — used for LangGraph update 
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.research_attention import triage_phase_attention_update
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, query_price_deltas
-from digiquant.olympus.atlas.triage import evaluate
-from digiquant.olympus.atlas.triage_signals import all_tracked_tickers
+from digiquant.research.research_attention import triage_phase_attention_update
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.supabase_io import SupabaseClient, query_price_deltas
+from digiquant.research.triage import evaluate
+from digiquant.research.triage_signals import all_tracked_tickers
 
 
 @dataclass(frozen=True)

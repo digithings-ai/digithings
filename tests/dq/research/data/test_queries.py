@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.data.queries import get_macro_series, get_price_technicals
+from digiquant.research.data.queries import get_macro_series, get_price_technicals
 
 
 class _FakeTable:

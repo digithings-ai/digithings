@@ -15,11 +15,11 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint suppression: test fixture dicts
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     _scoped_data_layer,
     _shared_context,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasResearchState,
     DataLayerSnapshot,
     DeltaTriageDecision,

@@ -10,8 +10,8 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from digiquant.olympus.replay.asof_dataset import AsOfDatasetSnapshot
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.asof_dataset import AsOfDatasetSnapshot
+from digiquant.dashboard.replay.models import (
     HoldingQuantity,
     InstrumentBarSeries,
     PortfolioReplayRequest,
@@ -23,14 +23,14 @@ from digiquant.olympus.replay.models import (
     WalkForwardFold,
     inconclusive_result,
 )
-from digiquant.olympus.replay.nautilus_portfolio import reconcile_portfolio_replay_result
-from digiquant.olympus.replay.policy_registry import (
+from digiquant.dashboard.replay.nautilus_portfolio import reconcile_portfolio_replay_result
+from digiquant.dashboard.replay.policy_registry import (
     PolicyRegistry,
     PolicyRegistryError,
     PolicyRegistryMissingError,
     PolicyRegistryUnavailableError,
 )
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 __all__ = [
     "PolicyArmReplayError",

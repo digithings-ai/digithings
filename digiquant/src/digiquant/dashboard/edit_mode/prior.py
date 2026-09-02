@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
-from digiquant.olympus.edit_mode.models import ArtifactKey, PriorPublished
+from digiquant.dashboard.edit_mode.models import ArtifactKey, PriorPublished
 
 
 class PriorLoader(Protocol):

@@ -39,15 +39,15 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
-from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, env_lookup
-from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries, sized_book
-from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
-from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
-from digiquant.olympus.performance_returns import calculate_performance_returns
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.research.state import AtlasResearchState
+from digiquant.research.supabase_io import SupabaseClient, load_prior_book, query_price_deltas
+from digiquant.dashboard.envcompat import POSITION_RISK_FIELDS, env_lookup
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries, sized_book
+from digiquant.portfolio.risk_envelope import risk_horizon_days
+from digiquant.portfolio.sector_map import sector_bucket
+from digiquant.dashboard.overlay.persist import skip_overlay_shared_register
+from digiquant.dashboard.performance_returns import calculate_performance_returns
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 

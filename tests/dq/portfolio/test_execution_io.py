@@ -15,21 +15,21 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     HoldingLotStatus,
     OrderIntentStatus,
     OrderRejectionReason,
     paper_execution_id,
 )
-from digiquant.olympus.hermes.writers import execution_io
-from digiquant.olympus.hermes.writers.execution_io import (
+from digiquant.portfolio.writers import execution_io
+from digiquant.portfolio.writers.execution_io import (
     HOLDING_LOTS,
     close_lot_id,
     execute_pending_orders,
     executed_intent_id,
     open_lot_id,
 )
-from digiquant.olympus.hermes.writers.ledger_io import (
+from digiquant.portfolio.writers.ledger_io import (
     APPROVED_TARGETS,
     COMMITS,
     DECISION_INTENTS,
@@ -1137,7 +1137,7 @@ class TestSoleAuthority:
         ]
         # Executor + owned opening-snapshot helper (+ operator CLI that names the table).
         assert self._files_naming("portfolio_ledger_holding_lots") == [
-            "digiquant/scripts/atlas/seed_ledger_opening_snapshot.py",
+            "digiquant/scripts/research/seed_ledger_opening_snapshot.py",
             f"{writers}/execution_io.py",
             f"{writers}/opening_snapshot.py",
         ]
@@ -1151,6 +1151,6 @@ class TestSoleAuthority:
         marks, and nobody would know which set of prices the book was built from.
         """
         assert self._files_naming("execute_pending_orders(") == [
-            "digiquant/scripts/atlas/execute_at_open.py",
+            "digiquant/scripts/research/execute_at_open.py",
             "digiquant/src/digiquant/olympus/hermes/writers/execution_io.py",
         ]

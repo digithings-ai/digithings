@@ -1,11 +1,11 @@
 """Pins the atlas collection gate's scope (#2183).
 
-`tests/dq/atlas/conftest.py` skips collection of files that need digigraph
+`tests/dq/research/conftest.py` skips collection of files that need digigraph
 when the digiquant-only CI lane runs without it. This test exists so a
 future edit can't silently widen that skip back to a whole directory (as
 `data/test_*.py` used to) without a human noticing here first.
 
-Lives at `tests/dq/`, not `tests/dq/atlas/`, on purpose: the atlas conftest's
+Lives at `tests/dq/`, not `tests/dq/research/`, on purpose: the atlas conftest's
 own top-level `test_*.py` entry in `collect_ignore_glob` would otherwise
 sweep this file out of collection in exactly the digiquant-only lane it's
 meant to guard.
@@ -59,7 +59,7 @@ def test_the_gate_does_not_skip_the_whole_data_directory() -> None:
 
 @pytest.mark.unit
 def test_the_dead_phases_pattern_stays_removed() -> None:
-    """`tests/dq/atlas/phases/` has never existed; the pattern matched nothing."""
+    """`tests/dq/research/phases/` has never existed; the pattern matched nothing."""
     assert not (ATLAS_DIR / "phases").is_dir()
     assert "phases/test_*.py" not in _collect_ignore_glob_literal()
 

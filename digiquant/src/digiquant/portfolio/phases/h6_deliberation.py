@@ -12,26 +12,26 @@ from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhas
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     _shared_context,
     build_grounding,
 )
-from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
-from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
-from digiquant.olympus.envcompat import (
+from digiquant.research.state import PhaseError, PhaseHermesState
+from digiquant.research.supabase_io import prior_book_current_weights
+from digiquant.dashboard.envcompat import (
     ATTEMPT,
     DELIBERATION_MAX_ROUNDS,
     DELIBERATION_MIN_ROUNDS,
     env_lookup,
 )
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.focus_roster import (
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.focus_roster import (
     fanout_ticker,
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
 )
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.models.deliberation import (
     CARRY_ATTENTION,
     CARRY_FINGERPRINT_SKIP,
     CARRY_LLM_FAILURE,
@@ -42,7 +42,7 @@ from digiquant.olympus.hermes.models.deliberation import (
     DeliberationTurn,
     MissingFactProposal,
 )
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
     ForecastAmendment,
@@ -53,23 +53,23 @@ from digiquant.olympus.hermes.models.forecast import (
     resolve_effective_forecast,
     unwrap_forecast_terms_payload,
 )
-from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
-from digiquant.olympus.hermes.roster_cap import capped_tickers
-from digiquant.olympus.hermes.skills import load_skill_full
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
-from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
-from digiquant.olympus.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
-from digiquant.olympus.research_retrieval.h6_amendment import (
+from digiquant.portfolio.research_attention import research_attention_h6_enforce_path
+from digiquant.portfolio.roster_cap import capped_tickers
+from digiquant.portfolio.skills import load_skill_full
+from digiquant.portfolio.state import HermesState
+from digiquant.portfolio.ticker_fingerprint import deliberation_skip_signal
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h6_phase_inputs
+from digiquant.dashboard.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
+from digiquant.dashboard.research_retrieval.h6_amendment import (
     H6AmendmentOutcome,
     H6AmendmentResult,
     attempt_h6_evidence_amendment,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     TickerEvidenceBundle,
     TypedProvenance,
 )
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.dashboard.research_retrieval.planner import (
     H6Action,
     H6Selection,
     H6SelectionMode,
@@ -80,7 +80,7 @@ from digiquant.olympus.research_retrieval.planner import (
     resolve_h6_selection_mode,
     select_h6,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 

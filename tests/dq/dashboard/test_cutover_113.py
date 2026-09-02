@@ -7,12 +7,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.overlay.persist import (
+from digiquant.dashboard.overlay.persist import (
     LEGACY_BOOK_UNIQUE_CODE,
     OverlayLegacyBookBlocked,
     require_overlay_legacy_book_safe,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 

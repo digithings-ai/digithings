@@ -43,8 +43,8 @@ from uuid import UUID
 
 from digiquant.brokers.connections import Broker
 from digiquant.brokers.contracts import ExecutionVenue, LiveVenueNotAuthorizedError
-from digiquant.olympus.envcompat import EXECUTION_ROUTING, env_lookup
-from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
+from digiquant.dashboard.envcompat import EXECUTION_ROUTING, env_lookup
+from digiquant.dashboard.tenancy import house_workspace_id, system_workspace_id
 
 _ROUTING_ENV = EXECUTION_ROUTING
 # Opt-in (default off). Mirror the *shape* of ledger_io's env parse, not its polarity.
@@ -76,7 +76,7 @@ class InconsistentOrderChainError(ValueError):
     """A pending ``OrderIntent`` is chained to a ``NO_OP`` / ``REJECT`` decision.
 
     Direction lives on ``DecisionIntent.action`` three hops up the ledger chain
-    (:func:`digiquant.olympus.hermes.writers.execution_io._directions_by_order`).
+    (:func:`digiquant.portfolio.writers.execution_io._directions_by_order`).
     ``NO_OP`` / ``REJECT`` imply no order at all — a pending intent under either
     is a broken chain, and the router refuses to invent a side.
     """

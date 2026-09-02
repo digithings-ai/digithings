@@ -1,6 +1,6 @@
 """Bounded H6 missing-fact evidence supplement (#2908 / WP11.4).
 
-Validated :class:`~digiquant.olympus.hermes.models.deliberation.MissingFactProposal`
+Validated :class:`~digiquant.portfolio.models.deliberation.MissingFactProposal`
 → targeted retrieval → append-only :class:`EvidenceBundleAmendment`. Generic H6 web
 search is forbidden; invalid/exhausted/failed paths never fall back to broad search.
 """
@@ -17,10 +17,10 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from digiquant.olympus.hermes.models.deliberation import MissingFactProposal
-from digiquant.olympus.research_retrieval.blinding import research_document_allowed
-from digiquant.olympus.research_retrieval.evidence_bundle import H5EvidenceFact
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.portfolio.models.deliberation import MissingFactProposal
+from digiquant.dashboard.research_retrieval.blinding import research_document_allowed
+from digiquant.dashboard.research_retrieval.evidence_bundle import H5EvidenceFact
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     EvidenceRecord,
     MissingFactRequest,
@@ -34,7 +34,7 @@ from digiquant.olympus.research_retrieval.models import (
     missing_fact_request_content_hash,
     missing_fact_request_id,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 logger = logging.getLogger(__name__)
 

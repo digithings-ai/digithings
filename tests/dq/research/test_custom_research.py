@@ -21,14 +21,14 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.graph import (
+from digiquant.research.graph import (
     AtlasInput,
     build_cli_parser,
     initial_state,
     resolve_cli_inputs,
 )
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_node
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.publish_phase import PublishDeps, build_publish_node
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,  # noqa: F401 — re-export check
@@ -147,7 +147,7 @@ def _seed_state_minimal(custom_prompt: str | None = None) -> AtlasResearchState:
 @pytest.mark.unit
 class TestPhase7SynthesisCustomPrompt:
     def test_custom_prompt_added_to_phase_inputs_when_set(self) -> None:
-        from digiquant.olympus.atlas.phases.phase7_synthesis import _synthesis_node
+        from digiquant.research.phases.phase7_synthesis import _synthesis_node
 
         captured: dict[str, str] = {}
 
@@ -191,7 +191,7 @@ class TestPhase7SynthesisCustomPrompt:
         assert "XLE" in captured["text"]
 
     def test_custom_prompt_omitted_on_routine_run(self) -> None:
-        from digiquant.olympus.atlas.phases.phase7_synthesis import _synthesis_node
+        from digiquant.research.phases.phase7_synthesis import _synthesis_node
 
         captured: dict[str, str] = {}
 

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-WORKFLOW_FILE = "pipeline-olympus.yml"
+WORKFLOW_FILE = "pipeline-digiquant.yml"
 
 
 # Only these events count as "today's house already landed". A same-day

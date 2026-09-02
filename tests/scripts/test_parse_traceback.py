@@ -46,7 +46,7 @@ def test_identify_component_prefers_src_prefix() -> None:
     assert pt.identify_component("digigraph/src/digigraph/workflow.py") == "digigraph"
     assert pt.identify_component("digikey/src/digikey/jwt.py") == "digikey"
     assert pt.identify_component("scripts/score.py") == "scripts"
-    assert pt.identify_component("frontend/olympus/lib/x.ts") == "unknown"
+    assert pt.identify_component("frontend/dashboard/lib/x.ts") == "unknown"
 
 
 def test_identify_component_handles_absolute_and_windows_paths() -> None:

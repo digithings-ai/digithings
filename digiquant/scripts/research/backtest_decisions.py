@@ -5,7 +5,7 @@ Zero LLM cost. Reads ``decision_log`` (the agent's calls), computes each long-si
 decision's realized return over its holding window + the benchmark's return over the same
 window from ``price_history`` (look-ahead-safe via ``query_returns_window`` — only prices
 inside the window are used), and runs the pure
-:func:`digiquant.olympus.atlas.backtest.backtest_decisions` to print a decision-level tear
+:func:`digiquant.research.backtest.backtest_decisions` to print a decision-level tear
 sheet: hit-rate, mean/median alpha, compounded return vs benchmark, max drawdown,
 information / Sortino ratios, and **conviction-bucket calibration** (do higher-conviction
 calls earn higher alpha?).
@@ -14,7 +14,7 @@ Read-only — no writes, no LLM, no schema change. Run weekly / on demand.
 
 Usage::
 
-    python digiquant/scripts/atlas/backtest_decisions.py [--start YYYY-MM-DD] [--benchmark SPY]
+    python digiquant/scripts/research/backtest_decisions.py [--start YYYY-MM-DD] [--benchmark SPY]
 
 Env: ``SUPABASE_URL`` + ``SUPABASE_SERVICE_ROLE_KEY``. Exit 0 = clean; 1 = hard failure;
 2 = bad ``--start``.
@@ -31,9 +31,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 if TYPE_CHECKING:  # build_trades returns Trades; keep the dep import lazy (see _ensure_importable)
-    from digiquant.olympus.atlas.backtest import Trade
+    from digiquant.research.backtest import Trade
 
-# repo root: .../digiquant/scripts/atlas/backtest_decisions.py → up 4 (atlas → scripts →
+# repo root: .../digiquant/scripts/research/backtest_decisions.py → up 4 (atlas → scripts →
 # digiquant → repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
@@ -75,8 +75,8 @@ def build_trades(
 ) -> list[Trade]:
     """Turn decision_log rows into realized :class:`Trade`s, skipping non-long stances and
     decisions whose price window isn't available yet (look-ahead-safe)."""
-    from digiquant.olympus.atlas.backtest import Trade
-    from digiquant.olympus.atlas.supabase_io import query_returns_window
+    from digiquant.research.backtest import Trade
+    from digiquant.research.supabase_io import query_returns_window
 
     trades: list[Trade] = []
     for row in decisions:
@@ -132,8 +132,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     _ensure_importable()
-    from digiquant.olympus.atlas.backtest import backtest_decisions
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.backtest import backtest_decisions
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     try:
         client = build_client(SupabaseConfig.from_env())

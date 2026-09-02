@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.turnover import (
+from digiquant.portfolio.turnover import (
     apply_rebalancing_cadence,
     hold_drifted_book,
     mark_to_market_weights,

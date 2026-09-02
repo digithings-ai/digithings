@@ -11,8 +11,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
-from digiquant.olympus.hermes.writers.thesis_io import (
+from digiquant.portfolio.models.thesis import ThesisReviewOutput, ThesisStatusUpdate
+from digiquant.portfolio.writers.thesis_io import (
     persist_thesis_review,
     vehicle_shaped_ticker,
 )

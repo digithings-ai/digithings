@@ -10,15 +10,15 @@ from typing import (
 from unittest.mock import patch
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
     scalar_slot_write_adapter,
 )
-from digiquant.olympus.atlas.phases.phase3_macro import MacroRegimeReport
-from digiquant.olympus.atlas.phases.phase5_equities import EquityOverviewReport
-from digiquant.olympus.atlas.skills import SkillNotFoundError, load_skill_edit
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.phase3_macro import MacroRegimeReport
+from digiquant.research.phases.phase5_equities import EquityOverviewReport
+from digiquant.research.skills import SkillNotFoundError, load_skill_edit
+from digiquant.research.state import (
     AtlasResearchState,
     Carried,
     DeltaTriageDecision,
@@ -26,8 +26,8 @@ from digiquant.olympus.atlas.state import (
     PriorContext,
     SegmentPayload,
 )
-from digiquant.olympus.atlas.triage import evaluate
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
+from digiquant.research.triage import evaluate
+from digiquant.dashboard.edit_mode import DocumentPatch, PatchOp
 
 from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
@@ -184,7 +184,7 @@ class TestBuildSegmentNodeEditMode:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             return_value=patch_body,
         ) as mock_run:
             out = node(state)
@@ -238,7 +238,7 @@ class TestBuildSegmentNodeEditMode:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             return_value=full_body,
         ) as mock_run:
             out = node(state)
@@ -274,7 +274,7 @@ class TestSegmentEditE2EPilot:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             return_value=patch_body,
         ):
             out = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)(state)
@@ -365,7 +365,7 @@ class TestEquityEditMode:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             return_value=patch_body,
         ) as mock_run:
             out = build_segment_node(spec)(state)
@@ -413,7 +413,7 @@ class TestEditMergeFallback:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             side_effect=[bad_patch, full_report],
         ) as mock_run:
             out = node(state)
@@ -453,7 +453,7 @@ class TestEditMergeFallback:
         )
 
         with patch(
-            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            "digiquant.research.phases._node_factory.run_research_agent",
             return_value=good_patch,
         ):
             out = node(state)
@@ -484,7 +484,7 @@ class TestEditSchemaConstraintsReachTheModel:
         assert "DocumentPatch" in body
 
     def test_hermes_edit_skills_get_them_too(self) -> None:
-        from digiquant.olympus.hermes.skills import load_skill_edit as hermes_load_edit
+        from digiquant.portfolio.skills import load_skill_edit as hermes_load_edit
 
         body = hermes_load_edit("asset-analyst")
         assert "Output constraints (schema-enforced)" in body
@@ -493,8 +493,8 @@ class TestEditSchemaConstraintsReachTheModel:
     def test_stated_cap_matches_the_schema(self) -> None:
         """Drift guard: path stays capped; reason/summary must stay uncapped."""
         from annotated_types import MaxLen
-        from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
-        from digiquant.olympus.edit_mode.models import DocumentPatch, PatchOp
+        from digiquant.research.skills import EDIT_SCHEMA_CONSTRAINTS
+        from digiquant.dashboard.edit_mode.models import DocumentPatch, PatchOp
 
         path_caps = [
             m.max_length for m in PatchOp.model_fields["path"].metadata if isinstance(m, MaxLen)

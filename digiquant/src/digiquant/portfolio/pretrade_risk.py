@@ -13,7 +13,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AlteredTarget,
     BindingConstraint,
     BookWeightsView,
@@ -33,11 +33,11 @@ from digiquant.olympus.hermes.allocation_contracts import (
     ScalarMetric,
     TradeDeltaEntry,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     pretrade_risk_report_content_hash,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     PolicyArtifactStatus,
 )

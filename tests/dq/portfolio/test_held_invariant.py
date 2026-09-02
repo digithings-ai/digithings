@@ -5,9 +5,9 @@ from __future__ import annotations
 import inspect
 
 import pytest
-from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_asset_analyst
-from digiquant.olympus.hermes.phases.h6_deliberation import build_h6_deliberation
-from digiquant.olympus.hermes.roster_cap import capped_tickers
+from digiquant.portfolio.phases.h5_asset_analyst import build_h5_asset_analyst
+from digiquant.portfolio.phases.h6_deliberation import build_h6_deliberation
+from digiquant.portfolio.roster_cap import capped_tickers
 
 _BOOK = ("AAA", "BBB", "SPY", "CCC", "IJR", "XLP")
 _HELD = {"SPY", "IJR", "XLP"}

@@ -19,7 +19,7 @@ modes, and :func:`plan_research_attention` for pre-provider routing. Runtime
 Atlas/Hermes wiring is WP13.3/13.4 — this module exposes the policy + planner API only.
 
 WP13.2 (#2922) adds persistence contracts consumed by
-:class:`~digiquant.olympus.research_retrieval.store.AttentionStore` — storage
+:class:`~digiquant.dashboard.research_retrieval.store.AttentionStore` — storage
 only; no Atlas/Hermes activation.
 """
 
@@ -44,14 +44,14 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import yaml
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from digiquant.olympus.envcompat import (
+from digiquant.dashboard.envcompat import (
     H6_BOUNDARY_PRICE_DELTA,
     H6_MATERIAL_WEIGHT_PCT,
     H6_SELECTION_MODE,
     RESEARCH_POLICY_PATH,
     env_lookup,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -604,7 +604,7 @@ def policy_content_hash(raw: Mapping[str, object]) -> str:
 
 def default_research_policy_path() -> Path:
     """Default bundled policy path relative to digiquant package root."""
-    return Path(__file__).resolve().parents[4] / "config" / "olympus_research_policy.yaml"
+    return Path(__file__).resolve().parents[4] / "config" / "research_policy.yaml"
 
 
 def resolve_research_policy_path() -> Path:

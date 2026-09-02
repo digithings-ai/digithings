@@ -23,7 +23,7 @@ Copy-paste prompts for ad-hoc sessions. Replace `{DATE}` with today (YYYY-MM-DD)
 ```
 Today is {DATE}.
 
-Run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` (see docs/agentic/ARCHITECTURE.md).
+Run `python -m digiquant.portfolio.chain --run-type baseline|delta` (see docs/agentic/ARCHITECTURE.md).
 
 Setup:
 - Read config/watchlist.md; for portfolio layer read config/preferences.md and config/investment-profile.md

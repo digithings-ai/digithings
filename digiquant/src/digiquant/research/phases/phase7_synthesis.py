@@ -19,37 +19,37 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     _edit_phase_inputs,
     _shared_context,
 )
-from digiquant.olympus.atlas.research_attention import (
+from digiquant.research.research_attention import (
     apply_digest_metric_patch,
     artifact_target_key,
     research_attention_enforce_path,
     resolve_attention_plan_for_node,
     resolve_research_attention_rollout_mode,
 )
-from digiquant.olympus.atlas.segments import (
+from digiquant.research.segments import (
     Source,
     compose_legacy_digest_body,
     compose_legacy_research_body,
 )
-from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
-from digiquant.olympus.atlas.state import (
+from digiquant.research.skills import load_skill, load_skill_edit
+from digiquant.research.state import (
     AtlasResearchState,
     PhaseError,
     refresh_scope_forces_full,
 )
-from digiquant.olympus.edit_mode import DocumentPatch, MergeError, merge_document_patch
-from digiquant.olympus.edit_mode.content_identity import (
+from digiquant.dashboard.edit_mode import DocumentPatch, MergeError, merge_document_patch
+from digiquant.dashboard.edit_mode.content_identity import (
     UNCHANGED_FLAG_KEY,
     UNCHANGED_SINCE_KEY,
 )
-from digiquant.olympus.edit_mode.models import TriageSignal
-from digiquant.olympus.edit_mode.prior import PriorPublished
-from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
-from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
+from digiquant.dashboard.edit_mode.models import TriageSignal
+from digiquant.dashboard.edit_mode.prior import PriorPublished
+from digiquant.dashboard.edit_mode.resolve import resolve_edit_mode
+from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class SegmentFreshness(BaseModel):
     content last materially changed — not the run date. It is distinct from ``baseline``,
     which means the segment was not regenerated at all (an explicit ``Carried`` slot).
 
-    Keep this in lockstep with :class:`digiquant.olympus.atlas.snapshot.SegmentFreshness`,
+    Keep this in lockstep with :class:`digiquant.research.snapshot.SegmentFreshness`,
     which validates rows on the *read* path with ``extra="forbid"`` and would reject a value
     this model can emit but that one cannot accept.
     """

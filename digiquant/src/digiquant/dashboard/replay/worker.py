@@ -16,7 +16,7 @@ import traceback
 from decimal import Decimal
 from pathlib import Path
 
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     PortfolioReplayRequest,
     PortfolioReplayResult,
     PortfolioReplayStatus,
@@ -137,7 +137,7 @@ def _worker_entry(request_path: str, result_path: str) -> None:
         request_hash = request.content_hash()
         starting_cash = request.starting_cash
         # Import inside the child so the parent never loads Nautilus.
-        from digiquant.olympus.replay.nautilus_portfolio import (
+        from digiquant.dashboard.replay.nautilus_portfolio import (
             run_shared_cash_portfolio_replay,
         )
 
@@ -172,7 +172,7 @@ def _write_result(path: Path, result: PortfolioReplayResult) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI: ``python -m digiquant.olympus.replay.worker --request X --result Y``."""
+    """CLI: ``python -m digiquant.dashboard.replay.worker --request X --result Y``."""
     parser = argparse.ArgumentParser(description="Olympus shared-cash portfolio replay worker")
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)

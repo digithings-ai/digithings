@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.overlay.cron import (
+from digiquant.dashboard.overlay.cron import (
     format_overlay_store_not_configured,
     load_active_byok_workspace_ids,
     load_overlay_cron_workspaces,
@@ -22,14 +22,14 @@ from digiquant.olympus.overlay.cron import (
     reserved_overlay_workspace_ids,
     run_overlay_cron,
 )
-from digiquant.olympus.overlay.cron_execute import (
+from digiquant.dashboard.overlay.cron_execute import (
     PROFILE_PIN_MISSING,
     OverlayExecuteRequiresChain,
     load_overlay_profile_version_id,
     parse_overlay_profile_pin,
     require_overlay_chain,
 )
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.dispatch import (
     JOB_TYPE_OVERLAY_DAILY,
     JobRun,
     JobStatus,
@@ -38,7 +38,7 @@ from digiquant.olympus.overlay.dispatch import (
     WorkspaceEntitlement,
     overlay_idempotency_key,
 )
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.tenancy import (
     PlanTier,
     SubscriptionStatus,
     house_workspace_id,

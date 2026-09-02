@@ -4,7 +4,7 @@ Strict Pydantic v2 models resolve every incumbent H8 leaf with provenance before
 H9/replay consumption. Phase 1 versions incumbent behavior only — no optimizer
 or live ``size_portfolio`` input swap.
 
-Style mirrors :mod:`digiquant.olympus.hermes.models.forecast_calibration`:
+Style mirrors :mod:`digiquant.portfolio.models.forecast_calibration`:
 frozen, ``extra="forbid"``, UTC-only aware datetimes, deterministic hashes.
 """
 

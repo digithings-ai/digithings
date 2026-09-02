@@ -27,10 +27,10 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+from digiquant.dashboard.tenancy import PlanTier, SubscriptionStatus
 
 if TYPE_CHECKING:
-    from digiquant.olympus.overlay.byok import ByokProbe
+    from digiquant.dashboard.overlay.byok import ByokProbe
 
 JOB_TYPE_OVERLAY_DAILY = "overlay_daily"
 ENTITLED_TIERS: frozenset[str] = frozenset({PlanTier.STUDIO.value, PlanTier.ENTERPRISE.value})
@@ -315,7 +315,7 @@ def dispatch_overlay_daily(
     else:
         # Dependency-isolation exception to the no-inline-imports rule: byok pulls
         # digillm/openai, which the digiquant-only CI lane deliberately omits.
-        from digiquant.olympus.overlay.byok import probe_byok
+        from digiquant.dashboard.overlay.byok import probe_byok
 
         probe = probe_byok(client=byok_client, workspace_id=workspace.workspace_id)
     reason = evaluate_entitlement(workspace, probe)

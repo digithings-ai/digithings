@@ -51,7 +51,7 @@ digigraph:
   - tests/contracts/**
   - .github/workflows/test-digigraph.yml
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
-  # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
+  # mcp_servers.yaml, digiquant_models.yaml -- all read by tests/dg/*), and
   # infra/digichat-release/config/ is its vendored copy for the Profile A release
   # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
   # config-only edit runs no digigraph job at all -- including the one test that
@@ -206,12 +206,12 @@ nautilus_smoke:
 
 atlas_graph:
   - digiquant/src/digiquant/olympus/atlas/**
-  - digiquant/scripts/atlas/**
+  - digiquant/scripts/research/**
   - digiquant/supabase/**
-  - tests/dq/atlas/**
-  # tests/dq/atlas/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
+  - tests/dq/research/**
+  # tests/dq/research/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
   # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
-  # `tests/dq/atlas tests/dq/hermes tests/dq/learning`. An edit_mode-only change therefore
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning`. An edit_mode-only change therefore
   # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
   # edit_mode/content_identity.py and is consumed by three atlas modules (#1749).
   - digiquant/src/digiquant/olympus/edit_mode/**
@@ -221,10 +221,10 @@ atlas_graph:
   - tests/dq/replay/test_walk_forward.py
   - tests/dq/replay/phase4_e2e_fixtures.py
   - tests/dq/replay/test_phase4_end_to_end.py
-  - tests/dq/hermes/**
+  - tests/dq/portfolio/**
   - tests/dq/learning/**
-  - .github/workflows/test-atlas-graph.yml
-  - .github/workflows/pipeline-olympus.yml
+  - .github/workflows/test-research-graph.yml
+  - .github/workflows/pipeline-digiquant.yml
 
 ruff_and_scripts:
   - digibase/**
@@ -272,10 +272,10 @@ ruff_and_scripts:
   # tests/scripts/test_pipeline_olympus_attempt.py asserts the outer-retry loop exports
   # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
   # key (#1762). This file IS listed under atlas_graph, but that lane's selector is
-  # `tests/dq/atlas tests/dq/hermes tests/dq/learning` — it never runs tests/scripts/. Drop the
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning` — it never runs tests/scripts/. Drop the
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
   # symptom is a cost figure that is quietly a floor.
-  - .github/workflows/pipeline-olympus.yml
+  - .github/workflows/pipeline-digiquant.yml
   # tests/scripts/test_check_deploy_freshness.py pins both deploy checks' own `paths:` filters —
   # that each lists the build script's callees, not just the build script. Same shape as the
   # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
@@ -296,8 +296,8 @@ ruff_and_scripts:
   - .github/workflows/**
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
-# only actionlint in CI was a job inside test-atlas-graph.yml pinned to
-# `files: .github/workflows/pipeline-olympus.yml`, reached only through the
+# only actionlint in CI was a job inside test-research-graph.yml pinned to
+# `files: .github/workflows/pipeline-digiquant.yml`, reached only through the
 # atlas_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
 # itself was never workflow-linted at all (observed on #1818, where atlas_graph
 # reported "skipping" over a diff of pure workflow YAML).

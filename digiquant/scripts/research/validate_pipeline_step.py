@@ -57,7 +57,7 @@ def _ensure_importable() -> None:
 
 
 _ensure_importable()
-from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
 DOC_TYPE_TO_SCHEMA = {
     "market_thesis_exploration": "market-thesis-exploration.schema.json",

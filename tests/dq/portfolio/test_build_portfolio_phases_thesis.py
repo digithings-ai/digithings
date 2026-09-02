@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
-from digiquant.olympus.hermes.graph import build_hermes_graph, build_hermes_phases_thesis
+from digiquant.research.state import AtlasResearchState, PhaseHermesState
+from digiquant.portfolio.graph import build_hermes_graph, build_hermes_phases_thesis
 
 
 @pytest.mark.unit
@@ -66,11 +66,11 @@ class TestBuildHermesPhasesThesis:
         from unittest.mock import patch
 
         from digigraph.graph.pipeline_builder import build_pipeline
-        from digiquant.olympus.atlas.state import AtlasConfigBundle
-        from digiquant.olympus.hermes.phases.h4_opportunity_screener import (
+        from digiquant.research.state import AtlasConfigBundle
+        from digiquant.portfolio.phases.h4_opportunity_screener import (
             build_h4_opportunity_screener,
         )
-        from digiquant.olympus.hermes.phases.h5_asset_analyst import build_h5_from_state
+        from digiquant.portfolio.phases.h5_asset_analyst import build_h5_from_state
 
         monkeypatch.setenv("ATLAS_MAX_ANALYSTS", "2")
         state = AtlasResearchState(
@@ -89,7 +89,7 @@ class TestBuildHermesPhasesThesis:
         )
 
         def fake_analyst(**kwargs: object) -> tuple:
-            from digiquant.olympus.hermes.models.analyst import AnalystPayload
+            from digiquant.portfolio.models.analyst import AnalystPayload
 
             ticker = kwargs.get("ticker", "GLD")
             payload = AnalystPayload(
@@ -103,7 +103,7 @@ class TestBuildHermesPhasesThesis:
             return payload, {}, [], None
 
         with patch(
-            "digiquant.olympus.hermes.phases.h5_asset_analyst.run_asset_analyst_llm",
+            "digiquant.portfolio.phases.h5_asset_analyst.run_asset_analyst_llm",
             side_effect=fake_analyst,
         ):
             result = compiled.invoke(state)

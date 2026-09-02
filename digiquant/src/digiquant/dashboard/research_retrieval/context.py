@@ -1,7 +1,7 @@
 """Deterministic role-specific context capsules and manifests (#2938 / WP14.1).
 
 Compiles bounded, inspectable role inputs from one exact pinned
-:class:`~digiquant.olympus.research_retrieval.models.ResearchStateVersion`
+:class:`~digiquant.dashboard.research_retrieval.models.ResearchStateVersion`
 plus optional bundle/amendment/attention artifacts. Prose and raw transcripts
 are never authoritative — structured entity IDs and content hashes are.
 
@@ -19,7 +19,7 @@ from uuid import UUID, uuid5
 
 from pydantic import Field, field_validator, model_validator
 
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceBundleAmendment,
     NonEmptyStr,
     ResearchStateModel,
@@ -27,8 +27,8 @@ from digiquant.olympus.research_retrieval.models import (
     TickerEvidenceBundle,
     content_digest,
 )
-from digiquant.olympus.research_retrieval.planner import AttentionPlan
-from digiquant.olympus.research_retrieval.store import LoadedResearchState
+from digiquant.dashboard.research_retrieval.planner import AttentionPlan
+from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 
 _CONTEXT_MANIFEST_ID_NS = UUID("c1a0e50a-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _CONTEXT_CAPSULE_ID_NS = UUID("c1a0e50b-4b8d-5f2a-9c17-3d6e8f0a1b22")

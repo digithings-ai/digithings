@@ -1,8 +1,8 @@
-"""Unit tests for digiquant.olympus.atlas.snapshot.
+"""Unit tests for digiquant.research.snapshot.
 
 Covers the SnapshotEnvelope contract and the parity test that catches drift
 between this local mirror and the upstream
-``digiquant.olympus.atlas.phases.phase7_synthesis.DigestSnapshot``.
+``digiquant.research.phases.phase7_synthesis.DigestSnapshot``.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import json
 from datetime import date, datetime, timezone
 
 import pytest
-from digiquant.olympus.atlas.snapshot import (
+from digiquant.research.snapshot import (
     SCHEMA_VERSION,
     DigestPayload,
     SnapshotEnvelope,
@@ -26,7 +26,7 @@ def _digest_payload_kwargs() -> dict:
     """Hand-built realistic DigestPayload kwargs.
 
     Mirrors what the Phase 7 synthesis node emits and what
-    ``digiquant.olympus.atlas.supabase_io.publish_daily_snapshot`` writes into the
+    ``digiquant.research.supabase_io.publish_daily_snapshot`` writes into the
     ``snapshot`` jsonb column.
     """
     return {
@@ -137,7 +137,7 @@ class TestSnapshotEnvelope:
         """Feed a realistic ``daily_snapshots`` row — the shape ``publish_daily_snapshot`` writes.
 
         Mirrors the row dict pattern in
-        ``tests/dq/atlas/test_supabase_io.py``.
+        ``tests/dq/research/test_supabase_io.py``.
         """
         row = {
             "id": "row-1",
@@ -193,7 +193,7 @@ class TestSnapshotEnvelope:
 class TestParityWithPipelineDigest:
     """Drift guard between the local mirror and the upstream pipeline model.
 
-    These tests skip cleanly when ``digiquant.olympus.atlas`` is not importable (e.g.
+    These tests skip cleanly when ``digiquant.research`` is not importable (e.g.
     in environments that only install the ``digiquant`` library). When it is
     importable, the field-name set must match exactly — otherwise this fails
     loud and we fix the mirror or bump the schema version.
@@ -201,9 +201,9 @@ class TestParityWithPipelineDigest:
 
     @staticmethod
     def _digest_snapshot_class():
-        if importlib.util.find_spec("digiquant.olympus.atlas") is None:
-            pytest.skip("digiquant.olympus.atlas not installed in this test env")
-        from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
+        if importlib.util.find_spec("digiquant.research") is None:
+            pytest.skip("digiquant.research not installed in this test env")
+        from digiquant.research.phases.phase7_synthesis import DigestSnapshot
 
         return DigestSnapshot
 
@@ -231,15 +231,15 @@ class TestParityWithPipelineDigest:
         parity test only checks names) — adding/removing a grade in one must match the other."""
         from typing import get_args
 
-        from digiquant.olympus.atlas.segments import DataQuality as SegmentsDataQuality
-        from digiquant.olympus.atlas.snapshot import DataQuality as SnapshotDataQuality
+        from digiquant.research.segments import DataQuality as SegmentsDataQuality
+        from digiquant.research.snapshot import DataQuality as SnapshotDataQuality
 
         assert set(get_args(SnapshotDataQuality)) == set(get_args(SegmentsDataQuality))
 
     def test_actionable_item_field_parity(self) -> None:
         DigestSnapshot = self._digest_snapshot_class()
-        from digiquant.olympus.atlas.phases.phase7_synthesis import ActionableItem as UpstreamItem
-        from digiquant.olympus.atlas.snapshot import ActionableItem as LocalActionableItem
+        from digiquant.research.phases.phase7_synthesis import ActionableItem as UpstreamItem
+        from digiquant.research.snapshot import ActionableItem as LocalActionableItem
 
         assert set(LocalActionableItem.model_fields) == set(UpstreamItem.model_fields)
         # Touch the upstream digest class so the import is exercised.
@@ -247,8 +247,8 @@ class TestParityWithPipelineDigest:
 
     def test_risk_item_field_parity(self) -> None:
         self._digest_snapshot_class()  # gate skip on availability
-        from digiquant.olympus.atlas.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
-        from digiquant.olympus.atlas.snapshot import RiskItem as LocalRiskItem
+        from digiquant.research.phases.phase7_synthesis import RiskItem as UpstreamRiskItem
+        from digiquant.research.snapshot import RiskItem as LocalRiskItem
 
         assert set(LocalRiskItem.model_fields) == set(UpstreamRiskItem.model_fields)
 
@@ -267,12 +267,12 @@ class TestExportedSchemaArtifact:
         )
         assert schema_path.exists(), (
             f"missing schema artifact at {schema_path}; "
-            "run python3 scripts/export_atlas_snapshot_schema.py"
+            "run python3 scripts/export_research_snapshot_schema.py"
         )
         on_disk = json.loads(schema_path.read_text(encoding="utf-8"))
         live = SnapshotEnvelope.model_json_schema()
         assert on_disk == live, (
-            "Schema drift between digiquant/docs/schemas/atlas_snapshot.v1.json "
+            "Schema drift between digiquant/docs/schemas/research_snapshot.v1.json "
             "and SnapshotEnvelope.model_json_schema(). "
-            "Re-run scripts/export_atlas_snapshot_schema.py."
+            "Re-run scripts/export_research_snapshot_schema.py."
         )

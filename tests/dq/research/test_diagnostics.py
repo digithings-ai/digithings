@@ -15,9 +15,9 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 import pytest
-from digiquant.olympus.atlas import diagnostics
-from digiquant.olympus.atlas.phases.fail_soft import NODE_FAILED_REASON
-from digiquant.olympus.atlas.state import (
+from digiquant.research import diagnostics
+from digiquant.research.phases.fail_soft import NODE_FAILED_REASON
+from digiquant.research.state import (
     AtlasResearchState,
     Carried,
     PhaseError,
@@ -508,7 +508,7 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert len(rows) == 1
     row = rows[0]
     assert row["run_id"] == "baseline-2026-06-12-local"
-    # Per-ATTEMPT since #1762: pipeline-olympus.yml retries the chain inside one job, so
+    # Per-ATTEMPT since #1762: pipeline-digiquant.yml retries the chain inside one job, so
     # run_id alone let the last retry overwrite the expensive attempt's tokens and cost.
     assert row["_on_conflict"] == "run_id,attempt"
     assert row["attempt"] == 1  # no OLYMPUS_ATTEMPT in the environment → first attempt
@@ -722,7 +722,7 @@ def test_failed_when_no_snapshot_even_without_fresh_segments() -> None:
     # whether a SIGINT fired. The snapshot check is the sole gate (#814).
     state = _state(phase1={"macro": _carried(NODE_FAILED_REASON)})
     # Confirm state.published is empty (the default).
-    from digiquant.olympus.atlas.diagnostics import _snapshot_published
+    from digiquant.research.diagnostics import _snapshot_published
 
     assert not _snapshot_published(state), "precondition: no snapshot published"
     s = diagnostics.summarize_run(state)

@@ -6,10 +6,10 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.supabase_io import load_prior_book
-from digiquant.olympus.hermes.writers.commit_io import _prune_orphan_positions
-from digiquant.olympus.hermes.writers.ledger_io import COMMITS, _rows_for_date
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.research.supabase_io import load_prior_book
+from digiquant.portfolio.writers.commit_io import _prune_orphan_positions
+from digiquant.portfolio.writers.ledger_io import COMMITS, _rows_for_date
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.test_execution_io import RUN_DATE, _Chain, _run

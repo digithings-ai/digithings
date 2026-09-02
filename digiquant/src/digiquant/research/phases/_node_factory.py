@@ -21,8 +21,8 @@ from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
-from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
-from digiquant.olympus.atlas.research_attention import (
+from digiquant.research.phases.fail_soft import run_segment_fail_soft
+from digiquant.research.research_attention import (
     apply_segment_metric_patch,
     artifact_target_key,
     carry_segment_slot,
@@ -30,8 +30,8 @@ from digiquant.olympus.atlas.research_attention import (
     resolve_attention_plan_for_node,
     resolve_research_attention_rollout_mode,
 )
-from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
-from digiquant.olympus.atlas.state import (
+from digiquant.research.skills import load_skill, load_skill_edit
+from digiquant.research.state import (
     AtlasResearchState,
     Carried,
     PhaseError,
@@ -45,24 +45,24 @@ from digiquant.olympus.atlas.state import (
 # ``state.merge_fallbacks`` and every phase module imports it, so the contributor is wired
 # on any compiled graph. Keep the import here rather than in ``diagnostics.py`` — the seam
 # exists so a new key costs one module plus one line, not an edit to the gate rules.
-from digiquant.olympus.atlas.telemetry import merge_fallback_breakdown  # noqa: F401
-from digiquant.olympus.atlas.triage import triage_decision_to_signal
-from digiquant.olympus.edit_mode import (
+from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
+from digiquant.research.triage import triage_decision_to_signal
+from digiquant.dashboard.edit_mode import (
     DocumentPatch,
     EditMode,
     PriorPublished,
     artifact_document_key,
     resolve_edit_mode,
 )
-from digiquant.olympus.edit_mode.content_identity import (
+from digiquant.dashboard.edit_mode.content_identity import (
     UNCHANGED_SINCE_KEY,
     clear_unchanged,
     mark_unchanged,
     prior_content_date,
 )
-from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
-from digiquant.olympus.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
-from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
+from digiquant.dashboard.edit_mode.merge import MergeError, merge_document_patch, section_index
+from digiquant.dashboard.envcompat import MACRO_STALE_DAYS, RESEARCH_DATA_TOOLS, env_lookup
+from digiquant.dashboard.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ def _atlas_data_client() -> Any:
     Segment nodes don't carry a client, so build one from env the same way the
     MCP tools and preflight do, and cache it so it isn't rebuilt per node.
     """
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     return build_client(SupabaseConfig.from_env())
 
@@ -136,7 +136,7 @@ def _ingested_macro_stale(run_date: Any) -> bool:
         logger.warning("macro freshness probe: client unavailable (%s); paid fallback", exc)
         return True
     try:
-        from digiquant.olympus.atlas.supabase_io import query_macro_series_freshness
+        from digiquant.research.supabase_io import query_macro_series_freshness
 
         latest = query_macro_series_freshness(client=client)
     except Exception as exc:  # any probe failure → paid fallback
@@ -198,7 +198,7 @@ def build_grounding(
     web_grounding: dict | None = None
     if use_data_tools and _data_tools_enabled():
         try:
-            from digiquant.olympus.atlas.data.tools import DATA_TOOLS, build_data_tool_dispatcher
+            from digiquant.research.data.tools import DATA_TOOLS, build_data_tool_dispatcher
 
             # Anchor "as of" reads to the run's logical date (not wall-clock) so tool
             # outputs are reproducible + look-ahead-safe for backfills/delta runs.
@@ -212,11 +212,11 @@ def build_grounding(
             execute_tool = None
     if use_research_tools and research_phase is not None and _data_tools_enabled():
         try:
-            from digiquant.olympus.research_retrieval import (
+            from digiquant.dashboard.research_retrieval import (
                 RESEARCH_TOOLS,
                 build_research_tool_dispatcher,
             )
-            from digiquant.olympus.research_retrieval.blinding import portfolio_tool_allowed
+            from digiquant.dashboard.research_retrieval.blinding import portfolio_tool_allowed
 
             research_defs = list(RESEARCH_TOOLS)
             if not portfolio_tool_allowed(research_phase):
@@ -248,7 +248,7 @@ def build_grounding(
     if ai_portfolios:
         from digigraph.model_config import get_grounding_model
 
-        from digiquant.olympus.atlas.data.ai_portfolios import fetch_ai_portfolio_grounding
+        from digiquant.research.data.ai_portfolios import fetch_ai_portfolio_grounding
 
         grounding = get_grounding_model(segment=segment or "ai-portfolios")
         if grounding:
@@ -263,7 +263,7 @@ def build_grounding(
                 segment or "macro",
             )
         elif grounding:
-            from digiquant.olympus.atlas.data.web_grounding import fetch_web_grounding
+            from digiquant.research.data.web_grounding import fetch_web_grounding
 
             web_grounding = fetch_web_grounding(
                 model=grounding, segment=segment or "research", run_date=run_date, scope=scope
@@ -288,7 +288,7 @@ def apply_web_grounding_to_inputs(
     ``grounding_absent`` (which would wrongly tell the analyst to lower conviction; #946 is for
     segments where web search is the *primary* grounding).
     """
-    from digiquant.olympus.atlas.data.web_grounding import (
+    from digiquant.research.data.web_grounding import (
         OlympusWebSearchError,
         olympus_web_search_required,
     )

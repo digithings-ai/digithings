@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 import pytest
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AlteredTarget,
     BindingConstraint,
     BookWeightsView,
@@ -25,18 +25,18 @@ from digiquant.olympus.hermes.allocation_contracts import (
     ScalarMetric,
     TradeDeltaEntry,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     pretrade_risk_report_content_hash,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.models.risk_policy import (
+from digiquant.portfolio.models.risk_policy import (
     CovarianceSnapshot,
     PolicyArtifactStatus,
     covariance_snapshot_content_hash,
     covariance_snapshot_id,
     snapshot_hash_payload,
 )
-from digiquant.olympus.hermes.pretrade_risk import (
+from digiquant.portfolio.pretrade_risk import (
     CostLiquidityScalars,
     ForecastQualityScalars,
     PreTradeRiskBuildRequest,

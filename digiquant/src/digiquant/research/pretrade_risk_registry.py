@@ -1,6 +1,6 @@
 """Private append-only PreTradeRiskReport registry (#2754 / WP9.4).
 
-Persists immutable :class:`~digiquant.olympus.hermes.allocation_contracts.PreTradeRiskReport`
+Persists immutable :class:`~digiquant.portfolio.allocation_contracts.PreTradeRiskReport`
 rows from migration ``083_olympus_pretrade_risk_reports.sql``.
 
 **Exact retry:** same ``report_id`` + same ``report_content_hash`` is a no-op.
@@ -21,8 +21,8 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.allocation_contracts import PreTradeRiskReport
 
 logger = logging.getLogger(__name__)
 

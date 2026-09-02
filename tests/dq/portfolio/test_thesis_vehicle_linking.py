@@ -103,7 +103,7 @@ class _MockClient:
 
 # ── Import the real functions under test ─────────────────────────────────────
 
-from digiquant.olympus.hermes.writers.thesis_io import (  # noqa: E402
+from digiquant.portfolio.writers.thesis_io import (  # noqa: E402
     resolve_primary_market_thesis,
     upsert_thesis_row,
     upsert_thesis_vehicles,

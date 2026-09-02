@@ -6,9 +6,9 @@ from datetime import date
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
-from digiquant.olympus.atlas.phases._node_factory import SegmentNodeSpec, build_segment_node
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_node
-from digiquant.olympus.atlas.research_attention import (
+from digiquant.research.phases._node_factory import SegmentNodeSpec, build_segment_node
+from digiquant.research.phases.triage_phase import TriageDeps, build_triage_node
+from digiquant.research.research_attention import (
     OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
     apply_segment_metric_patch,
     artifact_target_key,
@@ -17,7 +17,7 @@ from digiquant.olympus.atlas.research_attention import (
     reset_attention_stores,
     triage_phase_attention_update,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -26,8 +26,8 @@ from digiquant.olympus.atlas.state import (
     PriorContext,
     SegmentPayload,
 )
-from digiquant.olympus.edit_mode.models import PriorPublished
-from digiquant.olympus.research_retrieval.planner import AttentionMode, AttentionRolloutMode
+from digiquant.dashboard.edit_mode.models import PriorPublished
+from digiquant.dashboard.research_retrieval.planner import AttentionMode, AttentionRolloutMode
 from pydantic import BaseModel
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -103,7 +103,7 @@ def test_triage_builds_plan_before_segment_nodes(monkeypatch: pytest.MonkeyPatch
     node = build_triage_node(TriageDeps(client=FakeSupabaseClient()))
     update = node(_state_with_triage())
     assert update.get("research_attention_plan") is not None
-    from digiquant.olympus.research_retrieval.planner import AttentionPlan
+    from digiquant.dashboard.research_retrieval.planner import AttentionPlan
 
     plan = AttentionPlan.model_validate(update["research_attention_plan"])
     assert plan.rollout_mode is AttentionRolloutMode.SHADOW
@@ -114,7 +114,7 @@ def test_plan_persists_decisions_to_attention_store(monkeypatch: pytest.MonkeyPa
     state = _state_with_triage(price_deltas={"TLT": 0.01})
     plan = plan_atlas_research_attention(state)
     assert plan is not None
-    from digiquant.olympus.atlas.research_attention import persist_research_attention_plan
+    from digiquant.research.research_attention import persist_research_attention_plan
 
     persist_research_attention_plan(state=state, plan=plan)
     store = attention_store_for_run(str(state.run_id))
@@ -147,11 +147,11 @@ def test_enforce_metric_patch_skips_provider_calls(monkeypatch: pytest.MonkeyPat
         return _BondsSegment(date=RUN.isoformat())
 
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        "digiquant.research.phases._node_factory.build_grounding",
         _fake_grounding,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        "digiquant.research.phases._node_factory.run_research_agent",
         _fake_agent,
     )
 
@@ -172,19 +172,19 @@ def test_shadow_preserves_incumbent_provider_path(monkeypatch: pytest.MonkeyPatc
     agent_calls: list[str] = []
 
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        "digiquant.research.phases._node_factory.build_grounding",
         lambda **_: (None, None, None),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        "digiquant.research.phases._node_factory.run_research_agent",
         lambda **_: agent_calls.append("called") or _BondsSegment(date=RUN.isoformat()),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.load_skill",
+        "digiquant.research.phases._node_factory.load_skill",
         lambda _slug: "skill",
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory._resolve_segment_edit_mode",
+        "digiquant.research.phases._node_factory._resolve_segment_edit_mode",
         lambda _state, _segment: "full",
     )
 
@@ -215,11 +215,11 @@ def test_enforce_carry_skips_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     agent_calls: list[str] = []
 
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        "digiquant.research.phases._node_factory.build_grounding",
         lambda **_: (None, None, None),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        "digiquant.research.phases._node_factory.run_research_agent",
         lambda **_: agent_calls.append("called") or _BondsSegment(date=RUN.isoformat()),
     )
 
@@ -237,19 +237,19 @@ def test_custom_prompt_skips_plan_requirement(monkeypatch: pytest.MonkeyPatch) -
 
     agent_calls: list[str] = []
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        "digiquant.research.phases._node_factory.build_grounding",
         lambda **_: (None, None, None),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        "digiquant.research.phases._node_factory.run_research_agent",
         lambda **_: agent_calls.append("called") or _BondsSegment(date=RUN.isoformat()),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.load_skill",
+        "digiquant.research.phases._node_factory.load_skill",
         lambda _slug: "skill",
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory._resolve_segment_edit_mode",
+        "digiquant.research.phases._node_factory._resolve_segment_edit_mode",
         lambda _state, _segment: "full",
     )
 
@@ -269,19 +269,19 @@ def test_off_mode_skips_plan_and_allows_incumbent_without_plan(
 
     agent_calls: list[str] = []
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        "digiquant.research.phases._node_factory.build_grounding",
         lambda **_: (None, None, None),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        "digiquant.research.phases._node_factory.run_research_agent",
         lambda **_: agent_calls.append("called") or _BondsSegment(date=RUN.isoformat()),
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory.load_skill",
+        "digiquant.research.phases._node_factory.load_skill",
         lambda _slug: "skill",
     )
     monkeypatch.setattr(
-        "digiquant.olympus.atlas.phases._node_factory._resolve_segment_edit_mode",
+        "digiquant.research.phases._node_factory._resolve_segment_edit_mode",
         lambda _state, _segment: "full",
     )
 

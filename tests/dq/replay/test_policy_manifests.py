@@ -11,8 +11,8 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -23,7 +23,7 @@ from digiquant.olympus.replay.canonical import (
     replay_pair_content_hash,
     walk_forward_fold_content_hash,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     InstrumentBarSeries,
     OhlcvBar,
@@ -229,8 +229,8 @@ def test_manifest_hash_stable_cross_process() -> None:
     script = (
         "import json,sys;"
         "from datetime import datetime;"
-        "from digiquant.olympus.replay.canonical import replay_input_manifest_content_hash;"
-        "from digiquant.olympus.replay.models import PolicyVersionRef, SharedInputIdentity;"
+        "from digiquant.dashboard.replay.canonical import replay_input_manifest_content_hash;"
+        "from digiquant.dashboard.replay.models import PolicyVersionRef, SharedInputIdentity;"
         "p=json.loads(sys.argv[1]);"
         "shared=SharedInputIdentity(**p['shared']);"
         "refs=tuple(PolicyVersionRef(**r) for r in p['refs']);"

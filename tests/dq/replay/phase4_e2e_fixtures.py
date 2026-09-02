@@ -12,20 +12,20 @@ from decimal import Decimal
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.accounting.models import PeriodStatus
-from digiquant.olympus.atlas.phases.outcome_maturation import (
+from digiquant.dashboard.accounting.models import PeriodStatus
+from digiquant.research.phases.outcome_maturation import (
     OutcomeMaturationDeps,
     pin_outcome_lesson_for_preflight,
 )
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.allocation_hashes import sha256_hex
+from digiquant.portfolio.models.forecast_calibration import (
     ForecastOutcome,
     OutcomeStatus,
     SessionPriceSnapshot,
     forecast_outcome_content_hash,
     forecast_outcome_id,
 )
-from digiquant.olympus.hermes.models.portfolio_ledger import (
+from digiquant.portfolio.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
     DecisionIntent,
@@ -37,18 +37,18 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     RequestedTarget,
     paper_execution_id,
 )
-from digiquant.olympus.learning.component_attribution import (
+from digiquant.dashboard.learning.component_attribution import (
     ComponentAttributor,
     CostAttributionSlice,
     ForecastAttributionSlice,
     TimingDiagnosticsSlice,
 )
-from digiquant.olympus.learning.lesson_registry import (
+from digiquant.dashboard.learning.lesson_registry import (
     LessonCompilationPolicy,
     LessonCompiler,
     cohort_key,
 )
-from digiquant.olympus.learning.outcome_assembly import (
+from digiquant.dashboard.learning.outcome_assembly import (
     AccountingSlice,
     CostEvidenceRef,
     MaturedForecastBinding,
@@ -57,13 +57,13 @@ from digiquant.olympus.learning.outcome_assembly import (
     SymbolLineage,
     session_close_utc,
 )
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     EpisodeDisposition,
     OutcomeEpisode,
 )
-from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
-from digiquant.olympus.replay.canonical import (
+from digiquant.dashboard.learning.outcome_store import OutcomeLearningStore
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -72,7 +72,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     ArmFoldEvidence,
     EvidenceMode,
     MetricDirection,
@@ -81,7 +81,7 @@ from digiquant.olympus.replay.comparison import (
     SignalQualityTelemetry,
     compare_policy_pair,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     AuthenticatedPrincipal,
     ConfidenceBoundRule,
     GateCriterion,
@@ -94,8 +94,8 @@ from digiquant.olympus.replay.governance import (
     persist_gate_evaluation,
     record_policy_governance_decision,
 )
-from digiquant.olympus.replay.governance_models import GovernanceDecisionKind
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.governance_models import GovernanceDecisionKind
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     FillRecord,
     HoldingSnapshot,
@@ -116,8 +116,8 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
-from digiquant.olympus.replay.walk_forward import (
+from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.walk_forward import (
     WalkForwardScheduleParams,
     assign_episodes_to_fold,
     build_walk_forward_folds,

@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from digiquant.olympus.overlay.byok import (
+from digiquant.dashboard.overlay.byok import (
     BYOK_AAD_PURPOSE,
     CredentialStatus,
     LlmProvider,

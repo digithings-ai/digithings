@@ -7,13 +7,13 @@ from typing import Any  # score:allow untyped any — used for fake-payload dict
 from uuid import uuid4
 
 import pytest
-from digiquant.olympus.atlas.phases.publish_phase import (
+from digiquant.research.phases.publish_phase import (
     PublishDeps,
     build_publish_node,
     build_publish_phase,
     render_digest_markdown,
 )
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Carried,
@@ -22,7 +22,7 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -291,7 +291,7 @@ class TestPublishNode:
         assert digest_keys == set()
 
     def test_atlas_publish_omits_pm_rebalance_doc(self) -> None:
-        """pm-rebalance is written by Hermes commit_run (see tests/dq/hermes/test_commit_run.py)."""
+        """pm-rebalance is written by Hermes commit_run (see tests/dq/portfolio/test_commit_run.py)."""
         client = FakeSupabaseClient()
         state = _seed_full_state(run_type="baseline")
         build_publish_node(PublishDeps(client=client))(state)
@@ -322,8 +322,8 @@ class TestPublishPhaseCompiles:
 class TestGraphDepsWiring:
     def test_publish_none_skips_publish_phase(self) -> None:
         """Default ``AtlasGraphDeps.publish=None`` must not append the publish phase."""
-        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
         deps = AtlasGraphDeps(
@@ -334,8 +334,8 @@ class TestGraphDepsWiring:
         assert graph is not None
 
     def test_publish_provided_appends_publish_phase(self) -> None:
-        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
-        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+        from digiquant.research.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.research.phases.preflight import PreflightDeps
 
         client = FakeSupabaseClient()
         deps = AtlasGraphDeps(
@@ -604,7 +604,7 @@ class TestCompiledResearchViewsPublish:
         from decimal import Decimal
         from uuid import UUID
 
-        from digiquant.olympus.research_retrieval.models import (
+        from digiquant.dashboard.research_retrieval.models import (
             BeliefStatus,
             BeliefVersion,
             EvidenceRecord,
@@ -620,8 +620,8 @@ class TestCompiledResearchViewsPublish:
             manifest_content_hash,
             research_state_version_id,
         )
-        from digiquant.olympus.research_retrieval.store import ResearchStateStore
-        from digiquant.olympus.research_retrieval.views import (
+        from digiquant.dashboard.research_retrieval.store import ResearchStateStore
+        from digiquant.dashboard.research_retrieval.views import (
             COMPILED_BRIEF_DOCUMENT_KEY,
             COMPILED_DIGEST_DOCUMENT_KEY,
         )
@@ -755,8 +755,8 @@ class TestCompiledResearchViewsPublish:
         assert "digest" in keys
 
     def test_skips_compiled_views_when_state_unavailable(self) -> None:
-        from digiquant.olympus.research_retrieval.store import ResearchStateStore
-        from digiquant.olympus.research_retrieval.views import (
+        from digiquant.dashboard.research_retrieval.store import ResearchStateStore
+        from digiquant.dashboard.research_retrieval.views import (
             COMPILED_BRIEF_DOCUMENT_KEY,
             COMPILED_DIGEST_DOCUMENT_KEY,
         )

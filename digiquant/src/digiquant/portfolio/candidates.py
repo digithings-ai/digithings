@@ -29,7 +29,7 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: duck-typed Supabase client + rows
 )
 
-from digiquant.olympus.atlas.data.queries import TECHNICAL_COLUMNS
+from digiquant.research.data.queries import TECHNICAL_COLUMNS
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _focus_top_n() -> int:
 
 def load_portfolio_holdings() -> list[str]:
     """Tickers of current positions from ``config/portfolio.json`` ([] if absent)."""
-    from digiquant.olympus.atlas.graph import _atlas_config_root
+    from digiquant.research.graph import _atlas_config_root
 
     path = _atlas_config_root() / "portfolio.json"
     if not path.exists():

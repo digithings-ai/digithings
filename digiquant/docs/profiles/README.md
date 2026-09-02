@@ -11,7 +11,7 @@ The schemas are intentionally coarse. Per-portfolio limits (CVaR, factor caps, p
 
 ## DB-backed ProfileConfig (Track B / #2609)
 
-Runtime pins live in `digiquant.olympus.profile_config.ProfileConfig` and the private
+Runtime pins live in `digiquant.dashboard.profile_config.ProfileConfig` and the private
 `olympus_profile_config` table (migration `075`). Preflight resolves an exact
 `version_id` (or the house default). `InvestmentProfile` / `AssetPreferences` remain
 the nested posture/asset schemas inside a ProfileConfig payload — they are not a

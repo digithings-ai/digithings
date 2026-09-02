@@ -2,7 +2,7 @@
  * Hand-written TypeScript mirror of `SnapshotEnvelope` in
  * `digiquant/src/digiquant/atlas/snapshot.py` (schema v1).
  *
- * Source of truth: `digiquant/docs/schemas/atlas_snapshot.v1.json`. When the
+ * Source of truth: `digiquant/docs/schemas/research_snapshot.v1.json`. When the
  * Pydantic model bumps `SCHEMA_VERSION`, regenerate the JSON schema and
  * update this file in lockstep — the Atlas pipeline writes the envelope
  * shape into `daily_snapshots.snapshot` and the frontend reads it back.

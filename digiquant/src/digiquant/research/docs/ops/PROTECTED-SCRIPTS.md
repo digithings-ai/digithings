@@ -13,7 +13,7 @@ Scripts listed here are **do not remove or rename casually**: GitHub Actions, [`
 | Smoke test | `bash scripts/smoke-test.sh` |
 | Pytest | `python -m pytest tests/` — imports [`scripts/generate-snapshot.py`](../../scripts/generate-snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) via [`tests/test_etl.py`](../../tests/test_etl.py) |
 | DB types | `bash scripts/check-types-sync.sh` |
-| Supabase migrations | `bash digiquant/scripts/atlas/verify-supabase-migrations.sh` — via `test-digiquant.yml`, not `ci.yml` directly |
+| Supabase migrations | `bash digiquant/scripts/research/verify-supabase-migrations.sh` — via `test-digiquant.yml`, not `ci.yml` directly |
 | Skill frontmatter | `bash scripts/validate-frontmatter.sh` |
 
 ### [`pipeline-digiquant-prices.yml`](../../.github/workflows/pipeline-digiquant-prices.yml)

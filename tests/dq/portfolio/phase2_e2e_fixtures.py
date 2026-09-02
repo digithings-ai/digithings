@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
-from digiquant.olympus.hermes.allocation_contracts import (
+from digiquant.portfolio.allocation_contracts import (
     AllocationCadence,
     AllocationInputBundle,
     AllocationRunContext,
@@ -43,24 +43,24 @@ from digiquant.olympus.hermes.allocation_contracts import (
     TradeDeltaEntry,
     build_source_hashes,
 )
-from digiquant.olympus.hermes.allocation_hashes import (
+from digiquant.portfolio.allocation_hashes import (
     allocation_bundle_content_hash,
     pretrade_risk_report_content_hash,
     weights_fingerprint,
 )
-from digiquant.olympus.hermes.shadow_artifact import (
+from digiquant.portfolio.shadow_artifact import (
     ShadowAllocationArtifact,
     ShadowCommitMetadata,
     build_shadow_allocation_artifact,
 )
-from digiquant.olympus.hermes.shadow_optimizer import (
+from digiquant.portfolio.shadow_optimizer import (
     ShadowCostSchedule,
     ShadowFeasibilityConstraints,
     ShadowObjectiveParams,
     ShadowOptimizerRequest,
     evaluate_shadow_challenger,
 )
-from digiquant.olympus.replay.allocation_comparison import (
+from digiquant.dashboard.replay.allocation_comparison import (
     ComparisonArm,
     ComparisonArmInput,
     ComparisonStatus,
@@ -68,7 +68,7 @@ from digiquant.olympus.replay.allocation_comparison import (
     compare_allocation_arms,
     load_shadow_criteria,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingSnapshot,
     InstrumentBarSeries,
@@ -485,7 +485,7 @@ def production_imports_challenger(path: Path) -> list[str]:
 def load_isolation_checker() -> Any:
     import sys
 
-    script = _REPO / "digiquant/scripts/atlas/check_allocation_shadow_isolation.py"
+    script = _REPO / "digiquant/scripts/research/check_allocation_shadow_isolation.py"
     spec = importlib.util.spec_from_file_location("check_allocation_shadow_isolation", script)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

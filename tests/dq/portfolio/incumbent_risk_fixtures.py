@@ -12,7 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
-from digiquant.olympus.hermes.sizing import SizingResult
+from digiquant.portfolio.sizing import SizingResult
 
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "incumbent_h8_risk_policy.json"
 

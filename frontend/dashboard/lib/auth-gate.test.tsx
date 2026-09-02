@@ -64,7 +64,7 @@ vi.mock('@/components/login-screen', () => ({
   LoginScreen: () => createElement('div', { 'data-login': '1' }, 'Sign in to digiquant'),
 }));
 
-vi.mock('@/components/atlas-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
+vi.mock('@/components/dashboard-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
 
 import { AuthGate, isDashboardAuthCallbackPath, isDashboardAuthPath } from './auth-gate';
 

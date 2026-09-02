@@ -10,13 +10,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from digiquant.olympus.research_retrieval.legacy_backfill import (
+from digiquant.dashboard.research_retrieval.legacy_backfill import (
     BackfillCounts,
     LegacySourceDocument,
     backfill_legacy_manifests,
     build_legacy_document_ref,
 )
-from digiquant.olympus.research_retrieval.models import (
+from digiquant.dashboard.research_retrieval.models import (
     EvidenceRecord,
     ResearchStateManifest,
     ResearchStateVersion,
@@ -28,7 +28,7 @@ from digiquant.olympus.research_retrieval.models import (
     manifest_content_hash,
     research_state_version_id,
 )
-from digiquant.olympus.research_retrieval.store import ResearchStateStore
+from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
 pytestmark = pytest.mark.unit
 
@@ -231,7 +231,7 @@ def test_backfill_counts_reject_irreconcilable() -> None:
 
 
 def test_conflict_different_content_is_unverifiable() -> None:
-    from digiquant.olympus.research_retrieval.models import LegacyDocumentRef
+    from digiquant.dashboard.research_retrieval.models import LegacyDocumentRef
 
     store = ResearchStateStore()
     first = backfill_legacy_manifests([_source(payload={"v": 1})], store, apply=True)

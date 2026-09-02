@@ -6,8 +6,8 @@ small and stable so callers never have to know about internal phase
 structure.
 
 Per ADR-0015, Atlas owns research only. Analysis, debate, PM, and
-reflection moved to ``digiquant.olympus.hermes`` (#471/#472). The
-end-to-end cron entry point is :func:`digiquant.olympus.hermes.chain.run_atlas_then_hermes`,
+reflection moved to ``digiquant.portfolio`` (#471/#472). The
+end-to-end cron entry point is :func:`digiquant.portfolio.chain.run_atlas_then_hermes`,
 which wires Atlas (no publish) → Hermes → publish_phase.
 
 Single **daily** graph topology: preflight → optional preflight_reflect →
@@ -24,29 +24,29 @@ from uuid import UUID
 
 from digigraph.graph.pipeline_builder import PipelinePhase, build_pipeline
 
-from digiquant.olympus.atlas.phases.phase1_altdata import build_phase1
-from digiquant.olympus.atlas.phases.phase2_institutional import build_phase2
-from digiquant.olympus.atlas.phases.phase3_macro import build_phase3
-from digiquant.olympus.atlas.phases.phase4_assetclass import build_phase4
-from digiquant.olympus.atlas.phases.phase5_equities import build_phase5
-from digiquant.olympus.atlas.phases.phase6_consolidate import build_phase6
-from digiquant.olympus.atlas.phases.phase7_synthesis import build_phase7
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.phases.phase1_altdata import build_phase1
+from digiquant.research.phases.phase2_institutional import build_phase2
+from digiquant.research.phases.phase3_macro import build_phase3
+from digiquant.research.phases.phase4_assetclass import build_phase4
+from digiquant.research.phases.phase5_equities import build_phase5
+from digiquant.research.phases.phase6_consolidate import build_phase6
+from digiquant.research.phases.phase7_synthesis import build_phase7
+from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
     build_preflight_node,
     build_preflight_reflect_node,
 )
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps, build_triage_phase
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
+from digiquant.research.phases.triage_phase import TriageDeps, build_triage_phase
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Cadence,
     RefreshScope,
     RunType,
 )
-from digiquant.olympus.temporal import capture_knowledge_cutoff_at, require_utc_datetime
+from digiquant.dashboard.temporal import capture_knowledge_cutoff_at, require_utc_datetime
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,7 @@ def build_atlas_graph(
         # Standalone Atlas runs (CLI without --no-publish, tests with a
         # FakeSupabaseClient) publish research-only artifacts. The chain
         # orchestrator passes ``publish=None`` and wires publish_phase
-        # after Hermes instead — see digiquant.olympus.hermes.chain.
+        # after Hermes instead — see digiquant.portfolio.chain.
         daily_phases.append(build_publish_phase(deps.publish))
     return build_pipeline(AtlasResearchState, daily_phases, checkpointer=checkpointer)
 
@@ -223,7 +223,7 @@ __all__ = [
 
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
-# Invoked as ``python -m digiquant.olympus.atlas.graph …`` by the GitHub Actions
+# Invoked as ``python -m digiquant.research.graph …`` by the GitHub Actions
 # schedulers (see ``.github/workflows/atlas-*.yml``). The CLI is kept
 # intentionally thin: parse flags → resolve baseline → build AtlasInput →
 # invoke the compiled graph. Heavy lifting stays in the graph itself.
@@ -313,7 +313,7 @@ def _make_default_config_loader(
 
     def _load() -> AtlasConfigBundle:
         watchlist = list(cli_watchlist) if cli_watchlist else _parse_watchlist_md()
-        from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
+        from digiquant.research.dashboard_digest import portfolio_preferences_static
 
         return AtlasConfigBundle(
             watchlist=watchlist,
@@ -381,7 +381,7 @@ def build_cli_parser():
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog="python -m digiquant.olympus.atlas.graph",
+        prog="python -m digiquant.research.graph",
         description="Invoke the Atlas research sub-graph.",
     )
     _add_cadence_cli_args(parser)
@@ -444,7 +444,7 @@ def _auto_resolve_baseline(run_date: date) -> date | None:
     ):
         return None
 
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     client = build_client(SupabaseConfig.from_env())
     resp = (
@@ -472,7 +472,7 @@ def resolve_cli_inputs(args) -> dict:
 
     Pure apart from the optional Supabase call behind ``--auto-baseline`` and
     the ``config/watchlist.md`` read on the no-flag fallback;
-    ``tests/dq/atlas/test_cli.py`` covers the explicit and auto-baseline
+    ``tests/dq/research/test_cli.py`` covers the explicit and auto-baseline
     paths by stubbing that call.
     """
     raw_watchlist = args.watchlist.strip()
@@ -539,7 +539,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         # Confirm the graph compiles cleanly, but skip invocation — no LLM calls.
         summary = _cli_summary(kwargs) | {"dry_run": True, "compiled": False}
         try:
-            from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+            from digiquant.research.phases.preflight import PreflightDeps
 
             deps = AtlasGraphDeps(preflight=PreflightDeps(client=None, config_loader=None))  # type: ignore[arg-type]
             build_atlas_graph(deps=deps, watchlist=kwargs["watchlist"])
@@ -551,8 +551,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         sys.stdout.write("\n")
         return 0
 
-    from digiquant.olympus.atlas.phases.preflight import PreflightDeps
-    from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+    from digiquant.research.phases.preflight import PreflightDeps
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
 
     atlas_input = AtlasInput(**kwargs)
     client = build_client(SupabaseConfig.from_env())

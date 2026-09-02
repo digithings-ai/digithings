@@ -34,7 +34,7 @@
 # against as of that file's own last_checked date; a slug added after a
 # snapshot was last refreshed won't appear there yet.
 # Endpoint capability (tools + strict json_schema + context floor) is live-verified
-# by scripts/validate_olympus_pools.py (.github/workflows/validate-olympus-pools.yml).
+# by scripts/validate_digiquant_pools.py (.github/workflows/validate-digiquant-pools.yml).
 #
 # Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
 #

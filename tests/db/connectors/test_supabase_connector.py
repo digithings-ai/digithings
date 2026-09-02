@@ -1,7 +1,7 @@
 """Unit tests for SupabaseConnector — the supabase client is faked, no live DB.
 
 Typed-result assertions over the success/failure paths, reusing the in-memory
-fake-client shape from ``tests/dq/atlas/test_supabase_io.py`` (records calls,
+fake-client shape from ``tests/dq/research/test_supabase_io.py`` (records calls,
 honours filters).
 
 The connector is imported directly from the submodule rather than via the

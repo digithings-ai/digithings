@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any  # score:allow untyped any — PostgREST row dicts in fixtures
 
 import pytest
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 

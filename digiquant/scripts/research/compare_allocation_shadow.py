@@ -13,14 +13,14 @@ import json
 import sys
 from pathlib import Path
 
-from digiquant.olympus.replay.allocation_comparison import (
+from digiquant.dashboard.replay.allocation_comparison import (
     ComparisonArm,
     ComparisonArmInput,
     compare_allocation_arms,
     load_shadow_criteria,
     write_comparison_report,
 )
-from digiquant.olympus.replay.models import PortfolioReplayRequest, PortfolioReplayResult
+from digiquant.dashboard.replay.models import PortfolioReplayRequest, PortfolioReplayResult
 
 
 def _load_json(path: Path) -> object:

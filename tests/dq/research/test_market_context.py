@@ -10,13 +10,13 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.data.queries import get_market_context
-from digiquant.olympus.atlas.phases.preflight import (
+from digiquant.research.data.queries import get_market_context
+from digiquant.research.phases.preflight import (
     PreflightDeps,
     _market_context_tickers,
     build_preflight_node,
 )
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 

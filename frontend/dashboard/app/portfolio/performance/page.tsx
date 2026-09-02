@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
-import { PerformanceTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
+import { PerformanceTearsheetView } from '@/components/tearsheet/DashboardTearsheetView';
 import { EntitledSurface } from '@/components/entitled-surface';
 import { fetchPerformanceTearsheet } from '@/lib/observability-queries';
 import { useCan } from '@/lib/use-entitlement';

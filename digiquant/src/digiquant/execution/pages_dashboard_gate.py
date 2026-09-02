@@ -29,8 +29,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.kairos.staging_e2e import DEFAULT_PUBLIC_APP_ORIGIN
-from digiquant.olympus.kairos.vendor_secret_files import (
+from digiquant.execution.staging_e2e import DEFAULT_PUBLIC_APP_ORIGIN
+from digiquant.execution.vendor_secret_files import (
     CORE_PROJECT_REF,
     function_deploy_argv,
 )

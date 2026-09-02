@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PriorContext
-from digiquant.olympus.hermes.ticker_fingerprint import (
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState, PriorContext
+from digiquant.portfolio.ticker_fingerprint import (
     deliberation_skip_signal,
     news_hash_for_ticker,
     ticker_triage_signal,

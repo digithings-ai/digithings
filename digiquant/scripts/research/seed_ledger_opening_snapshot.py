@@ -6,9 +6,9 @@ at-open residuals match the committed book. Idempotent: a no-op when open lots a
 exist or the book is empty.
 
 Usage:
-  python digiquant/scripts/atlas/seed_ledger_opening_snapshot.py
-  python digiquant/scripts/atlas/seed_ledger_opening_snapshot.py --date 2026-08-20
-  python digiquant/scripts/atlas/seed_ledger_opening_snapshot.py --dry-run
+  python digiquant/scripts/research/seed_ledger_opening_snapshot.py
+  python digiquant/scripts/research/seed_ledger_opening_snapshot.py --date 2026-08-20
+  python digiquant/scripts/research/seed_ledger_opening_snapshot.py --dry-run
 
 Environment: CORE_SUPABASE_URL / CORE_SUPABASE_SERVICE_KEY (or legacy SUPABASE_* names).
 """
@@ -30,12 +30,12 @@ def _ensure_importable() -> None:
 
 
 _ensure_importable()
-from digiquant.olympus.atlas.supabase_io import (  # noqa: E402
+from digiquant.research.supabase_io import (  # noqa: E402
     SupabaseConfig,
     SupabaseNotConfiguredError,
     build_client,
 )
-from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]
@@ -91,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     root = Path(__file__).resolve().parents[3]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root / "digiquant" / "src"))
-    from digiquant.olympus.hermes.writers.opening_snapshot import (
+    from digiquant.portfolio.writers.opening_snapshot import (
         POLICY_VERSION_ID,
         cold_start_requires_seed,
         ensure_legacy_opening_snapshot,

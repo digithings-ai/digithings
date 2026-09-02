@@ -6,9 +6,9 @@ from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
 
-from digiquant.olympus.atlas.state import RebalancePayload
-from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
-from digiquant.olympus.hermes.state import HermesState
+from digiquant.research.state import RebalancePayload
+from digiquant.portfolio.models.deliberation import is_unchallenged_carry
+from digiquant.portfolio.state import HermesState
 
 
 def analyst_payloads(state: HermesState) -> dict[str, dict[str, Any]]:

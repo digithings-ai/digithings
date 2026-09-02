@@ -11,7 +11,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingQuantity,
     InstrumentBarSeries,
@@ -20,7 +20,7 @@ from digiquant.olympus.replay.models import (
     PortfolioReplayStatus,
     TargetWeight,
 )
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 pytestmark = pytest.mark.unit
 

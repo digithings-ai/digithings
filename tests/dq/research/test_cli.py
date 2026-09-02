@@ -12,7 +12,7 @@ import warnings
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.graph import build_cli_parser, resolve_cli_inputs
+from digiquant.research.graph import build_cli_parser, resolve_cli_inputs
 
 pytestmark = pytest.mark.unit
 
@@ -125,7 +125,7 @@ def test_auto_baseline_live_raises_without_credentials(monkeypatch):
 
 
 def test_auto_baseline_resolves_from_stub(monkeypatch):
-    from digiquant.olympus.atlas import graph as graph_mod
+    from digiquant.research import graph as graph_mod
 
     monkeypatch.setattr(graph_mod, "_auto_resolve_baseline", lambda run_date: date(2026, 4, 15))
     args = _parse(
@@ -141,7 +141,7 @@ def test_auto_baseline_resolves_from_stub(monkeypatch):
 
 def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     """_auto_resolve_baseline must query daily_snapshots (not documents)."""
-    from digiquant.olympus.atlas import graph as graph_mod
+    from digiquant.research import graph as graph_mod
 
     calls = []
 
@@ -176,7 +176,7 @@ def test_auto_resolve_baseline_queries_daily_snapshots(monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://fake.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "fake-key")
 
-    import digiquant.olympus.atlas.supabase_io as sio
+    import digiquant.research.supabase_io as sio
 
     monkeypatch.setattr(sio, "build_client", lambda cfg: FakeClient())
     monkeypatch.setattr(sio.SupabaseConfig, "from_env", staticmethod(lambda: None))
@@ -215,15 +215,15 @@ def test_deprecated_run_type_monthly_rejected():
 
 
 def test_make_default_config_loader_returns_callable():
-    from digiquant.olympus.atlas.graph import _make_default_config_loader
+    from digiquant.research.graph import _make_default_config_loader
 
     loader = _make_default_config_loader(())
     assert callable(loader)
 
 
 def test_make_default_config_loader_cli_watchlist_takes_priority():
-    from digiquant.olympus.atlas.graph import _make_default_config_loader
-    from digiquant.olympus.atlas.state import AtlasConfigBundle
+    from digiquant.research.graph import _make_default_config_loader
+    from digiquant.research.state import AtlasConfigBundle
 
     loader = _make_default_config_loader(("AAPL", "MSFT"))
     result = loader()
@@ -232,8 +232,8 @@ def test_make_default_config_loader_cli_watchlist_takes_priority():
 
 
 def test_make_default_config_loader_reads_watchlist_md_when_no_cli():
-    from digiquant.olympus.atlas.graph import _make_default_config_loader
-    from digiquant.olympus.atlas.state import AtlasConfigBundle
+    from digiquant.research.graph import _make_default_config_loader
+    from digiquant.research.state import AtlasConfigBundle
 
     loader = _make_default_config_loader(())
     result = loader()
@@ -242,7 +242,7 @@ def test_make_default_config_loader_reads_watchlist_md_when_no_cli():
 
 
 def test_make_default_config_loader_reads_macro_series():
-    from digiquant.olympus.atlas.graph import _make_default_config_loader
+    from digiquant.research.graph import _make_default_config_loader
 
     loader = _make_default_config_loader(("SPY",))
     result = loader()
@@ -250,32 +250,32 @@ def test_make_default_config_loader_reads_macro_series():
 
 
 def test_parse_watchlist_md_dedupes():
-    from digiquant.olympus.atlas.graph import _parse_watchlist_md
+    from digiquant.research.graph import _parse_watchlist_md
 
     tickers = _parse_watchlist_md()
     assert len(tickers) == len(set(tickers)), "duplicate tickers in watchlist.md parse output"
 
 
 def test_parse_macro_series_yaml_nonempty():
-    from digiquant.olympus.atlas.graph import _parse_macro_series_yaml
+    from digiquant.research.graph import _parse_macro_series_yaml
 
     ids = _parse_macro_series_yaml()
     assert len(ids) > 0, "expected at least one macro series from config/macro_series.yaml"
 
 
 def test_parse_watchlist_md_missing_file(tmp_path, monkeypatch):
-    import digiquant.olympus.atlas.graph as gmod
+    import digiquant.research.graph as gmod
 
     monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
-    from digiquant.olympus.atlas.graph import _parse_watchlist_md
+    from digiquant.research.graph import _parse_watchlist_md
 
     assert _parse_watchlist_md() == []
 
 
 def test_parse_macro_series_yaml_missing_file(tmp_path, monkeypatch):
-    import digiquant.olympus.atlas.graph as gmod
+    import digiquant.research.graph as gmod
 
     monkeypatch.setattr(gmod, "_atlas_config_root", lambda: tmp_path)
-    from digiquant.olympus.atlas.graph import _parse_macro_series_yaml
+    from digiquant.research.graph import _parse_macro_series_yaml
 
     assert _parse_macro_series_yaml() == []

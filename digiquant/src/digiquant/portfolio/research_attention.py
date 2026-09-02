@@ -16,19 +16,19 @@ from typing import (  # score:allow untyped any — scored-lint: heterogeneous d
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.research_attention import (
+from digiquant.research.research_attention import (
     OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
     attention_store_for_run,
     lookup_attention_decision,
     resolve_research_attention_rollout_mode,
 )
-from digiquant.olympus.atlas.state import FocusRosterEntry
-from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
-from digiquant.olympus.edit_mode.models import PriorPublished
-from digiquant.olympus.edit_mode.prior import artifact_document_key
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.research_retrieval.planner import (
+from digiquant.research.state import FocusRosterEntry
+from digiquant.research.supabase_io import prior_book_current_weights
+from digiquant.dashboard.edit_mode.models import PriorPublished
+from digiquant.dashboard.edit_mode.prior import artifact_document_key
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.research_retrieval.planner import (
     AttentionDecision,
     AttentionFeatures,
     AttentionMode,

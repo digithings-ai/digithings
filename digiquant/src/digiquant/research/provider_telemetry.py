@@ -91,7 +91,7 @@ RECONCILED_KEYS: tuple[str, ...] = (
 
 ReconciliationStatus = Literal["reconciled", "mismatched", "unavailable"]
 
-# Double-flush guard, keyed by (run_id, attempt). `pipeline-olympus.yml` retries the chain up to
+# Double-flush guard, keyed by (run_id, attempt). `pipeline-digiquant.yml` retries the chain up to
 # three times inside ONE job, so run_id alone is not unique within a process — the attempt number
 # is what distinguishes them, exactly as it does for the `atlas_run_diagnostics` conflict key.
 # Bounded because nothing else prunes it; a chain process handles a handful of attempts and exits,

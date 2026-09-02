@@ -30,7 +30,7 @@ from pydantic import (
     model_validator,
 )
 
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
+from digiquant.portfolio.allocation_hashes import sha256_hex
 
 # Stable UUID5 namespaces — do not change; persisted IDs would diverge.
 _EPISODE_VERSION_ID_NS = UUID("d1a0e601-4b8d-5f2a-9c17-3d6e8f0a1b22")

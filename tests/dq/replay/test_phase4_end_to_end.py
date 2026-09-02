@@ -10,25 +10,25 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     EpisodeDisposition,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     REQUIRED_METRIC_GROUPS,
     ComparisonReportStatus,
     EvidenceMode,
     MetricGroupId,
 )
-from digiquant.olympus.replay.governance import CriterionOutcome
-from digiquant.olympus.replay.governance_models import (
+from digiquant.dashboard.replay.governance import CriterionOutcome
+from digiquant.dashboard.replay.governance_models import (
     GovernanceDecisionKind,
     PolicyGovernanceDecision,
 )
-from digiquant.olympus.replay.models import PortfolioReplayStatus
-from digiquant.olympus.replay.walk_forward import WalkForwardBuildStatus
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.models import PortfolioReplayStatus
+from digiquant.dashboard.replay.walk_forward import WalkForwardBuildStatus
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 from tests.dq.replay.phase4_e2e_fixtures import (

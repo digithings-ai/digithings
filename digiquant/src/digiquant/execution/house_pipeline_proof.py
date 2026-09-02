@@ -1,6 +1,6 @@
 """Fail-closed proof that the scheduled house GHA committed a book after main hotfixes.
 
-``pipeline-olympus.yml`` checks out ``ref: main`` even when the schedule event
+``pipeline-digiquant.yml`` checks out ``ref: main`` even when the schedule event
 fires on default ``develop``. The 2026-08-31 schedule (``33426508863``) failed
 before ledger-stamp [#3331](https://github.com/digithings-ai/digithings/pull/3331)
 (20:10Z) and UUID stringify [#3334](https://github.com/digithings-ai/digithings/pull/3334)
@@ -28,7 +28,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-WORKFLOW_FILE: str = "pipeline-olympus.yml"
+WORKFLOW_FILE: str = "pipeline-digiquant.yml"
 CLI_PREFIX: str = "digiquant_house_pipeline_proof"
 # Exclusive cutoff: runs at-or-before this instant are pre-#3334 main.
 UUID_HOTFIX_MERGED_AT: datetime = datetime(2026, 8, 31, 20, 39, tzinfo=UTC)

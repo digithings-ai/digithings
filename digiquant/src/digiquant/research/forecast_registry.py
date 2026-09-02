@@ -1,10 +1,10 @@
 """Private append-only prospective forecast registry (#2663 / WP4.6, #2684 / WP5.4).
 
-Persists immutable :class:`~digiquant.olympus.hermes.models.forecast.ForecastAssessment`
-bases and :class:`~digiquant.olympus.hermes.models.forecast.ForecastAmendment` records
+Persists immutable :class:`~digiquant.portfolio.models.forecast.ForecastAssessment`
+bases and :class:`~digiquant.portfolio.models.forecast.ForecastAmendment` records
 into migration ``079_olympus_forecast_registry.sql`` tables, plus observational
-:class:`~digiquant.olympus.hermes.models.forecast_calibration.ForecastCalibration` /
-:class:`~digiquant.olympus.hermes.models.forecast_calibration.CalibratedForecast`
+:class:`~digiquant.portfolio.models.forecast_calibration.ForecastCalibration` /
+:class:`~digiquant.portfolio.models.forecast_calibration.CalibratedForecast`
 shadow rows into migration ``080`` tables.
 
 **Exact retry:** same primary key + same ``content_hash`` is a no-op.
@@ -27,16 +27,16 @@ from typing import (
 )
 from uuid import UUID
 
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.models.forecast import (
     ForecastAmendment,
     ForecastAssessment,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import (
+from digiquant.portfolio.models.forecast_calibration import (
     CalibratedForecast,
     ForecastCalibration,
 )
-from digiquant.olympus.temporal import require_utc_datetime
+from digiquant.dashboard.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 

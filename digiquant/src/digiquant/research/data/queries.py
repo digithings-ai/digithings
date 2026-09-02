@@ -20,7 +20,7 @@ from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ _VIX_3M_SERIES = "VXVCLS"
 def default_sector_etfs() -> list[str]:
     """Headline ETF per configured sector (relative-strength universe)."""
     try:
-        from digiquant.olympus.atlas.sectors_config import load_sectors
+        from digiquant.research.sectors_config import load_sectors
 
         etfs: list[str] = []
         for sector in load_sectors():

@@ -9,27 +9,27 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     FocusRosterEntry,
     PhaseHermesState,
     PriorContext,
 )
-from digiquant.olympus.hermes.focus_roster import with_fanout_ticker
-from digiquant.olympus.hermes.models.deliberation import (
+from digiquant.portfolio.focus_roster import with_fanout_ticker
+from digiquant.portfolio.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     MissingFactProposal,
 )
-from digiquant.olympus.hermes.phases import h6_deliberation
-from digiquant.olympus.research_retrieval.evidence_bundle import (
+from digiquant.portfolio.phases import h6_deliberation
+from digiquant.dashboard.research_retrieval.evidence_bundle import (
     H5EvidenceFact,
     build_h5_evidence_bundle,
 )
-from digiquant.olympus.research_retrieval.h6_amendment import H6AmendmentOutcome
-from digiquant.olympus.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.dashboard.research_retrieval.h6_amendment import H6AmendmentOutcome
+from digiquant.dashboard.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 pytestmark = pytest.mark.unit
 
@@ -116,7 +116,7 @@ def _state() -> AtlasResearchState:
 @pytest.mark.unit
 class TestH6AmendmentWiring:
     def test_h6_grounding_disables_generic_live_search(self) -> None:
-        with patch("digiquant.olympus.hermes.phases.h6_deliberation.build_grounding") as mocked:
+        with patch("digiquant.portfolio.phases.h6_deliberation.build_grounding") as mocked:
             mocked.return_value = (None, None, None)
             h6_deliberation._h6_grounding(_state(), segment="test")
         mocked.assert_called_once()
@@ -160,11 +160,11 @@ class TestH6AmendmentWiring:
             return json.dumps({"payload": {"body": "Next earnings on 2026-10-28."}})
 
         with patch(
-            "digiquant.olympus.hermes.phases.h6_deliberation.run_research_agent",
+            "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
             side_effect=fake_research_agent,
         ):
             with patch(
-                "digiquant.olympus.hermes.phases.h6_deliberation.build_grounding",
+                "digiquant.portfolio.phases.h6_deliberation.build_grounding",
                 return_value=([{"type": "function"}], execute_tool, None),
             ):
                 out = h6_deliberation.build_h6_from_state(store).worker.run(
@@ -207,11 +207,11 @@ class TestH6AmendmentWiring:
             )
 
         with patch(
-            "digiquant.olympus.hermes.phases.h6_deliberation.run_research_agent",
+            "digiquant.portfolio.phases.h6_deliberation.run_research_agent",
             side_effect=fake_research_agent,
         ):
             with patch(
-                "digiquant.olympus.hermes.phases.h6_deliberation.build_grounding",
+                "digiquant.portfolio.phases.h6_deliberation.build_grounding",
                 return_value=([{"type": "function"}], None, None),
             ):
                 out = h6_deliberation.build_h6_from_state().worker.run(

@@ -1,4 +1,4 @@
-"""Unit tests for scripts/seed_olympus_demo.py (#1045).
+"""Unit tests for scripts/seed_digiquant_demo.py (#1045).
 
 Verifies that the data generators produce valid, schema-conformant rows
 without touching a real Supabase instance.
@@ -15,13 +15,13 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "scripts" / "seed_olympus_demo.py"
+_SCRIPT = REPO_ROOT / "scripts" / "seed_digiquant_demo.py"
 
 pytestmark = pytest.mark.unit
 
 
 def _load_module():
-    spec = importlib.util.spec_from_file_location("seed_olympus_demo", _SCRIPT)
+    spec = importlib.util.spec_from_file_location("seed_digiquant_demo", _SCRIPT)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
@@ -137,7 +137,7 @@ class TestDryRun:
         """--dry-run must not attempt any Supabase call."""
         saved = sys.argv[:]
         try:
-            sys.argv = ["seed_olympus_demo.py", "--dry-run"]
+            sys.argv = ["seed_digiquant_demo.py", "--dry-run"]
             mod.main()
         finally:
             sys.argv = saved

@@ -13,14 +13,14 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 from uuid import UUID
 
-from digiquant.olympus.overlay.dispatch import (
+from digiquant.dashboard.overlay.dispatch import (
     JobRun,
     JobRunStore,
     JobStatus,
     overlay_idempotency_key,
 )
-from digiquant.olympus.overlay.models import OverlayError, OverlayRunRequest
-from digiquant.olympus.overlay.persist import OVERLAY_PERSIST_ENV, overlay_persist_enabled
+from digiquant.dashboard.overlay.models import OverlayError, OverlayRunRequest
+from digiquant.dashboard.overlay.persist import OVERLAY_PERSIST_ENV, overlay_persist_enabled
 from digiquant.vault.envelope import MASTER_KEY_ENV
 
 PROFILE_PIN_MISSING = "profile_pin_missing"
@@ -142,7 +142,7 @@ def production_chain_factory(
     """Lazy-import the real Olympus graph. Never returns None."""
     del run_date
     # Dependency-isolation: graph_invoke pulls hermes/atlas; digiquant-only CI omits digillm.
-    from digiquant.olympus.overlay.graph_invoke import build_overlay_chain
+    from digiquant.dashboard.overlay.graph_invoke import build_overlay_chain
 
     return build_overlay_chain(
         workspace_id=job.workspace_id,
@@ -160,8 +160,8 @@ def production_overlay_runner(
 ) -> object:
     """Lazy-import ``run_overlay``. House env keys are not a BYOK fallback."""
     # Dependency-isolation: runner pulls byok/digillm; digiquant-only CI omits them.
-    from digiquant.olympus.overlay.runner import run_overlay
-    from digiquant.olympus.research_corpus import ResearchCorpusStore
+    from digiquant.dashboard.overlay.runner import run_overlay
+    from digiquant.dashboard.research_corpus import ResearchCorpusStore
     from digiquant.vault.envelope import load_master_key
 
     return run_overlay(

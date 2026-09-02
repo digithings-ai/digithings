@@ -3,11 +3,11 @@ from __future__ import annotations
 import dataclasses
 from datetime import date
 
-import digiquant.olympus.atlas.data.web_grounding as wg
-import digiquant.olympus.atlas.phases.phase3_macro as p3
+import digiquant.research.data.web_grounding as wg
+import digiquant.research.phases.phase3_macro as p3
 import pytest
-from digiquant.olympus.atlas.phases import _node_factory
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.research.phases import _node_factory
+from digiquant.research.state import AtlasConfigBundle, AtlasResearchState
 
 
 def _state() -> AtlasResearchState:

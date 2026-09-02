@@ -17,7 +17,7 @@ from typing import Any  # score:allow untyped any — scored-lint: duck-typed fa
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.atlas import provider_telemetry as pt
+from digiquant.research import provider_telemetry as pt
 
 from digillm import (
     ArtifactRef,
@@ -348,7 +348,7 @@ def test_a_repeated_flush_of_one_run_writes_nothing_the_second_time() -> None:
 
 
 def test_the_flush_guard_is_keyed_by_attempt_not_run_id_alone() -> None:
-    """pipeline-olympus.yml retries the chain up to three times inside ONE job, so run_id is
+    """pipeline-digiquant.yml retries the chain up to three times inside ONE job, so run_id is
     identical across attempts — exactly why atlas_run_diagnostics keys on (run_id, attempt)."""
     node = _node()
     client = _Client()

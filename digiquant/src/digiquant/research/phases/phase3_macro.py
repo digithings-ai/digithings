@@ -6,13 +6,13 @@ from typing import Any, Literal  # score:allow untyped any — used for dict sha
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
     scalar_slot_write_adapter,
 )
-from digiquant.olympus.atlas.segments import ResearchMemo
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.segments import ResearchMemo
+from digiquant.research.state import AtlasResearchState
 
 # Per ARCHITECTURE.md §Phase 3: 4-factor model. Optional machine tokens for the
 # pipeline strip / phase-6; the operator artifact is markdown ``body``.

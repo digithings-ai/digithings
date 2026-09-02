@@ -22,29 +22,29 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from pydantic import ValidationError
 
-from digiquant.olympus.atlas.forecast_outcomes import list_resolved_outcomes_as_of
-from digiquant.olympus.atlas.phases._node_factory import (
+from digiquant.research.forecast_outcomes import list_resolved_outcomes_as_of
+from digiquant.research.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
 )
-from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.forecast_calibration import (
+from digiquant.research.state import PhaseError, PhaseHermesState
+from digiquant.research.supabase_io import SupabaseClient
+from digiquant.portfolio.candidates import holdings_from_prior_book
+from digiquant.portfolio.forecast_calibration import (
     ShadowCalibrationAttachment,
     attach_shadow_calibrations_from_state,
 )
-from digiquant.olympus.hermes.models.forecast_calibration import ForecastOutcome
-from digiquant.olympus.hermes.models.pm_direction import (
+from digiquant.portfolio.models.forecast_calibration import ForecastOutcome
+from digiquant.portfolio.models.pm_direction import (
     PMDirectionMemo,
     bind_forecast_references,
 )
-from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
-from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
-from digiquant.olympus.hermes.skills import load_skill_full
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.research_retrieval.context_wiring import wire_h7_phase_inputs
-from digiquant.olympus.research_retrieval.store import ResearchStateStore
+from digiquant.portfolio.payloads import analyst_payloads, deliberation_summaries
+from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
+from digiquant.portfolio.skills import load_skill_full
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.dashboard.research_retrieval.store import ResearchStateStore
 
 NODE_ID = "hermes/portfolio/pm-direction"
 PHASE_NAME = "hermes_h7_pm_direction"

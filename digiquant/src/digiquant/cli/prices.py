@@ -56,7 +56,7 @@ def _resolve_universe(tickers: str, watchlist: Path | None, include_sectors: boo
     else:
         raise click.UsageError("Provide --watchlist or --tickers.")
     if include_sectors:
-        from digiquant.olympus.atlas.sectors_config import sector_universe
+        from digiquant.research.sectors_config import sector_universe
 
         present = {t.upper() for t in universe}
         for ticker in sector_universe():

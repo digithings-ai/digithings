@@ -8,8 +8,8 @@ from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, PriorContext
-from digiquant.olympus.hermes.models.forecast import (
+from digiquant.research.state import AtlasResearchState, PhaseHermesState, PriorContext
+from digiquant.portfolio.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
     EffectiveSource,
@@ -17,13 +17,13 @@ from digiquant.olympus.hermes.models.forecast import (
     RawUncertainty,
     forecast_terms_content_hash,
 )
-from digiquant.olympus.hermes.models.pm_direction import (
+from digiquant.portfolio.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
     TickerDirection,
     bind_forecast_references,
 )
-from digiquant.olympus.hermes.phases.h7_pm_direction import _bind_forecast_references, _h7_node
+from digiquant.portfolio.phases.h7_pm_direction import _bind_forecast_references, _h7_node
 
 pytestmark = pytest.mark.unit
 
@@ -178,7 +178,7 @@ class TestH7SuccessPathBinding:
             memo="ok",
         )
         with patch(
-            "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
+            "digiquant.portfolio.phases.h7_pm_direction.run_research_agent",
             return_value=llm_memo,
         ):
             out = _h7_node(state)

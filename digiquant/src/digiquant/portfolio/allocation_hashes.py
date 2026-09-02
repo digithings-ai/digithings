@@ -5,7 +5,7 @@ timestamps in payloads, ``allow_nan=False``, and SHA-256 digests. Never use
 Python ``hash()`` for cross-run identity.
 
 ``weights_fingerprint`` is the sole authoritative implementation —
-:mod:`digiquant.olympus.hermes.writers.commit_io` delegates here so H9
+:mod:`digiquant.portfolio.writers.commit_io` delegates here so H9
 idempotency bytes stay stable. Pre-trade report digests live beside the
 allocation bundle helpers so H9 can bind book + report without a second hash
 dialect (#2742 / WP9.1).

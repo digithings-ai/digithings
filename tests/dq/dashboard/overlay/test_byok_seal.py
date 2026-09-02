@@ -9,7 +9,7 @@ from typing import Self
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.overlay.byok_seal import (
+from digiquant.dashboard.overlay.byok_seal import (
     BYOK_AAD_PURPOSE,
     BYOK_SECRET_FILENAME,
     EXIT_BYOK_FILE_OR_KEYS_MISSING,
@@ -24,8 +24,8 @@ from digiquant.olympus.overlay.byok_seal import (
     run_byok_seal,
     verify_sealed_row,
 )
-from digiquant.olympus.overlay.dispatch import WorkspaceEntitlement
-from digiquant.olympus.tenancy import (
+from digiquant.dashboard.overlay.dispatch import WorkspaceEntitlement
+from digiquant.dashboard.tenancy import (
     PlanTier,
     SubscriptionStatus,
     house_workspace_id,
@@ -283,8 +283,8 @@ def test_apply_stores_for_plan_floor_studio(tmp_path: Path) -> None:
 
 def test_aad_purpose_matches_overlay_byok_module() -> None:
     pytest.importorskip("digillm.client", reason="optional; constants still pinned locally")
-    from digiquant.olympus.overlay.byok import BYOK_AAD_PURPOSE as live
-    from digiquant.olympus.overlay.byok import LLM_PROVIDERS as live_providers
+    from digiquant.dashboard.overlay.byok import BYOK_AAD_PURPOSE as live
+    from digiquant.dashboard.overlay.byok import LLM_PROVIDERS as live_providers
 
     assert BYOK_AAD_PURPOSE == live
     assert LLM_PROVIDERS == live_providers

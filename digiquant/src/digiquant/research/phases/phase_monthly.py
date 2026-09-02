@@ -10,9 +10,9 @@ from typing import Any  # score:allow untyped any — used for JSON-derived dict
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field
 
-from digiquant.olympus.atlas.phases._node_factory import _shared_context
-from digiquant.olympus.atlas.phases.phase7_synthesis import DigestSnapshot
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.research.phases._node_factory import _shared_context
+from digiquant.research.phases.phase7_synthesis import DigestSnapshot
+from digiquant.research.state import AtlasResearchState
 
 
 class MonthlyDigest(DigestSnapshot):
@@ -27,7 +27,7 @@ class MonthlyDigest(DigestSnapshot):
 def _monthly_node(state: AtlasResearchState) -> dict[str, Any]:
     from digigraph.graph.research_agent import run_research_agent
 
-    from digiquant.olympus.atlas.skills import SkillNotFoundError, load_skill
+    from digiquant.research.skills import SkillNotFoundError, load_skill
 
     try:
         skill_text = load_skill("monthly-synthesis")

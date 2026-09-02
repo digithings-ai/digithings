@@ -12,7 +12,7 @@ import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from digiquant.olympus.kairos.vendor_secret_files import (
+from digiquant.execution.vendor_secret_files import (
     BILLING_FUNCTIONS,
     EXIT_VENDOR_FILES_OR_KEYS_MISSING,
     apply_ready,

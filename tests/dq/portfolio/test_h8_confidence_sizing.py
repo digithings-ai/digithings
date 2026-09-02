@@ -9,20 +9,20 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.atlas.state import (
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     PhaseHermesState,
 )
-from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases import phase7e_risk_sizing
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+from digiquant.portfolio.h8_risk_snapshots import H8RiskArtifacts
+from digiquant.portfolio.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.portfolio.phases import phase7e_risk_sizing
+from digiquant.portfolio.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_risk_sizing_node,
 )
-from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
-from digiquant.olympus.hermes.skills import load_skill_full
+from digiquant.portfolio.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.portfolio.skills import load_skill_full
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
@@ -237,11 +237,11 @@ def _run_h8_with_memo(
     tickers = tuple(row.ticker for row in roster if row.direction == "long")
     artifacts = H8RiskArtifacts(policy=_risk_policy(), covariance_snapshot=_covariance(tickers))
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        "digiquant.portfolio.h8_risk_snapshots.resolve_h8_risk_artifacts",
         lambda **_kwargs: artifacts,
     )
     monkeypatch.setattr(
-        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        "digiquant.portfolio.allocation_inputs.assemble_allocation_input_bundle_from_state",
         lambda *_a, **_k: bundle,
     )
     state = AtlasResearchState(

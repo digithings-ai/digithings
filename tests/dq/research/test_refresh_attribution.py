@@ -153,7 +153,7 @@ def test_all_cash_day_writes_cash_row() -> None:
 
 
 def test_house_book_ignores_same_date_overlay_positions() -> None:
-    from digiquant.olympus.tenancy import house_workspace_id
+    from digiquant.dashboard.tenancy import house_workspace_id
 
     overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     house = str(house_workspace_id())

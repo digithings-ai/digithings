@@ -61,16 +61,16 @@ from unittest.mock import patch
 # and duplicating it here would be drift-prone.
 from tests.fixtures.fake_supabase import FakeSupabaseClient
 
-from digiquant.olympus.atlas.graph import (
+from digiquant.research.graph import (
     AtlasGraphDeps,
     AtlasInput,
     build_atlas_graph,
     initial_state,
 )
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps, PreflightReflectDeps
-from digiquant.olympus.atlas.phases.publish_phase import PublishDeps
-from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import (
+from digiquant.research.phases.preflight import PreflightDeps, PreflightReflectDeps
+from digiquant.research.phases.publish_phase import PublishDeps
+from digiquant.research.phases.triage_phase import TriageDeps
+from digiquant.research.state import (
     AtlasConfigBundle,
     AtlasResearchState,
     Phase7DigestPayload,
@@ -78,9 +78,9 @@ from digiquant.olympus.atlas.state import (
     RebalancePayload,
     RiskDebatePayload,
 )
-from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
-from digiquant.olympus.hermes.state import HermesState
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.portfolio.phases.phase9_evolution import Phase9Deps
+from digiquant.portfolio.state import HermesState
+from digiquant.dashboard.research_retrieval.store import EvidenceBundleStore
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
@@ -497,7 +497,7 @@ def _append_quiet_price_history(
 
 
 def _quiet_bias_by_segment() -> dict[str, str]:
-    from digiquant.olympus.atlas.sectors_config import load_sectors
+    from digiquant.research.sectors_config import load_sectors
 
     slugs = [
         "alt-sentiment-news",
@@ -632,7 +632,7 @@ def build_quiet_day_canned_extras(
         )
         price_technicals.append(CannedPriceTechnicalRow(date=prior_date, ticker=ticker))
 
-    from digiquant.olympus.atlas.triage_signals import all_tracked_tickers
+    from digiquant.research.triage_signals import all_tracked_tickers
 
     seeded = {row["ticker"] for row in price_history}
     for ticker in all_tracked_tickers():
@@ -952,8 +952,8 @@ class SimulationRun:
         ``phaseN_*`` field directly. The fake client's ``store`` carries
         every write; the canned reads carry every prior-context probe.
         """
-        from digiquant.olympus.hermes.chain import ChainDeps
-        from digiquant.olympus.hermes.graph import HermesGraphDeps
+        from digiquant.portfolio.chain import ChainDeps
+        from digiquant.portfolio.graph import HermesGraphDeps
 
         chain_deps = ChainDeps(
             atlas=self.deps,
@@ -967,8 +967,8 @@ class SimulationRun:
 
     def invoke_through_h5(self, atlas_input: AtlasInput) -> AtlasResearchState:
         """Run Atlas + Hermes H1–H5 only (checkpoint boundary before H6)."""
-        from digiquant.olympus.hermes.chain import ChainDeps
-        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+        from digiquant.portfolio.chain import ChainDeps
+        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_phases_thesis
 
         chain_deps = ChainDeps(
             atlas=self.deps,
@@ -988,8 +988,8 @@ class SimulationRun:
 
     def invoke_hermes_from_h6(self, state: AtlasResearchState) -> AtlasResearchState:
         """Resume Hermes from H6 onward using the wired deps (post-checkpoint)."""
-        from digiquant.olympus.hermes.chain import ChainDeps
-        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+        from digiquant.portfolio.chain import ChainDeps
+        from digiquant.portfolio.graph import HermesGraphDeps, build_hermes_phases_thesis
 
         chain_deps = ChainDeps(
             atlas=self.deps,
@@ -1021,8 +1021,8 @@ def _invoke_with_config(
     """
     from digigraph.graph.pipeline_builder import build_pipeline
 
-    from digiquant.olympus.atlas.graph import AtlasGraphDeps as _AGDeps
-    from digiquant.olympus.atlas.phases.publish_phase import build_publish_phase
+    from digiquant.research.graph import AtlasGraphDeps as _AGDeps
+    from digiquant.research.phases.publish_phase import build_publish_phase
 
     atlas_deps_no_publish = _AGDeps(
         preflight=chain_deps.atlas.preflight,
@@ -1037,7 +1037,7 @@ def _invoke_with_config(
     )
     state = atlas_graph.invoke(state)
 
-    from digiquant.olympus.hermes.graph import build_hermes_graph
+    from digiquant.portfolio.graph import build_hermes_graph
 
     hermes_graph = build_hermes_graph(watchlist=list(atlas_input.watchlist), deps=chain_deps.hermes)
     state = hermes_graph.invoke(state)
@@ -1059,7 +1059,7 @@ def _invoke_atlas_then_hermes_phases(
     """Run Atlas through phase 7, then a subset of Hermes phases."""
     from digigraph.graph.pipeline_builder import build_pipeline
 
-    from digiquant.olympus.atlas.graph import AtlasGraphDeps as _AGDeps
+    from digiquant.research.graph import AtlasGraphDeps as _AGDeps
 
     atlas_deps_no_publish = _AGDeps(
         preflight=chain_deps.atlas.preflight,
@@ -1087,7 +1087,7 @@ def _invoke_hermes_phases_from(
     """Resume Hermes from an existing checkpointed state."""
     from digigraph.graph.pipeline_builder import build_pipeline
 
-    from digiquant.olympus.atlas.phases.publish_phase import build_publish_phase
+    from digiquant.research.phases.publish_phase import build_publish_phase
 
     if hermes_phases:
         hermes_graph = build_pipeline(HermesState, hermes_phases)
@@ -1153,9 +1153,9 @@ def simulated_pipeline(
         triage=TriageDeps(client=client) if triage else None,
         preflight_reflect=(PreflightReflectDeps(client=client) if preflight_reflect else None),
     )
-    from digiquant.olympus.hermes.graph import HermesGraphDeps, ThesisGraphDeps
-    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
-    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+    from digiquant.portfolio.graph import HermesGraphDeps, ThesisGraphDeps
+    from digiquant.portfolio.phases.h9_commit_run import CommitRunDeps
+    from digiquant.portfolio.phases.phase7e_risk_sizing import RiskSizingDeps
 
     hermes_deps = HermesGraphDeps(
         phase9=Phase9Deps(client=client) if phase9 else None,
@@ -1181,7 +1181,7 @@ def simulated_pipeline(
     fake_chat = simulate_chat_completion(overrides=overrides, captured_calls=run.captured_calls)
 
     def _simulator_load_skill_edit(slug: str) -> str:
-        from digiquant.olympus.atlas.skills import SkillNotFoundError, load_skill_edit
+        from digiquant.research.skills import SkillNotFoundError, load_skill_edit
 
         try:
             return load_skill_edit(slug)
@@ -1189,7 +1189,7 @@ def simulated_pipeline(
             return f"Simulator stub edit skill for {slug!r}. Return DocumentPatch JSON only."
 
     def _simulator_hermes_load_skill_edit(slug: str) -> str:
-        from digiquant.olympus.hermes.skills import SkillNotFoundError, load_skill_edit
+        from digiquant.portfolio.skills import SkillNotFoundError, load_skill_edit
 
         try:
             return load_skill_edit(slug)
@@ -1199,19 +1199,19 @@ def simulated_pipeline(
     with (
         patch("digigraph.graph.research_agent.completion_text", side_effect=fake_chat),
         patch(
-            "digiquant.olympus.atlas.phases._node_factory.load_skill_edit",
+            "digiquant.research.phases._node_factory.load_skill_edit",
             side_effect=_simulator_load_skill_edit,
         ),
         patch(
-            "digiquant.olympus.atlas.phases.phase7_synthesis.load_skill_edit",
+            "digiquant.research.phases.phase7_synthesis.load_skill_edit",
             side_effect=_simulator_load_skill_edit,
         ),
         patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.load_skill_edit",
+            "digiquant.portfolio.phases.portfolio_common.load_skill_edit",
             side_effect=_simulator_hermes_load_skill_edit,
         ),
         patch(
-            "digiquant.olympus.hermes.phases.thesis_common.load_skill_edit",
+            "digiquant.portfolio.phases.thesis_common.load_skill_edit",
             side_effect=_simulator_hermes_load_skill_edit,
         ),
     ):
