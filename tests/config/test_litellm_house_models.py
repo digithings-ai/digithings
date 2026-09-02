@@ -72,7 +72,10 @@ def test_litellm_yaml_allows_byok_clientside_credentials() -> None:
 
 
 def test_house_pins_are_unprefixed() -> None:
-    """Registered vendor prefixes must not appear on house pins (they skip LiteLLM)."""
+    """House pins must not use leftover vendor spellings (openrouter/, gemini/, xai/).
+
+    anthropic/ and openai/ are OpenRouter org slugs and are expected.
+    """
     for slug in _olympus_house_slugs():
         assert not slug.startswith("openrouter/"), slug
         assert not slug.startswith("gemini/"), slug
