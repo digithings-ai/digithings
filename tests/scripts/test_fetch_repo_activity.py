@@ -58,8 +58,25 @@ def _snapshot(**over: Any) -> dict[str, Any]:
         "commits": 770,
         "pullsMerged": 337,
         "issuesClosed": 151,
+        "pullsOpen": 4,
         "issuesOpen": 197,
         "features": [{"scope": "ci", "summary": "a thing", "pr": 1, "date": None}],
+        "mergedPulls": [
+            {
+                "number": 1,
+                "title": "a thing",
+                "url": "https://github.com/digithings-ai/digithings/pull/1",
+                "mergedAt": "2026-08-06T10:00:00Z",
+            }
+        ],
+        "openIssues": [
+            {
+                "number": 2,
+                "title": "an issue",
+                "url": "https://github.com/digithings-ai/digithings/issues/2",
+                "updatedAt": "2026-08-06T10:00:00Z",
+            }
+        ],
         "latestRelease": None,
         "modules": {"digigraph": {"path": "digigraph", "lastCommit": None, "files": 1, "lines": 2}},
     }
@@ -122,6 +139,52 @@ def test_the_windowed_and_unwindowed_queries_stay_deliberately_different() -> No
     )
 
 
+@pytest.mark.unit
+def test_open_prs_are_unwindowed_current_state() -> None:
+    """Open PRs are the live queue, not 'opened in the last 30 days'."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    opened = next(line for line in source.splitlines() if "is:pr+is:open" in line)
+    assert "created:" not in opened and "merged:>=" not in opened
+    assert "is:pr+is:open" in source
+
+
+@pytest.mark.unit
+def test_recent_lists_come_from_search_items_not_commit_subjects() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    merged = next(line for line in source.splitlines() if "is:pr+is:merged" in line)
+    assert "per_page=6" in merged and "sort=updated" in merged
+    issues = next(line for line in source.splitlines() if "is:issue+is:open&" in line)
+    assert "sort=updated" in issues
+
+
+@pytest.mark.unit
+def test_search_items_keeps_number_title_and_url() -> None:
+    rows = fra._search_items(
+        {
+            "items": [
+                {
+                    "number": 9,
+                    "title": "hello",
+                    "html_url": "https://github.com/digithings-ai/digithings/pull/9",
+                    "updated_at": "2026-09-02T00:00:00Z",
+                    "closed_at": "2026-09-01T00:00:00Z",
+                },
+                {"number": 10},
+            ]
+        },
+        6,
+    )
+    assert rows == [
+        {
+            "number": 9,
+            "title": "hello",
+            "url": "https://github.com/digithings-ai/digithings/pull/9",
+            "updatedAt": "2026-09-02T00:00:00Z",
+            "closedAt": "2026-09-01T00:00:00Z",
+        }
+    ]
+
+
 # ── shape validation ─────────────────────────────────────────────────────────
 
 
@@ -140,6 +203,13 @@ def test_check_refuses_a_missing_figure(
 ) -> None:
     data = _snapshot()
     del data[missing]
+    assert _check(data, tmp_path, monkeypatch) == 1
+
+
+@pytest.mark.unit
+def test_check_refuses_a_missing_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    data = _snapshot()
+    del data["mergedPulls"]
     assert _check(data, tmp_path, monkeypatch) == 1
 
 

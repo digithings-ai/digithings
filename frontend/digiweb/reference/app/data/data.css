@@ -1,5 +1,14 @@
 /* Data page — dot-matrix stat, card deck, pricing precision table. */
 
+/* Specimen labels for the two RepoActivity densities on this page. */
+.ra-specimen-kicker {
+  margin-top: 1.4rem;
+}
+
+.ra-specimen-kicker-next {
+  margin-top: 2rem;
+}
+
 /* Dot-matrix stat — promoted to @digithings/web (#1450): <DotMatrixStat/>
    (components/data-layout/DotMatrixStat.tsx) carries the utilities; the
    dms-* LED cluster lives in @digithings/web/styles/data-layout.css,

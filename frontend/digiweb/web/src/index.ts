@@ -374,6 +374,29 @@ export {
   type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
+// repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed
+export {
+  RepoActivity,
+  fetchRepoActivityLive,
+  cloneParts,
+  grouped,
+  isoDay,
+  DEFAULT_LIVE_TIMEOUT_MS,
+  REPO_ACTIVITY_DEMO,
+  REPO_ACTIVITY_DEMO_CLONE,
+  REPO_ACTIVITY_DEMO_CONTRIBUTING,
+  REPO_ACTIVITY_DEMO_URL,
+  type RepoActivityProps,
+  type RepoActivityLiveConfig,
+  type RepoActivitySnapshot,
+  type RepoFeature,
+  type RepoIssueItem,
+  type RepoModuleActivity,
+  type RepoPullItem,
+  type RepoRelease,
+  type FetchRepoActivityLiveOptions,
+} from "./components/repo-activity";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
 
