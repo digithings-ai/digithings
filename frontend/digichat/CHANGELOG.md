@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.2...digichat-v1.4.0) (2026-09-02)
+
+
+### Features
+
+* **digichat-ui:** zero-radius ink/paper composer chrome ([6291cd3](https://github.com/digithings-ai/digithings/commit/6291cd33d273c1014b913081c7ad960543f51e70))
+* **digichat:** inherit utilitarian-terminal v0.1 chrome ([42b93e0](https://github.com/digithings-ai/digithings/commit/42b93e0ebf5081b31d383ccd611f0bdb655a4c93))
+* **digiweb:** utilitarian terminal blend — Phase 0 canon promotion ([4641acf](https://github.com/digithings-ai/digithings/commit/4641acfeca6c9f947680b40065b4f774c0df683d))
+
+
+### Bug Fixes
+
+* close remaining [#2408](https://github.com/digithings-ai/digithings/issues/2408) BYOK low-risk follow-ups ([#3144](https://github.com/digithings-ai/digithings/issues/3144)) ([6b3b922](https://github.com/digithings-ai/digithings/commit/6b3b92272013bcc0ae43f5f4ee89b7c70c25b4fa))
+* **digichat:** add byok_model_provider_mismatch to remediable codes ([#3145](https://github.com/digithings-ai/digithings/issues/3145)) ([6c9f708](https://github.com/digithings-ai/digithings/commit/6c9f708a62d736f7be6a0d71df69219f5cd99a13)), closes [#2524](https://github.com/digithings-ai/digithings/issues/2524)
+* **digichat:** align embed server theme with referer host ([#2006](https://github.com/digithings-ai/digithings/issues/2006)) ([fb278e9](https://github.com/digithings-ai/digithings/commit/fb278e92b93a0c50a75cbaeb548d9b7497d76c64))
+* **digichat:** drop BYOK upstream messages on digigraph_error SSE ([#2536](https://github.com/digithings-ai/digithings/issues/2536)) ([#3132](https://github.com/digithings-ai/digithings/issues/3132)) ([5a1e199](https://github.com/digithings-ai/digithings/commit/5a1e199175c9703eeb2539e86589b3cba0792e56))
+* **digichat:** gate forwarded rate-limit IPs ([#3194](https://github.com/digithings-ai/digithings/issues/3194)) ([59319d2](https://github.com/digithings-ai/digithings/commit/59319d2ac8c16bd93af2894b31e862512abc3ca1))
+* **digichat:** harden BYOK models route error and rate-limit responses ([5a18f66](https://github.com/digithings-ai/digithings/commit/5a18f66b260d4dcef5ff25aee12cad98c43b7ad1)), closes [#2408](https://github.com/digithings-ai/digithings/issues/2408)
+* **digichat:** harden BYOK models route error and rate-limit responses ([#3136](https://github.com/digithings-ai/digithings/issues/3136)) ([4169212](https://github.com/digithings-ai/digithings/commit/41692122dd00d6b5b3a5173c64f8fb67b435aab6)), closes [#2408](https://github.com/digithings-ai/digithings/issues/2408)
+* **digichat:** promote reviewed task fixes ([baa7766](https://github.com/digithings-ai/digithings/commit/baa7766d12918ee7906544e20ee63f472c2563a5))
+* **digichat:** reopen BYOK panel when key is bound ([#2529](https://github.com/digithings-ai/digithings/issues/2529)) ([9590c54](https://github.com/digithings-ai/digithings/commit/9590c542251f11b9a23cdd9447e01307bb94d648))
+* **digichat:** stop stale localStorage from wiping server history ([#3027](https://github.com/digithings-ai/digithings/issues/3027)) ([93eba59](https://github.com/digithings-ai/digithings/commit/93eba5968f6eb65214676950b321a31507698e62))
+
 ## [1.3.2](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.1...digichat-v1.3.2) (2026-08-21)
 
 
