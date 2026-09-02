@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
@@ -15,9 +14,16 @@ from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.olympus.atlas.phases._node_factory import (
     _shared_context,
-    apply_web_grounding_to_inputs,
+    build_grounding,
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
+from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
+from digiquant.olympus.envcompat import (
+    ATTEMPT,
+    DELIBERATION_MAX_ROUNDS,
+    DELIBERATION_MIN_ROUNDS,
+    env_lookup,
+)
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
     fanout_ticker,
@@ -26,12 +32,15 @@ from digiquant.olympus.hermes.focus_roster import (
     with_fanout_ticker,
 )
 from digiquant.olympus.hermes.models.deliberation import (
+    CARRY_ATTENTION,
     CARRY_FINGERPRINT_SKIP,
     CARRY_LLM_FAILURE,
+    CARRY_LOW_VALUE,
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,
     DeliberationTurn,
+    MissingFactProposal,
 )
 from digiquant.olympus.hermes.models.forecast import (
     AmendmentOutcome,
@@ -39,14 +48,39 @@ from digiquant.olympus.hermes.models.forecast import (
     ForecastAmendment,
     ForecastAssessment,
     ForecastTerms,
+    fill_forecast_tenor_from_base,
     materialize_forecast_amendment,
     resolve_effective_forecast,
+    unwrap_forecast_terms_payload,
 )
-from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
+from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
+from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
+from digiquant.olympus.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
+from digiquant.olympus.research_retrieval.h6_amendment import (
+    H6AmendmentOutcome,
+    H6AmendmentResult,
+    attempt_h6_evidence_amendment,
+)
+from digiquant.olympus.research_retrieval.models import (
+    TickerEvidenceBundle,
+    TypedProvenance,
+)
+from digiquant.olympus.research_retrieval.planner import (
+    H6Action,
+    H6Selection,
+    H6SelectionMode,
+    H6SelectionReason,
+    assert_no_materiality_in_prompt,
+    build_h6_decision_features,
+    incumbent_fallback_selection,
+    resolve_h6_selection_mode,
+    select_h6,
+)
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +90,93 @@ DEFAULT_DELIBERATION_MAX_ROUNDS = 10
 DEFAULT_DELIBERATION_MIN_ROUNDS = 2
 
 
+def _h6_attempt_id() -> str:
+    raw = env_lookup(ATTEMPT).strip()
+    return raw or "1"
+
+
+def _base_bundle_for_ticker(state: HermesState, ticker: str) -> TickerEvidenceBundle | None:
+    sym = ticker.strip().upper()
+    raw = state.phase_hermes.ticker_evidence_bundles.get(sym)
+    if not isinstance(raw, dict):
+        raw = state.phase_hermes.ticker_evidence_bundles.get(ticker)
+    if not isinstance(raw, dict) or not raw:
+        return None
+    try:
+        return TickerEvidenceBundle.model_validate(raw)
+    except Exception:
+        return None
+
+
+def _h6_grounding(state: HermesState, *, segment: str = ""):
+    """H6 grounding — research tools only; generic web search forbidden (#2908)."""
+    return build_grounding(
+        use_data_tools=False,
+        live_search=False,
+        run_date=state.run_date,
+        segment=segment or "hermes/h6_deliberation",
+        use_research_tools=True,
+        research_phase="h6_deliberation",
+        watchlist=tuple(state.config.watchlist),
+    )
+
+
+def _attach_evidence_amendment(
+    summary: DeliberationSummary,
+    *,
+    base_bundle: TickerEvidenceBundle | None,
+    amendment_result: H6AmendmentResult | None,
+) -> DeliberationSummary:
+    update: dict[str, Any] = {}
+    if base_bundle is not None:
+        update["base_bundle_id"] = str(base_bundle.bundle_id)
+    if amendment_result is None:
+        update["evidence_amendment_outcome"] = H6AmendmentOutcome.NONE.value
+        return summary.model_copy(update=update)
+    update["evidence_amendment_outcome"] = amendment_result.outcome.value
+    if amendment_result.failure_reason:
+        update["evidence_amendment_failure_reason"] = amendment_result.failure_reason
+    if amendment_result.missing_fact_request is not None:
+        update["missing_fact_request_id"] = str(amendment_result.missing_fact_request.request_id)
+    if amendment_result.amendment is not None:
+        update["evidence_amendment_id"] = str(amendment_result.amendment.amendment_id)
+    return summary.model_copy(update=update)
+
+
+def _maybe_attempt_missing_fact_amendment(
+    *,
+    state: HermesState,
+    ticker: str,
+    proposal: MissingFactProposal | None,
+    base_bundle: TickerEvidenceBundle | None,
+    execute_tool: Any,
+    store: EvidenceBundleStore | None,
+    prior_result: H6AmendmentResult | None,
+) -> H6AmendmentResult | None:
+    if prior_result is not None:
+        return prior_result
+    if proposal is None or base_bundle is None:
+        return None
+    cutoff = state.knowledge_cutoff_at or base_bundle.recorded_at
+    provenance = TypedProvenance(
+        source_run_id=str(state.run_id),
+        attempt_id=_h6_attempt_id(),
+        artifact_id=f"artifact-h6-{ticker.strip().upper()}",
+    )
+    return attempt_h6_evidence_amendment(
+        proposal=proposal,
+        base_bundle=base_bundle,
+        ticker=ticker,
+        execute_tool=execute_tool,
+        store=store if evidence_bundle_writer_enabled() else None,
+        recorded_at=cutoff,
+        provenance=provenance,
+    )
+
+
 def deliberation_max_rounds() -> int:
     """``ATLAS_DELIBERATION_MAX_ROUNDS`` env override; default 6."""
-    raw = os.environ.get("ATLAS_DELIBERATION_MAX_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MAX_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MAX_ROUNDS
     try:
@@ -76,7 +194,7 @@ def deliberation_min_rounds() -> int:
     path (instant convergence). The caller clamps it to ``max_rounds`` so it can never
     deadlock the loop.
     """
-    raw = os.environ.get("ATLAS_DELIBERATION_MIN_ROUNDS", "").strip()
+    raw = env_lookup(DELIBERATION_MIN_ROUNDS).strip()
     if not raw:
         return DEFAULT_DELIBERATION_MIN_ROUNDS
     try:
@@ -189,7 +307,10 @@ def _resolve_from_debate(
             None,
         )
     try:
-        terms = ForecastTerms.model_validate(amendment_terms_raw)
+        payload = unwrap_forecast_terms_payload(amendment_terms_raw)
+        if not isinstance(payload, dict):
+            raise TypeError("amendment terms must be an object")
+        terms = ForecastTerms.model_validate(fill_forecast_tenor_from_base(payload, base.terms))
         amendment = materialize_forecast_amendment(
             base=base,
             terms=terms,
@@ -228,7 +349,7 @@ def _resolve_from_debate(
 
 
 def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
-    return {
+    inputs = {
         "ticker": ticker,
         "analyst_payload": _analyst_payload(state, ticker),
         "prior_book": list(state.prior_context.prior_book),
@@ -237,6 +358,123 @@ def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
         "held_in_prior_book": ticker
         in set(holdings_from_prior_book(state.prior_context.prior_book)),
     }
+    # WP11.3: selection materiality features must never enter provider prompts.
+    assert_no_materiality_in_prompt(inputs)
+    return inputs
+
+
+def _roster_reason_for(state: HermesState, ticker: str) -> str:
+    sym = ticker.strip().upper()
+    for entry in state.phase_hermes.focus_roster:
+        if str(entry.ticker).strip().upper() == sym:
+            return str(entry.roster_reason)
+    return "other"
+
+
+def _bundle_conflict_signal(bundle_dump: Mapping[str, Any] | None) -> bool:
+    """True when the H5 bundle dump carries conflict diagnostics (if present)."""
+    if not isinstance(bundle_dump, Mapping):
+        return False
+    conflicts = bundle_dump.get("conflicts")
+    if isinstance(conflicts, (list, tuple)) and conflicts:
+        return True
+    # Bundle contract itself has no conflicts field; counter-evidence lives on forecast.
+    return False
+
+
+def _invalidation_risk_for(state: HermesState, ticker: str, analyst: Mapping[str, Any]) -> bool:
+    """Thesis challenged / invalidation hit for this ticker → select H6."""
+    sym = ticker.strip().upper()
+    for thesis in state.prior_context.active_theses:
+        if not isinstance(thesis, Mapping):
+            continue
+        status = str(thesis.get("status") or "").strip().lower()
+        if status not in {"challenged", "invalidated"}:
+            continue
+        linked = str(thesis.get("ticker") or thesis.get("linked_ticker") or "").upper()
+        if linked == sym:
+            return True
+        vehicles = thesis.get("candidate_tickers") or thesis.get("tickers") or []
+        if isinstance(vehicles, (list, tuple)) and sym in {
+            str(v).strip().upper() for v in vehicles
+        }:
+            return True
+    risks = str(analyst.get("risks") or "").lower()
+    if "invalidat" in risks or "thesis break" in risks or "breached" in risks:
+        return True
+    return False
+
+
+def _resolve_h6_selection(state: HermesState, ticker: str, analyst: dict[str, Any]) -> H6Selection:
+    """Build features + selection; planner errors → incumbent fallback (full H6)."""
+    mode = resolve_h6_selection_mode()
+    if mode is H6SelectionMode.OFF:
+        # Off: no selection record required for actuation; still emit typed incumbent reason.
+        held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=0.0,
+            analyst=analyst,
+        )
+        return incumbent_fallback_selection(feats, mode=mode)
+
+    try:
+        held_set = set(holdings_from_prior_book(state.prior_context.prior_book))
+        held = ticker.strip().upper() in held_set
+        weights = prior_book_current_weights(list(state.prior_context.prior_book))
+        weight_pct = float(weights.get(ticker.strip().upper(), 0.0) or 0.0)
+        prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker.strip().upper())
+        if not isinstance(prior_analyst, dict):
+            prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker)
+        bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker.strip().upper())
+        if not isinstance(bundle_dump, dict):
+            bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker)
+        bundle_id = None
+        if isinstance(bundle_dump, dict) and bundle_dump.get("bundle_id"):
+            bundle_id = str(bundle_dump["bundle_id"])
+        price_delta = state.price_deltas.get(ticker.strip().upper())
+        if price_delta is None:
+            price_delta = state.price_deltas.get(ticker)
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=weight_pct,
+            analyst=analyst,
+            prior_analyst=prior_analyst if isinstance(prior_analyst, dict) else None,
+            price_delta=float(price_delta) if price_delta is not None else None,
+            evidence_bundle_id=bundle_id,
+            has_evidence_conflict=_bundle_conflict_signal(bundle_dump),
+            invalidation_risk=_invalidation_risk_for(state, ticker, analyst),
+        )
+        return select_h6(feats, mode=mode)
+    except Exception as exc:
+        logger.warning(
+            "H6 selection failed for %s (%s: %s); falling back to full incumbent H6",
+            ticker,
+            type(exc).__name__,
+            exc,
+        )
+        held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=0.0,
+            analyst=analyst,
+        )
+        return incumbent_fallback_selection(feats, mode=mode)
+
+
+def _attach_selection(summary: DeliberationSummary, selection: H6Selection) -> DeliberationSummary:
+    return summary.model_copy(
+        update={
+            "selection_reason": selection.reason.value,
+            "h6_selection": selection.model_dump(mode="json"),
+        }
+    )
 
 
 def _deliberation_summary(
@@ -262,18 +500,21 @@ def _deliberation_summary(
 
 
 def run_deliberation_loop(
-    state: HermesState, ticker: str
-) -> tuple[DeliberationSummary, dict[str, Any] | None]:
+    state: HermesState,
+    ticker: str,
+    *,
+    base_bundle: TickerEvidenceBundle | None = None,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> tuple[DeliberationSummary, dict[str, Any] | None, H6AmendmentResult | None]:
     """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
 
-    Returns the summary plus the last analyst-proposed complete ``forecast_amendment``
-    terms dict (or ``None`` when the debate did not propose a replacement).
+    Returns the summary, the last analyst-proposed complete ``forecast_amendment``
+    terms dict (or ``None``), and optional WP11.4 evidence-amendment provenance.
     """
     pm_skill = load_skill_full("deliberation")
-    analyst_skill = load_skill_full("asset-analyst")
-    tools, execute_tool, web_grounding = _portfolio_grounding(
-        state, phase="h6_deliberation", segment=f"{NODE_ID}-{ticker}"
-    )
+    analyst_skill = load_skill_full("deliberation-analyst-response")
+    tools, execute_tool, _web_grounding = _h6_grounding(state, segment=f"{NODE_ID}-{ticker}")
     transcript: list[DeliberationTurn] = []
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
@@ -281,22 +522,33 @@ def run_deliberation_loop(
     max_rounds = deliberation_max_rounds()
     min_rounds = min(deliberation_min_rounds(), max_rounds)
     last_amendment_terms: dict[str, Any] | None = None
+    amendment_result: H6AmendmentResult | None = None
+    pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
 
     while True:
         round_number += 1
-        pm_inputs = apply_web_grounding_to_inputs(
-            {
-                **_portfolio_phase_inputs(state, ticker),
-                "segment": f"h6_pm_challenge-{ticker}",
-                "role": "pm",
-                "round_number": round_number,
-                "transcript": [t.model_dump(mode="json") for t in transcript],
-                "prior_deliberation": prior_summary,
-            },
-            web_grounding=web_grounding,
-            segment=f"h6_pm_challenge-{ticker}",
-            live_search=True,
-        )
+        pm_inputs = {
+            **_portfolio_phase_inputs(state, ticker),
+            "segment": f"h6_pm_challenge-{ticker}",
+            "role": "pm",
+            "round_number": round_number,
+            "transcript": [t.model_dump(mode="json") for t in transcript],
+            "prior_deliberation": prior_summary,
+        }
+        if base_bundle is not None:
+            pm_inputs["base_evidence_bundle"] = base_bundle.model_dump(mode="json")
+        if amendment_result is not None and amendment_result.supplemental_evidence:
+            pm_inputs["evidence_amendment"] = [
+                item.model_dump(mode="json") for item in amendment_result.supplemental_evidence
+            ]
+        pm_inputs = wire_h6_phase_inputs(
+            pm_inputs,
+            ticker=ticker,
+            bundle=base_bundle,
+            research_state_pin=pin,
+            research_state_store=research_state_store,
+            amendment=amendment_result.amendment if amendment_result else None,
+        ).phase_inputs
         pm_result = run_research_agent(
             skill_text=pm_skill,
             phase_inputs=pm_inputs,
@@ -317,6 +569,15 @@ def run_deliberation_loop(
             if isinstance(pm_result, DeliberationPmTurn)
             else DeliberationPmTurn.model_validate(pm_result)
         )
+        amendment_result = _maybe_attempt_missing_fact_amendment(
+            state=state,
+            ticker=ticker,
+            proposal=pm_turn.missing_fact,
+            base_bundle=base_bundle,
+            execute_tool=execute_tool,
+            store=evidence_bundle_store,
+            prior_result=amendment_result,
+        )
         converged_signal = pm_turn.converged or (
             pm_turn.accepts_analyst_position and not pm_turn.open_questions
         )
@@ -324,12 +585,14 @@ def run_deliberation_loop(
         # one challenge + analyst response so the debate isn't a round-1 rubber-stamp. Set
         # ATLAS_DELIBERATION_MIN_ROUNDS=1 to restore the instant-convergence quiet path.
         if converged_signal and round_number >= min_rounds:
-            if pm_turn.challenge:
-                transcript.append(
-                    DeliberationTurn(
-                        role="pm", round_number=round_number, message=pm_turn.challenge
-                    )
+            close = (pm_turn.conclusion or pm_turn.challenge).strip()
+            transcript.append(
+                DeliberationTurn(
+                    role="pm",
+                    round_number=round_number,
+                    message=close or "PM converges.",
                 )
+            )
             return (
                 _deliberation_summary(
                     ticker=ticker,
@@ -339,6 +602,7 @@ def run_deliberation_loop(
                     conviction_delta=pm_turn.conviction_delta,
                 ),
                 last_amendment_terms,
+                amendment_result,
             )
 
         # Not converged, or held below the min-rounds floor: record the PM's challenge (with a
@@ -356,19 +620,30 @@ def run_deliberation_loop(
             )
         )
 
-        analyst_inputs = apply_web_grounding_to_inputs(
-            {
-                **_portfolio_phase_inputs(state, ticker),
-                "segment": f"h6_analyst_response-{ticker}",
-                "role": "analyst",
-                "round_number": round_number,
-                "pm_challenge": pm_turn.challenge,
-                "transcript": [t.model_dump(mode="json") for t in transcript],
-            },
-            web_grounding=web_grounding,
-            segment=f"h6_analyst_response-{ticker}",
-            live_search=True,
-        )
+        analyst_inputs: dict[str, Any] = {
+            **_portfolio_phase_inputs(state, ticker),
+            "segment": f"h6_analyst_response-{ticker}",
+            "role": "analyst",
+            "round_number": round_number,
+            "pm_challenge": pm_turn.challenge,
+            "transcript": [t.model_dump(mode="json") for t in transcript],
+        }
+        if base_bundle is not None:
+            analyst_inputs["base_evidence_bundle"] = base_bundle.model_dump(mode="json")
+        if amendment_result is not None and amendment_result.supplemental_evidence:
+            analyst_inputs["evidence_amendment"] = [
+                item.model_dump(mode="json") for item in amendment_result.supplemental_evidence
+            ]
+        if amendment_result is not None and amendment_result.failure_reason:
+            analyst_inputs["evidence_amendment_failure"] = amendment_result.failure_reason
+        analyst_inputs = wire_h6_phase_inputs(
+            analyst_inputs,
+            ticker=ticker,
+            bundle=base_bundle,
+            research_state_pin=pin,
+            research_state_store=research_state_store,
+            amendment=amendment_result.amendment if amendment_result else None,
+        ).phase_inputs
         analyst_result = run_research_agent(
             skill_text=analyst_skill,
             phase_inputs=analyst_inputs,
@@ -405,6 +680,7 @@ def run_deliberation_loop(
                     conviction_delta=analyst_turn.conviction_delta,
                 ),
                 last_amendment_terms,
+                amendment_result,
             )
         if round_number >= max_rounds:
             return (
@@ -418,10 +694,15 @@ def run_deliberation_loop(
                     cap_reason="max_rounds",
                 ),
                 last_amendment_terms,
+                amendment_result,
             )
 
 
-def _h6_node_factory(ticker: str):
+def _h6_node_factory(
+    ticker: str,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+):
     def _node(state: HermesState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
             return {}
@@ -430,7 +711,134 @@ def _h6_node_factory(ticker: str):
             return {}
         stance = str(analyst.get("stance") or "hold")
         base = _base_forecast_from_analyst(analyst)
-        if deliberation_skip_signal(state, ticker, analyst_stance=stance):
+        selection = _resolve_h6_selection(state, ticker, analyst)
+        h6_enforce = research_attention_h6_enforce_path(state, ticker, analyst)
+
+        if h6_enforce == "carry":
+            prior = _prior_deliberation_summary(state, ticker)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            if prior:
+                net_stance = prior.get("net_stance", "neutral")
+                conviction_delta = int(prior.get("conviction_delta") or 0)
+                conclusion = str(
+                    prior.get("conclusion_excerpt")
+                    or prior.get("conclusion")
+                    or prior.get("bull_thesis")
+                    or analyst.get("thesis")
+                    or f"attention carry: {stance}"
+                )
+            else:
+                net_stance = stance_map.get(stance, "neutral")
+                conviction_delta = 0
+                conclusion = str(analyst.get("thesis") or f"attention carry: {stance}")
+            carried = DeliberationSummary(
+                ticker=ticker,
+                converged=True,
+                conclusion=conclusion,
+                net_stance=net_stance,  # type: ignore[arg-type]
+                conviction_delta=conviction_delta,
+                transcript=[],
+                carried=True,
+                carry_reason=CARRY_ATTENTION,
+            )
+            if prior:
+                prior_amendment = None
+                raw_am = prior.get("forecast_amendment")
+                if isinstance(raw_am, dict) and raw_am:
+                    try:
+                        prior_amendment = ForecastAmendment.model_validate(raw_am)
+                    except Exception:
+                        prior_amendment = None
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                    amendment=prior_amendment,
+                )
+            elif base is not None:
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=resolve_effective_forecast(
+                        base=base,
+                        amendment_outcome=AmendmentOutcome.NONE,
+                        known_at=state.knowledge_cutoff_at or base.known_at,
+                    ),
+                )
+            carried = _attach_selection(carried, selection)
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: carried.model_dump(mode="json")}
+                )
+            }
+
+        # Enforce + low-value: carry with zero provider calls (typed reason).
+        if (
+            h6_enforce is None
+            and selection.mode is H6SelectionMode.ENFORCE
+            and selection.action is H6Action.CARRY
+            and selection.reason is H6SelectionReason.LOW_VALUE_CARRY
+        ):
+            prior = _prior_deliberation_summary(state, ticker)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            if prior:
+                net_stance = prior.get("net_stance", "neutral")
+                conviction_delta = int(prior.get("conviction_delta") or 0)
+                conclusion = str(
+                    prior.get("conclusion_excerpt")
+                    or prior.get("conclusion")
+                    or prior.get("bull_thesis")
+                    or analyst.get("thesis")
+                    or f"low-value carry: {stance}"
+                )
+            else:
+                net_stance = stance_map.get(stance, "neutral")
+                conviction_delta = 0
+                conclusion = str(analyst.get("thesis") or f"low-value carry: {stance}")
+            carried = DeliberationSummary(
+                ticker=ticker,
+                converged=True,
+                conclusion=conclusion,
+                net_stance=net_stance,  # type: ignore[arg-type]
+                conviction_delta=conviction_delta,
+                transcript=[],
+                carried=True,
+                carry_reason=CARRY_LOW_VALUE,
+            )
+            if prior:
+                prior_amendment = None
+                raw_am = prior.get("forecast_amendment")
+                if isinstance(raw_am, dict) and raw_am:
+                    try:
+                        prior_amendment = ForecastAmendment.model_validate(raw_am)
+                    except Exception:
+                        prior_amendment = None
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                    amendment=prior_amendment,
+                )
+            elif base is not None:
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=resolve_effective_forecast(
+                        base=base,
+                        amendment_outcome=AmendmentOutcome.NONE,
+                        known_at=state.knowledge_cutoff_at or base.known_at,
+                    ),
+                )
+            carried = _attach_selection(carried, selection)
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: carried.model_dump(mode="json")}
+                )
+            }
+
+        # Enforce + select: skip fingerprint short-circuit so selected success meets round floor.
+        allow_fingerprint_skip = h6_enforce != "challenge" and not (
+            selection.mode is H6SelectionMode.ENFORCE and selection.action is H6Action.SELECT
+        )
+        if allow_fingerprint_skip and deliberation_skip_signal(
+            state, ticker, analyst_stance=stance
+        ):
             prior = _prior_deliberation_summary(state, ticker)
             if prior:
                 carried = DeliberationSummary(
@@ -463,14 +871,22 @@ def _h6_node_factory(ticker: str):
                     effective=_carry_prior_effective(prior=prior, base=base, state=state),
                     amendment=prior_amendment,
                 )
+                carried = _attach_selection(carried, selection)
                 return {
                     "phase_hermes": PhaseHermesState(
                         deliberation_summaries={ticker: carried.model_dump(mode="json")}
                     )
                 }
 
+        base_bundle = _base_bundle_for_ticker(state, ticker)
         try:
-            summary, amendment_terms = run_deliberation_loop(state, ticker)
+            summary, amendment_terms, evidence_amendment = run_deliberation_loop(
+                state,
+                ticker,
+                base_bundle=base_bundle,
+                evidence_bundle_store=evidence_bundle_store,
+                research_state_store=research_state_store,
+            )
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
@@ -503,6 +919,7 @@ def _h6_node_factory(ticker: str):
                         known_at=state.knowledge_cutoff_at or base.known_at,
                     ),
                 )
+            fallback = _attach_selection(fallback, selection)
             return {
                 "phase_hermes": PhaseHermesState(
                     deliberation_summaries={ticker: fallback.model_dump(mode="json")}
@@ -523,11 +940,17 @@ def _h6_node_factory(ticker: str):
             amendment_terms_raw=amendment_terms,
             amendment_reason=summary.conclusion or "h6_challenge_revision",
         )
+        summary = _attach_evidence_amendment(
+            summary,
+            base_bundle=base_bundle,
+            amendment_result=evidence_amendment,
+        )
         summary = _attach_forecast_lineage(
             summary,
             effective=effective,
             amendment=amendment,
         )
+        summary = _attach_selection(summary, selection)
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
@@ -554,6 +977,8 @@ def build_h6_deliberation(
     tickers: list[str],
     *,
     held: Collection[str] = (),
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> PipelinePhase:
     capped = capped_tickers(tickers, held=held)
     if not capped:
@@ -568,12 +993,19 @@ def build_h6_deliberation(
     return PipelinePhase(
         name=PHASE_NAME,
         nodes=[
-            NodeSpec(name=f"{NODE_ID}-{ticker}", run=_h6_node_factory(ticker)) for ticker in capped
+            NodeSpec(
+                name=f"{NODE_ID}-{ticker}",
+                run=_h6_node_factory(ticker, evidence_bundle_store, research_state_store),
+            )
+            for ticker in capped
         ],
     )
 
 
-def build_h6_from_state() -> FanOutPhase:
+def build_h6_from_state(
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> FanOutPhase:
     """Runtime roster fan-out — one parallel ``Send`` worker per focus-roster ticker.
 
     Like H5, the roster is only known at run time, so ``FanOutPhase`` maps each ticker to a
@@ -586,7 +1018,7 @@ def build_h6_from_state() -> FanOutPhase:
         ticker = state.hermes_fanout_ticker
         if not ticker:
             return {}
-        return _h6_node_factory(ticker)(state)
+        return _h6_node_factory(ticker, evidence_bundle_store, research_state_store)(state)
 
     return FanOutPhase(
         name=PHASE_NAME,

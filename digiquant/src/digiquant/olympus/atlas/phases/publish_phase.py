@@ -6,11 +6,17 @@ Skips carried slots. Monthly runs omit this phase.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.inspectable_io import (
+    publish_bias_row_document,
+    publish_inputs_document,
+)
+from digiquant.olympus.atlas.segments import compose_legacy_digest_body
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Phase7DigestPayload,
@@ -24,6 +30,8 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document_delta,
 )
 from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
+from digiquant.olympus.attention_plan_io import ATTENTION_PLAN_DOCUMENT_KEY
+from digiquant.olympus.overlay.persist import is_private_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,8 @@ class PublishDeps:
     """Wiring deps for the publish node (injected Supabase client)."""
 
     client: SupabaseClient
+    research_state_store: Any | None = None
+    """Optional WP12 store for dual-write of compiled prose views (#2877)."""
 
 
 # ``documents.category`` must satisfy the ``chk_documents_category`` CHECK
@@ -65,68 +75,35 @@ def _segment_category(slug: str) -> str:
 def render_digest_markdown(snapshot: Phase7DigestPayload | dict[str, Any]) -> str:
     """Render a human-readable markdown string from the digest/snapshot payload.
 
-    Pure template function — no LLM, no I/O. Tolerates missing keys so it
-    works on both full and partial (carried-incomplete) snapshots.
+    Prefer the stitched ``body``. Historical JSON slots fall back to
+    :func:`compose_legacy_digest_body` (no Overall bias / fake metrics).
     """
-    lines: list[str] = []
-    headline = str(snapshot.get("headline") or "")
-    if headline:
-        lines.append(f"# {headline}")
-        lines.append("")
-
-    regime = str(snapshot.get("market_regime_snapshot") or "")
-    if regime:
-        lines.append(f"## Market Regime\n\n{regime}")
-        lines.append("")
-
-    equities = str(snapshot.get("us_equities_summary") or "")
-    if equities:
-        lines.append(f"## US Equities\n\n{equities}")
-        lines.append("")
-
-    assets = str(snapshot.get("asset_classes_summary") or "")
-    if assets:
-        lines.append(f"## Asset Classes\n\n{assets}")
-        lines.append("")
-
-    actions: list[dict[str, Any]] = list(snapshot.get("actionable_summary") or [])
-    if actions:
-        lines.append("## Actionable Items")
-        lines.append("")
-        for item in actions:
-            pri = item.get("priority", "")
-            label = item.get("label", "")
-            rationale = item.get("rationale", "")
-            lines.append(f"- **[P{pri}] {label}** — {rationale}")
-        lines.append("")
-
-    risks: list[dict[str, Any]] = list(snapshot.get("risk_radar") or [])
-    if risks:
-        lines.append("## Risk Radar")
-        lines.append("")
-        for risk in risks:
-            hours = risk.get("horizon_hours", "?")
-            label = risk.get("label", "")
-            trigger = risk.get("trigger", "")
-            lines.append(f"- **{label}** ({hours}h) — {trigger}")
-        lines.append("")
-
-    continuity = snapshot.get("continuity")
-    if continuity:
-        lines.append(f"*Note: {continuity}*")
-        lines.append("")
-
-    return "\n".join(lines)
+    data: dict[str, Any] = dict(snapshot) if isinstance(snapshot, Mapping) else dict(snapshot)
+    body = str(data.get("body") or "").strip()
+    if body:
+        continuity = data.get("continuity")
+        if continuity and str(continuity) not in body:
+            return f"{body.rstrip()}\n\n*Note: {continuity}*\n"
+        return body if body.endswith("\n") else f"{body}\n"
+    return compose_legacy_digest_body(data)
 
 
 def _is_degenerate(body: Any) -> bool:
-    """A content-free segment: the analyst graded the evidence ``data_quality == "absent"``
-    AND produced no material findings (Pillar 1E). Publishing it would surface a
-    confident-looking empty document, so it is suppressed. A segment with findings — or one
-    graded high/medium/low (or ungraded ``None``) — always publishes."""
+    """A content-free segment is suppressed rather than published empty.
+
+    New memos: empty ``body`` and no leftover findings/headline.
+    Legacy: ``data_quality == "absent"`` and no material findings (Pillar 1E).
+    """
     if not isinstance(body, dict):
         return False
-    return body.get("data_quality") == "absent" and not (body.get("material_findings") or [])
+    md = str(body.get("body") or "").strip()
+    if md:
+        return False
+    findings = body.get("material_findings") or []
+    headline = str(body.get("headline") or "").strip()
+    if body.get("data_quality") == "absent" and not findings:
+        return True
+    return not findings and not headline
 
 
 def _log_suppressed(slug: str, body: dict[str, Any]) -> None:
@@ -145,6 +122,7 @@ def _publish_segment_bag(
     bag: dict[str, SegmentSlot],
     run_type: str,
     date_str: str,
+    workspace_id: str | None = None,
 ) -> list[PublishedArtifact]:
     """Publish all fresh ('today') slots in a phase output dict (skipping degenerate ones)."""
     published: list[PublishedArtifact] = []
@@ -164,6 +142,7 @@ def _publish_segment_bag(
             date_str=date_str,
             category=_segment_category(slug),
             segment=slug,
+            workspace_id=workspace_id,
         )
         published.append(artifact)
     return published
@@ -188,6 +167,7 @@ def _publish_document_deltas(
                 target_document_key=target_key,
                 patch=patch,
                 run_type=run_type,
+                workspace_id=getattr(state.config, "workspace_id", None),
             )
         )
     return published
@@ -221,12 +201,136 @@ def _carry_incomplete_snapshot(
     return carried  # type: ignore[return-value]
 
 
+def _append_house_daily_snapshot(
+    artifacts: list[PublishedArtifact],
+    *,
+    deps: PublishDeps,
+    workspace_id: str | None,
+    date_str: str,
+    snapshot: Phase7DigestPayload | dict[str, Any],
+    run_type: str,
+    baseline_date: str | None,
+    digest_markdown: str,
+) -> bool:
+    """Write ``daily_snapshots`` for the house path only.
+
+    Overlay private books live in ``documents`` (workspace-scoped). This table
+    is unique on ``date`` with no ``workspace_id`` — an overlay upsert would
+    last-writer-wins over the house Brief.
+    """
+    if is_private_workspace(workspace_id):
+        logger.info("publish: overlay workspace skips daily_snapshots (house-only table)")
+        return False
+    artifacts.append(
+        publish_daily_snapshot(
+            client=deps.client,
+            date_str=date_str,
+            snapshot=snapshot,
+            run_type=run_type,
+            baseline_date=baseline_date,
+            digest_markdown=digest_markdown,
+            workspace_id=workspace_id,
+        )
+    )
+    return True
+
+
+def _maybe_publish_compiled_research_views(
+    *,
+    deps: PublishDeps,
+    state: AtlasResearchState,
+    run_type: str,
+    date_str: str,
+) -> list[PublishedArtifact]:
+    """Dual-write WP12.5 compiled prose views when structured persistence is safe.
+
+    Retains incumbent digest/segment writers. Skips (fail-closed) when the
+    research-state pin is unavailable, the store is unwired, exact load fails,
+    or ``publish_compiled_views`` refuses a failed structured write.
+    """
+    if state.research_state_status != "pinned" or not state.research_state_pin:
+        return []
+    store = deps.research_state_store
+    if store is None:
+        return []
+
+    from digiquant.olympus.research_retrieval.models import ResearchStatePin
+    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+    from digiquant.olympus.research_retrieval.views import (
+        compile_views_from_store,
+        document_key_for_view,
+        publish_compiled_views,
+    )
+
+    if not isinstance(store, ResearchStateStore):
+        logger.warning(
+            "publish: research_state_store must be ResearchStateStore; got %s",
+            type(store).__name__,
+        )
+        return []
+
+    try:
+        pin = ResearchStatePin.model_validate(state.research_state_pin)
+        brief, digest = compile_views_from_store(store, pin.state_version_id, strict=True)
+    except Exception:
+        logger.exception(
+            "publish: refusing compiled research views for %s (exact state unavailable)",
+            date_str,
+        )
+        return []
+
+    published: list[PublishedArtifact] = []
+
+    def _publisher(view: Any) -> None:
+        key = document_key_for_view(view.kind)
+        published.append(
+            publish_document(
+                client=deps.client,
+                document_key=key,
+                payload={
+                    "kind": view.kind.value,
+                    "state_version_id": str(view.state_version_id),
+                    "state_content_hash": view.state_content_hash,
+                    "state_schema_version": view.state_schema_version,
+                    "manifest_content_hash": view.manifest_content_hash,
+                    "view_schema_version": view.view_schema_version,
+                    "content_hash": view.content_hash,
+                    "markdown": view.markdown,
+                },
+                doc_type=None,
+                run_type=run_type,
+                title=f"research-state {view.kind.value} {date_str}",
+                date_str=date_str,
+                category="output",
+                segment=key,
+                workspace_id=getattr(state.config, "workspace_id", None),
+            )
+        )
+
+    try:
+        # Structured path is safe only when exact pin load succeeded above.
+        publish_compiled_views(
+            views=(brief, digest),
+            structured_write_ok=True,
+            publisher=_publisher,
+        )
+    except Exception:
+        logger.exception(
+            "publish: compiled research-view dual-write failed for %s; "
+            "incumbent documents retained",
+            date_str,
+        )
+        return []
+    return published
+
+
 def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
     """Return the publish node bound to ``deps``."""
 
     def publish(state: AtlasResearchState) -> dict[str, Any]:
         date_str = state.run_date.isoformat()
         run_type = state.run_type
+        workspace_id = getattr(state.config, "workspace_id", None)
         artifacts: list[PublishedArtifact] = []
 
         # Track C glass-box (#2622): shadow AttentionPlan for Pipeline Inputs.
@@ -242,6 +346,33 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
         if attention is not None:
             artifacts.append(attention)
 
+        # WP-B: inspectable Inputs + bias-row. Fail-soft — a miss must not
+        # block segment/digest writes (same policy as attention-plan).
+        attention_key = ATTENTION_PLAN_DOCUMENT_KEY if attention is not None else None
+        try:
+            artifacts.append(
+                publish_inputs_document(
+                    client=deps.client,
+                    state=state,
+                    attention_plan_key=attention_key,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "publish: inputs document failed for %s; continuing",
+                date_str,
+            )
+        try:
+            bias_row = publish_bias_row_document(client=deps.client, state=state)
+        except Exception:
+            logger.exception(
+                "publish: bias-row document failed for %s; continuing",
+                date_str,
+            )
+            bias_row = None
+        if bias_row is not None:
+            artifacts.append(bias_row)
+
         for bag in (
             state.phase1_outputs,
             state.phase2_outputs,
@@ -250,7 +381,11 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
         ):
             artifacts.extend(
                 _publish_segment_bag(
-                    client=deps.client, bag=bag, run_type=run_type, date_str=date_str
+                    client=deps.client,
+                    bag=bag,
+                    run_type=run_type,
+                    date_str=date_str,
+                    workspace_id=workspace_id,
                 )
             )
 
@@ -270,6 +405,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                         date_str=date_str,
                         category="macro",
                         segment="macro",
+                        workspace_id=workspace_id,
                     )
                 )
 
@@ -306,20 +442,19 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     title=title,
                     date_str=date_str,
                     category=digest_category,
+                    workspace_id=workspace_id,
                 )
             )
             if not state.custom_prompt:
-                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
-                digest_md = render_digest_markdown(state.phase7_digest)
-                artifacts.append(
-                    publish_daily_snapshot(
-                        client=deps.client,
-                        date_str=date_str,
-                        snapshot=dict(state.phase7_digest),
-                        run_type=run_type,
-                        baseline_date=baseline_iso,
-                        digest_markdown=digest_md,
-                    )
+                _append_house_daily_snapshot(
+                    artifacts,
+                    deps=deps,
+                    workspace_id=workspace_id,
+                    date_str=date_str,
+                    snapshot=dict(state.phase7_digest),
+                    run_type=run_type,
+                    baseline_date=state.baseline_date.isoformat() if state.baseline_date else None,
+                    digest_markdown=render_digest_markdown(state.phase7_digest),
                 )
         elif not state.custom_prompt:
             # Continuity (#952): no fresh digest (partial/failed run) — carry
@@ -327,23 +462,32 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
             # always sees a row for the run date.
             carried = _carry_incomplete_snapshot(state)
             if carried is not None:
-                baseline_iso = state.baseline_date.isoformat() if state.baseline_date else None
-                digest_md = render_digest_markdown(carried)
-                artifacts.append(
-                    publish_daily_snapshot(
-                        client=deps.client,
-                        date_str=date_str,
-                        snapshot=carried,
-                        run_type=run_type,
-                        baseline_date=baseline_iso,
-                        digest_markdown=digest_md,
+                wrote = _append_house_daily_snapshot(
+                    artifacts,
+                    deps=deps,
+                    workspace_id=workspace_id,
+                    date_str=date_str,
+                    snapshot=carried,
+                    run_type=run_type,
+                    baseline_date=state.baseline_date.isoformat() if state.baseline_date else None,
+                    digest_markdown=render_digest_markdown(carried),
+                )
+                if wrote:
+                    logger.warning(
+                        "publish: no fresh digest for %s; wrote carried-incomplete "
+                        "snapshot from prior context",
+                        date_str,
                     )
-                )
-                logger.warning(
-                    "publish: no fresh digest for %s; wrote carried-incomplete "
-                    "snapshot from prior context",
-                    date_str,
-                )
+
+        # WP12.5: dual-write compiled views from exact pinned state (incumbent retained).
+        artifacts.extend(
+            _maybe_publish_compiled_research_views(
+                deps=deps,
+                state=state,
+                run_type=run_type,
+                date_str=date_str,
+            )
+        )
 
         return {
             "published": artifacts

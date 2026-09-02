@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from digiquant.olympus.atlas.testing.simulator import (
@@ -180,6 +180,7 @@ def resolved_outcome_row(*, salt: int = 0, known_at: datetime = PRIOR_KNOWN_AT) 
         "base_forecast_id": str(_BASE_FORECAST_ID),
         "effective_forecast_id": str(eff_id),
         "ticker": f"T{salt:02d}",
+        "horizon_sessions": 21,
         "reference_session": _REF_SESSION.isoformat(),
         "maturity_session": _MAT_SESSION.isoformat(),
         "reference_snapshot": _session_snapshot(session=_REF_SESSION).model_dump(mode="json"),
@@ -207,6 +208,7 @@ def resolved_outcome_row(*, salt: int = 0, known_at: datetime = PRIOR_KNOWN_AT) 
         base_forecast_id=_BASE_FORECAST_ID,
         effective_forecast_id=eff_id,
         ticker=f"T{salt:02d}",
+        horizon_sessions=21,
         reference_session=_REF_SESSION,
         maturity_session=_MAT_SESSION,
         reference_snapshot=_session_snapshot(session=_REF_SESSION),

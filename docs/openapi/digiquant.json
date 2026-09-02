@@ -149,7 +149,7 @@
                 "type": "null"
               }
             ],
-            "description": "Max drawdown %",
+            "description": "Max drawdown as negative percent, e.g. -15 for -15%",
             "title": "Max Drawdown Pct"
           },
           "message": {
@@ -352,7 +352,7 @@
                 "type": "null"
               }
             ],
-            "description": "Max drawdown e.g. -0.15 for -15%",
+            "description": "Max drawdown as negative percent, e.g. -15 for -15%",
             "title": "Max Drawdown Pct"
           },
           "max_trades_per_year": {
@@ -739,6 +739,101 @@
           "symbols"
         ],
         "title": "PipelineRequest",
+        "type": "object"
+      },
+      "PolicyGateEvaluateRequest": {
+        "additionalProperties": false,
+        "description": "POST /v1/olympus/policy_gate/evaluate \u2014 eligibility only.",
+        "properties": {
+          "comparison_id": {
+            "title": "Comparison Id",
+            "type": "string"
+          },
+          "criteria_version_id": {
+            "title": "Criteria Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "comparison_id",
+          "criteria_version_id"
+        ],
+        "title": "PolicyGateEvaluateRequest",
+        "type": "object"
+      },
+      "PolicyGovernanceDecisionRequest": {
+        "additionalProperties": false,
+        "description": "POST /v1/olympus/policy_governance_decisions \u2014 DigiAuth principal only.",
+        "properties": {
+          "current_policy_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Policy Version Id"
+          },
+          "decision_kind": {
+            "title": "Decision Kind",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "supersedes_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Decision Id"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "decision_kind",
+          "rationale"
+        ],
+        "title": "PolicyGovernanceDecisionRequest",
+        "type": "object"
+      },
+      "PolicyReplayRunRequest": {
+        "additionalProperties": false,
+        "description": "POST /v1/olympus/policy_replay/run \u2014 register a replay run.",
+        "properties": {
+          "pair_content_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Pair Content Hash",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "required": [
+          "pair_content_hash"
+        ],
+        "title": "PolicyReplayRunRequest",
         "type": "object"
       },
       "ValidationError": {
@@ -1294,6 +1389,273 @@
           }
         },
         "summary": "V1 Get Job Status",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_comparison/{comparison_id}": {
+      "get": {
+        "description": "Fetch a comparison summary (artifact IDs / status only).",
+        "operationId": "v1_olympus_get_policy_comparison_v1_olympus_policy_comparison__comparison_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "title": "Comparison Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Get Policy Comparison V1 Olympus Policy Comparison  Comparison Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Get Policy Comparison",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_gate/evaluate": {
+      "post": {
+        "description": "Evaluate immutable gate criteria (eligibility only \u2014 never activates).",
+        "operationId": "v1_olympus_evaluate_policy_gate_v1_olympus_policy_gate_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyGateEvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Evaluate Policy Gate V1 Olympus Policy Gate Evaluate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Evaluate Policy Gate",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_gate/evaluations/{evaluation_id}": {
+      "get": {
+        "description": "Fetch a gate-evaluation summary (fail closed).",
+        "operationId": "v1_olympus_get_policy_gate_evaluation_v1_olympus_policy_gate_evaluations__evaluation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evaluation_id",
+            "required": true,
+            "schema": {
+              "title": "Evaluation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Get Policy Gate Evaluation V1 Olympus Policy Gate Evaluations  Evaluation Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Get Policy Gate Evaluation",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_governance_decisions": {
+      "post": {
+        "description": "Record an authenticated human decision (DigiAuth principal \u2014 no MCP).",
+        "operationId": "v1_olympus_record_policy_governance_decision_v1_olympus_policy_governance_decisions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyGovernanceDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Record Policy Governance Decision V1 Olympus Policy Governance Decisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Record Policy Governance Decision",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_replay/run": {
+      "post": {
+        "description": "Register a policy replay run (summary IDs only \u2014 no activation).",
+        "operationId": "v1_olympus_run_policy_replay_v1_olympus_policy_replay_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyReplayRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Run Policy Replay V1 Olympus Policy Replay Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Run Policy Replay",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/olympus/policy_replay/{run_id}": {
+      "get": {
+        "description": "Fetch a policy replay run summary (fail closed).",
+        "operationId": "v1_olympus_get_policy_replay_v1_olympus_policy_replay__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Olympus Get Policy Replay V1 Olympus Policy Replay  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Olympus Get Policy Replay",
         "tags": [
           "v1"
         ]

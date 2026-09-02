@@ -29,10 +29,16 @@ from digiquant.backtest_jobs import create_backtest_job, get_backtest_job
 from digiquant.graph.pipeline import run_quant_workflow
 from digiquant.models import BacktestResult, ExportResult, OptimizationConstraints, OptimizeResult
 from digiquant.service import (
+    service_evaluate_policy_gate,
+    service_get_policy_comparison,
+    service_get_policy_gate_evaluation,
+    service_get_policy_replay,
     service_list_strategies,
+    service_record_policy_governance_decision,
     service_run_backtest,
     service_run_export,
     service_run_optimize,
+    service_run_policy_replay,
 )
 
 app = FastAPI(
@@ -443,6 +449,11 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
                 constraints=constraints,
                 data_path=args.get("data_path"),
                 data_dir=args.get("data_dir"),
+                base_params=(
+                    args.get("strategy_params")
+                    if isinstance(args.get("strategy_params"), dict)
+                    else None
+                ),
             )
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
@@ -512,7 +523,270 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         )
         return {"ok": True, "service": "digiquant", "tool": tool, "data": raw}
 
+
+    if tool == "digiquant_build_sdca_risk_index":
+        from digiquant.sdca_mcp import run_build_sdca_risk_index
+
+        payload = json.loads(
+            run_build_sdca_risk_index(
+                ticker=str(args.get("ticker") or "BTC-USD"),
+                cache_dir=args.get("cache_dir"),
+                refresh=bool(args.get("refresh", True)),
+                bulk_period=str(args.get("bulk_period") or "max"),
+                risk_model=str(args.get("risk_model") or "btc_power_law"),
+                profile=args.get("profile"),
+                profile_json=args.get("profile_json"),
+                coefficients_path=args.get("coefficients_path"),
+                output_path=args.get("output_path"),
+                indicator_weights=str(args.get("indicator_weights") or "{}"),
+                m2_path=args.get("m2_path"),
+                dxy_path=args.get("dxy_path"),
+                eth_ticker=str(args.get("eth_ticker") or "ETH-USD"),
+                valuation_form=str(args.get("valuation_form") or "log_quadratic"),
+                rolling_window=int(args.get("rolling_window") or 90),
+            )
+        )
+        if payload.get("error"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "digiquant_fetch_bitview_series":
+        from digiquant.sdca_mcp import run_fetch_bitview_series
+
+        series_ids = args.get("series_ids_json")
+        if isinstance(args.get("series_ids"), list):
+            series_ids = json.dumps(args["series_ids"])
+        payload = json.loads(
+            run_fetch_bitview_series(
+                series_ids_json=str(series_ids or ""),
+                cache_dir=args.get("cache_dir"),
+                timeout=float(args.get("timeout") or 30.0),
+                start=(int(args["start"]) if args.get("start") is not None else None),
+                end=(int(args["end"]) if args.get("end") is not None else None),
+            )
+        )
+        if payload.get("error") and not payload.get("series"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "digiquant_fit_sdca_weights":
+        from digiquant.sdca_mcp import run_fit_sdca_weights
+
+        payload = json.loads(
+            run_fit_sdca_weights(
+                profile=str(args.get("profile") or "btc_v1"),
+                profile_json=args.get("profile_json"),
+                cache_dir=args.get("cache_dir"),
+                coefficients_path=args.get("coefficients_path"),
+                output_path=args.get("output_path"),
+                m2_path=args.get("m2_path"),
+                dxy_path=args.get("dxy_path"),
+                eth_ticker=str(args.get("eth_ticker") or "ETH-USD"),
+                valuation_form=str(args.get("valuation_form") or "log_quadratic"),
+                rolling_window=int(args.get("rolling_window") or 90),
+            )
+        )
+        if payload.get("error"):
+            return {"ok": False, "error": str(payload["error"]), "data": payload}
+        return {"ok": True, "service": "digiquant", "tool": tool, "data": payload}
+
+    if tool == "olympus_run_policy_replay":
+        pair_hash = str(args.get("pair_content_hash") or "").strip()
+        if not pair_hash:
+            return {"ok": False, "error": "pair_content_hash required"}
+        try:
+            summary = service_run_policy_replay(
+                pair_content_hash=pair_hash,
+                run_id=(str(args["run_id"]) if args.get("run_id") else None),
+            )
+        except (LookupError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": summary.model_dump(mode="json"),
+        }
+
+    if tool == "olympus_get_policy_replay":
+        run_id = str(args.get("run_id") or "").strip()
+        if not run_id:
+            return {"ok": False, "error": "run_id required"}
+        try:
+            summary = service_get_policy_replay(run_id)
+        except (LookupError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": summary.model_dump(mode="json"),
+        }
+
+    if tool == "olympus_get_policy_comparison":
+        comparison_id = str(args.get("comparison_id") or "").strip()
+        if not comparison_id:
+            return {"ok": False, "error": "comparison_id required"}
+        try:
+            summary = service_get_policy_comparison(comparison_id)
+        except (LookupError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": summary.model_dump(mode="json"),
+        }
+
+    if tool == "olympus_evaluate_policy_gate":
+        comparison_id = str(args.get("comparison_id") or "").strip()
+        criteria_version_id = str(args.get("criteria_version_id") or "").strip()
+        if not comparison_id or not criteria_version_id:
+            return {"ok": False, "error": "comparison_id and criteria_version_id required"}
+        try:
+            summary = service_evaluate_policy_gate(
+                comparison_id=comparison_id,
+                criteria_version_id=criteria_version_id,
+            )
+        except (LookupError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": summary.model_dump(mode="json"),
+        }
+
+    if tool == "olympus_get_policy_gate_evaluation":
+        evaluation_id = str(args.get("evaluation_id") or "").strip()
+        if not evaluation_id:
+            return {"ok": False, "error": "evaluation_id required"}
+        try:
+            summary = service_get_policy_gate_evaluation(evaluation_id)
+        except (LookupError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": summary.model_dump(mode="json"),
+        }
+
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
+
+
+class PolicyReplayRunRequest(BaseModel):
+    """POST /v1/olympus/policy_replay/run — register a replay run."""
+
+    model_config = ConfigDict(extra="forbid")
+    pair_content_hash: str = Field(..., min_length=64, max_length=64)
+    run_id: str | None = None
+
+
+class PolicyGateEvaluateRequest(BaseModel):
+    """POST /v1/olympus/policy_gate/evaluate — eligibility only."""
+
+    model_config = ConfigDict(extra="forbid")
+    comparison_id: str
+    criteria_version_id: str
+
+
+class PolicyGovernanceDecisionRequest(BaseModel):
+    """POST /v1/olympus/policy_governance_decisions — DigiAuth principal only."""
+
+    model_config = ConfigDict(extra="forbid")
+    evaluation_id: str
+    decision_kind: str
+    rationale: str
+    current_policy_version_id: str | None = None
+    supersedes_decision_id: str | None = None
+
+
+@v1.post("/olympus/policy_replay/run")
+def v1_olympus_run_policy_replay(req: PolicyReplayRunRequest) -> dict[str, Any]:
+    """Register a policy replay run (summary IDs only — no activation)."""
+    try:
+        summary = service_run_policy_replay(
+            pair_content_hash=req.pair_content_hash,
+            run_id=req.run_id,
+        )
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return summary.model_dump(mode="json")
+
+
+@v1.get("/olympus/policy_replay/{run_id}")
+def v1_olympus_get_policy_replay(run_id: str) -> dict[str, Any]:
+    """Fetch a policy replay run summary (fail closed)."""
+    try:
+        summary = service_get_policy_replay(run_id)
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return summary.model_dump(mode="json")
+
+
+@v1.get("/olympus/policy_comparison/{comparison_id}")
+def v1_olympus_get_policy_comparison(comparison_id: str) -> dict[str, Any]:
+    """Fetch a comparison summary (artifact IDs / status only)."""
+    try:
+        summary = service_get_policy_comparison(comparison_id)
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return summary.model_dump(mode="json")
+
+
+@v1.post("/olympus/policy_gate/evaluate")
+def v1_olympus_evaluate_policy_gate(req: PolicyGateEvaluateRequest) -> dict[str, Any]:
+    """Evaluate immutable gate criteria (eligibility only — never activates)."""
+    try:
+        summary = service_evaluate_policy_gate(
+            comparison_id=req.comparison_id,
+            criteria_version_id=req.criteria_version_id,
+        )
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return summary.model_dump(mode="json")
+
+
+@v1.get("/olympus/policy_gate/evaluations/{evaluation_id}")
+def v1_olympus_get_policy_gate_evaluation(evaluation_id: str) -> dict[str, Any]:
+    """Fetch a gate-evaluation summary (fail closed)."""
+    try:
+        summary = service_get_policy_gate_evaluation(evaluation_id)
+    except (LookupError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    return summary.model_dump(mode="json")
+
+
+@v1.post("/olympus/policy_governance_decisions")
+def v1_olympus_record_policy_governance_decision(
+    req: PolicyGovernanceDecisionRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Record an authenticated human decision (DigiAuth principal — no MCP)."""
+    from digiquant.olympus.replay.governance import (
+        AuthenticatedPrincipal,
+        GovernanceDecisionError,
+    )
+
+    auth = getattr(request.state, "digi_auth", None)
+    if auth is None:
+        raise HTTPException(status_code=401, detail="authenticated principal required")
+    try:
+        principal = AuthenticatedPrincipal.from_digi_auth(auth)
+        decision = service_record_policy_governance_decision(
+            principal=principal,
+            evaluation_id=req.evaluation_id,
+            decision_kind=req.decision_kind,
+            rationale=req.rationale,
+            current_policy_version_id=req.current_policy_version_id,
+            supersedes_decision_id=req.supersedes_decision_id,
+        )
+    except GovernanceDecisionError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except (LookupError, ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return decision.model_dump(mode="json")
 
 
 @v1.post("/jobs/backtest")

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from enum import StrEnum
@@ -25,17 +24,25 @@ from digiquant.olympus.atlas.supabase_io import (
     load_prior_book,
     publish_document,
 )
+from digiquant.olympus.envcompat import POSITION_RISK_FIELDS, PRETRADE_RISK_MODE, env_lookup
 from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.overlay.persist import (
+    hermes_document_key,
+    is_private_workspace,
+    require_overlay_legacy_book_safe,
+    require_overlay_persist,
+)
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
 _SEED_NAV = 100.0
-_RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
-_PRETRADE_RISK_MODE_ENV = "OLYMPUS_PRETRADE_RISK_MODE"
+_RISK_FIELDS_ENV = POSITION_RISK_FIELDS
+_PRETRADE_RISK_MODE_ENV = PRETRADE_RISK_MODE
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
@@ -48,10 +55,15 @@ _MANIFEST_SEQ_FIELD = "commit_seq"
 # unbounded ``price_history`` scan.
 _NAV_INTERVAL_PAD_DAYS = 7
 _NAV_MAX_INTERVAL_DAYS = 120
+# Worst-case ``price_history`` window for ``_interval_price_returns``: the interval is
+# capped at ``_NAV_MAX_INTERVAL_DAYS`` and the fetch floor is padded below the anchor.
+_NAV_INTERVAL_WINDOW_DAYS = _NAV_MAX_INTERVAL_DAYS + _NAV_INTERVAL_PAD_DAYS
+_NAV_INTERVAL_ROW_BUDGET = 900
+_NAV_INTERVAL_TICKER_BATCH = max(1, _NAV_INTERVAL_ROW_BUDGET // (_NAV_INTERVAL_WINDOW_DAYS + 1))
 
 
 def _position_risk_fields_enabled() -> bool:
-    return os.environ.get(_RISK_FIELDS_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    return env_lookup(_RISK_FIELDS_ENV).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _coerce_float(val: Any) -> float:
@@ -84,10 +96,21 @@ def _effective_conviction(analyst: Any, debate: Any) -> float | None:
     return round(_clamp_conviction(base + delta), 2)
 
 
-def _prior_nav(client: SupabaseClient, run_date: date) -> float:
+def _prior_nav(
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | UUID | None = None,
+) -> float:
+    """Latest ``nav_history.nav`` strictly before ``run_date`` for one workspace.
+
+    Omitted ``workspace_id`` is the house — never an unfiltered date scan. Overlay
+    must pass its id so a later private NAV cannot compound the house index.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     resp = (
         client.table("nav_history")
         .select("date, nav")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -163,32 +186,32 @@ def _interval_price_returns(
         )
 
     floor = (anchor - timedelta(days=_NAV_INTERVAL_PAD_DAYS)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, ticker, close")
-        .in_("ticker", list(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
-
     anchor_str = anchor.isoformat()
+    ordered = sorted(tickers)
     # Per ticker keep the latest close at-or-before the anchor (interval start) and
     # the latest close strictly before run_date (interval end). Small categorical
-    # data — a handful of tickers over weeks of dates — so no dataframe, matching
-    # the ``query_price_deltas`` precedent.
+    # data — batched so a full window for every ticker fits under PostgREST's cap.
     begin: dict[str, tuple[str, float]] = {}
     end: dict[str, tuple[str, float]] = {}
-    for row in getattr(resp, "data", None) or []:
-        ticker = row.get("ticker")
-        row_date = row.get("date")
-        close = _opt_float(row.get("close"))
-        if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
-            continue
-        if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
-            begin[ticker] = (row_date, close)
-        if row_date > end.get(ticker, ("", 0.0))[0]:
-            end[ticker] = (row_date, close)
+    for start in range(0, len(ordered), _NAV_INTERVAL_TICKER_BATCH):
+        resp = (
+            client.table("price_history")
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + _NAV_INTERVAL_TICKER_BATCH])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        for row in getattr(resp, "data", None) or []:
+            ticker = row.get("ticker")
+            row_date = row.get("date")
+            close = _opt_float(row.get("close"))
+            if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
+                continue
+            if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
+                begin[ticker] = (row_date, close)
+            if row_date > end.get(ticker, ("", 0.0))[0]:
+                end[ticker] = (row_date, close)
 
     returns: dict[str, float] = {}
     for ticker, (begin_date, begin_close) in begin.items():
@@ -205,13 +228,18 @@ def _interval_price_returns(
     return returns
 
 
-def _compute_nav(client: SupabaseClient, run_date: date, prior_book: list[dict[str, Any]]) -> float:
+def _compute_nav(
+    client: SupabaseClient,
+    run_date: date,
+    prior_book: list[dict[str, Any]],
+    workspace_id: str | UUID | None = None,
+) -> float:
     """NAV for ``run_date`` = prior NAV compounded by the prior book's interval return.
 
     See :func:`_interval_price_returns` for why the return is measured over the
     interval since the prior book date rather than the latest one-day delta (#1745).
     """
-    prior_nav = _prior_nav(client, run_date)
+    prior_nav = _prior_nav(client, run_date, workspace_id)
     held = {
         str(r.get("ticker")): _coerce_float(r.get("weight_pct"))
         for r in prior_book
@@ -236,6 +264,13 @@ def _latest_values(
     *,
     lookback_days: int = 14,
 ) -> dict[str, float]:
+    """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
+
+    We only need each ticker's *most recent* value inside a short ``lookback_days``
+    window. ``.order("date", desc=True)`` ensures truncation drops the *oldest* rows,
+    so every ticker still resolves from the leading page — not because the requested
+    ``.limit`` can exceed PostgREST's server-side row cap. Fail-soft on read errors.
+    """
     if not tickers:
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()
@@ -311,6 +346,21 @@ def _enrich_positions(
             row["target_pct_gain"] = round(_ATR_TARGET_MULT * atr, 4)
 
 
+def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict[str, str]:
+    """Per-ticker rationale from H8 ``actions`` for ``positions`` booking (#2597)."""
+    out: dict[str, str] = {}
+    for action in book.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        ticker = action.get("ticker")
+        if not isinstance(ticker, str) or not ticker.strip():
+            continue
+        rationale = str(action.get("rationale") or "").strip()
+        if rationale:
+            out[ticker.strip().upper()] = rationale
+    return out
+
+
 def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str, float]:
     """Normalize H8 ``recommended_portfolio`` into non-CASH positive weights."""
     recommended = book.get("recommended_portfolio") or []
@@ -368,7 +418,13 @@ def _canonical_thesis_ids(
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
 
 
-def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[str]) -> list[str]:
+def _prune_orphan_positions(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    keep: set[str],
+    workspace_id: str | None = None,
+) -> list[str]:
     """Delete same-date ``positions`` rows absent from the book just written (#1744).
 
     ``positions`` is upserted on ``(date, ticker)``, so a second commit for the same
@@ -394,15 +450,23 @@ def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[
     (``sync_positions_from_rebalance.py``, ``materialize_snapshot.py``) issue one
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.
+
+    Omitted ``workspace_id`` means the house workspace — never an unfiltered
+    date scan. Overlay passes its id so a private book cannot prune house rows.
     """
-    resp = client.table("positions").select("ticker").eq("date", date_str).execute()
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table("positions").select("ticker").eq("date", date_str).eq("workspace_id", scoped)
+    )
+    resp = query.execute()
     existing = {
         str(row.get("ticker")) for row in getattr(resp, "data", None) or [] if row.get("ticker")
     }
     orphans = sorted(existing - keep)
     if not orphans:
         return []
-    client.table("positions").delete().eq("date", date_str).in_("ticker", orphans).execute()
+    delete = client.table("positions").delete().eq("date", date_str).eq("workspace_id", scoped)
+    delete.in_("ticker", orphans).execute()
     logger.warning(
         "commit_io: pruned %d orphan position row(s) for %s not in the committed book: %s",
         len(orphans),
@@ -448,11 +512,20 @@ def book_portfolio(
         }
         for t, w in weights.items()
     ]
+    rationale_by_ticker = _action_rationale_by_ticker(book)
+    for row in pos_rows:
+        rationale = rationale_by_ticker.get(str(row["ticker"]).strip().upper())
+        if rationale:
+            row["rationale"] = rationale
 
+    overlay_ws = getattr(state.config, "workspace_id", None)
     prior_book = load_prior_book(
-        client, run_date, include_risk_fields=_position_risk_fields_enabled()
+        client,
+        run_date,
+        include_risk_fields=_position_risk_fields_enabled(),
+        workspace_id=overlay_ws,
     )
-    nav = _compute_nav(client, run_date, prior_book)
+    nav = _compute_nav(client, run_date, prior_book, workspace_id=overlay_ws)
 
     if _position_risk_fields_enabled():
         try:
@@ -482,14 +555,22 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
+    workspace_id = str(resolved_workspace_id(overlay_ws))
+    require_overlay_persist(workspace_id)
+    # Legacy UNIQUE(date) / UNIQUE(date,ticker) still sit beside the widened
+    # (workspace_id, …) keys (migration 097). Overlay rows for the same calendar
+    # date collide with house or get rewritten by house on_conflict=date upserts.
+    require_overlay_legacy_book_safe(workspace_id)
+
     client.table("nav_history").upsert(
         {
+            "workspace_id": workspace_id,
             "date": date_str,
             "nav": nav,
             "cash_pct": cash_pct,
             "invested_pct": round(invested, 4),
         },
-        on_conflict="date",
+        on_conflict="workspace_id,date",
     ).execute()
 
     if cash_pct > 0.01:
@@ -503,7 +584,8 @@ def book_portfolio(
         )
 
     for row in pos_rows:
-        client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+        row["workspace_id"] = workspace_id
+        client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
     # Upsert first, then prune: the inverse order would leave a window in which the
     # date has no book at all.
@@ -511,6 +593,7 @@ def book_portfolio(
         client=client,
         date_str=date_str,
         keep={str(r["ticker"]) for r in pos_rows},
+        workspace_id=overlay_ws,
     )
 
     return BookedPortfolio(
@@ -523,11 +606,44 @@ def book_portfolio(
     )
 
 
-def manifest_document_key(source_run_id: str) -> str:
-    return f"{_MANIFEST_DOC_PREFIX}{source_run_id}"
+OVERLAY_MANIFEST_PREFIX = "overlay-commit/"
 
 
-def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
+def _manifest_key_prefix(workspace_id: UUID | str | None) -> str:
+    """House (omitted or house UUID) stays ``commit-run/``. Private overlay only."""
+    if is_private_workspace(workspace_id):
+        return f"{OVERLAY_MANIFEST_PREFIX}{resolved_workspace_id(workspace_id)}/"
+    return _MANIFEST_DOC_PREFIX
+
+
+def _manifest_row_in_workspace(row: dict[str, Any], workspace_id: UUID | str | None) -> bool:
+    """Store-path tenancy: overlay requires its id; house accepts omitted/house."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    row_ws = row.get("workspace_id")
+    if is_private_workspace(workspace_id):
+        return str(row_ws or "") == scoped
+    return row_ws is None or str(row_ws) == scoped
+
+
+def manifest_document_key(source_run_id: str, workspace_id: str | None = None) -> str:
+    """House keys stay ``commit-run/{run_id}``. Overlay is namespaced so a
+    date-scoped house lookup cannot see (or last-writer-wins over) a private book.
+
+    Uses :func:`is_private_workspace`, not a truthy *workspace_id*. A house UUID
+    (or omitted id) must keep the house prefix — same rule as
+    :func:`hermes_document_key`. A truthy check would write house manifests under
+    ``overlay-commit/{house}/`` and ``load_commit_manifests`` would miss
+    existing ``commit-run/`` rows.
+    """
+    return f"{_manifest_key_prefix(workspace_id)}{source_run_id}"
+
+
+def load_commit_manifests(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Every commit manifest already persisted for ``run_date`` (#1744).
 
     Keyed on the **date**, never on ``source_run_id``. ``AtlasResearchState.run_id``
@@ -541,8 +657,13 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
 
     The manifest *document* stays per-run (``commit-run/{source_run_id}``) so each
     attempt keeps its own audit artefact; only the idempotency lookup is date-scoped.
+    Prefix follows :func:`is_private_workspace` (house UUID is not overlay). The
+    PostgREST path also pins ``documents.workspace_id`` so an overlay same-date
+    row cannot satisfy a house ``commit-run/%`` like.
     """
     date_str = run_date.isoformat()
+    prefix = _manifest_key_prefix(workspace_id)
+    scoped = str(resolved_workspace_id(workspace_id))
     out: list[dict[str, Any]] = []
 
     store = getattr(client, "store", None)
@@ -550,13 +671,16 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
         for row in store.get("documents", []):
             key = row.get("document_key")
             if (
-                row.get("date") == date_str
-                and isinstance(key, str)
-                and key.startswith(_MANIFEST_DOC_PREFIX)
+                row.get("date") != date_str
+                or not isinstance(key, str)
+                or not key.startswith(prefix)
             ):
-                payload = row.get("payload")
-                if isinstance(payload, dict):
-                    out.append(dict(payload))
+                continue
+            if not _manifest_row_in_workspace(row, workspace_id):
+                continue
+            payload = row.get("payload")
+            if isinstance(payload, dict):
+                out.append(dict(payload))
     if out:
         return out
 
@@ -564,7 +688,8 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
         client.table("documents")
         .select("payload")
         .eq("date", date_str)
-        .like("document_key", f"{_MANIFEST_DOC_PREFIX}%")
+        .eq("workspace_id", scoped)
+        .like("document_key", f"{prefix}%")
         .execute()
     )
     for row in getattr(resp, "data", None) or []:
@@ -610,9 +735,10 @@ def save_commit_manifest(
 ) -> PublishedArtifact:
     source_run_id = str(state.run_id)
     date_str = state.run_date.isoformat()
+    workspace_id = getattr(state.config, "workspace_id", None)
     return publish_document(
         client=client,
-        document_key=manifest_document_key(source_run_id),
+        document_key=manifest_document_key(source_run_id, workspace_id),
         payload=manifest,
         doc_type="Commit Run",
         run_type=state.run_type,
@@ -620,6 +746,7 @@ def save_commit_manifest(
         date_str=date_str,
         category="portfolio",
         segment="commit_run",
+        workspace_id=workspace_id,
     )
 
 
@@ -631,22 +758,23 @@ def publish_portfolio_brief(
 ) -> PublishedArtifact:
     """Publish operator brief — weights from H8 ``sized_book`` only.
 
-    ``adjustments`` is excluded from the persisted payload: per its own docstring
-    on ``RebalancePayload`` (atlas/state.py), the H8 adjustment-event list is
-    in-memory/explanation-only and "never persisted" (#2417) — ``dict(book)``
-    would otherwise carry it into Supabase unconditionally whenever present.
+    ``adjustments`` and ``requested_pct`` are excluded from the document payload:
+    H9 persists them on the portfolio ledger (#2768); carrying them into the
+    ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
-    payload = {k: v for k, v in dict(book).items() if k != "adjustments"}
+    workspace_id = getattr(state.config, "workspace_id", None)
+    payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
-        document_key="pm-rebalance",
+        document_key=hermes_document_key("pm-rebalance", workspace_id),
         payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
         title=f"PM Rebalance {date_str}",
         date_str=date_str,
         category="portfolio",
+        workspace_id=workspace_id,
     )
 
 
@@ -658,13 +786,14 @@ def publish_hermes_documents(
     """Publish H5/H6/H7 artifacts not covered by Atlas publish."""
     date_str = state.run_date.isoformat()
     run_type = state.run_type
+    workspace_id = getattr(state.config, "workspace_id", None)
     artifacts: list[PublishedArtifact] = []
 
     for ticker, payload in analyst_payloads(state).items():
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"analyst/{ticker}",
+                document_key=hermes_document_key(f"analyst/{ticker}", workspace_id),
                 payload=dict(payload),
                 doc_type=None,
                 run_type=run_type,
@@ -673,6 +802,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="analyst",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -682,7 +812,7 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"deliberation/{ticker}",
+                document_key=hermes_document_key(f"deliberation/{ticker}", workspace_id),
                 payload=dict(debate),
                 doc_type=None,
                 run_type=run_type,
@@ -691,6 +821,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="deliberation",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -700,13 +831,14 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key="pm-direction-memo",
+                document_key=hermes_document_key("pm-direction-memo", workspace_id),
                 payload=payload,
                 doc_type="PM Direction Memo",
                 run_type=run_type,
                 title=f"PM Direction {date_str}",
                 date_str=date_str,
                 category="portfolio",
+                workspace_id=workspace_id,
             )
         )
 
@@ -846,7 +978,7 @@ class PreTradeRiskValidation:
 
 def resolve_pretrade_risk_mode() -> PreTradeRiskMode:
     """Read ``OLYMPUS_PRETRADE_RISK_MODE``; unknown values fall back to shadow."""
-    raw = os.environ.get(_PRETRADE_RISK_MODE_ENV, PreTradeRiskMode.SHADOW.value).strip().lower()
+    raw = env_lookup(_PRETRADE_RISK_MODE_ENV, default=PreTradeRiskMode.SHADOW.value).strip().lower()
     try:
         return PreTradeRiskMode(raw)
     except ValueError:
@@ -1026,6 +1158,7 @@ __all__ = [
     "held_tickers",
     "load_commit_manifests",
     "manifest_commit_seq",
+    "OVERLAY_MANIFEST_PREFIX",
     "manifest_document_key",
     "persist_decision_log",
     "persist_validated_pretrade_risk_report",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import Any  # score:allow untyped any — used for fake-payload dict shape
+from uuid import uuid4
 
 import pytest
 from digiquant.olympus.atlas.phases.publish_phase import (
@@ -21,12 +22,13 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
     SegmentSlot,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 
 def _slot(slug: str, **extra: Any) -> SegmentSlot:
-    body = {"segment": slug, **extra}
+    body = {"segment": slug, "body": f"# {slug}\n\nmemo", **extra}
     return SegmentSlot(payload=SegmentPayload(segment=slug, body=body, as_of=date(2026, 4, 26)))
 
 
@@ -73,7 +75,8 @@ class TestPublishNode:
 
         result = node(state)
 
-        # Atlas publish: segments + digest only; Hermes artifacts publish in h9/commit_run.
+        # Atlas publish: inspectable inputs (+ bias-row when present) plus
+        # segments + digest; Hermes artifacts publish in h9/commit_run.
         doc_rows = client.store["documents"]
         keys = sorted(r["document_key"] for r in doc_rows)
         assert keys == sorted(
@@ -85,12 +88,44 @@ class TestPublishNode:
                 "bonds",
                 "equity",
                 "digest",
+                "inputs",
             ]
         )
-        # Idempotency: every upsert declares (date, document_key) on-conflict.
-        assert all(r["_on_conflict"] == "date,document_key" for r in doc_rows)
+        # Idempotency: every upsert declares (workspace_id, date, document_key).
+        assert all(r["_on_conflict"] == "workspace_id,date,document_key" for r in doc_rows)
         # Return value records every artifact so state.published is populated.
         assert len(result["published"]) == len(doc_rows) + 1  # +1 for daily_snapshots
+
+    def test_overlay_workspace_skips_daily_snapshots(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.config = AtlasConfigBundle(
+            watchlist=list(state.config.watchlist),
+            workspace_id=str(overlay),
+        )
+        node = build_publish_node(PublishDeps(client=client))
+        result = node(state)
+        assert client.store.get("daily_snapshots", []) == []
+        assert all(a.table != "daily_snapshots" for a in result["published"])
+        doc_rows = client.store["documents"]
+        assert doc_rows
+        assert all(r["workspace_id"] == str(overlay) for r in doc_rows)
+
+    def test_house_workspace_id_still_writes_daily_snapshots(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.config = AtlasConfigBundle(
+            watchlist=list(state.config.watchlist),
+            workspace_id=str(house_workspace_id()),
+        )
+        node = build_publish_node(PublishDeps(client=client))
+        node(state)
+        assert len(client.store["daily_snapshots"]) == 1
 
     def test_hermes_artifacts_not_published_from_atlas_when_present(self) -> None:
         """Thesis-first topology: deliberation / risk-debate publish in Hermes h9, not Atlas."""
@@ -336,8 +371,8 @@ class TestSuppressDegenerate:
     def test_absent_with_no_findings_is_suppressed(self) -> None:
         keys = self._published_keys(
             self._state_with(
-                dead=_slot("dead", data_quality="absent", material_findings=[]),
-                live=_slot("live", data_quality="high"),
+                dead=_slot("dead", body="", data_quality="absent", material_findings=[]),
+                live=_slot("live"),
             )
         )
         assert "dead" not in keys
@@ -359,7 +394,7 @@ class TestSuppressDegenerate:
 
     def test_degenerate_macro_phase3_is_suppressed(self) -> None:
         state = self._state_with()
-        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase3_output = _slot("macro", body="", data_quality="absent", material_findings=[])
         keys = self._published_keys(state)
         assert "macro" not in keys
 
@@ -367,10 +402,10 @@ class TestSuppressDegenerate:
         # A degenerate macro + degenerate phase1 leg are dropped; healthy legs across
         # phases 1/2/4/5 still publish — suppression is per-segment, not all-or-nothing.
         state = self._state_with(
-            dead=_slot("dead", data_quality="absent", material_findings=[]),
+            dead=_slot("dead", body="", data_quality="absent", material_findings=[]),
             alive=_slot("alive", data_quality="high"),
         )
-        state.phase3_output = _slot("macro", data_quality="absent", material_findings=[])
+        state.phase3_output = _slot("macro", body="", data_quality="absent", material_findings=[])
         state.phase2_outputs = {"inst-flows": _slot("inst-flows", data_quality="medium")}
         state.phase4_outputs = {"bonds": _slot("bonds")}  # ungraded → publishes
         keys = self._published_keys(state)
@@ -558,3 +593,183 @@ class TestContinuitySnapshotOnPartialRun:
         md = snapshots[0].get("digest_markdown")
         assert md is not None
         assert len(md) > 0
+
+
+@pytest.mark.unit
+class TestCompiledResearchViewsPublish:
+    """WP12.5 dual-write of compiled views from exact pinned state."""
+
+    def test_dual_writes_when_pin_and_store_safe(self) -> None:
+        from datetime import UTC, datetime, timedelta
+        from decimal import Decimal
+        from uuid import UUID
+
+        from digiquant.olympus.research_retrieval.models import (
+            BeliefStatus,
+            BeliefVersion,
+            EvidenceRecord,
+            ResearchStateManifest,
+            ResearchStatePin,
+            ResearchStateVersion,
+            TypedProvenance,
+            belief_content_hash,
+            belief_version_id,
+            content_digest,
+            evidence_content_hash,
+            evidence_record_id,
+            manifest_content_hash,
+            research_state_version_id,
+        )
+        from digiquant.olympus.research_retrieval.store import ResearchStateStore
+        from digiquant.olympus.research_retrieval.views import (
+            COMPILED_BRIEF_DOCUMENT_KEY,
+            COMPILED_DIGEST_DOCUMENT_KEY,
+        )
+
+        ts = datetime(2026, 4, 26, 12, 0, tzinfo=UTC)
+        prov = TypedProvenance(
+            source_run_id="run-publish-views",
+            attempt_id="1",
+            artifact_id="art",
+        )
+        fields = dict(
+            source="ingest:sec_8k",
+            authority="edgar",
+            summary="Filed 8-K",
+            event_time=ts - timedelta(hours=2),
+            effective_as_of=ts - timedelta(hours=1),
+            known_at=ts - timedelta(minutes=30),
+            recorded_at=ts,
+            provenance=prov,
+            affected_belief_ids=(),
+            novelty_of=(),
+            contradiction_of=(),
+            supersedes_evidence_id=None,
+        )
+        ch = evidence_content_hash(
+            source=fields["source"],
+            authority=fields["authority"],
+            summary=fields["summary"],
+            supersedes_evidence_id=None,
+        )
+        evidence = EvidenceRecord(
+            evidence_id=evidence_record_id(
+                source=fields["source"],
+                authority=fields["authority"],
+                content_hash=ch,
+            ),
+            content_hash=ch,
+            **fields,
+        )
+        belief_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        bch = belief_content_hash(
+            belief_id=belief_id,
+            statement="Base case holds",
+            confidence=Decimal("0.5"),
+            horizon_sessions=5,
+            status=BeliefStatus.ACTIVE,
+            supporting_evidence_ids=(evidence.evidence_id,),
+        )
+        belief = BeliefVersion(
+            belief_version_id=belief_version_id(
+                belief_id=belief_id,
+                content_hash=bch,
+                supersedes_version_id=None,
+            ),
+            belief_id=belief_id,
+            statement="Base case holds",
+            confidence=Decimal("0.5"),
+            horizon_sessions=5,
+            status=BeliefStatus.ACTIVE,
+            supporting_evidence_ids=(evidence.evidence_id,),
+            counter_evidence_ids=(),
+            invalidation_rules=(),
+            supersedes_version_id=None,
+            event_time=ts - timedelta(hours=3),
+            effective_as_of=ts - timedelta(hours=2),
+            known_at=ts - timedelta(hours=1),
+            recorded_at=ts,
+            schema_version=1,
+            content_hash=bch,
+            provenance=prov,
+        )
+        mh = manifest_content_hash(
+            evidence_ids=(evidence.evidence_id,),
+            belief_version_ids=(belief.belief_version_id,),
+        )
+        manifest = ResearchStateManifest(
+            evidence_ids=(evidence.evidence_id,),
+            belief_version_ids=(belief.belief_version_id,),
+            expected_event_version_ids=(),
+            patch_ids=(),
+            legacy_ref_ids=(),
+            content_hash=mh,
+        )
+        sh = content_digest(
+            {
+                "manifest_content_hash": manifest.content_hash,
+                "parent_state_version_id": None,
+                "schema_version": 1,
+            }
+        )
+        version = ResearchStateVersion(
+            state_version_id=research_state_version_id(
+                manifest_content_hash=manifest.content_hash,
+                parent_id=None,
+                schema_version=1,
+            ),
+            parent_state_version_id=None,
+            manifest=manifest,
+            event_time=ts - timedelta(hours=3),
+            effective_as_of=ts - timedelta(hours=2),
+            known_at=ts - timedelta(minutes=30),
+            recorded_at=ts,
+            schema_version=1,
+            content_hash=sh,
+            provenance=prov,
+        )
+        store = ResearchStateStore()
+        store.append_evidence(evidence)
+        store.append_belief(belief)
+        store.append_state_version(version)
+        pin = ResearchStatePin(
+            run_id="run-publish-views",
+            attempt_id="1",
+            state_version_id=version.state_version_id,
+            knowledge_cutoff_at=ts,
+            requested_as_of=ts - timedelta(minutes=30),
+            pinned_at=ts,
+        )
+
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.research_state_status = "pinned"
+        state.research_state_pin = pin.model_dump(mode="json")
+        node = build_publish_node(PublishDeps(client=client, research_state_store=store))
+        node(state)
+
+        keys = {row["document_key"] for row in client.store["documents"]}
+        assert COMPILED_BRIEF_DOCUMENT_KEY in keys
+        assert COMPILED_DIGEST_DOCUMENT_KEY in keys
+        # Incumbent digest retained.
+        assert "digest" in keys
+
+    def test_skips_compiled_views_when_state_unavailable(self) -> None:
+        from digiquant.olympus.research_retrieval.store import ResearchStateStore
+        from digiquant.olympus.research_retrieval.views import (
+            COMPILED_BRIEF_DOCUMENT_KEY,
+            COMPILED_DIGEST_DOCUMENT_KEY,
+        )
+
+        client = FakeSupabaseClient()
+        state = _seed_full_state(run_type="baseline")
+        state.research_state_status = "state_unavailable"
+        state.research_state_pin = None
+        node = build_publish_node(
+            PublishDeps(client=client, research_state_store=ResearchStateStore())
+        )
+        node(state)
+        keys = {row["document_key"] for row in client.store["documents"]}
+        assert COMPILED_BRIEF_DOCUMENT_KEY not in keys
+        assert COMPILED_DIGEST_DOCUMENT_KEY not in keys
+        assert "digest" in keys

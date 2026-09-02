@@ -431,6 +431,9 @@ def test_records_ordered_phase_scoped_events_without_call_bodies():
             "sources": 0,
             "input_summary": "Structured model request",
             "output_summary": "Model response returned",
+            "call_id": None,
+            "attempt_id": None,
+            "node_run_id": None,
         }
     )
     assert events[1]["kind"] == "tool_call"
@@ -462,3 +465,90 @@ def test_event_text_is_bounded_before_persistence():
     assert len(event["document_key"]) == 500
     assert len(event["name"]) == 255
     assert len(event["input_summary"]) == 500
+
+
+@pytest.mark.unit
+def test_missing_usage_stays_null_on_glass_box_events() -> None:
+    """WP1 invariant: unavailable tokens/cost must not become fabricated zeros (#2763)."""
+    usage.start()
+    call_id = uuid4()
+    attempt_id = uuid4()
+    node_run_id = uuid4()
+    with usage.call_context(node_run_id=node_run_id, phase="macro", operation="MacroReport"):
+        usage.record(
+            kind="chat",
+            model="openrouter/auto",
+            prompt_tokens=None,
+            completion_tokens=None,
+            cached_tokens=None,
+            cost=None,
+            call_id=call_id,
+            attempt_id=attempt_id,
+        )
+
+    event = usage.events_snapshot()[0]
+    assert event["prompt_tokens"] is None
+    assert event["completion_tokens"] is None
+    assert event["cached_tokens"] is None
+    assert event["cost_usd"] is None
+    assert event["call_id"] == str(call_id)
+    assert event["attempt_id"] == str(attempt_id)
+    assert event["node_run_id"] == str(node_run_id)
+
+
+@pytest.mark.unit
+def test_explicit_zero_usage_is_preserved() -> None:
+    usage.start()
+    usage.record(
+        kind="chat",
+        model="m",
+        prompt_tokens=0,
+        completion_tokens=0,
+        cached_tokens=0,
+        cost=0.0,
+    )
+    event = usage.events_snapshot()[0]
+    assert event["prompt_tokens"] == 0
+    assert event["completion_tokens"] == 0
+    assert event["cached_tokens"] == 0
+    assert event["cost_usd"] == 0.0
+
+
+def _mock_chat_response(content: str = "") -> MagicMock:
+    msg = MagicMock()
+    msg.content = content
+    msg.tool_calls = None
+    choice = MagicMock()
+    choice.message = msg
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.model = "gpt-4o-mini"
+    resp.usage = None
+    return resp
+
+
+@pytest.mark.unit
+def test_empty_retry_records_per_model_counter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mocked empty-then-success completion increments usage.empty_retries (#1639)."""
+    import digigraph.llm_client  # noqa: F401 — wires digillm observer to usage.record
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(digillm_client, "_EMPTY_RETRY_MAX", 2)
+    monkeypatch.setattr(digillm_client.time, "sleep", lambda *_a, **_k: None)
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_chat_response(""),
+        _mock_chat_response("healed"),
+    ]
+    usage.start()
+    with patch.object(digillm_client, "get_client_for_model", return_value=fake_client):
+        digillm_client.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+    snap = usage.snapshot()
+    assert snap["empty_retries"] == {"total": 1, "by_model": {"gpt-4o-mini": 1}}
+    assert snap["llm_calls"] == 1
+
+
+@pytest.mark.unit
+def test_empty_retries_default_zero_when_none_recorded() -> None:
+    usage.start()
+    assert usage.snapshot()["empty_retries"] == {"total": 0, "by_model": {}}

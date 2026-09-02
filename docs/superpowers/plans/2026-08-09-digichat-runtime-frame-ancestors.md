@@ -637,19 +637,11 @@ Integration assumptions and non-conflicts only — **do not implement** those pi
 | Compose overlays | `infra/digichat-release/compose.profile-a.yml` may later swap Python services to GHCR; keep digichat env blocks free for CSP hosts — do not bake hosts into stack images. |
 | Publish workflows | digichat publish drops embed build-arg; new stack publish workflows must not reintroduce digichat CSP build-args “for consistency.” |
 
-<<<<<<< HEAD
-### Pick 3 — corpus / crawl / OCR → digivault ingest
-
-| Seam | Assumption / must not conflict |
-|---|---|
-| Product model | Corpus lands in **client digivault**; digichat remains the same release. CSP parents are orthogonal to vault content. |
-=======
 ### Pick 3 — `scripts/docs_onboard` (crawl / OCR → digivault and/or digisearch)
 
 | Seam | Assumption / must not conflict |
 |---|---|
 | Product model | Onboarded docs land in **client digivault** (and/or digisearch); digichat remains the same release. CSP parents are orthogonal to vault content. |
->>>>>>> origin/develop
 | Embed parents | Doc-chat demos still need the parent marketing host in runtime CSP (this pick) **and** vault notes (Pick 3). Neither replaces the other. |
 | Config | Ingest pipelines must not require digichat rebuilds; they also must not put secrets into `DIGICHAT_EMBED_HOSTS`. |
 | Scope boundary | Do not add crawl/OCR UI or digichat upload routes in this plan (AGENTS.md Phase 2 / sketch Follow-ups). |

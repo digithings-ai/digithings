@@ -49,6 +49,7 @@ PositivePrice: TypeAlias = Annotated[
 ]
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 NonNegativeInt: TypeAlias = Annotated[int, Field(ge=0)]
+PositiveSessions: TypeAlias = Annotated[int, Field(gt=0)]
 
 
 class OutcomeStatus(StrEnum):
@@ -167,6 +168,7 @@ class ForecastOutcome(ForecastCalibrationModel):
     base_forecast_id: UUID
     effective_forecast_id: UUID
     ticker: NonEmptyId
+    horizon_sessions: PositiveSessions
     reference_session: date
     maturity_session: date
     reference_snapshot: SessionPriceSnapshot | None = None
@@ -277,6 +279,7 @@ class ForecastOutcome(ForecastCalibrationModel):
             "base_forecast_id": str(self.base_forecast_id),
             "effective_forecast_id": str(self.effective_forecast_id),
             "ticker": self.ticker,
+            "horizon_sessions": self.horizon_sessions,
             "reference_session": self.reference_session.isoformat(),
             "maturity_session": self.maturity_session.isoformat(),
             "reference_snapshot": (
@@ -405,10 +408,11 @@ class ForecastCalibration(ForecastCalibrationModel):
 
 
 class CalibratedForecast(ForecastCalibrationModel):
-    """Shadow calibrated subject forecast — observational until Phase 2.
+    """Versioned calibrated subject forecast for the H8 allocation bundle (WP8.4).
 
-    Never feeds incumbent H8 sizing in Phase 1. Unavailable subjects retain
-    typed reasons and low reliability rather than inventing zeros.
+    Unavailable subjects retain typed reasons and low reliability rather than
+    inventing zeros. H8 consumes AVAILABLE slices via ``AllocationInputBundle``;
+    degraded/unavailable slices receive no new risk.
     """
 
     calibrated_forecast_id: UUID

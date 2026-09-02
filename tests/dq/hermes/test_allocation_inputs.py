@@ -470,12 +470,64 @@ def test_from_state_fills_missing_horizons_with_default() -> None:
             # No deliberation_summaries → no H6 horizons
         ),
     )
+    # from_state derives DEFAULT when horizons are absent (phase7e no longer forces 21).
     bundle = assemble_allocation_input_bundle_from_state(
+        state,
+        risk_policy=policy,
+        covariance=cov,
+    )
+    assert bundle is not None
+    assert bundle.calibrated_returns[0].horizon_sessions == DEFAULT_FORECAST_HORIZON_SESSIONS
+    assert bundle.covariance is not None
+
+
+def test_from_state_derives_coherent_non_default_horizon() -> None:
+    """#2814: coherent H6 horizon ≠ 21 must assemble — not reject via expected=21."""
+    from digiquant.olympus.atlas.state import (
+        AtlasConfigBundle,
+        AtlasResearchState,
+        PhaseHermesState,
+    )
+    from digiquant.olympus.hermes.allocation_inputs import (
+        DEFAULT_FORECAST_HORIZON_SESSIONS,
+        assemble_allocation_input_bundle_from_state,
+    )
+
+    policy = _risk_policy()
+    cov = _covariance(("AAPL",))
+    memo = _memo("AAPL")
+    # Horizon extraction only needs terms.horizon_sessions (not a full EffectiveForecast).
+    deliberation = {
+        "AAPL": {
+            "effective_forecast": {
+                "terms": {"horizon_sessions": 63},
+            }
+        }
+    }
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=_SESSION,
+        knowledge_cutoff_at=_CUTOFF,
+        config=AtlasConfigBundle(preferences={"current_weights": {"AAPL": 40.0, "CASH": 60.0}}),
+        phase_hermes=PhaseHermesState(
+            pm_direction_memo=memo,
+            calibrated_forecasts={"AAPL": _calibrated("AAPL").model_dump(mode="json")},
+            deliberation_summaries=deliberation,
+        ),
+    )
+    hard_expected = assemble_allocation_input_bundle_from_state(
         state,
         risk_policy=policy,
         covariance=cov,
         expected_horizon_sessions=DEFAULT_FORECAST_HORIZON_SESSIONS,
     )
-    assert bundle is not None
-    assert bundle.calibrated_returns[0].horizon_sessions == DEFAULT_FORECAST_HORIZON_SESSIONS
-    assert bundle.covariance is not None
+    assert hard_expected is None  # old phase7e contract — must not be reintroduced
+
+    derived = assemble_allocation_input_bundle_from_state(
+        state,
+        risk_policy=policy,
+        covariance=cov,
+    )
+    assert derived is not None
+    assert derived.calibrated_returns[0].horizon_sessions == 63
+    assert derived.calibrated_returns[0].status is AssetInputStatus.AVAILABLE

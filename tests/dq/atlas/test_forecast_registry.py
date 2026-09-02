@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
 from digiquant.olympus.atlas import forecast_registry as fr
@@ -197,6 +197,32 @@ def test_amendment_requires_persisted_base() -> None:
     result = fr.persist_forecast_lineage(client=client, amendments=[amendment])
     assert result.degraded_reason is not None
     assert "missing base" in (result.degraded_reason or "")
+
+
+def test_amendment_reason_over_sql_cap_is_truncated() -> None:
+    """079 `olympus_forecast_amendments_reason_check` is length 1..2000.
+
+    House GHA 33426508863: H6 BITO amendment reason exceeded the check, so the
+    registry insert 23514'd (`h9 forecast registry degraded`) while the book was
+    retained. Truncate at the write boundary — content_hash is over terms, not reason.
+    """
+    client = RegistryFake()
+    base = _assessment()
+    long_reason = "The PM's three challenges are accepted as substantive and force " + ("x" * 2500)
+    amendment = materialize_forecast_amendment(
+        base=base,
+        terms=_terms(base_return=Decimal("0.05")),
+        reason=long_reason,
+        source_run_id=RUN_ID,
+        provider_invocation_id="h6:BITO:run",
+        effective_at=TS,
+        known_at=TS,
+    )
+    result = fr.persist_forecast_lineage(client=client, assessments=[base], amendments=[amendment])
+    assert result.ok
+    stored = client.store[fr.AMENDMENTS][0]["reason"]
+    assert len(stored) == fr.AMENDMENT_REASON_MAX_LEN
+    assert stored == long_reason[: fr.AMENDMENT_REASON_MAX_LEN]
 
 
 def test_persist_base_then_amendment() -> None:

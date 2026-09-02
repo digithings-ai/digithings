@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import polars as pl
 
@@ -55,11 +55,18 @@ from digiquant.olympus.hermes.sizing import (
 )
 from digiquant.olympus.hermes.turnover import _VALID_CADENCES
 
-METHOD_VERSION = "incumbent-risk-policy@v1"
-"""Implementation version stamped on every resolved policy."""
+METHOD_VERSION = "incumbent-risk-policy@v2"
+"""Implementation version stamped on every resolved policy.
 
-COVARIANCE_METHOD_VERSION = "incumbent-covariance@v1"
-"""Implementation version stamped on every covariance snapshot."""
+v2: ``unavailable_reason`` participates in ``content_hash`` (#2803).
+"""
+
+COVARIANCE_METHOD_VERSION = "incumbent-covariance@v2"
+"""Implementation version stamped on every covariance snapshot.
+
+v2: incomplete Pearson pairs fail closed as ``unavailable`` (no silent identity
+repair labeled ``degraded``); ``unavailable_reason`` is hashed (#2803).
+"""
 
 INCUMBENT_CONTROL_ORDER: tuple[str, ...] = (
     "select",
@@ -615,28 +622,32 @@ def resolve_covariance_snapshot(
         )
 
     lookup = _corr_lookup(corr)
-    missing_pairs = []
+    missing_pairs: list[tuple[str, str]] = []
     for i, ti in enumerate(canonical):
         for tj in canonical[i + 1 :]:
             if (ti, tj) not in lookup and (tj, ti) not in lookup:
                 missing_pairs.append((ti, tj))
 
-    try:
-        matrix = _build_correlation_matrix(canonical, lookup)
-        status = (
-            PolicyArtifactStatus.AVAILABLE if not missing_pairs else PolicyArtifactStatus.DEGRADED
-        )
-        unavailable_reason = (
-            f"incomplete_pairs:{','.join(f'{a}/{b}' for a, b in missing_pairs)}"
-            if missing_pairs
-            else None
-        )
-    except KeyError as exc:
+    if missing_pairs:
+        # Fail closed: do not invent off-diagonal zeros / wipe observed pairs and
+        # label the result ``degraded``. Structural identity is a placeholder only
+        # (same shape as missing_frame), status ``unavailable`` (#2803).
         n = len(canonical)
         matrix = tuple(tuple(1.0 if i == j else 0.0 for j in range(n)) for i in range(n))
-        status = PolicyArtifactStatus.DEGRADED
-        unavailable_reason = str(exc)
+        return _finalize_covariance_snapshot(
+            as_of_session=as_of_session,
+            lookback_days=lookback_days,
+            tickers=canonical,
+            matrix=matrix,
+            observation_count=observation_count,
+            resolved_at=at,
+            status=PolicyArtifactStatus.UNAVAILABLE,
+            unavailable_reason=(
+                "incomplete_pairs:" + ",".join(f"{a}/{b}" for a, b in missing_pairs)
+            ),
+        )
 
+    matrix = _build_correlation_matrix(canonical, lookup)
     return _finalize_covariance_snapshot(
         as_of_session=as_of_session,
         lookback_days=lookback_days,
@@ -644,8 +655,8 @@ def resolve_covariance_snapshot(
         matrix=matrix,
         observation_count=observation_count,
         resolved_at=at,
-        status=status,
-        unavailable_reason=unavailable_reason,
+        status=PolicyArtifactStatus.AVAILABLE,
+        unavailable_reason=None,
     )
 
 

@@ -9,13 +9,13 @@ converting legacy conviction scores inside ``decision_log``.
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from datetime import date
 from typing import (  # score:allow untyped any — used for heterogeneous node-update dict shape
     Any,
     Callable,
 )
+from uuid import UUID
 
 import yaml
 
@@ -52,8 +52,11 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.envcompat import ATTEMPT, REFRESH_ON_DEMAND, env_lookup
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.olympus.overlay.runner import pin_seam_config
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
@@ -79,6 +82,13 @@ class PreflightDeps:
     # circuit-breaker (#928). 30 days covers a baseline + a month of deltas
     # with slack; matches the documents-read window in ``load_prior_context``.
     institutional_absence_lookback_days: int = 30
+    # WP12.3 (#2863): optional in-process ResearchStateStore for exact pin.
+    # None → typed state_unavailable (compatibility documents stay shadow-only).
+    research_state_store: Any | None = None
+    # WP15.6 (#2975): optional outcome-learning maturation stack for lesson pin.
+    outcome_maturation_deps: Any | None = None
+    # Outer-retry attempt id (string form of OLYMPUS_ATTEMPT / DiagnosticsDeps.attempt).
+    research_state_attempt_id: str | None = None
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -121,7 +131,7 @@ def _market_context_tickers() -> list[str]:
 def _refresh_on_demand_enabled() -> bool:
     """``ATLAS_REFRESH_ON_DEMAND`` — opt in to the in-graph technicals recompute (off by
     default; the CI pre-baseline step is the primary freshness mechanism)."""
-    return os.environ.get("ATLAS_REFRESH_ON_DEMAND", "").strip().lower() in (
+    return env_lookup(REFRESH_ON_DEMAND).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -222,7 +232,9 @@ def _data_layer_snapshot(
         market_context["onchain_positioning"] = onchain.compact_summary()
         try:
             upsert_onchain_cohort_positioning(
-                client=deps.client, rows=onchain.to_rows(run_date.isoformat())
+                client=deps.client,
+                rows=onchain.to_rows(run_date.isoformat()),
+                workspace_id=config.workspace_id,
             )
         except Exception as exc:  # persistence is best-effort; a missing table
             # (pre-migration window) or any postgrest/network error must never block the run.
@@ -344,14 +356,12 @@ def _hydrate_config(
     run_date: date,
 ) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
-    from uuid import UUID
-
     from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
     from digiquant.olympus.atlas.graph import _atlas_config_root
     from digiquant.olympus.profile_config import pin_profile_config_for_preflight
 
     try:
-        prior_book = load_prior_book(client, run_date)
+        prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)
     except _SUPABASE_READ_ERRORS:
         prior_book = []
 
@@ -394,6 +404,10 @@ def _hydrate_config(
             "research_budget_usd": str(pinned.research_budget_usd),
         }
 
+    seam = pin_seam_config(
+        requested_version_id=requested_version,
+        workspace_id=UUID(str(config.workspace_id)) if config.workspace_id else None,
+    )
     hydrated = AtlasConfigBundle(
         watchlist=watchlist,
         investment_profile=investment_profile,
@@ -402,8 +416,140 @@ def _hydrate_config(
         macro_series=list(config.macro_series),
         profile_config_version_id=str(pinned.version_id),
         profile_config=pinned.model_dump(mode="json"),
+        workspace_id=seam.workspace_id,
     )
     return hydrated, prior_book
+
+
+def _resolve_research_state_attempt_id(deps: PreflightDeps) -> str:
+    """Outer-retry attempt string for ResearchStatePin.attempt_id."""
+    if deps.research_state_attempt_id is not None and deps.research_state_attempt_id.strip():
+        return deps.research_state_attempt_id.strip()
+    raw = env_lookup(ATTEMPT).strip()
+    if raw:
+        return raw
+    return "1"
+
+
+def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+    """WP12.3: select once and carry an exact research-state pin (or typed unavailable).
+
+    Resume: if state already carries a pin dump, keep it (checkpoint / same attempt).
+    Missing store or unusable state → ``state_unavailable`` (documents remain
+    compatibility/shadow only — never invent exact state).
+    """
+    from uuid import UUID
+
+    from digiquant.olympus.research_retrieval.models import ResearchStatePin
+    from digiquant.olympus.research_retrieval.pin import (
+        STATE_UNAVAILABLE,
+        pin_research_state_for_preflight,
+    )
+    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+
+    # Checkpoint / mid-run resume already has the authoritative pin.
+    if state.research_state_pin is not None and state.research_state_status == "pinned":
+        return {}
+
+    if deps.research_state_store is None:
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": (
+                "research_state_store not wired; compatibility documents only (shadow)"
+            ),
+        }
+
+    store = deps.research_state_store
+    if not isinstance(store, ResearchStateStore):
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": (
+                f"research_state_store must be ResearchStateStore; got {type(store).__name__}"
+            ),
+        }
+
+    try:
+        cutoff = require_knowledge_cutoff_at(state)
+    except ValueError as exc:
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": str(exc),
+        }
+
+    explicit: UUID | None = None
+    if state.requested_research_state_version_id:
+        try:
+            explicit = UUID(state.requested_research_state_version_id)
+        except ValueError:
+            return {
+                "research_state_pin": None,
+                "research_state_status": STATE_UNAVAILABLE,
+                "research_state_unavailable_reason": (
+                    f"invalid requested_research_state_version_id "
+                    f"{state.requested_research_state_version_id!r}"
+                ),
+            }
+
+    result = pin_research_state_for_preflight(
+        store=store,
+        run_id=str(state.run_id),
+        attempt_id=_resolve_research_state_attempt_id(deps),
+        knowledge_cutoff_at=cutoff,
+        explicit_state_version_id=explicit,
+        pinned_at=cutoff,
+    )
+    if result.status == "pinned" and result.pin is not None:
+        pin: ResearchStatePin = result.pin
+        return {
+            "research_state_pin": pin.model_dump(mode="json"),
+            "research_state_status": "pinned",
+            "research_state_unavailable_reason": None,
+        }
+    return {
+        "research_state_pin": None,
+        "research_state_status": STATE_UNAVAILABLE,
+        "research_state_unavailable_reason": result.unavailable_reason,
+    }
+
+
+def _outcome_maturation_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+    """WP15.6: mature prior outcomes and pin one structured lesson at cutoff."""
+    from digiquant.olympus.atlas.phases.outcome_maturation import (
+        OutcomeMaturationDeps,
+        outcome_lesson_preflight_update,
+        pin_outcome_lesson_for_preflight,
+    )
+
+    if state.outcome_lesson_status == "pinned" and state.outcome_lesson_pin is not None:
+        return {}
+
+    maturation_deps = deps.outcome_maturation_deps
+    if maturation_deps is not None and not isinstance(maturation_deps, OutcomeMaturationDeps):
+        return {
+            "outcome_lesson_pin": None,
+            "outcome_lesson_status": "store_unavailable",
+            "outcome_lesson_unavailable_reason": (
+                f"outcome_maturation_deps must be OutcomeMaturationDeps; "
+                f"got {type(maturation_deps).__name__}"
+            ),
+        }
+
+    try:
+        cutoff = require_knowledge_cutoff_at(state)
+    except ValueError:
+        cutoff = state.knowledge_cutoff_at
+
+    result = pin_outcome_lesson_for_preflight(
+        maturation_deps,
+        knowledge_cutoff_at=cutoff,
+        consuming_run_id=str(state.run_id) if state.run_id is not None else None,
+        resume_pin=state.outcome_lesson_pin,
+        resume_status=state.outcome_lesson_status,
+    )
+    return outcome_lesson_preflight_update(result)
 
 
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
@@ -451,7 +597,9 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             active_theses = []
         try:
-            portfolio_performance = load_portfolio_performance_snapshot(deps.client, state.run_date)
+            portfolio_performance = load_portfolio_performance_snapshot(
+                deps.client, state.run_date, workspace_id=config.workspace_id
+            )
         except _SUPABASE_READ_ERRORS:
             portfolio_performance = {}
 
@@ -466,11 +614,49 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             portfolio_performance=portfolio_performance,
         )
 
-        return {
+        update: dict[str, Any] = {
             "config": config,
             "prior_context": prior_context,
             "data_layer": data_layer,
         }
+        update.update(_pin_research_state_update(deps, state))
+        update.update(_outcome_maturation_update(deps, state))
+
+        from digiquant.olympus.research_retrieval.h7_prerequisites import (
+            build_h7_prerequisite_snapshot,
+        )
+
+        prior_effective_ids = tuple(
+            sorted(
+                {
+                    str(row.get("effective_forecast_id"))
+                    for row in prior_deliberation.values()
+                    if isinstance(row, dict) and row.get("effective_forecast_id")
+                }
+            )
+        )
+        try:
+            cutoff = state.knowledge_cutoff_at
+        except Exception:
+            cutoff = None
+        pin_raw = update.get("research_state_pin")
+        if not isinstance(pin_raw, dict) and isinstance(state.research_state_pin, dict):
+            pin_raw = state.research_state_pin
+        lesson_pin_raw = update.get("outcome_lesson_pin")
+        if not isinstance(lesson_pin_raw, dict) and isinstance(state.outcome_lesson_pin, dict):
+            lesson_pin_raw = state.outcome_lesson_pin
+        snapshot = build_h7_prerequisite_snapshot(
+            client=deps.client,
+            run_date=state.run_date,
+            knowledge_cutoff_at=cutoff,
+            research_state_pin=pin_raw if isinstance(pin_raw, dict) else None,
+            prior_effective_forecast_ids=prior_effective_ids,
+            outcome_lesson_pin=lesson_pin_raw if isinstance(lesson_pin_raw, dict) else None,
+        )
+        if snapshot is not None:
+            update["h7_prerequisite_snapshot"] = snapshot.model_dump(mode="json")
+
+        return update
 
     return preflight
 
@@ -489,10 +675,17 @@ def build_preflight_reflect_node(
     """Return the Phase B reflect node bound to ``deps``."""
 
     def reflect(state: AtlasResearchState) -> dict[str, Any]:
+        if skip_overlay_shared_register(state.config.workspace_id):
+            logger.info(
+                "overlay skip shared register decision_log / forecast outcomes "
+                "(house-only leftover uniques)"
+            )
+            return {}
         resolve_pending(
             client=deps.client,
             run_date=state.run_date,
             reflector=deps.reflector,
+            workspace_id=state.config.workspace_id,
         )
         # WP5.2 — typed forecast outcomes beside decision_log reflection.
         try:

@@ -20,6 +20,7 @@ from digiquant.olympus.edit_mode import (
     resolve_edit_mode,
     stale_full_days,
 )
+from pydantic import ValidationError
 
 _DELTA_EXAMPLE = (
     Path(__file__).resolve().parents[3]
@@ -322,25 +323,21 @@ class TestMergeAppendTokenAndClamps:
             )
 
 
-# ─── #1740: over-long `reason` must not discard the whole patch ────────
+# ─── #1740 / #3063: over-long prose must not discard the whole patch ──
 
 
 @pytest.mark.unit
-def test_patch_op_truncates_over_long_reason_instead_of_raising() -> None:
-    """Regression for #1740.
+def test_patch_op_accepts_over_long_reason_without_truncating() -> None:
+    """Regression for #1740 / #3063.
 
-    `reason` carries a 240-char cap that no *-edit.md skill stated, so the model
-    overran it routinely — and because it was a hard schema constraint, one long
-    reason raised ValidationError and discarded the ENTIRE DocumentPatch. That
-    cost 1-4 researched segments per run and took out the master digest on
-    2026-07-28. It is informational prose; nothing downstream parses it.
+    A 240-char hard cap used to raise ValidationError and discard the entire
+    DocumentPatch. Soft-truncating still lost prose. Free-text ``reason`` is
+    accepted in full.
     """
     op = PatchOp(op="set", path="/headline", value="x", reason="A" * 400)
 
     assert op.reason is not None
-    assert len(op.reason) == 240
-    assert op.reason.endswith("...")
-    assert op.reason.startswith("AAA")
+    assert op.reason == "A" * 400
 
 
 @pytest.mark.unit
@@ -348,6 +345,24 @@ def test_patch_op_leaves_short_reason_untouched() -> None:
     op = PatchOp(op="set", path="/headline", value="x", reason="short and fine")
     assert op.reason == "short and fine"
     assert PatchOp(op="set", path="/h", value="x").reason is None
+
+
+@pytest.mark.unit
+def test_patch_op_add_maps_to_set() -> None:
+    """House GHA 33426508863: DocumentPatch ops.6.op='add' (RFC 6902 name).
+
+    This module's ``set`` already implements RFC add, including ``/-`` list
+    append. Mapping to ``append`` would require a list target and would break
+    ``add`` on a scalar path like ``/headline``.
+    """
+    assert PatchOp(op="add", path="/headline", value="x").op == "set"
+    assert PatchOp.model_validate({"op": "Add", "path": "/material_findings/-"}).op == "set"
+
+
+@pytest.mark.unit
+def test_patch_op_unknown_verb_is_still_rejected() -> None:
+    with pytest.raises(ValidationError, match="op"):
+        PatchOp(op="upsert", path="/headline", value="x")
 
 
 @pytest.mark.unit
@@ -363,8 +378,10 @@ def test_document_patch_survives_an_over_long_reason() -> None:
                 {"op": "set", "path": "/headline", "value": "a", "reason": "B" * 300},
                 {"op": "set", "path": "/bias", "value": "risk-on", "reason": "ok"},
             ],
+            "one_line_summary": "S" * 500,
         }
     )
     assert len(patch.ops) == 2
-    assert len(patch.ops[0].reason or "") == 240
+    assert patch.ops[0].reason == "B" * 300
+    assert patch.one_line_summary == "S" * 500
     assert patch.ops[1].reason == "ok"

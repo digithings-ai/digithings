@@ -59,7 +59,7 @@ from unittest.mock import patch
 # unit-test suite. Importing from a tests module is unusual, but the
 # fake is the same shape every test in the project already depends on
 # and duplicating it here would be drift-prone.
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
@@ -79,6 +79,8 @@ from digiquant.olympus.atlas.state import (
     RiskDebatePayload,
 )
 from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
+from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
@@ -129,21 +131,22 @@ def client_store_to_canned_extras(client: FakeSupabaseClient) -> dict[str, list[
 
 
 class SegmentFixtureBody(TypedDict, total=False):
-    """Minimum-valid segment report body for simulator defaults (SIMP-033)."""
+    """Minimum-valid research memo body for simulator defaults."""
 
     segment: str
     date: str
+    body: str
+    sources: list[str]
+    internal_bias: str
     bias: str
     headline: str
     material_findings: list[str]
-    sources: list[str]
     notes: str
     growth: str
     inflation: str
     policy: str
     risk_appetite: str
     regime_label: str
-    portfolio_implications: str
 
 
 class DigestFixtureBody(SegmentFixtureBody, Phase7DigestPayload, total=False):
@@ -242,39 +245,32 @@ FixtureResponse = (
 # ──────────────────────────────────────────────────────────────────────────
 # 1. Default responses keyed by output schema name
 # ──────────────────────────────────────────────────────────────────────────
-# Phase 1-5 segment reports all extend SegmentReport, so a single
-# ``_segment`` template covers the lot; specific schemas with required
-# extra fields get their own builder below.
+# Phase 1-5 segment reports all extend ResearchMemo, so a single
+# ``_segment`` template covers the lot; MacroRegimeReport keeps optional
+# 4-factor tokens for the pipeline strip.
 
 _TODAY = "2026-04-26"
 
 
 def _segment(slug: str, headline: str = "synthetic finding") -> SegmentFixtureBody:
-    """Minimum valid SegmentReport body for a given segment slug."""
+    """Minimum valid ResearchMemo body for a given segment slug."""
     return {
         "segment": slug,
         "date": _TODAY,
-        "bias": "neutral",
-        "headline": headline,
-        "material_findings": [],
+        "body": f"# {slug}\n\n{headline}",
         "sources": [],
-        "notes": "",
+        "internal_bias": "neutral",
     }
 
 
 def _digest_body() -> DigestFixtureBody:
-    """DigestSnapshot extends SegmentReport with required summary strings."""
+    """Thin markdown digest envelope (WP-E)."""
     return {
-        **_segment("master-digest", headline="synthetic regime"),
-        "market_regime_snapshot": "synthetic",
-        "alt_data_dashboard": "synthetic",
-        "institutional_summary": "synthetic",
-        "asset_classes_summary": "synthetic",
-        "us_equities_summary": "synthetic",
-        "thesis_tracker": "",
-        "portfolio_recommendations": "",
-        "actionable_summary": [],
-        "risk_radar": [],
+        "segment": "master-digest",
+        "date": _TODAY,
+        "body": "# Daily Digest — 2026-04-26\n\n## Market regime\n\nsynthetic\n",
+        "regime_label": "Synthetic / Mixed",
+        "sources": [],
         "segment_freshness": {},
     }
 
@@ -349,7 +345,6 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
         "policy": "neutral",
         "risk_appetite": "mixed",
         "regime_label": "Synthetic / Mixed / Neutral / Mixed",
-        "portfolio_implications": "",
     },
     # Phase 4 — every asset class shares the SegmentReport core; phase4
     # extras are all optional.
@@ -363,6 +358,12 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "SectorReport": _segment("sector"),
     # Phase 7
     "DigestSnapshot": _digest_body(),
+    "DigestSubsection": {
+        "slug": "macro",
+        "date": _TODAY,
+        "body": "## Macro\n\nsynthetic subsection",
+        "sources": [],
+    },
     "MonthlyDigest": _digest_body(),
     # H5 unified analyst
     "AnalystPayload": {
@@ -415,7 +416,15 @@ DEFAULT_RESPONSES: dict[str, FixtureResponse] = {
     "PMDirectionMemo": {
         "schema_version": "1.0",
         "date": "2026-04-26",
-        "roster": [{"ticker": "AAPL", "direction": "long", "conviction_rank": 1, "narrative": ""}],
+        "roster": [
+            {
+                "ticker": "AAPL",
+                "direction": "long",
+                "conviction_rank": 1,
+                "narrative": "",
+                "confidence": 0.7,
+            }
+        ],
         "memo": "synthetic direction memo",
     },
     "RebalanceDecision": {
@@ -794,6 +803,7 @@ def simulate_chat_completion(
                         "direction": "long",
                         "conviction_rank": idx + 1,
                         "narrative": "",
+                        "confidence": 0.7,
                     }
                     for idx, ticker in enumerate(roster)
                 ],
@@ -929,6 +939,7 @@ class SimulationRun:
     # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
     hermes_deps: Any = None
     publish_deps: Any = None
+    evidence_bundle_store: EvidenceBundleStore | None = None
 
     def llm_telemetry(self) -> LlmCallTelemetry:
         """Aggregate LLM call budget + patch-ratio telemetry for gate tests."""
@@ -953,6 +964,47 @@ class SimulationRun:
         atlas_input_with_state = atlas_input
         result = _invoke_with_config(atlas_input_with_state, chain_deps, self.config_bundle)
         return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+    def invoke_through_h5(self, atlas_input: AtlasInput) -> AtlasResearchState:
+        """Run Atlas + Hermes H1–H5 only (checkpoint boundary before H6)."""
+        from digiquant.olympus.hermes.chain import ChainDeps
+        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+
+        chain_deps = ChainDeps(
+            atlas=self.deps,
+            hermes=self.hermes_deps or HermesGraphDeps(),
+            publish=None,
+        )
+        state = _invoke_atlas_then_hermes_phases(
+            atlas_input,
+            chain_deps,
+            self.config_bundle,
+            hermes_phases=build_hermes_phases_thesis(
+                watchlist=list(atlas_input.watchlist),
+                deps=chain_deps.hermes,
+            )[:5],
+        )
+        return AtlasResearchState.model_validate(state) if isinstance(state, dict) else state
+
+    def invoke_hermes_from_h6(self, state: AtlasResearchState) -> AtlasResearchState:
+        """Resume Hermes from H6 onward using the wired deps (post-checkpoint)."""
+        from digiquant.olympus.hermes.chain import ChainDeps
+        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+
+        chain_deps = ChainDeps(
+            atlas=self.deps,
+            hermes=self.hermes_deps or HermesGraphDeps(),
+            publish=self.publish_deps,
+        )
+        resume = _invoke_hermes_phases_from(
+            state,
+            chain_deps,
+            build_hermes_phases_thesis(
+                watchlist=list(state.config.watchlist),
+                deps=chain_deps.hermes,
+            )[5:],  # H6–H9
+        )
+        return AtlasResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
 
 def _invoke_with_config(
@@ -997,6 +1049,56 @@ def _invoke_with_config(
     return state
 
 
+def _invoke_atlas_then_hermes_phases(
+    atlas_input: AtlasInput,
+    chain_deps: "ChainDeps",  # noqa: F821
+    config_bundle: AtlasConfigBundle,
+    *,
+    hermes_phases: list[Any],
+) -> AtlasResearchState:
+    """Run Atlas through phase 7, then a subset of Hermes phases."""
+    from digigraph.graph.pipeline_builder import build_pipeline
+
+    from digiquant.olympus.atlas.graph import AtlasGraphDeps as _AGDeps
+
+    atlas_deps_no_publish = _AGDeps(
+        preflight=chain_deps.atlas.preflight,
+        publish=None,
+        triage=chain_deps.atlas.triage,
+        preflight_reflect=chain_deps.atlas.preflight_reflect,
+    )
+    state = initial_state(atlas_input, config=config_bundle)
+    atlas_graph = build_atlas_graph(
+        deps=atlas_deps_no_publish,
+        watchlist=atlas_input.watchlist,
+    )
+    state = atlas_graph.invoke(state)
+    if hermes_phases:
+        hermes_graph = build_pipeline(HermesState, hermes_phases)
+        state = hermes_graph.invoke(state)
+    return state
+
+
+def _invoke_hermes_phases_from(
+    state: AtlasResearchState,
+    chain_deps: "ChainDeps",  # noqa: F821
+    hermes_phases: list[Any],
+) -> AtlasResearchState:
+    """Resume Hermes from an existing checkpointed state."""
+    from digigraph.graph.pipeline_builder import build_pipeline
+
+    from digiquant.olympus.atlas.phases.publish_phase import build_publish_phase
+
+    if hermes_phases:
+        hermes_graph = build_pipeline(HermesState, hermes_phases)
+        state = hermes_graph.invoke(state)
+    if chain_deps.publish is not None:
+        publish_only = [build_publish_phase(chain_deps.publish)]
+        publish_graph = build_pipeline(AtlasResearchState, publish_only)
+        state = publish_graph.invoke(state)
+    return state
+
+
 @contextmanager
 def simulated_pipeline(
     *,
@@ -1010,6 +1112,7 @@ def simulated_pipeline(
     commit_run: bool = True,
     preferences: dict[str, Any] | None = None,
     replace_canned_defaults: bool = False,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
 ) -> Iterator[SimulationRun]:
     """Patch chat_completion + thread a fake client through every dep slot.
 
@@ -1029,8 +1132,12 @@ def simulated_pipeline(
     preferences
         Merged into ``AtlasConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
+    evidence_bundle_store
+        Optional append-only H5/H6 bundle store. When set, Hermes H5/H6 wire
+        the store for publish/amendment persistence (WP11.5 durable tests).
     """
     client = seed_supabase_client(canned_extras, replace_defaults=replace_canned_defaults)
+    bundle_store = evidence_bundle_store
     watchlist_list = list(watchlist)
     preferences_dict = dict(preferences or {})
 
@@ -1055,6 +1162,7 @@ def simulated_pipeline(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client) if commit_run else None,
+        evidence_bundle_store=bundle_store,
     )
     publish_deps = PublishDeps(client=client) if publish else None
     config_bundle = AtlasConfigBundle(
@@ -1068,6 +1176,7 @@ def simulated_pipeline(
         config_bundle=config_bundle,
         hermes_deps=hermes_deps,
         publish_deps=publish_deps,
+        evidence_bundle_store=bundle_store,
     )
     fake_chat = simulate_chat_completion(overrides=overrides, captured_calls=run.captured_calls)
 

@@ -25,6 +25,7 @@ Boundaries (deliberate):
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import (  # score:allow untyped any — scored-lint: heterogeneous GraphQL/JSON payload shapes
     Any,
@@ -359,9 +360,11 @@ def _onchain_enabled() -> bool:
     enable the signal in CI/prod; the owner can flip it off instantly if the third-party endpoint
     becomes unavailable or its ToS changes — no code change. An injected ``provider`` bypasses the
     switch entirely (tests + alternative providers)."""
-    import os
-
-    return os.environ.get("ATLAS_ONCHAIN_POSITIONING", "0").strip().lower() in ("1", "true", "yes")
+    if "DIGIQUANT_ONCHAIN_POSITIONING" in os.environ:
+        raw = os.environ.get("DIGIQUANT_ONCHAIN_POSITIONING", "0")
+    else:
+        raw = os.environ.get("ATLAS_ONCHAIN_POSITIONING", "0")
+    return raw.strip().lower() in ("1", "true", "yes")
 
 
 def get_onchain_cohort_positioning(

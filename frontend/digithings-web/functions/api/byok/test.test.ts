@@ -129,7 +129,7 @@ describe("POST /api/byok/test", () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body).toEqual({ ok: false, error: "Unknown BYOK provider: totally-bogus" });
+      expect(body).toEqual({ ok: false, error: "Unknown BYOK provider." });
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -199,6 +199,19 @@ describe("POST /api/byok/test", () => {
   });
 
   describe("existing providers are unaffected", () => {
+    it("calls Gemini with x-goog-api-key header, not a query-string key (#2408)", async () => {
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({}));
+
+      await onRequestPost(
+        request({ "x-byok-key": "AIza-realkey", "x-byok-provider": "gemini" }),
+      );
+
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models");
+      expect(url).not.toContain("key=");
+      expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("AIza-realkey");
+    });
+
     it("still validates and dispatches anthropic keys as before", async () => {
       fetchMock.mockResolvedValueOnce(
         jsonFetchResponse({ data: [{ id: "claude-3-5-haiku-20241022" }] }),

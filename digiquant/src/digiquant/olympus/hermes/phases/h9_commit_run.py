@@ -20,8 +20,12 @@ from digiquant.olympus.atlas.forecast_registry import persist_forecast_lineage_f
 from digiquant.olympus.atlas.risk_policy_registry import persist_h8_risk_snapshots_from_state
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.h9_cost_evidence import build_cost_bundles_for_commit
+from digiquant.olympus.hermes.h9_cost_evidence import (
+    build_cost_bundles_for_commit,
+    investor_currency_from_state,
+)
 from digiquant.olympus.hermes.payloads import sized_book
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.commit_io import (
     PreTradeRiskMode,
@@ -124,6 +128,17 @@ def _persist_cost_liquidity_registry(
             {
                 "cost_liquidity_registry_status": "degraded",
                 "cost_liquidity_registry_reason": "missing_risk_policy",
+                "cost_liquidity_registry_snapshots_written": 0,
+                "cost_liquidity_registry_estimates_written": 0,
+            },
+            empty_snapshots,
+            empty_estimates,
+        )
+    if investor_currency_from_state(state) is None:
+        return (
+            {
+                "cost_liquidity_registry_status": "degraded",
+                "cost_liquidity_registry_reason": "currency_missing",
                 "cost_liquidity_registry_snapshots_written": 0,
                 "cost_liquidity_registry_estimates_written": 0,
             },
@@ -293,7 +308,11 @@ def build_commit_run_node(deps: CommitRunDeps):
         current_fp = weights_fingerprint(weights)
 
         # Date-scoped, not run_id-scoped (#1744): run_id is a fresh uuid4 per process.
-        priors = load_commit_manifests(client=deps.client, run_date=state.run_date)
+        priors = load_commit_manifests(
+            client=deps.client,
+            run_date=state.run_date,
+            workspace_id=getattr(state.config, "workspace_id", None),
+        )
         latest, commit_seq = resolve_prior_commit(priors)
 
         # WP9.4: validate report identity before booking. Enforce rejects incomplete
@@ -307,19 +326,29 @@ def build_commit_run_node(deps: CommitRunDeps):
         if latest is not None and latest.get("weights_fingerprint") == current_fp:
             # Same date, same book, already on disk — genuinely idempotent.
             # Still attempt forecast registry (fail-soft): a prior commit may have
-            # booked while registry was degraded (#2663).
+            # booked while registry was degraded (#2663). Cost registry needs the
+            # prior ledger_commit_id the same way (#2807 / WP7) — ledger=None would
+            # permanently skip as ledger_disabled after a degraded first write.
             registry = _persist_forecast_registry(client=deps.client, state=state)
             risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
+            prior_commit_id = latest.get("ledger_commit_id")
+            ledger_for_retry: LedgerAppend | None = None
+            if prior_commit_id:
+                ledger_for_retry = LedgerAppend(
+                    commit_id=str(prior_commit_id),
+                    frozen_symbols=list(latest.get("ledger_frozen_symbols") or []),
+                    unpriced_symbols=list(latest.get("ledger_unpriced_symbols") or []),
+                )
             cost_registry, _, _ = _persist_cost_liquidity_registry(
                 client=deps.client,
                 state=state,
-                ledger=None,
+                ledger=ledger_for_retry,
             )
             pretrade_registry = persist_validated_pretrade_risk_report(
                 client=deps.client,
                 validation=pretrade_validation,
                 source_run_id=source_run_id,
-                ledger_commit_id=None,
+                ledger_commit_id=str(prior_commit_id) if prior_commit_id else None,
             )
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
@@ -372,12 +401,20 @@ def build_commit_run_node(deps: CommitRunDeps):
         # attempt reads to decide "already committed", so a partial chain must leave no
         # manifest behind — otherwise a failed append reports as a clean no-op and the
         # lineage is silently short a commit. Raising here is the honest outcome.
+        h8_adjustments = [
+            SizingAdjustment.model_validate(event) for event in (book.get("adjustments") or [])
+        ]
+        h8_requested = {
+            str(ticker): float(pct) for ticker, pct in (book.get("requested_pct") or {}).items()
+        }
         ledger = append_commit_chain(
             client=deps.client,
             state=state,
             weights=booked.weights,
             cash_pct=booked.cash_pct,
             nav=booked.nav,
+            adjustments=h8_adjustments,
+            requested_pct=h8_requested,
         )
         cost_registry, cost_snapshots, cost_estimates = _persist_cost_liquidity_registry(
             client=deps.client,

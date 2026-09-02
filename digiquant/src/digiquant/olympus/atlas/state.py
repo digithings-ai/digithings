@@ -207,6 +207,14 @@ class AtlasConfigBundle(BaseModel):
             "overlay watchlist/themes/risk; never forks or cancels the house run."
         ),
     )
+    # T4 pin seam: overlay workspace. None → house writers keep the T0 house stamp.
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Overlay workspace id threaded through preflight. None selects the "
+            "house workspace stamp (byte-identical house path)."
+        ),
+    )
 
 
 class PriorContext(BaseModel):
@@ -362,13 +370,15 @@ class RebalancePayload(TypedDict, total=False):
     recommended_portfolio: list[TargetWeightRow]
     actions: list[RebalanceActionRow]
     notes: str
-    # Reason-coded H8 sizing adjustments (#2417) — explanation-only, in-memory,
-    # never persisted. Each row mirrors ``SizingAdjustment.model_dump()``. Intended
-    # for future in-process consumers (H9 narrative/notes, pre-trade risk explaining
-    # a requested->approved delta, outcome-episode logging) — no such consumer reads
-    # this field yet. Absent/empty is valid (fully flat book, or sizing failed soft
-    # before any adjustment ran).
+    # Reason-coded H8 sizing adjustments (#2417) — mirrored into durable
+    # ``TargetAdjustment`` rows by H9 (#2768) when ``unit`` is ``pct``. Each row
+    # mirrors ``SizingAdjustment.model_dump()``. Absent/empty is valid (fully flat
+    # book, or sizing failed soft before any adjustment ran).
     adjustments: list[dict[str, Any]]
+    # Pre-cap request weights in percent (#2768) — H8's ``SizingResult.requested_pct``.
+    # H9 writes these onto ``portfolio_ledger_requested_targets.requested_weight``
+    # when they differ from the approved book.
+    requested_pct: dict[str, float]
     # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
     h8_sizing_input_mode: str
     allocation_input_bundle_hash: str
@@ -385,19 +395,21 @@ class Phase9EvolutionPayload(TypedDict, total=False):
 
 
 class Phase7DigestPayload(TypedDict, total=False):
-    """Phase 7 master digest — mirrors ``DigestSnapshot`` / ``MonthlyDigest`` dumps."""
+    """Phase 7 master digest — thin markdown envelope plus historical extras."""
 
-    # SegmentReport core (present on daily + monthly digests).
     segment: str
     date: str
+    body: str
+    regime_label: str
+    sources: list[dict[str, Any]]
+    segment_freshness: dict[str, dict[str, Any]]
+    # Historical DigestSnapshot slots (pre-WP-E rows; extra on the live model).
     bias: str
     headline: str
     material_findings: list[dict[str, Any]]
-    sources: list[dict[str, Any]]
     notes: str
     data_quality: str | None
     confidence: float | None
-    # DigestSnapshot extensions.
     market_regime_snapshot: str
     alt_data_dashboard: str
     institutional_summary: str
@@ -407,8 +419,6 @@ class Phase7DigestPayload(TypedDict, total=False):
     portfolio_recommendations: str
     actionable_summary: list[dict[str, Any]]
     risk_radar: list[dict[str, Any]]
-    segment_freshness: dict[str, dict[str, Any]]
-    regime_label: str
     # Carry-forward provenance (#1559). Set only when master-digest synthesis FAILED
     # and the prior digest was carried forward (or, for ``continuity``, on the
     # publish-phase carried-incomplete path) — absent on a fresh synthesis and on a
@@ -483,6 +493,11 @@ class PhaseHermesState(BaseModel):
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
+    # WP11.2: ticker → TickerEvidenceBundle dump (H5 base; published before provider).
+    ticker_evidence_bundles: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="ticker → TickerEvidenceBundle dump (H5 base; WP11.2)",
+    )
     deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
@@ -542,6 +557,11 @@ def _merge_phase_hermes(
     merged = left.model_copy(deep=True)
     if right.asset_analysts:
         merged.asset_analysts = {**merged.asset_analysts, **right.asset_analysts}
+    if right.ticker_evidence_bundles:
+        merged.ticker_evidence_bundles = {
+            **merged.ticker_evidence_bundles,
+            **right.ticker_evidence_bundles,
+        }
     if right.deliberation_summaries:
         merged.deliberation_summaries = {
             **merged.deliberation_summaries,
@@ -622,6 +642,58 @@ class AtlasResearchState(BaseModel):
             "checkpoints only — new readers fail closed when missing."
         ),
     )
+    # WP12.3 (#2863): one research-state pin per run/attempt. Optional request
+    # selects an exact version; otherwise preflight uses cutoff-bound as-of.
+    # Resume reuses the checkpointed dump — never re-select as ingestion continues.
+    requested_research_state_version_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional exact ResearchStateVersion.id for preflight. None → "
+            "select_state_as_of bound by knowledge_cutoff_at."
+        ),
+    )
+    research_state_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Resolved ResearchStatePin dump after preflight. Authoritative root "
+            "state_version_id for the run/attempt; same-run children must name it parent."
+        ),
+    )
+    research_state_status: str | None = Field(
+        default=None,
+        description=(
+            "pinned | state_unavailable after preflight. Typed unavailable keeps "
+            "compatibility documents shadow-only until exact-state coverage."
+        ),
+    )
+    research_state_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when research_state_status is state_unavailable.",
+    )
+    # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for H7 decision context compile.
+    h7_prerequisite_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "H7PrerequisiteSnapshot dump from preflight — accounting, forecast "
+            "outcomes, and pin linkage for H7 context compiler."
+        ),
+    )
+    # WP15.6 (#2975): exact structured lesson pin selected at preflight.
+    outcome_lesson_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "OutcomeLessonPin dump after preflight maturation/compile. Authoritative "
+            "structured lesson for WP14 H5/H7 context — not decision_log prose."
+        ),
+    )
+    outcome_lesson_status: str | None = Field(
+        default=None,
+        description="pinned | lesson_unavailable | store_unavailable after preflight.",
+    )
+    outcome_lesson_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when outcome_lesson_status is not pinned.",
+    )
 
     @field_validator("knowledge_cutoff_at")
     @classmethod
@@ -657,6 +729,10 @@ class AtlasResearchState(BaseModel):
         default_factory=dict
     )
     phase6_bias_row: Phase6BiasRow | None = None
+    phase7_subsection_outputs: Annotated[dict[str, dict[str, Any]], _merge_segment_dict] = Field(
+        default_factory=dict,
+        description="Topical digest subsection markdown keyed by slug (macro, alt-data, …).",
+    )
     phase7_digest: Phase7DigestPayload | None = None
     phase7d_risk_debate: RiskDebatePayload | None = None
     phase7d_rebalance: RebalancePayload | None = None
@@ -679,6 +755,11 @@ class AtlasResearchState(BaseModel):
     custom_prompt: str | None = None
 
     triage: DeltaTriageResult | None = None
+    # WP13.3 (#2926): deterministic research attention plan built at triage end.
+    # Stored as JSON-compatible dump; validate via research_attention helpers.
+    research_attention_plan: dict[str, Any] | None = None
+    # WP13.4 (#2930): post-H4 Hermes ticker attention plan — roster is already fixed.
+    hermes_research_attention_plan: dict[str, Any] | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta
     # runs (empty dict on baseline / monthly). Frozen-by-convention: the

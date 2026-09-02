@@ -162,13 +162,15 @@ export default function Home() {
             choice of model.
           </p>
           <div className="dqhero-cta">
-            {/* Real link, not decorative copy (full-UI-suite critique, P3):
-                the hero's only affordance used to be a <p>, and the nearest
-                actual CTA (NavShell's "Ask digichat" pill) disappears at
-                exactly the scroll depth that leaves the hero (autoHide
-                yields past 180px) -- so the page's most-viewed screen handed
-                off to one with no visible action. Same copy, same look,
-                now an anchor to the next section instead of a static label. */}
+            {/* Claim + install: shared .cmdline (site.css) is the diegetic
+                proof; the loud control is ink/paper, never an accent pill. */}
+            <p className="cmdline">
+              <span className="prompt">$</span>
+              git clone https://github.com/digithings-ai/digithings.git
+            </p>
+            <a className="btn btn-primary" href="/chat">
+              Ask digichat
+            </a>
             <a className="dqhero-scroll-label" href="#metrics">
               Scroll to explore
             </a>

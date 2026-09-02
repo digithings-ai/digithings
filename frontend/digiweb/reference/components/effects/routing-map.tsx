@@ -49,7 +49,7 @@ export function RoutingMap() {
     // color-mix. Every rm-* SVG child rule (strokes, animated dash, ping ring)
     // stays in effects.css — that's the genuine animation mechanics.
     <svg
-      className="mt-[1.6rem] w-full h-auto rounded-[14px] border border-hair bg-surface/40"
+      className="mt-[1.6rem] w-full h-auto rounded-none border border-hair bg-surface/40"
       viewBox={`0 0 ${W} ${H}`}
       role="img"
       aria-label="Orders routing across trading venues"

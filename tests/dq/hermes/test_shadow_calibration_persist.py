@@ -84,7 +84,9 @@ def _snapshot(*, session: date, price: str = "100") -> SessionPriceSnapshot:
     )
 
 
-def _resolved_outcome(*, salt: int = 0, known_at: datetime = _TS) -> ForecastOutcome:
+def _resolved_outcome(
+    *, salt: int = 0, known_at: datetime = _TS, horizon_sessions: int = 21
+) -> ForecastOutcome:
     mean = Decimal("0.04")
     real = Decimal("0.06")
     residual = real - mean
@@ -93,6 +95,7 @@ def _resolved_outcome(*, salt: int = 0, known_at: datetime = _TS) -> ForecastOut
         base_forecast_id=_BASE_ID,
         effective_forecast_id=UUID(f"22222222-2222-5222-8222-{salt:012d}"),
         ticker=ticker,
+        horizon_sessions=horizon_sessions,
         reference_session=_REF,
         maturity_session=_MAT,
         reference_snapshot=_snapshot(session=_REF),
@@ -110,6 +113,7 @@ def _resolved_outcome(*, salt: int = 0, known_at: datetime = _TS) -> ForecastOut
         **{k: (v.isoformat() if isinstance(v, (datetime, date)) else v) for k, v in draft.items()},
         "base_forecast_id": str(draft["base_forecast_id"]),
         "effective_forecast_id": str(draft["effective_forecast_id"]),
+        "horizon_sessions": horizon_sessions,
         "reference_snapshot": draft["reference_snapshot"].model_dump(mode="json"),  # type: ignore[union-attr]
         "maturity_snapshot": draft["maturity_snapshot"].model_dump(mode="json"),  # type: ignore[union-attr]
         "forecast_mean_return": str(mean),
@@ -207,6 +211,42 @@ class TestAttachShadowCalibrations:
         )
         assert len(attachment.calibrated_forecasts) == 1
         assert "AAPL" in attachment.calibrated_forecast_dumps()
+
+    def test_from_state_without_cutoff_returns_empty(self) -> None:
+        """#2797: never stamp identities with datetime.now when cutoff is missing."""
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=RUN_DATE,
+            baseline_date=date(2026, 8, 24),
+            knowledge_cutoff_at=None,
+            prior_context=PriorContext(),
+            phase_hermes=PhaseHermesState(
+                deliberation_summaries={
+                    "AAPL": {
+                        "effective_forecast": _effective().model_dump(mode="json"),
+                    }
+                }
+            ),
+        )
+        attachment = fc.attach_shadow_calibrations_from_state(
+            state,
+            outcomes=[_resolved_outcome(salt=0)],
+        )
+        assert attachment.calibrations == ()
+        assert attachment.calibrated_forecasts == ()
+
+    def test_attach_filters_outcomes_by_subject_horizon(self) -> None:
+        outcomes = [
+            *[_resolved_outcome(salt=i, horizon_sessions=21) for i in range(3)],
+            *[_resolved_outcome(salt=10 + i, horizon_sessions=5) for i in range(4)],
+        ]
+        attachment = fc.attach_shadow_calibrations(
+            subjects=[_effective()],
+            outcomes=outcomes,
+            as_of=_AS_OF,
+        )
+        assert attachment.calibrations[0].cohort_key == "horizon:21|regime:default"
+        assert attachment.calibrations[0].sample_count == 3
 
 
 class TestPersistShadowCalibrations:

@@ -10,7 +10,7 @@ Update an **existing** `inst-hedge-fund-intel` document; do not rewrite from scr
 ## Output contract
 
 Respond with **`DocumentPatch`** with `target_document_key`: `"inst-hedge-fund-intel"`.
-Patch paths: `/headline`, `/bias`, `/tracked_funds_count`, `/top_signals`, …
+Patch paths: `/body`, `/internal_bias`, `/sources`, …
 
 ## Inputs
 

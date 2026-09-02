@@ -670,6 +670,97 @@ class TestRejections:
         assert [r.reason for r in result.rejections] == [OrderRejectionReason.DATA_UNAVAILABLE]
         assert client.store.get(PAPER_EXECUTIONS, []) == []
 
+    @pytest.mark.parametrize(
+        "mark",
+        [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")],
+        ids=["nan", "inf", "-inf"],
+    )
+    def test_nonfinite_mark_is_data_unavailable_not_a_raise(self, mark: Decimal) -> None:
+        """Non-finite marks must decline, not crash the public executor (#2497).
+
+        ``Decimal(\"NaN\") <= 0`` raises ``InvalidOperation``; ``Infinity`` clears the
+        old ``<= 0`` gate and dies later in ``PaperExecution`` validation. Both must
+        exit as ``data_unavailable`` with no fill or lot rows.
+        """
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="add", quantity="10")
+        client = chain.client()
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"AAPL": mark},
+            now=NOW,
+        )
+
+        assert [r.reason for r in result.rejections] == [OrderRejectionReason.DATA_UNAVAILABLE]
+        assert result.fills == []
+        assert client.store.get(PAPER_EXECUTIONS, []) == []
+        assert client.store.get(HOLDING_LOTS, []) == []
+
+    @pytest.mark.parametrize(
+        "quantity",
+        ["NaN", "Infinity", "-Infinity"],
+        ids=["nan", "inf", "-inf"],
+    )
+    def test_nonfinite_quantity_is_data_unavailable_not_a_raise(self, quantity: str) -> None:
+        """Non-finite quantities take the same decline path as non-finite marks (#2497)."""
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="add", quantity=quantity)
+        client = chain.client()
+
+        result = _run(client, {"AAPL": "195.50"})
+
+        assert [r.reason for r in result.rejections] == [OrderRejectionReason.DATA_UNAVAILABLE]
+        assert result.fills == []
+        assert client.store.get(PAPER_EXECUTIONS, []) == []
+        assert client.store.get(HOLDING_LOTS, []) == []
+
+    def test_float_nan_mark_is_data_unavailable_not_a_raise(self) -> None:
+        """The marks signature is ``float | Decimal``; ``float(\"nan\")`` is in-bounds (#2497).
+
+        ``_decimal`` catches only ``(ArithmeticError, ValueError)``, so
+        ``Decimal(str(float(\"nan\")))`` returns ``Decimal(\"NaN\")`` and must decline.
+        """
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="add", quantity="10")
+        client = chain.client()
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"AAPL": float("nan")},
+            now=NOW,
+        )
+
+        assert [r.reason for r in result.rejections] == [OrderRejectionReason.DATA_UNAVAILABLE]
+        assert result.fills == []
+        assert client.store.get(PAPER_EXECUTIONS, []) == []
+        assert client.store.get(HOLDING_LOTS, []) == []
+
+    def test_nonfinite_mark_skips_one_order_without_bailing_the_batch(self) -> None:
+        """A bad mark is a per-order skip — a sibling with a good mark still fills (#2497)."""
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="add", quantity="10")
+        chain.order(symbol="MSFT", action="add", quantity="4")
+        client = chain.client()
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"AAPL": Decimal("NaN"), "MSFT": Decimal("400.00")},
+            now=NOW,
+        )
+
+        assert [r.symbol for r in result.rejections] == ["AAPL"]
+        assert [r.reason for r in result.rejections] == [OrderRejectionReason.DATA_UNAVAILABLE]
+        assert [f.symbol for f in result.fills] == ["MSFT"]
+        assert Decimal(client.store[PAPER_EXECUTIONS][0]["price"]) == Decimal("400.00")
+        assert {row["symbol"] for row in client.store[HOLDING_LOTS]} == {"MSFT"}
+
 
 class TestHeadsOnly:
     def test_a_superseded_pending_order_is_not_filled(self) -> None:

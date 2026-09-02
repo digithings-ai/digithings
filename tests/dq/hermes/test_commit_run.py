@@ -5,7 +5,7 @@ from __future__ import annotations
 import pathlib
 import re
 from datetime import date, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from digiquant.olympus.atlas.state import (
@@ -19,8 +19,13 @@ from digiquant.olympus.atlas.state import (
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
 from digiquant.olympus.hermes.writers.commit_io import (
+    _NAV_INTERVAL_TICKER_BATCH,
+    _NAV_INTERVAL_WINDOW_DAYS,
+    OVERLAY_MANIFEST_PREFIX,
     _canonical_thesis_ids,
+    _interval_price_returns,
     load_commit_manifests,
+    manifest_document_key,
     resolve_prior_commit,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
@@ -32,6 +37,7 @@ from digiquant.olympus.hermes.writers.ledger_io import (
 from digiquant.olympus.hermes.writers.ledger_io import (
     _heads as _ledger_heads,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -456,6 +462,53 @@ class TestCommitRunIdempotency:
         found = load_commit_manifests(client=client, run_date=RUN_DATE)
         assert [m["weights_fingerprint"] for m in found] == ["fp-x"]
 
+    def test_house_uuid_keeps_commit_run_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        assert manifest_document_key("run-1", str(overlay)).startswith(OVERLAY_MANIFEST_PREFIX)
+        assert manifest_document_key("run-1") == "commit-run/run-1"
+        assert manifest_document_key("run-1", str(house_workspace_id())) == "commit-run/run-1"
+
+    def test_house_uuid_load_does_not_see_overlay_manifests(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+        overlay = uuid4()
+        house = str(house_workspace_id())
+        iso = RUN_DATE.isoformat()
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": iso,
+                        "document_key": f"overlay-commit/{overlay}/ov-run",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "overlay"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/overlay-spoof",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "spoof"},
+                    },
+                    {
+                        "date": iso,
+                        "document_key": "commit-run/house-run",
+                        "workspace_id": house,
+                        "payload": {"weights_fingerprint": "house"},
+                    },
+                ]
+            }
+        )
+        overlay_found = load_commit_manifests(
+            client=client, run_date=RUN_DATE, workspace_id=str(overlay)
+        )
+        house_omitted = load_commit_manifests(client=client, run_date=RUN_DATE)
+        house_pinned = load_commit_manifests(client=client, run_date=RUN_DATE, workspace_id=house)
+        assert [m["weights_fingerprint"] for m in overlay_found] == ["overlay"]
+        assert [m["weights_fingerprint"] for m in house_omitted] == ["house"]
+        assert [m["weights_fingerprint"] for m in house_pinned] == ["house"]
+
     def test_missing_sized_book_with_h7_memo_fails_closed(self) -> None:
         client = FakeSupabaseClient()
         state = _state(with_sized_book=False)
@@ -680,6 +733,38 @@ class TestCanonicalThesisIds:
         assert spy_row is not None
         assert spy_row.get("thesis_id") == "vehicle-spy"
 
+    def test_book_portfolio_persists_action_rationale_on_positions(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "thesis_vehicles": [],
+                "nav_history": [],
+                "price_history": [],
+            }
+        )
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
+                "actions": [
+                    {
+                        "ticker": "SPY",
+                        "action": "hold",
+                        "target_pct": 100.0,
+                        "rationale": "PM: maintain core US equity beta while energy sleeve scales.",
+                    }
+                ],
+                "notes": "H8 sized book",
+            }
+        )
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        node(state)
+
+        positions_written = client.store.get("positions", [])
+        spy_row = next((r for r in positions_written if r.get("ticker") == "SPY"), None)
+        assert spy_row is not None
+        assert spy_row.get("rationale") == (
+            "PM: maintain core US equity beta while energy sleeve scales."
+        )
+
 
 class TestMemoUnaddressedHeldCarry:
     """#1649 — held names the H7 memo omits are carried, never dropped or blocked.
@@ -796,10 +881,13 @@ class TestMemoUnaddressedHeldCarry:
 _COMMITS = "portfolio_ledger_commits"
 _INTENTS = "portfolio_ledger_decision_intents"
 _REQUESTED = "portfolio_ledger_requested_targets"
+_ADJUSTMENTS = "portfolio_ledger_target_adjustments"
 _APPROVED = "portfolio_ledger_approved_targets"
 _ORDERS = "portfolio_ledger_order_intents"
 _EXECUTIONS = "portfolio_ledger_paper_executions"
 
+# Adjustments may be empty on a commit with no H8 deltas — keep them out of the
+# "every table must have rows" loops; they are mirrored for supersession reads.
 _LEDGER_TABLES = (_COMMITS, _INTENTS, _REQUESTED, _APPROVED, _ORDERS)
 
 
@@ -828,7 +916,7 @@ def _mirror_ledger(client: FakeSupabaseClient) -> None:
     docstring on ``_FakeQuery``), so a two-attempt supersession test has to bridge
     them by hand.
     """
-    for table in (*_LEDGER_TABLES, _EXECUTIONS):
+    for table in (*_LEDGER_TABLES, _ADJUSTMENTS, _EXECUTIONS):
         client.canned_reads[table] = [dict(r) for r in client.store.get(table, [])]
 
 
@@ -918,9 +1006,14 @@ class TestCommitChainLedger:
             capture_output=True,
             text=True,
         ).stdout.split()
+        # ``ledger_io`` is the only writer. Pipeline caller is H9. ``recover_ledger``
+        # is the operator recovery caller for a booked-but-uncommitted day (#3330): it
+        # reads existing positions and must not call H8 / ``book_portfolio``. A fourth
+        # ``append_commit_chain(`` site is a second commit *authority* and fails this.
         assert sorted(hits) == [
             "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
             "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/recover_ledger.py",
         ], f"a second commit authority appeared: {hits}"
 
     def test_identical_same_date_fingerprint_appends_nothing(self) -> None:
@@ -1063,9 +1156,131 @@ class TestCommitChainLedger:
 
         assert not out.get("errors"), out.get("errors")
         assert all(not _rows(client, t) for t in _LEDGER_TABLES)
+        assert not _rows(client, _ADJUSTMENTS)
         assert {r["ticker"] for r in _rows(client, "positions")} == {"SPY"}
         manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
         assert manifest.get("ledger_commit_id") is None
+
+
+class TestTargetAdjustmentPersistence:
+    """WP2 residual #2768 — durable requested→approved adjustment lineage."""
+
+    def _book_with_cap(self) -> dict:
+        return {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 40.0}],
+            "actions": [],
+            "notes": "H8 sized with single-name cap",
+            "requested_pct": {"SPY": 80.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "single_name_cap",
+                    "original_pct": 80.0,
+                    "adjusted_pct": 40.0,
+                    "unit": "pct",
+                    "reason": "single-name cap 40%",
+                }
+            ],
+        }
+
+    def test_persists_target_adjustment_rows_keyed_to_requested_target(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=self._book_with_cap()))
+
+        adjustments = _rows(client, _ADJUSTMENTS)
+        assert len(adjustments) == 1
+        row = adjustments[0]
+        assert row["symbol"] == "SPY"
+        assert row["adjustment_type"] == "single_name_cap"
+        assert float(row["original_value"]) == pytest.approx(0.80)
+        assert float(row["adjusted_value"]) == pytest.approx(0.40)
+        assert row["reason"] == "single-name cap 40%"
+
+        requested = {r["id"]: r for r in _rows(client, _REQUESTED)}
+        assert row["requested_target_id"] in requested
+        assert requested[row["requested_target_id"]]["symbol"] == "SPY"
+
+    def test_requested_weight_reflects_pre_cap_intent(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=self._book_with_cap()))
+
+        spy_requested = next(r for r in _rows(client, _REQUESTED) if r["symbol"] == "SPY")
+        spy_approved = next(r for r in _rows(client, _APPROVED) if r["symbol"] == "SPY")
+        assert float(spy_requested["requested_weight"]) == pytest.approx(0.80)
+        assert float(spy_approved["approved_weight"]) == pytest.approx(0.40)
+        assert spy_approved["requested_target_id"] == spy_requested["id"]
+
+    def test_conviction_unit_adjustments_are_not_persisted_as_weight_rows(self) -> None:
+        book = {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 50.0}],
+            "actions": [],
+            "notes": "conviction floor only",
+            "requested_pct": {"SPY": 50.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "conviction_floor",
+                    "original_pct": 0.9,
+                    "adjusted_pct": 0.55,
+                    "unit": "conviction",
+                    "reason": "unchallenged conviction floor",
+                }
+            ],
+        }
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=book))
+        assert not _rows(client, _ADJUSTMENTS)
+
+    def test_no_unexplained_durable_delta_when_adjustments_cover_request(self) -> None:
+        """Every material requested≠approved symbol must carry ≥1 adjustment row."""
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        book = {
+            "recommended_portfolio": [
+                {"ticker": "SPY", "target_pct": 30.0},
+                {"ticker": "AAPL", "target_pct": 20.0},
+            ],
+            "actions": [],
+            "notes": "two capped names",
+            "requested_pct": {"SPY": 60.0, "AAPL": 40.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "single_name_cap",
+                    "original_pct": 60.0,
+                    "adjusted_pct": 30.0,
+                    "unit": "pct",
+                    "reason": "single-name cap",
+                },
+                {
+                    "ticker": "AAPL",
+                    "adjustment_type": "sector_cap",
+                    "original_pct": 40.0,
+                    "adjusted_pct": 20.0,
+                    "unit": "pct",
+                    "reason": "sector cap",
+                },
+            ],
+        }
+        _run(client, _state(sized_book=book, analysts=_multi_analysts("SPY", "AAPL")))
+
+        by_symbol: dict[str, list[dict]] = {}
+        for row in _rows(client, _ADJUSTMENTS):
+            by_symbol.setdefault(row["symbol"], []).append(row)
+
+        for req in _rows(client, _REQUESTED):
+            if req["symbol"] == "CASH":
+                continue
+            approved = next(
+                r for r in _rows(client, _APPROVED) if r["requested_target_id"] == req["id"]
+            )
+            req_w = float(req["requested_weight"])
+            appr_w = float(approved["approved_weight"])
+            if abs(req_w - appr_w) <= 1e-9:
+                continue
+            assert by_symbol.get(req["symbol"]), (
+                f"{req['symbol']}: requested={req_w} approved={appr_w} with no "
+                "TargetAdjustment row — durable delta unexplained"
+            )
 
 
 class TestLedgerIoMutationPins:
@@ -1260,17 +1475,59 @@ _MIGRATION_069 = (
     / "migrations"
     / "069_olympus_portfolio_ledger.sql"
 )
+_MIGRATION_097 = (
+    pathlib.Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "097_workspaces_tenant_columns.sql"
+)
+
+
+def _strip_sql_comments(raw: str) -> str:
+    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
 
 
 def _migration_sql() -> str:
-    raw = _MIGRATION_069.read_text(encoding="utf-8")
-    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
+    """Migration 069 DDL (CHECKs / CREATE TABLE bodies)."""
+    return _strip_sql_comments(_MIGRATION_069.read_text(encoding="utf-8"))
+
+
+def _migration_097_sql() -> str:
+    """Migration 097 DDL (tenant ``workspace_id`` ADD COLUMNs)."""
+    return _strip_sql_comments(_MIGRATION_097.read_text(encoding="utf-8"))
 
 
 def _table_body(sql: str, table: str) -> str:
     match = re.search(rf"CREATE TABLE IF NOT EXISTS public\.{table} \((.*?)\n\);", sql, re.S)
     assert match, f"table {table} not found in migration 069"
     return match.group(1)
+
+
+def _columns_for_table(table: str) -> set[str]:
+    """Columns the live schema permits: CREATE TABLE (069) ∪ ADD COLUMN (097).
+
+    T0 (#5-T0) stamped ``workspace_id`` on every ledger writer. That column is not in
+    migration 069's CREATE TABLE — 097 ADDs it — so the emitted-columns guard must
+    union both migrations or it falsely rejects a legitimate stamped row.
+    """
+    create_cols = set(
+        re.findall(
+            r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
+            _table_body(_migration_sql(), table),
+            re.M,
+        )
+    )
+    alter_cols = set(
+        re.findall(
+            rf"ALTER TABLE public\.{table}\s+ADD COLUMN IF NOT EXISTS ([a-z_]+) ",
+            _migration_097_sql(),
+            re.I,
+        )
+    )
+    columns = create_cols | alter_cols
+    assert columns, f"parsed no columns for {table}"
+    return columns
 
 
 def _allowed_values(sql: str, table: str, column: str) -> set[str]:
@@ -1349,28 +1606,24 @@ class TestLedgerRowsSatisfyMigration069:
     ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
     validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
     a model field with no column behind it, which is a PostgREST 400 rather than a
-    CHECK violation.
+    CHECK violation. Column membership is the live schema = 069 CREATE ∪ 097 ADD
+    (``workspace_id`` and any later tenant columns).
     """
 
     def test_emitted_columns_all_exist_in_the_migration(self) -> None:
         # A key the table lacks is a PostgREST 400, not a CHECK violation.
-        sql = _migration_sql()
         client = _ledger_client(SPY=100.0)
         _run(client, _state())
         for table in _LEDGER_TABLES:
-            columns = set(
-                re.findall(
-                    r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
-                    _table_body(sql, table),
-                    re.M,
-                )
-            )
-            assert columns, f"parsed no columns for {table}"
+            columns = _columns_for_table(table)
             rows = _rows(client, table)
             assert rows, f"{table} got no rows — the assertion below would be vacuous"
             for row in rows:
                 unknown = set(row) - columns
                 assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
+            # T0: every ledger writer stamps workspace_id; vacuous if we forget the ADD.
+            assert "workspace_id" in columns, f"{table} schema must include workspace_id (097)"
+            assert all("workspace_id" in row for row in rows)
 
     def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
         sql = _migration_sql()
@@ -1544,6 +1797,81 @@ class TestPriceReadRowCap:
         )
 
 
+class TestIntervalPriceReturnsRowCap:
+    """Regression (#2484): interval NAV returns must not drop tickers under the row cap.
+
+    ``_interval_price_returns`` needs both ends of a padded interval window (up to
+    ``_NAV_INTERVAL_WINDOW_DAYS`` calendar days per ticker). A truncated ticker is
+    omitted from the returned dict and the caller treats a missing key as 0.0 — a
+    silent wrong NAV with no diagnostic.
+    """
+
+    CAP = 1000
+    RUN = date(2026, 6, 12)
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        anchor = self.RUN - timedelta(days=120)
+        floor = anchor - timedelta(days=7)
+        rows: list[dict[str, object]] = []
+        for index, ticker in enumerate(tickers):
+            begin_close = 100.0 + index
+            end_close = 110.0 + index
+            day = floor
+            while day < self.RUN:
+                iso = day.isoformat()
+                if iso <= anchor.isoformat():
+                    close = begin_close
+                elif day == self.RUN - timedelta(days=1):
+                    close = end_close
+                else:
+                    close = (begin_close + end_close) / 2.0
+                rows.append({"date": iso, "ticker": ticker, "close": close})
+                day += timedelta(days=1)
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_returns_every_ticker_under_the_row_cap(self) -> None:
+        tickers = [f"TK{index:03d}" for index in range(10)]
+        window_rows = _NAV_INTERVAL_WINDOW_DAYS + 1
+        assert len(tickers) * window_rows > self.CAP, "universe must exceed the cap"
+        returns = _interval_price_returns(
+            client=self._capped_client(tickers),
+            tickers=tuple(tickers),
+            start_date=self.RUN - timedelta(days=200),
+            run_date=self.RUN,
+        )
+        missing = sorted(set(tickers) - set(returns))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is treated as 0.0 return and silently wrong NAV"
+        )
+        for index, ticker in enumerate(tickers):
+            expected = (110.0 + index - (100.0 + index)) / (100.0 + index)
+            assert returns[ticker] == pytest.approx(expected)
+
+    def test_batch_is_derived_from_the_interval_window(self) -> None:
+        worst_case = _NAV_INTERVAL_TICKER_BATCH * (_NAV_INTERVAL_WINDOW_DAYS + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
+
+
 class TestForecastRegistryInH9:
     """WP4.6 (#2663): H9 persists forecast lineage after booking; failure cannot rebook."""
 
@@ -1703,6 +2031,94 @@ class TestRiskPolicyRegistryH9:
         assert client.store.get("positions", [])
 
 
+class TestCostLiquidityRegistryH9Noop:
+    """WP7 follow-up #2807 — fingerprint-noop must retry cost with prior ledger id."""
+
+    def test_fingerprint_noop_retries_cost_with_prior_ledger_commit_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.olympus.hermes.writers.ledger_io import LedgerAppend
+
+        client = _ledger_client(SPY=100.0)
+        state = _state()
+        captured: list[LedgerAppend | None] = []
+        real = h9._persist_cost_liquidity_registry
+
+        def wrap(*, client, state, ledger):  # type: ignore[no-untyped-def]
+            captured.append(ledger)
+            return real(client=client, state=state, ledger=ledger)
+
+        monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
+        out1 = _run(client, state)
+        manifest1 = out1["phase_hermes"].commit_manifest
+        assert manifest1["status"] == "committed"
+        commit_id = manifest1.get("ledger_commit_id")
+        assert commit_id, "first commit must mint ledger_commit_id for noop retry"
+        assert captured and captured[0] is not None
+        assert captured[0].commit_id == commit_id
+
+        out2 = _run(client, state)
+        manifest2 = out2["phase_hermes"].commit_manifest
+        assert manifest2["status"] == "noop"
+        assert len(captured) >= 2
+        noop_ledger = captured[-1]
+        assert noop_ledger is not None, "noop must not pass ledger=None when prior commit exists"
+        assert noop_ledger.commit_id == commit_id
+        assert manifest2.get("cost_liquidity_registry_reason") != "ledger_disabled"
+
+    def test_noop_without_prior_ledger_commit_id_stays_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.olympus.hermes.writers.commit_io import (
+            weights_fingerprint,
+            weights_from_sized_book,
+        )
+
+        client = FakeSupabaseClient()
+        state = _state()
+        book = state.phase_hermes.sized_book
+        assert book is not None
+        weights = weights_from_sized_book(book)
+        fp = weights_fingerprint(weights)
+        monkeypatch.setattr(
+            h9,
+            "load_commit_manifests",
+            lambda **_k: [
+                {
+                    "schema_version": "1.1",
+                    "status": "committed",
+                    "weights_fingerprint": fp,
+                    "weights": {k: round(v, 4) for k, v in sorted(weights.items())},
+                    "nav": 100.0,
+                    "decision_log_rows": 0,
+                    "commit_seq": 1,
+                    # Pre-1.2 / ledger-off manifests have no ledger_commit_id.
+                }
+            ],
+        )
+        captured: list[object] = []
+
+        def wrap(*, client, state, ledger):  # type: ignore[no-untyped-def]
+            captured.append(ledger)
+            return (
+                {
+                    "cost_liquidity_registry_status": "skipped",
+                    "cost_liquidity_registry_reason": "ledger_disabled",
+                    "cost_liquidity_registry_snapshots_written": 0,
+                    "cost_liquidity_registry_estimates_written": 0,
+                },
+                {},
+                {},
+            )
+
+        monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
+        out = _run(client, state)
+        assert out["phase_hermes"].commit_manifest["status"] == "noop"
+        assert captured == [None]
+
+
 class TestPreTradeRiskH9:
     """WP9.4 — H9 hash validation + append-only PreTradeRiskReport persistence (#2754)."""
 
@@ -1742,7 +2158,9 @@ class TestPreTradeRiskH9:
 
     def _merging_client(self) -> FakeSupabaseClient:
         from dataclasses import dataclass
-        from typing import Any
+        from typing import (
+            Any,  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+        )
 
         from digiquant.olympus.atlas import pretrade_risk_registry as ptr
 
@@ -1804,6 +2222,33 @@ class TestPreTradeRiskH9:
         assert "errors" in out
         assert "missing_pre_trade_risk_report" in out["errors"][0].message
         assert not client.store.get("positions")
+
+    def test_shadow_default_missing_report_commits_without_blocking(self, monkeypatch) -> None:
+        """Default/shadow is fail-soft: missing report must not block the book (#2824)."""
+        monkeypatch.delenv("OLYMPUS_PRETRADE_RISK_MODE", raising=False)
+        client = FakeSupabaseClient()
+        out = _run(client, _state())
+        assert "errors" not in out
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
+        assert manifest["pretrade_risk_registry_reason"] == "missing_pre_trade_risk_report"
+        assert client.store.get("positions")
+
+    def test_explicit_shadow_invalid_report_commits(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "shadow")
+        client = FakeSupabaseClient()
+        state = _state()
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={"pre_trade_risk_report": {"not": "a report"}}
+        )
+        out = _run(client, state)
+        assert "errors" not in out
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
+        assert "unknown_pre_trade_risk_report" in str(manifest["pretrade_risk_registry_reason"])
+        assert client.store.get("positions")
 
     def test_enforce_unknown_report_rejects(self, monkeypatch) -> None:
         monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")

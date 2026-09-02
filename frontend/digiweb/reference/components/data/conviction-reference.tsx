@@ -3,7 +3,7 @@
  * conviction primitives, RECORDED-FROM-OLYMPUS pending a promotion ruling: no
  * @digithings/web export exists yet, so this specimen reproduces the dress as
  * static markup sourced class-for-class from
- * `frontend/olympus/components/shared/conviction-meter.tsx` and
+ * `frontend/dashboard/components/shared/conviction-meter.tsx` and
  * `signed-conviction-badge.tsx`, rather than consuming a shared primitive.
  *
  * THREE encodings, never conflated (the olympus F6 ruling) — same cyan
@@ -90,7 +90,7 @@ function ConvictionBadge({ value }: { value: number }) {
   const tone = value < 0 ? "text-down border-down/35" : "text-up border-up/35";
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
+      className={`inline-flex items-center rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
     >
       {sign}
       {Math.abs(value)}

@@ -134,7 +134,7 @@ export function TerminalManifest({
 
   return (
     <div className={shell} aria-label={ariaLabel}>
-      <div className="tm-pane flex flex-col rounded-[16px] border border-hair px-[clamp(1rem,2.4vw,1.6rem)] py-[clamp(1rem,2.4vw,1.5rem)] font-mono">
+      <div className="tm-pane flex flex-col rounded-none border border-hair px-[clamp(1rem,2.4vw,1.6rem)] py-[clamp(1rem,2.4vw,1.5rem)] font-mono">
         <div className="mb-[0.7rem] flex-none text-[0.8rem] tracking-[0.02em] text-ink-mute">
           <span className="text-accent">{prompt}</span> {command}
           {meta ? <span> {meta}</span> : null}

@@ -27,9 +27,26 @@ except ImportError:
     print("pip install supabase", file=sys.stderr)
     sys.exit(1)
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    src = str(_REPO_ROOT / "digiquant" / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
+
+_GROUP_A_TABLES = frozenset({"position_events", "positions", "nav_history"})
+
 
 def _max_date(sb, table: str, col: str = "date"):
-    r = sb.table(table).select(col).order(col, desc=True).limit(1).execute()
+    query = sb.table(table).select(col)
+    if table in _GROUP_A_TABLES:
+        query = eq_house_workspace(query)
+    r = query.order(col, desc=True).limit(1).execute()
     rows = getattr(r, "data", None) or []
     if not rows:
         return None

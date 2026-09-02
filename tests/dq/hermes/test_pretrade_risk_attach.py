@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
 from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
@@ -20,12 +20,10 @@ pytestmark = pytest.mark.unit
 
 
 def _final_weights(book: dict[str, Any]) -> dict[str, float]:
-    return {
-        str(row["ticker"]): float(row["target_pct"])
-        for row in book.get("recommended_portfolio") or []
-        if float(row.get("target_pct") or 0) > 0
-        and str(row.get("ticker", "")).strip().upper() != "CASH"
-    }
+    """Match H9 commit extraction — report fingerprint must equal this map."""
+    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+
+    return weights_from_sized_book(book)
 
 
 def _run_h8(
@@ -119,6 +117,31 @@ def test_report_fingerprint_matches_final_book_after_controls(
     assert report.final_weights.weights_fingerprint == weights_fingerprint(final)
     assert book["pre_trade_risk_report_hash"] == report.report_content_hash
     assert report.allocation_input_bundle_hash == result["bundle"].bundle_content_hash
+
+
+def test_final_book_weights_matches_h9_extractor_on_divergent_shapes() -> None:
+    """H8 report binding and H9 validation must share one weight extractor (#2824)."""
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import _final_book_weights
+    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+
+    gross_gt_100 = {
+        "recommended_portfolio": [
+            {"ticker": "SPY", "target_pct": 80.0},
+            {"ticker": "TLT", "target_pct": 40.0},
+        ]
+    }
+    dup_rows = {
+        "recommended_portfolio": [
+            {"ticker": "SPY", "target_pct": 30.0},
+            {"ticker": "SPY", "target_pct": 30.0},
+            {"ticker": "TLT", "target_pct": 40.0},
+        ]
+    }
+    for book in (gross_gt_100, dup_rows):
+        h8_risky, _cash = _final_book_weights(book)
+        h9_risky = weights_from_sized_book(book)
+        assert h8_risky == h9_risky
+        assert weights_fingerprint(h8_risky) == weights_fingerprint(h9_risky)
 
 
 def test_continuity_carry_case_report_matches_final_book(

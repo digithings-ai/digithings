@@ -605,7 +605,7 @@ def compare_action_cost(
             expected_components=estimate.components,
             realized_fee=None,
             realized_slippage=None,
-            status=CostOutcomeStatus.PENDING,
+            status=CostOutcomeStatus.UNAVAILABLE,
             unavailable_reason="expected_cost_unpriceable",
             compared_at=at,
             content_hash="0" * 64,

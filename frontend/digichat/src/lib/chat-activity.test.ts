@@ -370,7 +370,7 @@ describe("toDigiChatActivity", () => {
           operation: "retrieve",
           status: "failed",
           label: "digivault errors (2)",
-          toolName: "digivault",
+          toolName: "digivault_search_notes",
           query: "batch",
           hitCount: 2,
         },

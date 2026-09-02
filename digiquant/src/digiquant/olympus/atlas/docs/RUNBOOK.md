@@ -43,7 +43,7 @@ metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **Claude Cowork:** project briefing and scheduled task recipes live under [`cowork/`](cowork/) — see [`cowork/README.md`](cowork/README.md) and paste [`cowork/PROJECT-PROMPT.md`](cowork/PROJECT-PROMPT.md) into the Cowork project instructions. **First-time setup:** [`cowork/SETUP-ATLAS-COWORK.md`](cowork/SETUP-ATLAS-COWORK.md) (agent-driven wizard → `cowork/OPERATOR-COWORK.md` + `config/schedule.json` → `cowork_operator`).
 
-**Olympus daily chain:** `python -m digiquant.olympus.hermes.chain --cadence daily` (`.github/workflows/pipeline-olympus.yml`). Sunday cron sets `refresh_scope=all` for operator full refresh; weekdays use edit-mode continuity (`skip`/`edit`/`full` per artifact). Beliefs distillation: `--refresh-scope beliefs` or automatic when `decision_log` backlog exceeds `OLYMPUS_BELIEFS_BACKLOG` (default 20).
+**Olympus daily chain:** `python -m digiquant.olympus.hermes.chain --cadence daily` (`.github/workflows/pipeline-olympus.yml`). Sunday cron sets `refresh_scope=all` for operator full refresh; weekdays use edit-mode continuity (`skip`/`edit`/`full` per artifact). Beliefs distillation: daily short fold on every house run; `--refresh-scope beliefs` (or unfolded `decision_log` backlog above `OLYMPUS_BELIEFS_BACKLOG`, default 20) selects the full rewrite.
 
 ## Two tracks (research vs portfolio)
 
@@ -87,6 +87,65 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 **As-of date constraints:** all web research must use `before:DATE` query constraints; prices/macro come from Supabase filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
+
+### Legacy research-state inventory (WP12.4 / #2870)
+
+Inventory existing `documents` rows into `LegacyDocumentRef` pointers
+(`legacy_manifest_only`, `known_at=None`) for audit/degraded compatibility.
+Does **not** extract evidence/beliefs/events or invent known times. Strict
+readers exclude these rows. Default is dry-run. `--apply` appends via the
+**in-memory** `ResearchStateStore` (SQL IO adapter later) — it does **not**
+INSERT into `olympus_research_legacy_refs` yet; use it to validate counts and
+library idempotency in-process.
+
+```bash
+# Dry-run counts only (default)
+python3 scripts/backfill_research_state.py --supabase
+python3 scripts/backfill_research_state.py --documents-json /path/to/sources.json
+
+# In-process append via ResearchStateStore (not durable SQL)
+python3 scripts/backfill_research_state.py --supabase --apply
+```
+
+Counts always reconcile: `source == inserted + skipped + unverifiable`.
+Library: `digiquant.olympus.research_retrieval.legacy_backfill`.
+
+### Compiled research-state prose views (WP12.5 / #2877)
+
+`research_retrieval.views` compiles deterministic brief/digest markdown from one
+exact pinned `ResearchStateVersion` (sorted entities; embeds state id / hash /
+schema). Atlas publish dual-writes `research-state-brief` /
+`research-state-digest` only when the preflight pin is present and
+`PublishDeps.research_state_store` can exact-load that version; structured-write
+failure refuses view publication. Incumbent digest/segment documents stay until
+a later parity/retention gate.
+
+**Operator note:** Atlas/Hermes CLI currently construct `PublishDeps(client=…)`
+(and preflight deps) **without** injecting `research_state_store` — same shadow
+pattern as WP12.3. Dual-write therefore does **not** run on default production
+CLI paths until callers wire the same in-memory store used for the pin (durable
+SQL IO adapter later). Do not treat `research-state-brief` /
+`research-state-digest` rows as present or operator-authoritative until that
+wiring lands.
+
+### Research attention shadow evaluation (WP13.5 / #2934)
+
+After a shadow-mode Olympus run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+reconcile planned attention decisions to exact WP1 attempt usage and downstream
+artifacts before considering enforcement:
+
+```bash
+python3 digiquant/scripts/atlas/evaluate_research_policy_shadow.py \
+  --store-snapshot artifacts/attention/store.json \
+  --attempt-details artifacts/attention/attempts.json \
+  --downstream artifacts/attention/downstream.json \
+  --output artifacts/attention/evaluation.json
+```
+
+The CLI is file-only evidence — it never activates `enforce` or writes to
+production booking paths. Exit code `0` when the report is `complete` (100%
+decision-attempt reconciliation plus downstream linkage for eligible shadow
+runs); `1` when telemetry or downstream artifacts are missing.
 
 ## Market-open execution and price backfill
 
@@ -178,8 +237,11 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (~$0.005 per server-side tool invocation — one
-`web_search` pre-pass spawns dozens), tokens are second.
+Agentic searches dominate cost (built-in provider search on the tier's
+`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
+billed per that model's page; the `openrouter:web_search` Exa server tool is
+**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
+but unreachable from production pools), tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -196,7 +258,8 @@ unchanged keys, so the diet does **not** disturb the stable→volatile prompt-ca
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds, lower `max_search_results`. A **blanket** fan-out cap is still
+thresholds. (`max_search_results` is unused under native Olympus grounding —
+Exa toolkit only.) A **blanket** fan-out cap is still
 rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
 prioritised round-robin *within* the cap, so the reduction falls on the
@@ -258,13 +321,18 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | Env | Values | Effect |
 |---|---|---|
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
-| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + Olympus native web grounding (`get_grounding_model` / Perplexity / `:online`) |
 
-`apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
-and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
-No other OpenRouter env vars are set at chain startup. The workflow
+`apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
+sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
+tier + `openrouter_defaults`. No other OpenRouter env vars are set at chain startup. The workflow
 (`.github/workflows/pipeline-olympus.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
 the pipeline run step and the preflight-validation step — see the table below.
+
+**Preflight time ceiling (#2528/#2531):** `digiquant/scripts/atlas/validate-providers.py` sets
+`DIGILLM_REQUEST_TIMEOUT_SECONDS=20` and `DIGILLM_EMPTY_RETRY_MAX=0` before any LLM import (local
+runs and CI). The `Validate AI provider routing` workflow step has `timeout-minutes: 10` so a hung
+provider yields a step **failure**, not a 240-minute job **cancellation**.
 
 #### OpenRouter routing knobs (digillm → `extra_body`)
 
@@ -273,13 +341,19 @@ the pipeline run step and the preflight-validation step — see the table below.
 | **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
-| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI on the pipeline run step since #1622 and on the preflight-validation step since #2512, so the preflight's digillm-routed checks self-heal the same way (#2374) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; model comes from `get_grounding_model()`, which picks from the tier's `web_search_models` pool — when that resolves to nothing the grounding pre-pass is skipped, never substituted |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
+| **`openrouter:web_search` (Exa)** | digillm **toolkit** fallback for non-native OpenRouter models — **not** Olympus production grounding (#2567) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra) |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding** uses OpenRouter's `openrouter:web_search` server tool, with the model resolved by `get_grounding_model()`.
+**Web grounding (Olympus)** resolves via `get_grounding_model()` from the tier's
+`web_search_models` pool. Every production pool entry is `perplexity/sonar` or an
+`:online` variant — **web-search-capable models only** (#2567). digillm uses
+built-in provider search; Olympus call sites do **not** pass Exa `engine` /
+`max_results`. The Exa `openrouter:web_search` server tool remains a digillm /
+digigraph toolkit fallback for non-native models (opt-in / diagnostics). Check 4
+in `validate-providers.py` exercises the **native** Olympus path.
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -310,6 +384,11 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
+**First check:** `atlas_run_diagnostics.breakdown.empty_retries` on the run row — `total` and
+`by_model` count every digillm empty-retry self-heal (the `empty-retry n/4` log lines). A green
+`status` with a rising `empty_retries.total` means the provider is flaking but recovering; treat
+it as a warning before it escalates to a hard failure (see 2026-07-20 → 07-21 in #1639).
+
 Every phase uses **pinned open-weight models** from `config/olympus_models.yaml` (via
 `get_model_for_phase`). Legacy `openrouter/openrouter/auto` paths are blocked from frontier
 providers. Every research call is a **structured-output** (`response_format` json_schema) or
@@ -319,7 +398,7 @@ back with empty bodies. Contract and levers, in order of cause:
 1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
 2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).
 3. **`provider.require_parameters` is forced on** for any request carrying `response_format`/`tools` (digillm, independent of the `OPENROUTER_REQUIRE_PARAMETERS` toggle) so the Auto Router only routes to a provider that honors the param. Do **not** disable it for the pipeline.
-4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. If empties persist after (1)–(3), pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm routes among them with `route=fallback` and the empty-retry self-heal swaps off a flaky primary. Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
+4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. Pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm attaches `route=fallback` on the **primary** request so OpenRouter can swap on provider **errors** — not on empty `200` bodies (#2520). Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
 
 ## Environment requirements
 1. Python 3.11+ recommended.
@@ -524,4 +603,22 @@ not by a dense calendar.
 Recovering a **single** missing day that is genuinely recoverable (prices exist, a book was
 committed, only the metrics row is absent) is still supported: `--date YYYY-MM-DD`. That is not
 this case — for 06-27 → 07-16 there is no committed book to compute from.
+
+### Booked positions, missing ledger commit (#3330)
+
+If `positions` / `nav_history` / `pm-rebalance` exist for the date but
+`portfolio_ledger_commits` does not (H9 `append_commit_chain` died after
+`book_portfolio` — historically `23502` `workspace_id` NOT NULL while cron
+checked out `main`), do **not** re-run the cheap-tier LLM pipeline. Recover the
+already-decided book:
+
+```bash
+python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD
+python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-MM-DD --apply
+```
+
+Dry-run prints weights/NAV from `positions`. `--apply` appends one house ledger
+commit and a `commit-run/{run_id}` document. Idempotent when a committed
+manifest already exists. Requires `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` (same as the pipeline). Does not touch brokers.
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 import polars as pl
@@ -45,12 +45,14 @@ ORDER_INTENTS = "portfolio_ledger_order_intents"
 _PRICE_HISTORY = "price_history"
 
 
-def investor_currency_from_state(state: AtlasResearchState) -> str:
-    """Resolve explicit portfolio currency — never infer from NAV."""
+def investor_currency_from_state(state: AtlasResearchState) -> str | None:
+    """Resolve explicit portfolio currency — never infer USD or NAV."""
     prefs = getattr(getattr(state, "config", None), "preferences", None) or {}
-    raw = prefs.get("investor_currency") or prefs.get("currency") or "USD"
+    raw = prefs.get("investor_currency") or prefs.get("currency")
+    if raw is None:
+        return None
     code = str(raw).strip().upper()
-    return code if len(code) >= 3 else "USD"
+    return code if len(code) >= 3 else None
 
 
 def _load_symbol_history(
@@ -166,6 +168,9 @@ def build_cost_bundles_for_commit(
     """Estimate observational costs for every order intent in one ledger commit."""
     run_date = state.run_date.isoformat()
     currency = investor_currency_from_state(state)
+    if currency is None:
+        logger.warning("h9 cost evidence: currency_missing — skipping estimates (no false USD)")
+        return []
     cutoff = state.knowledge_cutoff_at
     resolved_at = (
         require_utc_datetime(cutoff, field_name="knowledge_cutoff_at")

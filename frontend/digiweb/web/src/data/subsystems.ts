@@ -1,14 +1,10 @@
-/** digiquant subsystems — Atlas (research) → Hermes (signals) → Kairos (execution).
+/** digiquant subsystems — research → portfolio → execution.
  *  Same shape conventions as modules; drives the pipeline graph + detail pages.
  *
- *  Accuracy note (#1846): Atlas and Hermes are shipped LangGraph sub-graphs under
- *  `digiquant/src/digiquant/olympus/`. "Kairos" names the execution STAGE, not a
- *  python package — there is no `digiquant.olympus.kairos`, so its snippet must
- *  point at a symbol that exists (`digiquant.backtest.run_backtest`). Do not
- *  reintroduce the old "backtest → paper → loopback → live" ladder: "loopback"
- *  appears in zero python files under `digiquant/src`, and there is no paper/live
- *  gate mechanism at all. Every broker adapter is a stub that raises
- *  NotImplementedError (`digiquant/src/digiquant/brokers/stubs.py`). */
+ *  Display names and URL ids are job words (ADR-0026). Emblem keys stay on the
+ *  existing mark set (research/portfolio/execution alias the same SVGs).
+ *  Init snippets do not print retired package paths.
+ */
 import { type StackItem } from "./modules";
 
 export interface Subsystem {
@@ -28,15 +24,15 @@ export interface Subsystem {
 
 export const subsystems: Subsystem[] = [
   {
-    id: "atlas",
-    name: "Atlas",
+    id: "research",
+    name: "Research",
     tier: "research",
     step: "01 · research",
-    emblem: "atlas",
+    emblem: "research",
     role: "Scheduled macro & market research",
     tagline: "Research, persisted — structured views, not prose.",
     summary: [
-      "Atlas runs scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR) on two cadences: a weekday delta and a Sunday baseline.",
+      "Scheduled LangGraph research cycles across a configurable universe, pulling from open data sources (FRED, Treasury, CoinGecko, SEC/EDGAR) on one daily graph, with per-artifact skip, edit, or full refresh.",
       "Every cycle writes structured, versioned views to Supabase — re-used downstream, and fully auditable.",
     ],
     stack: [
@@ -47,19 +43,22 @@ export const subsystems: Subsystem[] = [
       { name: "CoinGecko", icon: null, mono: "CG" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.olympus.atlas.graph import build_atlas_graph\natlas = build_atlas_graph()" },
-    related: ["hermes", "kairos"],
+    initSnippet: {
+      lang: "python",
+      code: "# daily research cycle — structured views, not prose\n# universe + open data → versioned artifacts (A0–A4)",
+    },
+    related: ["portfolio", "execution"],
   },
   {
-    id: "hermes",
-    name: "Hermes",
+    id: "portfolio",
+    name: "Portfolio",
     tier: "signals",
     step: "02 · signals",
-    emblem: "hermes",
+    emblem: "portfolio",
     role: "Deliberation & signal delivery",
     tagline: "Delivery, not deliberation theatre.",
     summary: [
-      "Hermes translates Atlas research into allocations via a LangGraph deliberation pipeline. Each signal is timestamped, attributed to the views that produced it, and fully replayable.",
+      "Translates daily research into allocations via a LangGraph deliberation pipeline. Each signal is timestamped, attributed to the views that produced it, and fully replayable.",
       "Signals carry their provenance, so any decision can be reconstructed from the research that drove it.",
     ],
     stack: [
@@ -68,20 +67,23 @@ export const subsystems: Subsystem[] = [
       { name: "Supabase", icon: "supabase" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.olympus.hermes.graph import build_hermes_graph\nhermes = build_hermes_graph()" },
-    related: ["atlas", "kairos"],
+    initSnippet: {
+      lang: "python",
+      code: "# deliberation → a sized book (H1–H9)\n# every signal timestamped to the views that produced it",
+    },
+    related: ["research", "execution"],
   },
   {
-    id: "kairos",
-    name: "Kairos",
+    id: "execution",
+    name: "Execution",
     tier: "execution",
     step: "03 · execution",
-    emblem: "kairos",
-    role: "Backtest & optimize on NautilusTrader · no venue wired",
-    tagline: "Execution that stops at the audit log until you wire a venue.",
+    emblem: "execution",
+    role: "Backtest, optimize, and paper-route — live venues refused",
+    tagline: "Paper adapters ship. Live tokens never leave the router.",
     summary: [
-      "The execution stage runs Hermes signals through a real NautilusTrader engine — backtest and Optuna-driven optimization over your own OHLCV data, with a tearsheet and an append-only audit trail per run.",
-      "It reaches no live venue: the shipped IB, Alpaca, and QuantConnect adapters are declared stubs that raise NotImplementedError on connect and submit. Connecting a broker is your own deliberate integration, not a flag we flip.",
+      "The execution stage runs the sized book through a real NautilusTrader engine — backtest and Optuna-driven optimization over your own OHLCV data, with a tearsheet and an append-only audit trail per run.",
+      "Paper adapters for Alpaca and IBKR ship; routing stays off until you opt in. Live venue tokens are refused on the public path. Connecting a live venue is your own integration, not a flag we flip.",
     ],
     stack: [
       { name: "NautilusTrader", icon: null, mono: "NT" },
@@ -89,8 +91,11 @@ export const subsystems: Subsystem[] = [
       { name: "Polars", icon: "polars" },
     ],
     dockerCmd: "docker compose up -d digiquant",
-    initSnippet: { lang: "python", code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # no broker adapter is wired" },
-    related: ["hermes", "atlas"],
+    initSnippet: {
+      lang: "python",
+      code: "from digiquant.backtest import run_backtest\nresult = run_backtest(...)  # paper adapters exist; live tokens are refused",
+    },
+    related: ["portfolio", "research"],
   },
 ];
 

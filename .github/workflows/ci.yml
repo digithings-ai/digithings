@@ -31,7 +31,7 @@ jobs:
       digillm: ${{ steps.filter.outputs.digillm }}
       digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
-      olympus: ${{ steps.filter.outputs.olympus }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
       web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
@@ -80,6 +80,7 @@ jobs:
             digigraph:
               - 'digigraph/**'
               - 'tests/dg/**'
+              - 'tests/contracts/**'
               - '.github/workflows/test-digigraph.yml'
               - 'config/**'
               - 'infra/digichat-release/config/**'
@@ -97,19 +98,20 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
-            olympus:
-              - 'frontend/olympus/**'
+            dashboard:
+              - 'frontend/dashboard/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/test-olympus.yml'
+              - '.github/workflows/test-dashboard.yml'
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/brand/**'
               - 'frontend/digiweb/reference/**'
               - 'frontend/digichat-cloudflare/**'
               - 'frontend/digithings-stack-cloudflare/**'
@@ -150,6 +152,9 @@ jobs:
               - 'tests/dq/test_tearsheet_isolation.py'
               - 'tests/dq/test_v1_jobs.py'
               - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
+              - 'tests/dq/replay/test_nautilus_portfolio.py'
+              - 'tests/dq/replay/test_worker.py'
+              - 'digiquant/src/digiquant/olympus/replay/**'
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
@@ -159,6 +164,10 @@ jobs:
               - 'digiquant/src/digiquant/olympus/edit_mode/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
               - 'digiquant/src/digiquant/olympus/learning/**'
+              - 'digiquant/src/digiquant/olympus/replay/walk_forward.py'
+              - 'tests/dq/replay/test_walk_forward.py'
+              - 'tests/dq/replay/phase4_e2e_fixtures.py'
+              - 'tests/dq/replay/test_phase4_end_to_end.py'
               - 'tests/dq/hermes/**'
               - 'tests/dq/learning/**'
               - '.github/workflows/test-atlas-graph.yml'
@@ -291,10 +300,10 @@ jobs:
     if: needs.changes.outputs.digichat == 'true'
     uses: ./.github/workflows/test-digichat.yml
 
-  olympus:
+  dashboard:
     needs: changes
-    if: needs.changes.outputs.olympus == 'true'
-    uses: ./.github/workflows/test-olympus.yml
+    if: needs.changes.outputs.dashboard == 'true'
+    uses: ./.github/workflows/test-dashboard.yml
 
   web:
     needs: changes
@@ -374,17 +383,10 @@ jobs:
         # uv run so the script's own `python3` calls resolve to the locked venv.
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
+      - name: Install ripgrep (pandas boundary gate)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
       - name: Pandas boundary (REM-132)
-        # Not wrapped in `uv run`: this script is pure bash + ripgrep and calls no
-        # Python, so the venv would buy nothing.
-        #
-        # NOTE (#1715): this gate is currently a no-op on runners without
-        # ripgrep. Its scan ends in `|| true`, so a missing `rg` yields an empty
-        # violation list and prints "pandas boundary OK". Run locally with rg
-        # present it FAILS on digiquant/scripts/fetch_real_ohlcv.py:17
-        # (`import pandas as pd`), which is outside the allowlist and contrary to
-        # the Polars-only rule. Left as-is here because fixing it is a digiquant
-        # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
 
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
@@ -567,7 +569,7 @@ jobs:
       - digillm
       - digifetch
       - digichat
-      - olympus
+      - dashboard
       - web
       - score
       - e2e-contract

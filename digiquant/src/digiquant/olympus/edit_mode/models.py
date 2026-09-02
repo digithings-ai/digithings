@@ -11,6 +11,10 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 PatchOpType = Literal["set", "append", "remove"]
+# RFC 6902 names the write verb ``add``. This module's ``set`` is that verb
+# (object replace-or-insert, and ``/-`` / past-end list append). House GHA
+# 33426508863 rejected ``ops.6.op='add'`` and regenerated the segment.
+_PATCH_OP_SYNONYMS: dict[str, PatchOpType] = {"add": "set"}
 EditMode = Literal["full", "edit", "skip"]
 ArtifactKey = tuple[str, str]
 FullArtifactBody = dict[str, Any]
@@ -22,28 +26,17 @@ class PatchOp(BaseModel):
     op: PatchOpType
     path: str = Field(max_length=512, description="JSON Pointer, RFC 6901")
     value: Any | None = None
-    reason: str | None = Field(default=None, max_length=240)
+    # Free prose — no max_length / soft-truncate. A 240-char hard cap used to
+    # discard entire DocumentPatches (#1740); truncating just reintroduces loss.
+    reason: str | None = None
 
-    @field_validator("reason", mode="before")
+    @field_validator("op", mode="before")
     @classmethod
-    def _truncate_reason(cls, v: object) -> object:
-        """Truncate an over-long ``reason`` instead of rejecting the patch (#1740).
-
-        ``reason`` is free prose the model writes to explain one op, and nothing
-        downstream parses it. But the 240-char cap is stated in none of the 17
-        ``*-edit.md`` skills, so the model overruns it by a handful of characters
-        on a regular basis — and because the cap is enforced as a hard schema
-        constraint, a single long ``reason`` raised ValidationError and discarded
-        the ENTIRE DocumentPatch. That cost 1-4 successfully-researched segments
-        per run, and on 2026-07-28 it took out the master digest itself.
-
-        Fail-soft, matching the ``flow_direction`` idiom in
-        ``phase2_institutional.py``: an informational field must never fail a
-        merge.
-        """
-        if isinstance(v, str) and len(v) > 240:
-            return v[:237] + "..."
-        return v
+    def _normalize_op(cls, v: object) -> object:
+        if not isinstance(v, str):
+            return v
+        token = v.strip().lower()
+        return _PATCH_OP_SYNONYMS.get(token, token)
 
 
 class DocumentPatch(BaseModel):
@@ -62,7 +55,7 @@ class DocumentPatch(BaseModel):
     status: Literal["updated", "skipped"]
     skip_reason: str | None = None
     ops: list[PatchOp] = Field(default_factory=list)
-    one_line_summary: str | None = Field(default=None, max_length=400)
+    one_line_summary: str | None = None
     signals_checked: list[str] = Field(default_factory=list)
 
 

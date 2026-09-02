@@ -11,7 +11,7 @@
 **Facts (do not renumber WPs):**
 
 - **WP1** telemetry / call-attempt ledger — **done**.
-- **WP2** action/fill dual-write — **cutover closed** on develop (`#2594` `book_source` labeling, `#2595` `legacy_opening_snapshot` seed + prices cron `--require-ledger`). Residual before Gate 1 is non-caveated: `#2487` / `#2772` (ledger_io money-arithmetic test lock), `#2768` (durable `TargetAdjustment` rows still dark).
+- **WP2** action/fill dual-write — **cutover closed** on develop (`#2594` `book_source` labeling, `#2595` `legacy_opening_snapshot` seed + prices cron `--require-ledger`). Residual `#2487` / `#2772` (ledger_io money-arithmetic test lock) **done**. Residual `#2768` (durable `TargetAdjustment` rows) is the remaining WP2 Gate-1 caveat tracked in code.
 - **WP3** reconciled period accounting — **coded** on develop (promote `#2603`); deep review / Gate 1 residual caveats still apply.
 - **`module/digiquant`** — synced with develop via #2587 (the earlier “273 commits stale” audit finding is **historical**; still never branch from a stale module ref — `make task` enforces current `origin/<base>`).
 
@@ -23,6 +23,7 @@
 - Run **parallel tracks** without deleting later WPs: **A** trust/money (WP2→WP3) ∥ **B** research plumbing (ProfileConfig → WP12-class corpus → WP13 **shadow**) ∥ **C** glass-box (#1945; Pipeline = primary product surface; Brief = daily read). B/C may start **beside** WP2/WP3; they do **not** wait for WP8–10. Phase 0 accounting gates **stay**.
 - Planner sits before the research gate; it **cannot** expand H4 roster/cap or rewrite H7/H8 authority.
 - **Kairos / execution:** groundwork for Interactive Brokers API + Alpaca Trading API / MCP; default **paper** and/or **manual**; live-trading cutover remains human-gated (see § Kairos / execution groundwork below).
+- **Next major milestones (planning):** [Kairos execution + user tenancy brief (2026-08-29)](2026-08-29-olympus-kairos-tenancy-milestone-brief.md) — Milestone 1 paper broker connect (Alpaca first), Milestone 2 login/tiers/private books. Not authorized by this strip alone.
 
 This section amends product framing and schedule emphasis only. WP numbers, Gates 1–4, the authority matrix, H1–H9 ownership, and the target mermaid remain the program spine.
 
@@ -312,6 +313,9 @@ Additive note only — not a Kairos redesign and not a new WP renumber.
   not silently enable live cutover.
 - Users may later **connect** portfolios via these APIs for automated routing; until then paper/manual
   remain the product default.
+- **Program plan (2026-08-29):** phased WPs K0–K5 (execution) then T0–T5 (tenancy/tiers) live in
+  [2026-08-29-olympus-kairos-tenancy-milestone-brief.md](2026-08-29-olympus-kairos-tenancy-milestone-brief.md).
+  That brief does not renumber metaplan WPs; live cutover remains human-gated.
 
 ## State Machines
 

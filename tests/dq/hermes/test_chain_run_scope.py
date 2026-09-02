@@ -72,6 +72,20 @@ def test_run_scope_uses_the_diagnostics_run_id(monkeypatch: pytest.MonkeyPatch) 
     assert seen == {"run_id": "gha-1978"}
 
 
+def test_manage_usage_false_does_not_start_or_reset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overlay cron owns WP1 capture; nested chain start/reset would wipe the ledger."""
+    seen_start: list[object] = []
+    seen_reset: list[object] = []
+    monkeypatch.setattr(chain_mod._usage, "start", lambda **k: seen_start.append(k))
+    monkeypatch.setattr(chain_mod._usage, "reset", lambda: seen_reset.append(1))
+    monkeypatch.setattr(chain_mod, "_run_beliefs_fold", lambda *a, **k: None)
+    deps = chain_mod.ChainDeps(atlas=None, hermes=None)
+    atlas_input = AtlasInput(cadence="daily", run_date=date(2026, 6, 20), refresh_scope="beliefs")
+    chain_mod.run_atlas_then_hermes(atlas_input=atlas_input, deps=deps, manage_usage=False)
+    assert seen_start == []
+    assert seen_reset == []
+
+
 def test_run_scope_is_unavailable_without_diagnostics_deps(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = _capture_start(monkeypatch)
     # diagnostics defaults to None for library and test callers. Unavailable, never fabricated:

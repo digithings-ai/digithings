@@ -1,7 +1,10 @@
-"""H7 — PM direction memo (direction + conviction rank only; no weights).
+"""H7 — PM direction memo (direction + rank + confidence; no weights).
 
 WP4.5 (#2660): after LLM success or prior-memo fail-soft, deterministically bind
 each roster row to the current run's effective forecast (never model-supplied IDs).
+
+WP-G: roster rows may carry ``confidence`` in ``[0, 1]``. Rank remains order, not
+size. H8 scales each long by that confidence (cash-first).
 
 WP5.4 (#2684): at this existing H6→H7 boundary, attach cutoff-safe shadow
 calibration artifacts into typed state for H9 persistence. Observational only —
@@ -40,6 +43,8 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.olympus.research_retrieval.store import ResearchStateStore
 
 NODE_ID = "hermes/portfolio/pm-direction"
 PHASE_NAME = "hermes_h7_pm_direction"
@@ -150,12 +155,23 @@ def _phase_hermes_with_shadow(
     )
 
 
-def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dict[str, Any]:
+def _h7_node(
+    state: HermesState,
+    *,
+    client: SupabaseClient | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> dict[str, Any]:
     """H7 node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
     # WP5.4: attach before LLM so fail-soft memo path still carries shadows.
     shadow = _attach_shadow_calibration(state, client=client)
 
     current_weights = _current_weights_from_config(state)
+    lesson_pin = state.outcome_lesson_pin if isinstance(state.outcome_lesson_pin, dict) else None
+    legacy_lessons = (
+        []
+        if lesson_pin and lesson_pin.get("lesson_version_id")
+        else list(state.prior_context.decision_lessons)
+    )
     phase_inputs: dict[str, Any] = {
         "segment": NODE_ID,
         "bias_row": state.phase6_bias_row or {},
@@ -166,13 +182,31 @@ def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dic
         "prior_direction": _prior_direction_payload(state),
         "prior_book": list(state.prior_context.prior_book),
         "preferences": dict(state.config.preferences),
-        "past_context": list(state.prior_context.decision_lessons),
+        "past_context": legacy_lessons,
         "active_theses": list(state.prior_context.active_theses),
         "portfolio_performance": dict(state.prior_context.portfolio_performance),
         "prior_analyst_gaps": _prior_analyst_gaps(state),
         "focus_roster": _focus_roster_tickers(state),
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
+    pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
+    prereq = (
+        state.h7_prerequisite_snapshot if isinstance(state.h7_prerequisite_snapshot, dict) else None
+    )
+    phase_inputs = wire_h7_phase_inputs(
+        phase_inputs,
+        research_state_pin=pin,
+        research_state_store=research_state_store,
+        h7_prerequisite_snapshot=prereq,
+        outcome_lesson_pin=lesson_pin,
+        analyst_payloads=analyst_payloads(state),
+        deliberation_summaries=deliberation_summaries(state),
+        shadow_calibrations=shadow.calibration_dumps(),
+        calibrated_forecasts=shadow.calibrated_forecast_dumps(),
+        prior_direction=_prior_direction_payload(state),
+        decision_lessons=tuple(legacy_lessons),
+        focus_roster=tuple(_focus_roster_tickers(state)),
+    ).phase_inputs
     tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
@@ -226,11 +260,15 @@ def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dic
     return {"phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow)}
 
 
-def build_h7_pm_direction(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_h7_pm_direction(
+    *,
+    client: SupabaseClient | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> PipelinePhase:
     """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
 
     def _bound(state: HermesState) -> dict[str, Any]:
-        return _h7_node(state, client=client)
+        return _h7_node(state, client=client, research_state_store=research_state_store)
 
     return PipelinePhase(
         name=PHASE_NAME,

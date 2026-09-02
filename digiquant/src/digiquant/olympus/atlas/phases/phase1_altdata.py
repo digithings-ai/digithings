@@ -1,112 +1,41 @@
 """Phase 1 — alternative data & positioning (6 parallel segment nodes).
 
-Per-skill Pydantic models extend :class:`digiquant.olympus.atlas.segments.SegmentReport`.
+Per-skill Pydantic models extend :class:`digiquant.olympus.atlas.segments.ResearchMemo`.
 """
 
 from __future__ import annotations
 
-from typing import Literal
-
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from pydantic import BaseModel, Field
 
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
 )
-from digiquant.olympus.atlas.segments import SegmentReport
+from digiquant.olympus.atlas.segments import ResearchMemo
 
 
-class SentimentNewsReport(SegmentReport):
+class SentimentNewsReport(ResearchMemo):
     """Phase 1A — retail + pro sentiment + news catalysts."""
 
-    aaii_bull_bear_spread: float | None = Field(
-        default=None,
-        description="AAII bulls minus bears; None if not available in today's context.",
-    )
-    cnn_fear_greed_index: int | None = Field(default=None, ge=0, le=100)
-    retail_sentiment_stance: Literal["risk_on", "risk_off", "mixed"] | None = None
-    top_catalysts: list[str] = Field(
-        default_factory=list,
-        description="≤5 short catalyst labels; ordered by significance.",
-    )
 
-
-class CtaPositioningReport(SegmentReport):
+class CtaPositioningReport(ResearchMemo):
     """Phase 1B — systematic trend-follower positioning."""
 
-    systematic_stance: Literal["long", "short", "neutral", "mixed"] | None = None
-    futures_oi_trend: Literal["expanding", "contracting", "flat"] | None = None
-    cta_flow_bias: Literal["adding", "reducing", "neutral", "mixed"] | None = None
 
-
-class OnchainCohortPositioningReport(SegmentReport):
+class OnchainCohortPositioningReport(ResearchMemo):
     """Phase 1F — on-chain cohort positioning (smart-money vs rekt divergence, Hyperdash, #801)."""
 
-    smart_money_stance: Literal["long", "short", "neutral", "mixed"] | None = None
-    crowd_stance: Literal["long", "short", "neutral", "mixed"] | None = None
-    divergence_signal: (
-        Literal["smart_long_crowd_short", "smart_short_crowd_long", "aligned", "none"] | None
-    ) = None
-    top_divergent_markets: list[str] = Field(
-        default_factory=list,
-        description="≤5 markets (BTC/ETH/HYPE or equity perps) with the largest smart-vs-crowd "
-        "divergence, most extreme first.",
-    )
 
-
-class OptionsDerivativesReport(SegmentReport):
+class OptionsDerivativesReport(ResearchMemo):
     """Phase 1C — GEX, VIX, dealer positioning."""
 
-    vix_level: float | None = Field(default=None, ge=0)
-    vix_term_structure: Literal["contango", "backwardation", "flat"] | None = None
-    dealer_gamma: Literal["long", "short", "neutral"] | None = None
-    put_call_ratio: float | None = Field(default=None, ge=0)
 
-
-class PoliticianSignalsReport(SegmentReport):
+class PoliticianSignalsReport(ResearchMemo):
     """Phase 1D — Congressional trades (STOCK Act) + policy signals."""
 
-    notable_buys: list[str] = Field(default_factory=list, description="≤5 short tickers")
-    notable_sells: list[str] = Field(default_factory=list, description="≤5 short tickers")
-    policy_signal: str | None = Field(
-        default=None,
-        description="Fed / Treasury / regulator signal worth flagging today.",
-    )
 
-
-class AiAccountRead(BaseModel):
-    """One AI-portfolio account's latest read (from its X posts)."""
-
-    handle: str
-    model: str | None = None
-    picks: list[str] = Field(
-        default_factory=list, description="Named tickers held/added/trimmed; ≤8."
-    )
-    stance: str | None = Field(default=None, description="risk-on / risk-off / mixed, if stated.")
-    posted_in_window: bool = Field(
-        default=True, description="False if the account had no in-window equity posts."
-    )
-    as_of: str | None = Field(default=None, description="Date of the latest post used.")
-
-
-class AiPortfoliosReport(SegmentReport):
-    """Phase 1E — what other AI investment systems are picking (X proxy, #658).
-
-    A cross-model stock-bias proxy: Olympus trades ETFs, so the value is the implied
-    sector/theme TILT, not a direct call. Subordinate to macro + real data.
-    """
-
-    per_account: list[AiAccountRead] = Field(default_factory=list)
-    consensus_longs: list[str] = Field(
-        default_factory=list, description="Tickers named long by 2+ accounts."
-    )
-    sector_tilt: str | None = Field(
-        default=None, description="Implied sector/theme lean rolled up from the stock picks."
-    )
-    divergences: str | None = Field(
-        default=None, description="Notable disagreements across accounts."
-    )
+class AiPortfoliosReport(ResearchMemo):
+    """Phase 1E — what other AI investment systems are picking (X proxy, #658)."""
 
 
 # ─── Phase assembly ─────────────────────────────────────────────────────────

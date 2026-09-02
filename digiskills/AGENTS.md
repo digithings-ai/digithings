@@ -10,7 +10,7 @@ extras — no FastAPI service yet.
 ## Read first
 
 1. `digiskills/ARCHITECTURE.md` — module map, public API, design decisions.
-2. Root `AGENTS.md` and `CLAUDE.md` — stack-wide non-negotiables.
+2. Root `AGENTS.md` — stack-wide non-negotiables (`CLAUDE.md` is a pointer).
 3. [ADR-0023](../docs/adr/0023-digiskills-agent-skill-compiler.md) — why this
    module exists, what's explicitly deferred (external ingestion, hosted
    platform, live MCP distribution).
