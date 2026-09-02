@@ -24,8 +24,14 @@ from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
 APPLY_MAX_AGE_DAYS = 7
 
 
-def _apply_guard(run_date: date, *, apply: bool, yes: bool) -> str | None:
-    if not apply or yes:
+def _apply_guard(
+    run_date: date, *, apply: bool, yes: bool, force_recommit: bool = False
+) -> str | None:
+    if not apply:
+        return None
+    if force_recommit and not yes:
+        return "--force-recommit --apply requires --yes (re-run is a no-op once the book matches)"
+    if yes:
         return None
     age = (datetime.now(tz=UTC).date() - run_date).days
     if 0 <= age <= APPLY_MAX_AGE_DAYS:
@@ -50,16 +56,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--yes",
         action="store_true",
-        help=f"Confirm --apply for dates older than {APPLY_MAX_AGE_DAYS} days.",
+        help=(
+            f"Confirm --apply for dates older than {APPLY_MAX_AGE_DAYS} days "
+            "and for --force-recommit."
+        ),
     )
     parser.add_argument(
         "--force-recommit",
         action="store_true",
-        help="Append a new commit even when a head already exists.",
+        help="Append a new commit when the head does not match the book. Requires --yes.",
     )
     args = parser.parse_args(argv)
     run_date = date.fromisoformat(args.date)
-    refused = _apply_guard(run_date, apply=args.apply, yes=args.yes)
+    refused = _apply_guard(
+        run_date, apply=args.apply, yes=args.yes, force_recommit=args.force_recommit
+    )
     if refused:
         print(json.dumps({"error": refused, "status": "refused"}, indent=2, sort_keys=True))
         return 1

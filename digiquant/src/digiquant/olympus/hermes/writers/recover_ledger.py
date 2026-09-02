@@ -339,7 +339,6 @@ def recover_ledger_from_book(
         client=client, table=COMMITS, run_date=run_date, workspace_id=workspace_id
     )
     commit_heads = _heads(prior_commits)
-    head_ids = {str(row.get("id")) for row in commit_heads if row.get("id")}
     approved_match = _approved_matches_book(
         client=client,
         run_date=run_date,
@@ -365,6 +364,7 @@ def recover_ledger_from_book(
             source_run_id=latest_source,
         )
 
+    head_id = str(commit_heads[0].get("id") or "") or None if commit_heads else None
     if not force_recommit:
         if latest is not None and latest.get("status") == "committed":
             manifest_fp = str(latest.get("weights_fingerprint") or "")
@@ -383,62 +383,47 @@ def recover_ledger_from_book(
                     commit_id=latest_id,
                     source_run_id=latest_source,
                 )
-            if latest_id and latest_id in head_ids and approved_match and chain_complete:
-                return outcome(
-                    "already_committed",
-                    f"ledger commit {latest_id} already present for {run_date.isoformat()}",
-                    commit_id=latest_id,
-                    source_run_id=latest_source,
-                )
         if len(commit_heads) > 1:
             return outcome(
                 "conflict",
-                (
-                    f"forked commit chain for {run_date.isoformat()}; "
-                    "will not append without --force-recommit"
-                ),
+                f"forked commit chain for {run_date.isoformat()}; will not append",
             )
-        if commit_heads:
-            head_id = str(commit_heads[0].get("id") or "") or None
-            if approved_match and head_id and chain_complete:
-                source_run_id = latest_source
-                has_head_manifest = any(
-                    str(m.get("ledger_commit_id") or "") == head_id for m in manifests
-                )
-                if apply and not has_head_manifest:
-                    new_id, state = _new_recovery_state(
-                        client=client, run_date=run_date, workspace_id=workspace_id
-                    )
-                    _write_recovery_manifest(
-                        client=client,
-                        state=state,
-                        weights=weights,
-                        cash_pct=cash_pct,
-                        nav=nav,
-                        ledger=LedgerAppend(
-                            commit_id=head_id, frozen_symbols=[], unpriced_symbols=[]
-                        ),
-                        commit_seq=next_seq,
-                        manifests=manifests,
-                    )
-                    source_run_id = str(new_id)
-                present = f"ledger commit {head_id} already present for {run_date.isoformat()}"
-                return outcome(
-                    "already_committed",
-                    f"{present}; published missing commit-run manifest" if apply else present,
-                    commit_id=head_id,
-                    source_run_id=source_run_id,
-                )
-            if not (approved_match and head_id):
-                return outcome(
-                    "conflict",
-                    (
-                        f"head commit exists for {run_date.isoformat()} but approved weights "
-                        "do not match the book; pass --force-recommit to append"
-                    ),
-                    commit_id=head_id,
-                    source_run_id=latest_source,
-                )
+        if commit_heads and not (approved_match and head_id):
+            return outcome(
+                "conflict",
+                (
+                    f"head commit exists for {run_date.isoformat()} but approved weights "
+                    "do not match the book"
+                ),
+                commit_id=head_id,
+                source_run_id=latest_source,
+            )
+
+    if approved_match and chain_complete and head_id:
+        source_run_id = latest_source
+        has_head_manifest = any(str(m.get("ledger_commit_id") or "") == head_id for m in manifests)
+        if apply and not has_head_manifest:
+            new_id, state = _new_recovery_state(
+                client=client, run_date=run_date, workspace_id=workspace_id
+            )
+            _write_recovery_manifest(
+                client=client,
+                state=state,
+                weights=weights,
+                cash_pct=cash_pct,
+                nav=nav,
+                ledger=LedgerAppend(commit_id=head_id, frozen_symbols=[], unpriced_symbols=[]),
+                commit_seq=next_seq,
+                manifests=manifests,
+            )
+            source_run_id = str(new_id)
+        present = f"ledger commit {head_id} already present for {run_date.isoformat()}"
+        return outcome(
+            "already_committed",
+            f"{present}; published missing commit-run manifest" if apply else present,
+            commit_id=head_id,
+            source_run_id=source_run_id,
+        )
 
     source_run_id, state = _new_recovery_state(
         client=client, run_date=run_date, workspace_id=workspace_id

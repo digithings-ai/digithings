@@ -305,6 +305,43 @@ class TestRecoverLedgerFromBook:
         assert payload["ledger_commit_id"] == result.commit_id
         assert payload["supersedes"] == []
 
+    def test_force_recommit_second_apply_does_not_append_again(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {"VGK": 99.0, "CASH": 1.0})
+        first = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
+        _mirror_writes(client)
+        second = recover_ledger_from_book(
+            client=client, run_date=RUN_DATE, apply=True, force_recommit=True
+        )
+        assert first.status == "committed"
+        assert second.status == "already_committed"
+        assert second.commit_id == first.commit_id
+        assert len(client.store.get(COMMITS, [])) == 1
+
+    def test_conflict_message_does_not_recommend_force_recommit(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        _seed_head_commit(client)
+        _seed_approved(client, {"VGK": 99.0, "CASH": 1.0})
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "conflict"
+        assert "force-recommit" not in result.message.lower()
+        assert "force_recommit" not in result.message.lower()
+
+    def test_cli_force_recommit_apply_requires_yes(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "recover_ledger_cli", Path("digiquant/scripts/recover_ledger.py")
+        )
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rc = mod.main(["--date", RUN_DATE.isoformat(), "--apply", "--force-recommit"])
+        assert rc != 0
+
     def test_force_recommit_supersedes_prior_manifest_fingerprints(self) -> None:
         client = FakeSupabaseClient()
         _seed_booked_day(client)
