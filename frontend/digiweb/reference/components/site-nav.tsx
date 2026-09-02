@@ -34,6 +34,7 @@ const PAGES = [
   { href: "/terminal", label: "Terminal" },
   { href: "/chatbot", label: "Chatbot" },
   { href: "/symbols", label: "Symbols" },
+  { href: "/brand", label: "Brand" },
   { href: "/account", label: "Account" },
 ] as const;
 

@@ -40,7 +40,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
 | `pipeline-digiquant-prices.yml` | Pipeline: digiquant prices | schedule (intraday: */15 13-21 weekdays; at-open: 13:35 **and** 14:35, DST-gated to one; EOD: 21:25 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL`. Schedules are the UTC union of both ET offsets — see the DST note in the workflow header (#1775) | Working | none |
-| `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper tearsheet regen for digiquant.io: backtest with Supabase calibrations, commit `frontend/digiquant-web/public/strategies/*.json`, upsert `strategy_tearsheets` (#1068) | Working | none |
+| `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper + BTC-SDCA tearsheet regen: Coinbase + M2/DXY siblings, Nautilus generate, upsert `strategy_tearsheets` (#1068, #3453). Checkout pinned to `main`. | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
 | `test-digismith.yml` | Test: digismith | workflow_call | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |

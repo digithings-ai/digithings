@@ -37,6 +37,7 @@ is the only shared chrome.
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
 | `/chatbot`         | Chatbot     | digichat as a terminal CLI (mono scrollback, `>` prompt) — thinking chain, collapsible tool-call chain, composer, markdown, inline chart, inline route graph, custom action widgets embedded in the terminal |
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
+| `/brand`           | Brand       | avatars, social headers, OG card, mail sign-off — local kit, not shipped on digithings.ai |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |
 
 ## Conventions

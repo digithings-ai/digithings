@@ -16,9 +16,14 @@ CALIBRATIONS_EXAMPLE = _STRATEGIES_DIR / "calibrations.example.json"
 CalibrationSource = Literal["file", "supabase", "example"]
 
 
-def _entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
+def entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
+    """True when the settings entry is the Slapper family (needs private calibrations)."""
     default = settings.get("defaults", {}).get("strategy_type", "slapper")
     return str(entry.get("strategy_type") or default or "slapper") == "slapper"
+
+
+def _entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
+    return entry_is_slapper(entry, settings)
 
 
 def load_calibrations_file(path: Path | None = None) -> dict[str, dict[str, Any]]:

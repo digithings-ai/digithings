@@ -20,6 +20,7 @@ frontend/digiweb/
 │   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
 │   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
 │   └── references/        external north-star scans (Cursor, herdr, …)
+├── brand/                 generated identity kit (avatars, headers, OG) — previewed at design-reference `/brand`, not on digithings.ai
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
     ├── app/<family>/       one page per design family (foundations, iterate, controls, …)
@@ -225,7 +226,8 @@ Off-repo uploads (GitHub, X, LinkedIn, slides, mail) are generated under
 `frontend/digiweb/brand/` — avatars from the favicon tile, OG cards and social
 headers from outlined Geist Mono + `HEADLINES` in `build-og.py`. Headers are a
 **compact stack**, not a cropped 1200×630 card. `build-header.py --check` keeps
-the served copies on digithings.ai/brand in sync. See `frontend/digiweb/brand/README.md`.
+the served copies on the design-reference `/brand` page in sync (not on
+digithings.ai). See `frontend/digiweb/brand/README.md`.
 
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the

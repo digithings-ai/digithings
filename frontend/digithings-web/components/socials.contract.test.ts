@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -7,14 +7,13 @@ function load(rel: string): string {
 }
 
 describe("digithings.ai socials import", () => {
-  it("puts SocialRow on the contact band and the brand kit page", () => {
+  it("puts SocialRow on the contact band, not a live /brand kit page", () => {
     const home = load("../app/page.tsx");
-    const brand = load("../app/brand/page.tsx");
     expect(home).toContain("SocialRow");
     expect(home).toContain("Questions, enterprise, or partnership");
-    expect(brand).toContain("SocialRow");
     expect(home).not.toMatch(/Discord/i);
-    expect(brand).not.toMatch(/Discord/i);
+    const liveBrand = fileURLToPath(new URL("../app/brand/page.tsx", import.meta.url));
+    expect(existsSync(liveBrand)).toBe(false);
   });
 
   it("mounts the same primitive in the shared site footer", () => {

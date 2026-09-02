@@ -34,7 +34,7 @@ BRAND = Path(__file__).resolve().parent
 REPO_ROOT = BRAND.parents[2]
 OUT_DIR = BRAND / "headers"
 EMAIL_DIR = BRAND / "email"
-PUBLIC_BRAND = REPO_ROOT / "frontend" / "digithings-web" / "public" / "brand"
+PUBLIC_BRAND = REPO_ROOT / "frontend" / "digiweb" / "reference" / "public" / "brand"
 PUBLIC_OG_PNG = REPO_ROOT / "frontend" / "digithings-web" / "public" / "og.png"
 
 # Vertical rhythm as a fraction of WORD_EM. OG used ~0.86 between word and
@@ -295,7 +295,7 @@ def signoff_html(copy: dict[str, str]) -> str:
 
 
 def kit_copies() -> list[tuple[Path, Path]]:
-    """Canonical kit file → served copy under digithings-web/public."""
+    """Canonical kit file → design-reference public/brand (plus live og.png)."""
     pairs: list[tuple[Path, Path]] = []
     for spec in FORMATS:
         for ext in (".svg", ".png"):

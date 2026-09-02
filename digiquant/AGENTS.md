@@ -415,9 +415,11 @@ pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
 3. Skip `resolve_calibrations()` for non-Slapper families. Record provenance in
    tearsheet notes instead.
 4. Pass `trade_size` only when `config_declares_field(name, "trade_size")`.
-5. Do not `--push-supabase` a new family from an agent environment. After a
-   real Nautilus `generate_tearsheets.py --strategy btc_sdca` the operator
-   may push. Nightly pipeline is the intended live-library path.
+  5. Nightly `pipeline-digiquant-tearsheets.yml` is the live-library path and
+   must stage `export_sdca_macro.py` (M2/DXY siblings) before generate so
+   `btc_sdca` weights are not silently dropped. A one-shot operator push is
+   `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase`
+   after a real Nautilus run (#3453). Do not SQL-insert fake metrics.
 
 ---
 
