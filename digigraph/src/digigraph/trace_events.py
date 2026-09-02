@@ -18,6 +18,10 @@ TraceEventType = Literal[
 ]
 
 
+# Matches digichat ``MAX_NOTE_BODY_CHARS`` — DocumentPane needs the full note (#3419).
+MAX_RAG_SOURCE_BODY_CHARS = 80_000
+
+
 class RagSourceItem(BaseModel):
     """One citation from digisearch-style results."""
 
@@ -30,6 +34,13 @@ class RagSourceItem(BaseModel):
     snippet: str | None = Field(
         default=None, description="Short content preview; not full row payload."
     )
+    body: str | None = Field(
+        default=None,
+        description=(
+            "Full note markdown for digichat DocumentPane (#3419). "
+            "Only set on digivault_get_note paths; capped at MAX_RAG_SOURCE_BODY_CHARS."
+        ),
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -38,8 +49,14 @@ def rag_sources_from_results(
     *,
     max_items: int = 20,
     snippet_len: int = 400,
+    include_body: bool = False,
+    body_max: int = MAX_RAG_SOURCE_BODY_CHARS,
 ) -> list[dict[str, Any]]:
-    """Build RAG citation list for trace/UI from digisearch result dicts (redacted size)."""
+    """Build RAG citation list for trace/UI from digisearch result dicts (redacted size).
+
+    Pass ``include_body=True`` for digivault_get_note so digichat can render the
+    full note in DocumentPane. Locate tools keep snippet-only items (no body).
+    """
     out: list[dict[str, Any]] = []
     for r in results[:max_items]:
         if not isinstance(r, dict):
@@ -58,11 +75,22 @@ def rag_sources_from_results(
             source_id = f"{doc_id}#{rank}"
         elif doc_id is not None:
             source_id = str(doc_id)
+        body: str | None = None
+        if include_body:
+            raw_body = r.get("body")
+            if not isinstance(raw_body, str) or not raw_body.strip():
+                raw_body = r.get("body_markdown")
+            if not isinstance(raw_body, str) or not raw_body.strip():
+                raw_body = content if content is not None else None
+            if isinstance(raw_body, str) and raw_body.strip():
+                text = raw_body.strip()
+                body = text if len(text) <= body_max else text[:body_max]
         item = RagSourceItem(
             source_id=source_id,
             doc_id=str(doc_id) if doc_id is not None else None,
             score=sc,
             snippet=snip or None,
+            body=body,
             metadata={k: meta[k] for k in list(meta.keys())[:16]},
         )
         out.append(item.model_dump(exclude_none=True))

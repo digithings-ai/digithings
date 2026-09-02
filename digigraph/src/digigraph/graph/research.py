@@ -402,7 +402,14 @@ def _run_document_rag_path(
             if isinstance(p, dict) and p.get("ref"):
                 collected_stored[p["ref"]] = p
         if isinstance(result, dict) and result.get("rag_sources"):
-            merge_rag_sources_accumulator(collected_rag, result["rag_sources"])
+            # WorkflowState stays lean — full get_note bodies stream on the
+            # rag_sources trace for digichat DocumentPane (#3419) but must not
+            # enter LangGraph checkpoints.
+            lean_sources = [
+                {k: v for k, v in item.items() if k != "body"} if isinstance(item, dict) else item
+                for item in result["rag_sources"]
+            ]
+            merge_rag_sources_accumulator(collected_rag, lean_sources)
         # Make every tool call visible in the activity UI, including zero-hit
         # searches: without hit_count, "searched and found nothing" and "never
         # searched" look identical downstream. setdefault so a tool that already

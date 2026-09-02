@@ -49,4 +49,28 @@ describe("DocumentPane", () => {
     expect(html).not.toContain("application/pdf");
     expect(html).toContain("a paper scan");
   });
+
+  it("falls back to readableSnippet for a get_note-shaped hit without body", () => {
+    // Live digigraph RagSourceItem shape before/without wire body: doc_id + snippet.
+    // Locks the non-http path rule and makes a regression to excerpt-only visible
+    // once MiniMarkdown+body is the happy path (#3419).
+    const html = renderToStaticMarkup(
+      <DocumentPane
+        hit={{
+          title: "Auth plane",
+          path: "clients/digithings/auth__p001",
+          snippet: "# Auth\n\n**RS256** tokens for digikey. See the JWKS docs.",
+        }}
+        onClose={() => {}}
+      />,
+    );
+    expect(html).toContain("Auth plane");
+    expect(html).toContain("clients/digithings/auth__p001");
+    expect(html).toContain("RS256 tokens for digikey");
+    expect(html).not.toContain("**");
+    expect(html).not.toContain("# Auth");
+    expect(html).not.toMatch(/href="clients\//);
+    expect(html).not.toContain("http://");
+    expect(html).not.toContain("https://");
+  });
 });

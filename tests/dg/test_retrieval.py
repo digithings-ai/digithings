@@ -160,6 +160,34 @@ def test_auto_load_notes_skips_when_tool_not_allowed() -> None:
     assert out is locate
 
 
+def test_merge_loaded_notes_stamps_body_onto_matching_locate_source() -> None:
+    from digigraph.retrieval import merge_loaded_notes
+
+    locate = {
+        "content": '{"preview": []}',
+        "rag_sources": [
+            {
+                "doc_id": "clients/x/p001",
+                "snippet": "# Hi…",
+                "metadata": {"title": "Hi"},
+            }
+        ],
+    }
+    note = {
+        "content": '{"notes": []}',
+        "rag_sources": [
+            {
+                "doc_id": "clients/x/p001",
+                "snippet": "# Hi…",
+                "body": "# Hi\n\nFull note for DocumentPane.",
+            }
+        ],
+    }
+    merged = merge_loaded_notes(locate, note)
+    assert merged["rag_sources"][0]["body"] == "# Hi\n\nFull note for DocumentPane."
+    assert merged["rag_sources"][0]["snippet"] == "# Hi…"
+
+
 def test_workflow_state_declares_force_tool() -> None:
     from digigraph.graph.state import WorkflowState
 

@@ -354,7 +354,7 @@ digigraph/src/digigraph/
 ├── run_storage.py               Lower-level session path helpers, search result writer
 ├── mcp_server.py                FastMCP server exposing workflow, chat, thread_state, tool lists
 ├── audit.py                     Thin audit_log → digibase.audit.emit_event (workflow_start/end, tool_denied)
-├── trace_events.py              TraceEventV1, RagSourceItem, rag_sources_from_results
+├── trace_events.py              TraceEventV1, RagSourceItem (optional capped `body` for get_note / #3419), rag_sources_from_results
 ├── tool_policy.py               Allowed tool name resolution (request → project config → env)
 ├── trading_profile.py           optimization_constraints_dict_from_profile
 ├── project_config.py            DigiProjectConfig loader (DIGI_PROJECT_CONFIG YAML)

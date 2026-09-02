@@ -145,19 +145,28 @@ def merge_loaded_notes(
     note_sources = note_result.get("rag_sources")
     if isinstance(note_sources, list) and note_sources:
         existing = list(merged.get("rag_sources") or [])
-        seen = {
-            (s.get("source_id") or s.get("doc_id"))
-            for s in existing
-            if isinstance(s, dict) and (s.get("source_id") or s.get("doc_id"))
-        }
+        by_key: dict[str, dict[str, Any]] = {}
+        for s in existing:
+            if isinstance(s, dict):
+                key = s.get("source_id") or s.get("doc_id")
+                if key:
+                    by_key[str(key)] = s
+        seen = set(by_key)
         for item in note_sources:
             if not isinstance(item, dict):
                 continue
             key = item.get("source_id") or item.get("doc_id")
-            if key and key in seen:
+            if key and str(key) in seen:
+                # Upgrade snippet-only locate hits with get_note body for DocumentPane (#3419).
+                body = item.get("body")
+                if isinstance(body, str) and body.strip():
+                    prior = by_key[str(key)]
+                    if not prior.get("body"):
+                        prior["body"] = body
                 continue
             if key:
-                seen.add(key)
+                seen.add(str(key))
+                by_key[str(key)] = item
             existing.append(item)
         merged["rag_sources"] = existing
     return merged
