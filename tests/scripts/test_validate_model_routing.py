@@ -54,10 +54,7 @@ def routing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 def test_exact_phase_slug_wins(routing: Any) -> None:
-    assert (
-        routing.get_model_for_phase("master-digest")
-        == "openrouter/deepseek/deepseek-v4-flash"
-    )
+    assert routing.get_model_for_phase("master-digest") == "openrouter/deepseek/deepseek-v4-flash"
 
 
 def test_trailing_dash_prefix_matches_per_ticker_slug(routing: Any) -> None:
@@ -149,7 +146,7 @@ def test_repo_config_pins_h6_deliberation_prefix_and_master_digest(
     monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
     assert (
         mod.get_model_for_phase("hermes/portfolio/deliberation-AAPL")
-        == "openrouter/deepseek/deepseek-v4-flash"
+        == "deepseek/deepseek-v4-flash"
     )
-    assert mod.get_model_for_phase("master-digest") == "openrouter/deepseek/deepseek-v4-flash"
+    assert mod.get_model_for_phase("master-digest") == "deepseek/deepseek-v4-flash"
     assert (REPO_ROOT / "config" / "model_modes.yaml").is_file()

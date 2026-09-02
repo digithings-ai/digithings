@@ -158,7 +158,7 @@ def check_env_vars() -> bool:
 # as literal null), so the provider's own stop condition governs — confirmed clean
 # (``finish_reason: "stop"``) across 10/10 live samples with no cap. Retries remain as a
 # backstop for real transience, not as the mechanism this check depends on to pass.
-_CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
+_CONNECTIVITY_PING_MODEL = "deepseek/deepseek-v4-flash"
 
 # Preflight-local digillm bounds — read once at digillm import. The real pipeline keeps
 # digillm's 600s / empty-retry defaults; the preflight needs a fast FAIL, not a 240-minute
@@ -241,7 +241,7 @@ def check_openrouter_structured() -> bool:
             phase_inputs={},
             shared_context={},
             output_model=_Ping,
-            model="openrouter/openrouter/auto",
+            model="openrouter/auto",
             max_retries=1,
         )
         elapsed = time.monotonic() - t0
@@ -279,7 +279,7 @@ def check_openrouter_function_tools() -> bool:
     try:
         _ensure_importable()
         from digigraph.model_config import _load_olympus_models, get_olympus_tier
-        from digillm.client import completion
+        from digillm.client import _parse_provider_prefix, completion
 
         from digiquant.olympus.atlas.data.tools import DATA_TOOLS
 
@@ -335,12 +335,17 @@ def check_openrouter_function_tools() -> bool:
                 # OpenRouter — a bare `removeprefix("openrouter/")` would misfire on a
                 # differently-prefixed pin (e.g. `gemini/...`), which digillm strips
                 # differently (see `_parse_provider_prefix`).
-                served = None
-                substituted = False
-                if model.startswith("openrouter/"):
-                    served = getattr(resp, "model", None) if resp is not None else None
-                    requested = model.removeprefix("openrouter/")
-                    substituted = bool(served) and served != requested
+                served = getattr(resp, "model", None) if resp is not None else None
+                vendor, _ = _parse_provider_prefix(model)
+                # gemini/ and xai/ are BYOK/diagnostic prefixes, not house OpenRouter slugs
+                # (house Gemini pins use google/, xAI pins use x-ai/). anthropic/ IS a
+                # house OpenRouter slug and must still be compared.
+                skip_sub = vendor in {"gemini", "xai"}
+                if served and not skip_sub:
+                    requested = {model, model.removeprefix("openrouter/")}
+                    substituted = served not in requested
+                else:
+                    substituted = False
                 if not has_output:
                     detail = "empty response (no content, no tool_calls)"
                 elif substituted:
@@ -378,7 +383,7 @@ def check_openrouter_web_search() -> bool:
         from digigraph.model_config import get_grounding_model, is_web_search_capable_model
         from digillm import openrouter_web_search
 
-        model = get_grounding_model() or "openrouter/perplexity/sonar"
+        model = get_grounding_model() or "perplexity/sonar"
         if not is_web_search_capable_model(model):
             return check(
                 f"Web search ({model})",

@@ -105,8 +105,7 @@ def collect_pool_slugs(config_dir: Path) -> list[str]:
                 slugs.add(_bare_slug(model))
     modes = yaml.safe_load((config_dir / "model_modes.yaml").read_text()) or {}
     for model in (modes.get("phase_models") or {}).values():
-        if str(model).startswith("openrouter/"):
-            slugs.add(_bare_slug(str(model)))
+        slugs.add(_bare_slug(str(model)))
     return sorted(s for s in slugs if s and ":online" not in s)
 
 

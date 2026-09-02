@@ -572,10 +572,11 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return a web-search-capable OpenRouter model for Olympus grounding pre-passes.
+    """Return a web-search-capable model for DigiQuant grounding pre-passes.
 
-    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — Olympus must
-    not ground via the digillm Exa toolkit branch.
+    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — house
+    grounding must not use the digillm Exa toolkit branch. Slugs are unprefixed
+    OpenRouter ids resolved through LiteLLM (#3414).
     """
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
@@ -587,12 +588,25 @@ def get_grounding_model(*, segment: str = "grounding") -> str | None:
 
 
 def apply_olympus_openrouter_env(*, force: bool = False) -> str:
-    """Apply OpenRouter cost knobs from the active Olympus tier. Returns tier name.
+    """Apply house LLM routing + OpenRouter cost knobs from the active DigiQuant tier.
 
-    Sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF`` when
-    unset (or when *force*). Called at chain startup so CI picks up tier policy
+    When ``OPENAI_API_BASE`` is already set (Docker LiteLLM, stack-local), leave it
+    alone — house pins are unprefixed slugs on that proxy's ``model_list``.
+
+    CLI / GHA without a local proxy: point the default client at OpenRouter's
+    OpenAI-compatible API and copy ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY``
+    when that is unset, so unprefixed pins do not hit api.openai.com.
+
+    Also sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF``
+    when unset (or when *force*). Called at chain startup so CI picks up tier policy
     without duplicating values in ``olympus-pipeline.yml``.
     """
+    if not (os.environ.get("OPENAI_API_BASE") or "").strip():
+        os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
+        if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+            or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+            if or_key:
+                os.environ["OPENAI_API_KEY"] = or_key
     tier = get_olympus_tier()
     tier_cfg = _load_olympus_models().tiers.get(tier)
     if tier_cfg is None:

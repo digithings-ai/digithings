@@ -288,14 +288,18 @@ string to `chat_completion` and skip this entirely.
 
 `get_client_for_model(model)` is the single client entry point:
 
-- A `provider/model_id` prefix matching the registry routes to a dedicated,
-  **cached** client (`base_url` + key from the provider's env var).
-- Every other model string falls back to `get_client()` — the default
-  `OPENAI_API_BASE` / `OPENAI_API_KEY` path (LiteLLM proxy, Ollama, OpenRouter,
-  or OpenAI direct).
+- **House path:** when `OPENAI_API_BASE` is set (LiteLLM), every non-BYOK call
+  uses `get_client()`. Registered prefixes stay on the wire as LiteLLM
+  `model_name` keys (DigiQuant pins are unprefixed OpenRouter slugs).
+- **BYOK:** when a BYOK override's `base_url` matches a registered provider,
+  an uncached client is built with the user's key.
+- **Diagnostics without a proxy:** a `provider/model_id` prefix matching the
+  registry routes to a dedicated, **cached** vendor client. Every other model
+  string uses `get_client()` (`OPENAI_API_BASE` / `OPENAI_API_KEY`).
 
-Built-in registry: `xai`, `gemini`, `groq`, `openrouter`, `anthropic`. Extend at runtime via
-`register_provider(prefix, base_url, api_key_env)` — no code change needed.
+Built-in registry (`xai`, `gemini`, `openrouter`, `anthropic`): BYOK and
+diagnostics only — not a skip around LiteLLM for house traffic. Extend at
+runtime via `register_provider(prefix, base_url, api_key_env)`.
 
 A missing required provider key raises `RuntimeError` (no silent fallback), so
 misconfiguration surfaces immediately rather than masquerading as a default-model

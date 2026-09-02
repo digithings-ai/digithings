@@ -77,6 +77,44 @@ def test_openrouter_web_search_online_suffix_uses_native_completion(
 
 
 @pytest.mark.unit
+def test_openrouter_web_search_unprefixed_online_via_house_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """House grounding pins are unprefixed ``:online`` slugs resolved through LiteLLM (#3414)."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    with patch("digillm.client.completion") as completion:
+        completion.return_value = _chat_resp("ok [[1]](https://example.com)")
+        result = openrouter_web_search("deepseek/deepseek-v4-flash:online", "latest CPI")
+    assert result is not None
+    kwargs = completion.call_args[1]
+    assert "tools" not in kwargs
+    assert kwargs["usage_kind"] == "web_search"
+
+
+@pytest.mark.unit
+def test_openrouter_web_search_unprefixed_perplexity_via_house_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")
+    with patch("digillm.client.completion") as completion:
+        completion.return_value = _chat_resp("headline [[1]](https://example.com)")
+        openrouter_web_search("perplexity/sonar", "latest CPI")
+    kwargs = completion.call_args[1]
+    assert "tools" not in kwargs
+
+
+@pytest.mark.unit
+def test_openrouter_web_search_unprefixed_without_proxy_or_key_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    assert openrouter_web_search("perplexity/sonar", "q") is None
+
+
+@pytest.mark.unit
 def test_openrouter_web_search_fails_soft_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     with patch("digillm.client.completion", side_effect=RuntimeError("boom")):

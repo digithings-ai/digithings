@@ -38,8 +38,12 @@
 #
 # Fail-hard when grounding unavailable: OLYMPUS_WEB_SEARCH=required.
 #
-# Env contract: OPENROUTER_API_KEY only — apply_olympus_openrouter_env() sets
-# OPENROUTER_ALLOWED_MODELS + OPENROUTER_COST_QUALITY_TRADEOFF at chain startup.
+# Env contract: house calls go service → digillm → LiteLLM (OPENAI_API_BASE).
+# apply_olympus_openrouter_env() sets OPENROUTER_ALLOWED_MODELS +
+# OPENROUTER_COST_QUALITY_TRADEOFF at chain startup, and points the default
+# client at OpenRouter's OpenAI-compat API only when OPENAI_API_BASE is unset
+# (CLI/GHA without a local proxy). Prefixes (openrouter/, gemini/, …) are
+# BYOK/diagnostics — do not put them on house pins.
 
 default_tier: cheap
 
@@ -59,17 +63,17 @@ tiers:
       # tools for it. deepseek-r1 and llama-4-maverick dropped from ``reasoning`` — CoT/
       # empty-completion failures under strict json_schema (#1617, #1006).
       extraction:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/meta-llama/llama-4-maverick"
+        - "deepseek/deepseek-v4-flash"
+        - "meta-llama/llama-4-maverick"
       research:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/meta-llama/llama-4-maverick"
+        - "deepseek/deepseek-v4-flash"
+        - "meta-llama/llama-4-maverick"
       reasoning:
-        - "openrouter/deepseek/deepseek-v4-flash"
+        - "deepseek/deepseek-v4-flash"
     web_search_models:
-      - "openrouter/perplexity/sonar"
-      - "openrouter/deepseek/deepseek-v4-flash:online"
-      - "openrouter/meta-llama/llama-4-maverick:online"
+      - "perplexity/sonar"
+      - "deepseek/deepseek-v4-flash:online"
+      - "meta-llama/llama-4-maverick:online"
 
   balanced:
     openrouter:
@@ -82,26 +86,26 @@ tiers:
       # failures under strict json_schema; re-add a GLM only once a variant passes the
       # gate consistently.
       extraction:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/google/gemini-3.7-flash"
-        - "openrouter/openai/gpt-5.6-luna"
-        - "openrouter/meta-llama/llama-4-maverick"
+        - "deepseek/deepseek-v4-flash"
+        - "google/gemini-3.7-flash"
+        - "openai/gpt-5.6-luna"
+        - "meta-llama/llama-4-maverick"
       research:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-3.7-flash"
-        - "openrouter/x-ai/grok-4.3"
-        - "openrouter/openai/gpt-5.6-luna"
+        - "deepseek/deepseek-v4-flash"
+        - "deepseek/deepseek-v4-pro"
+        - "meta-llama/llama-4-maverick"
+        - "google/gemini-3.7-flash"
+        - "x-ai/grok-4.3"
+        - "openai/gpt-5.6-luna"
       reasoning:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/x-ai/grok-4.3"
-        - "openrouter/google/gemini-3.7-flash"
+        - "deepseek/deepseek-v4-flash"
+        - "deepseek/deepseek-v4-pro"
+        - "x-ai/grok-4.3"
+        - "google/gemini-3.7-flash"
     web_search_models:
-      - "openrouter/perplexity/sonar"
-      - "openrouter/google/gemini-3.7-flash:online"
-      - "openrouter/openai/gpt-5.6-luna:online"
+      - "perplexity/sonar"
+      - "google/gemini-3.7-flash:online"
+      - "openai/gpt-5.6-luna:online"
 
   quality:
     openrouter:
@@ -114,27 +118,27 @@ tiers:
       # Google coverage instead. glm-5.2 stays out — matches glm-5's pre-existing
       # pass/fail record; re-evaluate independently.
       extraction:
-        - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/openai/gpt-5.6-sol"
-        - "openrouter/google/gemini-3.7-flash"
-        - "openrouter/anthropic/claude-sonnet-5"
+        - "deepseek/deepseek-v4-flash"
+        - "openai/gpt-5.6-sol"
+        - "google/gemini-3.7-flash"
+        - "anthropic/claude-sonnet-5"
       research:
-        - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/openai/gpt-5.6-sol"
-        - "openrouter/anthropic/claude-sonnet-5"
-        - "openrouter/google/gemini-3.7-flash"
-        - "openrouter/x-ai/grok-4.6"
+        - "deepseek/deepseek-v4-pro"
+        - "openai/gpt-5.6-sol"
+        - "anthropic/claude-sonnet-5"
+        - "google/gemini-3.7-flash"
+        - "x-ai/grok-4.6"
       reasoning:
-        - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/anthropic/claude-sonnet-5"
-        - "openrouter/openai/gpt-5.6-sol"
-        - "openrouter/x-ai/grok-4.6"
+        - "deepseek/deepseek-v4-pro"
+        - "anthropic/claude-sonnet-5"
+        - "openai/gpt-5.6-sol"
+        - "x-ai/grok-4.6"
     web_search_models:
-      - "openrouter/perplexity/sonar"
-      - "openrouter/openai/gpt-5.6-sol:online"
-      - "openrouter/deepseek/deepseek-v4-flash:online"
-      - "openrouter/anthropic/claude-sonnet-5:online"
-      - "openrouter/x-ai/grok-4.6:online"
+      - "perplexity/sonar"
+      - "openai/gpt-5.6-sol:online"
+      - "deepseek/deepseek-v4-flash:online"
+      - "anthropic/claude-sonnet-5:online"
+      - "x-ai/grok-4.6:online"
 
 phase_capabilities:
   macro: research

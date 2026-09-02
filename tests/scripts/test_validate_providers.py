@@ -52,7 +52,7 @@ def _fake_response(content: str | None) -> SimpleNamespace:
 
 def test_default_model_is_pinned_not_bare_auto(vp: Any) -> None:
     """The regression: the ping must pin to a known-good model, never bare openrouter/auto."""
-    assert vp._CONNECTIVITY_PING_MODEL == "openrouter/deepseek/deepseek-v4-flash"
+    assert vp._CONNECTIVITY_PING_MODEL == "deepseek/deepseek-v4-flash"
 
 
 def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
@@ -276,6 +276,26 @@ def test_function_tools_pass_when_response_has_no_model_field(vp: Any) -> None:
         patch("digillm.client.completion", return_value=response),
     ):
         assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_reports_substitution_on_unprefixed_house_slug(vp: Any) -> None:
+    """House pins are unprefixed OpenRouter slugs (#3414); substitution still surfaces."""
+    response = SimpleNamespace(
+        model="anthropic/claude-sonnet-5",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by anthropic/claude-sonnet-5" in detail
+    assert "substitution" in detail.lower()
 
 
 def test_function_tools_skips_substitution_check_for_non_openrouter_models(vp: Any) -> None:

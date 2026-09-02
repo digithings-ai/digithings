@@ -18,14 +18,123 @@ model_list:
       model: openai/gpt-4o-mini
       api_key: os.environ/OPENAI_API_KEY
 
-  # ── OpenRouter :free examples (dogfood / optional — not required for all installs) ──
-  # llm_mode: free is policy only; pin digiproject agents.llm (or DIGI_LLM_*) to a
-  # concrete :free id. Roster may rotate — do not put product pins in model_modes.yaml.
-  # Verified live 2026-08-10 (deepseek/deepseek-chat-v3:free 404'd); tools+answer OK.
-  - model_name: openrouter/openai/gpt-oss-20b:free
-    litellm_params:
+  # ── OpenRouter house slugs (#3414) ────────────────────────────────────────
+  # DigiQuant pins and dogfood send unprefixed OpenRouter ids (no openrouter/).
+  # LiteLLM maps each model_name to openrouter/<slug>. Prefixed aliases remain
+  # so leftover openrouter/… callers still resolve. No default marketplace.
+  # Do not add router fallbacks here (strict routing; see litellm.dev.yaml).
+  - model_name: openai/gpt-oss-20b:free
+    litellm_params: &or_gpt_oss_20b_free
       model: openrouter/openai/gpt-oss-20b:free
       api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-oss-20b:free
+    litellm_params: *or_gpt_oss_20b_free
+  - model_name: openrouter/auto
+    litellm_params:
+      model: openrouter/openrouter/auto
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: deepseek/deepseek-v4-flash
+    litellm_params: &or_ds_v4_flash
+      model: openrouter/deepseek/deepseek-v4-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/deepseek/deepseek-v4-flash
+    litellm_params: *or_ds_v4_flash
+  - model_name: deepseek/deepseek-v4-flash:online
+    litellm_params: &or_ds_v4_flash_online
+      model: openrouter/deepseek/deepseek-v4-flash:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/deepseek/deepseek-v4-flash:online
+    litellm_params: *or_ds_v4_flash_online
+  - model_name: deepseek/deepseek-v4-pro
+    litellm_params: &or_ds_v4_pro
+      model: openrouter/deepseek/deepseek-v4-pro
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/deepseek/deepseek-v4-pro
+    litellm_params: *or_ds_v4_pro
+  - model_name: meta-llama/llama-4-maverick
+    litellm_params: &or_llama4_mav
+      model: openrouter/meta-llama/llama-4-maverick
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/meta-llama/llama-4-maverick
+    litellm_params: *or_llama4_mav
+  - model_name: meta-llama/llama-4-maverick:online
+    litellm_params: &or_llama4_mav_online
+      model: openrouter/meta-llama/llama-4-maverick:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/meta-llama/llama-4-maverick:online
+    litellm_params: *or_llama4_mav_online
+  - model_name: google/gemini-3.7-flash
+    litellm_params: &or_gem_37_flash
+      model: openrouter/google/gemini-3.7-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/google/gemini-3.7-flash
+    litellm_params: *or_gem_37_flash
+  - model_name: google/gemini-3.7-flash:online
+    litellm_params: &or_gem_37_flash_online
+      model: openrouter/google/gemini-3.7-flash:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/google/gemini-3.7-flash:online
+    litellm_params: *or_gem_37_flash_online
+  - model_name: openai/gpt-5.6-luna
+    litellm_params: &or_gpt56_luna
+      model: openrouter/openai/gpt-5.6-luna
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-5.6-luna
+    litellm_params: *or_gpt56_luna
+  - model_name: openai/gpt-5.6-luna:online
+    litellm_params: &or_gpt56_luna_online
+      model: openrouter/openai/gpt-5.6-luna:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-5.6-luna:online
+    litellm_params: *or_gpt56_luna_online
+  - model_name: openai/gpt-5.6-sol
+    litellm_params: &or_gpt56_sol
+      model: openrouter/openai/gpt-5.6-sol
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-5.6-sol
+    litellm_params: *or_gpt56_sol
+  - model_name: openai/gpt-5.6-sol:online
+    litellm_params: &or_gpt56_sol_online
+      model: openrouter/openai/gpt-5.6-sol:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/openai/gpt-5.6-sol:online
+    litellm_params: *or_gpt56_sol_online
+  - model_name: x-ai/grok-4.3
+    litellm_params: &or_grok43
+      model: openrouter/x-ai/grok-4.3
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/x-ai/grok-4.3
+    litellm_params: *or_grok43
+  - model_name: x-ai/grok-4.6
+    litellm_params: &or_grok46
+      model: openrouter/x-ai/grok-4.6
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/x-ai/grok-4.6
+    litellm_params: *or_grok46
+  - model_name: x-ai/grok-4.6:online
+    litellm_params: &or_grok46_online
+      model: openrouter/x-ai/grok-4.6:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/x-ai/grok-4.6:online
+    litellm_params: *or_grok46_online
+  - model_name: anthropic/claude-sonnet-5
+    litellm_params: &or_sonnet5
+      model: openrouter/anthropic/claude-sonnet-5
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/anthropic/claude-sonnet-5
+    litellm_params: *or_sonnet5
+  - model_name: anthropic/claude-sonnet-5:online
+    litellm_params: &or_sonnet5_online
+      model: openrouter/anthropic/claude-sonnet-5:online
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/anthropic/claude-sonnet-5:online
+    litellm_params: *or_sonnet5_online
+  - model_name: perplexity/sonar
+    litellm_params: &or_pplx_sonar
+      model: openrouter/perplexity/sonar
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/perplexity/sonar
+    litellm_params: *or_pplx_sonar
 
   # ─── Ollama Cloud (free tier; OLLAMA_API_KEY at ollama.com/settings/keys) ───
   # Updated 2026-04-24. Model catalog: https://ollama.com/search?c=cloud
