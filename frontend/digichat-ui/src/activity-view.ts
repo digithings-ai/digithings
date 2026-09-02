@@ -73,6 +73,11 @@ export type CanonActivityRow =
       meta?: string;
       /** Retrieved documents, rendered as the fold-out body of this tool row. */
       sources?: VaultHitSummary[];
+      /**
+       * Running rows carry a body line so the head is expandable (caret).
+       * Locate tools use "Searching…"; other in-flight tools use "Working…".
+       */
+      lines?: string[];
       /** Start expanded when a body is attached. */
       defaultOpen?: boolean;
     }
@@ -101,6 +106,86 @@ export type CanonActivityRow =
 export function outcomeMeta(count: number): string {
   if (count <= 0) return "no hits";
   return `${count} note${count === 1 ? "" : "s"}`;
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  digisearch: "Search the knowledge base",
+  azure_ai_search: "Search the knowledge base",
+  rag_sources: "Search the knowledge base",
+  digivault: "Find original documents",
+  digivault_search_notes: "Find original documents",
+  digivault_get_note: "Load document",
+};
+
+/** Wire ids whose in-flight fold should read "Searching…", not "Working…". */
+const LOCATE_TOOL_NAMES = new Set([
+  "digisearch",
+  "azure_ai_search",
+  "rag_sources",
+  "digivault",
+  "digivault_search_notes",
+]);
+
+/** Human labels for the head only — identity keys still use the wire tool id. */
+export function toolDisplayName(name: string): string {
+  return TOOL_LABELS[name] ?? name;
+}
+
+/** In-flight body so the head stays a disclosure; locate tools keep Searching…. */
+function inFlightToolLines(toolName: string): string[] {
+  return LOCATE_TOOL_NAMES.has(toolName) ? ["Searching…"] : [WORKING_LABEL];
+}
+
+const QUERY_DISPLAY_MAX = 80;
+
+/** Omit a query that already appeared on the previous row; truncate long ones. */
+export function displayArgs(
+  query: string | undefined,
+  previousQuery: string | undefined,
+): string | undefined {
+  const q = query?.trim();
+  if (!q) return undefined;
+  if (previousQuery?.trim() === q) return undefined;
+  if (q.length <= QUERY_DISPLAY_MAX) return q;
+  return `${q.slice(0, QUERY_DISPLAY_MAX - 1).trimEnd()}…`;
+}
+
+/** Strip markdown chrome so a snippet reads as a sentence, not a wall. */
+export function readableSnippet(raw: string, max = 220): string {
+  let s = raw
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)]\([^)]*\)/g, "$1")
+    .replace(/[#*_`>~]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "";
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const lastStop = Math.max(
+    cut.lastIndexOf(". "),
+    cut.lastIndexOf("? "),
+    cut.lastIndexOf("! "),
+  );
+  const end =
+    lastStop > max * 0.45 ? cut.slice(0, lastStop + 1) : cut.replace(/\s+\S*$/, "");
+  return `${end.trimEnd()}…`;
+}
+
+function previousQueryAt(
+  activities: readonly DigiChatActivity[],
+  i: number,
+): string | undefined {
+  const prev = activities[i - 1];
+  if (!prev || !("query" in prev)) return undefined;
+  return prev.query;
+}
+
+function hitsForDisplay(hits: VaultHitSummary[] | undefined): VaultHitSummary[] | undefined {
+  if (!hits?.length) return undefined;
+  return hits.map((hit) =>
+    hit.snippet ? { ...hit, snippet: readableSnippet(hit.snippet) } : hit,
+  );
 }
 
 /**
@@ -139,30 +224,28 @@ function identityKey(activity: DigiChatActivity, i: number): string {
 export function toCanonRows(activities: readonly DigiChatActivity[]): CanonActivityRow[] {
   return activities.map((activity, i): CanonActivityRow => {
     const key = identityKey(activity, i);
+    const args =
+      "query" in activity ? displayArgs(activity.query, previousQueryAt(activities, i)) : undefined;
     switch (activity.kind) {
       case "tool_call":
-        // Still in flight: no body, so the head renders as a plain row with a
-        // breathing ellipsis and no caret.
         return {
           kind: "tool",
           key,
-          name: activity.name,
-          ...(activity.query ? { args: activity.query } : {}),
+          name: toolDisplayName(activity.name),
+          ...(args ? { args } : {}),
           status: "running",
+          lines: inFlightToolLines(activity.name),
         };
 
       case "tool_result":
         return {
           kind: "tool",
           key,
-          name: activity.name,
-          ...(activity.query ? { args: activity.query } : {}),
+          name: toolDisplayName(activity.name),
+          ...(args ? { args } : {}),
           status: "ok",
           meta: outcomeMeta(activity.count),
-          // Retrieved documents fold under this tool row — that is how they
-          // arrived (Foundry retrieve / azure_ai_search_call_output). No
-          // separate Sources panel; the chain is the transcript of the stream.
-          ...(activity.hits.length ? { sources: activity.hits } : {}),
+          ...(activity.hits.length ? { sources: hitsForDisplay(activity.hits) } : {}),
         };
 
       case "trace":
@@ -248,13 +331,19 @@ export function liveActivityLabel(activities: DigiChatActivity[]): string | unde
  */
 export function citationHits(activities: readonly DigiChatActivity[]): VaultHitSummary[] {
   const out: VaultHitSummary[] = [];
-  const seen = new Set<string>();
+  const byPath = new Map<string, number>();
   for (const activity of activities) {
     if (activity.kind !== "tool_result") continue;
     for (const hit of activity.hits) {
-      if (seen.has(hit.path)) continue;
-      seen.add(hit.path);
-      out.push(hit);
+      const idx = byPath.get(hit.path);
+      if (idx === undefined) {
+        byPath.set(hit.path, out.length);
+        out.push(hit);
+        continue;
+      }
+      if (!out[idx].body && hit.body) {
+        out[idx] = hit;
+      }
     }
   }
   return out;

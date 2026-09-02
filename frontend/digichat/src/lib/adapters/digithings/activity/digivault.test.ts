@@ -75,6 +75,7 @@ describe("mapDigivaultSearchNotes", () => {
           title: "digithings chat — product showcase (client #0)",
           path: "clients/digithings/digithings-docs-projects-digithings-showcase-md",
           snippet: "# digithings chat — product showcase (client #0)",
+          body: "# digithings chat — product showcase (client #0)",
         },
       ],
       query: "showcase",
@@ -120,7 +121,7 @@ describe("mapDigivaultGetNote", () => {
       query: "clients/digithings/ok",
     });
     expect(span?.documents).toEqual([
-      { title: "OK", path: "clients/digithings/ok", snippet: "body" },
+      { title: "OK", path: "clients/digithings/ok", snippet: "body", body: "body" },
     ]);
   });
 

@@ -23,10 +23,11 @@ export const ACTIVITY_PART_TYPE = "data-digichatActivity" as const;
 
 export const MAX_LABEL_CHARS = 200;
 export const MAX_QUERY_CHARS = 200;
-export const MAX_DOCUMENTS = 8;
+export const MAX_DOCUMENTS = 20;
 export const MAX_DOC_FIELD_CHARS = 300;
 export const MAX_REASONING_CHARS = 4000;
 export const MAX_SNIPPET_CHARS = 280;
+export const MAX_NOTE_BODY_CHARS = 80_000;
 export const MAX_BRIEF_THEMES = 8;
 export const MAX_BRIEF_QUESTIONS = 12;
 export const MAX_BRIEF_THEME_LABEL = 120;
@@ -41,6 +42,8 @@ export type ActivityDocument = {
   tier?: string;
   year?: number;
   snippet?: string;
+  /** Full note from digivault_get_note. Not an invented URL. */
+  body?: string;
 };
 
 export type ActivityBrief = {
@@ -129,6 +132,8 @@ function documents(value: unknown): ActivityDocument[] | undefined {
     }
     const snippet = snippetStr(record.snippet, MAX_SNIPPET_CHARS);
     if (snippet) doc.snippet = snippet;
+    const body = snippetStr(record.body, MAX_NOTE_BODY_CHARS);
+    if (body) doc.body = body;
     out.push(doc);
     if (out.length === MAX_DOCUMENTS) break;
   }
@@ -414,11 +419,12 @@ export function toDigiChatActivity(
           !span.documentsWithheld
         ) {
           const mergedHits = [...existing.hits];
-          const seenPaths = new Set(mergedHits.map((h) => h.path));
           for (const hit of result.hits) {
-            if (!seenPaths.has(hit.path)) {
+            const existingIdx = mergedHits.findIndex((h) => h.path === hit.path);
+            if (existingIdx === -1) {
               mergedHits.push(hit);
-              seenPaths.add(hit.path);
+            } else if (hit.body && !mergedHits[existingIdx].body) {
+              mergedHits[existingIdx] = { ...mergedHits[existingIdx], ...hit };
             }
           }
           // CodeRabbit finding (#2327 review): mergedHits.length is 0 whenever

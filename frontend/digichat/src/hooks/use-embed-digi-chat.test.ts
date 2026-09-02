@@ -8,6 +8,8 @@ import {
   chatAccessTokenAtSend,
   uiMessageToDigiChat,
   useEmbedDigiChat,
+  setPendingForceTool,
+  takePendingForceTool,
 } from "./use-embed-digi-chat";
 import { ACTIVITY_PART_TYPE } from "@/lib/chat-activity";
 import {
@@ -439,6 +441,72 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
     const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
     expect(new Headers(second.headers).get("X-Digi-Language")).toBe("de");
 
+    unmount();
+  });
+});
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Force-Tool", () => {
+  beforeEach(() => {
+    takePendingForceTool("https://example.com");
+  });
+
+  it("omits the header when send did not force a tool", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({});
+    expect(headers.has("X-Digi-Force-Tool")).toBe(false);
+  });
+
+  it("isolates pending force-tool by embed host", () => {
+    setPendingForceTool("https://a.example", "digisearch");
+    setPendingForceTool("https://b.example", "digivault_search_notes");
+    expect(takePendingForceTool("https://a.example")).toBe("digisearch");
+    expect(takePendingForceTool("https://a.example")).toBeUndefined();
+    expect(takePendingForceTool("https://b.example")).toBe("digivault_search_notes");
+  });
+
+  it("reads the force tool at send time, then clears it", async () => {
+    capturedTransportConfig = undefined;
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions());
+    });
+    const config = readCapturedTransportConfig();
+    if (!config || !chat) {
+      throw new Error("useEmbedDigiChat did not construct a transport");
+    }
+    chat.send("RS256 token exchange", { forceTool: "digisearch" });
+    const first = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(first.headers).get("X-Digi-Force-Tool")).toBe("digisearch");
+    const second = await config.prepareSendMessagesRequest({ messages: [], body: undefined });
+    expect(new Headers(second.headers).has("X-Digi-Force-Tool")).toBe(false);
+    unmount();
+  });
+});
+
+describe("useEmbedDigiChat reset (/new)", () => {
+  const host = "https://example.com";
+  const storageKey = `digichat_embed_conversation:${host}`;
+
+  beforeEach(() => {
+    takePendingForceTool(host);
+    window.sessionStorage.clear();
+  });
+
+  it("clears transcript, stored conversation id, and pending force-tool", () => {
+    capturedTransportConfig = undefined;
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    if (!chat) {
+      throw new Error("useEmbedDigiChat did not return a controller");
+    }
+    window.sessionStorage.setItem(storageKey, "foundry-conv-123");
+    setPendingForceTool(host, "digisearch");
+
+    chat.reset();
+
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
+    expect(takePendingForceTool(host)).toBeUndefined();
     unmount();
   });
 });

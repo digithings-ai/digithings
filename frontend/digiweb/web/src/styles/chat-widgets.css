@@ -33,6 +33,22 @@
   border-left-color: color-mix(in srgb, var(--danger) 55%, var(--term-hair));
 }
 
+.tc-caret {
+  width: 0;
+  height: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  color: var(--term-mute, var(--ink-mute));
+  flex-shrink: 0;
+  transition: transform 0.2s var(--ease);
+}
+
+.tc-caret.open,
+button.tc-head[aria-expanded="true"] .tc-caret {
+  transform: rotate(90deg);
+}
+
 /* a live (running) call breathes its status mark */
 .tc-run {
   animation: tc-run-pulse 1.2s var(--ease) infinite;
@@ -153,7 +169,8 @@
 /* ── reduced motion ─────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .think-caret {
+  .think-caret,
+  .tc-caret {
     transition: none;
   }
   .tc-run,
