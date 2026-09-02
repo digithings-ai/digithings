@@ -69,8 +69,11 @@ class TestKairosCronSpecIsProbeOnly:
         assert crons == ["15 12 * * *"]
         house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
         house_crons = [entry["cron"] for entry in _triggers(house)["schedule"]]
-        assert "0 12 * * *" in house_crons
+        assert house_crons == ["17 9 * * *", "17 10 * * *", "17 11 * * *", "17 12 * * *"]
+        assert "0 12 * * *" not in house_crons
         assert "0 12 * * *" not in crons
+        for cron in house_crons:
+            assert cron not in crons
 
     def test_permissions_are_contents_read_only(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
@@ -119,6 +122,41 @@ class TestKairosCronSpecIsProbeOnly:
     def test_installed_workflow_is_present_and_matches_spec(self) -> None:
         assert INSTALLED.is_file()
         assert INSTALLED.read_text(encoding="utf-8") == SPEC.read_text(encoding="utf-8")
+
+
+class TestHouseScheduleRetriesOffPeak:
+    """Same anti-congestion pattern as FX Hub (`17 */2` in pipeline-digiquant-prices)."""
+
+    def test_house_crons_avoid_top_of_hour_and_retry_before_ny_open(self) -> None:
+        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
+        crons = [entry["cron"] for entry in _triggers(house)["schedule"]]
+        assert crons == ["17 9 * * *", "17 10 * * *", "17 11 * * *", "17 12 * * *"]
+        for cron in crons:
+            minute, _hour, *_rest = cron.split()
+            assert minute != "0", cron
+
+    def test_house_accepts_repository_dispatch_watchdog(self) -> None:
+        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
+        triggers = _triggers(house)
+        dispatch = triggers.get("repository_dispatch")
+        assert isinstance(dispatch, dict)
+        types = dispatch.get("types")
+        assert types == ["olympus-daily"]
+
+    def test_already_committed_gate_skips_the_llm_job(self) -> None:
+        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
+        jobs = house["jobs"]
+        assert "already-committed" in jobs
+        run = jobs["run"]
+        needs = run["needs"]
+        assert "already-committed" in needs
+        assert "skip != 'true'" in str(run.get("if") or "")
+        gate_blob = "\n".join(
+            step["run"]
+            for step in jobs["already-committed"].get("steps", [])
+            if isinstance(step, dict) and isinstance(step.get("run"), str)
+        )
+        assert "house_schedule_skip.py" in gate_blob
 
 
 class TestHousePipelineDoesNotRunOverlay:

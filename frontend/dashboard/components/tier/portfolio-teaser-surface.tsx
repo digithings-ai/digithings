@@ -6,7 +6,7 @@ import { usePlanTier } from '@/lib/use-entitlement';
 
 /**
  * Free-tier portfolio glimpse — ticker names only, no weights/NAV/fills.
- * Baseline+ should render the full book instead (caller gates that separately).
+ * Brief+ should render the full book instead (caller gates that separately).
  */
 export function PortfolioTeaserSurface({
   tickers,
@@ -19,7 +19,7 @@ export function PortfolioTeaserSurface({
   const hookTier = usePlanTier();
   const tier = tierProp ?? hookTier;
 
-  // Full book available → no teaser chrome (Baseline+).
+  // Full book available → no teaser chrome (Brief+).
   if (can(tier, 'house_weights_nav')) {
     return null;
   }
@@ -40,7 +40,7 @@ export function PortfolioTeaserSurface({
         {shown.length === 0 ? (
           <p className="text-sm text-ink-soft">
             Active book symbols appear here as a teaser. Weights and connections
-            unlock on Baseline and Custom.
+            unlock on Brief, Desk, and Studio.
           </p>
         ) : (
           <p className="text-sm text-ink-soft">

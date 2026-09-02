@@ -172,10 +172,12 @@ supabase link --project-ref rwagjbkvxkdwqmouagad
 supabase secrets set \
   STRIPE_SECRET_KEY=… \
   STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… \
-  STRIPE_PRICE_BASELINE_ANNUAL=… \
-  STRIPE_PRICE_CUSTOM_MONTHLY=… \
-  STRIPE_PRICE_CUSTOM_ANNUAL=… \
+  STRIPE_PRICE_BRIEF_MONTHLY=… \
+  STRIPE_PRICE_BRIEF_ANNUAL=… \
+  STRIPE_PRICE_DESK_MONTHLY=… \
+  STRIPE_PRICE_DESK_ANNUAL=… \
+  STRIPE_PRICE_STUDIO_MONTHLY=… \
+  STRIPE_PRICE_STUDIO_ANNUAL=… \
   NEXT_PUBLIC_APP_URL=… \
   APP_URL=… \
   DIGIQUANT_VAULT_MASTER_KEY=… \
@@ -195,7 +197,7 @@ supabase functions deploy settings
 
 | Function | Secrets |
 |----------|---------|
-| `stripe-webhook` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_BASELINE_ANNUAL`, `STRIPE_PRICE_CUSTOM_MONTHLY`, `STRIPE_PRICE_CUSTOM_ANNUAL` (+ platform `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`) |
+| `stripe-webhook` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BRIEF_MONTHLY`, `STRIPE_PRICE_BRIEF_ANNUAL`, `STRIPE_PRICE_DESK_MONTHLY`, `STRIPE_PRICE_DESK_ANNUAL`, `STRIPE_PRICE_STUDIO_MONTHLY`, `STRIPE_PRICE_STUDIO_ANNUAL` (+ platform `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`) |
 | `create-checkout-session` | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_*` (via tiers map), `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_APP_URL` |
 | `settings` | `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID` (optional, default `v1`), `APP_URL` (or `NEXT_PUBLIC_APP_URL`), `ALPACA_OAUTH_CLIENT_ID`, `ALPACA_OAUTH_CLIENT_SECRET` |
@@ -262,7 +264,7 @@ NEXT_PUBLIC_DASHBOARD_AUTH=1 npm run build
 |--------------|---------------------|--------|
 | Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** and **pushed to `core` EF secrets** (2026-08-30 via `sbp_` + `supabase secrets set`). | K3 seal; settings brokers; T4 BYOK at runtime |
 | `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET on `core` to `https://digiquant.io`** (2026-08-31). Observer `GET /settings/app-urls` returns Alpaca `…/olympus/settings/brokers/callback/` + billing `…/olympus/settings/?tab=billing` (no loopback; public client id empty until Alpaca secrets land). settings **v32**, checkout **v8**, portal **v9**. | OAuth redirect pin; checkout return URLs |
-| Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
+| Vendor identity (`admin@digithings.ai` on Proton) | **Policy** — company mailbox for vendor signups; owner completes CAPTCHA / Proton codes on the desktop. No Workspace / company Google account. Agentmail is not used for vendor signup. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md). | Vendor consoles |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Partial** — **GitHub Enabled** (OAuth App still named `digiquant olympus` in the vendor console + callback). Site URL `https://digiquant.io` + `/dashboard/auth/callback/` allow-list. **Google Disabled** (skipped captcha console). | T1 login when flag on (GitHub path ready; Google still human) |
@@ -311,7 +313,7 @@ cutover PR merged/deployed → **then** remove Access.
         `research_snapshot ? 'portfolio'` is false.
       - As free-tier JWT: same weight/NAV views + `pm-rebalance` → **0**;
         `public_daily_research` + research docs (`analyst/*`, etc.) → readable.
-- [ ] **Authenticated Baseline+ smoke:** JWT with `plan_tier=baseline` reads
+- [ ] **Authenticated Brief+ smoke:** JWT with `plan_tier=brief` (or desk/studio) reads
       weight-bearing docs; cannot read another workspace’s private rows.
 - [ ] **Frontend research-view cutover** (named task below) merged and Pages
       redeployed — Observer/anon paths no longer `.from('daily_snapshots')` for
@@ -327,13 +329,13 @@ until the dashboard switches (file: `frontend/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
-| `queries.ts` ~713 | `daily_snapshots` select `snapshot,digest_markdown` (latest) | Observer/free → `public_daily_research` (`research_snapshot`); Baseline+ house book still from positions/NAV (or BFF) — never raw snapshot portfolio |
+| `queries.ts` ~713 | `daily_snapshots` select `snapshot,digest_markdown` (latest) | Observer/free → `public_daily_research` (`research_snapshot`); Brief+ house book still from positions/NAV (or BFF) — never raw snapshot portfolio |
 | `queries.ts` ~740 | `daily_snapshots` select `date,run_type` (history) | Switch to `public_daily_research` (same columns) |
 | `queries.ts` ~1816 | `digest_markdown, snapshot` for digest render | Research path: render from `research_snapshot`; do not fetch `digest_markdown` for free/anon |
 | `queries.ts` ~1908, ~1921 | `daily_snapshots` meta / prev date | Use `public_daily_research` |
 | `queries.ts` ~1986 | `date, snapshot, digest_markdown` history | Use `public_daily_research`; drop digest_markdown for unentitled tiers |
 | `queries.ts` ~2063 | `date, run_type, snapshot` | Use `public_daily_research` |
-| `snapshot-fetch.ts` ~232 | latest `daily_snapshots` row → `SnapshotEnvelope` | Parse `research_snapshot` for Observer; Baseline+ weight UI must not use this envelope’s stripped digest for book weights |
+| `snapshot-fetch.ts` ~232 | latest `daily_snapshots` row → `SnapshotEnvelope` | Parse `research_snapshot` for Observer; Brief+ weight UI must not use this envelope’s stripped digest for book weights |
 | `queries.ts` ~749 | prefetch `documents` `pm-rebalance` | Gate with `can(tier, 'house_weights_nav')`; free must not fetch (RLS will empty, but skip the request) |
 
 Track as a single agent-task issue, e.g. `[agent] cutover — Olympus reads public_daily_research`.
@@ -345,7 +347,7 @@ Cutover SQL **REVOKEs** `public_portfolio_positions`, `public_nav_history`, and
 accounting NAV/attribution views from **both** `anon` and `authenticated`
 (definer views — base RLS does not protect them). That fail-closes free JWT.
 
-Why no staged `901_tier_gated_view_policies.sql` in this kit: restoring Baseline+
+Why no staged `901_tier_gated_view_policies.sql` in this kit: restoring Brief+
 SELECT on those views without a proven claim gate (or a BFF that checks
 `plan_tier` then reads via `service_role`) would re-open the free-JWT leak.
 T5 UI already skips unentitled fetches; the data plane must stay fail-closed
@@ -379,11 +381,11 @@ Full manual chain once secrets land on Cursor env **and** core EF:
 set -euo pipefail
 SUPABASE_FUNCTIONS="${SUPABASE_FUNCTIONS:-https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1}"
 # 1) Signup / login (Supabase Auth GitHub or Email/Agentmail) — manual browser or supabase-js
-# 2) Subscribe (Stripe test Checkout → Baseline or Custom)
+# 2) Subscribe (Stripe Checkout → Studio for overlay proof; Brief/Desk also valid SKUs)
 curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -H "Authorization: Bearer $USER_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"tier":"baseline","interval":"monthly"}'
+  -d '{"tier":"studio","interval":"annual"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
 # 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
 # 4) Overlay run (T4): `DIGIQUANT_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`

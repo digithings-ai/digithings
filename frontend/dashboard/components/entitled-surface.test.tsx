@@ -8,7 +8,7 @@ describe('EntitledSurface', () => {
     const html = renderToStaticMarkup(
       createElement(
         EntitledSurface,
-        { artifactClass: 'house_weights_nav', tier: 'baseline' },
+        { artifactClass: 'house_weights_nav', tier: 'brief' },
         createElement('div', { 'data-testid': 'panel' }, 'weights'),
       ),
     );

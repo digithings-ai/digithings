@@ -22,8 +22,9 @@ pytestmark = pytest.mark.unit
 _FAKE = {
     "STRIPE_SECRET_KEY": "sk_test_not_a_real_key",
     "STRIPE_WEBHOOK_SECRET": "whsec_not_a_real_secret",
-    "STRIPE_PRICE_BASELINE_MONTHLY": "price_baseline",
-    "STRIPE_PRICE_CUSTOM_MONTHLY": "price_custom",
+    "STRIPE_PRICE_BRIEF_MONTHLY": "price_brief",
+    "STRIPE_PRICE_DESK_MONTHLY": "price_desk",
+    "STRIPE_PRICE_STUDIO_MONTHLY": "price_studio",
     "MAILGUN_API_KEY": "key-not-real",
     "MAILGUN_DOMAIN": "mg.example.test",
     "NOTIFY_FROM": "Kairos <noreply@example.test>",
@@ -41,8 +42,9 @@ def _write_complete(root: Path) -> None:
             for k in (
                 "STRIPE_SECRET_KEY",
                 "STRIPE_WEBHOOK_SECRET",
-                "STRIPE_PRICE_BASELINE_MONTHLY",
-                "STRIPE_PRICE_CUSTOM_MONTHLY",
+                "STRIPE_PRICE_BRIEF_MONTHLY",
+                "STRIPE_PRICE_DESK_MONTHLY",
+                "STRIPE_PRICE_STUDIO_MONTHLY",
             )
         )
         + "\n",
