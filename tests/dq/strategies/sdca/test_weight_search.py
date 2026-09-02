@@ -150,6 +150,54 @@ def test_backtest_search_does_not_drop_all_on_high_drawdown() -> None:
     assert result.weights.weekly_rsi == pytest.approx(1.0)
 
 
+def test_backtest_search_keeps_extra_when_early_fold_is_all_cash() -> None:
+    """Early expanding IS windows can sit all-cash in the sell zone (#0d7a6f81).
+
+    Stage A ranks by mean IS vs-flat-DCA across folds — not an all-folds
+    capital-deployed floor. Requiring every fold to clear 10% deployed used
+    to drop the whole extra grid when the first window never bought.
+    """
+    dates = _dates()
+    prices = [100.0 + 0.2 * i for i in range(len(dates))]
+    zeros = [0.0] * len(dates)
+
+    def evaluator(
+        window_dates: list[date],
+        window_prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        rsi_w = 0.0
+        for ind in extra_indicators or []:
+            if getattr(ind, "name", "") == "weekly_rsi":
+                rsi_w = float(ind.weight)
+        # Short early windows: all-cash (0% deployed). Longer windows trade.
+        deployed = 0.0 if len(window_dates) < 40 else 40.0
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=4.0 + 3.0 * rsi_w,
+            vs_lump_pct=-1.0,
+            capital_deployed_pct=deployed,
+            max_drawdown_pct=12.0,
+        )
+
+    result = optimize_stage_a_by_backtest(
+        dates,
+        prices,
+        extra_z={"weekly_rsi": zeros},
+        rails_fitter=_fitter,
+        evaluator=evaluator,
+        shape=_SHAPE,
+        search_names=("weekly_rsi",),
+        grid=(0.0, 1.0),
+        valuation_grid=(1.0,),
+    )
+    assert result.weights.weekly_rsi == pytest.approx(1.0)
+    assert any(not score.feasible for score in result.fold_scores)
+    assert any(score.feasible for score in result.fold_scores)
+
+
 def test_backtest_search_skips_enabled_extra_without_z() -> None:
     dates = _dates()
     prices = [100.0] * len(dates)

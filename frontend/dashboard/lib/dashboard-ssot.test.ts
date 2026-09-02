@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertDailySnapshotQueryOk,
   bookedCoversCommittedSnapshot,
   committedBookDate,
   previousBookDate,
@@ -48,13 +49,35 @@ describe('bookedCoversCommittedSnapshot', () => {
 });
 
 describe('unpublishedBookNote', () => {
-  it('notes when the committed snapshot is older than today', () => {
-    expect(unpublishedBookNote('2026-08-28', '2026-08-31')).toBe(
+  it('is silent when no position date is newer than the snapshot', () => {
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-28', '2026-08-27'])).toBeNull();
+  });
+
+  it('notes when a position date is newer than the committed snapshot', () => {
+    expect(unpublishedBookNote('2026-08-28', ['2026-08-31', '2026-08-28'])).toBe(
       'Last committed snapshot is 2026-08-28. Newer positions are hidden until a snapshot exists for that date.'
     );
   });
 
-  it('is silent when the snapshot is today', () => {
-    expect(unpublishedBookNote('2026-08-31', '2026-08-31')).toBeNull();
+  it('is silent without a snapshot', () => {
+    expect(unpublishedBookNote(null, ['2026-08-31'])).toBeNull();
+  });
+});
+
+describe('assertDailySnapshotQueryOk', () => {
+  it('throws on a query error', () => {
+    const err = { message: 'permission denied', code: 'PGRST205' };
+    expect(() => assertDailySnapshotQueryOk(err)).toThrow(/Daily snapshot query failed/);
+    try {
+      assertDailySnapshotQueryOk(err);
+    } catch (thrown) {
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).cause).toBe(err);
+    }
+  });
+
+  it('does not throw when the query succeeded', () => {
+    expect(() => assertDailySnapshotQueryOk(null)).not.toThrow();
+    expect(() => assertDailySnapshotQueryOk(undefined)).not.toThrow();
   });
 });

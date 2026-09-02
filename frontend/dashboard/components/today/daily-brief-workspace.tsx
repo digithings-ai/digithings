@@ -133,6 +133,8 @@ export interface DailyBriefWorkspaceProps {
   runHealth: BriefRunHealth | null | undefined;
   /** Recent run diagnostics for the Pipeline Health week bar (optional). */
   runDiagnostics?: AtlasRunDiagnostics[];
+  /** All position dates, including unpublished rows newer than the snapshot. */
+  positionDates?: string[];
   /** Test override for house book gates; production reads the session. */
   tier?: PlanTier;
 }
@@ -236,6 +238,7 @@ export function DailyBriefWorkspace({
   ledgerDayEvents,
   runHealth,
   runDiagnostics = [],
+  positionDates = [],
   tier,
 }: DailyBriefWorkspaceProps) {
   // `regime`, `regimeLabel`, `confidence`, and `runType` remain on the props
@@ -376,7 +379,12 @@ export function DailyBriefWorkspace({
               <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
               <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
             </ClaimLink>
-            <BriefPipelineHealth runHealth={runHealth} diagnostics={runDiagnostics} />
+            <BriefPipelineHealth
+              runHealth={runHealth}
+              diagnostics={runDiagnostics}
+              snapshotDate={digestDate}
+              positionDates={positionDates}
+            />
           </div>
         </div>
       </header>

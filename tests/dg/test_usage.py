@@ -549,6 +549,32 @@ def test_empty_retry_records_per_model_counter(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.unit
+def test_empty_retry_keys_by_served_model_not_request_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenRouter auto routes must attribute empty retries to ``r.model`` (#1639)."""
+    import digigraph.llm_client  # noqa: F401 — wires digillm observer to usage.record
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk")
+    monkeypatch.setattr(digillm_client, "_EMPTY_RETRY_MAX", 2)
+    monkeypatch.setattr(digillm_client.time, "sleep", lambda *_a, **_k: None)
+
+    empty = _mock_chat_response("")
+    empty.model = "x-ai/grok-4"
+    healed = _mock_chat_response("healed")
+    healed.model = "x-ai/grok-4"
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [empty, healed]
+    usage.start()
+    with patch.object(digillm_client, "get_client_for_model", return_value=fake_client):
+        digillm_client.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
+    snap = usage.snapshot()
+    assert snap["empty_retries"] == {"total": 1, "by_model": {"x-ai/grok-4": 1}}
+    assert "openrouter/auto" not in snap["empty_retries"]["by_model"]
+
+
+@pytest.mark.unit
 def test_empty_retries_default_zero_when_none_recorded() -> None:
     usage.start()
     assert usage.snapshot()["empty_retries"] == {"total": 0, "by_model": {}}
