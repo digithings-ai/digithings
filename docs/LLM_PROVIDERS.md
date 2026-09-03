@@ -183,6 +183,7 @@ For users with GPU or Apple Silicon:
 - **Ollama** — simplest. One command pulls and runs Llama 3.3, Qwen 2.5/3, DeepSeek, Gemma, Phi. OpenAI-compatible server on `:11434`. LiteLLM: `ollama_chat/<model>`.
 - **LM Studio** — GUI + local OpenAI-compatible server. Best for non-CLI users.
 - **vLLM** — production-grade serving with PagedAttention. Deploy on your own GPU. LiteLLM: `openai/<model>` with `api_base`.
+- **OmniRoute** — optional self-hosted OpenAI-compat gateway (`localhost:20128/v1`). Off by default; see [providers/omniroute.md](providers/omniroute.md). Does **not** replace OpenRouter as the house default.
 - **llama.cpp / llamafile** — CPU-only or constrained hardware.
 - **TGI (Text Generation Inference)** — Hugging Face's serving stack.
 
