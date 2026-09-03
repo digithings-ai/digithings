@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DASHBOARD_CSP, DASHBOARD_SECURITY_HEADERS } from "./security-headers.mjs";
+import { DASHBOARD_CSP, DASHBOARD_DIGICHAT_FRAME_SRC, DASHBOARD_SECURITY_HEADERS } from "./security-headers.mjs";
+import { DIGICHAT_POPUP_FRAME_ORIGINS } from "./digichat-popup";
 
 // Shipped at the dist root by scripts/build-digiquant.sh — Cloudflare Pages
 // ignores _headers files below the output root (#674).
@@ -22,6 +23,12 @@ describe("dashboard security-headers", () => {
     expect(DASHBOARD_CSP).toContain("frame-src");
     expect(DASHBOARD_CSP).toContain("https://digithings.ai");
     expect(DASHBOARD_CSP).toContain("http://127.0.0.1:3005");
+  });
+
+  it("keeps popup allowlist aligned with CSP frame-src (#3422)", () => {
+    for (const origin of DIGICHAT_POPUP_FRAME_ORIGINS) {
+      expect(DASHBOARD_DIGICHAT_FRAME_SRC).toContain(origin);
+    }
   });
 
   it("exports standard hardening headers", () => {

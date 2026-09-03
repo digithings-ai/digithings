@@ -5,7 +5,7 @@
  * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
  * `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
  *
- * Grounding, web search, three-tier models, and DigiGraph→DigiLLM live in the
+ * Grounding, web search, three-tier models, and digigraph→digillm live in the
  * digichat tenant registry (`DIGICHAT_EMBED_TENANTS` for digiquant.io) — not here.
  */
 
@@ -19,7 +19,19 @@ export const DEFAULT_DIGICHAT_EMBED_ORIGIN = 'https://digithings.ai';
 /** Registry host key for digiquant.io /dashboard embeds. */
 export const DEFAULT_DIGICHAT_EMBED_HOST = 'digiquant.io';
 
-/** Digiquant phosphor — matches `--accent-digiquant` (dark). */
+/**
+ * Origins allowed by dashboard CSP `frame-src` (see security-headers.mjs).
+ * Keep in sync — popup fails closed when ORIGIN is outside this set.
+ */
+export const DIGICHAT_POPUP_FRAME_ORIGINS: readonly string[] = [
+  'https://digithings.ai',
+  'https://www.digithings.ai',
+  'https://digichat.digithings.ai',
+  'http://127.0.0.1:3005',
+  'http://localhost:3005',
+];
+
+/** digiquant phosphor — matches `--accent-digiquant` (dark). */
 export const DIGICHAT_POPUP_ACCENT = '#3dd6c4';
 
 export const DIGICHAT_READY = 'digichat:ready';
@@ -90,9 +102,29 @@ export function digichatEmbedOriginForDashboard(
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
 }
 
+/** True when origin is listed in dashboard CSP frame-src. */
+export function isDigichatOriginAllowedByCsp(origin: string): boolean {
+  return (DIGICHAT_POPUP_FRAME_ORIGINS as readonly string[]).includes(origin);
+}
+
 /**
- * Opt-in popup: requires an explicit enable flag so digiquant.io does not
- * mount a broken launcher before digichat tenant ops are ready.
+ * digiquant.io (and any non-loopback host) needs an embed token — digichat
+ * treats only digithings.ai hosts as first-party for tokenless embed.
+ */
+export function embedHostRequiresToken(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') return false;
+  if (h === 'digithings.ai' || h === 'www.digithings.ai' || h === 'occ.digithings.ai') {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Opt-in popup: requires ORIGIN (or POPUP=1) and fails closed when the
+ * resolved origin is outside CSP frame-src, or when the host needs a token
+ * and none is configured (avoids a wrong-tenant gated embed).
  */
 export function isDigichatPopupEnabled(
   env: Record<string, string | undefined> = process.env as Record<
@@ -101,9 +133,17 @@ export function isDigichatPopupEnabled(
   >,
 ): boolean {
   if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '0') return false;
-  if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '1') return true;
-  // Origin alone is enough when operators set the embed origin on Pages.
-  return Boolean(resolveDigichatEmbedOrigin(env));
+  const wants =
+    env.NEXT_PUBLIC_DIGICHAT_POPUP === '1' ||
+    Boolean(resolveDigichatEmbedOrigin(env));
+  if (!wants) return false;
+  const origin = digichatEmbedOriginForDashboard(env);
+  if (!isDigichatOriginAllowedByCsp(origin)) return false;
+  const host =
+    env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST?.trim() || DEFAULT_DIGICHAT_EMBED_HOST;
+  const token = env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN?.trim();
+  if (embedHostRequiresToken(host) && !token) return false;
+  return true;
 }
 
 export function readDigichatPopupConfig(

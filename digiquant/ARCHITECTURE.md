@@ -914,7 +914,7 @@ OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_nam
 ### Dashboard digichat popup (#3422)
 
 The operator UI at `/dashboard/` (`frontend/dashboard`) mounts a Desk+ digichat
-popup that iframes digichat `/embed` (DigiGraph backend → DigiLLM). Grounding,
+popup that iframes digichat `/embed` (digigraph backend → digillm). Grounding,
 web search, and model tiers are digichat tenant config (`DIGICHAT_EMBED_TENANTS`
 for `digiquant.io`), not digiquant HTTP. Plan gate: `glassbox_economics` (Desk+).
 

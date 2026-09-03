@@ -54,32 +54,62 @@ describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
     expect(readDigichatPopupConfig({})).toBeNull();
   });
 
-  it('enables when origin is set', () => {
+  it('stays off when digiquant.io has origin but no token', () => {
+    expect(
+      isDigichatPopupEnabled({
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
+      }),
+    ).toBe(false);
+    expect(
+      readDigichatPopupConfig({
+        NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      }),
+    ).toBeNull();
+  });
+
+  it('stays off when ORIGIN is outside CSP frame-src', () => {
+    expect(
+      isDigichatPopupEnabled({
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://preview.pages.dev',
+        NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok',
+      }),
+    ).toBe(false);
+  });
+
+  it('enables when origin, CSP, and token are set', () => {
     const env = {
       NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
+      NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok_test',
     };
     expect(isDigichatPopupEnabled(env)).toBe(true);
     const cfg = readDigichatPopupConfig(env);
     expect(cfg).not.toBeNull();
     expect(cfg!.origin).toBe('https://digithings.ai');
     expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
+    expect(cfg!.token).toBe('tok_test');
     expect(cfg!.pageContext).toBe(true);
     expect(cfg!.suggestions.length).toBeGreaterThan(0);
   });
 
-  it('honors POPUP=0 kill switch even with origin', () => {
+  it('honors POPUP=0 kill switch even with origin + token', () => {
     expect(
       isDigichatPopupEnabled({
         NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
+        NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok',
         NEXT_PUBLIC_DIGICHAT_POPUP: '0',
       }),
     ).toBe(false);
   });
 
-  it('honors POPUP=1 without origin (uses default origin)', () => {
-    const cfg = readDigichatPopupConfig({ NEXT_PUBLIC_DIGICHAT_POPUP: '1' });
+  it('allows loopback host without token when POPUP=1', () => {
+    const cfg = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'localhost',
+    });
     expect(cfg).not.toBeNull();
     expect(cfg!.origin).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(cfg!.host).toBe('localhost');
+    expect(cfg!.token).toBeUndefined();
   });
 });
 

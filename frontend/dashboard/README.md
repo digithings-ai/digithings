@@ -225,8 +225,10 @@ Desk / Studio / Enterprise sessions see a bottom-right digichat launcher (Brief 
 Observer do not). The panel iframes digichat `/embed?layout=embed` with optional
 page-context (`digichat:page-context`) for the visible dashboard DOM — same contract
 as digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
-Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`).
-Tenant grounding (DigiGraph → DigiLLM, research/portfolio corpus, opt-in web search,
+Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
+plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in
+the CSP `frame-src` allowlist or the launcher stays off.
+Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
 BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
 See `.env.local.example`.
 
