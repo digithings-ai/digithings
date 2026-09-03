@@ -6,6 +6,7 @@ from typing import Any  # score:allow untyped any — captured mock kwargs dict
 from unittest.mock import patch
 
 import pytest
+from digigraph.graph import research_agent as _research_agent_module
 from digiquant.tool_rounds import (
     OLYMPUS_MAX_TOOL_ROUNDS_ENV,
     olympus_max_tool_rounds,
@@ -44,7 +45,7 @@ def test_wrapper_injects_default_rounds() -> None:
         seen.update(kwargs)
         return _Out(headline="ok")
 
-    with patch("digigraph.graph.research_agent.run_research_agent", _fake):
+    with patch.object(_research_agent_module, "run_research_agent", _fake):
         out = run_olympus_research_agent(
             skill_text="s",
             phase_inputs={},
@@ -62,7 +63,7 @@ def test_wrapper_respects_explicit_rounds() -> None:
         seen.update(kwargs)
         return _Out(headline="ok")
 
-    with patch("digigraph.graph.research_agent.run_research_agent", _fake):
+    with patch.object(_research_agent_module, "run_research_agent", _fake):
         run_olympus_research_agent(
             skill_text="s",
             phase_inputs={},

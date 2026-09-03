@@ -109,6 +109,10 @@ def test_amendment_spelling_wrappers_materialize(wrapper_key: str) -> None:
     assert amendment is not None
     assert effective is not None
     assert effective.amendment_outcome is AmendmentOutcome.ACCEPTED
+    # The nested economics materialized: ordered returns from the fixture.
+    assert amendment.terms.bear_return == Decimal("-0.10")
+    assert amendment.terms.base_return == Decimal("0.03")
+    assert amendment.terms.bull_return == Decimal("0.15")
 
 
 def test_registry_reason_is_short_not_conclusion() -> None:

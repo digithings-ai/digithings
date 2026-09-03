@@ -35,6 +35,7 @@ from digiquant.portfolio.models.portfolio_ledger import (
 from digiquant.portfolio.models.risk_policy import RiskPolicy
 from digiquant.research.state import ResearchState
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.supabase_retry import is_retryable_supabase_error, run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
 
@@ -63,14 +64,20 @@ def _load_symbol_history(
     as_of_session: str,
     lookback_days: int,
 ) -> pl.DataFrame:
-    resp = (
-        client.table(_PRICE_HISTORY)
-        .select("date, ticker, close, high, low, volume")
-        .eq("ticker", symbol.strip().upper())
-        .lte("date", as_of_session)
-        .execute()
+    def _fetch_history() -> list[dict[str, Any]]:
+        history_resp = (
+            client.table(_PRICE_HISTORY)
+            .select("date, ticker, close, high, low, volume")
+            .eq("ticker", symbol.strip().upper())
+            .lte("date", as_of_session)
+            .execute()
+        )
+        return list(getattr(history_resp, "data", None) or [])
+
+    rows = run_with_supabase_retry(
+        _fetch_history,
+        operation=f"h9 cost history {symbol}",
     )
-    rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return pl.DataFrame()
     frame = pl.DataFrame(rows)
@@ -102,7 +109,12 @@ def _fetch_technicals_row(
             .execute()
         )
     except Exception as exc:
-        logger.warning("h9 cost evidence: price_technicals read failed (%s)", exc)
+        # Fail-soft on transport faults, but loud on real bugs: a renamed or
+        # dropped technicals column must not degrade to unset-vol silently.
+        if is_retryable_supabase_error(exc):
+            logger.warning("h9 cost evidence: price_technicals read failed (%s)", exc)
+        else:
+            logger.error("h9 cost evidence: price_technicals read failed (%s)", exc)
         return None
     rows = list(getattr(resp, "data", None) or [])
     return rows[0] if rows else None
@@ -114,15 +126,21 @@ def _fetch_price_row(
     symbol: str,
     session_date: str,
 ) -> dict[str, Any] | None:
-    resp = (
-        client.table(_PRICE_HISTORY)
-        .select("date, close, high, low, volume")
-        .eq("ticker", symbol.strip().upper())
-        .eq("date", session_date)
-        .limit(1)
-        .execute()
+    def _fetch_history_row() -> list[dict[str, Any]]:
+        history_resp = (
+            client.table(_PRICE_HISTORY)
+            .select("date, close, high, low, volume")
+            .eq("ticker", symbol.strip().upper())
+            .eq("date", session_date)
+            .limit(1)
+            .execute()
+        )
+        return list(getattr(history_resp, "data", None) or [])
+
+    rows = run_with_supabase_retry(
+        _fetch_history_row,
+        operation=f"h9 cost price row {symbol}",
     )
-    rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return None
     row = dict(rows[0])

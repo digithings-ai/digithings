@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
@@ -9,6 +10,8 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 )
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 PatchOpType = Literal["set", "append", "remove"]
 # RFC 6902 names the write verb ``add``. This module's ``set`` is that verb
@@ -82,6 +85,14 @@ class DocumentPatch(BaseModel):
             if not isinstance(op, dict) or (op.get("op") and op.get("path"))
         ]
         if len(kept) != len(ops):
+            # Telemetry, not silence: an all-placeholder patch merges as a
+            # no-op, which frozen-row analysis must distinguish from no-change.
+            logger.info(
+                "DocumentPatch dropped %d of %d ops missing op/path (target=%s)",
+                len(ops) - len(kept),
+                len(ops),
+                data.get("target_document_key"),
+            )
             data = {**data, "ops": kept}
         return data
 

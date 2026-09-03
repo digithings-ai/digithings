@@ -184,18 +184,31 @@ def resolve_pending(
         ticker = row.get("ticker") or ""
         benchmark = row.get("benchmark") or DEFAULT_BENCHMARK
 
-        ticker_window = query_returns_window(
-            client=client,
-            ticker=ticker,
-            start_date=decision_run_date,
-            holding_days=holding_days,
-        )
-        bench_window = query_returns_window(
-            client=client,
-            ticker=benchmark,
-            start_date=decision_run_date,
-            holding_days=holding_days,
-        )
+        try:
+            ticker_window = query_returns_window(
+                client=client,
+                ticker=ticker,
+                start_date=decision_run_date,
+                holding_days=holding_days,
+            )
+            bench_window = query_returns_window(
+                client=client,
+                ticker=benchmark,
+                start_date=decision_run_date,
+                holding_days=holding_days,
+            )
+        except Exception as exc:
+            # A persistent outage (retries exhausted) must not block sibling
+            # rows — the row stays pending for the next due-window check (#3078).
+            logger.warning(
+                "decision_log returns window failed for %s (run_id=%s): %s: %s",
+                ticker,
+                row.get("run_id"),
+                type(exc).__name__,
+                exc,
+            )
+            skipped_no_data += 1
+            continue
         if ticker_window is None or bench_window is None:
             # Gracefully skip — row stays pending and the next due-window
             # check will retry once price_history catches up. AC #7.
