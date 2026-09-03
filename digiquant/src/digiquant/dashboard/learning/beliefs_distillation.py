@@ -147,12 +147,12 @@ def _run_beliefs_llm(
     prior_body: str | None = None,
     max_tokens: int | None = None,
 ) -> BeliefsBlob:
-    from digigraph.graph.research_agent import run_research_agent
     from digigraph.model_config import get_grounding_model
 
     from digiquant.research.data.web_grounding import fetch_web_grounding
     from digiquant.research.phases._node_factory import apply_web_grounding_to_inputs
     from digiquant.research.skills import load_skill
+    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
     skill_slug = "beliefs-distillation-daily" if fold_mode == "short" else "beliefs-distillation"
     skill_text = load_skill(skill_slug)

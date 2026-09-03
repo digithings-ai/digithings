@@ -9,7 +9,6 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
     TypeVar,
 )
 
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel, ValidationError
 
@@ -31,6 +30,7 @@ from digiquant.research.phases._node_factory import (
     apply_web_grounding_to_inputs,
 )
 from digiquant.research.state import PhaseError, refresh_scope_forces_full
+from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 

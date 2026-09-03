@@ -16,7 +16,6 @@ from datetime import date
 from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
-from digigraph.graph.research_agent import run_research_agent
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from digiquant.dashboard.edit_mode import DocumentPatch, MergeError, merge_document_patch
@@ -50,6 +49,7 @@ from digiquant.research.state import (
     ResearchState,
     refresh_scope_forces_full,
 )
+from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 

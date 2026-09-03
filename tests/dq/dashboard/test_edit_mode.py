@@ -125,6 +125,35 @@ class TestResolveEditMode:
 
 
 @pytest.mark.unit
+class TestDocumentPatchDropsIncompleteOps:
+    """Cheap-model placeholder ops (missing op/path) must not kill the patch (#3299)."""
+
+    def test_ops_missing_op_or_path_are_dropped_before_validate(self) -> None:
+        patch = _patch(
+            [
+                {"op": "set", "path": "/headline", "value": "kept"},
+                {"path": "/headline", "value": "no verb"},
+                {"op": "set", "value": "no pointer"},
+                {"value": "neither"},
+            ]
+        )
+        assert [(op.op, op.path) for op in patch.ops] == [("set", "/headline")]
+
+    def test_all_placeholder_ops_validate_as_empty_patch(self) -> None:
+        patch = _patch([{"path": "/x"}, {"op": "set"}])
+        assert patch.ops == []
+
+    def test_real_ops_untouched(self) -> None:
+        patch = _patch(
+            [
+                {"op": "set", "path": "/a", "value": 1},
+                {"op": "remove", "path": "/b"},
+            ]
+        )
+        assert len(patch.ops) == 2
+
+
+@pytest.mark.unit
 class TestMergeDocumentPatch:
     def test_golden_ops_from_delta_request_example(self) -> None:
         example = json.loads(_DELTA_EXAMPLE.read_text(encoding="utf-8"))

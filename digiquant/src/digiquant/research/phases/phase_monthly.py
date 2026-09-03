@@ -25,9 +25,8 @@ class MonthlyDigest(DigestSnapshot):
 
 
 def _monthly_node(state: ResearchState) -> dict[str, Any]:
-    from digigraph.graph.research_agent import run_research_agent
-
     from digiquant.research.skills import SkillNotFoundError, load_skill
+    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
     try:
         skill_text = load_skill("monthly-synthesis")

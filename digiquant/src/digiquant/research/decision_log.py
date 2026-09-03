@@ -184,18 +184,31 @@ def resolve_pending(
         ticker = row.get("ticker") or ""
         benchmark = row.get("benchmark") or DEFAULT_BENCHMARK
 
-        ticker_window = query_returns_window(
-            client=client,
-            ticker=ticker,
-            start_date=decision_run_date,
-            holding_days=holding_days,
-        )
-        bench_window = query_returns_window(
-            client=client,
-            ticker=benchmark,
-            start_date=decision_run_date,
-            holding_days=holding_days,
-        )
+        try:
+            ticker_window = query_returns_window(
+                client=client,
+                ticker=ticker,
+                start_date=decision_run_date,
+                holding_days=holding_days,
+            )
+            bench_window = query_returns_window(
+                client=client,
+                ticker=benchmark,
+                start_date=decision_run_date,
+                holding_days=holding_days,
+            )
+        except Exception as exc:
+            # A persistent outage (retries exhausted) must not block sibling
+            # rows — the row stays pending for the next due-window check (#3078).
+            logger.warning(
+                "decision_log returns window failed for %s (run_id=%s): %s: %s",
+                ticker,
+                row.get("run_id"),
+                type(exc).__name__,
+                exc,
+            )
+            skipped_no_data += 1
+            continue
         if ticker_window is None or bench_window is None:
             # Gracefully skip — row stays pending and the next due-window
             # check will retry once price_history catches up. AC #7.
@@ -348,9 +361,8 @@ def _default_reflector(prompt_inputs: dict[str, Any]) -> ReflectorOutput:
     Imports are lazy so unit tests that pass a stub ``reflector`` don't need
     ``digigraph`` / ``litellm`` installed.
     """
-    from digigraph.graph.research_agent import run_research_agent
-
     from digiquant.research.skills import load_skill
+    from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
     skill_text = load_skill("decision-reflector")
     return run_research_agent(

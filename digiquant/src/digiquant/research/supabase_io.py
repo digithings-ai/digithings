@@ -42,6 +42,7 @@ from digiquant.dashboard.postgrest_timeout import (
 )
 from digiquant.dashboard.tenancy import resolved_workspace_id
 from digiquant.research.state import Phase7DigestPayload, PriorContext, PublishedArtifact
+from digiquant.supabase_retry import run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
 
@@ -1018,18 +1019,27 @@ def query_returns_window(
 
     # Pull a wide-enough window: ``holding_days + lookback_days`` covers
     # weekends, holidays, and trailing gaps. Filtering ``ticker`` server-side
-    # keeps the response tiny.
+    # keeps the response tiny. Transient disconnects / PGRST002 / 502s retry
+    # 3× with short backoff (#3299) — this exact call raised httpx.ReadTimeout
+    # and failed the 2026-08-29 daily run (#3078).
     end_floor = (start_date + timedelta(days=holding_days + lookback_days)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, close")
-        .eq("ticker", ticker)
-        .gte("date", start_date.isoformat())
-        .lt("date", end_floor)
-        .order("date", desc=False)
-        .execute()
+
+    def _fetch_window() -> list[dict[str, Any]]:
+        window_resp = (
+            client.table("price_history")
+            .select("date, close")
+            .eq("ticker", ticker)
+            .gte("date", start_date.isoformat())
+            .lt("date", end_floor)
+            .order("date", desc=False)
+            .execute()
+        )
+        return list(getattr(window_resp, "data", None) or [])
+
+    rows = run_with_supabase_retry(
+        _fetch_window,
+        operation=f"query_returns_window {ticker}",
     )
-    rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return None
 
