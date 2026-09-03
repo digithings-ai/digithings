@@ -990,7 +990,7 @@
     },
     "/v1/product_graphs": {
       "get": {
-        "description": "List DigiGraph product graphs (digiquant research/portfolio scheduled path, #3415).",
+        "description": "List digigraph product graphs (digiquant research/portfolio scheduled path, #3415).",
         "operationId": "v1_list_product_graphs_v1_product_graphs_get",
         "responses": {
           "200": {
@@ -1014,7 +1014,7 @@
     },
     "/v1/product_graphs/{graph_name}/runs": {
       "post": {
-        "description": "Start one product-graph run (dry compile by default).\n\nDigiGraph owns the LangGraph entry; digiquant owns domain compile/apply via\n``POST /v1/orchestrator_invoke``. Full apply is refused until cutover.",
+        "description": "Start one product-graph run (dry compile by default).\n\ndigigraph owns the LangGraph entry; digiquant owns domain compile/apply via\n``POST /v1/orchestrator_invoke``. Full apply is refused until cutover.",
         "operationId": "v1_run_product_graph_v1_product_graphs__graph_name__runs_post",
         "parameters": [
           {
