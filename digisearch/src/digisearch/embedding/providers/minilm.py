@@ -23,6 +23,11 @@ EmbedFn = Callable[[list[str]], list[list[float]]]
 class MiniLMEmbedder(EmbeddingProvider):
     """all-MiniLM-L6-v2 (384-dim) via chromadb's bundled ONNX runtime."""
 
+    #: Persisted on Chroma collection metadata (`embedding_model_id`).
+    model_id: str = MINILM_MODEL_ID
+    #: Logical migration version (`embedding_version`); bump when weights change.
+    version: str = "1"
+
     def __init__(self, embed_fn: EmbedFn | None = None) -> None:
         self._embed_fn = embed_fn
 

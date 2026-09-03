@@ -123,12 +123,13 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     if not chroma_path and not chroma_host:
         return None
     try:
-        from digisearch.indexes.backends.chroma import ChromaBackend
+        from digisearch.indexes.backends.chroma import ChromaBackend, _get_default_embedder
 
         port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
         backend = ChromaBackend(
             name=index_name,
             persist_path=chroma_path,
+            embedding_provider=_get_default_embedder(),
             chroma_host=chroma_host,
             chroma_port=int(port_raw),
         )
@@ -261,11 +262,12 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     chroma_host = os.environ.get("CHROMA_HOST")
     if chroma_host and not chroma_path:
         try:
-            from digisearch.indexes.backends.chroma import ChromaBackend
+            from digisearch.indexes.backends.chroma import ChromaBackend, _get_default_embedder
 
             port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
             backend = ChromaBackend(
                 name=index_name,
+                embedding_provider=_get_default_embedder(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )
@@ -278,12 +280,13 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
             raise
     if chroma_path:
         try:
-            from digisearch.indexes.backends.chroma import ChromaBackend
+            from digisearch.indexes.backends.chroma import ChromaBackend, _get_default_embedder
 
             port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
             backend = ChromaBackend(
                 name=index_name,
                 persist_path=chroma_path,
+                embedding_provider=_get_default_embedder(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )

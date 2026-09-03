@@ -43,7 +43,11 @@ class DigiSearch:
         return None
 
     def _get_embedder(self) -> Any | None:
-        """Get default embedding provider from config."""
+        """Get default embedding provider from config.
+
+        Falls back to MiniLMEmbedder (same model Chroma historically bundled)
+        so Chroma construction sites always receive an explicit provider (#2437).
+        """
         prov = self.config.get_embedding_provider()
         if prov == "openai":
             try:
@@ -53,9 +57,16 @@ class DigiSearch:
                 return OpenAIEmbedder(model=model)
             except ImportError:
                 return None
-        return None
+        try:
+            from digisearch.indexes.backends.chroma import _get_default_embedder
 
-    def query(self, text: str, index_name: str = "default", top_k: int = 10, mode: str = "hybrid") -> list[Result]:
+            return _get_default_embedder()
+        except ImportError:
+            return None
+
+    def query(
+        self, text: str, index_name: str = "default", top_k: int = 10, mode: str = "hybrid"
+    ) -> list[Result]:
         """Search index. Uses configured backend or stub."""
         idx = self.get_index(index_name)
         if idx:

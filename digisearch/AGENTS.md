@@ -30,6 +30,7 @@ Before making any change to `digisearch/`:
 - [ ] Confirm any new ingest path validates the `source` path before opening it (no path traversal)
 - [ ] Confirm chunker changes go through `digisearch.chunking` (`ChunkerBackend` / factory); do not hard-code a chunker in new ingest paths
 - [ ] Confirm never adding `pandas-ta` (deleted upstream); use `pandas-ta-classic` if TA is ever required
+- [ ] Confirm every `ChromaBackend(...)` construction site passes an explicit `embedding_provider` (default `MiniLMEmbedder` via `_get_default_embedder()`); do not omit the argument and rely on Chroma's bundled ONNX path
 
 ---
 
@@ -46,6 +47,7 @@ Beyond root `AGENTS.md`:
 - **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.
 - **Chunker selection is config-only**: use `DIGISEARCH_CHUNKER` or per-index `chunker:` — do not fork ingest code to swap backends.
+- **Chroma embedding provider is mandatory**: every `ChromaBackend` construction must pass `embedding_provider` (default MiniLM). Never omit it so Chroma silently embeds with its bundled ONNX path. Partial embedding batches must raise — do not discard supplied vectors.
 
 ---
 
