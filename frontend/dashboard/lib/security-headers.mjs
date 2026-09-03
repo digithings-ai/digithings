@@ -6,6 +6,21 @@
  * never apply in production — #674).
  */
 
+/**
+ * digichat iframe origins for the Desk+ popup (#3422).
+ * Production default is digithings.ai Containers; loopback for local dogfood.
+ * Custom tunnel hosts: set NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN and extend this
+ * list (or regenerate _headers) so frame-src matches.
+ */
+export const DASHBOARD_DIGICHAT_FRAME_SRC = [
+  "'self'",
+  "https://digithings.ai",
+  "https://www.digithings.ai",
+  "https://digichat.digithings.ai",
+  "http://127.0.0.1:3005",
+  "http://localhost:3005",
+].join(" ");
+
 export const DASHBOARD_CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline'",
@@ -13,6 +28,7 @@ export const DASHBOARD_CSP = [
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  `frame-src ${DASHBOARD_DIGICHAT_FRAME_SRC}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

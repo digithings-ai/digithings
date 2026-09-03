@@ -18,6 +18,12 @@ describe("dashboard security-headers", () => {
     expect(DASHBOARD_CSP).toContain("wss://*.supabase.co");
   });
 
+  it("allows digichat iframe origins for the Desk+ popup (#3422)", () => {
+    expect(DASHBOARD_CSP).toContain("frame-src");
+    expect(DASHBOARD_CSP).toContain("https://digithings.ai");
+    expect(DASHBOARD_CSP).toContain("http://127.0.0.1:3005");
+  });
+
   it("exports standard hardening headers", () => {
     expect(DASHBOARD_SECURITY_HEADERS.some((h) => h.key === "X-Frame-Options")).toBe(
       true,

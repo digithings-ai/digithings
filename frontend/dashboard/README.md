@@ -215,7 +215,20 @@ would never apply in production (#674).
 The dashboard CSP is scoped to `/dashboard*`; landing pages keep Google Fonts working.
 Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
 secure WebSockets (`wss://*.supabase.co`).
+`frame-src` allows digichat origins for the Desk+ research/portfolio popup (#3422)
+(`https://digithings.ai`, `digichat.digithings.ai`, loopback `:3005`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
+
+### digichat popup (Desk+ — #3422)
+
+Desk / Studio / Enterprise sessions see a bottom-right digichat launcher (Brief and
+Observer do not). The panel iframes digichat `/embed?layout=embed` with optional
+page-context (`digichat:page-context`) for the visible dashboard DOM — same contract
+as digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`).
+Tenant grounding (DigiGraph → DigiLLM, research/portfolio corpus, opt-in web search,
+BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
+See `.env.local.example`.
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
 `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the
