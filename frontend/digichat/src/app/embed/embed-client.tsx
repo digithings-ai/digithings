@@ -291,11 +291,28 @@ function EmbedChat({
   const getResponseLanguage = useCallback(() => languageRef.current, []);
 
   // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
+  // Adjust during render when scope changes (same pattern as trialUnlockedFor).
   const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
-  const [webSearchPref, setWebSearchPref] = useState(false);
-  useEffect(() => {
-    setWebSearchPref(readWebSearchPref(webSearchScope));
-  }, [webSearchScope]);
+  const [webSearchState, setWebSearchState] = useState<{
+    scope: string;
+    pref: boolean;
+  }>(() => ({ scope: webSearchScope, pref: false }));
+  if (webSearchState.scope !== webSearchScope) {
+    setWebSearchState({
+      scope: webSearchScope,
+      pref: typeof window !== "undefined" ? readWebSearchPref(webSearchScope) : false,
+    });
+  }
+  // Hydrate from localStorage once on the client (SSR starts false).
+  const [webHydrated, setWebHydrated] = useState(false);
+  if (typeof window !== "undefined" && !webHydrated) {
+    setWebHydrated(true);
+    const stored = readWebSearchPref(webSearchScope);
+    if (stored !== webSearchState.pref) {
+      setWebSearchState({ scope: webSearchScope, pref: stored });
+    }
+  }
+  const webSearchPref = webSearchState.pref;
   const webSearchUserRef = useRef(webSearchPref);
   // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
   webSearchUserRef.current = webSearchPref;
@@ -309,12 +326,12 @@ function EmbedChat({
     [tenantAllowsWeb],
   );
   const toggleWebSearch = useCallback(() => {
-    setWebSearchPref((prev) => {
-      const next = !prev;
-      writeWebSearchPref(webSearchScope, next);
-      return next;
+    setWebSearchState((prev) => {
+      const next = !prev.pref;
+      writeWebSearchPref(prev.scope, next);
+      return { scope: prev.scope, pref: next };
     });
-  }, [webSearchScope]);
+  }, []);
 
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok

@@ -18,9 +18,12 @@ pytestmark = pytest.mark.unit
 
 
 def test_apply_web_search_opt_in_default_off() -> None:
-    base = frozenset({"digisearch", "digivault_search_notes"})
+    base = frozenset({"digisearch", "digivault_search_notes", WEB_SEARCH_TOOL_NAME})
     assert WEB_SEARCH_TOOL_NAME not in apply_web_search_opt_in(base, enable_web_search=False)
+    # Opt-in does not escalate — only keeps tools already allowlisted.
     assert WEB_SEARCH_TOOL_NAME in apply_web_search_opt_in(base, enable_web_search=True)
+    no_web = frozenset({"digisearch"})
+    assert WEB_SEARCH_TOOL_NAME not in apply_web_search_opt_in(no_web, enable_web_search=True)
 
 
 def test_apply_web_search_opt_in_unrestricted_stays_none() -> None:
@@ -28,12 +31,22 @@ def test_apply_web_search_opt_in_unrestricted_stays_none() -> None:
     assert apply_web_search_opt_in(None, enable_web_search=True) is None
 
 
-def test_allowed_tools_union_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DIGI_ALLOWED_TOOLS", raising=False)
-    req_off = WorkflowRequest(prompt="x", allowed_tools=["digisearch"], enable_web_search=False)
-    assert WEB_SEARCH_TOOL_NAME not in (allowed_tool_names_for_workflow(req_off) or frozenset())
-    req_on = WorkflowRequest(prompt="x", allowed_tools=["digisearch"], enable_web_search=True)
-    assert WEB_SEARCH_TOOL_NAME in (allowed_tool_names_for_workflow(req_on) or frozenset())
+def test_allowed_tools_does_not_escalate_when_enabled() -> None:
+    req = WorkflowRequest(prompt="x", allowed_tools=["digisearch"], enable_web_search=True)
+    names = allowed_tool_names_for_workflow(req) or frozenset()
+    assert WEB_SEARCH_TOOL_NAME not in names
+    req2 = WorkflowRequest(
+        prompt="x",
+        allowed_tools=["digisearch", WEB_SEARCH_TOOL_NAME],
+        enable_web_search=True,
+    )
+    assert WEB_SEARCH_TOOL_NAME in (allowed_tool_names_for_workflow(req2) or frozenset())
+    req3 = WorkflowRequest(
+        prompt="x",
+        allowed_tools=["digisearch", WEB_SEARCH_TOOL_NAME],
+        enable_web_search=False,
+    )
+    assert WEB_SEARCH_TOOL_NAME not in (allowed_tool_names_for_workflow(req3) or frozenset())
 
 
 def test_web_search_handler_denies_when_disabled() -> None:

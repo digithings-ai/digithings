@@ -19,18 +19,20 @@ def apply_web_search_opt_in(
     *,
     enable_web_search: bool,
 ) -> frozenset[str] | None:
-    """Union or strip ``web_search`` from a resolved allowlist.
+    """Activate or strip ``web_search`` within an already-authoritative allowlist.
 
-    Default is off. A concrete project allowlist never gains ``web_search``
-    unless the request opts in. Unrestricted sessions (``None``) stay
-    unrestricted either way — exposure is gated by the ``web`` skill's
-    ``when`` predicate and the tool handler's enable check, so digillm web
-    calls never mix into corpus RAG silently (#3420).
+    Request opt-in must **never** escalate past the operator/project allowlist
+    (#3420 review): if ``web_search`` is not already permitted, enabling the
+    header/body flag does nothing. When the allowlist includes ``web_search``
+    and the request opts out (default), strip it so the model cannot call web.
+    Unrestricted sessions (``None``) stay unrestricted — the ``web`` skill
+    ``when`` predicate and tool handler still require ``enable_web_search``.
     """
     if names is None:
         return None
     if enable_web_search:
-        return names | {WEB_SEARCH_TOOL_NAME}
+        # Do not union — only activate a tool the operator already allowlisted.
+        return names
     return frozenset(n for n in names if n != WEB_SEARCH_TOOL_NAME)
 
 

@@ -215,14 +215,16 @@ export function ChatPanel({
   const webSearchAllowed =
     typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
     process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1";
-  const [webSearchPref, setWebSearchPref] = useState(false);
-  useEffect(() => {
-    if (!webSearchAllowed) return;
-    setWebSearchPref(readWebSearchPref("auth"));
-  }, [webSearchAllowed]);
-  const webSearchPrefRef = useRef(webSearchPref);
-  // eslint-disable-next-line react-hooks/refs -- send-time read
-  webSearchPrefRef.current = webSearchPref;
+  const [webSearchPref, setWebSearchPref] = useState(() =>
+    webSearchAllowed && typeof window !== "undefined" ? readWebSearchPref("auth") : false,
+  );
+  if (typeof window !== "undefined" && webSearchAllowed) {
+    // One-shot client hydrate if SSR started false (localStorage unavailable on server).
+    const stored = readWebSearchPref("auth");
+    if (stored !== webSearchPref && !webSearchPref && stored) {
+      setWebSearchPref(stored);
+    }
+  }
 
   const transport = useMemo(
     () =>
@@ -239,7 +241,7 @@ export function ChatPanel({
           h.set("X-Digi-Run-Id", crypto.randomUUID());
           if (
             webSearchAllowed &&
-            isWebSearchEnabled({ tenantAllows: true, userPref: webSearchPrefRef.current })
+            isWebSearchEnabled({ tenantAllows: true, userPref: webSearchPref })
           ) {
             h.set("X-Digi-Enable-Web-Search", "1");
           }
@@ -263,7 +265,7 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed],
+    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed, webSearchPref],
   );
 
   const { messages, sendMessage, status, stop, error, regenerate, setMessages } =

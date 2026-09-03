@@ -47,8 +47,8 @@ WEB_SEARCH_TOOL: dict[str, Any] = {
         "description": (
             "Search the public web for current information via digillm. Results are "
             "External citations — they supplement digisearch/digivault corpus hits and "
-            "must never replace them. Use only when the corpus cannot answer and live "
-            "public facts are required."
+            "must never replace them. Prefer digisearch/digivault first; use web_search "
+            "only when the corpus cannot answer and live public facts are required."
         ),
         "parameters": {
             "type": "object",
@@ -1181,7 +1181,8 @@ def _handle_web_search(args: dict[str, Any], context: ToolContext) -> str | dict
         return "No search query provided."
     query = str(q).strip()
 
-    from digigraph.llm_client import openrouter_web_search, web_search as xai_web_search
+    from digigraph.llm_client import openrouter_web_search
+    from digigraph.llm_client import web_search as xai_web_search
     from digigraph.model_config import get_grounding_model, get_model_for_mode
 
     model = get_grounding_model() or get_model_for_mode()
