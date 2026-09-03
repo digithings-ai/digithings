@@ -38,7 +38,7 @@ lag via ``signal_delay_days``.
 
 Usage:
     python scripts/generate_tearsheets.py
-    python scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir data/price-history
+    python scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir digiquant/data/price-history
     python scripts/generate_tearsheets.py --signal-delay-days 3
     # Operator-only (not this environment): --push-supabase after a real run.
 """
@@ -70,7 +70,9 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
-DEFAULT_CACHE = REPO_ROOT / "data" / "price-history"
+# Must match fetch_coinbase / export_sdca_macro (ROOT = digiquant/). Repo-root
+# data/price-history is a different tree — #3472 / run 33705882823.
+DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
 CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
 _SCRIPTS_DIR = Path(__file__).resolve().parent
