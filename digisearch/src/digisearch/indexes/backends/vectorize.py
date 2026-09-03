@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -35,36 +34,18 @@ MAX_TOP_K = 50
 # must stay importable even when importing *this* module fails.
 
 
-#: Process-wide singleton for the default embedder, shared across every
-#: `VectorizeBackend` instance. `_vectorize_backend` in `_stub.py` constructs a
-#: fresh `VectorizeBackend` on every query (no production call site injects
-#: `embedding_provider` or populates `Query.embedding`), so per-instance
-#: memoization alone still reloads the ONNX model on every single query. The
-#: default embedder is stateless and identical for every caller, so sharing it
-#: process-wide is safe. This cache is for the *default* embedder only -- an
-#: *injected* `embedding_provider` always stays on `self.embedding_provider`
-#: (per-instance) and is never read from or written into this global.
-#: Initialisation is guarded by `_default_embedder_lock` (double-checked locking)
-#: so concurrent first-query threads cannot each construct a MiniLMEmbedder.
-_default_embedder_singleton: object | None = None
-_default_embedder_lock = threading.Lock()
+#: Process-wide MiniLM default lives in
+#: ``digisearch.embedding.providers.minilm.get_default_minilm_embedder`` so
+#: Chroma and Vectorize share one ONNX load. `_vectorize_backend` constructs a
+#: fresh `VectorizeBackend` on every query, so callers must use that shared
+#: helper rather than per-instance memoization.
 
 
 def _get_default_embedder() -> object:
-    """Return the module-level default embedder, constructing it at most once
-    per process (see `_default_embedder_singleton`).
+    """Return the process-wide MiniLM default embedder."""
+    from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
-    Thread-safe: under concurrent first access, only one thread constructs the
-    embedder; others wait on the lock and reuse the winner's instance.
-    """
-    global _default_embedder_singleton
-    if _default_embedder_singleton is None:
-        with _default_embedder_lock:
-            if _default_embedder_singleton is None:
-                from digisearch.embedding.providers.minilm import MiniLMEmbedder
-
-                _default_embedder_singleton = MiniLMEmbedder()
-    return _default_embedder_singleton
+    return get_default_minilm_embedder()
 
 
 def _reject_unsupported_query_filters(query: Query) -> None:

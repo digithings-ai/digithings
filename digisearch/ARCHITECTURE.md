@@ -1092,16 +1092,28 @@ The embedding cache already logs hit rates at INFO level — these should become
 
 ### (f) Schema versioning for evidence metadata
 
-**Problem:** When the embedding model changes (e.g. from `text-embedding-3-small` to `text-embedding-3-large`), vectors in the index are incompatible. There is no mechanism to detect this or trigger a re-index. The `EmbeddingModelSpec` version string is tracked but not enforced at query time.
+**Status (Chroma, #2437):** Implemented for the Chroma backend. `ChromaBackend`
+writes `embedding_model_id`, `embedding_dimensions`, and `embedding_version` into
+collection metadata (on create and stamped on first `add` for legacy
+collections). Construction against an existing collection whose stored
+`embedding_model_id` differs from the active provider raises before any
+query/add. Azure / Vectorize still rely on their own guards
+(`scripts/vectorize_sync.py` `assert_index_model` probes per-vector metadata).
 
-**Recommendation:**
+**Problem (historical):** When the embedding model changes (e.g. from
+`text-embedding-3-small` to `text-embedding-3-large`), vectors in the index are
+incompatible. There was no mechanism to detect this or trigger a re-index. The
+`EmbeddingModelSpec` version string was tracked but not enforced at query time.
 
-1. Store `embedding_model_id`, `embedding_dimensions`, and `embedding_version` in Chroma collection metadata and in Azure index document schema
-2. At startup, verify that the configured embedding spec matches the spec stored in the index
-3. If there is a mismatch, log an error and optionally raise (configurable via `DIGISEARCH_STRICT_VERSION_CHECK=1`)
-4. Provide a `digisearch index reembed --index <name>` CLI command that re-embeds and upserts all chunks under the new model
+**Remaining:**
 
-The `EmbeddingModelSpec.version` field in `embeddings/config.py` is the right anchor point — it needs to be persisted to and read from the index, not just held in env vars.
+1. Persist the same three fields on Azure index document schema
+2. Optionally gate mismatch with `DIGISEARCH_STRICT_VERSION_CHECK=1` for soft vs hard fail
+3. Provide a `digisearch index reembed --index <name>` CLI command that re-embeds and upserts all chunks under the new model
+
+The `EmbeddingModelSpec.version` field in `embeddings/config.py` remains the
+env-config anchor; Chroma now also persists the active provider's identity on
+the collection itself.
 
 ## Observability
 
