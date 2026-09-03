@@ -75,6 +75,10 @@ import {
   parseThemeMessage,
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
+import {
+  formatPageContextForPrompt,
+  parsePageContextMessage,
+} from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -372,6 +376,16 @@ function EmbedChat({
    * signal to gate the charge on.
    */
   const pendingGateChargeRef = useRef(false);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<string | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
+  const consumePageContextPrefix = useCallback((question: string): string => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return question;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+  }, []);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -475,7 +489,7 @@ function EmbedChat({
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
         heldForceToolRef.current = undefined;
-        void chat.send(held, forceTool ? { forceTool } : undefined);
+        void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -486,10 +500,21 @@ function EmbedChat({
       heldQuestionRef.current = null;
       const forceTool = heldForceToolRef.current;
       heldForceToolRef.current = undefined;
-      void chat.send(held, forceTool ? { forceTool } : undefined);
+      void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
       if (!ungated) pendingGateChargeRef.current = true;
     }
-  }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
+  }, [
+    byokIsSet,
+    byokKey,
+    byokProvider,
+    byokModel,
+    chat.busy,
+    chat.onRetry,
+    chat.send,
+    ungated,
+    gate,
+    consumePageContextPrefix,
+  ]);
 
   const openSettings = useCallback(() => {
     setQuotaPrompt(false);
@@ -587,6 +612,30 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
+  // Popup widget (#3421): accept visible-page context from the immediate parent
+  // after digichat:ready. Not first-party-only — registered third-party hosts
+  // describe their own already-visible DOM (no behind-auth scrape).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const parentOrigin = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parsePageContextMessage(event, parentOrigin);
+      if (!parsed) return;
+      const formatted = formatPageContextForPrompt(parsed);
+      if (!formatted) return;
+      pageContextRef.current = formatted;
+      setPageContextAttached(true);
+      setHandshakeError(null);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
   //
@@ -630,14 +679,16 @@ function EmbedChat({
     sentHeldRef.current = question;
     const forceTool = heldForceToolRef.current;
     heldForceToolRef.current = undefined;
-    void chat.send(question, forceTool ? { forceTool } : undefined);
+    const hadCtx = pageContextRef.current != null;
+    void chat.send(consumePageContextPrefix(question), forceTool ? { forceTool } : undefined);
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
       byok: byokIsSet,
+      page_context: hadCtx,
     });
-  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContextPrefix]);
 
   const reopenTrialForm = useCallback(() => {
     lastGatedPost.current = null;
@@ -689,16 +740,23 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
-    if (ungated) {
-      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    let base: string;
+    if (uiParams.welcome) base = uiParams.welcome;
+    else if (tenantCfg.welcome) base = tenantCfg.welcome;
+    else if (ungated) {
+      base =
+        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    } else {
+      base = DEFAULT_WELCOME.replace(
+        "the first few turns are free",
+        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+      );
     }
-    return DEFAULT_WELCOME.replace(
-      "the first few turns are free",
-      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-    );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+    if (pageContextAttached) {
+      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
+    }
+    return base;
+  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
@@ -724,15 +782,17 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      void chat.send(question, opts);
+      const hadCtx = pageContextRef.current != null;
+      void chat.send(consumePageContextPrefix(question), opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
+        page_context: hadCtx,
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContextPrefix],
   );
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
