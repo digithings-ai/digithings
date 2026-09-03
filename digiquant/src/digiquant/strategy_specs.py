@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from digiquant.strategy_aliases import (
-    PARAM_SPEC_NAMES,
-    STRATEGY_ALIASES,
     resolve_param_spec_name,
 )
 
@@ -66,13 +64,6 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
 
 # Hard cap on grid size to prevent accidental combinatorial explosion.
 MAX_GRID_SIZE = 10_000
-
-# Backward-compat: old name meant "alias → STRATEGY_PARAM_SPECS key".
-# Prefer ``resolve_param_spec_name`` / ``digiquant.strategy_aliases``.
-_ALIAS_TO_CANONICAL: dict[str, str] = {
-    **{alias: resolve_param_spec_name(alias) for alias in STRATEGY_ALIASES},
-    **{reg: spec for reg, spec in PARAM_SPEC_NAMES.items()},
-}
 
 # Param spec: (min, max, default, step_hint, type_str)
 # step_hint: suggested step for grid; None = use 1 or 0.5 based on type

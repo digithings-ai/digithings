@@ -21,6 +21,11 @@ if find_spec("nautilus_trader") is not None:
     )
     from digiquant.strategies.sdca import nautilus_strategy as sdca_nautilus_strategy
 
-from digiquant.strategies.registry import get_strategy, list_strategies, register, resolve_strategy_name
+from digiquant.strategies.registry import (
+    get_strategy,
+    list_strategies,
+    register,
+    resolve_strategy_name,
+)
 
 __all__ = ["get_strategy", "list_strategies", "register", "resolve_strategy_name"]
