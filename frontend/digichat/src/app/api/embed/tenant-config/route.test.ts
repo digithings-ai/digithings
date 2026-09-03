@@ -49,6 +49,7 @@ describe("GET /api/embed/tenant-config", () => {
       showByok: false,
       layout: "embed",
       showLanguageSelector: true,
+      webSearch: false,
       backendType: "foundry",
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
@@ -73,6 +74,7 @@ describe("GET /api/embed/tenant-config", () => {
       showByok: false,
       layout: "embed",
       showLanguageSelector: false,
+      webSearch: false,
     });
   });
 
@@ -87,6 +89,7 @@ describe("GET /api/embed/tenant-config", () => {
       showByok: false,
       layout: "embed",
       showLanguageSelector: false,
+      webSearch: false,
     });
   });
 
