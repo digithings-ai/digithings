@@ -11,6 +11,7 @@ import {
   sortTodayBriefs,
   filterEventsToDay,
   getTradeIdeas,
+  getTradeIdeaArchive,
   getTradeIdeaHistory,
 } from './fetch';
 import type {
@@ -38,6 +39,7 @@ const tradeIdeasDb = vi.hoisted(() => ({
   selectColumns: '',
   gte: [] as [string, string][],
   lte: [] as [string, string][],
+  order: [] as [string, unknown][],
 }));
 
 vi.mock('./supabase', () => {
@@ -65,7 +67,10 @@ vi.mock('./supabase', () => {
         tradeIdeasDb.lte.push([column, value]);
         return builder;
       },
-      order: () => builder,
+      order: (column, options) => {
+        tradeIdeasDb.order.push([column, options]);
+        return builder;
+      },
       then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
     };
     return builder;
@@ -147,6 +152,21 @@ describe('getTradeIdeas', () => {
   });
 });
 
+describe('getTradeIdeaArchive', () => {
+  beforeEach(() => {
+    tradeIdeasDb.selectColumns = '';
+    tradeIdeasDb.order = [];
+  });
+
+  it('selects full idea columns newest-board-first for the Trades history table', async () => {
+    await getTradeIdeaArchive();
+    expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
+    expect(tradeIdeasDb.selectColumns).toContain('thesis');
+    expect(tradeIdeasDb.selectColumns).toContain('catalyst');
+    expect(tradeIdeasDb.order[0]).toEqual(['run_date', { ascending: false }]);
+    expect(tradeIdeasDb.order[1]).toEqual(['rank', { ascending: true }]);
+  });
+});
 describe('getTradeIdeaHistory', () => {
   beforeEach(() => {
     tradeIdeasDb.selectColumns = '';
