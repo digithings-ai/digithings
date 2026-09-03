@@ -139,7 +139,7 @@ def test_default_embedder_constructed_once_across_n_queries_via_dispatcher(
     import digisearch.indexes.backends.vectorize as vectorize_module
 
     # Force a cold cache regardless of what earlier tests left behind.
-    monkeypatch.setattr(vectorize_module, "_default_embedder_singleton", None, raising=False)
+    monkeypatch.setattr(minilm_module, "_default_minilm_singleton", None, raising=False)
 
     construction_count = 0
 
@@ -156,6 +156,7 @@ def test_default_embedder_constructed_once_across_n_queries_via_dispatcher(
             return 384
 
     monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _StubEmbedder, raising=True)
+    monkeypatch.setattr(minilm_module, "_default_minilm_singleton", None, raising=False)
 
     class _RecordingPost:
         def __call__(

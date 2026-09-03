@@ -414,11 +414,13 @@ def test_query_constructs_default_embedder_at_most_once() -> None:
 
     original = minilm_module.MiniLMEmbedder
     minilm_module.MiniLMEmbedder = _StubEmbedder  # type: ignore[misc]
+    minilm_module._default_minilm_singleton = None
     try:
         for _ in range(3):
             backend.query(DsQuery(text="no embedding here", top_k=3))
     finally:
         minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
+        minilm_module._default_minilm_singleton = None
 
     assert construction_count == 1, f"expected 1 construction, got {construction_count}"
 
@@ -454,7 +456,7 @@ def test_default_embedder_singleton_is_thread_safe() -> None:
 
     original = minilm_module.MiniLMEmbedder
     minilm_module.MiniLMEmbedder = _SlowStubEmbedder  # type: ignore[misc]
-    vectorize_module._default_embedder_singleton = None
+    minilm_module._default_minilm_singleton = None
     results: list[object] = []
     errors: list[BaseException] = []
 
@@ -473,7 +475,7 @@ def test_default_embedder_singleton_is_thread_safe() -> None:
             t.join(timeout=10)
     finally:
         minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
-        vectorize_module._default_embedder_singleton = None
+        minilm_module._default_minilm_singleton = None
 
     assert not errors, f"worker errors: {errors}"
     assert construction_count == 1, f"expected 1 construction, got {construction_count}"

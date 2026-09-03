@@ -194,6 +194,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     operational section — fixture prose only.
     Hashes only (count still 46) for #2219 Vectorize fail-loud docs — multi-tenant
     / Vectorize filter paragraphs in ARCHITECTURE.md; RecursiveChunker unchanged.
+    Hashes only (count still 46) for #2437 Chroma EmbeddingProvider / schema
+    versioning docs in §(f) — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -247,7 +249,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a2a8fe99c2eece30",
         "deae7c288ab01590",
         "ac8dbe83a57bf4f4",
-        "7b92c8753a4f1d27",
-        "0f0940ad5aa21435",
-        "f45e1c5392b5eef0",
+        "8b8c754092fe534f",
+        "059d9ccf5c138f8c",
+        "22f9d694bae83638",
     ]
