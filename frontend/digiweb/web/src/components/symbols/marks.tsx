@@ -3,15 +3,13 @@ import type { ReactNode } from "react";
 /**
  * Brand marks — promoted from the design reference (symbols/marks) as pure,
  * props-driven components. The four-stroke digiquant signature was previously
- * copied verbatim in four places (dashboard atlas-mark.tsx + AtlasLoader.tsx,
+ * copied verbatim in four places (dashboard-mark.tsx + DashboardLoader.tsx,
  * digiquant-web's DigiquantMark, the reference specimen) — this file is the
  * canonical copy. Everything draws in currentColor so a mark inherits the
  * ink/accent of its livery scope. No CSS ships with this family: the marks
  * are pure SVG/text; stroke-draw loader animations stay in the consuming
- * app's CSS, targeted through `strokeClassPrefix`.
- *
- * CSS class prefixes (`olympus-mark`, `olympus-stroke`) stay until the path
- * wave; they are not user-visible. `OlympusMark` is a one-release alias.
+ * app's CSS, targeted through `strokeClassPrefix`. Default hooks are
+ * `dq-mark` / `dq-stroke`.
  */
 
 export type DigiquantMarkProps = {
@@ -22,21 +20,18 @@ export type DigiquantMarkProps = {
   /**
    * Per-path class hook for stroke-draw animations: each stroke gets
    * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The dashboard
-   * loader keys its draw keyframes off "atlas-loader-stroke";
+   * loader keys its draw keyframes off "research-loader-stroke";
    * the reference / landing hover replay uses the default
-   * "olympus-stroke".
+   * "dq-stroke".
    */
   strokeClassPrefix?: string;
 };
-
-/** @deprecated Use DigiquantMarkProps. */
-export type OlympusMarkProps = DigiquantMarkProps;
 
 export function DigiquantMark({
   size = 22,
   className,
   title,
-  strokeClassPrefix = "olympus-stroke",
+  strokeClassPrefix = "dq-stroke",
 }: DigiquantMarkProps) {
   const strokeClass = (n: number) => `${strokeClassPrefix} ${strokeClassPrefix}-${n}`;
   return (
@@ -48,7 +43,7 @@ export function DigiquantMark({
       role={title ? "img" : undefined}
       aria-hidden={title ? undefined : "true"}
       focusable="false"
-      className={["olympus-mark", className].filter(Boolean).join(" ")}
+      className={["dq-mark", className].filter(Boolean).join(" ")}
     >
       {title ? <title>{title}</title> : null}
       <path
@@ -86,9 +81,6 @@ export function DigiquantMark({
     </svg>
   );
 }
-
-/** @deprecated Use DigiquantMark. One-release alias (ADR-0026 wave 3). */
-export const OlympusMark = DigiquantMark;
 
 export type WordmarkProps = {
   /**

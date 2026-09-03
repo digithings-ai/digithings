@@ -1,11 +1,11 @@
-"""Olympus plan-tier → artifact-class entitlement map (Kairos tenancy T5 mirror).
+"""digiquant plan-tier → artifact-class entitlement map (execution tenancy T5 mirror).
 
-Spec §5-T5 matrix is the single source of truth — pin it in entitlements tests.
-Free-teaser addendum (2026-08-30): Observer also gets ``digest_summary`` +
-``portfolio_teaser`` (no weights/NAV, no brokers/automations).
+Spec §5-T5 matrix as amended by ``docs/agent-backlog/execution-tenancy/PRICING.md``:
+Observer (free) teaser; Brief (weights/NAV); Desk (glass-box + paper brokers);
+Studio (overlay / private book / BYOK). Enterprise matches Studio for content.
 
 TypeScript mirror (T5 UI gate) MUST stay in sync:
-  frontend/olympus/lib/entitlements.ts
+  frontend/dashboard/lib/entitlements.ts
 When either file changes the matrix, update the other in the same PR.
 """
 
@@ -15,16 +15,17 @@ from enum import StrEnum
 from typing import Final
 
 
-# String-match ``workspaces.plan_tier`` DB enum.
+# String-match ``workspaces.plan_tier`` DB enum (migration 115).
 class PlanTier(StrEnum):
     FREE = "free"
-    BASELINE = "baseline"
-    CUSTOM = "custom"
+    BRIEF = "brief"
+    DESK = "desk"
+    STUDIO = "studio"
     ENTERPRISE = "enterprise"
 
 
 class ArtifactClass(StrEnum):
-    """Artifact classes gated by plan tier (spec §5-T5 + free-teaser)."""
+    """Artifact classes gated by plan tier (spec §5-T5 + Brief/Desk/Studio)."""
 
     RESEARCH = "research"
     NARRATIVE = "narrative"
@@ -39,8 +40,9 @@ class ArtifactClass(StrEnum):
 
 PLAN_TIERS: Final[tuple[PlanTier, ...]] = (
     PlanTier.FREE,
-    PlanTier.BASELINE,
-    PlanTier.CUSTOM,
+    PlanTier.BRIEF,
+    PlanTier.DESK,
+    PlanTier.STUDIO,
     PlanTier.ENTERPRISE,
 )
 
@@ -53,32 +55,34 @@ OBSERVER_CLASSES: Final[frozenset[ArtifactClass]] = frozenset(
     }
 )
 
-BASELINE_CLASSES: Final[frozenset[ArtifactClass]] = OBSERVER_CLASSES | frozenset(
-    {ArtifactClass.HOUSE_WEIGHTS_NAV, ArtifactClass.GLASSBOX_ECONOMICS}
+BRIEF_CLASSES: Final[frozenset[ArtifactClass]] = OBSERVER_CLASSES | frozenset(
+    {ArtifactClass.HOUSE_WEIGHTS_NAV}
 )
 
-CUSTOM_CLASSES: Final[frozenset[ArtifactClass]] = BASELINE_CLASSES | frozenset(
-    {
-        ArtifactClass.PRIVATE_BOOK,
-        ArtifactClass.BROKER_STATUS,
-        ArtifactClass.OVERLAY_PROFILE,
-    }
+DESK_CLASSES: Final[frozenset[ArtifactClass]] = BRIEF_CLASSES | frozenset(
+    {ArtifactClass.GLASSBOX_ECONOMICS, ArtifactClass.BROKER_STATUS}
+)
+
+STUDIO_CLASSES: Final[frozenset[ArtifactClass]] = DESK_CLASSES | frozenset(
+    {ArtifactClass.PRIVATE_BOOK, ArtifactClass.OVERLAY_PROFILE}
 )
 
 ALLOWED: Final[dict[PlanTier, frozenset[ArtifactClass]]] = {
     PlanTier.FREE: OBSERVER_CLASSES,
-    PlanTier.BASELINE: BASELINE_CLASSES,
-    PlanTier.CUSTOM: CUSTOM_CLASSES,
-    PlanTier.ENTERPRISE: CUSTOM_CLASSES,
+    PlanTier.BRIEF: BRIEF_CLASSES,
+    PlanTier.DESK: DESK_CLASSES,
+    PlanTier.STUDIO: STUDIO_CLASSES,
+    PlanTier.ENTERPRISE: STUDIO_CLASSES,
 }
 
 ARTIFACT_CLASSES: Final[tuple[ArtifactClass, ...]] = tuple(ArtifactClass)
 
 _TIER_RANK: Final[dict[PlanTier, int]] = {
     PlanTier.FREE: 0,
-    PlanTier.BASELINE: 1,
-    PlanTier.CUSTOM: 2,
-    PlanTier.ENTERPRISE: 3,
+    PlanTier.BRIEF: 1,
+    PlanTier.DESK: 2,
+    PlanTier.STUDIO: 3,
+    PlanTier.ENTERPRISE: 4,
 }
 
 
@@ -104,23 +108,23 @@ def required_tier_for(artifact_class: ArtifactClass) -> PlanTier:
     """Minimum tier that unlocks a class — for locked-state upgrade copy."""
     if artifact_class in OBSERVER_CLASSES:
         return PlanTier.FREE
-    if artifact_class in {
-        ArtifactClass.HOUSE_WEIGHTS_NAV,
-        ArtifactClass.GLASSBOX_ECONOMICS,
-    }:
-        return PlanTier.BASELINE
-    return PlanTier.CUSTOM
+    if artifact_class is ArtifactClass.HOUSE_WEIGHTS_NAV:
+        return PlanTier.BRIEF
+    if artifact_class in {ArtifactClass.GLASSBOX_ECONOMICS, ArtifactClass.BROKER_STATUS}:
+        return PlanTier.DESK
+    return PlanTier.STUDIO
 
 
 __all__ = [
     "ARTIFACT_CLASSES",
     "ALLOWED",
     "ArtifactClass",
-    "BASELINE_CLASSES",
-    "CUSTOM_CLASSES",
+    "BRIEF_CLASSES",
+    "DESK_CLASSES",
     "OBSERVER_CLASSES",
     "PLAN_TIERS",
     "PlanTier",
+    "STUDIO_CLASSES",
     "can",
     "is_plan_tier",
     "max_plan_tier",

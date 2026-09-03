@@ -3,7 +3,7 @@
 Covers content idempotency, changed-content append, supersession lineage,
 as-of-visible version selection, exact load after newer rows, report/lesson
 membership checks, and no historical fabrication. Migration privacy contracts
-live in ``tests/dq/atlas/test_migration_093.py``.
+live in ``tests/dq/research/test_migration_093.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.learning.outcome_models import (
+from digiquant.dashboard.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
     ComponentAttributionReport,
@@ -32,7 +32,7 @@ from digiquant.olympus.learning.outcome_models import (
     lesson_content_hash,
     lesson_version_id,
 )
-from digiquant.olympus.learning.outcome_store import (
+from digiquant.dashboard.learning.outcome_store import (
     OutcomeLearningConflict,
     OutcomeLearningError,
     OutcomeLearningMissingError,

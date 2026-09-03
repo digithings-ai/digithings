@@ -52,8 +52,15 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 **React chat shell** (`src/components/chat-shell.tsx`): Client component that owns
 thread state. On mount it merges `localStorage` threads with a server `GET
-/api/conversations` call, then renders a shadcn Sidebar with conversation list, New
-chat button, rename/delete overflow menus, and the main `ChatPanel`.
+/api/conversations` call, **hydrates the auto-selected remote thread** via
+`GET /api/conversations/[id]` before mounting the composer (when local cache is
+missing or older than the server summary `updatedAt`), then renders a shadcn
+Sidebar with conversation list, New chat button, rename/delete overflow menus, and
+the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
+(`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
+refuses to flush a remote thread that is still `hydrated: false`, and the API
+returns **409 `would_truncate`** if a PUT would drop existing rows unless
+`allowTruncate: true` (used by `/clear`).
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
@@ -679,16 +686,18 @@ key). Conversation state lives in Foundry; the client echoes the conversation
 id via `X-External-Conversation` / `data-externalConversation`. Foundry
 behavior polish is tracked separately from digithings digigraph work.
 
-**Response language (#2103) — one feature, two independent implementations.**
-The embed header's language selector (`src/lib/languages.ts`'s curated
-`LANGUAGES` list) resolves to a code sent as `X-Digi-Language` on every chat
-request. The two backends have no shared system-prompt mechanism, so each
-adapter enforces the directive its own way:
+**Response language (#2103 / #3418) — `/lang` on the public embed, not a header dropdown.**
+The composer slash `/lang en|de|it|es|fr` (client-only) updates session language and
+sends it as `X-Digi-Language` on subsequent turns. The top-right language dropdown
+was dropped once `/lang` landed. Codes still come from `src/lib/languages.ts`'s
+curated `LANGUAGES` list. The two backends have no shared system-prompt mechanism,
+so each adapter enforces the directive its own way:
 
 - **digigraph** has a system-prompt slot: the BFF forwards the header and
-  digigraph's `research_node` appends a `Respond only in <language>` line to
-  the system prompt server-side once per turn (see `digigraph/ARCHITECTURE.md`
-  and `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
+  digigraph's `research_node` appends a `Respond only in <language>` line (plus
+  "do not translate retrieval queries") to the system prompt server-side once
+  per turn (see `digigraph/ARCHITECTURE.md` and
+  `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
   hand-sync with the frontend's `LANGUAGES` array; there is no shared module
   across the two languages).
 - **Foundry** has no per-call system-prompt slot at all — the `agent_reference`
@@ -698,8 +707,28 @@ adapter enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
+**Embed slash commands (#3418).** `@digithings/digichat-ui` `slash-commands.ts`
+owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
+`/search` and `/docs` (aliases `/digisearch` / `/digivault`) force a locate
+then synthesize — the user string is the tool argument, forwarded as
+`X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
+`/lang`, `/help`, and `/new` never leave the browser. `/new` clears the
+client transcript, drops `sessionStorage` `X-External-Conversation` for the
+embed host, and clears any pending force-tool — so Foundry (and any adapter
+keyed off that id) actually starts a new conversation. Empty `/search` or
+`/docs` wait for an argument. Public copy is "Search the knowledge base" /
+"Find original documents". Signed-in ChatShell keeps its own `/help` `/key`
+`/model` palette.
+
+**Open originals (#3419).** Source cards on a settled turn open a side pane
+(`DocumentPane`). Vault notes render from `body` already loaded by
+`digivault_get_note` (batch ≤20) — paths without `http(s)` never become links.
+Real `http(s)` PDFs use the browser PDF plugin plus Download; never invent a
+URL. Human tool labels live only in `activity-view.toolDisplayName` (identity
+keys still use wire ids).
+
 See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
-for the design rationale behind the dual-backend split.
+for the design rationale behind the dual-backend language split.
 
 digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at digichat
 `/embed` on the tunnel hostname (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, typically

@@ -67,7 +67,7 @@ interface Store {
   bootstrapDisabled?: boolean;
 }
 
-function wsRow(id: string, planTier = "custom"): WorkspaceRow {
+function wsRow(id: string, planTier = "studio"): WorkspaceRow {
   return {
     id,
     stripe_customer_id: null,
@@ -82,8 +82,8 @@ function wsRow(id: string, planTier = "custom"): WorkspaceRow {
 function freshStore(): Store {
   return {
     workspaces: new Map([
-      [WS_A, wsRow(WS_A, "custom")],
-      [WS_B, wsRow(WS_B, "custom")],
+      [WS_A, wsRow(WS_A, "studio")],
+      [WS_B, wsRow(WS_B, "studio")],
     ]),
     members: [
       { workspace_id: WS_A, user_id: USER_A, role: "owner" },
@@ -546,7 +546,7 @@ async function call(
     user: {
       id: userId,
       email: opts.email ?? "owner@example.com",
-      plan_tier: opts.planTier === undefined ? "custom" : opts.planTier,
+      plan_tier: opts.planTier === undefined ? "studio" : opts.planTier,
     },
     vaultKey: TEST_KEY,
     uuid: nextUuid,
@@ -623,14 +623,14 @@ Deno.test("GET profile: auto-bootstraps then returns empty contract", async () =
   assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
 });
 
-Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
+Deno.test("403 TIER_FORBIDDEN for desk on profile write", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
   const { status, json } = await call(store, "PATCH", "/profile", {
     profile_key: "workspace",
     label: "L",
     investment: validInvestment,
-  }, { planTier: "baseline" });
+  }, { planTier: "desk" });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
   assertEquals(store.profiles.length, 0);
@@ -641,7 +641,7 @@ Deno.test(
   async () => {
     const store = freshStore();
     store.workspaces.set(WS_A, wsRow(WS_A, "free"));
-    store.entitlementGrants.set("owner@example.com", "custom");
+    store.entitlementGrants.set("owner@example.com", "studio");
     store.productGrants.set("owner@example.com", ["fx_hub"]);
     const { status, json } = await call(store, "PATCH", "/profile", {
       profile_key: "workspace",
@@ -654,22 +654,35 @@ Deno.test(
   },
 );
 
-Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
+Deno.test("403 TIER_FORBIDDEN for brief on broker connect", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "brief"));
   const { status, json } = await call(store, "POST", "/brokers/connect", {
     broker: "alpaca",
     env: "paper",
     kind: "api_key",
     key_id: "PK",
     secret: "sec",
-  }, { planTier: "baseline" });
+  }, { planTier: "brief" });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
 });
 
+Deno.test("desk workspace may connect a paper broker", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
+  const { status, json } = await call(store, "POST", "/brokers/connect", {
+    broker: "alpaca",
+    env: "paper",
+    kind: "api_key",
+    key_id: "PK",
+    secret: "sec",
+  }, { planTier: "desk" });
+  assertEquals(status, 200, JSON.stringify(json));
+});
+
 Deno.test(
-  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still custom (stale claim after cancel)",
+  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still studio (stale claim after cancel)",
   async () => {
     const store = freshStore();
     store.workspaces.set(WS_A, wsRow(WS_A, "free"));
@@ -678,7 +691,7 @@ Deno.test(
       profile_key: "ws-overlay",
       label: "Should not write",
       investment: validInvestment,
-    }, { planTier: "custom" });
+    }, { planTier: "studio" });
     assertEquals(profile.status, 403);
     assertEquals(profile.json.code, "TIER_FORBIDDEN");
     assertEquals(store.profiles.length, 0);
@@ -689,7 +702,7 @@ Deno.test(
       kind: "api_key",
       key_id: "PK",
       secret: "sec",
-    }, { planTier: "custom" });
+    }, { planTier: "studio" });
     assertEquals(connect.status, 403);
     assertEquals(connect.json.code, "TIER_FORBIDDEN");
     assertEquals(store.brokers.length, 0);
@@ -697,10 +710,10 @@ Deno.test(
 );
 
 Deno.test(
-  "allows custom workspace when JWT claim lags at free (stale claim after upgrade)",
+  "allows studio workspace when JWT claim lags at free (stale claim after upgrade)",
   async () => {
     const store = freshStore();
-    store.workspaces.set(WS_A, wsRow(WS_A, "custom"));
+    store.workspaces.set(WS_A, wsRow(WS_A, "studio"));
     store.workspaces.get(WS_A)!.claim_sync_pending = true;
     const { status, json } = await call(store, "PATCH", "/profile", {
       profile_key: "ws-overlay",
@@ -876,7 +889,7 @@ Deno.test(
       }),
       {
         admin: mockAdmin(store),
-        user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+        user: { id: USER_A, email: "owner@example.com", plan_tier: "studio" },
         vaultKey: TEST_KEY,
         appUrl: APP_URL,
       },
@@ -929,7 +942,7 @@ Deno.test("POST brokers/connect oauth: OAUTH_NOT_CONFIGURED when Alpaca client s
     }),
     {
       admin: mockAdmin(store),
-      user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+      user: { id: USER_A, email: "owner@example.com", plan_tier: "studio" },
       vaultKey: TEST_KEY,
       appUrl: APP_URL,
       // Intentionally omit exchangeAlpacaCode → production default path.
@@ -1195,13 +1208,13 @@ Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
 // Vault helpers used by handlers
 // ---------------------------------------------------------------------------
 
-Deno.test("403 TIER_FORBIDDEN for baseline on keys connect", async () => {
+Deno.test("403 TIER_FORBIDDEN for desk on keys connect", async () => {
   const store = freshStore();
-  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  store.workspaces.set(WS_A, wsRow(WS_A, "desk"));
   const { status, json } = await call(store, "POST", "/keys/connect", {
     provider: "openai",
     kind: "api_key",
-    secret: "sk-test-baseline-blocked",
+    secret: "sk-test-desk-blocked",
   });
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
@@ -1354,7 +1367,7 @@ Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /dashboard callback", () => {
     "https://app.example/dashboard/settings/brokers/callback/",
   );
   assertEquals(
-    pinnedAlpacaRedirectUri("https://app.example/olympus"),
+    pinnedAlpacaRedirectUri("https://app.example/dashboard"),
     "https://app.example/dashboard/settings/brokers/callback/",
   );
 });

@@ -5,7 +5,7 @@ package executes ``learning/__init__.py``, which wires beliefs distillation
 through digigraph. The standard ``digiquant-test`` CI job installs only
 ``digiquant[dev]``, so digigraph runtime deps (e.g. ``openai``) are absent.
 
-Full coverage runs in ``test-atlas-graph.yml`` after ``uv sync --all-packages``.
+Full coverage runs in ``test-research-graph.yml`` after ``uv sync --all-packages``.
 """
 
 from __future__ import annotations

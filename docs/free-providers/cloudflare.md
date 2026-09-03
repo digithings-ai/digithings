@@ -73,7 +73,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (supplemental — small context and low daily budget) |
 | Single-shot 100k | **No** — 8k context cap requires heavy chunking |
 | Privacy safe | Yes (Cloudflare processes data; no model training) |
-| Atlas/Hermes role | BGE embeddings for digisearch; not suitable for research pipeline |
+| research/portfolio role | BGE embeddings for digisearch; not suitable for research pipeline |
 
 ---
 

@@ -33,8 +33,8 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | [**ROADMAP.md**](ROADMAP.md) | Phased plan |
 | [**ARCHITECTURE.md**](ARCHITECTURE.md) | System diagram and interfaces |
 | [**SECURITY.md**](SECURITY.md) | Threat model, non-negotiable defaults, reporting |
-| [**AGENTS.md**](AGENTS.md) | Rules for AI coding agents |
-| [**CLAUDE.md**](CLAUDE.md) | Claude Code quick reference |
+| [**AGENTS.md**](AGENTS.md) | Canonical rules for AI coding agents |
+| [**CLAUDE.md**](CLAUDE.md) | Pointer at AGENTS.md (Claude Code loader) |
 | [**CONTRIBUTING.md**](CONTRIBUTING.md) | How to contribute |
 | [**docs/LLM_PROVIDERS.md**](docs/LLM_PROVIDERS.md) | Free-tier + cheap LLM providers, LiteLLM wiring |
 | [**docs/providers/**](docs/providers/README.md) | Step-by-step API-key setup per provider |
@@ -75,7 +75,7 @@ make pull-ghcr && make up-ghcr
 
 See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
 
-**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). Research/portfolio phases route on **pinned** per-capability models selected from `config/olympus_models.yaml` per the active `OLYMPUS_MODEL_TIER` (`openrouter/openrouter/auto` is reserved for the OpenRouter diagnostic scripts, not phase routing and not grounding — grounding resolves a web-search-capable model from the active tier via `get_grounding_model()` — see `digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md` "OpenRouter model tiers"). Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
+**LLM routing:** set `OPENROUTER_API_KEY` in `.env` (sign up at https://openrouter.ai). Research/portfolio phases route on **pinned** per-capability models selected from `config/digiquant_models.yaml` per the active `OLYMPUS_MODEL_TIER` (`openrouter/openrouter/auto` is reserved for the OpenRouter diagnostic scripts, not phase routing and not grounding — grounding resolves a web-search-capable model from the active tier via `get_grounding_model()` — see `digiquant/src/digiquant/research/docs/RUNBOOK.md` "OpenRouter model tiers"). Model strings must be explicit — the old `digi/fast`/`digi/balanced`/`digi/best` tier aliases have been removed. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):
 
@@ -153,4 +153,4 @@ digithings/
 
 ## License
 
-**digithings** is open-core on GitHub under [MIT](LICENSE). Commercial options (managed hosting, Atlas execution layer, multi-tenant digibase, client consultancy) are tracked in [docs/VISION.md](docs/VISION.md).
+**digithings** is open-core on GitHub under [MIT](LICENSE). Commercial options (managed hosting, research execution layer, multi-tenant digibase, client consultancy) are tracked in [docs/VISION.md](docs/VISION.md).

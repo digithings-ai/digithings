@@ -1,7 +1,7 @@
 """Compatibility shim: expose pandas-ta-classic as ``pandas_ta``.
 
 ``pandas-ta-classic`` installs the top-level package ``pandas_ta_classic``.
-Atlas agent snippets and digiquant sandbox acceptance (#396) use the historical
+research agent snippets and digiquant sandbox acceptance (#396) use the historical
 ``import pandas_ta`` name from the deleted ``pandas-ta`` project. Re-export so
 both imports work inside the sandbox image.
 """

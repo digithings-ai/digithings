@@ -25,7 +25,8 @@
  */
 
 import {
-  requireCustomEligible,
+  requireDeskEligible,
+  requireStudioEligible,
   resolveAccessSnapshot,
   type AccessAdmin,
 } from "./access.ts";
@@ -102,10 +103,10 @@ const LLM_PROVIDERS = new Set([
   "gemini",
 ]);
 
-/** AAD env-slot for BYOK — must match digiquant.olympus.overlay.byok.BYOK_AAD_PURPOSE. */
+/** AAD env-slot for BYOK — must match digiquant.dashboard.overlay.byok.BYOK_AAD_PURPOSE. */
 export const BYOK_AAD_PURPOSE = "llm";
 
-/** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
+/** Fixed OAuth callback path under dashboard (must match frontend alpacaOAuthCallbackPath). */
 export { ALPACA_OAUTH_CALLBACK_PATH } from "./app-url.ts";
 
 function pathOf(url: URL): string {
@@ -208,12 +209,14 @@ async function resolveMember(
  * token — and fails closed incorrectly on upgrade when the claim lags.
  *
  * Creator/ops emails in `entitlement_grants` raise the *effective* floor
- * (migration 108) so baseline/Kairos works without Stripe for allowlisted
- * operators. Paying customers still go through Stripe → workspaces.plan_tier.
+ * (migration 108/115) so studio overlay + desk brokers work without Stripe
+ * for allowlisted operators. Paying customers still go through Stripe →
+ * workspaces.plan_tier.
  */
 async function requireEligibleTier(
   deps: SettingsDeps,
   authz: { user: AuthUser; workspace: { id: string; plan_tier: string } },
+  min: "desk" | "studio",
 ): Promise<Response | null> {
   const snap = await resolveAccessSnapshot({
     admin: deps.admin as unknown as AccessAdmin,
@@ -221,7 +224,9 @@ async function requireEligibleTier(
     workspaceId: authz.workspace.id,
     workspacePlanTier: authz.workspace.plan_tier,
   });
-  const gate = requireCustomEligible(snap.effectivePlanTier);
+  const gate = min === "desk"
+    ? requireDeskEligible(snap.effectivePlanTier)
+    : requireStudioEligible(snap.effectivePlanTier);
   if (!gate.ok) {
     return jsonError(403, "TIER_FORBIDDEN", gate.message);
   }
@@ -431,7 +436,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = await requireEligibleTier(deps, authz);
+  const tierErr = await requireEligibleTier(deps, authz, "studio");
   if (tierErr) return tierErr;
 
   const workspaceId = authz.workspace.id;
@@ -723,7 +728,7 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = await requireEligibleTier(deps, authz);
+  const tierErr = await requireEligibleTier(deps, authz, "desk");
   if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
@@ -1041,7 +1046,7 @@ async function connectKey(req: Request, deps: SettingsDeps): Promise<Response> {
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = await requireEligibleTier(deps, authz);
+  const tierErr = await requireEligibleTier(deps, authz, "studio");
   if (tierErr) return tierErr;
 
   const provider = (body.provider ?? "").toLowerCase().trim();

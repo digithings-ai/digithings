@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Footer, Reveal } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { Reveal } from "@digithings/web";
+import { DtFooter } from "@/components/DtFooter";
 import { PageHead, RuledList, RuledRow } from "../_company/prose";
 import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
@@ -144,7 +144,7 @@ export default function ServicesPage() {
         </section>
       </main>
 
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

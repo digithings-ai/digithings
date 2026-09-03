@@ -1,6 +1,6 @@
 """Macro time-series ingestion — FRED, Yahoo FX.
 
-Consolidates two Atlas scripts:
+Consolidates two research scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred`
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
@@ -437,7 +437,7 @@ def fetch_fx_yahoo(
 
 
 def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
-    """Last-wins per (source, series_id, obs_date) — matches the Atlas helper."""
+    """Last-wins per (source, series_id, obs_date) — matches the research helper."""
     out: dict[tuple[str, str, str], MacroObservation] = {}
     for r in rows:
         key = (

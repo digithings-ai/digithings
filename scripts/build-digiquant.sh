@@ -3,10 +3,11 @@
 # Assembles into dist/:
 #   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
-#   2. frontend/olympus/out/       — the dashboard (basePath /dashboard)
-#      → dist/dashboard/
+#   2. frontend/dashboard/out/     — the dashboard (basePath /dashboard)
+#      → dist/dashboard/ only. The landing export keeps a temporary 308 from
+#      /olympus/* to /dashboard/* so existing bookmarks do not fail closed.
 # The digiquant-web export ships public/_headers (root /* security headers +
-# /dashboard* CSP, plus /olympus* while 308s still land there).
+# /dashboard* CSP).
 set -euo pipefail
 
 # Anchor to the repo root so the rm/cp below never touch another cwd's dist/.
@@ -35,13 +36,13 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 # REM-037: committed static portfolio JSON must not ship (Supabase is primary).
-if [ -f frontend/olympus/public/dashboard-data.json ]; then
-  echo "ERROR: frontend/olympus/public/dashboard-data.json must not be committed (REM-037)."
+if [ -f frontend/dashboard/public/dashboard-data.json ]; then
+  echo "ERROR: frontend/dashboard/public/dashboard-data.json must not be committed (REM-037)."
   echo "       Remove the file; portfolio data comes from Supabase at runtime."
   exit 1
 fi
 
-# Olympus inlines NEXT_PUBLIC_* into the static bundle at build time. Fail
+# The dashboard inlines NEXT_PUBLIC_* into the static bundle at build time. Fail
 # PRODUCTION deploys when the Supabase vars are missing (preview/local may proceed).
 if [ "${CF_PAGES:-}" = "1" ]; then
   if [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}" ]; then
@@ -70,26 +71,14 @@ cp -r frontend/digiquant-web/out/. dist/
 echo "--- building dashboard ---"
 # T1 Pages gap: default Auth login UI on Cloudflare Pages without cutover 900
 # (anon RLS remains until intentional human cutover). Explicit
-# NEXT_PUBLIC_OLYMPUS_AUTH=0 or NEXT_PUBLIC_DASHBOARD_AUTH=0 keeps the classic
-# pre-auth shell. The OLYMPUS_* names remain one-release aliases so existing
-# Pages project env still works.
-if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" ]; then
-  export NEXT_PUBLIC_OLYMPUS_AUTH=1
-fi
+# NEXT_PUBLIC_DASHBOARD_AUTH=0 keeps the classic pre-auth shell.
 if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_DASHBOARD_AUTH:-}" ]; then
-  export NEXT_PUBLIC_DASHBOARD_AUTH="${NEXT_PUBLIC_OLYMPUS_AUTH:-1}"
+  export NEXT_PUBLIC_DASHBOARD_AUTH=1
 fi
-echo "NEXT_PUBLIC_OLYMPUS_AUTH=${NEXT_PUBLIC_OLYMPUS_AUTH:-<unset>}"
 echo "NEXT_PUBLIC_DASHBOARD_AUTH=${NEXT_PUBLIC_DASHBOARD_AUTH:-<unset>}"
-npm --workspace frontend/olympus run build
+npm --workspace frontend/dashboard run build
 mkdir -p dist/dashboard
-cp -r frontend/olympus/out/. dist/dashboard/
-# One-release twin: .github/workflows/deploy-digiquant-cloudflare.yml still
-# asserts `test -d dist/olympus` and cannot be edited on cursor/* branches.
-# HTML asset URLs are /dashboard/_next/… so the twin is a fallback if a
-# 308 from /olympus/* is not applied; drop it when the workflow path updates.
-mkdir -p dist/olympus
-cp -r frontend/olympus/out/. dist/olympus/
+cp -r frontend/dashboard/out/. dist/dashboard/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
@@ -105,12 +94,17 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 [ -f dist/subsystems/research/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard did not export" >&2; exit 1; }
-[ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — legacy-path twin not exported" >&2; exit 1; }
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
+# Alpaca OAuth callback (K1/T3). digiquant_pages_dashboard_gate --apply pins
+# ALPACA_OAUTH_CALLBACK_PATH here. A Pages export that 200s /dashboard/settings/
+# but 404s this path would still strand broker connect after EF deploy (#3378).
+[ -f dist/dashboard/settings/brokers/callback/index.html ] || { echo "ERROR: dist/dashboard/settings/brokers/callback/index.html missing — Alpaca OAuth callback not exported" >&2; exit 1; }
+grep -q 'alpaca-oauth-callback' dist/dashboard/settings/brokers/callback/index.html \
+  || { echo "ERROR: Alpaca OAuth callback export missing page marker" >&2; exit 1; }
 # Settings (T3 + Observer IA). Cloudflare Pages sets CF_PAGES=1, and this script
-# then defaults NEXT_PUBLIC_OLYMPUS_AUTH=1, so the static shell is the anonymous
+# then defaults NEXT_PUBLIC_DASHBOARD_AUTH=1, so the static shell is the anonymous
 # Observer view: Notifications | Billing | About. Pipeline/Keys testids are
 # Custom+ only (`settingsTabsVisible('free')`) and MUST NOT be required on that
 # path — requiring them is why #3266/#3273 never reached live digiquant.io
@@ -125,7 +119,7 @@ grep -q 'settings-tab-billing' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing Billing tab marker" >&2; exit 1; }
 grep -q 'settings-tab-about' dist/dashboard/settings/index.html \
   || { echo "ERROR: settings export missing About tab marker" >&2; exit 1; }
-if [ "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" != "1" ]; then
+if [ "${NEXT_PUBLIC_DASHBOARD_AUTH:-}" != "1" ]; then
   grep -q 'settings-tab-pipeline' dist/dashboard/settings/index.html \
     || { echo "ERROR: settings export missing Pipeline tab marker — stale pre-T3 shell?" >&2; exit 1; }
   grep -q 'settings-tab-keys' dist/dashboard/settings/index.html \

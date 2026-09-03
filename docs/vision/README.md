@@ -75,7 +75,7 @@ Shared headless-fetch engine: browser session lifecycle, composable retry/backof
 Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
 
 ### digiquant dashboard
-Human-facing operator surface (`frontend/olympus`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Path remains `/olympus/` until ADR-0026 wave 2. See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
+Human-facing operator surface (`frontend/dashboard`) for research, portfolio deliberation, and execution — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Public path is `/dashboard/` (ADR-0026). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md).
 
 **Note — not yet shipped:** digistore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and digilink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, digillm and digifetch *have* shipped as standalone libraries.)
 
@@ -123,5 +123,5 @@ One document per module — positioning, current state, 12-month roadmap, and op
 
 - [[digigraph|digigraph]] · [[digiquant|digiquant]] · [[digisearch|digisearch]] · [[digichat|digichat]]
 - [[digikey|digikey]] · [[digismith|digismith]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
-- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[olympus|digiquant dashboard]]
+- [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[dashboard|digiquant dashboard]]
 - [[digilink|digilink]] · [[digistore|digistore]] *(designed, not yet shipped)*

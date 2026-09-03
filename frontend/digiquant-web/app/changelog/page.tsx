@@ -36,7 +36,7 @@ export default function ChangelogPage() {
                 <h1 className="dq-title">Tagged releases.</h1>
                 <p className="dq-sub">
                   Versioned packages from the digithings stack this desk is built on. The quant
-                  engine and olympus ship on{" "}
+                  engine and dashboard ship on{" "}
                   <code className="font-mono text-[0.92em] text-ink">develop</code> without a
                   product tag.
                 </p>

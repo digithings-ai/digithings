@@ -25,7 +25,7 @@ for the layout rationale.
 - `frontend/digithings-web/` — digithings.ai (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `frontend/digiquant-web/` — digiquant.io (Next.js; imports `tokens.css` + `site/site.css` directly)
 - `frontend/digichat/` — digithings.ai/chat (Next.js; workspace dep, token adoption tracked by #240)
-- `frontend/olympus/` — workspace dep only; token adoption deferred
+- `frontend/dashboard/` — workspace dep only; token adoption deferred
 
 ---
 
@@ -125,9 +125,9 @@ value; component rules always reference `var(--accent)`.
 | ----------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------- |
 | digigraph   | `--accent-digigraph`    | ![](https://readme-swatches.vercel.app/e5b765?style=round)                                     | `#e5b765` |
 | digiquant   | `--accent-digiquant`    | ![](https://readme-swatches.vercel.app/3dd6c4?style=round)                                     | `#3dd6c4` |
-| Research    | `--accent-atlas`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
-| Portfolio   | `--accent-hermes`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
-| Execution   | `--accent-kairos`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
+| Research    | `--accent-research`        | ![](https://readme-swatches.vercel.app/6fbf94?style=round)                                     | `#6fbf94` |
+| Portfolio   | `--accent-portfolio`       | ![](https://readme-swatches.vercel.app/4a8f7b?style=round)                                     | `#4a8f7b` |
+| Execution   | `--accent-execution`       | ![](https://readme-swatches.vercel.app/2f7a65?style=round)                                     | `#2f7a65` |
 | digisearch  | `--accent-digisearch`   | ![](https://readme-swatches.vercel.app/5aa3c4?style=round)                                     | `#5aa3c4` |
 | digichat    | `--accent-digichat`     | ![](https://readme-swatches.vercel.app/e2708a?style=round)                                     | `#e2708a` |
 | digikey     | `--accent-digikey`      | ![](https://readme-swatches.vercel.app/d97a5a?style=round)                                     | `#d97a5a` |
@@ -473,8 +473,8 @@ import '@digithings/design/quant-native/styles.css';
 initTicker({
   elementId: 'ticker',
   symbols: [
-    { sym: 'ATLAS',  price: '184.22', delta: '+0.42%' },
-    { sym: 'KAIROS', price: '342.07', delta: '-0.18%' },
+    { sym: 'RESEARCH',  price: '184.22', delta: '+0.42%' },
+    { sym: 'EXECUTION', price: '342.07', delta: '-0.18%' },
   ],
   cadence: 60,  // px/sec
 });

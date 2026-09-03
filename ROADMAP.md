@@ -39,23 +39,23 @@ See [ADR-0002: Domain Unification](docs/adr/0002-domain-unification.md) for the 
 - **Phase 3c** — stand up `digiquant.io` domain, minimal digiquant product UI.
 - **Client Pilot Phase 2** — deliver POC improvements (see `projects/client-pilot/IMPROVEMENT_IDEAS.md`): surface stored_datasets to LLM, orchestrator list/profile tools, ECharts rendering, search quality improvements.
 
-## Phase 4 — Atlas on digigraph
+## Phase 4 — research on digigraph
 
-Goal: Atlas research engine runs on the digithings stack.
+Goal: research engine runs on the digithings stack.
 
-- Define Atlas research outputs as Pydantic models (analyst → PM hand-off, asset allocations, narrative bias).
-- Implement Atlas research subgraph in digigraph.
-- Migrate Atlas frontend to consume digigraph API; deploy at `digiquant.io/atlas`.
+- Define research outputs as Pydantic models (analyst → PM hand-off, asset allocations, narrative bias).
+- Implement research subgraph in digigraph.
+- Migrate research frontend to consume digigraph API; deploy at `digiquant.io/research`.
 - DB persistence layer for research runs (digibase credential broker likely first real customer).
 
-## Phase 5 — Atlas tiering & execution
+## Phase 5 — research tiering & execution
 
-Goal: turn Atlas into a product with free + paid tiers and a path from research → execution.
+Goal: turn research into a product with free + paid tiers and a path from research → execution.
 
 - **Free tier:** daily batch research per domain with analyst/PM agent deliberation; shared outputs.
 - **Paid tier:** user-level investment preferences, prompts, domains, portfolio tracking.
-- **Atlas-embedded digichat** — in-product navigation + research Q&A.
-- **Execution layer** — Atlas research biases feed digiquant strategy parameters; human gate before any live trade (non-negotiable).
+- **research-embedded digichat** — in-product navigation + research Q&A.
+- **Execution layer** — research biases feed digiquant strategy parameters; human gate before any live trade (non-negotiable).
 
 ## Phase 6 — platform roadmap
 

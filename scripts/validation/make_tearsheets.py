@@ -26,7 +26,7 @@ OUT_DIR = Path("digiquant/results/validation")
 # Published tearsheet JSON consumed by the React strategy-tearsheet library in
 # frontend/digiquant-web (the /strategies routes on digiquant.io).
 PUBLISH_DIR = Path("frontend/digiquant-web/public/strategies")
-DATA_SOURCE = "Olympus price_history table (Yahoo Finance, daily)"
+DATA_SOURCE = "dashboard price_history table (Yahoo Finance, daily)"
 # The Slapper family was optimized on 2018-onward data; earlier bars only warm
 # up the indicators. Gating the traded window here keeps the tearsheet honest.
 START_DATE = "2018-01-01"
@@ -152,7 +152,7 @@ TradingView results for each strategy.
 
 ## Methodology (what this matches, and what to check)
 
-- **Data:** daily OHLCV pulled from the **Olympus `price_history` table** (Yahoo
+- **Data:** daily OHLCV pulled from the **dashboard `price_history` table** (Yahoo
   Finance `BTC-USD`/`ETH-USD`/`SOL-USD`, sourced by the daily pipeline). ⚠️ If your
   TradingView chart used a different feed (e.g. Binance, INDEX, BNC:BLX, Coinbase),
   candles — and therefore signals — will differ.

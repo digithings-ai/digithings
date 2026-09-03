@@ -1,5 +1,5 @@
 # Broker adapters: IB native + Alpaca/QuantConnect stubs. Phase 2.
-# Kairos execution contracts (K0): typed venue/order/position models re-exported here
+# execution contracts (K0): typed venue/order/position models re-exported here
 # alongside the protocol and stubs so a caller does not need to import `contracts`
 # separately for the common case.
 #
@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any  # score:allow lazy module attribute boundary
 
 from digiquant.brokers.base import BrokerAdapter
 from digiquant.brokers.contracts import (

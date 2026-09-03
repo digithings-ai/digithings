@@ -26,9 +26,9 @@ Boundary rules this module enforces
 Client seam
 -----------
 :class:`SupabaseClient` is a minimal ``table()`` Protocol, mirroring the pattern in
-`olympus/atlas/supabase_io.py` rather than importing it: `digiquant.brokers` is the
-low-level venue layer and must not depend on the Atlas research sub-package (which pulls
-the atlas extra's runtime and, transitively, digigraph). Tests inject a fake — there is no
+`dashboard/research/supabase_io.py` rather than importing it: `digiquant.brokers` is the
+low-level venue layer and must not depend on the research sub-package (which pulls
+the research extra's runtime and, transitively, digigraph). Tests inject a fake — there is no
 live database in this suite.
 
 ``bytea`` over PostgREST is a text round-trip: Postgres' default ``bytea_output = hex``
@@ -258,7 +258,7 @@ class SupabaseClient(Protocol):
     """The one method this module uses from the ``supabase`` client.
 
     A Protocol so tests inject a fake without the ``supabase`` dependency, mirroring
-    `olympus/atlas/supabase_io.py`.
+    `dashboard/research/supabase_io.py`.
     """
 
     def table(self, name: str) -> PostgrestQuery: ...
@@ -323,7 +323,7 @@ def _audit(event: str, **fields: object) -> None:
     """Emit one audit line built from named, non-secret fields only.
 
     Not routed through ``digibase.audit.redact_mapping``: that redactor is key-name based
-    and does not recurse (see the warning in `atlas/supabase_io.py`), so relying on it
+    and does not recurse (see the warning in `research/supabase_io.py`), so relying on it
     would make safety depend on field naming. Every call site here passes ids, statuses,
     and fingerprints explicitly instead — there is no mapping in scope that could contain
     a secret to begin with.

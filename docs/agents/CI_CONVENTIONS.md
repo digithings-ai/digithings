@@ -16,16 +16,16 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 |------|------|---------|---------|--------|-------------|
 | `agent-backlog-snapshot.yml` | Agent: backlog snapshot | schedule (Mon 06:00), dispatch | Refresh `docs/agent-backlog/generated-snapshot.md` from open agent-task issues; opens auto-merge PR | Working | none |
 | `agent-quota-reset.yml` | Agent: quota reset | schedule (1st of month 09:00), dispatch | Clear `quota:*` labels on state issue #387; re-dispatch `pending:quota` tasks | Working | none |
-| `pipeline-olympus.yml` | Pipeline: Olympus research | schedule (MON-SAT 12:00 + 28-31 of month 14:00), dispatch | Unified Atlas+Hermes pipeline; `resolve` job picks baseline (Sat) / delta (weekday) / monthly (last weekday), integrates fed-odds ingest | Working | none |
-| *(spec, not installed)* `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` | Pipeline: Kairos cron check | schedule (daily 12:15 UTC), dispatch | Overlay + kairos sync + Mailgun `--check`/`--dry-run` probe; **must not** share the house Hermes job. Copy to `.github/workflows/kairos-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_kairos_cron_workflow.py` | none |
-| `test-atlas-graph.yml` | Test: Atlas graph | workflow_call | Unit tests + lint for Atlas + Hermes trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, `pipeline-olympus.yml` |
+| `pipeline-digiquant.yml` | Pipeline: dashboard research | schedule (`17 9/10/11/12 * * *`, off-peak retries before NY open), `repository_dispatch` `olympus-daily`, dispatch | Unified research+portfolio pipeline; skip-if-already-succeeded on later crons; `resolve` picks Sunday `all` / else `none` | Working | none |
+| *(spec, not installed)* `docs/agent-backlog/execution-tenancy/execution-cron-check.workflow.yml` | Pipeline: execution cron check | schedule (daily 12:15 UTC), dispatch | Overlay + execution sync + Mailgun `--check`/`--dry-run` probe; **must not** share the house portfolio job. Copy to `.github/workflows/execution-cron-check.yml` on a `chore/`/`feat/` branch (`cursor/*` cannot write workflows) | Spec pinned by `tests/scripts/test_execution_cron_workflow.py` | none |
+| `test-research-graph.yml` | Test: research graph | workflow_call | Unit tests + lint for research + portfolio trees; installs the full workspace from `uv.lock` (`uv sync --frozen`) | Working | `digiquant/src/digiquant/{research,portfolio}/**`, `tests/dq/{research,portfolio}/**`, `pipeline-digiquant.yml` |
 | `project-stub-fields.yml` | Project: stub fields TSV | issues labeled | Appends inferred row to `scripts/project_fields.tsv` when `agent-task` or `phase-N` label applied | Working | none |
 | `agent-docs-automerge.yml` | Agent: doc auto-merge | PR events | Enable squash auto-merge for PRs with `automerge-docs` label after doc-only path verification | Working | none |
 | `agent-ci-failure-triage.yml` | Agent: CI failure triage | workflow_run (completed) | Create `exec:cursor` + `ci:failure` issue when a PR workflow fails; guarded by `DIGITHINGS_PROJECT_TOKEN` | Fixed (#292) | none |
-| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + atlas-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `actionlint` (repo-wide workflow lint) + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
+| `ci.yml` | CI | push (main/develop), PR | Orchestrator: per-component tests + score + e2e-contract + nautilus-smoke + research-graph + pip-audit + ruff/scripts/baseline/provider_review + compose-validate + `actionlint` (repo-wide workflow lint) + `frontend-canon` (unconditional canon guard, #1434) | Working | none |
 | `test-e2e.yml` | Test: e2e stack | workflow_call, workflow_dispatch, push (develop) | PR gate: `e2e-contract` via `ci.yml`; compose `pytest -m e2e` on develop push/dispatch only (`continue-on-error`) | Working | `tests/test_e2e*.py`, compose |
 | `test-nautilus.yml` | Test: Nautilus smoke | workflow_call | Linux `digiquant[nautilus]` smoke subset | Working | `digiquant/**`, `tests/dq/**` |
-| `test-olympus.yml` | Test: olympus | workflow_call | Olympus lint + vitest + build | Working | `frontend/olympus/**`, design |
+| `test-dashboard.yml` | Test: dashboard | workflow_call | Dashboard lint + vitest + build | Working | `frontend/dashboard/**`, design |
 | `test-web.yml` | Test: web apps | workflow_call | Lint `digithings-web` + `digiquant-web` + `design-reference` (root workspaces); typecheck `design-reference` (`tsc --noEmit`); vitest for `digithings-web`, `@digithings/web`, `@digithings/digichat-ui`; frontend canon guard (`check_frontend_canon.py`) | Working | `frontend/{digithings-web,digiquant-web,digichat-ui,digiweb/web,digiweb/design,digiweb/reference}/**`, `package.json`/lock |
 | `test-score.yml` | Test: score PR diff | workflow_call | `make score` on PR diff (4 dimensions) | Working | none |
 | `agent-claude-dispatch.yml` | Agent: Claude dispatch | issues labeled | Acknowledge `exec:claude` label; post local-dispatch instructions (cloud dispatch disabled by policy) | Working | none |
@@ -40,7 +40,7 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `test-digigraph.yml` | Test: digigraph | workflow_call | digigraph unit tests | Working | `digigraph/**`, `tests/dg/**` |
 | `test-digikey.yml` | Test: digikey | workflow_call | digikey unit tests | Working | `digikey/**`, `tests/dk/**` |
 | `pipeline-digiquant-prices.yml` | Pipeline: digiquant prices | schedule (intraday: */15 13-21 weekdays; at-open: 13:35 **and** 14:35, DST-gated to one; EOD: 21:25 weekdays), dispatch | Price + technicals ingest; guarded by `SUPABASE_URL`. Schedules are the UTC union of both ET offsets — see the DST note in the workflow header (#1775) | Working | none |
-| `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper tearsheet regen for digiquant.io: backtest with Supabase calibrations, commit `frontend/digiquant-web/public/strategies/*.json`, upsert `strategy_tearsheets` (#1068) | Working | none |
+| `pipeline-digiquant-tearsheets.yml` | Pipeline: digiquant tearsheets | schedule (daily 00:00 UTC), dispatch | Daily Slapper + BTC-SDCA tearsheet regen: Coinbase + M2/DXY siblings, Nautilus generate, upsert `strategy_tearsheets` (#1068, #3453). Checkout pinned to `main`. | Working | none |
 | `test-digiquant.yml` | Test: digiquant | workflow_call | digiquant unit tests | Working | `digiquant/**`, `tests/dq/**` |
 | `test-digisearch.yml` | Test: digisearch | workflow_call | digisearch unit tests | Working | `digisearch/**`, `tests/ds/**` |
 | `test-digismith.yml` | Test: digismith | workflow_call | digismith unit tests | Working | `digismith/**`, `tests/dsm/**` |
@@ -55,14 +55,14 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `sync-architecture-vault.yml` | sync-architecture-vault | push (`main`), dispatch | Mirror digivault-managed `docs/vision/**` → Supabase `public.architecture_notes` for the digithings.ai docs chat; `production` env (human gate); needs migration 048 | Working | `docs/vision/**`, sync script |
 | `project-route-issues.yml` | Project: route issues | issues (opened/reopened/transferred/labeled) | Route issues to module project boards based on `component:*` label; requires `DIGITHINGS_PROJECT_TOKEN` | Working | none |
 | `pipeline-maintenance.yml` | Pipeline: scheduled maintenance | schedule (Mon 08:00), dispatch | Weekly sweep: CVE audit, stale branches, broken doc links, agents-init drift, stale issues/PRs, label coverage, workflow health | Working | none |
-| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working | none |
+| `smoke-stack.yml` | Smoke: stack | schedule (daily 07:00 UTC), dispatch | `docker compose up --wait` + `/healthz` on digikey/digigraph/digiquant/digisearch/digismith | Working (do not inject empty `REDIS_URL` into LiteLLM) | none |
 | `ci-type-check.yml` | CI: type check | push (main/develop), PR | mypy type checking for digibase + digikey | Working | `digibase/**`, `digikey/**`, `mypy.ini` |
 | `test-digivault.yml` | Test: digivault | workflow_call | digivault unit tests | Working | `digivault/**`, `tests/dv/**` |
 | `smoke-site.yml` | Smoke: site | schedule (daily 06:17), dispatch | Post-deploy probe of digithings.ai + digiquant.io: homepages, prerendered `/docs/`, stable `/og.png` canaries (SPA-fallback MIME masking, #671 / #800); one further job per site (`freshness`, `freshness-digithings`) checks that site's deploy build stamp so a frozen Pages project is detected rather than discovered (#1759) | Working | none |
-| `smoke-langsmith.yml` | Smoke: LangSmith | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on atlas workflows | Working | none |
-| `pipeline-atlas-metrics.yml` | Pipeline: Atlas metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the Olympus dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
+| `smoke-langsmith.yml` | Smoke: LangSmith | dispatch only | Readiness check (#687): `LANGSMITH_API_KEY` auth + `@traceable` nesting before enabling tracing on research workflows | Working | none |
+| `pipeline-research-metrics.yml` | Pipeline: research metrics refresh | schedule (daily, post-EOD), dispatch | Deterministic Polars/SQL recompute of `portfolio_metrics` + `position_attribution` the dashboard reads; zero LLM cost; runs after EOD price ingest | Working | none |
 | `pipeline-digiquant-backfill.yml` | Pipeline: digiquant backfill | dispatch only | One-shot full-history (≤40y) price + technicals + macro backfill into Supabase `price_history` | Working (on-demand) | none |
-| `db-migrate.yml` | db-migrate | push (`main`), dispatch | Apply pending Olympus Supabase migrations to prod; forward-only, the `olympus_schema_migrations` ledger is the SOLE skip gate (the `BASELINE_THROUGH` baseline branch was deleted in #1814 — it silently recorded a new low-numbered file as applied without running its DDL); one transaction per file on the unwrapped path; `production` env (human gate) (#1016) | Working | `digiquant/supabase/migrations/**` |
+| `db-migrate.yml` | db-migrate | push (`main`), dispatch | Apply pending dashboard Supabase migrations to prod; forward-only, the `olympus_schema_migrations` ledger is the SOLE skip gate (the `BASELINE_THROUGH` baseline branch was deleted in #1814 — it silently recorded a new low-numbered file as applied without running its DDL); one transaction per file on the unwrapped path; `production` env (human gate) (#1016) | Working | `digiquant/supabase/migrations/**` |
 | `deploy-digithings-cloudflare.yml` | Deploy: digithings.ai build check | PR (digithings.ai assets), dispatch | Gate/validate `scripts/build-digithings.sh`; primary deploy is Cloudflare Pages watching `main` | Working | digithings.ai assets |
 | `deploy-digiquant-cloudflare.yml` | Deploy: digiquant.io build check | PR (digiquant.io assets), dispatch | Gate/validate `scripts/build-digiquant.sh` (ADR-0012); primary deploy is Cloudflare Pages watching `main` | Working | digiquant.io assets |
 | `agent-pr-autolabel.yml` | Agent: PR autolabel | workflow_run (CI) | Add `automerge-agent` to low-risk agent-branch PRs once CI is green | Working | none |
@@ -79,9 +79,9 @@ Queue starvation and org runner limits: [CI-QUEUE.md](CI-QUEUE.md).
 | `CLAUDE_CODE_OAUTH_TOKEN` | agent-claude.yml, agent-claude-review.yml, agent-claude-dispatch.yml, pipeline-continuous-improvement.yml, pipeline-provider-review.yml | Optional — features disabled when absent |
 | `CURSOR_API_KEY` | agent-pr-finalizer.yml | Optional — Cursor fix dispatch skipped when absent |
 | `DIGITHINGS_PROJECT_TOKEN` | project routing/status workflows, CI failure triage, PR finalizer, scheduled maintenance | Required for cross-project updates; guarded features skip when absent |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | atlas-baseline, atlas-delta, atlas-monthly, digiquant-prices | Required for production runs |
-| `GEMINI_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for Atlas/Hermes LLM calls |
-| `OLLAMA_API_KEY` | atlas-baseline, atlas-delta, atlas-monthly | Required for reasoning tier (phases 7, 7D) |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | research-baseline, research-delta, research-monthly, digiquant-prices | Required for production runs |
+| `GEMINI_API_KEY` | research-baseline, research-delta, research-monthly | Required for research/portfolio LLM calls |
+| `OLLAMA_API_KEY` | research-baseline, research-delta, research-monthly | Required for reasoning tier (phases 7, 7D) |
 | `DIGISEARCH_URL` | reindex-digithings-guide | Optional — apply step skipped when absent |
 | `vars.DIGI_MAINTENANCE_PROJECT_NUMBER` | scheduled-maintenance, ci-failure-triage, enforce-project-assignment | Optional — project-add step skipped when absent |
 
@@ -177,7 +177,7 @@ All content inside a `run: |` block must be indented at or beyond the block's in
           gh issue create --body-file /tmp/body.md
 ```
 
-This pattern is used by the Olympus pipeline workflow (`pipeline-olympus.yml`) and is now required for all new issue/comment creation steps.
+This pattern is used by the dashboard pipeline workflow (`pipeline-digiquant.yml`) and is now required for all new issue/comment creation steps.
 
 ### 5. Secret guards
 
@@ -229,7 +229,7 @@ concurrency:
   cancel-in-progress: true
 ```
 
-For production pipelines where mid-run cancellation would corrupt state (Atlas baseline, monthly synthesis), set `cancel-in-progress: false` and use a named group without `${{ github.ref }}`.
+For production pipelines where mid-run cancellation would corrupt state (research baseline, monthly synthesis), set `cancel-in-progress: false` and use a named group without `${{ github.ref }}`.
 
 **Exception — a job gated on an `environment` approval must not queue.** The rule above
 assumes the run holding the group is *doing work*, so protecting it is worth a delay. A job

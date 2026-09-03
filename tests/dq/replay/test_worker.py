@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     InstrumentBarSeries,
     OhlcvBar,
@@ -18,7 +18,7 @@ from digiquant.olympus.replay.models import (
     PortfolioReplayStatus,
     TargetWeight,
 )
-from digiquant.olympus.replay.worker import run_portfolio_replay_isolated
+from digiquant.dashboard.replay.worker import run_portfolio_replay_isolated
 
 pytestmark = pytest.mark.unit
 
@@ -80,7 +80,7 @@ def test_timeout_is_typed_inconclusive(tmp_path: Path, monkeypatch: pytest.Monke
             self.exitcode = -9
 
     monkeypatch.setattr(
-        "digiquant.olympus.replay.worker._SPAWN_CTX.Process",
+        "digiquant.dashboard.replay.worker._SPAWN_CTX.Process",
         _HangProcess,
     )
     result = run_portfolio_replay_isolated(
@@ -116,7 +116,7 @@ def test_crash_without_result_json_is_typed(
             return None
 
     monkeypatch.setattr(
-        "digiquant.olympus.replay.worker._SPAWN_CTX.Process",
+        "digiquant.dashboard.replay.worker._SPAWN_CTX.Process",
         _CrashProcess,
     )
     result = run_portfolio_replay_isolated(
@@ -144,7 +144,7 @@ def test_worker_json_roundtrip_writes_result(tmp_path: Path) -> None:
 
 
 def test_spawn_context_is_spawn_not_fork() -> None:
-    from digiquant.olympus.replay import worker as worker_mod
+    from digiquant.dashboard.replay import worker as worker_mod
 
     assert worker_mod._SPAWN_CTX.get_start_method() == "spawn"
     assert multiprocessing.get_context("spawn").get_start_method() == "spawn"

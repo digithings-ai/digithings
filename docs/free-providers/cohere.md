@@ -82,7 +82,7 @@ model_list:
 | DIGI_LLM_MODE tier | Not in automated pipeline — trial only |
 | Single-shot 100k | Yes — 256k context on Command A; ideal for full 10-K |
 | Privacy safe | Trial keys not for production use |
-| Atlas/Hermes role | **Not in pipeline** — Embed v3 / Rerank v3 are the standout tools |
+| research/portfolio role | **Not in pipeline** — Embed v3 / Rerank v3 are the standout tools |
 
 ---
 

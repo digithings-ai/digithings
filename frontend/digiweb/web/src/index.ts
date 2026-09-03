@@ -11,7 +11,22 @@ export {
 } from "./motion/scrolly";
 export { Emblem, emblems } from "./components/emblems";
 export { StackLogo, StackRow } from "./components/StackLogo";
-export { GitHubGlyph } from "./components/icons";
+export { GitHubGlyph, GoogleGlyph, LinkedInGlyph, XGlyph } from "./components/icons";
+export {
+  SocialRow,
+  DIGITHINGS_SOCIALS,
+  type SocialRowProps,
+  type SocialProfile,
+  type SocialNetwork,
+} from "./components/SocialRow";
+export {
+  AuthCard,
+  passwordStrength,
+  type AuthCardLayout,
+  type AuthCardMode,
+  type AuthCardProps,
+  type AuthOAuthProvider,
+} from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
 export {
   Nav,
@@ -278,6 +293,9 @@ export {
 export {
   CandlestickChart,
   TimeSeries,
+  MultiTimeSeries,
+  RiskBandStrip,
+  AllocationStepChart,
   SignedBars,
   ContributionReturnChart,
   TradeReturnChart,
@@ -322,8 +340,19 @@ export {
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,
   TEARSHEET_DEMO,
+  RISK_BANDS,
+  riskBandLabel,
+  dcaRateCopy,
+  type RiskBand,
   type CandlestickChartProps,
   type TimeSeriesProps,
+  type MultiTimeSeriesProps,
+  type OverlaySeries,
+  type RiskBandStripProps,
+  type AllocationStepChartProps,
+  type AllocationFillMarker,
+  type OverlayTone,
+  type ChartLegendKind,
   type SignedBarsProps,
   type ContributionReturnChartProps,
   type ContributionReturnPoint,
@@ -352,6 +381,29 @@ export {
   type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
+// repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed
+export {
+  RepoActivity,
+  fetchRepoActivityLive,
+  cloneParts,
+  grouped,
+  isoDay,
+  DEFAULT_LIVE_TIMEOUT_MS,
+  REPO_ACTIVITY_DEMO,
+  REPO_ACTIVITY_DEMO_CLONE,
+  REPO_ACTIVITY_DEMO_CONTRIBUTING,
+  REPO_ACTIVITY_DEMO_URL,
+  type RepoActivityProps,
+  type RepoActivityLiveConfig,
+  type RepoActivitySnapshot,
+  type RepoFeature,
+  type RepoIssueItem,
+  type RepoModuleActivity,
+  type RepoPullItem,
+  type RepoRelease,
+  type FetchRepoActivityLiveOptions,
+} from "./components/repo-activity";
+
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
 export { subsystems, subsystemById, type Subsystem } from "./data/subsystems";
 
@@ -364,10 +416,8 @@ export {
 } from "./components/command-palette";
 export {
   DigiquantMark,
-  OlympusMark,
   Wordmark,
   type DigiquantMarkProps,
-  type OlympusMarkProps,
   type WordmarkProps,
 } from "./components/symbols/marks";
 // Terminal identity — the `digi` + block-cursor lockup and the hairline display

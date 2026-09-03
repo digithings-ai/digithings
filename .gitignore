@@ -51,7 +51,7 @@ build/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
 
-# Repo-root runtime caches (Atlas price-history, agent-cache paths) — JAN-004
+# Repo-root runtime caches (research price-history, agent-cache paths) — JAN-004
 /data/
 
 # Local agent memory archives (Cursor/agent tooling) — JAN-005
@@ -61,8 +61,8 @@ digiquant/results/
 .local_digikey.sqlite
 /*.sqlite
 
-# Olympus static portfolio fallback — stop tracking after REM-037 (JAN-007)
-frontend/olympus/public/dashboard-data.json
+# Dashboard static portfolio fallback — stop tracking after REM-037 (JAN-007)
+frontend/dashboard/public/dashboard-data.json
 
 # digithings-web OpenAPI explorer assets (copied at prebuild / predev from
 # docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
@@ -131,11 +131,12 @@ canvases/
 
 # Strategy calibrations — proprietary tuning values
 **/calibrations.json
-# SDCA BTC power-law fit — reproducible from real price history via the
-# digiquant_fit_btc_power_law MCP tool, not committed so a local/stale fit
-# never masquerades as the checked-in real one (#1082). The synthetic
-# btc_power_law_coefficients.example.json placeholder IS committed.
-**/btc_power_law_coefficients.json
+# SDCA BTC power-law coefficients: the real fit
+# (strategies/sdca/btc_power_law_coefficients.json) IS committed as of #3173 —
+# it is a public model (window + source in `notes`), unlike calibrations.json.
+# The synthetic btc_power_law_coefficients.example.json placeholder stays as
+# the load_coefficients() fallback when the real file is absent. Do not
+# gitignore the real file.
 # Strategy Pine files embed calibrated inputs (input.int(70, ...)) — keep private.
 # The indicator library (pinescript/indicators/*.pine) is calibration-free and is
 # committed as reusable fallback code.

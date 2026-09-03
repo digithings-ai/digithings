@@ -12,7 +12,7 @@ import { ContactMailto } from "@/components/ContactMailto";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
-import { LivePortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
+import { LivePortfolioPanel } from "@/components/landing/DashboardPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
 import { PipelineScene } from "@/components/landing/PipelineScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";

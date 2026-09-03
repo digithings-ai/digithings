@@ -1,7 +1,7 @@
 """Unit tests for SupabaseConnector — the supabase client is faked, no live DB.
 
 Typed-result assertions over the success/failure paths, reusing the in-memory
-fake-client shape from ``tests/dq/atlas/test_supabase_io.py`` (records calls,
+fake-client shape from ``tests/dq/research/test_supabase_io.py`` (records calls,
 honours filters).
 
 The connector is imported directly from the submodule rather than via the
@@ -40,7 +40,7 @@ class _FakeQuery:
     """Records calls and returns canned rows, honouring eq/gte/lte/in_/order/limit.
 
     Filters are applied for real (not no-ops) so a connector that forgets a
-    filter breaks loudly — same philosophy as the Atlas supabase_io fake.
+    filter breaks loudly — same philosophy as the research supabase_io fake.
     """
 
     table_name: str

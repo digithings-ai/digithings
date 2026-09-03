@@ -251,8 +251,12 @@ services:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
-    environment:
-      - REDIS_URL=${REDIS_URL:-}
+    # Do not inject REDIS_URL with an empty default: an empty string makes
+    # LiteLLM main-stable treat Redis as configured and exit 3
+    # (ValueError: Redis URL must specify one of the following schemes).
+    # Leave the var unset for the default local cache. When using
+    # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
+    # env_file passes a real URL through.
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
     volumes:
       - ./config:/app/config:ro

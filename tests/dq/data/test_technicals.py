@@ -3,7 +3,7 @@
 Uses a 60-row deterministic OHLCV series; compares module output to a
 reference implementation computed from first principles in plain Python.
 Tolerance is 1e-6 per the task brief — any regression beyond that shrinks
-matching against pandas_ta-era Atlas output.
+matching against pandas_ta-era research output.
 """
 
 from __future__ import annotations
