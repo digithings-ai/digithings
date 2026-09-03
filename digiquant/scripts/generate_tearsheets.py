@@ -36,11 +36,13 @@ log, open-position state, and headline metrics are self-consistent by
 construction and none of them can leak the live position. Payloads declare the
 lag via ``signal_delay_days``.
 
-Usage:
-    python scripts/generate_tearsheets.py
-    python scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir digiquant/data/price-history
-    python scripts/generate_tearsheets.py --signal-delay-days 3
+Usage (from repo root — same cwd as the nightly workflow):
+    python digiquant/scripts/generate_tearsheets.py
+    python digiquant/scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir digiquant/data/price-history
+    python digiquant/scripts/generate_tearsheets.py --signal-delay-days 3
     # Operator-only (not this environment): --push-supabase after a real run.
+    # Default cache is absolute under digiquant/data/price-history; --cache-dir is
+    # only needed to override (relative paths are cwd-relative).
 """
 
 from __future__ import annotations
