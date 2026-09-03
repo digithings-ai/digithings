@@ -5,3 +5,6 @@
 next-env.d.ts
 *.tsbuildinfo
 .DS_Store
+
+# Dev-only symlink into digiquant/.scratch/tearsheets for /strategies/preview
+/public/preview-tearsheets

@@ -163,8 +163,8 @@ function PrintHeading({ children }: { children: string }) {
   return <h2 className="ts-print-heading">{children}</h2>;
 }
 
-export function TearsheetView({ slug }: { slug: string }) {
-  const [data, setData] = useState<TearsheetData | null>(null);
+export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: TearsheetData }) {
+  const [fetchedData, setData] = useState<TearsheetData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [scaleOverride, setScaleOverride] = useState<ChartScale | null>(null);
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
@@ -180,6 +180,7 @@ export function TearsheetView({ slug }: { slug: string }) {
   const printTitleRef = useRef<string | null>(null);
 
   useEffect(() => {
+    if (dataProp) return;
     let alive = true;
     fetchTearsheet(slug)
       .then((d) => {
@@ -191,7 +192,9 @@ export function TearsheetView({ slug }: { slug: string }) {
         if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);
       });
     return () => { alive = false; };
-  }, [slug]);
+  }, [slug, dataProp]);
+
+  const data = dataProp ?? fetchedData;
 
   const displayTrades = useMemo(() => (data ? tradesForDisplay(data) : []), [data]);
   const sortedTrades = useMemo(() => sortTradesForLog(displayTrades), [displayTrades]);
