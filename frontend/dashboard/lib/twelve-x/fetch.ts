@@ -571,6 +571,25 @@ export async function getTradeIdeaHistory(
   return rows ?? [];
 }
 
+/**
+ * Full idea archive for the Trades history table (newest board first).
+ * Full columns so rows render entry/stop/target bands without a second fetch.
+ * `[]` when unconfigured/empty.
+ */
+export async function getTradeIdeaArchive(): Promise<FxTradeIdeaRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const rows = await querySupabase<FxTradeIdeaRow[]>((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select(
+        'run_date, rank, pair, direction, title, thesis, catalyst, levels, citations, trade_levels, evidence, as_of',
+      )
+      .order('run_date', { ascending: false })
+      .order('rank', { ascending: true }),
+  );
+  return rows ?? [];
+}
+
 /** Idea lifecycle eval rows. Eval tables only — no core FX. */
 export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];

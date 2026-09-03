@@ -2,7 +2,16 @@
 
 import { useMemo } from 'react';
 import { ClipboardList } from 'lucide-react';
-import type { FxConsensusEvalRow, FxIdeaEvalRow } from '@/lib/twelve-x/types';
+import type {
+  FxConsensusEvalRow,
+  FxIdeaEvalRow,
+  FxTradeIdeaRow,
+} from '@/lib/twelve-x/types';
+import {
+  assembleTradeHistory,
+  formatHoldPct,
+  type TradeHistoryRow,
+} from '@/lib/twelve-x/trade-history';
 import {
   openIdeas,
   summarizeConsensusAccuracy,
@@ -40,13 +49,41 @@ function RateCard({
   );
 }
 
-export default function TrackRecordTab({
+function Pill({ tone, children }: { tone: 'live' | 'right' | 'wrong' | 'mute'; children: string }) {
+  const toneClass =
+    tone === 'right'
+      ? 'border-accent text-accent'
+      : tone === 'wrong'
+        ? 'border-warn text-warn'
+        : tone === 'live'
+          ? 'border-ink text-ink'
+          : 'border-hair text-ink-mute';
+  return (
+    <span className={`inline-block border px-1.5 font-mono text-[10px] ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
+
+function BiasPill({ row }: { row: TradeHistoryRow }) {
+  if (row.lifecycle === 'live') return <Pill tone="live">LIVE</Pill>;
+  if (row.lifecycle === 'no_data') return <Pill tone="mute">NO DATA</Pill>;
+  if (row.lifecycle === 'unscored') return <Pill tone="mute">—</Pill>;
+  if (row.directionalWin === true) return <Pill tone="right">RIGHT</Pill>;
+  if (row.directionalWin === false) return <Pill tone="wrong">WRONG</Pill>;
+  return <Pill tone="mute">—</Pill>;
+}
+
+export default function TradesTab({
+  ideas,
   ideaEval,
   consensusEval,
 }: {
+  ideas: FxTradeIdeaRow[];
   ideaEval: FxIdeaEvalRow[];
   consensusEval: FxConsensusEvalRow[];
 }) {
+  const history = useMemo(() => assembleTradeHistory(ideas, ideaEval), [ideas, ideaEval]);
   const ideaSummary = useMemo(() => summarizeIdeaOutcomes(ideaEval), [ideaEval]);
   const open = useMemo(() => openIdeas(ideaEval), [ideaEval]);
   const stability = useMemo(() => summarizeConsensusStability(consensusEval), [consensusEval]);
@@ -59,17 +96,78 @@ export default function TrackRecordTab({
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <ClipboardList size={18} className="shrink-0 text-accent" aria-hidden />
-        <h2 className="font-display text-2xl tracking-tight text-ink">Track record</h2>
+        <h2 className="font-display text-2xl tracking-tight text-ink">Trades</h2>
       </div>
       <p className="max-w-2xl text-xs text-ink-mute">
-        Research call scorecard — each idea holds until the next board that posts the
-        same pair (successor clock). Directional outcomes use daily closes only; stop /
-        target levels are experimental and not scored.
+        Every trade recommendation and whether it worked. Each idea stays live until the
+        next board that posts the same pair (successor clock). Directional outcomes use
+        daily closes only for now — excursion (spike-capture) and level-touch scoring
+        follow once the high/low feed lands. Stop / target levels are quoted as published.
       </p>
 
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-          Trade ideas
+          History — all recommendations
+        </h3>
+        {history.length === 0 ? (
+          <p className="text-sm text-ink-mute">No trade ideas published yet.</p>
+        ) : (
+          <div className="overflow-x-auto border border-hair">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-hair text-left text-[10px] uppercase tracking-wider text-ink-mute">
+                  <th className="px-3 py-2 font-medium">Board</th>
+                  <th className="px-3 py-2 font-medium">Pair · bias</th>
+                  <th className="px-3 py-2 font-medium">Entry</th>
+                  <th className="px-3 py-2 font-medium">Stop · Target</th>
+                  <th className="px-3 py-2 font-medium">Lived</th>
+                  <th className="px-3 py-2 font-medium">Hold</th>
+                  <th className="px-3 py-2 font-medium">Bias</th>
+                  <th className="px-3 py-2 font-medium">Levels</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hair">
+                {history.map((row) => (
+                  <tr key={`${row.runDate}-${row.rank}`}>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
+                      {row.runDate} · #{row.rank}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-ink">
+                      {row.pair} {row.direction}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+                      {row.entryBand ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+                      {row.stop ?? row.target
+                        ? `${row.stop ?? '—'} → ${row.target ?? '—'}`
+                        : '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink-mute">
+                      {row.sessions ?? '—'}
+                      {row.lifecycle === 'live' ? '…' : ''}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+                      {formatHoldPct(row.holdReturn)}
+                      {row.lifecycle === 'live' && row.holdReturn !== null ? '…' : ''}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      <BiasPill row={row} />
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2">
+                      {row.hasLevels ? <Pill tone="mute">QUOTED</Pill> : <Pill tone="mute">—</Pill>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
+          Performance — bias (close-based)
         </h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {ideaEval.length > 0 ? (
@@ -124,7 +222,7 @@ export default function TrackRecordTab({
 
       <section className="space-y-3">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-          Consensus
+          Performance — consensus
         </h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {weightedStab ? (

@@ -15,11 +15,11 @@ describe('TwelveXClient tab set', () => {
     expect(TWELVE_X_TABS).toHaveLength(6);
   });
 
-  it('is the canonical Today / Consensus / Track record / Matrix / Events / How-it-works set', () => {
+  it('is the canonical Today / Consensus / Trades / Matrix / Events / How-it-works set', () => {
     expect(TWELVE_X_TABS.map((t) => t.id)).toEqual([
       'today',
       'consensus',
-      'track-record',
+      'trades',
       'matrix',
       'events',
       'how-it-works',
@@ -33,10 +33,10 @@ describe('TwelveXClient tab set', () => {
 
   it('labels each tab', () => {
     const labels = Object.fromEntries(TWELVE_X_TABS.map((t) => [t.id, t.label]));
-    expect(labels).toMatchObject({
+    expect(labels).toEqual({
       today: 'Today',
       consensus: 'Consensus',
-      'track-record': 'Track record',
+      trades: 'Trades',
       matrix: 'Matrix',
       events: 'Events',
       'how-it-works': 'How it works',
@@ -52,10 +52,14 @@ describe('resolveTab', () => {
   it('routes each of the six tab params to its tab', () => {
     expect(resolveTab('today')).toBe('today');
     expect(resolveTab('consensus')).toBe('consensus');
-    expect(resolveTab('track-record')).toBe('track-record');
+    expect(resolveTab('trades')).toBe('trades');
     expect(resolveTab('matrix')).toBe('matrix');
     expect(resolveTab('events')).toBe('events');
     expect(resolveTab('how-it-works')).toBe('how-it-works');
+  });
+
+  it('redirects legacy track-record param to trades', () => {
+    expect(resolveTab('track-record')).toBe('trades');
   });
 
   it('redirects legacy intelligence param to consensus', () => {
