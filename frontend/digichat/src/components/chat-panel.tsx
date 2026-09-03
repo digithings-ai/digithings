@@ -35,6 +35,23 @@ import { cn } from "@/lib/utils";
 import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
+/** Per-thread pending turn mode — module map, not a ref (#3475 / #1339). */
+const pendingTurnModeByThread = new Map<string, "regenerate" | "edit_last_user">();
+
+function setPendingTurnMode(threadId: string, mode?: "regenerate" | "edit_last_user"): void {
+  const key = threadId.trim();
+  if (!key) return;
+  if (mode) pendingTurnModeByThread.set(key, mode);
+  else pendingTurnModeByThread.delete(key);
+}
+
+function takePendingTurnMode(threadId: string): "regenerate" | "edit_last_user" | undefined {
+  const key = threadId.trim();
+  const mode = pendingTurnModeByThread.get(key);
+  pendingTurnModeByThread.delete(key);
+  return mode;
+}
+
 const MAX_INPUT_LINES = 5;
 
 // The one digichat-specific fence shape the shared <ChatMarkdown> renderer
@@ -198,6 +215,11 @@ export function ChatPanel({
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
           const h = new Headers(headers as HeadersInit | undefined);
           h.set("X-Digichat-Session", threadId);
+          const turnMode = takePendingTurnMode(threadId);
+          if (turnMode) {
+            h.set("X-Digi-Turn-Mode", turnMode);
+          }
+          h.set("X-Digi-Run-Id", crypto.randomUUID());
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
@@ -405,6 +427,7 @@ export function ChatPanel({
     setMessages(messages.slice(0, lastUserIndex));
     setEditingLastUser(false);
     setEditDraft("");
+    setPendingTurnMode(threadId, "edit_last_user");
     void sendMessage({
       role: "user",
       parts: [{ type: "text", text: next }],
@@ -538,7 +561,10 @@ export function ChatPanel({
                           className="h-6 text-[11px] text-muted-foreground"
                           disabled={!canRegenerate}
                           title="Replays the full digigraph workflow on this session"
-                          onClick={() => void regenerate()}
+                          onClick={() => {
+                            setPendingTurnMode(threadId, "regenerate");
+                            void regenerate();
+                          }}
                         >
                           <RefreshCw className="mr-1 size-3" />
                           regen
