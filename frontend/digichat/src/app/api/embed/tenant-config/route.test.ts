@@ -49,8 +49,10 @@ describe("GET /api/embed/tenant-config", () => {
       showByok: false,
       layout: "embed",
       showLanguageSelector: true,
+      backendType: "foundry",
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
+    expect(JSON.stringify(body)).not.toContain("datatapstream-secret");
   });
 
   it("returns legacy defaults for a registered host when the token is missing (#1339)", async () => {

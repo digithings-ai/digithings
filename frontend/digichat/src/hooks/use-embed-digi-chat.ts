@@ -182,6 +182,12 @@ type UseEmbedDigiChatOptions = {
    * a stable accessor closing over a ref instead of a storage-read helper.
    */
   getResponseLanguage?: () => string;
+  /**
+   * When false (Foundry), omit regenerate/editLastUser so DigiChatSession
+   * hides the chrome. Truncate-and-resend would corrupt an append-only
+   * Foundry conversation (#3466). Default true for digigraph-first callers.
+   */
+  allowClientTurnMutation?: boolean;
 };
 
 export function useEmbedDigiChat({
@@ -195,6 +201,7 @@ export function useEmbedDigiChat({
   trialUnlocked,
   onGated,
   getResponseLanguage,
+  allowClientTurnMutation = true,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
@@ -348,6 +355,38 @@ export function useEmbedDigiChat({
     }
   }, [setMessages, embedHost]);
 
+  const doRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    // Never set a pending force-tool on regen — slash force is send-only (#3466).
+    setPendingForceTool(embedHost);
+    void regenerate();
+  }, [allowClientTurnMutation, busy, embedHost, regenerate]);
+
+  const editLastUser = useCallback(
+    (text: string) => {
+      if (!allowClientTurnMutation || busy) return;
+      const next = text.trim();
+      if (!next) return;
+      let lastUserIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i]?.role === "user") {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx < 0) return;
+      // Drop the last user turn and anything after it (the following assistant).
+      setMessages(messages.slice(0, lastUserIdx));
+      // Force-tool is send-only — do not re-fire a prior slash on edit.
+      setPendingForceTool(embedHost);
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: next }],
+      });
+    },
+    [allowClientTurnMutation, busy, embedHost, messages, sendMessage, setMessages],
+  );
+
   // Mid-stream: keep completed searches as running tool_call rows until
   // retrieve arrives (or the turn settles). Settling early flashes "no hits".
   const digiMessages = useMemo(
@@ -383,9 +422,15 @@ export function useEmbedDigiChat({
     stop: () => {
       void stop();
     },
-    onRetry: () => {
-      void regenerate();
-    },
+    // Error-row Retry: digigraph may regenerate; Foundry must not (#3466).
+    onRetry: allowClientTurnMutation
+      ? () => {
+          doRegenerate();
+        }
+      : undefined,
+    ...(allowClientTurnMutation
+      ? { regenerate: doRegenerate, editLastUser }
+      : {}),
     seed,
   };
 }

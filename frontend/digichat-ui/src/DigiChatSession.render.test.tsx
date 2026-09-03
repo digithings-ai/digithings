@@ -156,6 +156,41 @@ describe("assistant turn — settled", () => {
     expect(html).toContain("Download thread as markdown");
   });
 
+  it("hides regen and edit when the controller omits them (Foundry)", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      false,
+      "embed",
+    );
+    expect(html).not.toContain("Regenerate answer");
+    expect(html).not.toContain("Edit last message");
+  });
+
+  it("shows regen + edit on digigraph when the controller opts in (#3466)", () => {
+    const chat: DigiChatSessionProps["chat"] = {
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      busy: false,
+      error: null,
+      send: async () => {},
+      stop: () => {},
+      regenerate: () => {},
+      editLastUser: () => {},
+    };
+    const html = renderToStaticMarkup(
+      <DigiChatSession chat={chat} showIntro={false} layout="embed" />,
+    );
+    expect(html).toContain("Regenerate answer");
+    expect(html).toContain("Edit last message");
+    expect(html).toContain(">regen</button>");
+    expect(html).toContain(">edit</button>");
+  });
+
   it("shows no caret when the turn is settled", () => {
     const html = sessionWith(
       [

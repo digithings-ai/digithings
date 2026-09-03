@@ -406,6 +406,10 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Fail closed: only digigraph gets mutation; missing backendType (gated default)
+    // must not enable regen/edit.
+    allowClientTurnMutation: tenantCfg.backendType === "digigraph",
   });
 
   // Charge the free-tier gate only once a gated send actually settles
