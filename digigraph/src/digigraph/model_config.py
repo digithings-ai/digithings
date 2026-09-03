@@ -572,7 +572,7 @@ def _model_for_digiquant_capability(capability: str, tier: str, phase_slug: str)
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return a web-search-capable model for Digicon/digiquant grounding pre-passes.
+    """Return a web-search-capable model for digiquant grounding pre-passes.
 
     Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — house
     grounding must not use the digillm Exa toolkit branch. Slugs are unprefixed

@@ -75,7 +75,7 @@ make pull-ghcr && make up-ghcr
 
 See [`docs/templates/self-host/README.md`](docs/templates/self-host/README.md) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). FastAPI Swagger: `http://127.0.0.1:<port>/docs`.
 
-**LLM routing:** house traffic is service → digillm → LiteLLM (`OPENAI_API_BASE`). Digicon/digiquant phase pins in `config/digiquant_models.yaml` are unprefixed OpenRouter slugs listed in `config/litellm.yaml`. Set `OPENROUTER_API_KEY` on the LiteLLM process (sign up at https://openrouter.ai). `openrouter/auto` is reserved for diagnostic scripts, not phase routing. Grounding uses unprefixed `:online` / `perplexity/*` slugs via `get_grounding_model()`. Optional OmniRoute is off by default — see `docs/providers/omniroute.md`. See `config/model_modes.yaml` and `.env.example`.
+**LLM routing:** house traffic is service → digillm → LiteLLM (`OPENAI_API_BASE`). digiquant phase pins in `config/digiquant_models.yaml` are unprefixed OpenRouter slugs listed in `config/litellm.yaml`. Set `OPENROUTER_API_KEY` on the LiteLLM process (sign up at https://openrouter.ai). `openrouter/auto` is reserved for diagnostic scripts, not phase routing. Grounding uses unprefixed `:online` / `perplexity/*` slugs via `get_grounding_model()`. Optional OmniRoute is off by default — see `docs/providers/omniroute.md`. See `config/model_modes.yaml` and `.env.example`.
 
 **Stack + digichat web UI** (http://127.0.0.1:3005):
 

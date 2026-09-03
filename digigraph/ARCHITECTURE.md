@@ -868,7 +868,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Model routing:** callers must pass a concrete model string. Digicon/digiquant
+- **Model routing:** callers must pass a concrete model string. digiquant
   phase pins in `config/digiquant_models.yaml` are **unprefixed** OpenRouter
   slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
   always caller → digillm → LiteLLM → vendor (or the user's OpenAI-compat

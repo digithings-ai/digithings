@@ -1578,7 +1578,7 @@ def openrouter_web_search(
 ) -> tuple[str, list[str]] | None:
     """Run web-search grounding and return ``(summary_text, source_urls)``.
 
-    House Digicon/digiquant grounding pins are unprefixed ``:online`` / ``perplexity/*``
+    House digiquant grounding pins are unprefixed ``:online`` / ``perplexity/*``
     slugs sent through LiteLLM (``OPENAI_API_BASE``). Leftover ``openrouter/``
     prefixes still work for diagnostics when ``OPENROUTER_API_KEY`` is set.
 
