@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,8 @@ from digisearch.core.evidence_metadata import normalize_metadata_for_chroma
 from digisearch.core.filter_apply import chunk_metadata_matches
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.core.workspace_filter import chunk_matches_workspace
+from digisearch.embedding.providers.minilm import get_default_minilm_embedder
+from digisearch.indexes.backends.chroma_errors import EmbeddingModelMismatchError
 from digisearch.indexes.base import DigiIndex
 
 logger = logging.getLogger(__name__)
@@ -25,12 +26,6 @@ try:
 except ImportError:
     _CHROMA_AVAILABLE = False
 
-#: Process-wide MiniLM default — same model Chroma's bundled ONNX uses.
-#: Lazy + locked so constructing backends that always get an injected provider
-#: never pays the ONNX load cost.
-_default_embedder_singleton: object | None = None
-_default_embedder_lock = threading.Lock()
-
 _META_MODEL_ID = "embedding_model_id"
 _META_DIMENSIONS = "embedding_dimensions"
 _META_VERSION = "embedding_version"
@@ -38,14 +33,7 @@ _META_VERSION = "embedding_version"
 
 def _get_default_embedder() -> object:
     """Return the process-wide MiniLMEmbedder (Chroma's historical default model)."""
-    global _default_embedder_singleton
-    if _default_embedder_singleton is None:
-        with _default_embedder_lock:
-            if _default_embedder_singleton is None:
-                from digisearch.embedding.providers.minilm import MiniLMEmbedder
-
-                _default_embedder_singleton = MiniLMEmbedder()
-    return _default_embedder_singleton
+    return get_default_minilm_embedder()
 
 
 def _provider_model_id(provider: object) -> str:
@@ -123,17 +111,34 @@ class ChromaBackend(DigiIndex):
     def _resolved_provider(self) -> object:
         return self.embedding_provider or _get_default_embedder()
 
+    def _collection_count(self) -> int:
+        count_fn = getattr(self._collection, "count", None)
+        if callable(count_fn):
+            try:
+                return int(count_fn())
+            except Exception:
+                return 0
+        return 0
+
     def _assert_collection_model(self, provider: object) -> None:
         meta = dict(getattr(self._collection, "metadata", None) or {})
-        existing = str(meta.get(_META_MODEL_ID) or "").strip()
-        if not existing:
+        expected_id = _provider_model_id(provider)
+        expected_dims = str(_provider_dimensions(provider))
+        expected_ver = _provider_version(provider)
+        checks = (
+            (_META_MODEL_ID, expected_id),
+            (_META_DIMENSIONS, expected_dims),
+            (_META_VERSION, expected_ver),
+        )
+        present = [(key, str(meta.get(key) or "").strip(), exp) for key, exp in checks]
+        if not any(existing for _, existing, _ in present):
             return
-        expected = _provider_model_id(provider)
-        if existing != expected:
-            raise ValueError(
-                f"Chroma collection {self.name!r} embedding_model_id={existing!r} "
-                f"does not match provider {expected!r}; re-index or use the original model"
-            )
+        for key, existing, exp in present:
+            if existing and existing != exp:
+                raise EmbeddingModelMismatchError(
+                    f"Chroma collection {self.name!r} {key}={existing!r} "
+                    f"does not match provider {exp!r}; re-index or use the original model"
+                )
 
     def _stamp_collection_metadata(self, provider: object) -> None:
         meta = dict(getattr(self._collection, "metadata", None) or {})
@@ -152,6 +157,15 @@ class ChromaBackend(DigiIndex):
                 _META_VERSION,
             )
         ):
+            return
+        if not str(meta.get(_META_MODEL_ID) or "").strip() and self._collection_count() > 0:
+            # Populated legacy collections may hold vectors from an unknown model;
+            # stamping the current provider would invent false compatibility.
+            logger.warning(
+                "chroma collection %r has vectors but no embedding_model_id; "
+                "refusing to auto-stamp (re-index or migrate metadata explicitly)",
+                self.name,
+            )
             return
         modify = getattr(self._collection, "modify", None)
         if callable(modify):

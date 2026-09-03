@@ -16,6 +16,7 @@ from digisearch.embedding.providers.minilm import (
     MiniLMEmbedder,
 )
 from digisearch.indexes.backends.chroma import ChromaBackend
+from digisearch.indexes.backends.chroma_errors import EmbeddingModelMismatchError
 
 
 class _FakeEmbedder:
@@ -47,8 +48,11 @@ def _backend_with_collection(
     collection_metadata: dict[str, Any] | None = None,
 ) -> ChromaBackend:
     collection.metadata = dict(collection_metadata or {"hnsw:space": "cosine"})
+    if not hasattr(collection, "count") or not callable(collection.count):
+        collection.count = MagicMock(return_value=0)
     with patch("digisearch.indexes.backends.chroma._CHROMA_AVAILABLE", True):
-        with patch("digisearch.indexes.backends.chroma.chromadb") as chromadb_mod:
+        with patch("digisearch.indexes.backends.chroma.chromadb", create=True) as chromadb_mod:
+            chromadb_mod.Settings = MagicMock()
             client = MagicMock()
             chromadb_mod.Client.return_value = client
             client.get_or_create_collection.return_value = collection
@@ -59,6 +63,7 @@ def _backend_with_collection(
 def test_embedding_provider_default_used_on_add_and_query() -> None:
     """No explicit provider → MiniLMEmbedder; embed() called when vectors missing."""
     collection = MagicMock()
+    collection.count = MagicMock(return_value=0)
     fake = _FakeEmbedder()
     with patch(
         "digisearch.indexes.backends.chroma._get_default_embedder",
@@ -102,6 +107,7 @@ def test_stub_call_sites_pass_embedding_provider() -> None:
 def test_partial_embedding_raises() -> None:
     """Mixed precomputed / missing embeddings must raise, not discard vectors."""
     collection = MagicMock()
+    collection.count = MagicMock(return_value=0)
     fake = _FakeEmbedder()
     backend = _backend_with_collection(collection, embedding_provider=fake)
     chunks = [
@@ -118,10 +124,10 @@ def test_partial_embedding_raises() -> None:
 
 @pytest.mark.unit
 def test_embedding_metadata_written_and_mismatch_raises() -> None:
-    """Fresh writes stamp model metadata; mismatched construct raises."""
+    """Empty collections stamp model metadata; mismatched construct raises."""
     collection = MagicMock()
+    collection.count = MagicMock(return_value=0)
     fake = _FakeEmbedder()
-    # Simulate a legacy collection created without embedding metadata.
     backend = _backend_with_collection(
         collection,
         embedding_provider=fake,
@@ -137,7 +143,7 @@ def test_embedding_metadata_written_and_mismatch_raises() -> None:
 
     other = _FakeEmbedder()
     other.model_id = "other-model"
-    with pytest.raises(ValueError, match=r"embedding_model_id|model"):
+    with pytest.raises(EmbeddingModelMismatchError, match=r"embedding_model_id|model"):
         _backend_with_collection(
             collection,
             embedding_provider=other,
@@ -148,6 +154,40 @@ def test_embedding_metadata_written_and_mismatch_raises() -> None:
                 "embedding_version": fake.version,
             },
         )
+
+    # Same model_id but different dimensions must also raise.
+    with pytest.raises(EmbeddingModelMismatchError, match=r"embedding_dimensions"):
+
+        class _DimMismatch(_FakeEmbedder):
+            @property
+            def dimensions(self) -> int:
+                return 16
+
+        _backend_with_collection(
+            collection,
+            embedding_provider=_DimMismatch(),
+            collection_metadata={
+                "hnsw:space": "cosine",
+                "embedding_model_id": fake.model_id,
+                "embedding_dimensions": fake.dimensions,
+                "embedding_version": fake.version,
+            },
+        )
+
+
+@pytest.mark.unit
+def test_legacy_populated_collection_refuses_auto_stamp() -> None:
+    """Do not invent embedding_model_id on a populated legacy collection."""
+    collection = MagicMock()
+    collection.count = MagicMock(return_value=3)
+    fake = _FakeEmbedder()
+    backend = _backend_with_collection(
+        collection,
+        embedding_provider=fake,
+        collection_metadata={"hnsw:space": "cosine"},
+    )
+    backend.add([Chunk(id="c0", content="x", doc_id="d0", embedding=None, metadata={})])
+    collection.modify.assert_not_called()
 
 
 @pytest.mark.unit

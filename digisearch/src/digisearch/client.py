@@ -58,9 +58,9 @@ class DigiSearch:
             except ImportError:
                 return None
         try:
-            from digisearch.indexes.backends.chroma import _get_default_embedder
+            from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
-            return _get_default_embedder()
+            return get_default_minilm_embedder()
         except ImportError:
             return None
 
