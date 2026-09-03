@@ -136,7 +136,6 @@ def test_default_embedder_constructed_once_across_n_queries_via_dispatcher(
     monkeypatch.delenv("CHROMA_HOST", raising=False)
 
     import digisearch.embedding.providers.minilm as minilm_module
-    import digisearch.indexes.backends.vectorize as vectorize_module
 
     # Force a cold cache regardless of what earlier tests left behind.
     monkeypatch.setattr(minilm_module, "_default_minilm_singleton", None, raising=False)
