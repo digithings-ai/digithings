@@ -387,14 +387,14 @@ def build_dashboard_get_policy_gate_evaluation_tool() -> dict[str, Any]:
 
 
 def build_digiquant_compile_research_portfolio_tool() -> dict[str, Any]:
-    """Dry compile research + portfolio graphs for DigiGraph product graphs (#3415)."""
+    """Dry compile research + portfolio graphs for digigraph product graphs (#3415)."""
     return {
         "type": "function",
         "function": {
             "name": "digiquant_compile_research_portfolio",
             "description": (
                 "Compile digiquant research and portfolio LangGraph topologies without "
-                "LLM calls or book writes. Used by DigiGraph product graphs "
+                "LLM calls or book writes. Used by digigraph product graphs "
                 "(research-portfolio-chain) as the dry-run path (#3415)."
             ),
             "parameters": {
@@ -414,7 +414,7 @@ def build_digiquant_compile_research_portfolio_tool() -> dict[str, Any]:
                     "graph_name": {
                         "type": "string",
                         "default": "research-portfolio-chain",
-                        "description": "DigiGraph product graph name for idempotency key.",
+                        "description": "digigraph product graph name for idempotency key.",
                     },
                 },
             },

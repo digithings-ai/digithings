@@ -1,6 +1,6 @@
-"""DigiGraph product graphs — scheduled digiquant research/portfolio runs (#3415).
+"""digigraph product graphs — scheduled digiquant research/portfolio runs (#3415).
 
-Platform rule: product paths are DigiGraph → digillm (via digigraph.llm_client when
+Platform rule: product paths are digigraph → digillm (via digigraph.llm_client when
 LLM nodes exist). Domain logic stays in digiquant; digigraph never imports
 digiquant Python packages — vertical calls use ``invoke_digiquant_tool``.
 
@@ -12,7 +12,7 @@ same issues (#3415 / #3424).
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal  # score:allow untyped any — digiquant hub JSON bodies
 
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -37,7 +37,7 @@ PRODUCT_GRAPH_SPECS: dict[str, ProductGraphSpec] = {
     "research-portfolio-chain": ProductGraphSpec(
         name="research-portfolio-chain",
         description=(
-            "Daily digiquant research → portfolio chain as a DigiGraph product "
+            "Daily digiquant research → portfolio chain as a digigraph product "
             "graph. First slice: dry compile via digiquant orchestrator."
         ),
         digiquant_tool="digiquant_compile_research_portfolio",
@@ -117,7 +117,7 @@ def _invoke_digiquant(
         return {
             "status": "error",
             "error": (
-                "full apply is not enabled on DigiGraph product graphs yet; "
+                "full apply is not enabled on digigraph product graphs yet; "
                 "pass dry_run=true (compile-only) or use digiquant.portfolio.chain"
             ),
         }

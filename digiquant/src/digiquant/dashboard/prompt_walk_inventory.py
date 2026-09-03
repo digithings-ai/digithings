@@ -1,6 +1,6 @@
 """Prompt / structured-output walk inventory for digiquant nodes (#3424).
 
-Static catalog used while Chris walks each node with DigiGraph product-graph
+Static catalog used while Chris walks each node with digigraph product-graph
 scaffolding (#3415). This is not a second orchestration layer — it names the
 current contract so the walk can mark keep / reconsider / prose without
 re-deriving phase builders.
@@ -115,7 +115,7 @@ PROMPT_WALK_NODES: tuple[PromptWalkNode, ...] = (
 
 
 class PromptWalkInventory(BaseModel):
-    """Versioned inventory returned to DigiGraph / tests."""
+    """Versioned inventory returned to digigraph / tests."""
 
     model_config = ConfigDict(extra="forbid")
 

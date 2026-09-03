@@ -1144,7 +1144,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
 
 @v1.get("/product_graphs")
 def v1_list_product_graphs() -> dict:
-    """List DigiGraph product graphs (digiquant research/portfolio scheduled path, #3415)."""
+    """List digigraph product graphs (digiquant research/portfolio scheduled path, #3415)."""
     from digigraph.graph.product_graphs import list_product_graphs
 
     return {
@@ -1161,7 +1161,7 @@ def v1_run_product_graph(
 ) -> dict:
     """Start one product-graph run (dry compile by default).
 
-    DigiGraph owns the LangGraph entry; digiquant owns domain compile/apply via
+    digigraph owns the LangGraph entry; digiquant owns domain compile/apply via
     ``POST /v1/orchestrator_invoke``. Full apply is refused until cutover.
     """
     import os

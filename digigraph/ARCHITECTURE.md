@@ -367,7 +367,7 @@ digigraph/src/digigraph/
 │   ├── research.py              research_node, _run_document_rag_path, _run_quant_or_augmented_path
 │   ├── research_subgraph.py     build_research_subgraph() — research_inner + research_brief_builder
 │   ├── research_brief.py        research_brief_builder_node
-│   ├── product_graphs.py        DigiGraph product graphs (#3415) — research-portfolio-chain dry path
+│   ├── product_graphs.py        digigraph product graphs (#3415) — research-portfolio-chain dry path
 │   └── pipeline_builder.py      phase-structured StateGraph compiler (digiquant research/portfolio consumer)
 ├── orchestration/
 │   ├── registry.py              ToolContext, register_tool, register_skill, get_tools, execute
@@ -1129,11 +1129,11 @@ These primitives stay research-agnostic on purpose. Any sub-graph that wants
 phase-structured parallel research can reuse them by declaring its own
 phase list.
 
-## DigiGraph product graphs (#3415)
+## digigraph product graphs (#3415)
 
 Scheduled digiquant **research → portfolio** work is moving from the digiquant
-CLI sidecar (`python -m digiquant.portfolio.chain`) onto DigiGraph-owned product
-graphs so the product path is DigiGraph → digillm (LLM nodes use
+CLI sidecar (`python -m digiquant.portfolio.chain`) onto digigraph-owned product
+graphs so the product path is digigraph → digillm (LLM nodes use
 `digigraph.llm_client`). Domain graphs still compile inside digiquant; digigraph
 never imports digiquant Python packages.
 

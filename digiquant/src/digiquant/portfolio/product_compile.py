@@ -1,4 +1,4 @@
-"""Compile-only research → portfolio topology for DigiGraph product graphs (#3415).
+"""Compile-only research → portfolio topology for digigraph product graphs (#3415).
 
 This is the digiquant-owned dry path that digigraph invokes over
 ``POST /v1/orchestrator_invoke`` (no digigraph → digiquant Python import).
@@ -10,13 +10,9 @@ the book.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal
+from typing import Any, Literal  # score:allow untyped any — orchestrator_invoke JSON payload
 
 from pydantic import BaseModel, ConfigDict, Field
-
-from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_graph
-from digiquant.research.graph import ResearchGraphDeps, build_research_graph
-from digiquant.research.phases.preflight import PreflightDeps
 
 
 class ProductCompileGraphStatus(BaseModel):
@@ -30,7 +26,7 @@ class ProductCompileGraphStatus(BaseModel):
 
 
 class ProductCompileResult(BaseModel):
-    """Structured dry-run result for DigiGraph product-graph scaffolding."""
+    """Structured dry-run result for digigraph product-graph scaffolding."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,9 +65,15 @@ def compile_research_portfolio(
     """Compile research + portfolio graphs without invoking nodes.
 
     Mirrors ``portfolio.chain`` ``--dry-run`` but returns a Pydantic model so
-    DigiGraph product graphs and tests can assert topology without parsing CLI
+    digigraph product graphs and tests can assert topology without parsing CLI
     stdout.
     """
+    # Lazy imports: digiquant-only CI omits digigraph/openai; module import must
+    # stay light so orchestrator manifest + idempotency helpers collect cleanly.
+    from digiquant.portfolio.graph import PortfolioGraphDeps, build_portfolio_graph
+    from digiquant.research.graph import ResearchGraphDeps, build_research_graph
+    from digiquant.research.phases.preflight import PreflightDeps
+
     wl = tuple(str(t).strip().upper() for t in watchlist if str(t).strip())
     statuses: list[ProductCompileGraphStatus] = []
 

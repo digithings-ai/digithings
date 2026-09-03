@@ -1,6 +1,6 @@
 # Prompt + structured-output walk (#3424)
 
-Companion to DigiGraph product graphs (#3415). Walk each digiquant research /
+Companion to digigraph product graphs (#3415). Walk each digiquant research /
 portfolio node with Chris: current prompt, current output, agree keep vs
 reconsider vs prose. Machine catalog:
 `digiquant.dashboard.prompt_walk_inventory.prompt_walk_inventory()`.
@@ -12,7 +12,7 @@ reconsider vs prose. Machine catalog:
   H7 direction/rank/confidence).
 - Prefer prose where structured JSON destroys signal (notably H6 deliberation —
   see `docs/reviews/2026-08-06-olympus-pipeline-review.md` OLY-REV-004).
-- Do this in the same pass as DigiGraph hosting; do not wait for a second epic.
+- Do this in the same pass as digigraph hosting; do not wait for a second epic.
 
 ## Seed nodes (update as walked)
 
@@ -32,4 +32,4 @@ reconsider vs prose. Machine catalog:
 
 1. Expand inventory to every A1–A4 / H1–H9 skill slug.
 2. For each node: paste current skill prompt + sample output; agree change.
-3. Land prompt/skill edits on this branch after DigiGraph dry path is green.
+3. Land prompt/skill edits on this branch after digigraph dry path is green.

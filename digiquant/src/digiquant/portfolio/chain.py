@@ -674,7 +674,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     }
 
     if args.dry_run:
-        # Compile both graphs cleanly, no invocation (shared with DigiGraph #3415).
+        # Compile both graphs cleanly, no invocation (shared with digigraph #3415).
         from digiquant.portfolio.product_compile import compile_research_portfolio
 
         compile_result = compile_research_portfolio(

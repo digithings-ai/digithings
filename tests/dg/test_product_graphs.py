@@ -1,9 +1,9 @@
-"""Unit tests for DigiGraph product graphs (#3415)."""
+"""Unit tests for digigraph product graphs (#3415)."""
 
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import Any  # score:allow untyped any — fake digiquant invoker payloads
 
 import pytest
 from digigraph.graph.product_graphs import (

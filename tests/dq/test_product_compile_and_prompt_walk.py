@@ -7,11 +7,14 @@ from datetime import date
 import pytest
 from digiquant.dashboard.prompt_walk_inventory import prompt_walk_inventory
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest
-from digiquant.portfolio.product_compile import compile_research_portfolio, idempotency_key_for
 
 
 @pytest.mark.unit
 def test_compile_research_portfolio_dry_run() -> None:
+    # digiquant-only CI omits digigraph/openai; research-graph lane covers compile.
+    pytest.importorskip("openai")
+    from digiquant.portfolio.product_compile import compile_research_portfolio, idempotency_key_for
+
     result = compile_research_portfolio(
         run_date=date(2026, 9, 3),
         watchlist=("AAPL",),
@@ -25,6 +28,16 @@ def test_compile_research_portfolio_dry_run() -> None:
         graph_name="research-portfolio-chain",
         run_date=date(2026, 9, 3),
     )
+
+
+@pytest.mark.unit
+def test_idempotency_key_for_is_stable() -> None:
+    from digiquant.portfolio.product_compile import idempotency_key_for
+
+    assert idempotency_key_for(
+        graph_name="research-portfolio-chain",
+        run_date=date(2026, 9, 3),
+    ) == "research-portfolio-chain:2026-09-03:daily:none"
 
 
 @pytest.mark.unit
