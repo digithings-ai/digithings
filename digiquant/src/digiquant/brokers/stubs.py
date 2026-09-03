@@ -1,6 +1,6 @@
 """Broker adapters: not implemented; raise NotImplementedError for every method.
 
-Migrated to the widened Kairos `BrokerAdapter` protocol (K0) — each stub implements the
+Migrated to the widened execution `BrokerAdapter` protocol (K0) — each stub implements the
 full surface (`get_account`, `get_positions`, `submit_order(req)`, `get_order`,
 `cancel_order`, `list_fills`) so `isinstance(<stub>(), BrokerAdapter)` holds, even though
 every method still raises `NotImplementedError`. No I/O happens anywhere in this module.

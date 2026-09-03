@@ -1,6 +1,6 @@
 # Onboarding — Developing on digithings
 
-Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [CLAUDE.md](CLAUDE.md) (repo-wide agent rules) and [AGENTS.md](AGENTS.md) (stack-wide non-negotiables) — read both once, then come back here to see how the pieces connect day-to-day.
+Welcome. This guide is how Chris develops on this monorepo with Claude Code. It's the companion to [AGENTS.md](AGENTS.md) (canonical repo-wide agent rules). [CLAUDE.md](CLAUDE.md) is a Claude Code loader stub that points at AGENTS.md — read AGENTS.md once, then come back here to see how the pieces connect day-to-day.
 
 If you're a new human contributor, skim this front-to-back and run the one-time setup.
 If you're a Claude Code session picking this up fresh, the later sections are the playbook.
@@ -59,7 +59,6 @@ All regenerated from `agents.yml` + `agents/sources/*`. Cursor and Copilot don't
 **Skills** (`.claude/skills/`) — workflows triggered by name:
 
 - `worktree-task-start` — pre-flight checklist wrapping `make task ISSUE=N`.
-- `score-and-fix` — run `make score`, walk rubric fixes for each failing dimension.
 - `write-acceptance-criteria` — Given/When/Then format + test command mapping.
 - `ci-triage` / `triage` — diagnose red CI on a PR; bucket failures, give fix commands.
 
@@ -67,7 +66,7 @@ All regenerated from `agents.yml` + `agents/sources/*`. Cursor and Copilot don't
 
 - `/task` — start a backlog task end-to-end (`make task ISSUE=N`).
 - `/spec` — generate a GitHub Issue body from a goal.
-- `/score` — run the 4-dimension scoring gate on staged changes.
+- `/score` — optional 4-dimension rubric on staged changes (not a pre-PR gate).
 - `/triage` — CI triage on the current PR.
 - `/normalize` — reshape rambling input into a structured instruction block.
 
@@ -84,7 +83,7 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 | Branch | When to use |
 |---|---|
 | `main` | Releases only. Never push directly. |
-| `develop` | Cross-cutting work: tooling, CI, docs, the client pilot, Atlas, releases. |
+| `develop` | Cross-cutting work: tooling, CI, docs, the client pilot, research, releases. |
 | `module/<component>` | Focused session on a single module (`digigraph`, `digiquant`, `digichat`, `digisearch`, `digikey`, `digismith`, `digiclaw`, `digibase`). |
 | `task/<N>-<slug>` | Individual backlog task. Auto-created by `make task ISSUE=N`. |
 
@@ -124,25 +123,15 @@ make task ISSUE=N                   # branches task/N-<slug> in an isolated work
 # ... do the work ...
 ruff check . && ruff format .
 make test-unit                      # pytest -m unit
-make score                          # 4-dimension gate; MUST pass before commit
 make commit MSG="feat(digiquant): short imperative subject (#N)"
 make pr                             # opens the PR with template pre-filled (requires gh)
 ```
 
-`make commit` runs conventional-commit validation + scoring. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`.
+`make commit` runs conventional-commit validation. `make pr` uses `scripts/create_pr.sh`, which routes the PR into the correct base branch via `scripts/project_routing.json`. Quality bar is **review** ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
 
-### Scoring gate — `make score`
+### Optional `make score`
 
-Four dimensions, hard thresholds. PRs that fall below fail CI:
-
-| Dimension | Minimum |
-|---|---|
-| Security | ≥ 8 |
-| Quality | ≥ 8 |
-| Optimization | ≥ 7 |
-| Accuracy | ≥ 9 |
-
-Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` skill) to walk failures dimension-by-dimension.
+`make score` and [`docs/scoring/`](docs/scoring/) are an optional human/CI tool (CI may still run the score job on a PR diff). Do not treat them as an agent pre-flight. Review skills own security, quality, optimization, and accuracy.
 
 ### GitHub project automation
 
@@ -155,8 +144,8 @@ Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` sk
 ## 5. PR review flow
 
 1. **Pre-push**: local `pre-push` hook blocks pushes to non-origin remotes, pushes to `main` without `ALLOW_MAIN_PUSH=1`, and live-trading-path pushes without a `Human-Approved-By:` trailer.
-2. **CI on open**: lint, unit tests, scoring gate, doc-link check, agents-init drift check.
-3. **Review**: invoke `/review` on your own PR before asking a human — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see CLAUDE.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available.
+2. **CI on open**: lint, unit tests, optional score job, doc-link check, agents-init drift check.
+3. **Review**: invoke `/review` on your own PR — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see AGENTS.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available. Then merge when merge-ready ([AGENTS.md § Merge-when-ready](AGENTS.md#merge-when-ready)).
 4. **CI red?** `/triage <N>` buckets failures by type and proposes minimal fix commands.
 5. **Security-sensitive changes**: run `/security-review` on the branch before requesting review.
 
@@ -198,7 +187,7 @@ make up-digichat / make down-digichat
 make test                           # unit + e2e (needs stack up)
 make test-unit                      # pytest -m unit (no stack)
 make test-e2e                       # pytest -m e2e
-make test-cov                       # coverage (needs `pip install -e` for each service — see CLAUDE.md)
+make test-cov                       # coverage (needs `pip install -e` for each service — see AGENTS.md)
 
 # Agent dev kit
 make status [COMPONENT=x]           # open agent-task issues
@@ -206,7 +195,7 @@ make batch-candidates               # group open tasks for parallel execution
 make new-task                       # interactive issue creation
 make task ISSUE=N                   # start backlog task in isolated worktree
 make parse-error                    # identify component from a Python traceback
-make score                          # self-score staged changes
+make score                          # optional 4-dimension rubric (human/CI)
 make commit MSG="feat(x):…"         # validated conventional commit
 make pr                             # open PR with template
 
@@ -225,7 +214,7 @@ make find-stale                     # find stale branches / artifacts
 
 - **Nested git repos under the monorepo root** (e.g. a cloned `digichat/` alongside `frontend/digichat/`) will trip cleanup scripts and pollute `git status`. If you see one, check whether it's stranded work before deleting. Everything that ships lives inside the monorepo tree — clones outside `frontend/` or `apps/` are almost always stale.
 - **Stray `node_modules/` at the repo root** means you ran `npm install` in the wrong directory. Workspace installs must happen under `frontend/` (design workspace root) or a specific app dir.
-- **Atlas frontend regeneration**: `frontend/olympus/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
+- **research frontend regeneration**: `frontend/dashboard/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
 - **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.worktrees/task/N-slug/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove .worktrees/task/N-slug/` after the PR merges.
 - **`make score` requires the editable installs** — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"` once per environment.
 
@@ -233,8 +222,8 @@ make find-stale                     # find stale branches / artifacts
 
 ## 9. Where to find more
 
-- [CLAUDE.md](CLAUDE.md) — repo-wide instructions for Claude Code sessions.
-- [AGENTS.md](AGENTS.md) — stack-wide non-negotiable rules (applies to every IDE / agent).
+- [AGENTS.md](AGENTS.md) — canonical repo-wide agent rules (every IDE / agent).
+- [CLAUDE.md](CLAUDE.md) — Claude Code loader stub; points at AGENTS.md.
 - [docs/VISION.md](docs/VISION.md) — product strategy and roadmap.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram.
 - [docs/adr/](docs/adr/) — architecture decision records. 0002 (two-domain plan), 0006 (public dogfood projects), 0009 (frontend umbrella) are the most referenced.

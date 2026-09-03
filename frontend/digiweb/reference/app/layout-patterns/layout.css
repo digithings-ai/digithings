@@ -96,7 +96,7 @@
 /* Social-proof / testimonial wall — fully migrated to token utilities in
    testimonial-wall-reference.tsx; no CSS rules remain. */
 
-/* ── phone mockup · olympus app (device-frame product surface) ─────────── */
+/* ── phone mockup · dashboard app (device-frame product surface) ─────────── */
 
 .phone-stage {
   margin-top: 1.2rem;
@@ -104,7 +104,7 @@
   justify-content: center;
   padding: clamp(1.5rem, 5vw, 3rem);
   border: 1px solid var(--hair);
-  border-radius: 16px;
+  border-radius: 0;
   background:
     radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
     color-mix(in srgb, var(--surface) 40%, transparent);
@@ -132,7 +132,7 @@
 .phone-btn {
   position: absolute;
   width: 3px;
-  border-radius: 3px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink) 22%, var(--hair));
 }
 .phone-btn--power { right: -4px; top: 128px; height: 54px; }
@@ -156,7 +156,7 @@
   transform: translateX(-50%);
   width: 74px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: 0;
   background: #05070a;
   z-index: 5;
 }
@@ -171,7 +171,7 @@
   color: var(--ink-soft);
 }
 .oly-status-r { display: inline-flex; gap: 3px; align-items: flex-end; }
-.oly-status-r i { width: 3px; height: 8px; background: var(--ink-mute); border-radius: 1px; }
+.oly-status-r i { width: 3px; height: 8px; background: var(--ink-mute); border-radius: 0; }
 
 .oly-head {
   display: flex;

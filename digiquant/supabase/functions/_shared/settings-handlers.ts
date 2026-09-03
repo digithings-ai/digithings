@@ -7,14 +7,29 @@
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
+ *   GET    /keys               — BYOK fingerprint projection only
+ *   POST   /keys/connect       — seal LLM api_key (AAD workspace:provider:llm)
+ *   POST   /keys/revoke        — mark revoked (fail closed on unknown)
  *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
  *   PATCH  /notifications      — upsert notification_prefs (workspace member)
+ *   GET    /notifications/log  — notification_log event keys (digest proof; no bodies)
+ *   GET    /jobs               — job_runs for the caller's workspace (overlay hop proof)
+ *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
+ *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
+ *                                + public Alpaca OAuth client id (never the secret)
+ *   POST   /access/redeem-invite — hashed FX Hub invite → client_product_grants
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
  * K5 migration 103 (notification_prefs).
  */
 
+import {
+  requireDeskEligible,
+  requireStudioEligible,
+  resolveAccessSnapshot,
+  type AccessAdmin,
+} from "./access.ts";
 import {
   requireBearerHeader,
   requireWorkspaceMember,
@@ -41,6 +56,15 @@ import {
   type BrokerCredential,
   type MasterKey,
 } from "./vault.ts";
+import {
+  pinnedAlpacaRedirectUriFromOrigin,
+  publicAlpacaOauthClientId,
+  settingsBillingReturnUrl,
+} from "./app-url.ts";
+import {
+  redeemProductInvite,
+  type InviteStore,
+} from "./invite.ts";
 
 export type SettingsDeps = {
   admin: AdminClient;
@@ -57,16 +81,33 @@ export type SettingsDeps = {
   now?: () => Date;
   /** Override APP_URL for pinned OAuth redirect_uri (tests). */
   appUrl?: string;
+  /** SHA-256 hex of the FX Hub invite (Supabase secret FX_HUB_INVITE_HASH). */
+  inviteHash?: string | null;
+  /** Tests inject an in-memory store; production uses PostgREST. */
+  inviteStore?: InviteStore;
 };
 
 const FINGERPRINT_COLUMNS =
   "id, workspace_id, broker, env, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
 
-/** Custom/enterprise only — baseline cannot write profiles or connect brokers. */
-const ELIGIBLE_TIERS = new Set(["custom", "enterprise"]);
+const KEY_FINGERPRINT_COLUMNS =
+  "id, workspace_id, provider, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
 
-/** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
-export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";
+/** Closed vocabulary matching migration 104 workspace_provider_credentials.provider. */
+const LLM_PROVIDERS = new Set([
+  "openai",
+  "anthropic",
+  "groq",
+  "openrouter",
+  "xai",
+  "gemini",
+]);
+
+/** AAD env-slot for BYOK — must match digiquant.dashboard.overlay.byok.BYOK_AAD_PURPOSE. */
+export const BYOK_AAD_PURPOSE = "llm";
+
+/** Fixed OAuth callback path under dashboard (must match frontend alpacaOAuthCallbackPath). */
+export { ALPACA_OAUTH_CALLBACK_PATH } from "./app-url.ts";
 
 function pathOf(url: URL): string {
   // Supabase mounts at /settings or /functions/v1/settings — strip both prefixes.
@@ -110,6 +151,18 @@ export async function handleSettingsRequest(
   if (method === "POST" && path === "/brokers/revoke") {
     return revokeBroker(req, deps);
   }
+  if (method === "GET" && (path === "/keys" || path === "/keys/")) {
+    return listKeys(req, deps);
+  }
+  if (method === "POST" && path === "/keys/connect") {
+    return connectKey(req, deps);
+  }
+  if (method === "POST" && path === "/keys/revoke") {
+    return revokeKey(req, deps);
+  }
+  if (method === "GET" && path === "/notifications/log") {
+    return listNotificationLog(req, deps);
+  }
   if (
     method === "GET" &&
     (path === "/notifications" || path === "/notifications/")
@@ -118,6 +171,18 @@ export async function handleSettingsRequest(
   }
   if (method === "PATCH" && path === "/notifications") {
     return patchNotifications(req, deps);
+  }
+  if (method === "GET" && (path === "/jobs" || path === "/jobs/")) {
+    return listJobs(req, deps);
+  }
+  if (method === "GET" && (path === "/fills" || path === "/fills/")) {
+    return listFills(req, deps);
+  }
+  if (method === "GET" && (path === "/app-urls" || path === "/app-urls/")) {
+    return getAppUrls(req, deps);
+  }
+  if (method === "POST" && path === "/access/redeem-invite") {
+    return redeemInvite(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
@@ -136,21 +201,34 @@ async function resolveMember(
 }
 
 /**
- * Fail closed on plan tier using the authoritative workspace row.
+ * Fail closed on plan tier using workspace row + ops entitlement_grants.
  *
  * `workspaces.plan_tier` is CAS-updated by the Stripe webhook. Preferring the
- * JWT `app_metadata.plan_tier` claim here fails open after cancel when claim
+ * JWT `app_metadata.plan_tier` claim alone fails open after cancel when claim
  * sync sets `claim_sync_pending` but leaves a stale elevated claim on the
  * token — and fails closed incorrectly on upgrade when the claim lags.
+ *
+ * Creator/ops emails in `entitlement_grants` raise the *effective* floor
+ * (migration 108/115) so studio overlay + desk brokers work without Stripe
+ * for allowlisted operators. Paying customers still go through Stripe →
+ * workspaces.plan_tier.
  */
-function requireEligibleTier(workspacePlanTier: string): Response | null {
-  const tier = (workspacePlanTier ?? "").trim().toLowerCase();
-  if (!ELIGIBLE_TIERS.has(tier)) {
-    return jsonError(
-      403,
-      "TIER_FORBIDDEN",
-      "plan_tier must be custom or enterprise for this settings action",
-    );
+async function requireEligibleTier(
+  deps: SettingsDeps,
+  authz: { user: AuthUser; workspace: { id: string; plan_tier: string } },
+  min: "desk" | "studio",
+): Promise<Response | null> {
+  const snap = await resolveAccessSnapshot({
+    admin: deps.admin as unknown as AccessAdmin,
+    email: authz.user.email,
+    workspaceId: authz.workspace.id,
+    workspacePlanTier: authz.workspace.plan_tier,
+  });
+  const gate = min === "desk"
+    ? requireDeskEligible(snap.effectivePlanTier)
+    : requireStudioEligible(snap.effectivePlanTier);
+  if (!gate.ok) {
+    return jsonError(403, "TIER_FORBIDDEN", gate.message);
   }
   return null;
 }
@@ -162,11 +240,7 @@ export function pinnedAlpacaRedirectUri(appUrl?: string): string {
     Deno.env.get("APP_URL") ??
     Deno.env.get("NEXT_PUBLIC_APP_URL") ??
     "";
-  const base = raw.replace(/\/+$/, "");
-  if (!base) {
-    throw new Error("APP_URL unset");
-  }
-  return `${base}${ALPACA_OAUTH_CALLBACK_PATH}`;
+  return pinnedAlpacaRedirectUriFromOrigin(raw);
 }
 
 function isUniqueViolation(err: { code?: string; message?: string }): boolean {
@@ -176,6 +250,24 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
 }
 
 const DEFAULT_PROFILE_KEY = "workspace";
+
+function withWorkspaceBilling(
+  body: Record<string, unknown>,
+  workspace: {
+    plan_tier: string;
+    subscription_status: string;
+    stripe_subscription_id?: string | null;
+  },
+): Record<string, unknown> {
+  const stripeSub = workspace.stripe_subscription_id;
+  return {
+    ...body,
+    plan_tier: workspace.plan_tier,
+    subscription_status: workspace.subscription_status,
+    // Boolean only — never the Stripe customer/subscription id.
+    has_stripe_subscription: typeof stripeSub === "string" && stripeSub.length > 0,
+  };
+}
 
 function emptyProfileBody(
   workspaceId: string,
@@ -191,7 +283,38 @@ function emptyProfileBody(
     recorded_at: null,
     investment: null,
     assets: null,
+    watchlist: [],
+    themes: [],
+    research_budget_usd: null,
   };
+}
+
+function normalizeStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const cleaned = item.trim();
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
+function parseResearchBudget(
+  raw: unknown,
+): { ok: true; value: number | null } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: null };
+  }
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+    return { ok: false, message: "research_budget_usd must be a number ≥ 0 or null" };
+  }
+  return { ok: true, value: raw };
 }
 
 function profileResponseBody(row: Record<string, unknown>): Record<string, unknown> {
@@ -209,7 +332,37 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
     recorded_at: row.recorded_at ?? null,
     investment: payload.investment ?? null,
     assets: payload.assets ?? null,
+    watchlist: normalizeStringList(payload.watchlist).map((t) => t.toUpperCase()),
+    themes: normalizeStringList(payload.themes).map((t) => t.toLowerCase()),
+    research_budget_usd:
+      typeof payload.research_budget_usd === "number" &&
+        Number.isFinite(payload.research_budget_usd)
+        ? payload.research_budget_usd
+        : null,
   };
+}
+
+/** GET /app-urls — member read of pinned Alpaca + billing URLs + public client id. */
+async function getAppUrls(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+  try {
+    const raw =
+      deps.appUrl ??
+      Deno.env.get("APP_URL") ??
+      Deno.env.get("NEXT_PUBLIC_APP_URL") ??
+      "";
+    return jsonOk({
+      alpaca_redirect_uri: pinnedAlpacaRedirectUri(raw),
+      billing_return_url: settingsBillingReturnUrl(raw),
+      // Public client id only — never ALPACA_OAUTH_CLIENT_SECRET.
+      alpaca_oauth_client_id: publicAlpacaOauthClientId(),
+    });
+  } catch {
+    return jsonError(500, "APP_URL_NOT_CONFIGURED", "APP_URL is not configured");
+  }
 }
 
 /**
@@ -251,10 +404,14 @@ async function getProfile(req: Request, deps: SettingsDeps): Promise<Response> {
   }
 
   if (!tip) {
-    return jsonOk(emptyProfileBody(authz.workspace.id, profileKey));
+    return jsonOk(
+      withWorkspaceBilling(emptyProfileBody(authz.workspace.id, profileKey), authz.workspace),
+    );
   }
 
-  return jsonOk(profileResponseBody(tip as Record<string, unknown>));
+  return jsonOk(
+    withWorkspaceBilling(profileResponseBody(tip as Record<string, unknown>), authz.workspace),
+  );
 }
 
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
@@ -268,6 +425,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     supersedes_id?: string | null;
     watchlist?: string[];
     themes?: string[];
+    research_budget_usd?: number | null;
   };
   try {
     body = await req.json();
@@ -278,7 +436,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  const tierErr = await requireEligibleTier(deps, authz, "studio");
   if (tierErr) return tierErr;
 
   const workspaceId = authz.workspace.id;
@@ -356,16 +514,24 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     }
   }
 
-  const versionId = (deps.uuid ?? crypto.randomUUID)();
+  const budgetParsed = parseResearchBudget(body.research_budget_usd);
+  if (!budgetParsed.ok) {
+    return jsonError(400, "INVALID_BUDGET", budgetParsed.message);
+  }
+  const watchlist = normalizeStringList(body.watchlist).map((t) => t.toUpperCase());
+  const themes = normalizeStringList(body.themes).map((t) => t.toLowerCase());
+
+  // Bind crypto: unbound `crypto.randomUUID` throws TypeError ("expected Crypto") on Deno/Edge.
+  const versionId = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const payload = {
     version_id: versionId,
     profile_key: profileKey,
     schema_version: 1,
     is_house_default: false,
     label,
-    watchlist: body.watchlist ?? [],
-    themes: body.themes ?? [],
-    research_budget_usd: null,
+    watchlist,
+    themes,
+    research_budget_usd: budgetParsed.value,
     investment: body.investment ?? null,
     assets: body.assets ?? null,
   };
@@ -448,6 +614,97 @@ async function listBrokers(req: Request, deps: SettingsDeps): Promise<Response> 
   return jsonOk({ connections });
 }
 
+const JOB_COLUMNS =
+  "id, workspace_id, job_type, status, error, idempotency_key, started_at, finished_at";
+
+async function listJobs(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("job_runs")
+    .select(JOB_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("started_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "job_runs not available");
+  }
+
+  const jobs = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    job_type: row.job_type,
+    status: row.status,
+    error: row.error ?? null,
+    idempotency_key: row.idempotency_key,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+  }));
+  return jsonOk({ jobs });
+}
+
+const FILL_COLUMNS = "id, workspace_id, symbol, quantity, executed_at, recorded_at";
+
+async function listFills(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("broker_executions")
+    .select(FILL_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("executed_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "broker_executions not available");
+  }
+
+  const fills = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    symbol: row.symbol,
+    quantity: row.quantity,
+    executed_at: row.executed_at,
+    recorded_at: row.recorded_at,
+  }));
+  return jsonOk({ fills });
+}
+
+const NOTIFY_LOG_COLUMNS = "event_key, sent_date, sent_at";
+
+async function listNotificationLog(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("notification_log")
+    .select(NOTIFY_LOG_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("sent_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "notification_log not available");
+  }
+
+  const events = (data ?? []).map((row: Record<string, unknown>) => ({
+    event_key: row.event_key,
+    sent_date: row.sent_date,
+    sent_at: row.sent_at,
+  }));
+  return jsonOk({ events });
+}
+
 async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response> {
   let body: {
     workspace_id?: string;
@@ -471,7 +728,7 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  const tierErr = await requireEligibleTier(deps, authz, "desk");
   if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
@@ -531,6 +788,13 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
       try {
         tokens = await exchanger({ code, redirectUri: expectedRedirect });
       } catch (err) {
+        if (err instanceof AlpacaOAuthNotConfiguredError) {
+          return jsonError(
+            500,
+            "OAUTH_NOT_CONFIGURED",
+            "ALPACA_OAUTH_CLIENT_ID and ALPACA_OAUTH_CLIENT_SECRET must be set",
+          );
+        }
         console.error(
           "alpaca oauth exchange failed",
           err instanceof Error ? err.name : "unknown",
@@ -586,7 +850,7 @@ async function insertBrokerConnection(
     scopes: string[];
   },
 ): Promise<Response> {
-  const id = (deps.uuid ?? crypto.randomUUID)();
+  const id = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const row = {
     id,
     workspace_id: args.workspaceId,
@@ -640,7 +904,7 @@ async function insertBrokerConnection(
     return jsonError(500, "CONNECT_FAILED", "Unable to revoke prior connection");
   }
 
-  const retryId = (deps.uuid ?? crypto.randomUUID)();
+  const retryId = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const retryRow = { ...row, id: retryId };
   const { data: retried, error: retryErr } = await deps.admin
     .from("broker_connections")
@@ -724,6 +988,254 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
     id: existing.id,
     broker: existing.broker,
     env: existing.env,
+    fingerprint: existing.fingerprint,
+    status: existing.status,
+    last_used_at: existing.last_used_at,
+    revoked_at: existing.revoked_at,
+  });
+}
+
+async function listKeys(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("workspace_provider_credentials")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "workspace_provider_credentials not available (blocked on T4)",
+    );
+  }
+
+  const keys = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    provider: row.provider,
+    auth_kind: row.auth_kind,
+    fingerprint: row.fingerprint,
+    status: row.status,
+    last_used_at: row.last_used_at,
+    created_at: row.created_at,
+  }));
+
+  return jsonOk({ keys });
+}
+
+async function connectKey(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: {
+    workspace_id?: string;
+    provider?: string;
+    kind?: string;
+    key_id?: string;
+    secret?: string;
+    scopes?: string[];
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const tierErr = await requireEligibleTier(deps, authz, "studio");
+  if (tierErr) return tierErr;
+
+  const provider = (body.provider ?? "").toLowerCase().trim();
+  if (!LLM_PROVIDERS.has(provider)) {
+    return jsonError(
+      400,
+      "INVALID_PROVIDER",
+      "provider must be one of openai, anthropic, groq, openrouter, xai, gemini",
+    );
+  }
+
+  const kind = body.kind ?? "api_key";
+  if (kind !== "api_key") {
+    return jsonError(400, "INVALID_KIND", "BYOK keys require kind=api_key");
+  }
+
+  let credential: BrokerCredential;
+  try {
+    credential = parseCredential({
+      kind: "api_key",
+      key_id: typeof body.key_id === "string" && body.key_id.trim()
+        ? body.key_id.trim()
+        : "api_key",
+      secret: body.secret,
+    });
+  } catch (err) {
+    if (err instanceof VaultPayloadError) {
+      return jsonError(400, "INVALID_CREDENTIAL", "credential payload is invalid");
+    }
+    throw err;
+  }
+
+  const aad = buildAad(authz.workspace.id, provider, BYOK_AAD_PURPOSE);
+  const envelope = await sealCredential(credential, {
+    aad,
+    key: deps.vaultKey,
+  });
+  const fp = await fingerprint(credential);
+  const scopes = Array.isArray(body.scopes) ? body.scopes : [];
+
+  return insertProviderCredential(deps, {
+    workspaceId: authz.workspace.id,
+    provider,
+    credentialKind: credential.kind,
+    envelope,
+    fingerprint: fp,
+    scopes,
+  });
+}
+
+async function insertProviderCredential(
+  deps: SettingsDeps,
+  args: {
+    workspaceId: string;
+    provider: string;
+    credentialKind: string;
+    envelope: { ciphertext: Uint8Array; nonce: Uint8Array; key_id: string };
+    fingerprint: string;
+    scopes: string[];
+  },
+): Promise<Response> {
+  const id = deps.uuid ? deps.uuid() : crypto.randomUUID();
+  const row = {
+    id,
+    workspace_id: args.workspaceId,
+    provider: args.provider,
+    auth_kind: args.credentialKind,
+    ciphertext: encodeBytea(args.envelope.ciphertext),
+    nonce: encodeBytea(args.envelope.nonce),
+    key_id: args.envelope.key_id,
+    fingerprint: args.fingerprint,
+    scopes: args.scopes,
+    status: "active",
+  };
+
+  const { data: inserted, error: insertErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .insert(row)
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .single();
+
+  if (!insertErr && inserted) {
+    return jsonOk({
+      id: inserted.id,
+      provider: inserted.provider,
+      auth_kind: inserted.auth_kind,
+      fingerprint: inserted.fingerprint,
+      status: inserted.status,
+      last_used_at: inserted.last_used_at,
+      created_at: inserted.created_at,
+    });
+  }
+
+  if (!insertErr || !isUniqueViolation(insertErr)) {
+    console.error("byok connect insert failed", insertErr?.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  const stamp = (deps.now ?? (() => new Date))().toISOString();
+  const { error: revokeErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .update({ status: "revoked", revoked_at: stamp })
+    .eq("workspace_id", args.workspaceId)
+    .eq("provider", args.provider)
+    .eq("status", "active");
+
+  if (revokeErr) {
+    console.error("byok reconnect revoke failed", revokeErr.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  const retryId = deps.uuid ? deps.uuid() : crypto.randomUUID();
+  const { data: retried, error: retryErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .insert({ ...row, id: retryId })
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .single();
+
+  if (retryErr || !retried) {
+    console.error("byok reconnect insert failed", retryErr?.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  return jsonOk({
+    id: retried.id,
+    provider: retried.provider,
+    auth_kind: retried.auth_kind,
+    fingerprint: retried.fingerprint,
+    status: retried.status,
+    last_used_at: retried.last_used_at,
+    created_at: retried.created_at,
+  });
+}
+
+async function revokeKey(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: { workspace_id?: string; credential_id?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const credentialId = body.credential_id;
+  if (typeof credentialId !== "string" || !credentialId) {
+    return jsonError(400, "INVALID_PAYLOAD", "credential_id is required");
+  }
+
+  const stamp = (deps.now ?? (() => new Date))().toISOString();
+  const { data: updated, error: updErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .update({ status: "revoked", revoked_at: stamp })
+    .eq("id", credentialId)
+    .eq("workspace_id", authz.workspace.id)
+    .neq("status", "revoked")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .maybeSingle();
+
+  if (updErr) {
+    return jsonError(500, "REVOKE_FAILED", "Unable to revoke credential");
+  }
+
+  if (updated) {
+    return jsonOk({
+      id: updated.id,
+      provider: updated.provider,
+      fingerprint: updated.fingerprint,
+      status: updated.status,
+      last_used_at: updated.last_used_at,
+      revoked_at: updated.revoked_at,
+    });
+  }
+
+  const { data: existing } = await deps.admin
+    .from("workspace_provider_credentials")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .eq("id", credentialId)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (!existing) {
+    return jsonError(404, "CREDENTIAL_NOT_FOUND", "Unknown provider credential");
+  }
+
+  return jsonOk({
+    id: existing.id,
+    provider: existing.provider,
     fingerprint: existing.fingerprint,
     status: existing.status,
     last_used_at: existing.last_used_at,
@@ -916,6 +1428,14 @@ async function patchNotifications(
   return jsonOk(prefsResponseBody(upserted as Record<string, unknown>));
 }
 
+/** Raised when Alpaca OAuth client id/secret are missing from EF secrets. */
+export class AlpacaOAuthNotConfiguredError extends Error {
+  constructor() {
+    super("Alpaca OAuth client not configured");
+    this.name = "AlpacaOAuthNotConfiguredError";
+  }
+}
+
 async function exchangeAlpacaCodeDefault(args: {
   code: string;
   redirectUri: string;
@@ -924,7 +1444,7 @@ async function exchangeAlpacaCodeDefault(args: {
     Deno.env.get("NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID");
   const clientSecret = Deno.env.get("ALPACA_OAUTH_CLIENT_SECRET");
   if (!clientId || !clientSecret) {
-    throw new Error("Alpaca OAuth client not configured");
+    throw new AlpacaOAuthNotConfiguredError();
   }
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -956,10 +1476,136 @@ async function exchangeAlpacaCodeDefault(args: {
   };
 }
 
+function postgrestInviteStore(
+  admin: AdminClient,
+  uuid: () => string,
+): InviteStore {
+  return {
+    async countAttempts(userId, sinceIso) {
+      const { data, error } = await admin
+        .from("product_invite_attempts")
+        .select("id")
+        .eq("user_id", userId)
+        .gte("attempted_at", sinceIso);
+      if (error) {
+        if (String(error.message ?? "").includes("does not exist")) return 0;
+        throw new Error("invite attempts unavailable");
+      }
+      return Array.isArray(data) ? data.length : 0;
+    },
+    async recordAttempt(row) {
+      const { error } = await admin.from("product_invite_attempts").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && !String(error.message ?? "").includes("does not exist")) {
+        throw new Error("invite attempt write failed");
+      }
+    },
+    async listActiveCodes(productKey) {
+      const { data, error } = await admin
+        .from("product_invite_codes")
+        .select("id, code_hash, max_redemptions, redemption_count, revoked_at")
+        .eq("product_key", productKey);
+      if (error || !Array.isArray(data)) return [];
+      return data.filter((row): row is {
+        id: string;
+        code_hash: string;
+        max_redemptions: number | null;
+        redemption_count: number;
+        revoked_at: string | null;
+      } => typeof row.id === "string" && typeof row.code_hash === "string");
+    },
+    async hasGrant(email, productKey) {
+      const { data, error } = await admin
+        .from("client_product_grants")
+        .select("product_key")
+        .eq("email", email);
+      if (error || !Array.isArray(data)) return false;
+      return data.some((row) => row.product_key === productKey);
+    },
+    async insertGrant(email, productKey, note) {
+      const { error } = await admin.from("client_product_grants").insert({
+        email,
+        product_key: productKey,
+        note,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("product grant insert failed");
+      }
+    },
+    async recordRedemption(row) {
+      const { error } = await admin.from("product_invite_redemptions").insert({
+        id: uuid(),
+        ...row,
+      });
+      if (error && error.code !== "23505") {
+        throw new Error("invite redemption write failed");
+      }
+    },
+    async incrementRedemptionCount(id) {
+      const { data } = await admin
+        .from("product_invite_codes")
+        .select("redemption_count")
+        .eq("id", id)
+        .maybeSingle();
+      const current =
+        data && typeof data.redemption_count === "number" ? data.redemption_count : 0;
+      await admin
+        .from("product_invite_codes")
+        .update({ redemption_count: current + 1 })
+        .eq("id", id);
+    },
+    async recordAdminAudit(row) {
+      if (!row.workspace_id) return;
+      await admin.from("notification_log").insert({
+        workspace_id: row.workspace_id,
+        event_key: row.event_key,
+        sent_date: row.sent_date,
+        sent_at: row.sent_at,
+      });
+    },
+  };
+}
+
+async function redeemInvite(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await req.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const requestedWorkspaceId =
+    typeof body.workspace_id === "string" ? body.workspace_id : null;
+  const member = await resolveMember(deps, requestedWorkspaceId);
+  const workspaceId = member.ok ? member.workspace.id : null;
+  const store = deps.inviteStore ??
+    postgrestInviteStore(deps.admin, deps.uuid ?? (() => crypto.randomUUID()));
+  const result = await redeemProductInvite({
+    userId: deps.user.id,
+    email: deps.user.email,
+    productKey: body.product_key,
+    code: body.code,
+    envHash: deps.inviteHash,
+    workspaceId,
+    store,
+    now: deps.now?.(),
+  });
+  if (!result.ok) {
+    return jsonError(result.status, result.code, result.message);
+  }
+  return jsonOk({
+    ok: true,
+    already_granted: result.alreadyGranted,
+    product_key: result.productKey,
+  });
+}
+
 /** Helper for index.ts — build deps from a verified user + admin client. */
 export function createDefaultDeps(user: AuthUser, admin?: AdminClient): SettingsDeps {
   return {
     admin: admin ?? createAdminClient(),
     user,
+    inviteHash: Deno.env.get("FX_HUB_INVITE_HASH") ?? null,
   };
 }

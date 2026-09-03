@@ -105,8 +105,8 @@ def test_contracts_are_exported_from_package() -> None:
 def _node_run(**overrides: object) -> NodeRunRecord:
     values: dict[str, object] = {
         "node_run_id": uuid4(),
-        "run_id": "olympus-2026-08-06-attempt-1",
-        "node_name": "atlas.phase_1",
+        "run_id": "dashboard-2026-08-06-attempt-1",
+        "node_name": "research.phase_1",
         "started_at": NOW,
         "finished_at": NOW,
         "outcome": NodeRunOutcome.SUCCEEDED,
@@ -167,7 +167,7 @@ def test_fanout_key_accepts_the_bound() -> None:
 
 
 # "ticker" is listed deliberately: `fanout_key` is an opaque producer-supplied label, and
-# DigiLLM must never grow Olympus vocabulary of its own. extra="forbid" turns that anti-goal
+# DigiLLM must never grow dashboard vocabulary of its own. extra="forbid" turns that anti-goal
 # into a test rather than prose.
 @pytest.mark.parametrize("field", ("prompt", "response", "api_key", "raw_exception", "ticker"))
 def test_records_reject_payload_and_secret_fields(field: str) -> None:

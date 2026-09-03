@@ -5,14 +5,14 @@
    Split out of chat-core.css deliberately. The @import below pulls KaTeX's
    own stylesheet, which drags in 60 font files — about 1 MB of assets. While
    it lived in chat-core.css, every app importing that sheet paid for it:
-   olympus shipped 1.03 MB of KaTeX fonts and 407 `.katex` selectors inside an
+   dashboard shipped 1.03 MB of KaTeX fonts and 407 `.katex` selectors inside an
    11 MB static export while declaring no katex dependency and rendering no
    math at all, and the design reference did the same.
 
    So import this sheet ONLY from an app that actually renders math — today
    digichat and digithings-web, both of which render <DigiChatSession> and so
    reach remark-math/rehype-katex. An app that only uses <ChatMarkdown>'s
-   children path (olympus, via SafeMarkdown) must not import it.
+   children path (dashboard, via SafeMarkdown) must not import it.
 
    Import it AFTER chat-core.css: the `.chat-md .katex` rules below are the
    token palette laid over KaTeX's metric-accurate layout, and @import is only

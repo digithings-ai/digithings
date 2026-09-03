@@ -1,4 +1,4 @@
-"""Fed rate-decision probabilities from FREE prediction markets (Atlas research, #778).
+"""Fed rate-decision probabilities from FREE prediction markets (research, #778).
 
 Markets pivot around FOMC decisions, so the analysts + PM need forward-looking hike/cut/hold
 odds. CME FedWatch has no free API (licensed/paid), so we DON'T call it — we read the same

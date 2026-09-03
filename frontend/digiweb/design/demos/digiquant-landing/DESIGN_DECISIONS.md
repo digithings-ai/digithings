@@ -6,7 +6,7 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 
 ## Canonical sources (deployed)
 - digithings.ai → `frontend/digithings-web` (Next.js static export)
-- digiquant.io  → `frontend/digiquant-web` (+ `frontend/olympus` at `/olympus`)
+- digiquant.io  → `frontend/digiquant-web` (+ `frontend/dashboard` at `/dashboard`)
 - Shared design system → `frontend/digiweb/design` (tokens.css, site/site.css, components.css)
   and `frontend/digiweb/web` (`@digithings/web` — ThemeProvider, web-theme.css)
 - LEGACY / not deployed: `frontend/digithings`, `frontend/digiquant` (old static HTML)
@@ -14,7 +14,7 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 ## Pages
 - digithings-web: `/` (page.tsx), `/chat`, `/architecture`, `/modules/[id]`
 - digiquant-web: `/` , `/pipeline`, `/strategies`, `/strategies/[id]`, `/subsystems/[id]`
-- olympus: dashboard (separate audit later)
+- dashboard: dashboard (separate audit later)
 
 ## Audit checklist (per user)
 - [ ] favicon = actual QR code on BOTH sites — DONE for digiquant (was generic /favicon.svg)
@@ -48,24 +48,24 @@ Variable-first, shared components, intentional spacing, no AI-slop tells.
 [`frontend/digiweb/design/references/`](../references/README.md) and
 [`frontend/digiweb/design/EVOLUTION.md`](../EVOLUTION.md) — Graphite (scroll/motion),
 Cursor (utilitarian bento), x.ai (brutalist dashboard/API). Read before the next
-landing or Olympus/twelve-x pass.
+landing or dashboard/twelve-x pass.
 
 Sequencing decision: **system-first** (scroll-aware header, section primitives, motion
 tokens applied globally) THEN per-page creative. Landing pages can "go crazy";
-Olympus + 12x dashboard stay professional/utility-focused.
+dashboard + 12x dashboard stay professional/utility-focused.
 
 Concrete directives (current sites FAIL these):
 1. Hero is generic AI cliché — "small headline + buttons + chart on the side", same on
    digiquant & digithings & every AI site. Make it ORIGINAL, themed to quant/quantitative
    finance. Facilitate VISUALIZING the tool (pipeline, strategies) — captivating.
 2. Ticker of daily prices is simulated & useless → WIRE TO REAL DATA: the price-table
-   pipeline + actual Olympus portfolio returns. (Verify data source: Supabase price tables
-   + Olympus portfolio; see massive-market-data MCP / Supabase.)
+   pipeline + actual dashboard portfolio returns. (Verify data source: Supabase price tables
+   + dashboard portfolio; see massive-market-data MCP / Supabase.)
 3. Scroll-aware header (ALL pages): (a) gets solid bg when scrolled (currently unreadable),
    (b) auto-hides on scroll-down, reappears on scroll-up / near top.
 4. Section rhythm: currently just bg tint + title + boxes. Add branded MOVING/interactive
    visual elements, real section transitions. Make it captivating, on-brand.
-5. Creativity by surface: landing = creative/bold; Olympus + 12x dashboard = professional.
+5. Creativity by surface: landing = creative/bold; dashboard + 12x dashboard = professional.
 
 ### In progress: 4 throwaway art-direction demos (parallel subagents) for digiquant.io landing
 Output dir: frontend/digiweb/design/demos/digiquant-landing/
@@ -92,14 +92,14 @@ Synthesis spec (drives 05-blend.html and ultimately the real build):
   site "comes alive and takes shape" — ASYMMETRIC (e.g. right column static/pinned while
   left animates in/out; elements translate/assemble on scroll). Generative canvas accent
   (equity curves/order flow), subtle + performant. Respect prefers-reduced-motion.
-- PRODUCT EMBEDS (reuse Olympus — DO NOT duplicate code; demo simulates, real build wires):
-  * Pipeline = the ACTUAL Olympus research pipeline (Atlas→Hermes→Kairos); clickable
+- PRODUCT EMBEDS (reuse dashboard — DO NOT duplicate code; demo simulates, real build wires):
+  * Pipeline = the ACTUAL dashboard research pipeline (research→portfolio→execution); clickable
     stages; selecting one shows LIVE RESEARCH to read.
   * Strategies: SHORTER; rows with ASSET LOGOS (Bitcoin/ETH/etc.); clicking opens a
     TEARSHEET SIDE PANEL (slides from right) with live price chart + last few trades marked
     (entries/exits, long/short) + KPIs.
-  * Ticker wired to REAL data (price-table pipeline + Olympus portfolio returns).
-- Olympus + 12x dashboard stay professional (creativity is for the landing).
+  * Ticker wired to REAL data (price-table pipeline + dashboard portfolio returns).
+- dashboard + 12x dashboard stay professional (creativity is for the landing).
 
 Artifacts so far: frontend/digiweb/design/demos/digiquant-landing/01..04 (screenshotted, reviewed).
 DONE: 05-blend.html built by me (subagent hit session limit) + verified (no console errors,
@@ -107,7 +107,7 @@ desktop 2-col cockpit hero + stacked mobile, all components mount). Awaiting use
 Open items to push next per brief: harder ASYMMETRIC scroll motion (left moves / right pinned),
 confirm header sizes, then lock direction → spec → implement.
 Next: build 05-blend.html, screenshot, present, ITERATE. Then spec → writing-plans →
-implement system-first (header/section/motion primitives) reusing Olympus components.
+implement system-first (header/section/motion primitives) reusing dashboard components.
 
 ## ITERATION LOG / north star (2026-06-26)
 - v5 (left headline + right graph) → REJECTED (the generic AI cliché).
@@ -120,12 +120,12 @@ implement system-first (header/section/motion primitives) reusing Olympus compon
 - User consistently likes: the top live TAPE; disliked: oversized single headline, side-by-side
   hero, "title + boxes", anything that feels templated/static.
 - v7 plan: scroll-driven concept — Stripe-style animated gradient hero that reacts to scroll;
-  scroll-PINNED scene where Atlas→Hermes→Kairos assemble as you scroll through; smooth-scroll
+  scroll-PINNED scene where research→portfolio→execution assemble as you scroll through; smooth-scroll
   feel; editorial type; keep tape + strategies/tearsheet. Self-contained (no external libs).
 - Build artifacts in frontend/digiweb/design/demos/digiquant-landing/ (06-frontier.html exists; next 07).
 
 - v7 (07-scroll-driven.html) BUILT + verified: Stripe-style animated mesh-gradient hero that
-  reacts to scroll (parallax/fade); scroll-PINNED scene where Atlas→Hermes→Kairos assemble as you
+  reacts to scroll (parallax/fade); scroll-PINNED scene where research→portfolio→execution assemble as you
   scroll (rail fill + stage cross-fade, verified railFill 50%/stage1 at p=0.5); editorial type;
   tape + strategies/tearsheet kept. NOTE: preview_screenshot can't capture scrolled states (black
   frame desync) — verify scrolled sections via DOM eval, not screenshots. Follow-up if kept: boost lede
@@ -136,8 +136,8 @@ Positioning: a PERSONAL, AI-run, self-hostable quant hedge fund — institutiona
 accessible/cheap to anyone, self-hosted, AI-driven. Tone: technical/precise.
 Chosen hero (wired into v7):
   Headline: "A quant hedge fund. <em>In a box you own.</em>"
-  Lede: "The research-to-execution stack an institutional desk would build — Atlas researches,
-  Hermes sizes the risk, Kairos executes on NautilusTrader. AI-driven, open-core and self-hosted,
+  Lede: "The research-to-execution stack an institutional desk would build — researches,
+  portfolio sizes the risk, execution executes on NautilusTrader. AI-driven, open-core and self-hosted,
   so a fund that used to need a team now runs for one."
 Carry this "fund in a box for one" framing across all sections + digithings.ai where relevant.
 Also fixed v7 lede readability over the mesh gradient (darkened veil center + text-shadow).
@@ -148,28 +148,28 @@ DONE: (1) QR for digiquant.io — segno-generated scannable QR encoding https://
   frontend/digiquant-web/public/favicon-qr.svg + -light.svg (replaced old). Phone-scan before prod.
 DONE: (2) Hero hue follows mouse — mesh blobs ease toward cursor (hero-normalized), gentle (.045
   ease + .20 bias), trails down on scroll. In 07-scroll-driven.html. Verified.
-DONE (3) PIPELINE rebuilt: horizontal Olympus pipeline, Olympus logo, zoom-per-engine. Verified:
-  Atlas steps light 2→7 across its segment, Hermes zooms at p0.5, Kairos "In development" at p0.7+.
-  Real steps wired (atlas 10 / hermes 9). Rail fills with progress.
+DONE (3) PIPELINE rebuilt: horizontal dashboard pipeline, dashboard logo, zoom-per-engine. Verified:
+  research steps light 2→7 across its segment, portfolio zooms at p0.5, execution "In development" at p0.7+.
+  Real steps wired (research 10 / portfolio 9). Rail fills with progress.
 DONE (4) TEARSHEETS rebuilt: vertical scrollytelling — 5 long/short strategies left, sticky
   tearsheet right (chart + trade markers + KPIs + last fills), IO-driven active on scroll + click.
   Verified switching. Removed dead slide-in #sheet markup. No console errors.
 ALL 4 REFINEMENT ITEMS COMPLETE in 07-scroll-driven.html. Awaiting user review.
 --- superseded follow-ups below (kept for history) ---
 Follow-ups (next pass — big scrollytelling rebuilds):
-  (3) PIPELINE = real Olympus pipeline, HORIZONTAL: embed Olympus logo; draw the FULL pipeline with
-      all research sub-steps per engine. Scroll-pinned: when on Atlas, ZOOM IN to show Atlas's
-      sub-steps; transitioning to Hermes, Atlas COLLAPSES + Hermes zooms in with its steps; same for
-      Kairos. Kairos = mark "in development / coming soon" (not fully built yet). Keep the animated
-      rail between the 3. Need real Atlas/Hermes step lists (check Olympus source:
-      digiquant/src/digiquant/olympus/{atlas,hermes}).
-      REAL STEPS (from atlas/phases + hermes/phases):
-      ATLAS (research): preflight → triage → 1 alt-data → 2 institutional → 3 macro →
+  (3) PIPELINE = real dashboard pipeline, HORIZONTAL: embed dashboard logo; draw the FULL pipeline with
+      all research sub-steps per engine. Scroll-pinned: when on research, ZOOM IN to show research's
+      sub-steps; transitioning to portfolio, research COLLAPSES + portfolio zooms in with its steps; same for
+      execution. execution = mark "in development / coming soon" (not fully built yet). Keep the animated
+      rail between the 3. Need real research/portfolio step lists (check dashboard source:
+      digiquant/src/digiquant/dashboard/{research,portfolio}).
+      REAL STEPS (from research/phases + portfolio/phases):
+      RESEARCH (research): preflight → triage → 1 alt-data → 2 institutional → 3 macro →
         4 asset-class → 5 equities → 6 consolidate → 7 synthesis → publish.
-      HERMES (deliberate): h1 thesis review → h2 market-thesis exploration → h3 thesis→vehicle map →
+      PORTFOLIO (deliberate): h1 thesis review → h2 market-thesis exploration → h3 thesis→vehicle map →
         h4 opportunity screener → h5 asset analyst → h6 deliberation → h7 PM direction
         (+7e risk sizing) → h9 commit run (+ evolution).
-      KAIROS (execute): IN DEVELOPMENT — show "coming soon", no sub-steps yet.
+      EXECUTION (execute): IN DEVELOPMENT — show "coming soon", no sub-steps yet.
   (4) TEARSHEETS = VERTICAL scrollytelling (contrast the horizontal pipeline): strategies are a suite
       of long/short strategies; as you scroll, go strategy→strategy, each tearsheet pops up on the
       RIGHT; keep scrolling → next strategy + its tearsheet; ALSO clickable to select. Show real
@@ -178,13 +178,13 @@ Follow-ups (next pass — big scrollytelling rebuilds):
 
 ## v7 CLEANUP — ALL DONE & VERIFIED (2026-06-26)
 Hero decluttered (no NautilusTrader/eyebrow/scrollcue), live tape removed, brand=lowercase
-"digiquant" + QR logo (qr-digiquant.svg), nav real (Pipeline/Strategies/Olympus↗ + GitHub +
-Open Olympus, no Sign in), buttons → real routes (/olympus, github). Pipeline = ONE continuous
-lerp-smoothed horizontal track, crossfading heads, engine dwell windows (Atlas 0-.42 / Hermes
-.42-.80 / Kairos .80-1 "In development"), mask fade reduced so edge cards aren't hidden, trailing
+"digiquant" + QR logo (qr-digiquant.svg), nav real (Pipeline/Strategies/dashboard↗ + GitHub +
+Open dashboard, no Sign in), buttons → real routes (/dashboard, github). Pipeline = ONE continuous
+lerp-smoothed horizontal track, crossfading heads, engine dwell windows (research 0-.42 / portfolio
+.42-.80 / execution .80-1 "In development"), mask fade reduced so edge cards aren't hidden, trailing
 spacer so last card centres. Strategies = REAL btc/eth/sol_slapper from index.json (Net +27M%/PF
 8.66/Win 75.9%/DD -30.5% etc), tearsheet KPIs match real card, "View full tearsheet" → /strategies/<id>.
-Open-core section → "Open source · MIT" with real GitHub/Olympus CTAs. No console errors.
+Open-core section → "Open source · MIT" with real GitHub/dashboard CTAs. No console errors.
 NOTE: headless preview throttles rAF when idle (nav transition + pan loop look stuck in
 screenshots) — verify scrolled behavior via DOM eval, not screenshots; it's smooth in a real browser.
 
@@ -198,8 +198,8 @@ BRAND:
 - Nav logo → the digiquant.io QR code mark (not the generated square glyph).
 - Brand name = "digiquant" — SINGLE word, lowercase. (Update nav + footer.)
 NAV:
-- Header links must be REAL sections that exist + map to anchors; include "Olympus"
-  (opens the Olympus dashboard). No fake links. Remove "Sign in" (no auth yet).
+- Header links must be REAL sections that exist + map to anchors; include "dashboard"
+  (opens the dashboard). No fake links. Remove "Sign in" (no auth yet).
 - Audit buttons: "Start a backtest", "Read the architecture", "Deploy a node" — only keep
   ones that are actually usable / point somewhere real; otherwise remove/replace.
 PIPELINE (smoothness — Apple-like continuous scroll, currently jittery):
@@ -207,7 +207,7 @@ PIPELINE (smoothness — Apple-like continuous scroll, currently jittery):
   proportional translateX), not stepped.
 - Mask fade hides edge boxes (e.g. "preflight" looks hidden when reached) → fix mask so steps
   aren't clipped/hidden.
-- UNIFY the horizontal track: Atlas→Hermes→Kairos should be ONE continuous horizontal scroll in
+- UNIFY the horizontal track: research→portfolio→execution should be ONE continuous horizontal scroll in
   the SAME on-screen location; only the heading/label text changes as you cross into each engine.
   Track stays put & pans continuously across all steps → stable, unified, no jump between engines.
 STRATEGIES / tearsheet:
@@ -230,11 +230,11 @@ GENERAL: whole-page scrolling must be smooth/continuous (Apple-like), no pausing
 
 #1214's AC framed this as *demoting* scroll sections into a bento and keeping "only
 one pinned section." Against the live landing that was stale + risky: digiquant.io
-runs **two** intentional pinned scrollies — `OlympusScene` (the #1205 flagship, which
+runs **two** intentional pinned scrollies — `DashboardScene` (the #1205 flagship, which
 #1215 then *enhances* with a progress rail) and `StrategySuite` (#1198). Demoting
 either regresses a good element. Per sign-off we went **additive**: a
 `Pipeline · Strategies · Pricing` `.bento` after the hero (teal marketing accent, real
-links to `#olympus` / `/strategies` / `#contact`), with **both** scrollies untouched.
+links to `#dashboard` / `/strategies` / `#contact`), with **both** scrollies untouched.
 Two pins is not the anti-pattern (#4 targets *five*). ProductFrame tearsheet crops
 inside the cells remain a possible follow-up.
 

@@ -32,10 +32,10 @@ function DemoNav() {
       }
       cta={
         <a
-          className="inline-flex items-center gap-[0.45rem] rounded-[999px] border border-hair bg-surface px-[0.95rem] py-[0.45rem] font-mono text-[0.78rem] text-ink"
+          className="inline-flex items-center gap-[0.45rem] rounded-none border border-hair bg-surface px-[0.95rem] py-[0.45rem] font-mono text-[0.78rem] text-ink"
           href="#"
         >
-          Launch olympus <span aria-hidden="true">→</span>
+          Launch dashboard <span aria-hidden="true">→</span>
         </a>
       }
     />

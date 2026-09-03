@@ -73,9 +73,19 @@ def create_mcp_server() -> Any:
         data_path: str | None = None,
         method: str = "grid",
         n_trials: int = 50,
+        param_grid_json: str | None = None,
+        strategy_params_json: str | None = None,
     ) -> str:
-        """Run parameter optimization (grid, bayesian, or random)."""
+        """Run parameter optimization (grid, bayesian, or random).
+
+        ``strategy_name='sdca'`` / ``'btc_sdca'`` is Stage B walk-forward
+        (vs-flat-DCA). Freeze Stage A weights by passing them in
+        ``strategy_params_json`` as ``*_weight`` keys. Stage A itself is
+        ``digiquant_fit_sdca_weights``.
+        """
         symbols: list[str] = json.loads(symbols_json)
+        params = json.loads(strategy_params_json) if strategy_params_json else None
+        grid = json.loads(param_grid_json) if param_grid_json else None
         from digiquant.service import service_run_optimize
 
         result = service_run_optimize(
@@ -85,6 +95,8 @@ def create_mcp_server() -> Any:
             data_dir=data_dir,
             method=method,
             n_trials=n_trials,
+            param_grid=grid,
+            base_params=params,
         )
         return result.model_dump_json(indent=2)
 
@@ -152,8 +164,8 @@ def create_mcp_server() -> Any:
         Reads the maintained ``price_technicals`` table in Supabase. Returns
         ``{"error": ...}`` if the data layer is unavailable.
         """
-        from digiquant.olympus.atlas.data.queries import get_price_technicals
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import get_price_technicals
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -169,8 +181,8 @@ def create_mcp_server() -> Any:
         Reads the maintained ``macro_series_observations`` table in Supabase.
         Returns ``{"error": ...}`` if the data layer is unavailable.
         """
-        from digiquant.olympus.atlas.data.queries import get_macro_series
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import get_macro_series
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -190,19 +202,22 @@ def create_mcp_server() -> Any:
         desc: bool = True,
         limit: int = 50,
     ) -> str:
-        """Read rows from a whitelisted Olympus table (JSON).
+        """Read rows from a whitelisted dashboard table (JSON).
 
-        Exposes the same read-only, table-scoped reader the in-process Hermes
-        agents use, so external agents (digichat / Kairos) can fetch the paper
+        Exposes the same read-only, table-scoped reader the in-process portfolio
+        agents use, so external agents (digichat / execution) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
         ``macro_series_observations``, ``trading_calendar``. Operator-internal
         telemetry (decision_log, diagnostics) is deliberately NOT readable.
+        Group A books (``positions``, ``nav_history``, ``position_events``,
+        ``portfolio_metrics``) default to the house ``workspace_id`` when
+        ``eq`` omits it; pass ``eq.workspace_id`` to read another book.
         ``limit`` is capped server-side. Returns ``{"error": ...}`` on failure.
         """
-        from digiquant.olympus.atlas.data.queries import query_data
-        from digiquant.olympus.atlas.supabase_io import SupabaseConfig, build_client
+        from digiquant.research.data.queries import query_data
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
 
         try:
             client = build_client(SupabaseConfig.from_env())
@@ -237,13 +252,15 @@ def create_mcp_server() -> Any:
     @mcp.tool()
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
-        start: str = "2017-01-01",
+        start: str = "2015-07-20",
         cache_dir: str | None = None,
     ) -> str:
         """Fetch daily OHLCV from Coinbase (CCXT) into the price-history cache.
 
-        ``symbols_json`` is a JSON array of CCXT symbols. Returns JSON mapping each
-        ticker to ``{bars, first, last, path}`` (or ``{error}``).
+        ``symbols_json`` is a JSON array of CCXT symbols. ``start`` defaults
+        to Coinbase BTC listing ``2015-07-20``; ETH/SOL begin at the first
+        available Coinbase daily bar. Returns JSON mapping each ticker to
+        ``{bars, first, last, path}`` (or ``{error}``).
         """
         import sys
         from pathlib import Path
@@ -365,6 +382,110 @@ def create_mcp_server() -> Any:
         )
 
     @mcp.tool()
+    def digiquant_build_sdca_risk_index(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        risk_model: str = "btc_power_law",
+        profile: str | None = None,
+        profile_json: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        indicator_weights: str = "{}",
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache.
+        ``profile`` (``btc_v1`` / ``eth_research_v1``) or ``profile_json`` applies
+        an ``SdcaAssetProfile`` (rails, oscillators, extra allowlist). Returns
+        JSON or ``{"error": ...}`` (never raises).
+        """
+        from digiquant.sdca_mcp import run_build_sdca_risk_index
+
+        return run_build_sdca_risk_index(
+            ticker=ticker,
+            cache_dir=cache_dir,
+            refresh=refresh,
+            bulk_period=bulk_period,
+            risk_model=risk_model,
+            profile=profile,
+            profile_json=profile_json,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            indicator_weights=indicator_weights,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
+
+    @mcp.tool()
+    def digiquant_fetch_bitview_series(
+        series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> str:
+        """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
+
+        JSON API only (no HTML scrape). Default catalog is the #1086 v1 subset.
+        ``nupl`` is refused (monotone of MVRV). Fail-soft + timeout. Coin Metrics
+        community CC BY-NC series are not fetched. Network is the operator opt-in
+        of invoking this tool.
+        """
+        from digiquant.sdca_mcp import run_fetch_bitview_series
+
+        return run_fetch_bitview_series(
+            series_ids_json=series_ids_json,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            start=start,
+            end=end,
+        )
+
+    @mcp.tool()
+    def digiquant_fit_sdca_weights(
+        profile: str = "btc_v1",
+        profile_json: str | None = None,
+        cache_dir: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Stage A: fit composite weights so risk overlaps cycle windows.
+
+        Not a second optimizer. Stage B is ``digiquant_run_optimize`` with
+        ``strategy_name='sdca'``; pass ``regularized_weight_params`` as
+        ``strategy_params_json``. No live-trading. Do not ``--push-supabase``.
+        """
+        from digiquant.sdca_mcp import run_fit_sdca_weights
+
+        return run_fit_sdca_weights(
+            profile=profile,
+            profile_json=profile_json,
+            cache_dir=cache_dir,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
+
+    @mcp.tool()
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,
@@ -464,7 +585,7 @@ def create_mcp_server() -> Any:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
     @mcp.tool()
-    def olympus_run_policy_replay(
+    def dashboard_run_policy_replay(
         pair_content_hash: str,
         run_id: str | None = None,
     ) -> str:
@@ -472,7 +593,7 @@ def create_mcp_server() -> Any:
 
         Recommendation/read only — never activates or promotes production policy.
         """
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_run_policy_replay
 
         try:
@@ -485,9 +606,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_replay(run_id: str) -> str:
+    def dashboard_get_policy_replay(run_id: str) -> str:
         """Fetch a policy replay run summary by id (fail closed if unknown)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_replay
 
         try:
@@ -497,9 +618,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_comparison(comparison_id: str) -> str:
+    def dashboard_get_policy_comparison(comparison_id: str) -> str:
         """Fetch a policy comparison summary (artifact IDs / status only)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_comparison
 
         try:
@@ -509,12 +630,12 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_evaluate_policy_gate(
+    def dashboard_evaluate_policy_gate(
         comparison_id: str,
         criteria_version_id: str,
     ) -> str:
         """Evaluate immutable gate criteria (eligibility only — never activates)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_evaluate_policy_gate
 
         try:
@@ -527,9 +648,9 @@ def create_mcp_server() -> Any:
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
 
     @mcp.tool()
-    def olympus_get_policy_gate_evaluation(evaluation_id: str) -> str:
+    def dashboard_get_policy_gate_evaluation(evaluation_id: str) -> str:
         """Fetch a gate-evaluation summary by id (fail closed if unknown)."""
-        from digiquant.olympus.replay.exposure import PolicyReplayExposureError
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
         from digiquant.service import service_get_policy_gate_evaluation
 
         try:

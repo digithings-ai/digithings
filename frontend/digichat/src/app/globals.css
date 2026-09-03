@@ -29,6 +29,9 @@
  *   - shadcn's `--accent` therefore also resolves rose under <body> — this
  *     matches digichat 0.2.0's rendered state (the body livery class already
  *     outranked the old neutral-gray :root definition via inheritance).
+ *   - Utilitarian v0.1 (Phase 3): `--primary` is ink/paper (loud CTA fill).
+ *     Rose stays on `--ring` / `--chart-1` / `--sidebar-primary` and the
+ *     `.accent-digichat` livery — never the default button fill.
  * ------------------------------------------------------------------------- */
 @import "@digithings/design/tokens.css";
 @import "@digithings/web/styles/web-theme.css";
@@ -40,7 +43,7 @@
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
    (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -75,7 +78,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -106,17 +109,19 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Utilitarian v0.1: pin Tailwind rounded-* to 0. True circles use
+     rounded-full (avatars, spinners, live dots) and do not read --radius. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0;
 }
 
 /*
@@ -134,7 +139,9 @@
   --card-foreground: var(--ink);
   --popover: var(--surface);
   --popover-foreground: var(--ink);
-  --primary-foreground: var(--on-accent);
+  /* Loud CTA = ink/paper rect. Rose livery is accent-only (ring/live). */
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
   --secondary: var(--surface-2);
   --secondary-foreground: var(--ink);
   --muted: var(--surface-2);
@@ -167,11 +174,15 @@
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--hair);
 
-  /* digichat self-hosts Geist via next/font (CSP-safe); re-point the canon
-     font tokens at the loaded families (digiquant-web pattern — tokens.css
-     ships literal family names that only the geist package registers). */
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  /* digichat self-hosts Geist Mono via next/font (CSP-safe). Utilitarian
+     v0.1: one mono voice for claim, body, and chrome. tokens.css remaps
+     the legacy `--font-family` slot to `--font-sans` under [data-theme];
+     pin it to the self-hosted face here so app-shell never falls through
+     to Inter or an unloaded JetBrains stack. */
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-mono);
+  --font-family: var(--font-mono);
 
   /* Legacy @digithings/design primitives (consumed by the imported app-shell
      chrome and the .dc-* classes below) — now theme-aware via canon tokens. */
@@ -185,25 +196,24 @@
      tokens.css:56 names JetBrains Mono / Fira Code / Space Mono — none of which
      is loaded anywhere (no @font-face in frontend, no next/font import), so the
      app-shell chrome and .dc-term-* fell through to the OS default mono while
-     the <pre> blocks beside them got Geist Mono. Same fix as olympus:101. */
+     the <pre> blocks beside them got Geist Mono. Same fix as dashboard:101. */
   --font-family-mono: var(--font-mono);
 }
 
 /*
- * Brand-accented shadcn slots differ per theme, mirroring tokens.css's own
- * --up convention: dark wears the rose livery (--accent-digichat, ruled
- * 2026-07-06); light runs the deeper phosphor teal for contrast on paper
- * (rose is 2.4:1 on the light canvas — fails AA).
+ * Brand-accented shadcn slots differ per theme. Utilitarian v0.1: --primary
+ * (loud fill) is ink/paper in both themes. Rose / phosphor stay on ring,
+ * chart identity, and selected sidebar — never the default CTA fill.
+ * Light ring uses --accent (body `.accent-digichat` still resolves rose;
+ * tokens.css light --accent-digichat is the AA-safe mix).
  */
 :root[data-theme="dark"] {
-  --primary: var(--accent-digichat);
   --ring: var(--accent-digichat);
   --chart-1: var(--accent-digichat);
   --sidebar-primary: var(--accent-digichat);
   --sidebar-ring: var(--accent-digichat);
 }
 :root[data-theme="light"] {
-  --primary: var(--accent);
   --ring: var(--accent);
   --chart-1: var(--accent);
   --sidebar-primary: var(--accent);
@@ -218,7 +228,7 @@
     @apply bg-background text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-mono;
   }
 }
 
@@ -308,7 +318,7 @@
   align-items: center;
   gap: 6px;
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
   background: color-mix(in srgb, var(--accent, var(--fg)) 12%, transparent);
   color: var(--text-primary);
@@ -351,7 +361,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -370,7 +380,7 @@
   margin-top: 0.25rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--bg-term, transparent);
   color: var(--text-primary);
   font-family: var(--font-family-mono);
@@ -429,7 +439,7 @@
   align-items: center;
   margin: 0;
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
@@ -472,7 +482,7 @@
 .dc-sidebar-brand-mark {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--accent, var(--fg)) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 35%, var(--border-color));
   color: var(--text-primary);
@@ -654,4 +664,52 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   opacity: 0.04;
   z-index: 0;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* ---------------------------------------------------------------------------
+ * Phase 3 — utilitarian-terminal v0.1 local restyle.
+ *
+ * Shared tokens + `@digithings/web` Button `dress="chat"` already ship
+ * radius 0 and ink/paper loud fill. This block keeps imported
+ * `@digithings/digichat-ui` session chrome (`.dc-send`) ink/paper even if
+ * a consumer stylesheet order changes.
+ * ------------------------------------------------------------------------- */
+.dc-send,
+.dc-stop {
+  border-radius: 0;
+}
+.dc-send {
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.dc-send:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
+.dc-stop {
+  color: var(--ink-soft);
+  background: transparent;
+  border-color: var(--hair);
+}
+.dc-code-inline,
+.dc-code-block pre,
+.dc-code-copy,
+.dc-msg-copy,
+.dc-quota-banner {
+  border-radius: 0;
+}
+
+/* Opaque top bar — the imported app-shell-terminal sheet still paints a
+   70% black wash that reads as glass. */
+.app-topbar {
+  background: var(--bg-primary);
+}
+
+/* Authenticated composer send affordance (↵ kbd) matches embed .dc-send. */
+.app-shell .slash-hint kbd {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }

@@ -32,7 +32,7 @@ import { p } from "@/lib/base-path";
 import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
-import { ChatActivities } from "@digithings/digichat-ui";
+import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
 const MAX_INPUT_LINES = 5;
@@ -88,7 +88,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         if (part.type === ACTIVITY_PART_TYPE || part.type === "data-digigraphTrace") return null;
         if (isReasoningUIPart(part)) {
           return (
-            <Collapsible key={i} className="rounded-lg border border-border/60 bg-muted/30">
+            <Collapsible key={i} className="rounded-none border border-border/60 bg-muted/30">
               <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/50">
                 Reasoning
               </CollapsibleTrigger>
@@ -122,7 +122,7 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-none border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
@@ -143,6 +143,11 @@ export type ChatPanelProps = {
   initialMessages: UIMessage[];
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
+  /**
+   * Mark the next server flush as an intentional truncate (edit last user).
+   * Without this, PUT returns 409 `would_truncate` (#3466).
+   */
+  onAllowTruncate?: (threadId: string) => void;
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
@@ -161,6 +166,7 @@ export function ChatPanel({
   initialMessages,
   onMessagesCommit,
   onTitleDerived,
+  onAllowTruncate,
   headerSlot,
   byokMode = false,
   onByokModeChange,
@@ -168,7 +174,10 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [text, setText] = useState("");
   const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
+  const [editingLastUser, setEditingLastUser] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -212,7 +221,7 @@ export function ChatPanel({
     [threadId, byokKey, byokProvider, byokModel],
   );
 
-  const { messages, sendMessage, status, stop, error, regenerate } =
+  const { messages, sendMessage, status, stop, error, regenerate, setMessages } =
     useChat<UIMessage>({
       id: threadId,
       messages: initialMessages,
@@ -237,6 +246,15 @@ export function ChatPanel({
 
   const busy = status === "streaming" || status === "submitted";
   const isStreaming = status === "streaming";
+
+  useEffect(() => {
+    if (!(busy && editingLastUser)) return;
+    // Defer out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setEditingLastUser(false);
+      setEditDraft("");
+    });
+  }, [busy, editingLastUser]);
 
   const updateStickiness = useCallback(() => {
     const el = scrollRef.current;
@@ -323,15 +341,84 @@ export function ChatPanel({
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
     const plain = messagePlainText(m);
-    try {
-      await navigator.clipboard.writeText(plain);
-    } catch {
-      /* ignore */
-    }
+    const sources =
+      m.role === "assistant"
+        ? citationHits(messageActivities(m)).map((h) => ({ title: h.title, path: h.path }))
+        : undefined;
+    const markdown =
+      m.role === "assistant" ? serializeAssistantMarkdown(plain, sources) : plain.trim();
+    await copyMarkdownWithFallback(markdown, { filename: "digichat-answer.md" });
   }, []);
 
+  const onDownloadThread = useCallback(() => {
+    const turns = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => {
+        const content = messagePlainText(m);
+        if (m.role === "assistant") {
+          return {
+            role: "assistant" as const,
+            content,
+            sources: citationHits(messageActivities(m)).map((h) => ({
+              title: h.title,
+              path: h.path,
+            })),
+          };
+        }
+        return { role: "user" as const, content };
+      });
+    const md = serializeThreadMarkdown(turns);
+    if (!md.trim()) return;
+    downloadMarkdown("digichat-thread.md", md);
+  }, [messages]);
+
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  const lastUser = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
+  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready" && !editingLastUser;
+  const canEditLastUser = !busy && !!lastUser && status === "ready" && !editingLastUser;
+  const canExportThread = !busy && messages.some((m) => messagePlainText(m).trim());
+
+  const beginEditLastUser = useCallback(() => {
+    if (!canEditLastUser || !lastUser) return;
+    setEditingLastUser(true);
+    setEditDraft(messagePlainText(lastUser));
+    queueMicrotask(() => editTextareaRef.current?.focus());
+  }, [canEditLastUser, lastUser]);
+
+  const cancelEditLastUser = useCallback(() => {
+    setEditingLastUser(false);
+    setEditDraft("");
+  }, []);
+
+  const submitEditLastUser = useCallback(() => {
+    const next = editDraft.trim();
+    if (!next || lastUserIndex < 0 || busy) return;
+    // Shorten the persisted list — ChatShell must pass allowTruncate (#3466).
+    onAllowTruncate?.(threadId);
+    setMessages(messages.slice(0, lastUserIndex));
+    setEditingLastUser(false);
+    setEditDraft("");
+    void sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: next }],
+    });
+  }, [
+    editDraft,
+    lastUserIndex,
+    busy,
+    onAllowTruncate,
+    threadId,
+    setMessages,
+    messages,
+    sendMessage,
+  ]);
 
   const startsWithSlash = text.trimStart().startsWith("/");
 
@@ -340,7 +427,7 @@ export function ChatPanel({
       {headerSlot}
 
       <div className="relative min-h-0 flex-1">
-        <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
+        <div ref={scrollRef} className="h-full overflow-y-auto rounded-none border border-border/40 dc-term-pane">
           {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>
@@ -350,9 +437,11 @@ export function ChatPanel({
             </div>
           ) : null}
 
-          {messages.map((m) => {
+          {messages.map((m, i) => {
             const isUser = m.role === "user";
             const isLastAssistant = m.role === "assistant" && m.id === lastAssistant?.id;
+            const isLastUser = isUser && i === lastUserIndex;
+            const showEditForm = isLastUser && editingLastUser;
             return (
               <div
                 key={m.id}
@@ -365,40 +454,111 @@ export function ChatPanel({
                   {isUser ? ">" : "▸"}
                 </span>
                 <div className="dc-term-body">
-                  <MessageBody
-                    message={m}
-                    isStreaming={isStreaming && isLastAssistant}
-                  />
-                  <div
-                    className={cn(
-                      "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
-                      isLastAssistant && !isUser && "opacity-100",
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[11px] text-muted-foreground"
-                      onClick={() => onCopyMessage(m)}
+                  {showEditForm ? (
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        ref={editTextareaRef}
+                        className="min-h-[4.5rem] w-full resize-y rounded-none border border-border/60 bg-transparent p-2 text-sm"
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditLastUser();
+                          } else if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            submitEditLastUser();
+                          }
+                        }}
+                        aria-label="Edit last message"
+                        maxLength={2000}
+                      />
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!editDraft.trim()}
+                          onClick={submitEditLastUser}
+                        >
+                          save
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          onClick={cancelEditLastUser}
+                        >
+                          cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <MessageBody
+                      message={m}
+                      isStreaming={isStreaming && isLastAssistant}
+                    />
+                  )}
+                  {!showEditForm ? (
+                    <div
+                      className={cn(
+                        "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
+                        (isLastAssistant || isLastUser) && "opacity-100",
+                      )}
                     >
-                      <Copy className="mr-1 size-3" />
-                      copy
-                    </Button>
-                    {isLastAssistant ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className="h-6 text-[11px] text-muted-foreground"
-                        disabled={!canRegenerate}
-                        onClick={() => void regenerate()}
+                        onClick={() => void onCopyMessage(m)}
                       >
-                        <RefreshCw className="mr-1 size-3" />
-                        regen
+                        <Copy className="mr-1 size-3" />
+                        copy
                       </Button>
-                    ) : null}
-                  </div>
+                      {isLastAssistant && canExportThread ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          onClick={onDownloadThread}
+                          aria-label="Download thread as markdown"
+                        >
+                          md
+                        </Button>
+                      ) : null}
+                      {isLastAssistant ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!canRegenerate}
+                          title="Replays the full digigraph workflow on this session"
+                          onClick={() => void regenerate()}
+                        >
+                          <RefreshCw className="mr-1 size-3" />
+                          regen
+                        </Button>
+                      ) : null}
+                      {isLastUser ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!canEditLastUser}
+                          title="Replaces this turn and replays the digigraph workflow"
+                          onClick={beginEditLastUser}
+                        >
+                          edit
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

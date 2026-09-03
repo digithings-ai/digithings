@@ -62,7 +62,8 @@ This check does not require a live approving review on the promotion PR
 (`required_approving_review_count: 0`, `require_code_owner_reviews: false` — verified via
 API). Instead, `scripts/check_review_coverage.py` walks every commit in the PR's range
 (merge and bot commits exempt) and requires each one to already carry review evidence from
-its own task PR, satisfied by any one of:
+its own task PR. The walker batches GitHub GraphQL (PR hatch state + associated SHAs)
+instead of sequential `gh pr view`; hatch rules are unchanged, satisfied by any one of:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|
@@ -75,7 +76,7 @@ its own task PR, satisfied by any one of:
 
 Full rationale — why reviewing the promotion diff itself is the wrong moment, and why this
 is deliberately *not* a required `Cursor Bugbot` check on `main` — is in
-[`CLAUDE.md` § Review coverage](../CLAUDE.md#review-coverage-the-gate-before-production).
+[`AGENTS.md` § Review coverage](../AGENTS.md#review-coverage-the-gate-before-production).
 
 **Why not a live reviewer-request instead?** [#1612](https://github.com/digithings-ai/digithings/issues/1612)
 proposed auto-requesting a non-author reviewer on every promotion PR to work around

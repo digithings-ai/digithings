@@ -133,7 +133,7 @@ export function ConnectionsSheet() {
         </SheetHeader>
 
         {err ? (
-          <p className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">{err}</p>
+          <p className="mt-4 rounded-none border border-destructive/40 bg-destructive/10 p-3 text-sm">{err}</p>
         ) : null}
 
         {loading || !form ? (
@@ -225,7 +225,7 @@ export function ConnectionsSheet() {
 
             {persistence && !persistence.serverDatabaseConfigured ? (
               <div
-                className="rounded-md border p-3 text-xs text-muted-foreground"
+                className="rounded-none border p-3 text-xs text-muted-foreground"
                 style={{ borderColor: "color-mix(in srgb, var(--warn) 30%, transparent)" }}
               >
                 <p className="font-medium text-foreground">Postgres not configured</p>

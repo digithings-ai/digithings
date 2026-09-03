@@ -1,6 +1,7 @@
 import "./tearsheet.css";
 import { TearsheetCardReference } from "@/components/tearsheet-card-reference";
 import { TearsheetChartsReference } from "@/components/tearsheet-charts-reference";
+import { TearsheetDcaReference } from "@/components/tearsheet-dca-reference";
 import { TearsheetTradeLogReference } from "@/components/tearsheet-trade-log-reference";
 
 const FAMILY_RULES = [
@@ -70,6 +71,19 @@ export default function TearsheetPage() {
         </p>
         <div className="mt-[1.2rem]">
           <TearsheetCardReference />
+        </div>
+      </section>
+
+      <section className="section-block" id="tearsheet-dca">
+        <p className="kicker">{"// dca overlays"}</p>
+        <h2 className="title">Rails, then the band.</h2>
+        <p className="section-copy">
+          Schema 1.3 DCA books overlay valuation rails on log price and paint composite
+          risk 0–100 with the labelled Fire sale → Bubble bands. Same SVG engine, same
+          print path — no canvas, no one-off styling.
+        </p>
+        <div className="mt-[1.2rem]">
+          <TearsheetDcaReference />
         </div>
       </section>
 

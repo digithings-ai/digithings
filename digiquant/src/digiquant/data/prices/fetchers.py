@@ -1,6 +1,6 @@
 """yfinance adapter — Polars-only, no pandas on the public surface.
 
-Ported from ``digiquant/scripts/atlas/fetch-quotes.py``.
+Ported from ``digiquant/scripts/research/fetch-quotes.py``.
 
 yfinance itself returns a ``pandas.DataFrame``. We treat that as a private
 implementation detail and immediately convert to Polars via the canonical
@@ -23,7 +23,7 @@ _WATCHLIST_RE = re.compile(r"^\|\s*([A-Z][A-Z0-9]{1,9}(?:-[A-Z]{2,4})?)\s*\|", r
 _EXCLUDE_TICKERS = frozenset({"ETF", "DXY", "VIX"})
 
 # Single source of truth for the ETF rotation baseline universe, used when
-# ``watchlist.md`` is missing. Kept in sync with Atlas's
+# ``watchlist.md`` is missing. Kept in sync with research's
 # ``config/watchlist.md`` snapshot at the time of the Wave-1-E migration.
 _FALLBACK_UNIVERSE: tuple[str, ...] = (
     "SPY",
@@ -156,7 +156,7 @@ def fetch_batch(
     # Canonical symbols use '.' for share classes (BRK.B); Yahoo uses '-'
     # (BRK-B). Without this, the download silently returns no_data forever
     # (#1754). Frames stay keyed by the CANONICAL ticker so DB rows and the
-    # Atlas config agree.
+    # research config agree.
     yahoo_by_canon = {t: _to_yahoo_symbol(t) for t in tickers}
 
     # Lazy import — yfinance is an optional dep.

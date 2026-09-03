@@ -96,7 +96,7 @@ jobs:
               --supabase
           else
             uv run --frozen --no-sync python -m digiquant prices fetch-quotes \
-              --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md \
+              --watchlist digiquant/src/digiquant/research/config/watchlist.md \
               --period "${YEARS}y" \
               --cache-dir data/price-history \
               --supabase
@@ -118,7 +118,7 @@ jobs:
         if: ${{ inputs.mode == 'full-backfill' && inputs.dry_run == false }}
         run: |
           uv run --frozen --no-sync python -m digiquant prices fetch-macro \
-            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --manifest digiquant/src/digiquant/research/config/macro_series.yaml \
             --backfill \
             --supabase
 
@@ -142,7 +142,7 @@ jobs:
             ARGS+=(--tickers "$TICKERS")
           else
             # Same universe as the daily cron: watchlist ETFs + sector single names.
-            ARGS+=(--watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md --include-sectors)
+            ARGS+=(--watchlist digiquant/src/digiquant/research/config/watchlist.md --include-sectors)
           fi
           if [ -n "$SINCE" ]; then
             ARGS+=(--since "$SINCE")
@@ -161,7 +161,7 @@ jobs:
           if [ -n "$TICKERS" ]; then
             echo "  python -m digiquant prices fetch-quotes --tickers \"$TICKERS\" --period ${YEARS}y --cache-dir data/price-history --supabase"
           else
-            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/olympus/atlas/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
+            echo "  python -m digiquant prices fetch-quotes --watchlist digiquant/src/digiquant/research/config/watchlist.md --period ${YEARS}y --cache-dir data/price-history --supabase"
           fi
           echo "  python -m digiquant prices compute-technicals --cache-dir data/price-history --date 1990-01-01 --days 99999 --supabase"
-          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml --backfill --supabase"
+          echo "  python -m digiquant prices fetch-macro --manifest digiquant/src/digiquant/research/config/macro_series.yaml --backfill --supabase"

@@ -31,10 +31,12 @@ import type { AdminClient, WorkspaceRow } from "../_shared/supabase-admin.ts";
 import type { StripeEvent } from "../_shared/stripe.ts";
 
 const PRICES: PriceTierEnv = {
-  baselineMonthly: "price_baseline_m",
-  baselineAnnual: "price_baseline_a",
-  customMonthly: "price_custom_m",
-  customAnnual: "price_custom_a",
+  briefMonthly: "price_brief_m",
+  briefAnnual: "price_brief_a",
+  deskMonthly: "price_desk_m",
+  deskAnnual: "price_desk_a",
+  studioMonthly: "price_studio_m",
+  studioAnnual: "price_studio_a",
 };
 
 const WS_ID = "11111111-1111-1111-1111-111111111111";
@@ -288,6 +290,16 @@ function createMockAdmin(store: Store): AdminClient {
     from(table: string) {
       return makeBuilder(table);
     },
+    async rpc(fn: string, args?: Record<string, unknown>) {
+      // Observer bootstrap (migration 107) — only used when membership missing.
+      if (fn !== "ensure_personal_workspace") {
+        return { data: null, error: { message: `unknown rpc ${fn}` } };
+      }
+      const userId = String(args?.p_user_id ?? "");
+      const existing = store.members.find((m) => m.user_id === userId);
+      if (existing) return { data: existing.workspace_id, error: null };
+      return { data: null, error: { message: "bootstrap not simulated in stripe mock" } };
+    },
     auth: {
       admin: {
         async getUserById(userId: string) {
@@ -327,10 +339,12 @@ function createMockAdmin(store: Store): AdminClient {
 // ---------------------------------------------------------------------------
 
 function setPriceEnv() {
-  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
-  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
+  Deno.env.set("STRIPE_PRICE_BRIEF_MONTHLY", PRICES.briefMonthly);
+  Deno.env.set("STRIPE_PRICE_BRIEF_ANNUAL", PRICES.briefAnnual);
+  Deno.env.set("STRIPE_PRICE_DESK_MONTHLY", PRICES.deskMonthly);
+  Deno.env.set("STRIPE_PRICE_DESK_ANNUAL", PRICES.deskAnnual);
+  Deno.env.set("STRIPE_PRICE_STUDIO_MONTHLY", PRICES.studioMonthly);
+  Deno.env.set("STRIPE_PRICE_STUDIO_ANNUAL", PRICES.studioAnnual);
 }
 
 function subEvent(
@@ -451,9 +465,9 @@ Deno.test("parseStripeEvent rejects garbage", () => {
   assertEquals(threw, true);
 });
 
-Deno.test("planTierFromPriceId maps baseline/custom/unknown", () => {
-  assertEquals(planTierFromPriceId("price_baseline_m", PRICES), "baseline");
-  assertEquals(planTierFromPriceId("price_custom_a", PRICES), "custom");
+Deno.test("planTierFromPriceId maps brief/studio/unknown", () => {
+  assertEquals(planTierFromPriceId("price_brief_m", PRICES), "brief");
+  assertEquals(planTierFromPriceId("price_studio_a", PRICES), "studio");
   assertEquals(planTierFromPriceId("price_other", PRICES), "free");
   assertEquals(planTierFromPriceId(null, PRICES), "free");
 });
@@ -461,16 +475,16 @@ Deno.test("planTierFromPriceId maps baseline/custom/unknown", () => {
 Deno.test("incomplete status forces free claim (not paid tier from price)", () => {
   assertEquals(mapStripeStatus("incomplete"), "none");
   assertEquals(
-    planTierForSubscriptionStatus("none", PRICES.baselineMonthly, PRICES),
+    planTierForSubscriptionStatus("none", PRICES.briefMonthly, PRICES),
     "free",
   );
   assertEquals(
-    planTierForSubscriptionStatus("active", PRICES.baselineMonthly, PRICES),
-    "baseline",
+    planTierForSubscriptionStatus("active", PRICES.briefMonthly, PRICES),
+    "brief",
   );
   assertEquals(
-    planTierForSubscriptionStatus("past_due", PRICES.customMonthly, PRICES),
-    "custom",
+    planTierForSubscriptionStatus("past_due", PRICES.studioMonthly, PRICES),
+    "studio",
   );
 });
 
@@ -487,7 +501,7 @@ Deno.test("duplicate applied event is a 200 no-op", async () => {
     type: "customer.subscription.created",
     created: 100,
     status: "active",
-    priceId: PRICES.baselineMonthly,
+    priceId: PRICES.briefMonthly,
   });
   const first = await handleStripeEvent(admin, evt);
   assertEquals(first.status, "applied");
@@ -495,13 +509,13 @@ Deno.test("duplicate applied event is a 200 no-op", async () => {
 
   const second = await handleStripeEvent(admin, evt);
   assertEquals(second.status, "duplicate");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "brief");
 });
 
 Deno.test("CAS stale event is out_of_order no-op and marks applied", async () => {
   setPriceEnv();
-  const store = freshStore({ last_stripe_event_created: 200, plan_tier: "custom" });
-  store.claims.set(USER_ID, "custom");
+  const store = freshStore({ last_stripe_event_created: 200, plan_tier: "studio" });
+  store.claims.set(USER_ID, "studio");
   const admin = createMockAdmin(store);
 
   const older = subEvent({
@@ -509,15 +523,15 @@ Deno.test("CAS stale event is out_of_order no-op and marks applied", async () =>
     type: "customer.subscription.updated",
     created: 100,
     status: "active",
-    priceId: PRICES.baselineMonthly,
+    priceId: PRICES.briefMonthly,
   });
   const result = await handleStripeEvent(admin, older);
   assertEquals(result.status, "out_of_order");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "custom");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "studio");
   assertEquals(store.stripeEvents[0]!.applied_at != null, true);
 });
 
-Deno.test("checkout → active → cancel yields free→baseline→free on both stores", async () => {
+Deno.test("checkout → active → cancel yields free→brief→free on both stores", async () => {
   setPriceEnv();
   const store = freshStore();
   const admin = createMockAdmin(store);
@@ -535,12 +549,12 @@ Deno.test("checkout → active → cancel yields free→baseline→free on both 
       type: "customer.subscription.created",
       created: 20,
       status: "active",
-      priceId: PRICES.baselineMonthly,
+      priceId: PRICES.briefMonthly,
     }),
   );
   assertEquals(created.status, "applied");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
-  assertEquals(store.claims.get(USER_ID), "baseline");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "brief");
+  assertEquals(store.claims.get(USER_ID), "brief");
 
   const deleted = await handleStripeEvent(admin, {
     id: "evt_sub_d",
@@ -573,12 +587,12 @@ Deno.test("claim-sync failure flags row but still returns applied (200 path)", a
       type: "customer.subscription.created",
       created: 50,
       status: "active",
-      priceId: PRICES.customMonthly,
+      priceId: PRICES.studioMonthly,
     }),
   );
   assertEquals(result.status, "applied");
   assertEquals(result.claim_sync_pending, true);
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "custom");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "studio");
   assertEquals(store.workspaces.get(WS_ID)!.claim_sync_pending, true);
   assertEquals(store.claims.get(USER_ID), "free");
   assertEquals(store.stripeEvents[0]!.applied_at != null, true);
@@ -594,7 +608,7 @@ Deno.test("poison-pill retry: insert then fail then retry re-applies", async () 
     type: "customer.subscription.created",
     created: 60,
     status: "active",
-    priceId: PRICES.baselineMonthly,
+    priceId: PRICES.briefMonthly,
   });
 
   let threw = false;
@@ -611,15 +625,15 @@ Deno.test("poison-pill retry: insert then fail then retry re-applies", async () 
   // Stripe retries — duplicate_pending path re-applies.
   const retry = await handleStripeEvent(admin, evt);
   assertEquals(retry.status, "applied");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
-  assertEquals(store.claims.get(USER_ID), "baseline");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "brief");
+  assertEquals(store.claims.get(USER_ID), "brief");
   assertEquals(store.stripeEvents[0]!.applied_at != null, true);
 });
 
 Deno.test("invoice.payment_failed sets past_due and retries claim sync", async () => {
   setPriceEnv();
   const store = freshStore({
-    plan_tier: "baseline",
+    plan_tier: "brief",
     subscription_status: "active",
     last_stripe_event_created: 10,
     claim_sync_pending: true,
@@ -642,15 +656,15 @@ Deno.test("invoice.payment_failed sets past_due and retries claim sync", async (
   });
   assertEquals(result.status, "applied");
   assertEquals(store.workspaces.get(WS_ID)!.subscription_status, "past_due");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
-  assertEquals(store.claims.get(USER_ID), "baseline");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "brief");
+  assertEquals(store.claims.get(USER_ID), "brief");
   assertEquals(store.workspaces.get(WS_ID)!.claim_sync_pending, false);
 });
 
 Deno.test("incomplete subscription maps to free on both stores", async () => {
   setPriceEnv();
-  const store = freshStore({ plan_tier: "baseline", last_stripe_event_created: 1 });
-  store.claims.set(USER_ID, "baseline");
+  const store = freshStore({ plan_tier: "brief", last_stripe_event_created: 1 });
+  store.claims.set(USER_ID, "brief");
   const admin = createMockAdmin(store);
 
   const result = await handleStripeEvent(
@@ -660,7 +674,7 @@ Deno.test("incomplete subscription maps to free on both stores", async () => {
       type: "customer.subscription.updated",
       created: 5,
       status: "incomplete",
-      priceId: PRICES.baselineMonthly,
+      priceId: PRICES.briefMonthly,
     }),
   );
   assertEquals(result.status, "applied");

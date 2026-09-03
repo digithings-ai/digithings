@@ -35,7 +35,10 @@ jobs:
   review-coverage:
     name: Every commit reaching main was reviewed
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Sequential `gh pr view` over a ~600-commit promotion is ~9.5 minutes;
+    # the direct-push hatch adds search lookups. 10 minutes cancelled #3256
+    # at a6a3a913 after #3440. Do not drop this without the GraphQL batcher (#3436).
+    timeout-minutes: 25
     permissions:
       contents: read
       pull-requests: read

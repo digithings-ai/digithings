@@ -1,6 +1,6 @@
 """Polars-only price pipeline package.
 
-Migrated from digiquant/scripts/atlas/* per issue #149 (Wave 1 Unit E).
+Migrated from digiquant/scripts/research/* per issue #149 (Wave 1 Unit E).
 
 Public surface:
     - fetchers.fetch_quotes / fetch_batch
@@ -34,7 +34,7 @@ OHLCV_COLUMNS: tuple[str, ...] = (
     "symbol",
 )
 
-# Canonical indicator column list (matches Atlas price_technicals schema).
+# Canonical indicator column list (matches research price_technicals schema).
 TECHNICAL_COLUMNS: tuple[str, ...] = (
     "sma_20",
     "sma_50",

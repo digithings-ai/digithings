@@ -25,17 +25,19 @@ is the only shared chrome.
 | Route              | Family      | Holds |
 | ------------------ | ----------- | ----- |
 | `/`                | Foundations | contents map, livery switcher, feature picker, button/CTA states |
+| `/iterate`         | Iterate     | utilitarian terminal blend gallery — pick corners, type, CTAs, nav, heroes, density (herdr / agentmail / omarchy); preference ledger → `design/BLEND.md` |
 | `/controls`        | Controls    | custom dropdown pane, search bar, nav buttons, form fields, tooltip (4 placements), range slider (fill + ticks + disabled), tags/chips input, accordion (single-open disclosure), skeleton loading states (shimmer), empty/error states |
-| `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (olympus app) |
+| `/layout-patterns` | Layout      | feature cell, bento grid, container-scaled product frame, phone mockup (dashboard app) |
 | `/typography`      | Typography  | type specimen + live type-suite switcher (5 coordinated suites: display + body + mono), scroll-linked word reveals (blur / muted / outline), copy & voice grammar |
-| `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, sortable data table, pricing, comparison matrix |
+| `/data`            | Data        | dot-matrix stat, count-up stat, odometer digit-roll, marquee ticker, sticky card deck, changelog rail, repository activity, sortable data table, pricing, comparison matrix |
 | `/finance`         | Finance     | dashboard workspace command/ledger composition, stock ticker tape, Lightweight-Charts price chart / equity curve / drawdown, synced multi-pane tearsheet (screen-only), performance dashboard, portfolio blotter, charting rules, performance metrics, returns matrix (monthly slice), order book |
 | `/tearsheet`       | Tearsheet   | print-grade SVG tearsheet family (#1463): synced candles with trade markers + hover cards, equity/drawdown/per-trade P&L on one shared zoom window, 3×3 returns matrix, KPI strip, trade log, library cards, live badge, working Download PDF |
-| `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; olympus-ported) |
+| `/effects`         | Effects     | cursor-follow hero graph, typed terminal, scrolly module graph, research pipeline, ambient mesh, rotating prompts, clip reveal, section transitions (zoom-morph · stacking · cross-fade), arc-flight routing map (revolut-mined), pipeline workflow viz (sequential + parallel, per-step time/token/cost diagnostics; dashboard-ported) |
 | `/chrome`          | Chrome      | announcement bar, command palette, tabs (sliding indicator), toast stack, scroll-aware nav, colophon footer with glow sweep |
 | `/terminal`        | Terminal    | diegetic CLI session + budget, streaming chat transcript |
 | `/chatbot`         | Chatbot     | digichat as a terminal CLI (mono scrollback, `>` prompt) — thinking chain, collapsible tool-call chain, composer, markdown, inline chart, inline route graph, custom action widgets embedded in the terminal |
 | `/symbols`         | Symbols     | module emblems, brand marks, favicon tiles, vendor logos, utility glyphs |
+| `/brand`           | Brand       | avatars, social headers, OG card, mail sign-off — local kit, not shipped on digithings.ai |
 | `/account`         | Account     | login, sign-up, payment, settings, profile templates |
 
 ## Conventions
@@ -46,19 +48,20 @@ is the only shared chrome.
   `color-mix(in srgb, var(--token) N%, …)` for tints.
 - **Livery.** **Monochrome is the default** (`--accent: var(--ink)`, black +
   white); colour is opt-in per product via a scope class (`accent-digiquant`,
-  `accent-digichat`, …) or the nav selector. atlas/hermes/kairos are backend
+  `accent-digichat`, …) or the nav selector. research/portfolio/execution are backend
   langgraph names, **not** coloured products — their accent tokens collapse to
   ink (reference-only). Money colours (`--up`/`--down`) are P&L-only and never
   follow a livery: `--up` is the fixed digiquant phosphor teal, `--down` a
   paired red — the single always-on colour domain. **These colour overrides
   live in the reference's `globals.css` only; `tokens.css` (which the live sites
   build from) is untouched.**
-- **Two voices.** `--font-display` (Fraunces serif by default) for human claims,
-  never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps;
-  `--font-sans` (Geist Sans) for body. All three swap together as a coordinated
-  **type suite** from the nav's suite selector (see `type-store.ts`; 5 suites:
-  default, plex, editorial, grotesk, terminal) — display + body + mono move as a
-  set so you evaluate the whole pairing.
+- **One voice (v0.1).** `--font-display`, `--font-sans`, and `--font-mono` all
+  default to the Geist Mono stack. Hierarchy is size and tracking, not a second
+  face. Serif is an escape hatch via the type-suite picker (`serif-legacy`,
+  `editorial`, …) — comparison furniture, not the shipping default. All three
+  tokens still swap together as a coordinated **type suite** from the nav
+  selector (see `type-store.ts`; suites: default, plex, editorial, grotesk,
+  terminal, utilitarian, omarchy).
 - **Motion laws.** One motion moment per surface; always honour
   `prefers-reduced-motion` (render the final state); content must read without
   JS. Import Motion as `m` etc. from `motion/react` (LazyMotion is provided

@@ -220,7 +220,7 @@ PII under innocuous keys.
 *not* JSONL audit emitters and must not be migrated to `emit_event`:
 
 - `digisearch.demos.audit_rag_demo` — RAG assertion/evidence demo, unrelated I/O
-- `digiquant/scripts/atlas/audit_*.py` — ops coverage/config scripts, not JSONL
+- `digiquant/scripts/research/audit_*.py` — ops coverage/config scripts, not JSONL
 - `digigraph.workflow._emit_event` — streaming queue helper for SSE/chunk events
 
 ### `digibase.metrics`

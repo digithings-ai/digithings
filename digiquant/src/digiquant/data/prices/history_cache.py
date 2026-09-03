@@ -1,12 +1,12 @@
 """Local OHLCV CSV cache — Polars-only.
 
-Ported from ``digiquant/scripts/atlas/preload-history.py``.
+Ported from ``digiquant/scripts/research/preload-history.py``.
 
 One CSV per ticker at ``<cache_dir>/<TICKER>.csv`` with columns
 ``timestamp, open, high, low, close, volume, symbol`` (matches
 :data:`digiquant.data.prices.OHLCV_COLUMNS`).
 
-The cache is intentionally flat CSV (no parquet) because Atlas' legacy
+The cache is intentionally flat CSV (no parquet) because research' legacy
 pipeline also reads these files, and we want cross-compatibility during the
 grace period. Writes are atomic (temp file + rename).
 """
@@ -39,7 +39,7 @@ def load_cached(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> pl.Da
         return None
     if df.is_empty():
         return None
-    # Normalize column names (legacy atlas caches use capitalized columns).
+    # Normalize column names (legacy research caches use capitalized columns).
     lower = {c: c.lower() for c in df.columns if c != c.lower()}
     if lower:
         df = df.rename(lower)

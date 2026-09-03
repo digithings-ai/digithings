@@ -19,6 +19,10 @@ digigraph (digillm + digivault hub). See
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
+
+**Last-turn regen + edit (#3466).** Digigraph surfaces (first-party `ChatPanel` + digigraph embeds) expose **regen** on the last settled assistant and **edit** on the last user turn. Both replay the full digigraph workflow on the same session (tools re-run; digistore may accumulate). Foundry embeds omit `regenerate` / `editLastUser` on `DigiChatController` (client config projects `backendType` only — no endpoints). Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. Foundry execution API is #3475.
+
 ### Capability matrix
 
 | Capability | Status |
@@ -52,14 +56,21 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 **React chat shell** (`src/components/chat-shell.tsx`): Client component that owns
 thread state. On mount it merges `localStorage` threads with a server `GET
-/api/conversations` call, then renders a shadcn Sidebar with conversation list, New
-chat button, rename/delete overflow menus, and the main `ChatPanel`.
+/api/conversations` call, **hydrates the auto-selected remote thread** via
+`GET /api/conversations/[id]` before mounting the composer (when local cache is
+missing or older than the server summary `updatedAt`), then renders a shadcn
+Sidebar with conversation list, New chat button, rename/delete overflow menus, and
+the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
+(`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
+refuses to flush a remote thread that is still `hydrated: false`, and the API
+returns **409 `would_truncate`** if a PUT would drop existing rows unless
+`allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
 so upstream digigraph can correlate the same conversation across turns. Scroll
-stick-to-bottom with a "New messages" chip when scrolled up. Copy and Regenerate
-actions on assistant bubbles.
+stick-to-bottom with a "New messages" chip when scrolled up. Copy, Regenerate,
+and Edit-last-user actions on bubbles (first-party is always digigraph).
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
@@ -94,28 +105,38 @@ connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversatio
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
 **Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
-`src/components/providers.tsx` — #1403): the app runs on the shared digithings token
-canon. `@digithings/design/tokens.css` defines `[data-theme="dark"|"light"]` semantic
-tokens; `@digithings/web/styles/web-theme.css` is the single Tailwind `@theme inline`
-bridge for token-named utilities; digichat's `globals.css` derives the shadcn variable
-set from those tokens under `:root[data-theme]` scopes (`--background: var(--bg)`,
-`--border: var(--hair)`, `--destructive: var(--down)`, …; dark `--primary`/`--ring`
-wear `--accent-digichat` rose, light runs the deeper phosphor teal). `<html>` ships
-`data-theme="dark"` + `.dark` as SSR defaults; the shared `themeInitScript` re-points
-both pre-paint (`dt-theme` localStorage key, shared with the marketing sites) and a
-`MutationObserver` (`ThemeClassSync` in `providers.tsx`) mirrors every later
-`[data-theme]` flip onto the `.dark`/`.light` classes for the Tailwind `dark:`
-variant. The old `@digithings/digichat-ui` `tokens-shadcn-bridge.css` (shadcn vars →
-token names, the reverse direction) is no longer imported; `/embed` sets
-`[data-theme]` on the root from the effective theme (URL `?theme=`, parent
-`digichat:theme` postMessage, or tenant `theme` — its own iframe document) and
-per-tenant accent hexes still override at the wrapper. Because the shared
-`ThemeProvider` (in `providers.tsx`, which wraps `/embed` too via the root layout)
-keeps a `prefers-color-scheme` listener that rewrites `[data-theme]` to the OS scheme
-whenever there is no `dt-theme` key — always true for an anonymous embed visitor —
-`/embed` re-asserts the effective theme with a `MutationObserver` on `html[data-theme]`
-(guarded write, so the observer never loops), so a mid-session OS light↔dark flip
-can't silently override a parent- or tenant-forced theme (#1434).
+`src/components/providers.tsx` — #1403, Phase 3 utilitarian-terminal v0.1):
+the app runs on the shared digithings token canon. `@digithings/design/tokens.css`
+defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings/web/styles/web-theme.css`
+is the single Tailwind `@theme inline` bridge for token-named utilities;
+digichat's `globals.css` derives the shadcn variable set from those tokens under
+`:root[data-theme]` scopes (`--background: var(--bg)`, `--border: var(--hair)`,
+`--destructive: var(--danger)`, …). **Loud CTA fill** is ink/paper
+(`--primary: var(--ink)` / `--primary-foreground: var(--bg)`); rose livery
+(`.accent-digichat` / `--accent-digichat`) is **accent only** — `--ring`,
+`--chart-1`, `--sidebar-primary`, live dots, transcript markers — never the
+default button fill. Local `@theme` `--radius-*` pins to `0` (true circles
+keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
+(`--font-sans`/`--font-display`/`--font-family` remap to `--font-geist-mono`).
+`<html>` ships `data-theme="dark"` + `.dark` as SSR defaults; the shared
+`themeInitScript` re-points both pre-paint (`dt-theme` localStorage key, shared
+with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
+`providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
+classes for the Tailwind `dark:` variant. The old `@digithings/digichat-ui`
+`tokens-shadcn-bridge.css` (shadcn vars → token names, the reverse direction) is
+no longer imported; `/embed` sets `[data-theme]` on the root from the effective
+theme (URL `?theme=`, parent `digichat:theme` postMessage, or tenant `theme` —
+its own iframe document) and per-tenant accent hexes still override at the
+wrapper. Because the shared `ThemeProvider` (in `providers.tsx`, which wraps
+`/embed` too via the root layout) keeps a `prefers-color-scheme` listener that
+rewrites `[data-theme]` to the OS scheme whenever there is no `dt-theme` key —
+always true for an anonymous embed visitor — `/embed` re-asserts the effective
+theme with a `MutationObserver` on `html[data-theme]` (guarded write, so the
+observer never loops), so a mid-session OS light↔dark flip can't silently
+override a parent- or tenant-forced theme (#1434). Composer send (imported
+`.dc-send` plus the authenticated ↵ kbd) is overridden locally to an ink/paper
+rect because `@digithings/digichat-ui` session.css still ships an 8px
+accent-tinted pill.
 
 **Shared controls layer** (`src/components/ui/*` — #1419): ten of the fifteen
 shadcn-derived wrappers are now thin re-exports of the `@digithings/web`
@@ -298,7 +319,7 @@ present, allowing LiteLLM to route models per-tenant.
 
 ```
 src/app/
-  layout.tsx            # Root layout (Providers, Inter font)
+  layout.tsx            # Root layout (Providers, Geist Mono)
   page.tsx              # Server component: default → /embed; optional root auth → ChatShell
   login/                # Login page (only when DIGICHAT_REQUIRE_ROOT_AUTH=1)
   api/
@@ -675,16 +696,18 @@ summary on the agent definition: the Responses API refuses a per-call
 items are intentionally omitted rather than rendered as empty “Thinking”
 chrome. This behavior remains separate from the digithings digigraph path.
 
-**Response language (#2103) — one feature, two independent implementations.**
-The embed header's language selector (`src/lib/languages.ts`'s curated
-`LANGUAGES` list) resolves to a code sent as `X-Digi-Language` on every chat
-request. The two backends have no shared system-prompt mechanism, so each
-adapter enforces the directive its own way:
+**Response language (#2103 / #3418) — `/lang` on the public embed, not a header dropdown.**
+The composer slash `/lang en|de|it|es|fr` (client-only) updates session language and
+sends it as `X-Digi-Language` on subsequent turns. The top-right language dropdown
+was dropped once `/lang` landed. Codes still come from `src/lib/languages.ts`'s
+curated `LANGUAGES` list. The two backends have no shared system-prompt mechanism,
+so each adapter enforces the directive its own way:
 
 - **digigraph** has a system-prompt slot: the BFF forwards the header and
-  digigraph's `research_node` appends a `Respond only in <language>` line to
-  the system prompt server-side once per turn (see `digigraph/ARCHITECTURE.md`
-  and `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
+  digigraph's `research_node` appends a `Respond only in <language>` line (plus
+  "do not translate retrieval queries") to the system prompt server-side once
+  per turn (see `digigraph/ARCHITECTURE.md` and
+  `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
   hand-sync with the frontend's `LANGUAGES` array; there is no shared module
   across the two languages).
 - **Foundry** has no per-call system-prompt slot at all — the `agent_reference`
@@ -694,8 +717,28 @@ adapter enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
+**Embed slash commands (#3418).** `@digithings/digichat-ui` `slash-commands.ts`
+owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
+`/search` and `/docs` (aliases `/digisearch` / `/digivault`) force a locate
+then synthesize — the user string is the tool argument, forwarded as
+`X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
+`/lang`, `/help`, and `/new` never leave the browser. `/new` clears the
+client transcript, drops `sessionStorage` `X-External-Conversation` for the
+embed host, and clears any pending force-tool — so Foundry (and any adapter
+keyed off that id) actually starts a new conversation. Empty `/search` or
+`/docs` wait for an argument. Public copy is "Search the knowledge base" /
+"Find original documents". Signed-in ChatShell keeps its own `/help` `/key`
+`/model` palette.
+
+**Open originals (#3419).** Source cards on a settled turn open a side pane
+(`DocumentPane`). Vault notes render from `body` already loaded by
+`digivault_get_note` (batch ≤20) — paths without `http(s)` never become links.
+Real `http(s)` PDFs use the browser PDF plugin plus Download; never invent a
+URL. Human tool labels live only in `activity-view.toolDisplayName` (identity
+keys still use wire ids).
+
 See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
-for the design rationale behind the dual-backend split.
+for the design rationale behind the dual-backend language split.
 
 digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at digichat
 `/embed` on the tunnel hostname (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, typically

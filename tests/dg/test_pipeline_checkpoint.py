@@ -71,8 +71,8 @@ def test_distinct_thread_ids_isolate_lineages():
         [PipelinePhase(name="p", nodes=[NodeSpec(name="only", run=only)])],
         checkpointer=MemorySaver(),
     )
-    graph.invoke({"a": ""}, {"configurable": {"thread_id": "run-1::atlas"}})
-    graph.invoke({"a": ""}, {"configurable": {"thread_id": "run-1::hermes"}})
+    graph.invoke({"a": ""}, {"configurable": {"thread_id": "run-1::research"}})
+    graph.invoke({"a": ""}, {"configurable": {"thread_id": "run-1::portfolio"}})
     assert len(seen) == 2  # different thread_ids => independent runs, both execute
 
 

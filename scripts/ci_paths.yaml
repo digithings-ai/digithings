@@ -51,7 +51,7 @@ digigraph:
   - tests/contracts/**
   - .github/workflows/test-digigraph.yml
   # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
-  # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
+  # mcp_servers.yaml, digiquant_models.yaml -- all read by tests/dg/*), and
   # infra/digichat-release/config/ is its vendored copy for the Profile A release
   # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
   # config-only edit runs no digigraph job at all -- including the one test that
@@ -87,19 +87,19 @@ digichat:
   - package-lock.json
   - .github/workflows/test-digichat.yml
 
-olympus:
-  - frontend/olympus/**
-  # Olympus is the third consumer of @digithings/web: it declares the dep, imports
+dashboard:
+  - frontend/dashboard/**
+  # Dashboard is the third consumer of @digithings/web: it declares the dep, imports
   # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
-  # editing only frontend/digiweb/web/** runs no olympus lint, tests or static-export
-  # check while measurably changing what olympus ships — the `.chat-md h5` selector
-  # added in #1948 lands in olympus's built stylesheet. Not digichat-ui: olympus does
-  # not consume it.
+  # editing only frontend/digiweb/web/** runs no dashboard lint, tests or static-export
+  # check while measurably changing what the dashboard ships — the `.chat-md h5` selector
+  # added in #1948 lands in the dashboard's built stylesheet. Not digichat-ui: the
+  # dashboard does not consume it.
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
   - package.json
   - package-lock.json
-  - .github/workflows/test-olympus.yml
+  - .github/workflows/test-dashboard.yml
 
 web:
   - frontend/digithings-web/**
@@ -109,10 +109,14 @@ web:
   - frontend/digichat-ui/**
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
+  # Derived brand kit (avatars, OG cards, social headers). --check runs in
+  # test-web.yml after npm ci (Geist + sharp). A header-only edit must redden
+  # this lane, not merge as an untested PNG.
+  - frontend/digiweb/brand/**
   # The design reference is the canonical surface every other frontend copies patterns
   # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
   # entry nothing built, linted or type-checked it: the only `run build` calls in
-  # .github/workflows are test-digichat.yml and test-olympus.yml. ~137 commits in the
+  # .github/workflows are test-digichat.yml and test-dashboard.yml. ~137 commits in the
   # month after it was scaffolded (2026-07-06), none of which could fail on a broken
   # import or a bad type — in the one app whose defects propagate by being copied.
   #
@@ -197,30 +201,30 @@ nautilus_smoke:
   - tests/dq/strategies/sdca/test_nautilus_strategy.py
   - tests/dq/replay/test_nautilus_portfolio.py
   - tests/dq/replay/test_worker.py
-  - digiquant/src/digiquant/olympus/replay/**
+  - digiquant/src/digiquant/dashboard/replay/**
   - .github/workflows/test-nautilus.yml
 
-atlas_graph:
-  - digiquant/src/digiquant/olympus/atlas/**
-  - digiquant/scripts/atlas/**
+research_graph:
+  - digiquant/src/digiquant/research/**
+  - digiquant/scripts/research/**
   - digiquant/supabase/**
-  - tests/dq/atlas/**
-  # tests/dq/atlas/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
+  - tests/dq/research/**
+  # tests/dq/research/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
   # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
-  # `tests/dq/atlas tests/dq/hermes tests/dq/learning`. An edit_mode-only change therefore
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning`. An edit_mode-only change therefore
   # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
-  # edit_mode/content_identity.py and is consumed by three atlas modules (#1749).
-  - digiquant/src/digiquant/olympus/edit_mode/**
-  - digiquant/src/digiquant/olympus/hermes/**
-  - digiquant/src/digiquant/olympus/learning/**
-  - digiquant/src/digiquant/olympus/replay/walk_forward.py
+  # edit_mode/content_identity.py and is consumed by three research modules (#1749).
+  - digiquant/src/digiquant/dashboard/edit_mode/**
+  - digiquant/src/digiquant/portfolio/**
+  - digiquant/src/digiquant/dashboard/learning/**
+  - digiquant/src/digiquant/dashboard/replay/walk_forward.py
   - tests/dq/replay/test_walk_forward.py
   - tests/dq/replay/phase4_e2e_fixtures.py
   - tests/dq/replay/test_phase4_end_to_end.py
-  - tests/dq/hermes/**
+  - tests/dq/portfolio/**
   - tests/dq/learning/**
-  - .github/workflows/test-atlas-graph.yml
-  - .github/workflows/pipeline-olympus.yml
+  - .github/workflows/test-research-graph.yml
+  - .github/workflows/pipeline-digiquant.yml
 
 ruff_and_scripts:
   - digibase/**
@@ -265,13 +269,13 @@ ruff_and_scripts:
   # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
   # edit it exists to catch. Same shape as the prices-cron entry above.
   - .github/workflows/db-migrate.yml
-  # tests/scripts/test_pipeline_olympus_attempt.py asserts the outer-retry loop exports
+  # tests/scripts/test_pipeline_dashboard_attempt.py asserts the outer-retry loop exports
   # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
-  # key (#1762). This file IS listed under atlas_graph, but that lane's selector is
-  # `tests/dq/atlas tests/dq/hermes tests/dq/learning` — it never runs tests/scripts/. Drop the
+  # key (#1762). This file IS listed under research_graph, but that lane's selector is
+  # `tests/dq/research tests/dq/portfolio tests/dq/learning` — it never runs tests/scripts/. Drop the
   # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
   # symptom is a cost figure that is quietly a floor.
-  - .github/workflows/pipeline-olympus.yml
+  - .github/workflows/pipeline-digiquant.yml
   # tests/scripts/test_check_deploy_freshness.py pins both deploy checks' own `paths:` filters —
   # that each lists the build script's callees, not just the build script. Same shape as the
   # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
@@ -292,10 +296,10 @@ ruff_and_scripts:
   - .github/workflows/**
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
-# only actionlint in CI was a job inside test-atlas-graph.yml pinned to
-# `files: .github/workflows/pipeline-olympus.yml`, reached only through the
-# atlas_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
-# itself was never workflow-linted at all (observed on #1818, where atlas_graph
+# only actionlint in CI was a job inside test-research-graph.yml pinned to
+# `files: .github/workflows/pipeline-digiquant.yml`, reached only through the
+# research_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
+# itself was never workflow-linted at all (observed on #1818, where research_graph
 # reported "skipping" over a diff of pure workflow YAML).
 # .github/actionlint.yaml is listed because it holds the suppression rules: a
 # change that widens or narrows them has to re-run the lint it governs.

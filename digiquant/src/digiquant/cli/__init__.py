@@ -1,4 +1,4 @@
-"""digiquant CLI: backtest, optimize, export. No fallbacks; raises on failure."""
+"""digiquant CLI: backtest, optimize, export, strategy, prices. No fallbacks; raises on failure."""
 
 from __future__ import annotations
 
@@ -40,9 +40,11 @@ def main() -> None:
 # Register subcommand groups.
 def _register_subgroups() -> None:
     from digiquant.cli.prices import prices as _prices_group
-    from digiquant.olympus.replay.cli import policy_replay as _policy_replay_group
+    from digiquant.cli.strategy import strategy as _strategy_group
+    from digiquant.dashboard.replay.cli import policy_replay as _policy_replay_group
 
     main.add_command(_prices_group)
+    main.add_command(_strategy_group)
     main.add_command(_policy_replay_group)
 
 
@@ -231,6 +233,105 @@ def export(
     if exp.status != "ok":
         raise RuntimeError(exp.message or "Export failed.")
     click.echo(f"Artifact: {exp.artifact_path}")
+
+
+@main.command("sdca-optimize-curve")
+@click.option(
+    "--cache-dir",
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    default=Path("data/price-history"),
+    show_default=True,
+    help="Coinbase/FRED cache (BTC-USD.csv plus M2SL/DTWEXBGS siblings)",
+)
+@click.option("--signal-delay-days", type=int, default=3, show_default=True)
+@click.option("--trade-start", type=str, default="2018-01-01", show_default=True)
+@click.option("--initial-cash", type=float, default=1000.0, show_default=True)
+@click.option(
+    "--n-random",
+    type=int,
+    default=400,
+    show_default=True,
+    help="Extra seeded random trials",
+)
+@click.option("--seed", type=int, default=42, show_default=True)
+@click.option("--no-grid", is_flag=True, help="Skip the coarse grid (random + published only)")
+@click.option(
+    "--sidecar",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Write the search result JSON (default: package sidecar path)",
+)
+@click.option(
+    "--persist-preset",
+    is_flag=True,
+    help="Write btc_optimized only if the winner beats return AND fill concentration",
+)
+def sdca_optimize_curve(
+    cache_dir: Path,
+    signal_delay_days: int,
+    trade_start: str,
+    initial_cash: float,
+    n_random: int,
+    seed: int,
+    no_grid: bool,
+    sidecar: Path | None,
+    persist_preset: bool,
+) -> None:
+    """Search remaining-book curve params on the frozen published composite.
+
+    Index weights are read from settings.json and not searched. Objective is
+    highest backtest return with cheap-buy / rich-sell / 2025-sell gates.
+    Does not --push-supabase. beats_flat_dca_oos is never set true here.
+    """
+    from digiquant.strategies.sdca.curve_optimize import (
+        persist_curve_winner,
+        run_published_curve_search,
+    )
+
+    result = run_published_curve_search(
+        cache_dir,
+        signal_delay_days=signal_delay_days,
+        trade_start=trade_start,
+        initial_cash=initial_cash,
+        n_random=n_random,
+        seed=seed,
+        include_grid=not no_grid,
+    )
+    wrote = persist_curve_winner(result, sidecar_path=sidecar, persist=persist_preset)
+    shape = result.best.shape
+    conc = result.best.concentration
+    click.echo(
+        f"evals={result.num_evaluations} feasible={result.num_feasible} "
+        f"persist_ok={result.persist_ok} wrote_preset={wrote} "
+        f"evaluator={result.evaluator} beats_flat_dca_oos={result.beats_flat_dca_oos}"
+    )
+    click.echo(
+        f"baseline return={result.baseline.total_return_pct:.2f}% "
+        f"vs_lump={result.baseline.vs_lump_pct:.2f}% "
+        f"buy_mean_risk={result.baseline.concentration.buy_mean_risk} "
+        f"sell_mean_risk={result.baseline.concentration.sell_mean_risk} "
+        f"sell_days_2025={result.baseline.concentration.sell_days_2025}"
+    )
+    click.echo(
+        f"best return={result.best.total_return_pct:.2f}% "
+        f"vs_lump={result.best.vs_lump_pct:.2f}% "
+        f"vs_flat_logged={result.best.vs_flat_dca_pct:.2f}% "
+        f"unconstrained_return={result.unconstrained_return_pct:.2f}% "
+        f"feasible={result.best.feasible} reasons={result.best.reject_reasons}"
+    )
+    click.echo(
+        "best shape: "
+        f"buy_max={shape.buy_max_rate:g} buy_knee={shape.buy_knee_risk:g} "
+        f"sell_knee={shape.sell_knee_risk:g} sell_max={shape.sell_max_rate:g} "
+        f"buy_curv={shape.buy_curvature:g} sell_curv={shape.sell_curvature:g}"
+    )
+    click.echo(
+        f"best concentration: buy_mean_risk={conc.buy_mean_risk} "
+        f"sell_mean_risk={conc.sell_mean_risk} "
+        f"buy_frac_cheap={conc.buy_frac_cheap:.3f} sell_frac_rich={conc.sell_frac_rich:.3f} "
+        f"buy_frac_deep={conc.buy_frac_deep:.3f} sell_frac_deep={conc.sell_frac_deep:.3f} "
+        f"sell_days_2025={conc.sell_days_2025}"
+    )
 
 
 if __name__ == "__main__":

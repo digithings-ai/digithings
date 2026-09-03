@@ -96,7 +96,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (CI workflows only — not for research pipelines) |
 | Single-shot 100k | Yes (context window supports it) but RPD is too low for bulk research |
 | Privacy safe | Unknown (Azure AI backend) |
-| Atlas/Hermes role | **Not recommended** — eval/ToS-restricted; too low RPD for research pipelines |
+| research/portfolio role | **Not recommended** — eval/ToS-restricted; too low RPD for research pipelines |
 
 ---
 
@@ -106,7 +106,7 @@ model_list:
 - RPD of 50–150 on high-complexity models is insufficient for daily automated research runs.
 - The `GITHUB_TOKEN` from Actions has the right scope automatically — no separate secret needed in CI.
 - Useful for: automated PR review, code review workflows, CI commentary.
-- Not useful for: Atlas/Hermes research pipelines, bulk document analysis, any sustained volume.
+- Not useful for: research/portfolio research pipelines, bulk document analysis, any sustained volume.
 
 ---
 

@@ -8,7 +8,12 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 |------|-----|----------------|---------------|
 | [Graphite](graphite.com.md) | https://graphite.com | Scroll-pinned features, motion as brand, product-in-context | digiquant.io landing, marketing motion |
 | [Cursor](cursor.com.md) | https://cursor.com | Utilitarian bento layout, literal CTAs, product frames | digithings.ai, digichat, docs surfaces |
-| [xAI](x.ai.md) | https://x.ai | Brutalist restraint, mono display, capability demos | Olympus, twelve-x, API/developer pages |
+| [xAI](x.ai.md) | https://x.ai | Brutalist restraint, mono display, capability demos | dashboard, twelve-x, API/developer pages |
+| [Herdr](herdr.dev.md) | https://herdr.dev | Diegetic terminal hero, ink/paper dual ground, sharp chrome | digichat, agent runtime surfaces, install CTAs |
+| [AgentMail](agentmail.to.md) | https://www.agentmail.to | Sparse dark API hero, white CTA, live code proof | digithings.ai API pages, digikey docs |
+| [Omarchy](omarchy.org.md) | https://omarchy.org | Mono-everything utilitarian voice, terminal colour as punctuation | dashboard density, digichat transcript voice |
+
+**Active blend (2026-08):** utilitarian terminal simplicity — Instrument Panel tokens + herdr’s diegetic proof + agentmail’s sparse hero + omarchy’s mono confidence. Pick treatments live on the reference app’s [`/iterate`](../../reference/app/iterate/page.tsx) page; ledger lands in [`BLEND.md`](BLEND.md).
 
 **Deep scans (page-by-page, components, mobile, copy):** [`scans/INDEX.md`](scans/INDEX.md)
 
@@ -16,7 +21,7 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 
 **Canonical implementation (ours):** [`../tokens.css`](../tokens.css), [`../site/site.css`](../site/site.css), [`@digithings/web`](../../web/)
 
-**Olympus subpage chrome (tab bar, tabs-vs-sidebar, typography, surfaces):** [`olympus-subpage-chrome.md`](olympus-subpage-chrome.md)
+**dashboard subpage chrome (tab bar, tabs-vs-sidebar, typography, surfaces):** [`dashboard-subpage-chrome.md`](dashboard-subpage-chrome.md)
 
 **The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `frontend/digiweb/design/` and open `/references/mine/index.html`
 
@@ -28,7 +33,7 @@ navigation, layout rhythm, typography roles, motion, and product framing.
    relevant site scan for the pattern you need (bento vs scrolly vs brutalist).
 2. **Before a new shared primitive** — check whether Graphite, Cursor, or xAI
    already solved it; note the “Adopt / Adapt / Avoid” table in each scan.
-3. **Before Olympus / twelve-x UI work** — Cursor + xAI scans; landing scans are
+3. **Before dashboard / twelve-x UI work** — Cursor + xAI scans; landing scans are
    intentionally deprioritized for dashboard density.
 4. **When debating fonts or spacing** — `EVOLUTION.md` § Typography & spacing
    locks the direction; individual scans are evidence, not law.
@@ -60,8 +65,8 @@ Last full pass: **2026-06-29** (deep layer in [`scans/`](scans/INDEX.md)).
 | digithings.ai | `frontend/digithings-web/` | Marketing + architecture story |
 | digiquant.io | `frontend/digiquant-web/` | Marketing + quant product proof |
 | digichat | `frontend/digichat/` | Product-as-landing (terminal chat) |
-| Olympus | `frontend/olympus/` | Professional dashboard |
-| twelve-x | `frontend/olympus/components/twelve-x/` | Data-dense research utility |
+| dashboard | `frontend/dashboard/` | Professional dashboard |
+| twelve-x | `frontend/dashboard/components/twelve-x/` | Data-dense research utility |
 | Shared system | `frontend/digiweb/design/`, `frontend/digiweb/web/` | Tokens, primitives, motion |
 
 Legacy static sites (`frontend/digithings/`, `frontend/digiquant/`) are not

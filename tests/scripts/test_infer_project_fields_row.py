@@ -57,8 +57,8 @@ def test_default_row_is_phase3_cross_cutting_task_p2_sonnet(mod: Any) -> None:
         ("phase-0", "Phase 2 — Hardening"),
         ("phase-2", "Phase 2 — Hardening"),
         ("phase-3", "Phase 3 — Domain unification"),
-        ("phase-4", "Phase 4 — Atlas on digigraph"),
-        ("phase-5", "Phase 5 — Atlas tiering"),
+        ("phase-4", "Phase 4 — research on digigraph"),
+        ("phase-5", "Phase 5 — research tiering"),
         ("client-pilot", "Client Pilot"),
     ],
 )

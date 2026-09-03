@@ -50,6 +50,29 @@ export function chatAccessTokenAtSend(resolvedHost: string): string | null {
   return readChatAccessToken(resolvedHost);
 }
 
+/**
+ * `/search` / `/docs` force-tool, written at send() and read inside
+ * prepareSendMessagesRequest. Not a React ref — `react-hooks/refs` forbids
+ * `.current` inside the useMemo that builds DefaultChatTransport, and useChat
+ * never adopts a rebuilt transport (#1339). Keyed by embedHost so two
+ * widgets on one page cannot steal each other's slash.
+ */
+const pendingForceByHost = new Map<string, string>();
+
+export function setPendingForceTool(host: string, tool?: string): void {
+  const key = host.trim();
+  if (!key) return;
+  if (tool) pendingForceByHost.set(key, tool);
+  else pendingForceByHost.delete(key);
+}
+
+export function takePendingForceTool(host: string): string | undefined {
+  const key = host.trim();
+  const tool = pendingForceByHost.get(key);
+  pendingForceByHost.delete(key);
+  return tool;
+}
+
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
 
 function conversationStorageKey(host: string): string {
@@ -159,6 +182,12 @@ type UseEmbedDigiChatOptions = {
    * a stable accessor closing over a ref instead of a storage-read helper.
    */
   getResponseLanguage?: () => string;
+  /**
+   * When false (Foundry), omit regenerate/editLastUser so DigiChatSession
+   * hides the chrome. Truncate-and-resend would corrupt an append-only
+   * Foundry conversation (#3466). Default true for digigraph-first callers.
+   */
+  allowClientTurnMutation?: boolean;
 };
 
 export function useEmbedDigiChat({
@@ -172,6 +201,7 @@ export function useEmbedDigiChat({
   trialUnlocked,
   onGated,
   getResponseLanguage,
+  allowClientTurnMutation = true,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
@@ -205,15 +235,18 @@ export function useEmbedDigiChat({
           // Send-time read — same freeze reason as isEmbedTrialUnlockedAtSend/
           // chatAccessTokenAtSend below (#1339): a language value closed over
           // by the transport at creation time would stay frozen at whatever
-          // detectBrowserLanguageCode() returned at mount, so picking a new
-          // language in the dropdown would never reach the header (#2103
-          // final review, Critical finding). Normalize against the curated
-          // list before forwarding — defense-in-depth for a hypothetical
+          // detectBrowserLanguageCode() returned at mount, so `/lang` would
+          // never reach the header (#2103 / #3418). Normalize against the
+          // curated list before forwarding — defense-in-depth for a hypothetical
           // future caller of this exported hook that doesn't already pass a
           // curated-safe value (see #2103 final review, Fix 6).
           const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
           if (normalizedLanguage !== "en") {
             headers["X-Digi-Language"] = normalizedLanguage;
+          }
+          const forceTool = takePendingForceTool(embedHost);
+          if (forceTool) {
+            headers["X-Digi-Force-Tool"] = forceTool;
           }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
@@ -296,15 +329,62 @@ export function useEmbedDigiChat({
   }, [error, onGated]);
 
   const send = useCallback(
-    (question: string) => {
+    (question: string, opts?: { forceTool?: string }) => {
       const q = question.trim();
       if (!q || busy) return;
+      setPendingForceTool(embedHost, opts?.forceTool);
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: q }],
       });
     },
-    [busy, sendMessage],
+    [busy, sendMessage, embedHost],
+  );
+
+  const reset = useCallback(() => {
+    setMessages([]);
+    // /new must also drop backend conversation continuity (Foundry's
+    // X-External-Conversation) and any unused slash force-tool, not just the
+    // client transcript — otherwise "Start a new conversation" is a lie on
+    // adapters that key off the stored id.
+    setPendingForceTool(embedHost);
+    try {
+      window.sessionStorage.removeItem(conversationStorageKey(embedHost));
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, [setMessages, embedHost]);
+
+  const doRegenerate = useCallback(() => {
+    if (!allowClientTurnMutation || busy) return;
+    // Never set a pending force-tool on regen — slash force is send-only (#3466).
+    setPendingForceTool(embedHost);
+    void regenerate();
+  }, [allowClientTurnMutation, busy, embedHost, regenerate]);
+
+  const editLastUser = useCallback(
+    (text: string) => {
+      if (!allowClientTurnMutation || busy) return;
+      const next = text.trim();
+      if (!next) return;
+      let lastUserIdx = -1;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i]?.role === "user") {
+          lastUserIdx = i;
+          break;
+        }
+      }
+      if (lastUserIdx < 0) return;
+      // Drop the last user turn and anything after it (the following assistant).
+      setMessages(messages.slice(0, lastUserIdx));
+      // Force-tool is send-only — do not re-fire a prior slash on edit.
+      setPendingForceTool(embedHost);
+      sendMessage({
+        role: "user",
+        parts: [{ type: "text", text: next }],
+      });
+    },
+    [allowClientTurnMutation, busy, embedHost, messages, sendMessage, setMessages],
   );
 
   // Mid-stream: keep completed searches as running tool_call rows until
@@ -338,12 +418,19 @@ export function useEmbedDigiChat({
     /** Raw AI SDK error — for structured code detection (quota → BYOK). */
     rawError: error,
     send,
+    reset,
     stop: () => {
       void stop();
     },
-    onRetry: () => {
-      void regenerate();
-    },
+    // Error-row Retry: digigraph may regenerate; Foundry must not (#3466).
+    onRetry: allowClientTurnMutation
+      ? () => {
+          doRegenerate();
+        }
+      : undefined,
+    ...(allowClientTurnMutation
+      ? { regenerate: doRegenerate, editLastUser }
+      : {}),
     seed,
   };
 }

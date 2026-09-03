@@ -12,16 +12,33 @@ to discover, copy, and extend standardized components.
 frontend/digiweb/
 ├── README.md              suite overview + the pass-through rule
 ├── ARCHITECTURE.md        this file
+├── DESIGN.md              agent-readable design system (Stitch / Refero shape)
 ├── MANIFEST.json          generated machine index of every reference component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
 ├── design/                @digithings/design — tokens.css + CSS primitives
+│   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
+│   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
+│   └── references/        external north-star scans (Cursor, herdr, …)
+├── brand/                 generated identity kit (avatars, headers, OG) — previewed at design-reference `/brand`, not on digithings.ai
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/<family>/       one page per design family (foundations, controls, …)
+    ├── app/<family>/       one page per design family (foundations, iterate, controls, …)
     ├── components/         the reusable patterns (one file each, docblock-headed)
     └── README.md           the canon: tokens, livery, type, motion, chart rules
 ```
+
+The **`/iterate`** family is the human preference gallery for the utilitarian
+terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
+locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
+rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
+
+Live apps import `@digithings/design` tokens and `@digithings/web` primitives —
+they do not fork a second look. Phase 3 product-local fights on this branch:
+digichat shadcn `--radius` pinned to 0, dashboard `.glass-card` retired, leftover
+`rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
+Themed `--font-family` follows `--font-sans` (mono); unthemed `:root` Inter
+remains a sans escape hatch.
 
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:
@@ -29,7 +46,25 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+
+`SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
+is the quiet company-profile utility row: the same borderless `.btn-icon`
+grammar as the NavShell GitHub slot (radius 0, ink-mute → ink, `--accent` only
+on `:focus-visible`). Default `DIGITHINGS_SOCIALS` is the live GitHub / X /
+LinkedIn set; Discord is not a network we run. Specimens live on the reference
+chrome page (`SocialsReference`). `Footer` accepts an optional `profiles` slot
+so marketing sites can mount the row without a fake Connect column.
+
+`AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
+`./styles/account-auth.css`) is the promoted sign-in / create-account card.
+Layouts `compact`, `icons-first`, and `desk` share one form: email + password,
+Google / GitHub / X (Supabase OAuth 2.0 provider id `x`, visible label X), primary submit
+Sign in / Sign up, footer Create an account / Sign in. Compact places the
+`digiquant` wordmark beside the mark. Desk may keep a product kicker, a sign-up
+strength meter, and sign-in Forgot password. Specimens live on the reference
+account page (`AuthCardProposals`) as a layout catalog. The dashboard login
+screen imports compact `AuthCard` (`frontend/dashboard/components/login-screen.tsx`).
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own
@@ -37,9 +72,10 @@ barrel, re-exported from `src/index.ts`:
 
 | Family | Components | CSS subpath |
 | ------ | ---------- | ----------- |
-| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from olympus `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
+| `finance-charts` | PriceChart, EquityCurve, DrawdownPlot + two chart scaffolds: rebuild-on-data `useFinanceChart` (with `readFinancePalette`, `financeChartOptions`, `tokenAlpha`, `toChartTime`) and the persistent dashboard lifecycle `useLightweightChart` (`chartChromeOptions`, `hostMonoFont`, `toLineData`/`timeToISO`, `useChartTip`/`ChartTipShell`, `useFinanceChartPalette`/`getFinancePalette` — converged from dashboard `lib/lw-chart.tsx`, #1450 batch E) and `*_DEMO` datasets. (MonthlyReturns and its `finance-charts.css` were deprecated into finance-tearsheet's ReturnsMatrix, #1463.) | — (the charts are canvas, zero CSS; `ChartTipShell` is utility-classed, covered by the family `@source` line) |
 | `finance-composites` | StockTicker, OrderBook, SortableTable, PerformanceDashboard, SyncedTearsheet | `./styles/finance-composites.css` |
 | `data-layout` | Odometer/OdometerStrip, DotMatrixStat, BentoGrid/BentoCell, ProductFrame, FeatureCell, TestimonialWall | `./styles/data-layout.css` |
+| `repo-activity` | RepoActivity (compact + detailed) + `fetchRepoActivityLive`. Snapshot-first GitHub velocity: three 30-day counts (commits on the configured branch, merged PRs, closed issues), current open PRs/issues, latest release, recent merged PRs, recently updated open issues. Optional client refresh applies atomically or keeps the snapshot. No stars/forks/watchers. | `./styles/repo-activity.css` |
 | `effects-chrome` | Pipeline, RotatingPrompts, StackingPanels, AnnouncementBar, TabStrip (+ `tabId`/`tabPanelId` helpers), ToastStack | `./styles/effects-chrome.css` |
 
 The #1463 reverse-promotion added the **`finance-tearsheet`** family — the
@@ -53,7 +89,7 @@ print-grade SVG tearsheet grammar (`.ts-*`) promoted from
 Engine ruling: canvas families are for screen-only dashboards; any surface
 with a PDF export composes finance-tearsheet — see [CHARTS.md](CHARTS.md).
 `@digithings/design/tearsheet/styles.css` is deprecated in favour of the
-family sheet (kept only until digiquant-web/olympus swap their imports).
+family sheet (kept only until digiquant-web/dashboard swap their imports).
 
 Family notes: the dashboard time-series primitives ride **TradingView
 Lightweight Charts** (`lightweight-charts` is a package dependency; hosts fill
@@ -71,7 +107,7 @@ app-owned). `TabStrip` wears three dresses (`underline`, `pill`, and `chip` —
 the dashboard sub-nav chip row, which may flex-wrap; the ink follows across
 rows), takes `ReactNode` labels, and accepts `linkPanels={false}` to omit
 `aria-controls` when the consumer owns no panel ids (wrapper-adaption cases
-like olympus's subpage tab bar).
+like the dashboard's subpage tab bar).
 
 Page-level dashboard composition is specified by
 `reference/components/dashboard-workspace-reference.tsx` on the Finance page.
@@ -87,7 +123,7 @@ liveries live inside utilities); shared sheets import with `layer(components)`;
 package components rendered by an app need an `@source` line. The adoption
 playbook and the CI guard contract live in [MIGRATION.md](MIGRATION.md)
 (`scripts/check_frontend_canon.py`, enforced by the unconditional
-`frontend-canon` job in `ci.yml` — plus redundantly in the web/olympus/digichat
+`frontend-canon` job in `ci.yml` — plus redundantly in the web/dashboard/digichat
 test jobs).
 
 ### The move touched deploy config
@@ -180,11 +216,18 @@ queries silently.
 
 Each product app also owns explicit 32px fallback, 180px Apple touch, and
 192/512px web-app PNGs plus a maskable 512px variant. digithings and digiquant
-use the compact terminal mark; Olympus uses the canonical four-stroke mark.
+use the compact terminal mark; the digiquant dashboard uses the canonical four-stroke mark.
 Tab and Apple metadata publish light/dark pairs with media queries. Web App
 Manifest icons use one contrast-safe default because installed icons are cached
 by the operating system and the manifest standard has no live colour-scheme
 selector; changing those assets requires removing and reinstalling the shortcut.
+
+Off-repo uploads (GitHub, X, LinkedIn, slides, mail) are generated under
+`frontend/digiweb/brand/` — avatars from the favicon tile, OG cards and social
+headers from outlined Geist Mono + `HEADLINES` in `build-og.py`. Headers are a
+**compact stack**, not a cropped 1200×630 card. `build-header.py --check` keeps
+the served copies on the design-reference `/brand` page in sync (not on
+digithings.ai). See `frontend/digiweb/brand/README.md`.
 
 The older text `Wordmark` (`symbols/marks.tsx`) and `Colophon`
 (`components/chrome.tsx`) are superseded for new work but not retired — the

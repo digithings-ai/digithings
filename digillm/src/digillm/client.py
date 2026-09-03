@@ -198,8 +198,8 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
 # stripping one still has to leave one behind.
 #
 # Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
-# write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
-# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
+# write the doubled ``openrouter/openrouter/auto`` (README, and the research provider
+# diagnostics under ``digiquant/scripts/research/``; no tier config lists it), but a BYOK
 # caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
 # prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
 # the middleware and the resolver from disagreeing about a hostile header. So the single-
@@ -1457,8 +1457,13 @@ def openrouter_web_search(
     """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
 
     ``:online`` models and native-search providers (``perplexity/*``) use built-in web
-    search via a plain completion. Other models fall back to the server-side
-    ``openrouter:web_search`` tool (Exa by default).
+    search via a plain completion — this is the **dashboard grounding** path
+    (:func:`digigraph.model_config.get_grounding_model`).
+
+    Other models fall back to the server-side ``openrouter:web_search`` tool
+    (Exa by default). That branch is a **digillm toolkit** capability for
+    non-native-search models (diagnostics / opt-in callers); dashboard must not
+    assemble ``engine`` / ``max_results`` for production grounding (#2567).
 
     Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
     unset, or the call fails (fail-soft).

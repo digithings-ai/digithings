@@ -18,7 +18,7 @@ from typing import (
 import polars as pl
 import pytest
 from digiquant.data.prices.correlation import pairwise_return_correlations
-from digiquant.olympus.atlas.data.queries import get_return_correlations
+from digiquant.research.data.queries import get_return_correlations
 
 pytestmark = pytest.mark.unit
 
@@ -42,7 +42,7 @@ def _corr_map(frame: pl.DataFrame) -> dict[tuple[str, str], float]:
     return {(r["a"], r["b"]): r["corr"] for r in frame.to_dicts()}
 
 
-# ── FakeSupabaseClient (mirrors the atlas/test_supabase_io version, minimal) ─
+# ── FakeSupabaseClient (mirrors the research/test_supabase_io version, minimal) ─
 
 
 @dataclass
