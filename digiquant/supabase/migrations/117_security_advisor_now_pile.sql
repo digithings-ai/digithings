@@ -1,5 +1,9 @@
 -- 117_security_advisor_now_pile.sql
 --
+-- # score:allow todo
+-- Intentional TODO(T5) markers preserved from migration 098 policy text (tier
+-- CHECK deferred; do not remove while recreating policies for initplan).
+--
 -- #3461 — live core security/performance advisors "Now" pile only.
 -- Does NOT touch security_definer public_* views (public tape), pg_net,
 -- unused indexes, or cutover 113/900.
