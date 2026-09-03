@@ -72,6 +72,7 @@ import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
+import { resetChatRunLocksForTests } from "@/lib/chat-run-lock";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
 
@@ -89,6 +90,7 @@ describe("POST /api/chat", () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
+    resetChatRunLocksForTests();
     vi.mocked(createFoundryStreamResponse).mockClear();
     vi.mocked(createDigigraphTraceStreamResponse).mockClear();
   });
@@ -349,6 +351,150 @@ describe("POST /api/chat", () => {
       headers?: Record<string, string>;
     };
     expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
+  });
+
+  it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-force-tool": "digisearch",
+          "x-digi-turn-mode": "regenerate",
+          "x-digichat-session": "sess-force-regen",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "RS256" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Force-Tool"]).toBeUndefined();
+  });
+
+  it("returns 409 run_in_progress for concurrent regen on the same session", async () => {
+    vi.mocked(streamText).mockImplementationOnce(
+      () =>
+        ({
+          toUIMessageStreamResponse: ({ headers }: { headers: Record<string, string> }) =>
+            new Response(
+              new ReadableStream({
+                start() {
+                  /* hold open until cancelled */
+                },
+              }),
+              { status: 200, headers },
+            ),
+        }) as ReturnType<typeof streamText>,
+    );
+
+    const first = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-concurrent",
+          "x-digi-turn-mode": "regenerate",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+
+    const second = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-concurrent",
+          "x-digi-turn-mode": "regenerate",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(second.status).toBe(409);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("run_in_progress");
+    await first.body?.cancel();
+  });
+
+  it("returns 409 run_id_replay for a duplicate X-Digi-Run-Id", async () => {
+    const first = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-runid",
+          "x-digi-run-id": "run-dup-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(first.status).toBe(200);
+    await first.text();
+
+    const second = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digichat-session": "sess-runid",
+          "x-digi-run-id": "run-dup-1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(second.status).toBe(409);
+    const body = (await second.json()) as { error: string };
+    expect(body.error).toBe("run_id_replay");
+  });
+
+  it("passes turnMode to the Foundry adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+          "x-digi-turn-mode": "regenerate",
+          "x-external-conversation": "conv_1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    await res.text();
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      turnMode?: string;
+    };
+    expect(call?.turnMode).toBe("regenerate");
   });
 
   it("passes responseLanguage to the Foundry adapter", async () => {
@@ -666,6 +812,7 @@ describe("POST /api/chat", () => {
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
       // No embed config on an authenticated request, so the adapter gets the default.
       expect(call?.activityDetail).toBe("full");
+      expect(call?.signal).toBeDefined();
     });
 
     it("forwards a digigraph-backed embed's activityDetail to the trace adapter", async () => {

@@ -19,6 +19,12 @@ import {
   parseSlashInput,
   slashHelpText,
 } from "./slash-commands";
+import {
+  downloadMarkdown,
+  serializeAssistantMarkdown,
+  serializeThreadMarkdown,
+  type TranscriptTurn,
+} from "./transcript-markdown";
 import type { DigiChatSessionProps, VaultHitSummary } from "./types";
 import { useStreamingIntro } from "./useStreamingIntro";
 
@@ -60,6 +66,8 @@ export function DigiChatSession({
     send,
     stop,
     onRetry,
+    regenerate,
+    editLastUser,
     reset,
     providerIsSet = false,
     openSettings,
@@ -68,8 +76,12 @@ export function DigiChatSession({
   const [input, setInput] = useState("");
   const [localNotes, setLocalNotes] = useState<string[]>([]);
   const [openDoc, setOpenDoc] = useState<VaultHitSummary | null>(null);
+  /** Index of the user turn being edited; only the latest user turn is eligible. */
+  const [editingUserIndex, setEditingUserIndex] = useState<number | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const editTaRef = useRef<HTMLTextAreaElement>(null);
 
   const introEnabled = showIntro && messages.length === 0 && !formReplacement;
   const { text: intro, done: introDone } = useStreamingIntro(welcomeIntro, introEnabled);
@@ -167,10 +179,68 @@ export function DigiChatSession({
 
   const waitingForAssistant =
     busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user");
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+  let lastAssistantIndex = -1;
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const role = messages[i]?.role;
+    if (lastAssistantIndex < 0 && role === "assistant") lastAssistantIndex = i;
+    if (lastUserIndex < 0 && role === "user") lastUserIndex = i;
+    if (lastAssistantIndex >= 0 && lastUserIndex >= 0) break;
+  }
+  const lastAssistant = lastAssistantIndex >= 0 ? messages[lastAssistantIndex] : undefined;
   const lastChain = lastAssistant ? chainActivities(lastAssistant.activities ?? []) : [];
   const showOptimisticSearch =
     busy && !waitingForAssistant && lastAssistant && lastChain.length === 0 && !lastAssistant.content;
+
+  // Cancel in-progress edit if the transcript shifts or a run starts.
+  useEffect(() => {
+    if (editingUserIndex === null) return;
+    if (!(busy || editingUserIndex !== lastUserIndex)) return;
+    queueMicrotask(() => {
+      setEditingUserIndex(null);
+      setEditDraft("");
+    });
+  }, [busy, editingUserIndex, lastUserIndex]);
+
+  const threadTurns: TranscriptTurn[] = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      sources:
+        m.role === "assistant"
+          ? citationHits(chainActivities(m.activities ?? [])).map((h) => ({
+              title: h.title,
+              path: h.path,
+            }))
+          : undefined,
+    }));
+  const threadMarkdown = serializeThreadMarkdown(threadTurns);
+  const canExportThread = threadMarkdown.trim().length > 0 && !busy;
+  const canRegenerate =
+    !!regenerate && !busy && lastAssistantIndex >= 0 && editingUserIndex === null;
+  const canEditLastUser =
+    !!editLastUser && !busy && lastUserIndex >= 0 && editingUserIndex === null;
+
+  function beginEditLastUser(index: number) {
+    if (!canEditLastUser || index !== lastUserIndex) return;
+    setEditingUserIndex(index);
+    setEditDraft(messages[index]?.content ?? "");
+    queueMicrotask(() => editTaRef.current?.focus());
+  }
+
+  function cancelEdit() {
+    setEditingUserIndex(null);
+    setEditDraft("");
+  }
+
+  function submitEdit() {
+    const next = editDraft.trim();
+    if (!next || !editLastUser || editingUserIndex === null) return;
+    setEditingUserIndex(null);
+    setEditDraft("");
+    void editLastUser(next);
+  }
 
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
@@ -245,6 +315,9 @@ export function DigiChatSession({
           const chain = chainActivities(m.activities ?? []);
           const sources = m.role === "assistant" && !streaming ? citationHits(chain) : [];
           const emptyWait = streaming && chain.length === 0 && !m.content;
+          const isLastAssistant = m.role === "assistant" && i === lastAssistantIndex;
+          const isLastUser = m.role === "user" && i === lastUserIndex;
+          const isEditing = editingUserIndex === i;
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -277,19 +350,100 @@ export function DigiChatSession({
                         ))}
                       </ul>
                     ) : null}
-                    {/* No copy on embed: clipboard API is blocked in the
-                        cross-origin iframe, so the button would silently no-op. */}
-                    {layout !== "embed" && !streaming && m.content ? (
-                      <CopyButton
-                        text={stripFoundryCitationMarkers(m.content)}
-                        className="dc-msg-copy"
-                        ariaLabel="Copy answer"
-                      />
+                    {/* Copy on page + embed: clipboard first; embed falls back to
+                        .md download / digichat:copy postMessage / textarea (#3465).
+                        Regen only when the controller opts in (digigraph; #3466). */}
+                    {!streaming && m.content ? (
+                      <span className="dc-msg-actions">
+                        <CopyButton
+                          text={serializeAssistantMarkdown(
+                            m.content,
+                            sources.map((h) => ({ title: h.title, path: h.path })),
+                          )}
+                          className="dc-msg-copy"
+                          ariaLabel="Copy answer as markdown"
+                          filename="digichat-answer.md"
+                        />
+                        {i === messages.length - 1 && canExportThread ? (
+                          <button
+                            type="button"
+                            className="dc-msg-copy"
+                            aria-label="Download thread as markdown"
+                            onClick={() =>
+                              downloadMarkdown("digichat-thread.md", threadMarkdown)
+                            }
+                          >
+                            md
+                          </button>
+                        ) : null}
+                        {isLastAssistant && regenerate ? (
+                          <button
+                            type="button"
+                            className="dc-msg-copy"
+                            aria-label="Regenerate answer"
+                            disabled={!canRegenerate}
+                            title="Replays the full digigraph workflow on this session"
+                            onClick={() => regenerate()}
+                          >
+                            regen
+                          </button>
+                        ) : null}
+                      </span>
                     ) : null}
                     {streaming && m.content ? <ChatStreamCursor className="dt-cur" /> : null}
                   </>
+                ) : isEditing ? (
+                  <div className="dc-edit-last">
+                    <textarea
+                      ref={editTaRef}
+                      className="dc-edit-textarea"
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelEdit();
+                        } else if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          submitEdit();
+                        }
+                      }}
+                      aria-label="Edit last message"
+                      rows={3}
+                      maxLength={2000}
+                    />
+                    <span className="dc-msg-actions dc-msg-actions-visible">
+                      <button
+                        type="button"
+                        className="dc-msg-copy"
+                        disabled={!editDraft.trim()}
+                        onClick={submitEdit}
+                      >
+                        save
+                      </button>
+                      <button type="button" className="dc-msg-copy" onClick={cancelEdit}>
+                        cancel
+                      </button>
+                    </span>
+                  </div>
                 ) : (
-                  m.content
+                  <>
+                    {m.content}
+                    {isLastUser && editLastUser ? (
+                      <span className="dc-msg-actions">
+                        <button
+                          type="button"
+                          className="dc-msg-copy"
+                          aria-label="Edit last message"
+                          disabled={!canEditLastUser}
+                          title="Replaces this turn and replays the digigraph workflow"
+                          onClick={() => beginEditLastUser(i)}
+                        >
+                          edit
+                        </button>
+                      </span>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

@@ -344,6 +344,10 @@ export function ChatShell({
     scheduleServerSave(activeId);
   }, [activeId, userId, scheduleServerSave]);
 
+  const allowTruncateForThread = useCallback((threadId: string) => {
+    allowTruncateRef.current[threadId] = true;
+  }, []);
+
   const onMessagesCommit = useCallback(
     (threadId: string, messages: UIMessage[]) => {
       const cur = threadsRef.current.find((x) => x.id === threadId);
@@ -576,6 +580,7 @@ export function ChatShell({
               initialMessages={activeThread.messages}
               onMessagesCommit={onMessagesCommit}
               onTitleDerived={onTitleDerived}
+              onAllowTruncate={allowTruncateForThread}
               byokMode={byokMode}
               onByokModeChange={setByokMode}
               onSlashCommand={(cmd) => {

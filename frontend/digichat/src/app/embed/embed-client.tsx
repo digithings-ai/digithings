@@ -406,6 +406,11 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
+    // Missing backendType (gated default) must not enable regen/edit.
+    allowClientTurnMutation:
+      tenantCfg.backendType === "digigraph" || tenantCfg.backendType === "foundry",
   });
 
   // Charge the free-tier gate only once a gated send actually settles

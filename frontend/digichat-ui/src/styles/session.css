@@ -166,10 +166,38 @@
   top: 0.4rem;
   right: 0.4rem;
 }
+.dc-msg-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.dc-msg-actions-visible .dc-msg-copy {
+  opacity: 1;
+}
 .dc-msg-copy {
   position: static;
   display: inline-block;
-  margin-top: 0.4rem;
+  margin-top: 0;
+}
+.dc-edit-last {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+.dc-edit-textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.45rem 0.55rem;
+  box-sizing: border-box;
 }
 .dc-code-block:hover .dc-code-copy,
 .dc-body:hover .dc-msg-copy,
