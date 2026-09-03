@@ -80,7 +80,6 @@ describe("copyMarkdownWithFallback", () => {
     const writeText = vi.fn().mockRejectedValue(new Error("blocked"));
     vi.stubGlobal("navigator", { clipboard: { writeText } });
 
-    // Minimal document stub for downloadMarkdown
     const click = vi.fn();
     const remove = vi.fn();
     const appendChild = vi.fn();
@@ -92,9 +91,21 @@ describe("copyMarkdownWithFallback", () => {
           rel: "",
           click,
           remove,
+          setAttribute: vi.fn(),
+          style: {},
+          focus: vi.fn(),
+          select: vi.fn(),
         };
       }
-      return {};
+      return {
+        id: "",
+        value: "",
+        setAttribute: vi.fn(),
+        style: {},
+        focus: vi.fn(),
+        select: vi.fn(),
+        readOnly: false,
+      };
     });
     const revoke = vi.fn();
     vi.stubGlobal("URL", {
@@ -106,14 +117,24 @@ describe("copyMarkdownWithFallback", () => {
       body: { appendChild },
       getElementById: () => null,
     });
-    vi.stubGlobal("Blob", class {
-      constructor(public parts: unknown[]) {}
-    });
+    vi.stubGlobal(
+      "Blob",
+      class MockBlob {
+        // eslint-disable-next-line @typescript-eslint/no-useless-constructor -- mirror Blob arity for callers
+        constructor(_parts: unknown[], _opts?: unknown) {}
+      },
+    );
+    // Run deferred revoke synchronously so the stub stays live for the call.
+    vi.stubGlobal("setTimeout", ((fn: () => void) => {
+      fn();
+      return 0;
+    }) as unknown as typeof setTimeout);
 
     const result = await copyMarkdownWithFallback("# embed", { filename: "answer.md" });
     expect(result).toBe("download");
     expect(click).toHaveBeenCalled();
     expect(createElement).toHaveBeenCalledWith("a");
+    expect(revoke).toHaveBeenCalledWith("blob:test");
   });
 });
 

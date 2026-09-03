@@ -81,7 +81,11 @@ export function downloadMarkdown(filename: string, text: string): void {
   a.click();
   a.remove();
   // Defer revoke — some browsers start the download asynchronously after click.
-  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
+  const later = globalThis.setTimeout ?? ((fn: () => void) => {
+    fn();
+    return 0;
+  });
+  later(() => URL.revokeObjectURL(url), 2_000);
 }
 
 function tryParentCopyPostMessage(text: string): boolean {
