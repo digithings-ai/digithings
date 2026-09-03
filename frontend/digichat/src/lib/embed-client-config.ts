@@ -34,6 +34,12 @@ export type EmbedTenantClientConfig = {
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
+  /**
+   * Discriminator only — never project Foundry endpoints / digigraph URLs.
+   * DigiChatSession uses this to hide regenerate/edit on Foundry (#3466)
+   * until the turn-mutation API (#3475).
+   */
+  backendType?: "digigraph" | "foundry";
 };
 
 /** Legacy defaults — deliberately the *gated* configuration, so a slow or
@@ -50,7 +56,9 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`
- *  and `backend` have no branch here and so can never be projected. */
+ *  and backend secrets (endpoints, agent names) have no branch here. The
+ *  `backendType` discriminator is projected so the UI can hide Foundry-unsafe
+ *  chrome (regen/edit) without learning relay URLs (#3466). */
 export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientConfig {
   return {
     slug: cfg.slug,
@@ -70,6 +78,7 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
     // above (the unresolved/gated fallback) stays false.
     showLanguageSelector: cfg.showLanguageSelector ?? true,
+    backendType: cfg.backend.type,
   };
 }
 

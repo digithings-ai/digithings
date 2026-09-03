@@ -21,6 +21,8 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 **Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
 
+**Last-turn regen + edit (#3466).** Digigraph surfaces (first-party `ChatPanel` + digigraph embeds) expose **regen** on the last settled assistant and **edit** on the last user turn. Both replay the full digigraph workflow on the same session (tools re-run; digistore may accumulate). Foundry embeds omit `regenerate` / `editLastUser` on `DigiChatController` (client config projects `backendType` only — no endpoints). Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. Foundry execution API is #3475.
+
 ### Capability matrix
 
 | Capability | Status |
@@ -62,13 +64,13 @@ the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
 (`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
 refuses to flush a remote thread that is still `hydrated: false`, and the API
 returns **409 `would_truncate`** if a PUT would drop existing rows unless
-`allowTruncate: true` (used by `/clear`).
+`allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
 so upstream digigraph can correlate the same conversation across turns. Scroll
-stick-to-bottom with a "New messages" chip when scrolled up. Copy and Regenerate
-actions on assistant bubbles.
+stick-to-bottom with a "New messages" chip when scrolled up. Copy, Regenerate,
+and Edit-last-user actions on bubbles (first-party is always digigraph).
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`

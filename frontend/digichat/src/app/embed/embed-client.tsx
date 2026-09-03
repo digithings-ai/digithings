@@ -406,6 +406,8 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    allowClientTurnMutation: tenantCfg.backendType !== "foundry",
   });
 
   // Charge the free-tier gate only once a gated send actually settles

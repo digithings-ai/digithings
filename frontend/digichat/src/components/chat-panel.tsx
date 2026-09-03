@@ -143,6 +143,11 @@ export type ChatPanelProps = {
   initialMessages: UIMessage[];
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
+  /**
+   * Mark the next server flush as an intentional truncate (edit last user).
+   * Without this, PUT returns 409 `would_truncate` (#3466).
+   */
+  onAllowTruncate?: (threadId: string) => void;
   headerSlot?: React.ReactNode;
   byokMode?: boolean;
   onByokModeChange?: (open: boolean) => void;
@@ -161,6 +166,7 @@ export function ChatPanel({
   initialMessages,
   onMessagesCommit,
   onTitleDerived,
+  onAllowTruncate,
   headerSlot,
   byokMode = false,
   onByokModeChange,
@@ -168,7 +174,10 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [text, setText] = useState("");
   const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
+  const [editingLastUser, setEditingLastUser] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
@@ -212,7 +221,7 @@ export function ChatPanel({
     [threadId, byokKey, byokProvider, byokModel],
   );
 
-  const { messages, sendMessage, status, stop, error, regenerate } =
+  const { messages, sendMessage, status, stop, error, regenerate, setMessages } =
     useChat<UIMessage>({
       id: threadId,
       messages: initialMessages,
@@ -237,6 +246,15 @@ export function ChatPanel({
 
   const busy = status === "streaming" || status === "submitted";
   const isStreaming = status === "streaming";
+
+  useEffect(() => {
+    if (!(busy && editingLastUser)) return;
+    // Defer out of the synchronous effect body — react-hooks/set-state-in-effect.
+    queueMicrotask(() => {
+      setEditingLastUser(false);
+      setEditDraft("");
+    });
+  }, [busy, editingLastUser]);
 
   const updateStickiness = useCallback(() => {
     const el = scrollRef.current;
@@ -355,8 +373,52 @@ export function ChatPanel({
   }, [messages]);
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "user") {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  const lastUser = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
+  const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready" && !editingLastUser;
+  const canEditLastUser = !busy && !!lastUser && status === "ready" && !editingLastUser;
   const canExportThread = !busy && messages.some((m) => messagePlainText(m).trim());
+
+  const beginEditLastUser = useCallback(() => {
+    if (!canEditLastUser || !lastUser) return;
+    setEditingLastUser(true);
+    setEditDraft(messagePlainText(lastUser));
+    queueMicrotask(() => editTextareaRef.current?.focus());
+  }, [canEditLastUser, lastUser]);
+
+  const cancelEditLastUser = useCallback(() => {
+    setEditingLastUser(false);
+    setEditDraft("");
+  }, []);
+
+  const submitEditLastUser = useCallback(() => {
+    const next = editDraft.trim();
+    if (!next || lastUserIndex < 0 || busy) return;
+    // Shorten the persisted list — ChatShell must pass allowTruncate (#3466).
+    onAllowTruncate?.(threadId);
+    setMessages(messages.slice(0, lastUserIndex));
+    setEditingLastUser(false);
+    setEditDraft("");
+    void sendMessage({
+      role: "user",
+      parts: [{ type: "text", text: next }],
+    });
+  }, [
+    editDraft,
+    lastUserIndex,
+    busy,
+    onAllowTruncate,
+    threadId,
+    setMessages,
+    messages,
+    sendMessage,
+  ]);
 
   const startsWithSlash = text.trimStart().startsWith("/");
 
@@ -375,9 +437,11 @@ export function ChatPanel({
             </div>
           ) : null}
 
-          {messages.map((m) => {
+          {messages.map((m, i) => {
             const isUser = m.role === "user";
             const isLastAssistant = m.role === "assistant" && m.id === lastAssistant?.id;
+            const isLastUser = isUser && i === lastUserIndex;
+            const showEditForm = isLastUser && editingLastUser;
             return (
               <div
                 key={m.id}
@@ -390,52 +454,111 @@ export function ChatPanel({
                   {isUser ? ">" : "▸"}
                 </span>
                 <div className="dc-term-body">
-                  <MessageBody
-                    message={m}
-                    isStreaming={isStreaming && isLastAssistant}
-                  />
-                  <div
-                    className={cn(
-                      "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
-                      isLastAssistant && !isUser && "opacity-100",
-                    )}
-                  >
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-[11px] text-muted-foreground"
-                      onClick={() => void onCopyMessage(m)}
+                  {showEditForm ? (
+                    <div className="flex flex-col gap-2">
+                      <textarea
+                        ref={editTextareaRef}
+                        className="min-h-[4.5rem] w-full resize-y rounded-none border border-border/60 bg-transparent p-2 text-sm"
+                        value={editDraft}
+                        onChange={(e) => setEditDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEditLastUser();
+                          } else if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            submitEditLastUser();
+                          }
+                        }}
+                        aria-label="Edit last message"
+                        maxLength={2000}
+                      />
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!editDraft.trim()}
+                          onClick={submitEditLastUser}
+                        >
+                          save
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          onClick={cancelEditLastUser}
+                        >
+                          cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <MessageBody
+                      message={m}
+                      isStreaming={isStreaming && isLastAssistant}
+                    />
+                  )}
+                  {!showEditForm ? (
+                    <div
+                      className={cn(
+                        "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
+                        (isLastAssistant || isLastUser) && "opacity-100",
+                      )}
                     >
-                      <Copy className="mr-1 size-3" />
-                      copy
-                    </Button>
-                    {isLastAssistant && canExportThread ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className="h-6 text-[11px] text-muted-foreground"
-                        onClick={onDownloadThread}
-                        aria-label="Download thread as markdown"
+                        onClick={() => void onCopyMessage(m)}
                       >
-                        md
+                        <Copy className="mr-1 size-3" />
+                        copy
                       </Button>
-                    ) : null}
-                    {isLastAssistant ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[11px] text-muted-foreground"
-                        disabled={!canRegenerate}
-                        onClick={() => void regenerate()}
-                      >
-                        <RefreshCw className="mr-1 size-3" />
-                        regen
-                      </Button>
-                    ) : null}
-                  </div>
+                      {isLastAssistant && canExportThread ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          onClick={onDownloadThread}
+                          aria-label="Download thread as markdown"
+                        >
+                          md
+                        </Button>
+                      ) : null}
+                      {isLastAssistant ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!canRegenerate}
+                          title="Replays the full digigraph workflow on this session"
+                          onClick={() => void regenerate()}
+                        >
+                          <RefreshCw className="mr-1 size-3" />
+                          regen
+                        </Button>
+                      ) : null}
+                      {isLastUser ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[11px] text-muted-foreground"
+                          disabled={!canEditLastUser}
+                          title="Replaces this turn and replays the digigraph workflow"
+                          onClick={beginEditLastUser}
+                        >
+                          edit
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );
