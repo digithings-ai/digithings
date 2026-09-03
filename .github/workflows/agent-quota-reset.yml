@@ -1,16 +1,14 @@
 name: "Agent: quota reset"
 
-# Runs on the 1st of each month at 09:00 UTC (09:00 to clear after most
-# quota resets, which typically happen at 00:00 UTC). Clears the
-# quota:* flags on the singleton state issue and re-dispatches issues
-# parked with pending:quota.
+# RETIRED 2026-09 (board cleanup): quota parking dropped in favor of Project
+# status + explicit manual pickup (`make task ISSUE=N`). Monthly schedule
+# disabled; manual dispatch kept as a no-op backstop (jobs tolerate the
+# deleted quota:*/pending:quota labels).
 #
-# Can also be triggered manually via workflow_dispatch when a human
-# confirms quotas have reset mid-month (rare).
+# Can still be triggered manually via workflow_dispatch, but it will find
+# nothing to do unless the labels are recreated.
 
 on:
-  schedule:
-    - cron: '0 9 1 * *'
   workflow_dispatch:
 
 permissions:
