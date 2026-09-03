@@ -706,7 +706,7 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
 
-        if (isMutatingTurnMode(turnMode)) {
+        if (turnMode === "regenerate" || turnMode === "edit_last_user") {
           // Item API was checked above; narrow again for TypeScript.
           if (!foundryClientSupportsItemMutation(openai)) {
             throw new FoundryProtocolError("Foundry item mutation unavailable");
