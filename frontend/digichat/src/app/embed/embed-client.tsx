@@ -15,6 +15,11 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  isWebSearchEnabled,
+  readWebSearchPref,
+  writeWebSearchPref,
+} from "@/lib/web-search-pref";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -284,6 +289,33 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   languageRef.current = language;
   const getResponseLanguage = useCallback(() => languageRef.current, []);
+
+  // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
+  const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
+  const [webSearchPref, setWebSearchPref] = useState(false);
+  useEffect(() => {
+    setWebSearchPref(readWebSearchPref(webSearchScope));
+  }, [webSearchScope]);
+  const webSearchUserRef = useRef(webSearchPref);
+  // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
+  webSearchUserRef.current = webSearchPref;
+  const tenantAllowsWeb = uiFlags.webSearch;
+  const getEnableWebSearch = useCallback(
+    () =>
+      isWebSearchEnabled({
+        tenantAllows: tenantAllowsWeb,
+        userPref: webSearchUserRef.current,
+      }),
+    [tenantAllowsWeb],
+  );
+  const toggleWebSearch = useCallback(() => {
+    setWebSearchPref((prev) => {
+      const next = !prev;
+      writeWebSearchPref(webSearchScope, next);
+      return next;
+    });
+  }, [webSearchScope]);
+
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -420,6 +452,7 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    getEnableWebSearch,
     // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
     // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
     // Missing backendType (gated default) must not enable regen/edit.
@@ -824,15 +857,31 @@ function EmbedChat({
     </header>
   ) : null;
 
-  const footerSlot = footerAttribution ? (
-    <p className="dc-attribution">
-      powered by digichat — a{" "}
-      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-        digithings
-      </a>{" "}
-      product.
-    </p>
-  ) : null;
+  const footerSlot =
+    tenantAllowsWeb || footerAttribution ? (
+      <>
+        {tenantAllowsWeb ? (
+          <label className="dc-web-search-toggle">
+            <input
+              type="checkbox"
+              checked={webSearchPref}
+              onChange={toggleWebSearch}
+              aria-label="Enable web search"
+            />
+            <span>Web search {webSearchPref ? "on" : "off"} (External cites)</span>
+          </label>
+        ) : null}
+        {footerAttribution ? (
+          <p className="dc-attribution">
+            powered by digichat — a{" "}
+            <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
+              digithings
+            </a>{" "}
+            product.
+          </p>
+        ) : null}
+      </>
+    ) : null;
 
   const showByokOnError =
     !handshakeError &&

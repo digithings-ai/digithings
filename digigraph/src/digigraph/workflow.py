@@ -87,6 +87,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool
+    initial["enable_web_search"] = bool(req.enable_web_search)
     return initial
 
 

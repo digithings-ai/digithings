@@ -31,6 +31,11 @@ import { parseChartEnvelope } from "@/lib/chart-spec";
 import { p } from "@/lib/base-path";
 import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
 import { useBYOKKey } from "@/hooks/use-byok-key";
+import {
+  isWebSearchEnabled,
+  readWebSearchPref,
+  writeWebSearchPref,
+} from "@/lib/web-search-pref";
 import { cn } from "@/lib/utils";
 import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
@@ -207,6 +212,18 @@ export function ChatPanel({
     clearKey: clearByokKey,
   } = useBYOKKey();
 
+  const webSearchAllowed =
+    typeof process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "string" &&
+    process.env.NEXT_PUBLIC_DIGICHAT_WEB_SEARCH === "1";
+  const [webSearchPref, setWebSearchPref] = useState(false);
+  useEffect(() => {
+    if (!webSearchAllowed) return;
+    setWebSearchPref(readWebSearchPref("auth"));
+  }, [webSearchAllowed]);
+  const webSearchPrefRef = useRef(webSearchPref);
+  // eslint-disable-next-line react-hooks/refs -- send-time read
+  webSearchPrefRef.current = webSearchPref;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
@@ -220,6 +237,12 @@ export function ChatPanel({
             h.set("X-Digi-Turn-Mode", turnMode);
           }
           h.set("X-Digi-Run-Id", crypto.randomUUID());
+          if (
+            webSearchAllowed &&
+            isWebSearchEnabled({ tenantAllows: true, userPref: webSearchPrefRef.current })
+          ) {
+            h.set("X-Digi-Enable-Web-Search", "1");
+          }
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
@@ -240,7 +263,7 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider, byokModel],
+    [threadId, byokKey, byokProvider, byokModel, webSearchAllowed],
   );
 
   const { messages, sendMessage, status, stop, error, regenerate, setMessages } =
@@ -651,6 +674,24 @@ export function ChatPanel({
       </div>
 
       <QuantComparisonStrip messages={messages} conversationId={threadId} />
+
+      {webSearchAllowed ? (
+        <label className="dc-web-search-toggle">
+          <input
+            type="checkbox"
+            checked={webSearchPref}
+            onChange={() => {
+              setWebSearchPref((prev) => {
+                const next = !prev;
+                writeWebSearchPref("auth", next);
+                return next;
+              });
+            }}
+            aria-label="Enable web search"
+          />
+          <span>Web search {webSearchPref ? "on" : "off"} (External cites)</span>
+        </label>
+      ) : null}
 
       <form onSubmit={onSubmit} className="app-input mt-2">
         <span className={cn("app-input-marker", startsWithSlash && "dc-input-slash-glyph")}>

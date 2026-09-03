@@ -33,6 +33,7 @@ agents:
     - digisearch
     - digivault_search_notes
     - digivault_get_note
+  # web_search intentionally omitted — opt-in via X-Digi-Enable-Web-Search (#3420)
   # Serves BOTH tenants. A per-tenant override exists (researchSystemPrompt inside
   # DIGI_TENANT_CORPUS_MAP, read by corpus_routing.py), but the deployed map sets it for
   # neither, so this text is what digithings AND OCC users get — keep it corpus-neutral.

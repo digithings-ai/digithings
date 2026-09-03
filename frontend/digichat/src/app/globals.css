@@ -713,3 +713,18 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   color: var(--bg);
   border-color: var(--ink);
 }
+
+/* Opt-in web search toggle (#3420) — footer control when tenant allows. */
+.dc-web-search-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  color: var(--muted-foreground, var(--fg-muted, #888));
+  cursor: pointer;
+  user-select: none;
+}
+.dc-web-search-toggle input {
+  accent-color: var(--ink, currentColor);
+}

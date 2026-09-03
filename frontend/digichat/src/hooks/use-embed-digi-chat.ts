@@ -205,6 +205,12 @@ type UseEmbedDigiChatOptions = {
    */
   getResponseLanguage?: () => string;
   /**
+   * Send-time accessor for opt-in web search (#3420). Must not be closed over
+   * at transport creation — user toggle changes after mount. Return true only
+   * when tenant allows AND user opted in.
+   */
+  getEnableWebSearch?: () => boolean;
+  /**
    * When false, omit regenerate/editLastUser so DigiChatSession hides the
    * chrome. Digigraph and Foundry both support turn mutation once the BFF
    * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
@@ -222,6 +228,7 @@ export function useEmbedDigiChat({
   trialUnlocked,
   onGated,
   getResponseLanguage,
+  getEnableWebSearch,
   allowClientTurnMutation = true,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
@@ -268,6 +275,9 @@ export function useEmbedDigiChat({
           const forceTool = takePendingForceTool(embedHost);
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
+          }
+          if (getEnableWebSearch?.()) {
+            headers["X-Digi-Enable-Web-Search"] = "1";
           }
           const turnMode = takePendingTurnMode(embedHost);
           if (turnMode) {
@@ -317,6 +327,7 @@ export function useEmbedDigiChat({
       byokModel,
       trialUnlocked,
       getResponseLanguage,
+      getEnableWebSearch,
     ],
   );
 
