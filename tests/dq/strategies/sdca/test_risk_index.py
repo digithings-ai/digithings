@@ -132,6 +132,44 @@ class TestBuildRiskIndex:
         assert frame["risk"].null_count() == 0
 
 
+class TestBuildRiskIndexRollingComposite:
+    def test_default_off_matches_undecorated_call(self) -> None:
+        dates, price = _dates_and_price(n=50, price=100.0)
+        model = StaticRiskModel()
+        plain = build_risk_index(dates, price, model)
+        explicit_off = build_risk_index(dates, price, model, composite_rolling_window=None)
+        assert plain["risk"].to_list() == explicit_off["risk"].to_list()
+        assert plain["composite_z"].to_list() == explicit_off["composite_z"].to_list()
+
+    def test_rolling_window_changes_output_once_warmed_up(self) -> None:
+        # Prices ramp so power_law_z (and thus composite_z) drifts over the
+        # window instead of sitting flat — a flat input can't tell a rolling
+        # renormalization apart from the plain clip.
+        n = 60
+        start = date(2020, 1, 1)
+        dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
+        price = pl.Series("price", [100.0 + i for i in range(n)], dtype=pl.Float64)
+        model = StaticRiskModel()
+        plain = build_risk_index(dates, price, model)
+        rolling = build_risk_index(
+            dates, price, model, composite_rolling_window=20, composite_rolling_min_samples=10
+        )
+        assert rolling["composite_z"][:9].to_list() == [None] * 9
+        assert rolling["composite_z"][-1] != pytest.approx(plain["composite_z"][-1])
+
+    def test_rolling_window_still_nulls_on_missing_rail_day(self) -> None:
+        dates, price = _dates_and_price(n=15)
+        frame = build_risk_index(
+            dates,
+            price,
+            StaticRiskModel(null_row=10),
+            composite_rolling_window=10,
+            composite_rolling_min_samples=3,
+        )
+        assert frame["composite_z"][10] is None
+        assert frame["risk"][10] is None
+
+
 class TestWriteRiskIndex:
     def test_round_trips_through_sdca_strategy_load(self, tmp_path: Path) -> None:
         pytest.importorskip("nautilus_trader")

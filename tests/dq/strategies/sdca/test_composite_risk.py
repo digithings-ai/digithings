@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 import polars as pl
 import pytest
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
@@ -98,3 +100,70 @@ class TestComputeCompositeRisk:
         ]
         with pytest.raises(ValueError, match="total weight"):
             compute_composite_risk(indicators)
+
+
+class TestRollingCompositeNormalization:
+    """``rolling_window`` re-normalizes the blend before the ``[-3, 3]`` clip."""
+
+    def test_default_none_matches_plain_clip(self) -> None:
+        z = [3.0, 1.0, -2.0, 10.0, -10.0, 0.0]
+        indicators = [IndicatorWeight(name="a", z=pl.Series(z), weight=1.0)]
+        off = compute_composite_risk(indicators)
+        explicit_off = compute_composite_risk(indicators, rolling_window=None)
+        assert off["composite_z"].to_list() == explicit_off["composite_z"].to_list()
+        assert off["composite_z"].to_list() == [3.0, 1.0, -2.0, 3.0, -3.0, 0.0]
+
+    def test_warmup_rows_are_null_until_min_samples(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0] * 10), weight=1.0)]
+        result = compute_composite_risk(indicators, rolling_window=10, rolling_min_samples=5)
+        assert result["composite_z"][:4].to_list() == [None, None, None, None]
+        assert result["composite_z"][4] is not None
+
+    def test_min_samples_defaults_to_half_window_floored_at_20(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0] * 200), weight=1.0)]
+        result = compute_composite_risk(indicators, rolling_window=100)
+        # default min_samples = max(20, 100 // 2) = 50
+        assert result["composite_z"][48] is None
+        assert result["composite_z"][49] is not None
+
+    def test_flat_series_gives_null_not_nan_at_zero_sigma(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([2.0] * 30), weight=1.0)]
+        result = compute_composite_risk(indicators, rolling_window=10, rolling_min_samples=5)
+        z = result["composite_z"][-1]
+        assert z is not None
+        assert math.isfinite(z)
+
+    def test_restabilizes_a_drifting_series_flat_expanding_would_not(self) -> None:
+        # A slow upward drift plus a late spike: an expanding/whole-history z
+        # would keep sliding as history accumulates. A short rolling window
+        # should read the late spike as extreme relative to its own recent
+        # regime, not muted by years of prior, lower-level history.
+        drift = [float(i) * 0.01 for i in range(300)]
+        spike = drift[:-1] + [drift[-2] + 5.0]
+        indicators = [IndicatorWeight(name="a", z=pl.Series(spike), weight=1.0)]
+        rolling = compute_composite_risk(indicators, rolling_window=30, rolling_min_samples=15)
+        assert rolling["composite_z"][-1] == pytest.approx(3.0)
+
+    def test_rolling_window_below_2_raises(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0, 2.0, 3.0]), weight=1.0)]
+        with pytest.raises(ValueError, match="rolling_window must be >= 2"):
+            compute_composite_risk(indicators, rolling_window=1)
+
+    def test_null_indicator_row_still_nulls_composite_and_risk(self) -> None:
+        indicators = [
+            IndicatorWeight(name="a", z=pl.Series([1.0] * 10 + [None] + [1.0] * 10), weight=1.0)
+        ]
+        result = compute_composite_risk(indicators, rolling_window=10, rolling_min_samples=5)
+        assert result["composite_z"][10] is None
+        assert result["risk"][10] is None
+
+    def test_rolling_blend_of_two_indicators_uses_weighted_average_as_input(self) -> None:
+        a = [1.0] * 40
+        b = [-1.0] * 39 + [5.0]
+        indicators = [
+            IndicatorWeight(name="a", z=pl.Series(a), weight=1.0),
+            IndicatorWeight(name="b", z=pl.Series(b), weight=1.0),
+        ]
+        rolling = compute_composite_risk(indicators, rolling_window=20, rolling_min_samples=10)
+        # weighted avg is flat 0.0 for 39 rows then jumps to 2.0 on the last row
+        assert rolling["composite_z"][-1] == pytest.approx(3.0)

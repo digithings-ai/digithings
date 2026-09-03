@@ -34,8 +34,16 @@ def evaluate_sdca_trial_curve_sim(
     extra_indicators: Sequence[IndicatorWeight] | None = None,
     *,
     initial_cash: float = DEFAULT_TRIAL_CASH,
+    composite_rolling_window: int | None = None,
+    composite_rolling_min_samples: int | None = None,
 ) -> SdcaTrialMetrics:
-    """Score one window via ``run_backtest`` (no NautilusTrader import)."""
+    """Score one window via ``run_backtest`` (no NautilusTrader import).
+
+    ``composite_rolling_window`` forwards to ``build_risk_index`` — not part
+    of ``SdcaTrialEvaluator``'s Protocol signature, so bind it with
+    ``functools.partial`` before passing this evaluator into Stage A /
+    walk-forward search, the same way callers already bind ``initial_cash``.
+    """
     if len(dates) != len(prices) or not dates:
         raise ValueError("evaluate_sdca_trial_curve_sim needs aligned non-empty dates/prices")
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
@@ -46,6 +54,8 @@ def evaluate_sdca_trial_curve_sim(
         risk_model,
         extra_indicators=list(extra_indicators) if extra_indicators is not None else None,
         power_law_weight=power_law_weight,
+        composite_rolling_window=composite_rolling_window,
+        composite_rolling_min_samples=composite_rolling_min_samples,
     )
     report, _frame = run_backtest(
         date_s,

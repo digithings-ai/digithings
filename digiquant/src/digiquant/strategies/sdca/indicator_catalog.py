@@ -38,7 +38,7 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight, causal_rolling_z
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     agreement_scaled_blend,
@@ -55,7 +55,6 @@ BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
 EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATOR_NAMES
 DEFAULT_ROLLING_WINDOW = 90
 _MIN_SAMPLES = 20
-_SIGMA_FLOOR = 1e-12
 _RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
 _RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
@@ -167,20 +166,6 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
     )
-
-
-def causal_rolling_z(
-    values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Rolling z in ``[-3, 3]``. Each day uses only that day and prior window."""
-    if window < 2:
-        raise ValueError(f"rolling window must be >= 2, got {window}")
-    mu = values.rolling_mean(window_size=window, min_samples=min_samples)
-    sigma = values.rolling_std(window_size=window, min_samples=min_samples)
-    return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
 
 def align_to_dates(

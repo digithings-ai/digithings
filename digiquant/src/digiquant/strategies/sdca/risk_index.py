@@ -57,6 +57,9 @@ def build_risk_index(
     extra_indicators: list[IndicatorWeight] | None = None,
     power_law_weight: float = 1.0,
     oscillators: SdcaOscillatorSpec | None = None,
+    *,
+    composite_rolling_window: int | None = None,
+    composite_rolling_min_samples: int | None = None,
 ) -> pl.DataFrame:
     """Join a ``RiskModel`` + price series into the SDCA risk index.
 
@@ -68,6 +71,9 @@ def build_risk_index(
     ``power_law_z`` here is ``power_law_confluence_z``'s output (whole-history
     power-law leg blended with a rolling trend leg) — ``oscillators`` (default
     ``SdcaOscillatorSpec()``) configures the trend leg's window.
+    ``composite_rolling_window`` (default ``None``, off) forwards to
+    ``compute_composite_risk``'s rolling re-normalization of the blended
+    composite — see that function's docstring.
     """
     dates = _require_date_series(dates, name="dates")
     if price.len() != dates.len():
@@ -98,7 +104,11 @@ def build_risk_index(
         IndicatorWeight(name="power_law", z=power_law_z, weight=power_law_weight),
         *(extra_indicators or []),
     ]
-    composite = compute_composite_risk(indicators)
+    composite = compute_composite_risk(
+        indicators,
+        rolling_window=composite_rolling_window,
+        rolling_min_samples=composite_rolling_min_samples,
+    )
     payload: dict[str, pl.Series] = {
         "date": dates,
         "risk": composite["risk"],
