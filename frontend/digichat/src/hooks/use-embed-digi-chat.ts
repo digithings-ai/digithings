@@ -59,6 +59,9 @@ export function chatAccessTokenAtSend(resolvedHost: string): string | null {
  */
 const pendingForceByHost = new Map<string, string>();
 
+/** Per-host pending turn mode for the next POST /api/chat (#3475). */
+const pendingTurnModeByHost = new Map<string, "regenerate" | "edit_last_user">();
+
 export function setPendingForceTool(host: string, tool?: string): void {
   const key = host.trim();
   if (!key) return;
@@ -71,6 +74,25 @@ export function takePendingForceTool(host: string): string | undefined {
   const tool = pendingForceByHost.get(key);
   pendingForceByHost.delete(key);
   return tool;
+}
+
+export function setPendingTurnMode(
+  host: string,
+  mode?: "regenerate" | "edit_last_user",
+): void {
+  const key = host.trim();
+  if (!key) return;
+  if (mode) pendingTurnModeByHost.set(key, mode);
+  else pendingTurnModeByHost.delete(key);
+}
+
+export function takePendingTurnMode(
+  host: string,
+): "regenerate" | "edit_last_user" | undefined {
+  const key = host.trim();
+  const mode = pendingTurnModeByHost.get(key);
+  pendingTurnModeByHost.delete(key);
+  return mode;
 }
 
 const CONVERSATION_STORAGE_PREFIX = "digichat_embed_conversation:";
@@ -183,13 +205,12 @@ type UseEmbedDigiChatOptions = {
    */
   getResponseLanguage?: () => string;
   /**
-   * When false (Foundry), omit regenerate/editLastUser so DigiChatSession
-   * hides the chrome. Truncate-and-resend would corrupt an append-only
-   * Foundry conversation (#3466). Default true for digigraph-first callers.
+   * When false, omit regenerate/editLastUser so DigiChatSession hides the
+   * chrome. Digigraph and Foundry both support turn mutation once the BFF
+   * sends X-Digi-Turn-Mode (#3475). Default true for digigraph-first callers.
    */
   allowClientTurnMutation?: boolean;
 };
-
 export function useEmbedDigiChat({
   accent,
   token,
@@ -248,6 +269,11 @@ export function useEmbedDigiChat({
           if (forceTool) {
             headers["X-Digi-Force-Tool"] = forceTool;
           }
+          const turnMode = takePendingTurnMode(embedHost);
+          if (turnMode) {
+            headers["X-Digi-Turn-Mode"] = turnMode;
+          }
+          headers["X-Digi-Run-Id"] = crypto.randomUUID();
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
           if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
@@ -359,6 +385,7 @@ export function useEmbedDigiChat({
     if (!allowClientTurnMutation || busy) return;
     // Never set a pending force-tool on regen — slash force is send-only (#3466).
     setPendingForceTool(embedHost);
+    setPendingTurnMode(embedHost, "regenerate");
     void regenerate();
   }, [allowClientTurnMutation, busy, embedHost, regenerate]);
 
@@ -379,6 +406,7 @@ export function useEmbedDigiChat({
       setMessages(messages.slice(0, lastUserIdx));
       // Force-tool is send-only — do not re-fire a prior slash on edit.
       setPendingForceTool(embedHost);
+      setPendingTurnMode(embedHost, "edit_last_user");
       sendMessage({
         role: "user",
         parts: [{ type: "text", text: next }],

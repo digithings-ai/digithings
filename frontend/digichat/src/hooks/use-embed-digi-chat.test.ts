@@ -530,7 +530,7 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     unmount();
   });
 
-  it("omits regenerate + editLastUser + onRetry on Foundry", () => {
+  it("omits regenerate + editLastUser + onRetry when allowClientTurnMutation is false", () => {
     let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
     const { unmount } = renderHookLocally(() => {
       chat = useEmbedDigiChat(
@@ -540,6 +540,18 @@ describe("useEmbedDigiChat turn mutation (#3466)", () => {
     expect(chat?.regenerate).toBeUndefined();
     expect(chat?.editLastUser).toBeUndefined();
     expect(chat?.onRetry).toBeUndefined();
+    unmount();
+  });
+
+  it("exposes regenerate + editLastUser when Foundry opts into turn mutation", () => {
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(
+        baseEmbedOptions({ embedHost: host, allowClientTurnMutation: true }),
+      );
+    });
+    expect(chat?.regenerate).toBeTypeOf("function");
+    expect(chat?.editLastUser).toBeTypeOf("function");
     unmount();
   });
 

@@ -7,6 +7,11 @@
  * Foundry turn continuity.
  * (data-externalConversation / X-External-Conversation).
  *
+ * Turn mutation (#3475): `send` appends last-user text via `responses.create`.
+ * `regenerate` / `edit_last_user` delete trailing conversation items (when the
+ * OpenAI client exposes `conversations.items`), then create a response with no
+ * new input. Without an item API, the adapter returns 501 `not_supported`.
+ *
  * Supersedes the standalone datatap-digichat-relay Azure Function (digithings#1396):
  * that Function's source was never in this repo, so its two known bugs
  * (duplicated answers, duplicated "Searching…" trace) are fixed here from the
@@ -25,6 +30,8 @@ import {
   type ActivityDocument,
   type ActivitySpan,
 } from "@/lib/chat-activity";
+import type { DigiTurnMode } from "@/lib/turn-mode";
+import { isMutatingTurnMode } from "@/lib/turn-mode";
 
 /** Foundry has no per-call system-prompt slot (see module doc comment) — the
  * language directive is prepended to the raw input text instead, resent on
@@ -45,16 +52,113 @@ export interface FoundryStreamEvent {
   [key: string]: unknown;
 }
 
+/** Conversation history item as returned by Foundry / OpenAI Conversations API. */
+export interface FoundryConversationItem {
+  id: string;
+  type?: string;
+  role?: string;
+  [key: string]: unknown;
+}
+
+export interface FoundryConversationItemsApi {
+  list(
+    conversationId: string,
+    opts?: { order?: "asc" | "desc"; limit?: number },
+  ): Promise<{ data: FoundryConversationItem[] } | FoundryConversationItem[]> | AsyncIterable<FoundryConversationItem>;
+  delete(conversationId: string, itemId: string): Promise<unknown>;
+  create(
+    conversationId: string,
+    body: {
+      items: Array<{
+        type: "message";
+        role: "user";
+        content: string | Array<{ type: "input_text"; text: string }>;
+      }>;
+    },
+  ): Promise<unknown>;
+}
+
 export interface OpenAIResponsesClientLike {
   conversations: {
     create(): Promise<{ id: string }>;
+    /** Present on OpenAI / Foundry clients that support history mutation (#3475). */
+    items?: FoundryConversationItemsApi;
   };
   responses: {
     create(
-      params: { conversation: string; input: string; stream: true },
+      params: { conversation: string; input?: string; stream: true },
       options: { signal?: AbortSignal; body: { agent_reference: { name: string; type: "agent_reference" } } }
     ): Promise<AsyncIterable<FoundryStreamEvent>>;
   };
+}
+
+/** True when this OpenAI client exposes conversation item list/delete/create. */
+export function foundryClientSupportsItemMutation(
+  client: OpenAIResponsesClientLike,
+): client is OpenAIResponsesClientLike & {
+  conversations: { create(): Promise<{ id: string }>; items: FoundryConversationItemsApi };
+} {
+  const items = client.conversations.items;
+  return (
+    !!items &&
+    typeof items.list === "function" &&
+    typeof items.delete === "function" &&
+    typeof items.create === "function"
+  );
+}
+
+async function listConversationItems(
+  items: FoundryConversationItemsApi,
+  conversationId: string,
+): Promise<FoundryConversationItem[]> {
+  const result = await items.list(conversationId, { order: "desc", limit: 100 });
+  if (Array.isArray(result)) return result;
+  if (result && typeof result === "object" && Array.isArray((result as { data?: unknown }).data)) {
+    return (result as { data: FoundryConversationItem[] }).data;
+  }
+  const out: FoundryConversationItem[] = [];
+  for await (const item of result as AsyncIterable<FoundryConversationItem>) {
+    out.push(item);
+  }
+  return out;
+}
+
+function isUserMessageItem(item: FoundryConversationItem): boolean {
+  if (item.type === "message" && item.role === "user") return true;
+  // Some payloads omit type and only set role.
+  return item.role === "user" && (item.type === undefined || item.type === "message");
+}
+
+/**
+ * Delete trailing Foundry items for regenerate / edit_last_user.
+ * Items are expected newest-first (order=desc).
+ * - regenerate: delete until (not including) the last user message.
+ * - edit_last_user: delete through and including the last user message.
+ */
+export async function mutateFoundryConversationForTurnMode(opts: {
+  items: FoundryConversationItemsApi;
+  conversationId: string;
+  turnMode: "regenerate" | "edit_last_user";
+  editedUserText?: string;
+}): Promise<void> {
+  const listed = await listConversationItems(opts.items, opts.conversationId);
+  for (const item of listed) {
+    if (!item.id) continue;
+    const isUser = isUserMessageItem(item);
+    if (opts.turnMode === "regenerate" && isUser) break;
+    await opts.items.delete(opts.conversationId, item.id);
+    if (opts.turnMode === "edit_last_user" && isUser) break;
+  }
+
+  if (opts.turnMode === "edit_last_user") {
+    const text = (opts.editedUserText ?? "").trim();
+    if (!text) {
+      throw new Error("edit_last_user requires non-empty user text");
+    }
+    await opts.items.create(opts.conversationId, {
+      items: [{ type: "message", role: "user", content: text }],
+    });
+  }
 }
 
 export function defaultOpenAIClientFactory(projectEndpoint: string): OpenAIResponsesClientLike {
@@ -523,9 +627,48 @@ export async function createFoundryStreamResponse(opts: {
   signal?: AbortSignal;
   openAIClientFactory?: (projectEndpoint: string) => OpenAIResponsesClientLike;
   responseLanguage?: string;
+  /** Default `send`. Regen/edit mutate Foundry items then create with no new user input (#3475). */
+  turnMode?: DigiTurnMode;
 }): Promise<Response> {
-  const message = applyLanguageDirective(lastUserMessageText(opts.messages), opts.responseLanguage);
+  const turnMode: DigiTurnMode = opts.turnMode ?? "send";
   const openai = (opts.openAIClientFactory ?? defaultOpenAIClientFactory)(opts.projectEndpoint);
+
+  // Fail closed: mutating modes need item delete/create. Do not fall through to
+  // append-only `responses.create({ input })` — that would duplicate the user turn.
+  if (isMutatingTurnMode(turnMode) && !foundryClientSupportsItemMutation(openai)) {
+    return new Response(
+      JSON.stringify({
+        error: "not_supported",
+        message:
+          "Foundry turn mutation requires conversation item delete/create on this adapter client.",
+      }),
+      {
+        status: 501,
+        headers: {
+          "content-type": "application/json",
+          ...opts.responseHeaders,
+        },
+      },
+    );
+  }
+
+  if (isMutatingTurnMode(turnMode) && !opts.conversationId) {
+    return new Response(
+      JSON.stringify({
+        error: "conversation_required",
+        message: "regenerate/edit_last_user require an existing X-External-Conversation.",
+      }),
+      {
+        status: 400,
+        headers: {
+          "content-type": "application/json",
+          ...opts.responseHeaders,
+        },
+      },
+    );
+  }
+
+  const message = applyLanguageDirective(lastUserMessageText(opts.messages), opts.responseLanguage);
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "foundry error"),
@@ -559,13 +702,33 @@ export async function createFoundryStreamResponse(opts: {
           });
         }
 
-        const responseStream = await openai.responses.create(
-          { conversation: conversationId, input: message, stream: true },
-          {
-            signal: opts.signal,
-            body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+        if (isMutatingTurnMode(turnMode)) {
+          // Item API was checked above; narrow again for TypeScript.
+          if (!foundryClientSupportsItemMutation(openai)) {
+            throw new FoundryProtocolError("Foundry item mutation unavailable");
           }
-        );
+          await mutateFoundryConversationForTurnMode({
+            items: openai.conversations.items,
+            conversationId,
+            turnMode,
+            editedUserText: turnMode === "edit_last_user" ? message : undefined,
+          });
+        }
+
+        // send: append last user text. regenerate/edit: items already on the
+        // thread — create a response with no new input (official Foundry sample shape).
+        const createParams: { conversation: string; input?: string; stream: true } = {
+          conversation: conversationId,
+          stream: true,
+        };
+        if (turnMode === "send") {
+          createParams.input = message;
+        }
+
+        const responseStream = await openai.responses.create(createParams, {
+          signal: opts.signal,
+          body: { agent_reference: { name: opts.agentName, type: "agent_reference" } },
+        });
 
         let traceSeq = 0;
         const textFilter = new FoundryToolLeakFilter();
