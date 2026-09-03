@@ -3,8 +3,9 @@
 `digillm` is the **single home for all LLM client / API-wrapper / tooling code**
 in the digithings monorepo. It is a standalone, **provider-agnostic** library
 extracted from the mature `digigraph.llm` implementation. It speaks to any
-OpenAI-compatible endpoint and carries **no FastAPI / service coupling** and no
-hard dependency on `digismith`.
+OpenAI-compatible endpoint, carries **no vendor preference** (LiteLLM is the
+house upstream swap layer via `OPENAI_API_BASE`), and has **no FastAPI /
+service coupling** and no hard dependency on `digismith`.
 
 Consumers: **twelve-x** adopts it now; **digigraph** and **digisearch** migrate
 to it later (their current in-tree LLM modules are superseded by this package).
