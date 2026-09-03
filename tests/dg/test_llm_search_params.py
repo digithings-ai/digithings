@@ -22,6 +22,18 @@ SEARCH_PARAMS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _isolate_from_openrouter_api_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live Search assertions assume no leftover OpenRouter rewrite of ``OPENAI_API_BASE``.
+
+    ``apply_digiquant_openrouter_env`` can leave ``OPENAI_API_BASE=https://openrouter.ai/...``
+    in the process env when a prior test cleared it with ``delenv`` alone; digillm then
+    attaches ``provider.require_parameters`` to every completion via ``_api_base_is_openrouter``.
+    """
+    monkeypatch.setenv("OPENAI_API_BASE", "")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+
+
 def _mock_client() -> MagicMock:
     create = MagicMock()
     create.return_value.choices = [MagicMock(message=MagicMock(content="ok", tool_calls=None))]
