@@ -768,6 +768,16 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
 
+**postMessage page-context (popup widget #3421).** Hosts that load
+`public/widget.js` may post `{ type: "digichat:page-context", text, screenshotDataUrl?, ts }`
+after `digichat:ready`. Accepted only from the immediate parent browsing-context
+origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
+registered third-party site can describe **its own already-visible** DOM. Text is
+capped (`embed-page-context-messages.ts`); screenshot data URLs are optional and
+never inlined into the model prompt (acknowledgment only). The embed prepends
+formatted context to the next `wrappedSend` once. Config/URL helpers:
+`src/lib/embed-popup-config.ts`.
+
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
 `dt-theme` localStorage), pin first paint with `?theme=light|dark` on the iframe

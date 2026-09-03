@@ -75,6 +75,10 @@ import {
   parseThemeMessage,
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
+import {
+  formatPageContextForPrompt,
+  parsePageContextMessage,
+} from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -512,6 +516,9 @@ function EmbedChat({
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
   /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
   const [handshakeError, setHandshakeError] = useState<string | null>(null);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<string | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
 
   // Same first-party allowlist as digichat:seed / digichat:theme.
   const firstPartyParentOrigins = useMemo(() => {
@@ -586,6 +593,30 @@ function EmbedChat({
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
   }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
+
+  // Popup widget (#3421): accept visible-page context from the immediate parent
+  // after digichat:ready. Not first-party-only — registered third-party hosts
+  // describe their own already-visible DOM (no behind-auth scrape).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const parentOrigin = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parsePageContextMessage(event, parentOrigin);
+      if (!parsed) return;
+      const formatted = formatPageContextForPrompt(parsed);
+      if (!formatted) return;
+      pageContextRef.current = formatted;
+      setPageContextAttached(true);
+      setHandshakeError(null);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
@@ -689,16 +720,23 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
-    if (ungated) {
-      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    let base: string;
+    if (uiParams.welcome) base = uiParams.welcome;
+    else if (tenantCfg.welcome) base = tenantCfg.welcome;
+    else if (ungated) {
+      base =
+        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    } else {
+      base = DEFAULT_WELCOME.replace(
+        "the first few turns are free",
+        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+      );
     }
-    return DEFAULT_WELCOME.replace(
-      "the first few turns are free",
-      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-    );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+    if (pageContextAttached) {
+      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
+    }
+    return base;
+  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
@@ -724,11 +762,21 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      void chat.send(question, opts);
+      const ctx = pageContextRef.current;
+      const outbound =
+        ctx && ctx.length > 0
+          ? `${ctx}\n\n---\n\nUser question:\n${question}`
+          : question;
+      if (ctx) {
+        pageContextRef.current = null;
+        setPageContextAttached(false);
+      }
+      void chat.send(outbound, opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
+        page_context: Boolean(ctx),
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
