@@ -95,6 +95,37 @@ def test_iau_nested_terms_wrapper_materializes() -> None:
     assert amendment.terms.raw_uncertainty.value == "medium"
 
 
+@pytest.mark.parametrize("wrapper_key", ["amendment", "forecast_amendment"])
+def test_amendment_spelling_wrappers_materialize(wrapper_key: str) -> None:
+    """Cheap-model {amendment|forecast_amendment: {...}} envelopes unwrap (#3299)."""
+    analyst, state = _analyst()
+    effective, amendment = _resolve_from_debate(
+        state=state,
+        ticker="IAU",
+        analyst=analyst,
+        amendment_terms_raw={wrapper_key: sample_forecast_terms_dict()},
+        amendment_reason="h6_challenge_revision",
+    )
+    assert amendment is not None
+    assert effective is not None
+    assert effective.amendment_outcome is AmendmentOutcome.ACCEPTED
+
+
+def test_registry_reason_is_short_not_conclusion() -> None:
+    """Registry reason stays h6_challenge_revision even for a long conclusion (#3299)."""
+    analyst, state = _analyst()
+    _, amendment = _resolve_from_debate(
+        state=state,
+        ticker="GLD",
+        analyst=analyst,
+        amendment_terms_raw=sample_forecast_terms_dict(),
+        amendment_reason="h6_challenge_revision",
+    )
+    assert amendment is not None
+    assert amendment.reason == "h6_challenge_revision"
+    assert len(amendment.reason) < 100  # well under the 2000-char registry CHECK
+
+
 def test_slv_wrapper_with_top_level_and_nested_terms_materializes() -> None:
     analyst, state = _analyst()
     nested = sample_forecast_terms_dict()

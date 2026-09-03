@@ -28,6 +28,7 @@ from digiquant.research.supabase_io import (
     query_pending_decisions,
     query_price_deltas,
     query_price_technicals_freshness,
+    query_returns_window,
     upsert_onchain_cohort_positioning,
 )
 
@@ -893,3 +894,78 @@ class TestLoadPriorBook:
             ]
         )
         assert weights == {"SPY": 20.0, "CASH": 80.0}
+
+
+@pytest.mark.unit
+class TestQueryReturnsWindowRetry:
+    """The 2026-08-29 daily run died on httpx.ReadTimeout here (#3078/#3299)."""
+
+    def _prices(self) -> list[dict[str, object]]:
+        base = date(2026, 8, 20)
+        return [
+            {
+                "date": (base + timedelta(days=offset)).isoformat(),
+                "ticker": "SPY",
+                "close": 100.0 + offset,
+            }
+            for offset in range(10)
+        ]
+
+    def _flaky(self, failures: int) -> FakeSupabaseClient:
+        import httpx
+
+        client = FakeSupabaseClient(canned_reads={"price_history": self._prices()})
+        state = {"attempts": 0}
+        orig_table = client.table
+
+        def _table(name: str):  # type: ignore[no-untyped-def]
+            query = orig_table(name)
+            inner = query.execute
+
+            def _execute():  # type: ignore[no-untyped-def]
+                state["attempts"] += 1
+                if state["attempts"] <= failures:
+                    raise httpx.ReadTimeout(
+                        "The read operation timed out",
+                        request=httpx.Request("GET", "https://x.supabase.co/rest/v1/t"),
+                    )
+                return inner()
+
+            query.execute = _execute  # type: ignore[method-assign]
+            return query
+
+        client.table = _table  # type: ignore[method-assign]
+        client.retry_attempts = state  # type: ignore[attr-defined]
+        return client
+
+    def test_two_timeouts_then_window_computes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import time
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky(failures=2)
+        out = query_returns_window(
+            client=client,
+            ticker="SPY",
+            start_date=date(2026, 8, 20),
+            holding_days=5,
+        )
+        assert out is not None
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]
+
+    def test_persistent_timeout_raises_to_fail_soft_caller(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import time
+
+        import httpx
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky(failures=10)
+        with pytest.raises(httpx.ReadTimeout):
+            query_returns_window(
+                client=client,
+                ticker="SPY",
+                start_date=date(2026, 8, 20),
+                holding_days=5,
+            )
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]

@@ -91,3 +91,76 @@ class TestMissingCurrencyFailSoft:
         assert result.resolved == 0
         assert result.pending == 0
         assert client.store.get(clr.ACTION_COST_OUTCOMES, []) == []
+
+
+@pytest.mark.unit
+class TestCostEvidenceReadsVolFromTechnicals:
+    """hist_vol_21/atr_pct live in price_technicals, not price_history (#3299).
+
+    Selecting them from price_history raised Postgres 42703 and blanked cost
+    evidence; H9 now reads OHLCV from history and joins the latest technicals row.
+    """
+
+    def _client(self) -> FakeSupabaseClient:
+        return FakeSupabaseClient(
+            canned_reads={
+                "price_history": [
+                    {
+                        "date": "2026-08-25",
+                        "ticker": "SPY",
+                        "close": 500.0,
+                        "high": 501.0,
+                        "low": 499.0,
+                        "volume": 1000,
+                    },
+                ],
+                "price_technicals": [
+                    {
+                        "date": "2026-08-25",
+                        "ticker": "SPY",
+                        "hist_vol_21": 18.5,
+                        "atr_pct": 1.2,
+                    },
+                ],
+            }
+        )
+
+    def test_price_row_merges_technicals_vol(self) -> None:
+        from digiquant.portfolio.h9_cost_evidence import _fetch_price_row
+
+        row = _fetch_price_row(
+            client=self._client(),
+            symbol="SPY",
+            session_date="2026-08-25",
+        )
+        assert row is not None
+        assert row["close"] == 500.0
+        assert row["hist_vol_21"] == 18.5
+        assert row["atr_pct"] == 1.2
+
+    def test_missing_technicals_leaves_vol_unset_not_fatal(self) -> None:
+        from digiquant.portfolio.h9_cost_evidence import _fetch_price_row
+
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [
+                    {
+                        "date": "2026-08-25",
+                        "ticker": "SPY",
+                        "close": 500.0,
+                        "high": 501.0,
+                        "low": 499.0,
+                        "volume": 1000,
+                    },
+                ],
+                "price_technicals": [],
+            }
+        )
+        row = _fetch_price_row(
+            client=client,
+            symbol="SPY",
+            session_date="2026-08-25",
+        )
+        assert row is not None
+        assert row["close"] == 500.0
+        assert row.get("hist_vol_21") is None

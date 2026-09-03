@@ -2037,6 +2037,24 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   **H9** (`commit_run`) is the portfolio terminal: positions, nav, theses sync, brief
   publish, `decision_log` append, the portfolio lineage ledger commit chain (see
   below), and fail-soft prospective forecast-registry persistence (#2663).
+- **Tool-round budget + log hygiene (#3299).** Every research/portfolio
+  `run_research_agent(...)` call goes through the thin wrapper
+  `digiquant.tool_rounds.run_olympus_research_agent`, which injects
+  `OLYMPUS_MAX_TOOL_ROUNDS` (default **24**, set in
+  `.github/digiquant-pipeline.yml`). The cap is high but finite: cheap models need
+  room for data-tool grounding before Pydantic validation. digigraph chat keeps its
+  own `max_tool_rounds=4` — never reuse the Olympus budget there.
+  Transient Supabase faults (disconnects, `PGRST002`, 502s) retry 3× with short
+  backoff (`digiquant.supabase_retry`) in data tools, retrieval queries, and
+  `query_returns_window`; anything else (notably 42703) still fails fast.
+  H6 amendment envelopes unwrap one `{terms|amendment|forecast_amendment}` level,
+  tenor fills from the H5 base, and the registry reason is always the short
+  `h6_challenge_revision` (never `summary.conclusion`, which tripped the 2000-char
+  CHECK). H9 cost evidence reads `hist_vol_21`/`atr_pct` from `price_technicals`
+  (second read joined onto the history row), never from `price_history`.
+  `conviction_delta` clamps to ±2 before validation; `DocumentPatch` drops ops
+  missing `op`/`path` before validation; bias synonyms map hawkish→bearish,
+  dovish→bullish (tightening→bearish).
 
 #### Risk-sizing layer (Pillar 2)
 

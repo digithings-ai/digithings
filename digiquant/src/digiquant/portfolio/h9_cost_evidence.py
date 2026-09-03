@@ -43,6 +43,7 @@ REQUESTED_TARGETS = "portfolio_ledger_requested_targets"
 APPROVED_TARGETS = "portfolio_ledger_approved_targets"
 ORDER_INTENTS = "portfolio_ledger_order_intents"
 _PRICE_HISTORY = "price_history"
+_PRICE_TECHNICALS = "price_technicals"
 
 
 def investor_currency_from_state(state: ResearchState) -> str | None:
@@ -64,7 +65,7 @@ def _load_symbol_history(
 ) -> pl.DataFrame:
     resp = (
         client.table(_PRICE_HISTORY)
-        .select("date, ticker, close, high, low, volume, hist_vol_21, atr_pct")
+        .select("date, ticker, close, high, low, volume")
         .eq("ticker", symbol.strip().upper())
         .lte("date", as_of_session)
         .execute()
@@ -78,6 +79,35 @@ def _load_symbol_history(
     return frame
 
 
+def _fetch_technicals_row(
+    *,
+    client: SupabaseClient,
+    symbol: str,
+    session_date: str,
+) -> dict[str, Any] | None:
+    """Latest ``price_technicals`` row ≤ session (vol lives here, not history).
+
+    ``price_history`` has no ``hist_vol_21`` / ``atr_pct`` columns — selecting
+    them there raised Postgres 42703 (#3299). Fail-soft: a missing row leaves
+    vol unset and the cost model falls back to its default sigma.
+    """
+    try:
+        resp = (
+            client.table(_PRICE_TECHNICALS)
+            .select("ticker, date, hist_vol_21, atr_pct")
+            .eq("ticker", symbol.strip().upper())
+            .lte("date", session_date)
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.warning("h9 cost evidence: price_technicals read failed (%s)", exc)
+        return None
+    rows = list(getattr(resp, "data", None) or [])
+    return rows[0] if rows else None
+
+
 def _fetch_price_row(
     *,
     client: SupabaseClient,
@@ -86,14 +116,23 @@ def _fetch_price_row(
 ) -> dict[str, Any] | None:
     resp = (
         client.table(_PRICE_HISTORY)
-        .select("date, close, high, low, volume, hist_vol_21, atr_pct")
+        .select("date, close, high, low, volume")
         .eq("ticker", symbol.strip().upper())
         .eq("date", session_date)
         .limit(1)
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    return rows[0] if rows else None
+    if not rows:
+        return None
+    row = dict(rows[0])
+    technicals = _fetch_technicals_row(client=client, symbol=symbol, session_date=session_date)
+    if technicals:
+        # Join (not a second price read): vol evidence onto the OHLCV row.
+        for key in ("hist_vol_21", "atr_pct"):
+            if row.get(key) is None and technicals.get(key) is not None:
+                row[key] = technicals[key]
+    return row
 
 
 def _load_commit_orders(
