@@ -17,7 +17,6 @@ from typing import (  # score:allow untyped any — heterogeneous node-update di
     NamedTuple,
 )
 
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
@@ -63,6 +62,7 @@ from digiquant.research.state import (
 # exists so a new key costs one module plus one line, not an edit to the gate rules.
 from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
 from digiquant.research.triage import triage_decision_to_signal
+from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 

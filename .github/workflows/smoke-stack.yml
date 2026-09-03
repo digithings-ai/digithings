@@ -27,6 +27,12 @@ jobs:
           cp .env.example .env
           docker compose up -d --wait digikey digigraph digiquant digisearch digismith
 
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color litellm || true
+          docker compose ps -a || true
+
       - name: Probe /healthz
         run: |
           set -euo pipefail

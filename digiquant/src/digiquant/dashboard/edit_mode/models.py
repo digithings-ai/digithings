@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
     Literal,
 )
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 PatchOpType = Literal["set", "append", "remove"]
 # RFC 6902 names the write verb ``add``. This module's ``set`` is that verb
@@ -57,6 +60,41 @@ class DocumentPatch(BaseModel):
     ops: list[PatchOp] = Field(default_factory=list)
     one_line_summary: str | None = None
     signals_checked: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_incomplete_ops(cls, data: object) -> object:
+        """Drop ops that lack ``op``+``path`` before PatchOp validation (#3299).
+
+        Cheap models emit placeholder ops (missing verb or pointer); rejecting
+        the whole patch for one malformed entry cost the segment. When any real
+        patch ops remain the patch is kept; an all-placeholder list validates
+        as an empty ops list downstream. Empty-JSON retry and AnalystPayload
+        bear≤base≤bull reject+retry are unchanged (no silent reorder).
+        """
+        if not isinstance(data, dict):
+            return data
+        ops = data.get("ops")
+        if not isinstance(ops, list):
+            return data
+        kept = [
+            op
+            for op in ops
+            # Already-validated PatchOp instances pass through; raw dicts must
+            # carry op+path (placeholder entries are dropped, not rejected).
+            if not isinstance(op, dict) or (op.get("op") and op.get("path"))
+        ]
+        if len(kept) != len(ops):
+            # Telemetry, not silence: an all-placeholder patch merges as a
+            # no-op, which frozen-row analysis must distinguish from no-change.
+            logger.info(
+                "DocumentPatch dropped %d of %d ops missing op/path (target=%s)",
+                len(ops) - len(kept),
+                len(ops),
+                data.get("target_document_key"),
+            )
+            data = {**data, "ops": kept}
+        return data
 
 
 class MergeStats(BaseModel):
