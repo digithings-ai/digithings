@@ -19,6 +19,12 @@ import {
   parseSlashInput,
   slashHelpText,
 } from "./slash-commands";
+import {
+  downloadMarkdown,
+  serializeAssistantMarkdown,
+  serializeThreadMarkdown,
+  type TranscriptTurn,
+} from "./transcript-markdown";
 import type { DigiChatSessionProps, VaultHitSummary } from "./types";
 import { useStreamingIntro } from "./useStreamingIntro";
 
@@ -172,6 +178,22 @@ export function DigiChatSession({
   const showOptimisticSearch =
     busy && !waitingForAssistant && lastAssistant && lastChain.length === 0 && !lastAssistant.content;
 
+  const threadTurns: TranscriptTurn[] = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+      sources:
+        m.role === "assistant"
+          ? citationHits(chainActivities(m.activities ?? [])).map((h) => ({
+              title: h.title,
+              path: h.path,
+            }))
+          : undefined,
+    }));
+  const threadMarkdown = serializeThreadMarkdown(threadTurns);
+  const canExportThread = threadMarkdown.trim().length > 0 && !busy;
+
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
       {headerSlot ??
@@ -277,14 +299,32 @@ export function DigiChatSession({
                         ))}
                       </ul>
                     ) : null}
-                    {/* No copy on embed: clipboard API is blocked in the
-                        cross-origin iframe, so the button would silently no-op. */}
-                    {layout !== "embed" && !streaming && m.content ? (
-                      <CopyButton
-                        text={stripFoundryCitationMarkers(m.content)}
-                        className="dc-msg-copy"
-                        ariaLabel="Copy answer"
-                      />
+                    {/* Copy on page + embed: clipboard first; embed falls back to
+                        .md download / digichat:copy postMessage / textarea (#3465). */}
+                    {!streaming && m.content ? (
+                      <span className="dc-msg-actions">
+                        <CopyButton
+                          text={serializeAssistantMarkdown(
+                            m.content,
+                            sources.map((h) => ({ title: h.title, path: h.path })),
+                          )}
+                          className="dc-msg-copy"
+                          ariaLabel="Copy answer as markdown"
+                          filename="digichat-answer.md"
+                        />
+                        {i === messages.length - 1 && canExportThread ? (
+                          <button
+                            type="button"
+                            className="dc-msg-copy"
+                            aria-label="Download thread as markdown"
+                            onClick={() =>
+                              downloadMarkdown("digichat-thread.md", threadMarkdown)
+                            }
+                          >
+                            md
+                          </button>
+                        ) : null}
+                      </span>
                     ) : null}
                     {streaming && m.content ? <ChatStreamCursor className="dt-cur" /> : null}
                   </>
