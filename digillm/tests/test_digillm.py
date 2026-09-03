@@ -398,7 +398,7 @@ def test_openrouter_rewrite_prefixed_byok_uses_user_bearer(
 ) -> None:
     """CLI OpenRouter rewrite is not LiteLLM — BYOK must not use extra_body pass-through.
 
-    Leftover ``apply_olympus_openrouter_env()`` (``digigraph/src/digigraph/model_config.py``)
+    Leftover ``apply_digiquant_openrouter_env()`` (``digigraph/src/digigraph/model_config.py``)
     sets ``OPENAI_API_BASE`` to OpenRouter when unset; OpenRouter ignores LiteLLM
     clientside credential fields.
     """

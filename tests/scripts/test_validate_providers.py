@@ -285,9 +285,9 @@ def test_function_tools_reports_substitution_on_unprefixed_house_slug(vp: Any) -
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["deepseek/deepseek-v4-flash"]),
         ),
         patch("digillm.client.completion", return_value=response),

@@ -31,10 +31,10 @@ def _model_names(path: Path) -> set[str]:
     return names
 
 
-def _olympus_house_slugs() -> set[str]:
-    olympus = yaml.safe_load((CONFIG / "olympus_models.yaml").read_text(encoding="utf-8"))
+def _digiquant_house_slugs() -> set[str]:
+    digiquant = yaml.safe_load((CONFIG / "digiquant_models.yaml").read_text(encoding="utf-8"))
     slugs: set[str] = set()
-    for tier in (olympus.get("tiers") or {}).values():
+    for tier in (digiquant.get("tiers") or {}).values():
         for pool in (tier.get("allowed_models") or {}).values():
             slugs.update(str(m) for m in (pool or []))
         slugs.update(str(m) for m in (tier.get("web_search_models") or []))
@@ -50,7 +50,7 @@ def _olympus_house_slugs() -> set[str]:
 
 def test_litellm_yaml_parses_and_lists_house_slugs() -> None:
     names = _model_names(CONFIG / "litellm.yaml")
-    missing = sorted(_olympus_house_slugs() - names)
+    missing = sorted(_digiquant_house_slugs() - names)
     assert not missing, f"house pins missing from config/litellm.yaml model_list: {missing}"
 
 
@@ -76,7 +76,7 @@ def test_house_pins_are_unprefixed() -> None:
 
     ``anthropic/`` and ``openai/`` are OpenRouter org slugs and are expected.
     """
-    for slug in _olympus_house_slugs():
+    for slug in _digiquant_house_slugs():
         assert not slug.startswith("openrouter/"), slug
         assert not slug.startswith("gemini/"), slug
         assert not slug.startswith("xai/"), slug

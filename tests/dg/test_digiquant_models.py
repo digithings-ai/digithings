@@ -270,7 +270,7 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    apply_olympus_openrouter_env()
+    apply_digiquant_openrouter_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")

@@ -304,7 +304,7 @@ string to `chat_completion` and skip this entirely.
 - **Default base vs LiteLLM:** any non-empty `OPENAI_API_BASE` is a default
   base (prefix → `get_client()` so house `anthropic/claude-sonnet-5` does not
   hit api.anthropic.com). LiteLLM clientside pass-through is only the
-  non-OpenRouter case. After leftover `apply_olympus_openrouter_env()`
+  non-OpenRouter case. After leftover `apply_digiquant_openrouter_env()`
   (`digigraph/src/digigraph/model_config.py`) with no LiteLLM: prefixed BYOK
   uses the user Bearer against the vendor URL; leftover `gemini/` / `xai/`
   stay vendor clients (`GEMINI_API_KEY` / `XAI_API_KEY`).

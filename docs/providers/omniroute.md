@@ -47,7 +47,7 @@ model_list:
       api_key: os.environ/OMNIROUTE_API_KEY
 ```
 
-House pins in `config/olympus_models.yaml` stay on the OpenRouter slugs in `config/litellm.yaml`. Point a *caller* at `omniroute/auto` only if you are experimenting — do not change `config/olympus_models.yaml` for this.
+House pins in `config/digiquant_models.yaml` stay on the OpenRouter slugs in `config/litellm.yaml`. Point a *caller* at `omniroute/auto` only if you are experimenting — do not change `config/digiquant_models.yaml` for this.
 
 When LiteLLM runs in Docker and OmniRoute is on the host, use `http://host.docker.internal:20128/v1` as `OMNIROUTE_API_BASE`.
 
@@ -62,5 +62,5 @@ curl -sS http://127.0.0.1:20128/v1/models \
 
 - Cookie / MITM / TPROXY / web-session OmniRoute providers
 - Replacing OpenRouter as the default house upstream
-- Cutting house phase or grounding pins in `config/olympus_models.yaml` over to OmniRoute
+- Cutting house phase or grounding pins in `config/digiquant_models.yaml` over to OmniRoute
 - Cost bake-off vs OpenRouter `:free` (follow-up on the models we pin)
