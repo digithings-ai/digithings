@@ -24,6 +24,20 @@ from digigraph.model_config import (
 
 _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 
+
+def _clear_env(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
+    """Delete env vars so teardown still undoes mutations by the code under test.
+
+    ``monkeypatch.delenv(..., raising=False)`` records no undo when the key was already
+    absent. ``apply_digiquant_openrouter_env`` then does ``os.environ[k] = ...`` and the
+    value leaks into later tests (e.g. Live Search ``extra_body`` assertions). Seed a
+    placeholder first so the undo stack always restores the pre-test state.
+    """
+    for name in names:
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name, raising=False)
+
+
 # Phase pools = bare OpenRouter slugs (function tools). The ``:online`` suffix is a
 # web-search variant only and must never appear in a phase pool — it 404s on tool use
 # for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
@@ -228,12 +242,15 @@ def test_phase_slug_selection_is_stable(monkeypatch: pytest.MonkeyPatch) -> None
 def test_apply_digiquant_openrouter_env_sets_open_weight_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
-    monkeypatch.delenv("OPENROUTER_COST_QUALITY_TRADEOFF", raising=False)
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    _clear_env(
+        monkeypatch,
+        "OPENROUTER_ALLOWED_MODELS",
+        "OPENROUTER_COST_QUALITY_TRADEOFF",
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+    )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
     tier = apply_digiquant_openrouter_env()
     assert tier == "cheap"
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
@@ -266,9 +283,7 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
     """CLI rewrite is not LiteLLM: leftover ``gemini/`` still needs ``GEMINI_API_KEY``."""
     import digillm
 
-    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY", "GEMINI_API_KEY")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     apply_digiquant_openrouter_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
@@ -280,8 +295,8 @@ def test_apply_openrouter_rewrite_leaves_gemini_on_vendor_client(
 def test_apply_quality_tier_preserves_frontier_auto_router_pool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
-    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "quality")
+    _clear_env(monkeypatch, "OPENROUTER_ALLOWED_MODELS", "OPENAI_API_BASE", "OPENAI_API_KEY")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "quality")
     apply_digiquant_openrouter_env()
     pool = os.environ["OPENROUTER_ALLOWED_MODELS"]
     assert "openai/*" in pool
