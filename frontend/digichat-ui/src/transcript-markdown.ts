@@ -80,7 +80,8 @@ export function downloadMarkdown(filename: string, text: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Defer revoke — some browsers start the download asynchronously after click.
+  window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
 }
 
 function tryParentCopyPostMessage(text: string): boolean {
