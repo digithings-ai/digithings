@@ -107,8 +107,8 @@ function fakeClient(
               async list() {
                 return { data: itemsState.list };
               },
-              async delete(_conversationId: string, itemId: string) {
-                itemsState.deleted.push(itemId);
+              async delete(itemId: string, params: { conversation_id: string }) {
+                itemsState.deleted.push(`${params.conversation_id}:${itemId}`);
               },
               async create(_conversationId: string, body: unknown) {
                 itemsState.created.push(body);
@@ -487,7 +487,7 @@ describe("createFoundryStreamResponse", () => {
         turnMode: "regenerate",
       }),
     );
-    expect(items.deleted).toEqual(["msg_asst", "tool_1"]);
+    expect(items.deleted).toEqual(["conv_old:msg_asst", "conv_old:tool_1"]);
     expect(items.created).toEqual([]);
     expect(createSpy.calls[0][0]).toEqual({ conversation: "conv_old", stream: true });
     expect(createSpy.calls[0][0]).not.toHaveProperty("input");
@@ -518,7 +518,7 @@ describe("createFoundryStreamResponse", () => {
         turnMode: "edit_last_user",
       }),
     );
-    expect(items.deleted).toEqual(["msg_asst", "msg_user"]);
+    expect(items.deleted).toEqual(["conv_edit:msg_asst", "conv_edit:msg_user"]);
     expect(items.created).toEqual([
       { items: [{ type: "message", role: "user", content: "edited question" }] },
     ]);

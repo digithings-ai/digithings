@@ -65,7 +65,11 @@ export interface FoundryConversationItemsApi {
     conversationId: string,
     opts?: { order?: "asc" | "desc"; limit?: number },
   ): Promise<{ data: FoundryConversationItem[] } | FoundryConversationItem[]> | AsyncIterable<FoundryConversationItem>;
-  delete(conversationId: string, itemId: string): Promise<unknown>;
+  /**
+   * OpenAI / Foundry client shape: `delete(itemId, { conversation_id })`
+   * — not `(conversationId, itemId)`.
+   */
+  delete(itemId: string, params: { conversation_id: string }): Promise<unknown>;
   create(
     conversationId: string,
     body: {
@@ -146,7 +150,7 @@ export async function mutateFoundryConversationForTurnMode(opts: {
     if (!item.id) continue;
     const isUser = isUserMessageItem(item);
     if (opts.turnMode === "regenerate" && isUser) break;
-    await opts.items.delete(opts.conversationId, item.id);
+    await opts.items.delete(item.id, { conversation_id: opts.conversationId });
     if (opts.turnMode === "edit_last_user" && isUser) break;
   }
 

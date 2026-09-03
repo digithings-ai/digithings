@@ -226,17 +226,23 @@ export async function POST(req: Request) {
   const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
 
   if (embedConfig?.backend.type === "foundry") {
-    const foundryRes = await createFoundryStreamResponse({
-      projectEndpoint: embedConfig.backend.projectEndpoint,
-      agentName: embedConfig.backend.agentName,
-      messages,
-      conversationId: externalConversation,
-      responseHeaders,
-      activityDetail: embedConfig.activityDetail,
-      signal: req.signal,
-      responseLanguage: languageCode,
-      turnMode,
-    });
+    let foundryRes: Response;
+    try {
+      foundryRes = await createFoundryStreamResponse({
+        projectEndpoint: embedConfig.backend.projectEndpoint,
+        agentName: embedConfig.backend.agentName,
+        messages,
+        conversationId: externalConversation,
+        responseHeaders,
+        activityDetail: embedConfig.activityDetail,
+        signal: req.signal,
+        responseLanguage: languageCode,
+        turnMode,
+      });
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
     // JSON 4xx/501 from the adapter are not streams — release immediately.
     if (foundryRes.headers.get("content-type")?.includes("application/json")) {
       runLock.release();
@@ -245,13 +251,19 @@ export async function POST(req: Request) {
     return finish(foundryRes);
   }
 
-  const coreMessages = await convertToModelMessages(
-    messages.map((m) => {
-      const { id: _omit, ...rest } = m;
-      void _omit;
-      return rest;
-    }) as Omit<UIMessage, "id">[]
-  );
+  let coreMessages;
+  try {
+    coreMessages = await convertToModelMessages(
+      messages.map((m) => {
+        const { id: _omit, ...rest } = m;
+        void _omit;
+        return rest;
+      }) as Omit<UIMessage, "id">[]
+    );
+  } catch (err) {
+    runLock.release();
+    throw err;
+  }
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
   const byokNeedsModel = byokRequiresModel(byokProvider);
@@ -338,16 +350,21 @@ export async function POST(req: Request) {
     process.env.DIGICHAT_TRACE_UI !== "0" && headerWantsTrace !== "0";
 
   if (useTraceStream) {
-    return finish(
-      await createDigigraphTraceStreamResponse({
-        messages,
-        digigraphBaseUrl: eco.digigraphUrl ?? "",
-        upstreamHeaders,
-        responseHeaders,
-        activityDetail: embedConfig?.activityDetail ?? "full",
-        signal: req.signal,
-      }),
-    );
+    try {
+      return finish(
+        await createDigigraphTraceStreamResponse({
+          messages,
+          digigraphBaseUrl: eco.digigraphUrl ?? "",
+          upstreamHeaders,
+          responseHeaders,
+          activityDetail: embedConfig?.activityDetail ?? "full",
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   const result = streamText({
