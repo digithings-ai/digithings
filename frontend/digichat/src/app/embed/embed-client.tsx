@@ -376,6 +376,16 @@ function EmbedChat({
    * signal to gate the charge on.
    */
   const pendingGateChargeRef = useRef(false);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<string | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
+  const consumePageContextPrefix = useCallback((question: string): string => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return question;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+  }, []);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -527,18 +537,6 @@ function EmbedChat({
   const [hideIntroForSeed, setHideIntroForSeed] = useState(false);
   /** Parent handshake/load failures — DigiChatSession `.dtc-error` transcript lines. */
   const [handshakeError, setHandshakeError] = useState<string | null>(null);
-  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
-  const pageContextRef = useRef<string | null>(null);
-  const [pageContextAttached, setPageContextAttached] = useState(false);
-
-  const consumePageContextPrefix = useCallback((question: string): string => {
-    const ctx = pageContextRef.current;
-    if (!ctx) return question;
-    pageContextRef.current = null;
-    setPageContextAttached(false);
-    return `${ctx}\n\n---\n\nUser question:\n${question}`;
-  }, []);
-
 
   // Same first-party allowlist as digichat:seed / digichat:theme.
   const firstPartyParentOrigins = useMemo(() => {
