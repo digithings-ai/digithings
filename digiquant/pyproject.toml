@@ -26,6 +26,7 @@ dependencies = [
     "cryptography>=42",
     # K5 email templates (notify/dispatch).
     "jinja2>=3.1",
+    "ccxt>=4.5.77",
 ]
 [project.optional-dependencies]
 nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
