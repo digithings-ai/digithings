@@ -116,7 +116,7 @@ jobs:
 
             Refs #${{ github.event.issue.number }}
             Fixes #128
-          labels: "phase-0"
+          labels: "housekeeping"
           add-paths: scripts/project_fields.tsv
 
   reap-stub-branch:
@@ -253,5 +253,5 @@ jobs:
 
             Refs #${{ github.event.issue.number }}
             Fixes #128
-          labels: "phase-0"
+          labels: "housekeeping"
           add-paths: scripts/project_fields.tsv
