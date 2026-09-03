@@ -89,11 +89,16 @@ jobs:
         # public figures lag reality by 3 days (end-date shift) so the live
         # position can't be read off the curve. No repo commit — the DB is the
         # delivery; digiquant.io reads strategy_tearsheets live.
+        # --cache-dir must match fetch_coinbase / export_sdca_macro defaults
+        # (digiquant/data/price-history). Explicit so the job still works while
+        # checkout stays on main (#1626) and DEFAULT_CACHE has not yet been
+        # promoted (#3472 — REPO_ROOT vs DIGIQUANT_ROOT mismatch).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
-            --signal-delay-days 3
+            --signal-delay-days 3 \
+            --cache-dir digiquant/data/price-history
 
       - name: Update persistent failure issue
         if: failure()
