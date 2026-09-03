@@ -48,6 +48,19 @@ describe("embed-page-context-messages", () => {
         "https://app.example",
       ),
     ).toBeNull();
+
+    expect(
+      parsePageContextMessage(
+        {
+          origin: "https://app.example",
+          data: {
+            ...msg,
+            screenshotDataUrl: "data:image/svg+xml,<svg></svg>",
+          },
+        } as MessageEvent,
+        "https://app.example",
+      ),
+    ).toBeNull();
   });
 
   it("extracts visible body text only", () => {

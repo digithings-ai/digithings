@@ -479,7 +479,7 @@ function EmbedChat({
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
         heldForceToolRef.current = undefined;
-        void chat.send(held, forceTool ? { forceTool } : undefined);
+        void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -490,10 +490,21 @@ function EmbedChat({
       heldQuestionRef.current = null;
       const forceTool = heldForceToolRef.current;
       heldForceToolRef.current = undefined;
-      void chat.send(held, forceTool ? { forceTool } : undefined);
+      void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
       if (!ungated) pendingGateChargeRef.current = true;
     }
-  }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
+  }, [
+    byokIsSet,
+    byokKey,
+    byokProvider,
+    byokModel,
+    chat.busy,
+    chat.onRetry,
+    chat.send,
+    ungated,
+    gate,
+    consumePageContextPrefix,
+  ]);
 
   const openSettings = useCallback(() => {
     setQuotaPrompt(false);
@@ -519,6 +530,15 @@ function EmbedChat({
   /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
   const pageContextRef = useRef<string | null>(null);
   const [pageContextAttached, setPageContextAttached] = useState(false);
+
+  const consumePageContextPrefix = useCallback((question: string): string => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return question;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+  }, []);
+
 
   // Same first-party allowlist as digichat:seed / digichat:theme.
   const firstPartyParentOrigins = useMemo(() => {
@@ -661,14 +681,16 @@ function EmbedChat({
     sentHeldRef.current = question;
     const forceTool = heldForceToolRef.current;
     heldForceToolRef.current = undefined;
-    void chat.send(question, forceTool ? { forceTool } : undefined);
+    const hadCtx = pageContextRef.current != null;
+    void chat.send(consumePageContextPrefix(question), forceTool ? { forceTool } : undefined);
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
       byok: byokIsSet,
+      page_context: hadCtx,
     });
-  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContextPrefix]);
 
   const reopenTrialForm = useCallback(() => {
     lastGatedPost.current = null;
@@ -762,25 +784,17 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      const ctx = pageContextRef.current;
-      const outbound =
-        ctx && ctx.length > 0
-          ? `${ctx}\n\n---\n\nUser question:\n${question}`
-          : question;
-      if (ctx) {
-        pageContextRef.current = null;
-        setPageContextAttached(false);
-      }
-      void chat.send(outbound, opts);
+      const hadCtx = pageContextRef.current != null;
+      void chat.send(consumePageContextPrefix(question), opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
-        page_context: Boolean(ctx),
+        page_context: hadCtx,
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContextPrefix],
   );
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */

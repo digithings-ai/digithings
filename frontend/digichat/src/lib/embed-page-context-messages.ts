@@ -32,7 +32,7 @@ export function buildPageContextMessage(
     text: clipped,
     screenshotDataUrl:
       shot &&
-      shot.startsWith("data:image/") &&
+      shot.startsWith("data:image/png") &&
       shot.length <= MAX_PAGE_CONTEXT_SCREENSHOT_CHARS
         ? shot
         : undefined,
@@ -60,8 +60,10 @@ export function parsePageContextMessage(
   let screenshotDataUrl: string | undefined;
   if (data.screenshotDataUrl !== undefined) {
     if (typeof data.screenshotDataUrl !== "string") return null;
+    // Widget emits PNG data URLs only — reject svg+xml / other image/* to
+    // avoid storing scriptable payloads even though we never inline into the model.
     if (
-      !data.screenshotDataUrl.startsWith("data:image/") ||
+      !data.screenshotDataUrl.startsWith("data:image/png") ||
       data.screenshotDataUrl.length > MAX_PAGE_CONTEXT_SCREENSHOT_CHARS
     ) {
       return null;

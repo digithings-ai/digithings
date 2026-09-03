@@ -46,6 +46,19 @@ describe("embed-popup-config", () => {
     });
   });
 
+  it("caps page-context max chars at embed parser limit (8k)", () => {
+    const attrs: Record<string, string> = {
+      src: "https://digithings.ai/widget.js",
+      "data-host": "digithings.ai",
+      "data-page-context-max-chars": "20000",
+    };
+    const script = {
+      src: attrs.src,
+      getAttribute: (name: string) => attrs[name] ?? null,
+    };
+    expect(readPopupWidgetConfigFromScript(script)?.pageContextMaxChars).toBe(8000);
+  });
+
   it("returns null without origin/host", () => {
     const script = {
       getAttribute: () => null,

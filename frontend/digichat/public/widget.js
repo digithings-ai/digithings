@@ -31,6 +31,7 @@
   if (typeof document === "undefined") return;
   if (document.getElementById(ROOT_ID)) return;
 
+  // Capture while currentScript is still set (before any deferred boot).
   var script =
     document.currentScript ||
     (function () {
@@ -79,9 +80,11 @@
   if (accent && !/^#[0-9a-fA-F]{6}$/.test(accent)) accent = "";
   var pageContextOn =
     attr("data-page-context") === "1" || attr("data-page-context").toLowerCase() === "true";
+  // Keep in sync with DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS /
+  // MAX_PAGE_CONTEXT_TEXT_CHARS (8k) — embed rejects longer text.
   var maxChars = parseInt(attr("data-page-context-max-chars") || "8000", 10);
   if (!isFinite(maxChars) || maxChars < 1) maxChars = 8000;
-  if (maxChars > 20000) maxChars = 20000;
+  if (maxChars > 8000) maxChars = 8000;
 
   function buildSrc() {
     var url = new URL(origin + "/embed");
@@ -143,115 +146,125 @@
     }
   }
 
-  var open = false;
-  var iframeLoaded = false;
-  var pageContextSent = false;
+  function mount() {
+    if (document.getElementById(ROOT_ID)) return;
+    if (!document.body) {
+      document.addEventListener("DOMContentLoaded", mount, { once: true });
+      return;
+    }
 
-  var root = document.createElement("div");
-  root.id = ROOT_ID;
-  root.setAttribute("data-digichat-popup", "1");
+    var open = false;
+    var iframeLoaded = false;
+    var pageContextSent = false;
 
-  var style = document.createElement("style");
-  style.textContent =
-    "#" +
-    ROOT_ID +
-    "{all:initial;font-family:ui-sans-serif,system-ui,sans-serif;}" +
-    "#" +
-    BTN_ID +
-    "{position:fixed;z-index:2147483000;right:20px;bottom:20px;border:0;cursor:pointer;" +
-    "box-shadow:0 8px 24px rgba(0,0,0,.18);transition:transform .15s ease,opacity .15s ease;}" +
-    "#" +
-    BTN_ID +
-    "[data-mode=dot]{width:56px;height:56px;border-radius:999px;background:#111;color:#fff;font-size:22px;line-height:56px;text-align:center;}" +
-    "#" +
-    BTN_ID +
-    "[data-mode=bar]{min-width:160px;height:44px;border-radius:10px;background:#111;color:#fff;padding:0 16px;font-size:14px;font-weight:600;}" +
-    "#" +
-    BTN_ID +
-    ":hover{transform:translateY(-1px);}" +
-    "#" +
-    PANEL_ID +
-    "{position:fixed;z-index:2147483000;right:20px;bottom:88px;width:min(400px,calc(100vw - 24px));" +
-    "height:min(640px,calc(100vh - 120px));border-radius:16px;overflow:hidden;" +
-    "box-shadow:0 16px 48px rgba(0,0,0,.28);background:#0b0b0c;display:none;}" +
-    "#" +
-    PANEL_ID +
-    "[data-open=1]{display:block;}" +
-    "#" +
-    IFRAME_ID +
-    "{width:100%;height:100%;border:0;background:transparent;}";
-  root.appendChild(style);
+    var root = document.createElement("div");
+    root.id = ROOT_ID;
+    root.setAttribute("data-digichat-popup", "1");
 
-  var btn = document.createElement("button");
-  btn.id = BTN_ID;
-  btn.type = "button";
-  btn.setAttribute("data-mode", mode);
-  btn.setAttribute("aria-label", "Open digichat");
-  btn.setAttribute("aria-expanded", "false");
-  btn.setAttribute("aria-controls", PANEL_ID);
-  btn.textContent = mode === "bar" ? "Ask digichat" : "✦";
-  if (accent) btn.style.background = accent;
+    var style = document.createElement("style");
+    style.textContent =
+      "#" +
+      ROOT_ID +
+      "{all:initial;font-family:ui-sans-serif,system-ui,sans-serif;}" +
+      "#" +
+      BTN_ID +
+      "{position:fixed;z-index:2147483000;right:20px;bottom:20px;border:0;cursor:pointer;" +
+      "box-shadow:0 8px 24px rgba(0,0,0,.18);transition:transform .15s ease,opacity .15s ease;}" +
+      "#" +
+      BTN_ID +
+      "[data-mode=dot]{width:56px;height:56px;border-radius:999px;background:#111;color:#fff;font-size:22px;line-height:56px;text-align:center;}" +
+      "#" +
+      BTN_ID +
+      "[data-mode=bar]{min-width:160px;height:44px;border-radius:10px;background:#111;color:#fff;padding:0 16px;font-size:14px;font-weight:600;}" +
+      "#" +
+      BTN_ID +
+      ":hover{transform:translateY(-1px);}" +
+      "#" +
+      PANEL_ID +
+      "{position:fixed;z-index:2147483000;right:20px;bottom:88px;width:min(400px,calc(100vw - 24px));" +
+      "height:min(640px,calc(100vh - 120px));border-radius:16px;overflow:hidden;" +
+      "box-shadow:0 16px 48px rgba(0,0,0,.28);background:#0b0b0c;display:none;}" +
+      "#" +
+      PANEL_ID +
+      "[data-open=1]{display:block;}" +
+      "#" +
+      IFRAME_ID +
+      "{width:100%;height:100%;border:0;background:transparent;}";
+    root.appendChild(style);
 
-  var panel = document.createElement("div");
-  panel.id = PANEL_ID;
-  panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "digichat");
+    var btn = document.createElement("button");
+    btn.id = BTN_ID;
+    btn.type = "button";
+    btn.setAttribute("data-mode", mode);
+    btn.setAttribute("aria-label", "Open digichat");
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-controls", PANEL_ID);
+    btn.textContent = mode === "bar" ? "Ask digichat" : "✦";
+    if (accent) btn.style.background = accent;
 
-  var iframe = document.createElement("iframe");
-  iframe.id = IFRAME_ID;
-  iframe.title = "digichat";
-  iframe.allow = "clipboard-write";
-  iframe.setAttribute("loading", "lazy");
+    var panel = document.createElement("div");
+    panel.id = PANEL_ID;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "digichat");
 
-  panel.appendChild(iframe);
-  root.appendChild(panel);
-  root.appendChild(btn);
-  document.body.appendChild(root);
+    var iframe = document.createElement("iframe");
+    iframe.id = IFRAME_ID;
+    iframe.title = "digichat";
+    iframe.allow = "clipboard-write";
+    iframe.setAttribute("loading", "lazy");
 
-  function sendPageContext() {
-    if (!pageContextOn || pageContextSent) return;
-    var win = iframe.contentWindow;
-    if (!win) return;
-    pageContextSent = true;
-    var text = extractVisibleText();
-    captureScreenshot(function (shot) {
-      var payload = {
-        type: PAGE_CONTEXT,
-        text: text,
-        ts: Date.now(),
-      };
-      if (shot) payload.screenshotDataUrl = shot;
-      try {
-        win.postMessage(payload, origin);
-      } catch (e) {
-        /* ignore */
+    panel.appendChild(iframe);
+    root.appendChild(panel);
+    root.appendChild(btn);
+    document.body.appendChild(root);
+
+    function sendPageContext() {
+      if (!pageContextOn || pageContextSent) return;
+      var win = iframe.contentWindow;
+      if (!win) return;
+      var text = extractVisibleText();
+      captureScreenshot(function (shot) {
+        var payload = {
+          type: PAGE_CONTEXT,
+          text: text,
+          ts: Date.now(),
+        };
+        if (shot) payload.screenshotDataUrl = shot;
+        try {
+          win.postMessage(payload, origin);
+          pageContextSent = true;
+        } catch (e) {
+          /* ignore — allow retry on next ready */
+        }
+      });
+    }
+
+    function setOpen(next) {
+      open = next;
+      panel.setAttribute("data-open", open ? "1" : "0");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.setAttribute("aria-label", open ? "Close digichat" : "Open digichat");
+      if (open && !iframeLoaded) {
+        iframe.src = buildSrc();
+        iframeLoaded = true;
       }
+    }
+
+    btn.addEventListener("click", function () {
+      setOpen(!open);
+    });
+
+    window.addEventListener("message", function (ev) {
+      if (ev.origin !== origin) return;
+      var data = ev.data;
+      if (!data || data.type !== READY) return;
+      sendPageContext();
+    });
+
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && open) setOpen(false);
     });
   }
 
-  function setOpen(next) {
-    open = next;
-    panel.setAttribute("data-open", open ? "1" : "0");
-    btn.setAttribute("aria-expanded", open ? "true" : "false");
-    btn.setAttribute("aria-label", open ? "Close digichat" : "Open digichat");
-    if (open && !iframeLoaded) {
-      iframe.src = buildSrc();
-      iframeLoaded = true;
-    }
-  }
-
-  btn.addEventListener("click", function () {
-    setOpen(!open);
-  });
-
-  window.addEventListener("message", function (ev) {
-    if (ev.origin !== origin) return;
-    var data = ev.data;
-    if (!data || data.type !== READY) return;
-    sendPageContext();
-  });
-
-  document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape" && open) setOpen(false);
-  });
+  mount();
 })();

@@ -88,9 +88,11 @@ export function readPopupWidgetConfigFromScript(
     pageContextAttr === "1" || pageContextAttr?.toLowerCase() === "true";
   const maxRaw = firstAttr(script, ["data-page-context-max-chars"]);
   const maxParsed = maxRaw ? Number.parseInt(maxRaw, 10) : NaN;
+  // Must stay ≤ MAX_PAGE_CONTEXT_TEXT_CHARS in embed-page-context-messages.ts
+  // or the embed silently rejects the postMessage.
   const pageContextMaxChars =
     Number.isFinite(maxParsed) && maxParsed > 0
-      ? Math.min(maxParsed, 20_000)
+      ? Math.min(maxParsed, DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS)
       : DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS;
 
   return {
