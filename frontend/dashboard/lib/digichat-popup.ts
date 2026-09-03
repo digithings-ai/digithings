@@ -31,7 +31,8 @@ export const DIGICHAT_POPUP_FRAME_ORIGINS: readonly string[] = [
   'http://localhost:3005',
 ];
 
-/** digiquant phosphor — matches `--accent-digiquant` (dark). */
+/** digiquant phosphor for embed `?accent=` — digichat URL requires #rrggbb. */
+// canon-allow: digichat embed accent query param (not Tailwind chrome)
 export const DIGICHAT_POPUP_ACCENT = '#3dd6c4';
 
 export const DIGICHAT_READY = 'digichat:ready';

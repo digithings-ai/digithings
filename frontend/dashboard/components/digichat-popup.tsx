@@ -132,7 +132,7 @@ export default function DigichatPopup({
         className={[
           'pointer-events-auto fixed right-5 bottom-[5.5rem] z-[2147483000]',
           'h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-          'overflow-hidden rounded-2xl bg-[#0b0b0c] shadow-[0_16px_48px_rgba(0,0,0,0.28)]',
+          'overflow-hidden rounded-2xl bg-surface shadow-lg',
           open ? 'block' : 'hidden',
         ].join(' ')}
       >
@@ -155,10 +155,9 @@ export default function DigichatPopup({
         aria-expanded={open}
         aria-controls="digichat-popup-panel"
         onClick={() => setOpen((v) => !v)}
-        style={{ background: config.accent, color: '#06110f' }}
         className={[
           'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'cursor-pointer border-0 shadow-[0_8px_24px_rgba(0,0,0,0.18)]',
+          'cursor-pointer border-0 bg-accent text-on-accent shadow-lg',
           'transition-[transform,opacity] duration-150 ease-out hover:-translate-y-px',
           mode === 'bar'
             ? 'h-11 min-w-[10rem] rounded-[10px] px-4 text-sm font-semibold'
