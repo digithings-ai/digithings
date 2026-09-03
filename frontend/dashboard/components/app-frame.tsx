@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
+import DigichatPopup from '@/components/digichat-popup';
 import DbUnavailable from '@/components/db-unavailable';
 import { useDashboard } from '@/lib/dashboard-context';
 import { isDbExempt } from '@/lib/nav';
@@ -37,6 +38,8 @@ export default function AppFrame({ children }: { children: ReactNode }) {
         <CommandPalette />
         <div className="flex min-h-0 flex-1 flex-col">{gated ? <DbUnavailable /> : children}</div>
       </main>
+      {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
+      <DigichatPopup />
     </div>
   );
 }
