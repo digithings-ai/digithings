@@ -107,10 +107,9 @@ services:
     env_file:
       - path: .env.profile-a
         required: false
-    environment:
-      # Optional cache: set REDIS_URL=redis://redis:6379 and enable the
-      # commented `redis` service below (or pass --profile litellm-cache).
-      REDIS_URL: ${REDIS_URL:-}
+    # Do not inject REDIS_URL with an empty default: empty string → LiteLLM exit 3.
+    # Optional cache: set REDIS_URL=redis://redis:6379 in .env.profile-a and
+    # enable the redis service below (or pass --profile litellm-cache).
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
     volumes:
       - ./config:/app/config:ro

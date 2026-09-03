@@ -23,10 +23,13 @@
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",
     "./styles/finance-tearsheet.css": "./src/styles/finance-tearsheet.css",
+    "./styles/finance-tearsheet-overlay.css": "./src/styles/finance-tearsheet-overlay.css",
     "./styles/data-layout.css": "./src/styles/data-layout.css",
+    "./styles/repo-activity.css": "./src/styles/repo-activity.css",
     "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",
     "./styles/command-palette.css": "./src/styles/command-palette.css",
+    "./styles/account-auth.css": "./src/styles/account-auth.css",
     "./data/modules": "./src/data/modules.ts",
     "./data/subsystems": "./src/data/subsystems.ts"
   },

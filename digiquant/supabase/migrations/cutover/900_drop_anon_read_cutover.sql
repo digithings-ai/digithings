@@ -15,7 +15,11 @@
 --   migrations/**) but the apply loop finds zero new top-level files → no DDL.
 --   Do NOT move this file to the migrations/ root until cutover.
 --
--- HOW TO APPLY (human, at cutover — never auto)
+-- 110 (pre-cutover, top-level) already narrowed ``anon_read`` on workspace-scoped
+-- private books to the house UUID (documents: house+system). This file still
+-- DROPs those policies so anon cannot read house weights/NAV after cutover.
+-- Do not skip the DROPs because 110 ran.
+--
 --   1. Confirm preconditions below.
 --   2. cp this file to digiquant/supabase/migrations/<next>_drop_anon_read_cutover.sql
 --      on a short-lived cutover branch; open PR → merge → promote to main
@@ -116,6 +120,64 @@ BEGIN
         EXECUTE 'DROP POLICY IF EXISTS "anon_read" ON public.benchmark_history';
     END IF;
 END $$;
+
+-- ============================================================================
+-- A2. Revert 109 authenticated house-teaser on the private book
+-- ============================================================================
+-- 109 (pre-cutover hotfix) expanded authenticated_select_own_workspace on
+-- positions / position_events / nav_history / portfolio_metrics with the house
+-- workspace UUID so Auth Pages JWTs could still read Brief/Portfolio while
+-- anon_read stayed TO anon. That is correct until this file runs.
+--
+-- Post-cutover governing rule: no free-tier JWT (and no anon) may retrieve
+-- house weights / NAV / fills from the base tables. Baseline+ house book is
+-- the documented follow-up in section E (Edge/BFF or a later GRANT) — this
+-- file must not leave 109's house UUID on authenticated SELECT.
+-- Restore 098 membership-only policies. Drop the daily_snapshots teaser
+-- policy too (section B already REVOKEs SELECT on that table).
+-- theses / instruments teasers stay — T5 research, no weight_pct.
+
+DROP POLICY IF EXISTS "authenticated_read_house_teaser" ON public.daily_snapshots;
+
+DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.positions;
+CREATE POLICY "authenticated_select_own_workspace" ON public.positions
+    FOR SELECT TO authenticated
+    USING (
+        workspace_id IN (
+            SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.position_events;
+CREATE POLICY "authenticated_select_own_workspace" ON public.position_events
+    FOR SELECT TO authenticated
+    USING (
+        workspace_id IN (
+            SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.nav_history;
+CREATE POLICY "authenticated_select_own_workspace" ON public.nav_history
+    FOR SELECT TO authenticated
+    USING (
+        workspace_id IN (
+            SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid()
+        )
+    );
+
+DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.portfolio_metrics;
+CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_metrics
+    FOR SELECT TO authenticated
+    USING (
+        workspace_id IN (
+            SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid()
+        )
+    );
+
+COMMENT ON POLICY "authenticated_select_own_workspace" ON public.positions IS
+    'Cutover: authenticated SELECT is own-workspace membership only. 109 house '
+    'teaser UUID removed so free JWTs cannot read house weights/NAV/fills.';
 
 -- ============================================================================
 -- B. daily_snapshots — DROP full-row anon; research via projection view
@@ -244,7 +306,7 @@ CREATE POLICY "authenticated_select_documents" ON public.documents
                 THEN COALESCE(
                     auth.jwt() -> 'app_metadata' ->> 'plan_tier',
                     'free'
-                ) IN ('baseline', 'custom', 'enterprise')
+                ) IN ('brief', 'desk', 'studio', 'enterprise')
                 ELSE TRUE
             END
         )
@@ -252,7 +314,7 @@ CREATE POLICY "authenticated_select_documents" ON public.documents
 
 COMMENT ON POLICY "authenticated_select_documents" ON public.documents IS
     'Cutover: house/system + own-workspace documents; weight-bearing keys '
-    'require JWT app_metadata.plan_tier in (baseline, custom, enterprise). '
+    'require JWT app_metadata.plan_tier in (brief, desk, studio, enterprise). '
     'Observer (free) uses public_daily_research + non-weight document keys.';
 
 -- ============================================================================

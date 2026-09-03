@@ -12,24 +12,23 @@ import { ContactMailto } from "@/components/ContactMailto";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
-import { OlympusPortfolioPanel } from "@/components/landing/OlympusPortfolioPanel";
+import { LivePortfolioPanel } from "@/components/landing/DashboardPortfolioPanel";
 import { ResearchPipeline } from "@/components/landing/ResearchPipeline";
-import { OlympusScene } from "@/components/landing/OlympusScene";
+import { PipelineScene } from "@/components/landing/PipelineScene";
 import { StrategySuite } from "@/components/landing/StrategySuite";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
 import { MetricsOdometer } from "@/components/landing/MetricsOdometer";
 
 // Real figures only — each one is mined from shipped data, never invented:
-// subsystem count from the shared subsystems registry (Atlas · Hermes ·
-// Kairos), trade count summed live from the Supabase strategy index (inside
+// subsystem count from the shared subsystems registry (research · portfolio ·
+// execution), trade count summed live from the Supabase strategy index (inside
 // <MetricsOdometer/>), the 7 pipeline stages from ResearchPipeline's FLOW
-// (01 research → 07 export), and the zero is literal: there is no execution
-// path at all — every broker adapter under digiquant/src/digiquant/brokers/
-// raises NotImplementedError, so no order can be submitted, gated or not.
+// (01 research → 07 export), and the zero is literal: routing is off by
+// default, live venue tokens are refused, and nothing is sent to a venue yet.
 
 // v7 scroll-driven landing, now wearing the flagship expressive grammar
 // (#1450): mesh hero → live market ticker → digit-roll OdometerStrip →
-// linear pipeline → Olympus scrolly → strategy suite → the one WordReveal
+// linear pipeline → desk scrolly → strategy suite → the one WordReveal
 // claim → pricing. Client islands; page stays a server component. Every
 // motion moment honors prefers-reduced-motion and reads with no JS.
 export default function Home() {
@@ -52,11 +51,20 @@ export default function Home() {
             </span>
           </h1>
           <p className="dqhero-lede">
-            The research stack an institutional desk would build — <b>Atlas</b> researches and{" "}
-            <b>Hermes</b> sizes the risk, through backtest to a tearsheet. Open-source and
+            The research stack an institutional desk would build — research runs daily and{" "}
+            portfolio sizes the risk, through backtest to a tearsheet. Open-source and
             self-hosted, so work that once needed a team runs for one.
           </p>
           <div className="dqhero-cta dqhero-scrollcue">
+            {/* Claim + install: shared .cmdline (site.css) is the diegetic
+                proof; the loud control is ink/paper, never a teal pill. */}
+            <p className="cmdline">
+              <span className="prompt">$</span>
+              git clone https://github.com/digithings-ai/digithings.git
+            </p>
+            <a className="btn btn-primary" href="/dashboard/">
+              Open dashboard
+            </a>
             <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
@@ -77,8 +85,8 @@ export default function Home() {
                 <h2 className="dq-title">The desk, in four numbers.</h2>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   No projections — every figure is a property of the shipped stack: the
-                  subsystems, the pipeline, and the published tearsheets. Live stays zero because
-                  there is no execution path: every broker adapter is a stub.
+                  subsystems, the pipeline, and the published tearsheets. Live stays zero
+                  because nothing is sent to a venue yet.
                 </p>
               </div>
             </Reveal>
@@ -90,12 +98,12 @@ export default function Home() {
 
         <ResearchPipeline />
 
-        <OlympusScene />
+        <PipelineScene />
 
-        {/* The payoff of the Olympus pipeline: the research book Atlas/Hermes
-            maintain, marked live off the same feed. Client island; SSR-safe
+        {/* The payoff of the research book: positions the pipeline
+            maintains, marked live off the same feed. Client island; SSR-safe
             (renders a plain "connects on deploy" card without env vars). */}
-        <OlympusPortfolioPanel />
+        <LivePortfolioPanel />
 
         <StrategySuite />
 
@@ -119,7 +127,7 @@ export default function Home() {
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   digiquant is open core, and it is built on the same digithings modules you can
                   deploy yourself. Self-host the whole stack at no cost, join the waitlist for
-                  managed Olympus, or talk to us about enterprise — the same engine either way.
+                  managed hosting, or talk to us about enterprise — the same engine either way.
                 </p>
               </div>
             </Reveal>

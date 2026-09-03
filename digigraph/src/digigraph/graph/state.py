@@ -59,6 +59,8 @@ class WorkflowState(TypedDict, total=False):
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None
+    # Per-request locate tool to inject with the user string as its query (#3418).
+    force_tool: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
@@ -77,7 +79,7 @@ class WorkflowState(TypedDict, total=False):
     # as digisearch_index / response_language). Underscore prefix matches the
     # CompactionMiddleware-style `_compaction_event` contract from the issue.
     _compaction_event: dict[str, Any] | None
-    # Optional LLM-facing message list for multi-turn / Atlas research sessions.
+    # Optional LLM-facing message list for multi-turn / research sessions.
     # Compaction mutates the view handed to digillm; checkpoint callers that need
     # the pre-compaction transcript should reload from workspace refs on the event.
     llm_messages: list[dict[str, Any]]

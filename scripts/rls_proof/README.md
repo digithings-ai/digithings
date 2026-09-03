@@ -1,10 +1,10 @@
 # RLS isolation proof harness (vanilla PostgreSQL)
 
-Program-level acceptance for the Kairos + tenancy epic:
+Program-level acceptance for the execution + tenancy epic:
 
 - user A cannot read user B's private rows on any tenant table
 - anon reads zero private rows post-cutover
-- tier gates hold at the policy layer (baseline+ can read house weight docs; free cannot)
+- tier gates hold at the policy layer (Brief+ can read house weight docs; free cannot)
 
 This harness reproduces the **post-cutover** schema on stock Postgres 16 when Docker /
 Supabase CLI are unavailable. It is **not** a substitute for applying migrations on the
@@ -16,15 +16,18 @@ real `core` Supabase project.
 |------|------|
 | `00_supabase_shim.sql` | Roles, `auth.*`, extensions, realtime publication, checkpointer stubs |
 | `01_seed.sql` | Two tenants + free observer + representative private rows |
+| `02_pre_cutover_110.sql` | Anon house-only private books (migration 110; **before** 900) |
 | `02_proof.sql` | `SET ROLE` + JWT claims matrix; fails the process on any assertion miss |
-| `run.sh` | Recreate DB → shim → migrations → cutover → seed → proof |
+| `run.sh` | Recreate DB → shim → migrations → seed → 110 proof → cutover → post-cutover proof |
 
 ## Migration apply order
 
 1. **Shim** (`00_supabase_shim.sql`)
-2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…101, lexicographic `sort` — same as `db-migrate.yml`)
-3. **Kairos/T4 migrations** `099`, `102`–`105` — now canonical in `digiquant/supabase/migrations/`, applied by the same glob (vendor step dropped after the K3–T4 merges)
-4. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI)
+2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…115, lexicographic `sort` — same as `db-migrate.yml`). Includes `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix), `110_anon_house_only_private_books` (anon house-only on overlay-capable book tables), and `115_plan_tier_brief_desk_studio` (D1 `baseline`/`custom` → Brief/Desk/Studio).
+3. **Seed** (`01_seed.sql`)
+4. **Pre-cutover 110 proof** (`02_pre_cutover_110.sql`) — anon sees house book (1 position) and zero overlay rows. This is the persist-safety contract 900 cannot prove (900 drops `anon_read`).
+5. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI). Section A2 restores 098 membership-only SELECT on the house book tables so 109's teaser does not leak weights to free JWTs after `anon_read` is dropped.
+6. **Post-cutover proof** (`02_proof.sql`) — 59/59; anon positions = 0.
 
 ## Run
 
@@ -64,7 +67,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 
 ## Re-run at real cutover
 
-After 096–105 are on `core` and cutover `900` is promoted:
+After 096–109 are on `core` and cutover `900` is promoted:
 
 1. Prefer proving against a Supabase branch / preview DB with the same SQL identity switches, **or**
 2. Vendor step dropped 2026-08-30 after K3/K4/K5/T4 merged — the harness now proves the canonical migration chain directly.

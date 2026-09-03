@@ -57,7 +57,6 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
-import { LanguageSelect } from "@/components/language-select";
 import { detectBrowserLanguageCode } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
@@ -263,11 +262,10 @@ function EmbedChat({
   const [language, setLanguage] = useState(() => detectBrowserLanguageCode());
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at whatever
-  // detectBrowserLanguageCode() returned at mount, so picking a language in
-  // the dropdown would never reach the outgoing header (#2103 final review,
-  // Critical finding). Mutate the ref directly in the render body (the
-  // "useLatest" idiom) rather than in a useEffect — an effect would lag one
-  // render behind and could race a fast pick-then-send. The value is
+  // detectBrowserLanguageCode() returned at mount, so `/lang` would never
+  // reach the outgoing header (#2103 / #3418). Mutate the ref directly in
+  // the render body (the "useLatest" idiom) rather than in a useEffect — an
+  // effect would lag one render behind and could race a fast pick-then-send. The value is
   // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
   // approved design is session-only, resetting to a fresh browser-locale
   // auto-detect on every reload.
@@ -359,6 +357,8 @@ function EmbedChat({
   /** The question that arrived after the free turns were spent, and the one
    *  already released — refs, so neither triggers a render of its own. */
   const heldQuestionRef = useRef<string | null>(null);
+  /** Force-tool for a held question (`/search` / `/docs`) — same lifetime as heldQuestionRef. */
+  const heldForceToolRef = useRef<string | undefined>(undefined);
   const sentHeldRef = useRef<string | null>(null);
   /**
    * Set (never incremented directly) by every gated send below, then charged
@@ -406,6 +406,11 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
+    // Missing backendType (gated default) must not enable regen/edit.
+    allowClientTurnMutation:
+      tenantCfg.backendType === "digigraph" || tenantCfg.backendType === "foundry",
   });
 
   // Charge the free-tier gate only once a gated send actually settles
@@ -468,7 +473,9 @@ function EmbedChat({
       setSettingsOpen(false);
       if (held) {
         heldQuestionRef.current = null;
-        void chat.send(held);
+        const forceTool = heldForceToolRef.current;
+        heldForceToolRef.current = undefined;
+        void chat.send(held, forceTool ? { forceTool } : undefined);
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -477,7 +484,9 @@ function EmbedChat({
     }
     if (held && !gate.locked) {
       heldQuestionRef.current = null;
-      void chat.send(held);
+      const forceTool = heldForceToolRef.current;
+      heldForceToolRef.current = undefined;
+      void chat.send(held, forceTool ? { forceTool } : undefined);
       if (!ungated) pendingGateChargeRef.current = true;
     }
   }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
@@ -619,7 +628,9 @@ function EmbedChat({
     if (!trialUnlocked || !question || chat.busy) return;
     if (sentHeldRef.current === question) return;
     sentHeldRef.current = question;
-    void chat.send(question);
+    const forceTool = heldForceToolRef.current;
+    heldForceToolRef.current = undefined;
+    void chat.send(question, forceTool ? { forceTool } : undefined);
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
@@ -694,10 +705,11 @@ function EmbedChat({
   const headerTitle = tenantCfg.title;
 
   const wrappedSend = useCallback(
-    (question: string) => {
+    (question: string, opts?: { forceTool?: string }) => {
       // byok_only: require a key before any send
       if (llmAccess === "byok_only" && !byokIsSet) {
         heldQuestionRef.current = question;
+        heldForceToolRef.current = opts?.forceTool;
         pendingByokRetryRef.current = true;
         setSettingsOpen(true);
         return;
@@ -707,11 +719,12 @@ function EmbedChat({
       // vanished — they had typed it, pressed send, and got nothing back.
       if ((gate.locked || trialLocked) && !ungated) {
         heldQuestionRef.current = question;
+        heldForceToolRef.current = opts?.forceTool;
         lastGatedPost.current = null;
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      void chat.send(question);
+      void chat.send(question, opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
@@ -730,9 +743,10 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot = headerTitle || uiFlags.showLanguageSelector ? (
+  // Language is `/lang` on the composer (#3418) — the top-right dropdown is gone.
+  const headerSlot = headerTitle ? (
     <header className="dc-brand">
-      {headerTitle ? <span>{headerTitle}</span> : null}
+      <span>{headerTitle}</span>
       {headerAttribution ? (
         <span className="dc-brand-by">
           (
@@ -746,9 +760,6 @@ function EmbedChat({
           </a>
           )
         </span>
-      ) : null}
-      {uiFlags.showLanguageSelector ? (
-        <LanguageSelect value={language} onChange={setLanguage} />
       ) : null}
     </header>
   ) : null;
@@ -792,6 +803,7 @@ function EmbedChat({
         providerIsSet: byokIsSet,
         openSettings: showByok ? openSettings : undefined,
         send: wrappedSend,
+        reset: chat.reset,
         stop: chat.stop,
         onRetry: handshakeError
           ? // regenerate() cannot repair a parent handshake/load failure; match
@@ -806,6 +818,7 @@ function EmbedChat({
             : chat.onRetry,
       }}
       headerSlot={headerSlot}
+      onLanguageChange={setLanguage}
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
@@ -925,7 +938,6 @@ function PaywallCard({
           type="button"
           size="sm"
           onClick={() => setShowBYOK(true)}
-          style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Key className="mr-1.5 size-3.5" />
           Bring your own key
@@ -935,7 +947,7 @@ function PaywallCard({
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}
-          className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          className="inline-flex items-center rounded-none border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
           Open digichat

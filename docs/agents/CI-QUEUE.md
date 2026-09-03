@@ -29,7 +29,7 @@ across all repos in `digithings-ai`), not a failing test.
 
 ## What we filtered (2026-06 queue remediation)
 
-1. **`ci.yml` orchestrator** — component test workflows are `workflow_call`-only; `changes` job gates digiquant, digisearch, score, e2e, nautilus, atlas, pip-audit, ruff, compose.
+1. **`ci.yml` orchestrator** — component test workflows are `workflow_call`-only; `changes` job gates digiquant, digisearch, score, e2e, nautilus, research, pip-audit, ruff, compose.
 2. **`pr-hygiene.yml`** — one workflow instead of two; TSV validation only when `scripts/project_fields.tsv` or the hygiene workflow changes (daily schedule still catches drift).
 3. **`project-status-automation.yml`** — dropped `opened` / `reopened` / `ready_for_review` on `pull_request`; still updates **Done** on merge and **In Progress** on task-branch push.
 4. **Concurrency** — all lightweight PR workflows use `cancel-in-progress: true` per workflow+PR so superseded pushes release queue slots faster.

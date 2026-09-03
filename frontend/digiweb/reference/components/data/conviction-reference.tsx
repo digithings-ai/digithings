@@ -1,12 +1,12 @@
 /**
- * Conviction vocabulary — recorded faithfully from the olympus dashboard's shared
- * conviction primitives, RECORDED-FROM-OLYMPUS pending a promotion ruling: no
+ * Conviction vocabulary — recorded faithfully from the dashboard's shared
+ * conviction primitives, RECORDED-FROM-DASHBOARD pending a promotion ruling: no
  * @digithings/web export exists yet, so this specimen reproduces the dress as
  * static markup sourced class-for-class from
- * `frontend/olympus/components/shared/conviction-meter.tsx` and
+ * `frontend/dashboard/components/shared/conviction-meter.tsx` and
  * `signed-conviction-badge.tsx`, rather than consuming a shared primitive.
  *
- * THREE encodings, never conflated (the olympus F6 ruling) — same cyan
+ * THREE encodings, never conflated (the dashboard F6 ruling) — same cyan
  * `--accent` pip grammar can mean two different things, and a signed badge
  * means a third; mixing them reads as one vocabulary when it is not:
  *
@@ -90,7 +90,7 @@ function ConvictionBadge({ value }: { value: number }) {
   const tone = value < 0 ? "text-down border-down/35" : "text-up border-up/35";
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
+      className={`inline-flex items-center rounded-none border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
     >
       {sign}
       {Math.abs(value)}
@@ -104,8 +104,8 @@ export function ConvictionReference() {
       <p className="kicker">{"// conviction"}</p>
       <h2 className="title">One pip grammar. Three meanings — never one.</h2>
       <p className="section-copy">
-        Recorded from the olympus dashboard&apos;s <code>ConvictionMeter</code> and{" "}
-        <code>SignedConvictionBadge</code> — RECORDED-FROM-OLYMPUS, pending a promotion ruling.
+        Recorded from the dashboard&apos;s <code>ConvictionMeter</code> and{" "}
+        <code>SignedConvictionBadge</code> — RECORDED-FROM-DASHBOARD, pending a promotion ruling.
         Not exported from <code>@digithings/web</code> yet, so this specimen reproduces the dress
         as static markup rather than consuming a shared primitive. Three distinct encodings share
         one cyan pip grammar plus one signed badge — the rule is that they never conflate.

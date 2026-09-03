@@ -600,7 +600,8 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
         return {
             "content": json.dumps(payload_for_llm),
             "results": [result],
-            "rag_sources": rag_sources_from_results([result]),
+            # Full note body for digichat DocumentPane (#3419); locate paths stay snippet-only.
+            "rag_sources": rag_sources_from_results([result], include_body=True),
         }
 
     # Batch: digivault's response shape here is {"notes": [...], "errors": {...}} —
@@ -628,7 +629,8 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     return {
         "content": json.dumps(content),
         "results": results,
-        "rag_sources": rag_sources_from_results(results),
+        # Full note body for digichat DocumentPane (#3419); locate paths stay snippet-only.
+        "rag_sources": rag_sources_from_results(results, include_body=True),
     }
 
 

@@ -3,7 +3,7 @@ name: "Smoke: LangSmith"
 # Dispatch-only readiness check (#687): does the LANGSMITH_API_KEY secret
 # authenticate, and do @traceable calls nest under the LangGraph root across
 # parallel node threads (the basis for "1 trace per graph, 3 per run")?
-# Run this once before enabling LANGSMITH_TRACING on the atlas workflows.
+# Run this once before enabling LANGSMITH_TRACING on the research workflows.
 
 on:
   workflow_dispatch: {}
@@ -27,7 +27,7 @@ jobs:
           enable-cache: true
 
       # Installs from the committed uv.lock rather than resolving fresh (#1715).
-      # Replaces install-workspace.sh + `digiquant[atlas]`: the script existed to
+      # Replaces install-workspace.sh + `digiquant[research]`: the script existed to
       # install siblings in topological order because they are not on PyPI, which
       # a uv workspace handles natively. This job checks out the default ref, so
       # the lock is present — unlike the pipelines pinned to `ref: main`.
@@ -39,6 +39,6 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           # Key alone yields zero traces — the flag is required (empirically verified).
           LANGSMITH_TRACING: "true"
-          LANGSMITH_PROJECT: atlas-langsmith-smoke
+          LANGSMITH_PROJECT: research-langsmith-smoke
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/smoke_langsmith.py
+          uv run --frozen --no-sync python digiquant/scripts/research/smoke_langsmith.py

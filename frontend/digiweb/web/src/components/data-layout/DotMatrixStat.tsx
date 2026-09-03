@@ -40,7 +40,7 @@ export function DotMatrixStat({
   const lit = Math.min(total, Math.max(0, Math.round((percent / 100) * total)));
   return (
     <div
-      className={`grid grid-cols-[180px_1fr] gap-[1.1rem] rounded-[12px] border border-hair bg-surface p-[1.1rem] max-[900px]:grid-cols-1${
+      className={`grid grid-cols-[180px_1fr] gap-[1.1rem] rounded-none border border-hair bg-surface p-[1.1rem] max-[900px]:grid-cols-1${
         className ? ` ${className}` : ""
       }`}
     >

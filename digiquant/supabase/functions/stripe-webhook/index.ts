@@ -1,5 +1,5 @@
 /**
- * stripe-webhook — Olympus consumer billing (T2 / roadmap P4).
+ * stripe-webhook — dashboard consumer billing (T2 / roadmap P4).
  *
  * verify_jwt = false (configured in config.toml). Auth is Stripe-Signature with
  * STRIPE_WEBHOOK_SECRET — never rely on Supabase JWT for this path.
@@ -7,7 +7,7 @@
  * Binding behavior:
  * 1. Verify signature → insert stripe_events first (duplicate ⇒ 200 no-op) →
  *    out-of-order guard via event.created → apply P4 mapping.
- * 2. Price → plan_tier via _shared/tiers.ts (baseline/custom; deleted ⇒ free).
+ * 2. Price → plan_tier via _shared/tiers.ts (brief/desk/studio; deleted ⇒ free).
  * 3. After tier change: update workspaces, then auth claim sync; on claim failure
  *    set claim_sync_pending=true and still return 200.
  */

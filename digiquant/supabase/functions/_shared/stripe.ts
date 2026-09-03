@@ -1,5 +1,5 @@
 /**
- * Shared Stripe helpers for Olympus billing Edge Functions (T2).
+ * Shared Stripe helpers for dashboard billing Edge Functions (T2).
  *
  * Secrets are read from Deno.env only — never log or return key material.
  * Signature verification uses the Stripe-Webhook-Signatures scheme (HMAC-SHA256).

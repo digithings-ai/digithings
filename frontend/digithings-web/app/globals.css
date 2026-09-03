@@ -11,10 +11,11 @@
 /* Homepage primitives (#1450): NumberedStages spine (stages.css), the
    digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
    the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
-   the stack Marquee it styled — the band under the hero is <RepoStrip> now, built
-   from tokens and utilities. digiquant-web still imports it. */
+   the stack Marquee it styled. Repository activity is the shared <RepoActivity>
+   family (repo-activity.css). digiquant-web still imports marquee.css. */
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/data-layout.css";
+@import "@digithings/web/styles/repo-activity.css";
 @import "@digithings/web/styles/word-reveal.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
@@ -23,7 +24,7 @@
 @import "@digithings/web/styles/chat-core.css";
 /* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
    (~1 MB). This app renders <DigiChatSession>, so it reaches
-   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   remark-math/rehype-katex and genuinely needs them; dashboard and the design
    reference deliberately do not import this. Must come AFTER chat-core.css. */
 @import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
@@ -44,26 +45,26 @@
 @source "../../digiweb/web/src/components/chat";
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/data-layout";
+@source "../../digiweb/web/src/components/repo-activity";
 @source "../../digiweb/web/src/components/typography";
 @source "../../digiweb/web/src/components/symbols";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
 @source "../../digiweb/web/src/components/terminal";
 
-/* Point the token font families at the self-hosted next/font variables. */
+/* Point the token font families at the self-hosted next/font variable.
+   Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
+   Do not re-point --font-display at a serif — tokens.css already ships Geist Mono. */
 :root[data-theme] {
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  /* v7 direction: editorial Fraunces serif for display headings (loaded via
-     next/font in layout.tsx). Sans Geist still carries body + data. */
-  --serif: var(--font-fraunces), "Fraunces", Georgia, serif;
-  --font-display: var(--serif);
+  --font-display: var(--font-mono);
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
    digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
-   must NOT change that file (digiquant-web + olympus consume it). Instead we
+   must NOT change that file (digiquant-web + dashboard consume it). Instead we
    override the semantic accent tokens here, scoped to this app's stylesheet
    only, collapsing accent to monochrome ink/white. Everything that reads
    the accent token (terminal cursor, nav hovers, dt- and dc- UI, primary
@@ -148,7 +149,7 @@ html {
    label in the theme's own ink tone, not a `.btn-primary` pill — a filled
    button read as a bright, standoffish box sitting next to the quiet GitHub
    glyph and the plain inline links either side of it. */
-.dc-nav-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
+.dc-nav-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 0; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
 .dc-nav-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
@@ -159,7 +160,7 @@ html {
    clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
 .dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
-.dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
+.dqhero-h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
 /* padding-bottom gives descenders/italic overhang room inside the overflow mask
    (the reveal still hides the line — the hidden state is pushed past the padding);
@@ -171,7 +172,7 @@ html {
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; margin-top: 2.4rem; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
 
 /* no-JS (law 06): the entrance never gates content — html.no-js renders the
@@ -217,16 +218,16 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-title { margin: 0; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
 .dc-settings-close { font: inherit; font-size: 1.2rem; line-height: 1; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.1rem 0.35rem; }
 .dc-settings-close:hover { color: var(--ink); }
-.dc-settings-note { margin: 0 0 1rem; padding: 0.5rem 0.6rem; border: 1px solid var(--hair); border-radius: 8px; background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink-mute); line-height: 1.45; font-size: 0.72rem; }
+.dc-settings-note { margin: 0 0 1rem; padding: 0.5rem 0.6rem; border: 1px solid var(--hair); border-radius: 0; background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink-mute); line-height: 1.45; font-size: 0.72rem; }
 .dc-settings-field { margin-bottom: 0.85rem; }
 .dc-settings-label { display: block; margin-bottom: 0.35rem; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); }
 .dc-settings-providers { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.dc-settings-provider { font: inherit; font-size: 0.72rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 6px; padding: 0.2rem 0.45rem; cursor: pointer; }
+.dc-settings-provider { font: inherit; font-size: 0.72rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 0; padding: 0.2rem 0.45rem; cursor: pointer; }
 .dc-settings-provider.is-active { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, var(--hair)); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .dc-settings-keyrow { display: flex; gap: 0.35rem; align-items: center; }
-.dc-settings-input, .dc-settings-select { flex: 1; font: inherit; font-size: 0.76rem; color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--hair); border-radius: 6px; padding: 0.35rem 0.5rem; width: 100%; }
+.dc-settings-input, .dc-settings-select { flex: 1; font: inherit; font-size: 0.76rem; color: var(--ink); background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--hair); border-radius: 0; padding: 0.35rem 0.5rem; width: 100%; }
 .dc-settings-input:focus, .dc-settings-select:focus { outline: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); outline-offset: 1px; }
-.dc-settings-ghost, .dc-settings-primary { font: inherit; font-size: 0.72rem; border-radius: 6px; padding: 0.28rem 0.55rem; cursor: pointer; border: 1px solid var(--hair); }
+.dc-settings-ghost, .dc-settings-primary { font: inherit; font-size: 0.72rem; border-radius: 0; padding: 0.28rem 0.55rem; cursor: pointer; border: 1px solid var(--hair); }
 .dc-settings-ghost { color: var(--ink-soft); background: transparent; }
 .dc-settings-ghost:hover:not(:disabled) { color: var(--ink); }
 .dc-settings-ghost:disabled { opacity: 0.45; cursor: default; }
@@ -254,7 +255,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    docs family (@digithings/web DocsLayout/CodeTabs/EndpointDoc + docs.css).
    What remains here is digithings content structure: guides, per-module
    sections, badges, interface lists, related links, copy-as-Markdown. */
-.docs-copy { font: inherit; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 7px; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.docs-copy { font: inherit; font-family: var(--font-mono); font-size: 0.76rem; color: var(--ink-soft); background: transparent; border: 1px solid var(--hair); border-radius: 0; cursor: pointer; padding: 0.3rem 0.65rem; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
 .docs-copy:hover { background: var(--accent-weak); color: var(--ink); }
 
 .doc-block { margin: 0; }
@@ -269,7 +270,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .doc-mod-title .dt-d { color: var(--ink); }
 .doc-mod-title .dt-s { color: var(--accent); }
 .doc-mod-role { font-size: 0.78rem; color: var(--ink-mute); }
-.doc-badge { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 7px; padding: 0.15rem 0.45rem; white-space: nowrap; }
+.doc-badge { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); border: 1px solid var(--hair); border-radius: 0; padding: 0.15rem 0.45rem; white-space: nowrap; }
 .doc-badge.is-road { color: var(--ink-mute); }
 .doc-tagline { margin: 0; color: var(--ink); font-size: 0.96rem; line-height: 1.5; }
 .doc-summary { margin: 0; color: var(--ink-soft); font-size: 0.88rem; line-height: 1.65; }
@@ -282,7 +283,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 
 /* ---- shared guides ---- */
 .doc-guide { border-top: 1px solid var(--hair); padding-top: clamp(1.2rem, 3vw, 1.8rem); display: flex; flex-direction: column; gap: 0.6rem; }
-.doc-guide-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
+.doc-guide-title { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
 .doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 .doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
 .doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
@@ -317,7 +318,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .docs-swagger .swagger-ui .model-box { background: var(--surface); border-color: var(--hair); box-shadow: none; }
 .docs-swagger .swagger-ui .opblock .opblock-section-header { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .docs-swagger .swagger-ui .btn,
-.docs-swagger .swagger-ui select { border-radius: 7px; }
+.docs-swagger .swagger-ui select { border-radius: 0; }
 .docs-swagger .swagger-ui .topbar,
 .docs-swagger .swagger-ui .auth-wrapper,
 .docs-swagger .swagger-ui .try-out,

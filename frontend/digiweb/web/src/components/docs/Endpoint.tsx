@@ -46,7 +46,7 @@ const METHOD_BG: Record<DocsMethod, string> = {
 export function MethodBadge({ method }: { method: DocsMethod }) {
   return (
     <span
-      className={`rounded-[6px] px-[0.45rem] py-[0.15rem] font-mono text-[0.7rem] font-semibold tracking-[0.04em] text-on-accent ${METHOD_BG[method]}`}
+      className={`rounded-none px-[0.45rem] py-[0.15rem] font-mono text-[0.7rem] font-semibold tracking-[0.04em] text-on-accent ${METHOD_BG[method]}`}
     >
       {method}
     </span>
@@ -55,7 +55,7 @@ export function MethodBadge({ method }: { method: DocsMethod }) {
 
 function InlineCode({ children }: { children: React.ReactNode }) {
   return (
-    <code className="rounded-[5px] bg-ink/9 px-[0.3rem] py-[0.05rem] font-mono text-[0.82em]">
+    <code className="rounded-none bg-ink/9 px-[0.3rem] py-[0.05rem] font-mono text-[0.82em]">
       {children}
     </code>
   );
@@ -93,7 +93,7 @@ function FieldTable({ title, fields }: { title: string; fields: DocsField[] }) {
 function DocBadge({ muted, children }: { muted?: boolean; children: React.ReactNode }) {
   return (
     <span
-      className={`whitespace-nowrap rounded-[7px] border border-hair px-[0.45rem] py-[0.15rem] font-mono text-[0.68rem] ${
+      className={`whitespace-nowrap rounded-none border border-hair px-[0.45rem] py-[0.15rem] font-mono text-[0.68rem] ${
         muted ? "text-ink-mute" : "text-ink-soft"
       }`}
     >
@@ -104,7 +104,7 @@ function DocBadge({ muted, children }: { muted?: boolean; children: React.ReactN
 
 export function EndpointDoc({ ep }: { ep: DocsEndpoint }) {
   return (
-    <div className="doc-endpoint flex flex-col gap-[0.55rem] rounded-[12px] border border-hair bg-surface/55 p-[clamp(0.8rem,2vw,1.1rem)]">
+    <div className="doc-endpoint flex flex-col gap-[0.55rem] rounded-none border border-hair bg-surface/55 p-[clamp(0.8rem,2vw,1.1rem)]">
       <div className="flex flex-wrap items-center gap-[0.6rem]">
         <MethodBadge method={ep.method} />
         <code className="break-all font-mono text-[0.92rem] text-ink">{ep.path}</code>

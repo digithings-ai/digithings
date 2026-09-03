@@ -35,6 +35,7 @@ vi.mock("@ai-sdk/react", () => ({
     status: "ready",
     error: undefined,
     regenerate: vi.fn(),
+    setMessages: vi.fn(),
     stop: vi.fn(),
   })),
 }));

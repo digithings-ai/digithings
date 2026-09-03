@@ -21,7 +21,10 @@ to it later (their current in-tree LLM modules are superseded by this package).
 
 | Module | Responsibility |
 |--------|----------------|
-| `digillm/client.py` | Provider registry + routing, client cache, retry/backoff, SHA-256 response cache, `chat_completion`, the tool-calling loop, tool-call types, and the per-request override contextvars. |
+| `digillm/types.py` | Shared TypedDict request, tool-call, tool-definition, and JSON-schema response payload shapes. |
+| `digillm/overrides.py` | Per-request proxy-key and BYOK contextvars, reset helpers, and context managers. |
+| `digillm/cache.py` | SHA-256 response-cache keying, TTL/eviction, and cache clearing. |
+| `digillm/client.py` | Compatibility import surface plus provider registry/routing, retry/backoff, completion/search, telemetry runtime, and the tool-calling loop. |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
 | `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
@@ -68,7 +71,7 @@ the durable digiquant writer remain separate follow-up tasks.
 hits, tool-loop turns, grounding, and structured repair. **Reason:** physical attempts prove that
 transport work occurred but cannot explain why it existed, whether a cache answered it, which
 call caused a follow-up, or what consumed the result. **Intent:** connect provider work to generic
-research purpose and artifact disposition without importing digigraph, Olympus, ticker, or
+research purpose and artifact disposition without importing digigraph, dashboard, ticker, or
 portfolio semantics into this leaf library. **System contribution:** consumers can reconcile
 logical research operations with physical reliability and cost evidence while preserving the
 existing provider behavior.
@@ -115,7 +118,7 @@ key: absent, never `""` and never fabricated.
 latency, served-model identity, and missing evidence, so provider reliability and cost cannot be
 reconciled. **Intent:** observe the incumbent provider behavior without changing retry counts,
 backoff, routing, cache order, provider selection, response parsing, or exceptions. **System
-contribution:** later Olympus persistence and reconciliation can distinguish provider-attempt
+contribution:** later dashboard persistence and reconciliation can distinguish provider-attempt
 effects from logical-call, node, and portfolio effects.
 
 `set_telemetry_observer(observer)` registers one process-wide sink, matching the existing startup
@@ -176,8 +179,8 @@ chat_completion(
   one prefix assumes a provider's model id never repeats the provider's own name.
   OpenRouter's auto-router breaks that: its id *is* `openrouter/auto`, so its
   litellm form carries the prefix twice (`openrouter/openrouter/auto` — the form
-  operators write in the README and in the Atlas provider diagnostics under
-  `digiquant/scripts/atlas/`; no tier config lists it) and stripping one still has
+  operators write in the README and in the research provider diagnostics under
+  `digiquant/scripts/research/`; no tier config lists it) and stripping one still has
   to leave one behind. Ids listed in the table are restored after the
   split, so **both spellings reach the wire as `openrouter/auto`**.
 

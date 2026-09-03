@@ -8,7 +8,7 @@
  * focus-within lights the accent ring, and the native WebKit search-cancel
  * affordance is suppressed in favor of the clear button.
  *
- * Shaped against the olympus adoption target: the ticker filter row inside
+ * Shaped against the dashboard adoption target: the ticker filter row inside
  * components/portfolio/performance-chart-workspace.tsx's comparables picker.
  */
 import type { InputHTMLAttributes, ReactNode } from "react";

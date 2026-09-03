@@ -5,7 +5,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 /**
  * StackingPanels — the layered between-sections transition promoted from the
  * design reference (effects/stacking-panels; mined from revolut.com). Each
- * panel pins in turn and the next slides up over it (rounded top + shadow
+ * panel pins in turn and the next slides up over it (hairline + shadow
  * give the layered seam); as a panel is covered it scales back and dims.
  *
  * The "covered" amount keys off the *next* panel's approach to the pin line —

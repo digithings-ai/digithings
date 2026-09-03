@@ -101,7 +101,7 @@ PY
 #
 # That is the failure CLAUDE.md already documents for stale module branches
 # (2026-06-17: `module/digiquant` ~400 commits behind, predating the
-# apps/digiquant-atlas → digiquant/src/digiquant/olympus move, so PRs cut from it
+# digiquant/src/digiquant/research → digiquant/src/digiquant/dashboard move, so PRs cut from it
 # edited files that no longer existed). Its answer was a manual pre-flight check.
 # A manual check is a check that gets skipped, and this is the one place it can be
 # made unconditional for every future task branch.
@@ -167,6 +167,27 @@ behind_develop() {
   git rev-list --count "${ref}..refs/remotes/origin/develop" 2>/dev/null || echo 0
 }
 
+# Return success when develop changed the subtree owned by a module base.
+#
+# Module names match their repository directory except digichat, whose source
+# lives below frontend/. Keep the exception here rather than widening the diff
+# to unrelated repository files: this guard is specifically about changes that
+# could make a task edit moved or deleted component code.
+module_subtree_changed_since_base() {
+  local base_ref="$1"
+  local base="${base_ref#refs/remotes/origin/}"
+  local component_path="${base#module/}"
+  if [[ "$base" == "module/digichat" ]]; then
+    component_path="frontend/digichat"
+  fi
+
+  local changed_paths
+  changed_paths="$(
+    git diff --name-only "${base_ref}...refs/remotes/origin/develop" -- "$component_path"
+  )" || die "cannot inspect ${base} changes against origin/develop; refusing to branch from an unverified module base."
+  [[ -n "$changed_paths" ]]
+}
+
 # Print the remote-tracking ref to branch from, given a base branch name.
 resolve_base_ref() {
   local base="$1"
@@ -218,6 +239,12 @@ assert_module_base_is_current() {
   [[ "$behind" -gt 0 ]] || return 0
 
   local base="${base_ref#refs/remotes/}"
+  if ! module_subtree_changed_since_base "$base_ref"; then
+    warn "${base} is ${behind} commit(s) behind origin/develop, but develop has no changes under its component subtree."
+    warn "Proceeding: the stale-module guard only refuses when the component itself changed."
+    return 0
+  fi
+
   warn "${base} is ${behind} commit(s) behind origin/develop."
   warn "A task branch cut from a stale module branch edits code that has already moved"
   warn "or been deleted on develop. Sync it first — module-branch-protection blocks"

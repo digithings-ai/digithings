@@ -23,7 +23,8 @@ BYOK settings UI, and handoff/seed logic.
 | `src/components/MiniMarkdown.tsx` | Thin delegate to `@digithings/web`'s `<ChatMarkdown source>` — that package owns the `.chat-md` grammar, GFM tables, fenced code, mermaid and LaTeX. Carries no node map and no `.dc-md-*` classes of its own. |
 | `src/activity-view.ts` | Pure projection of the `DigiChatActivity` wire vocabulary onto the shared chat family's props. The boundary adapter — no JSX, node-testable. |
 | `src/components/ChatActivities.tsx` | Agent-step feed, rendered on the shared `@digithings/web` chat primitives (see the mapping table below). Holds no mapping logic — that is `activity-view.ts`. |
-| `src/components/CopyButton.tsx` | Clipboard copy affordance (silently no-ops where the API is unavailable — cross-origin iframes). |
+| `src/components/CopyButton.tsx` | Markdown copy affordance — clipboard first; embed falls back to `.md` download → parent `digichat:copy` postMessage → selectable textarea (#3465). Never a silent no-op. |
+| `src/transcript-markdown.ts` | Shared serializer for last-answer + full-thread markdown export (`## You` / `## digichat`, optional Sources title+path). |
 | `src/components/DigiChatMark.tsx` | Brand mark / wordmark. |
 | `src/styles/session.css` | `.dc-*` session grammar (thread, rows, markdown, form, activities, settings-adjacent chrome). |
 | `src/styles/cursor.css` | `.dt-cur` caret + `dt-bl` keyframes, `.dtc-chip` / `.dtc-error`, wordmark colors. |
@@ -33,8 +34,10 @@ BYOK settings UI, and handoff/seed logic.
 
 - **Exports** (`src/index.ts`): `DigiChatSession`, `useStreamingIntro`,
   `CopyButton`, `DigiChatMark`/`DigiChatWordmark`, `ChatActivities`,
-  `MiniMarkdown`, `toCanonRows`/`outcomeMeta` +
-  the types in `src/types.ts` and `CanonActivityRow`.
+  `MiniMarkdown`, `toCanonRows`/`outcomeMeta`,
+  `serializeAssistantMarkdown`/`serializeThreadMarkdown`/`copyMarkdownWithFallback`/
+  `downloadMarkdown` (#3465), plus the types in `src/types.ts` and
+  `CanonActivityRow`.
 - **Class names are API.** Consumers style/target `.dc-*` and `.dt-*`/`.dtc-*`
   directly (digithings-web reuses `.dc-code-inline` and `.dt-cur`; digichat
   layers `.dc-term-*` chrome around the widget). `.dc-mermaid-*` was retired
@@ -55,7 +58,7 @@ not in a fork:
 | Prop | digithings-web `/chat` | digichat `/embed` |
 |---|---|---|
 | `chat: DigiChatController` | `useStackChat` + BYOK headers | `useEmbedDigiChat` + gate-wrapped `send` |
-| `layout` | `"page"` (full viewport under nav) | `"embed"` (flex child, no copy buttons — cross-origin clipboard) |
+| `layout` | `"page"` (full viewport under nav) | `"embed"` (flex child; copy uses download fallback when clipboard is blocked) |
 | `showStatusBar` / `showByok` | status bar + BYOK affordances | no bar; BYOK only when gated |
 | `settingsPanel` + `chat.openSettings` | `ProviderSettings` panel | — (BYOK lives in the paywall card) |
 | `headerSlot` / `footerSlot` | — | tenant title, turn meter, attribution |
@@ -172,6 +175,8 @@ the session itself has no storage or routing knowledge.
    the `ChatActivities` render tests pin the behaviour meanwhile.
 7. No primitive exists for the composer (`.dc-form` — asserted untouched by
    #1403 anyway), suggestions chips (`.dtc-chip`), or the status bar.
+   Composer chrome is utilitarian-terminal v0.1: radius 0, `.dc-send` is an
+   ink/paper rect, `.dtc-chip` is a hairline slab (not a pill).
    **Closed for diagrams and math:** `ChatMarkdown` gained mermaid and LaTeX in
    #1941, so `MermaidBlock` was deleted and `MiniMarkdown` became a delegate.
    An earlier revision of this section said the pair "must not be deleted" and
@@ -184,7 +189,7 @@ digithings-web `app/globals.css` import `chat-core.css` + `chat-widgets.css`
 *before* the digichat-ui sheets and `@source` the shared chat components. Both
 also import `chat-math.css` (after `chat-core.css`), which carries KaTeX's own
 stylesheet and its ~1 MB of fonts — an app that renders no math must not import
-it, which is why olympus and the design reference do not.
+it, which is why dashboard and the design reference do not.
 
 ## Extension guide
 

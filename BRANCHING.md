@@ -50,9 +50,9 @@ Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 **Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
-command here. As of 2026-08 that was `module/website`, `module/olympus`,
-`module/digiskills` and `module/digiquant-atlas` — **a snapshot, not an invariant**
-(`module/digiquant-atlas` was queued for deletion when this was written). Check rather
+command here. As of 2026-08 that was `module/website`, `module/dashboard`,
+`module/digiskills` and `module/digiquant-research` — **a snapshot, not an invariant**
+(`module/digiquant-research` was queued for deletion when this was written). Check rather
 than trust the list:
 
 ```bash
@@ -64,8 +64,8 @@ The second was empty for all four at the 2026-08 sync (PRs #2397, #2401, #2402;
 `module/digiskills` needed none — it is a plain ancestor of `develop`). Where such a branch
 is ahead of `develop` at all, the extra commits are its own `chore/sync-*` merges:
 **dormant, not divergent, with no work stranded on any of them.** Don't revive one —
-branch from `develop`. `module/digiquant-atlas` was cut in the pre-migration
-`apps/digiquant-atlas/` era, and the Wave 1 / Wave 2 plan docs that name it as a PR target
+branch from `develop`. `module/digiquant-research` was cut in the pre-migration
+`digiquant/src/digiquant/research/` era, and the Wave 1 / Wave 2 plan docs that name it as a PR target
 are archival.
 
 Deleting a dormant module branch is **not** a plain `git push origin --delete`. The

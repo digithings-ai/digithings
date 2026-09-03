@@ -36,7 +36,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
-import hashlib
 import json
 import logging
 import math
@@ -50,15 +49,15 @@ from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
-    Any,
-    TypedDict,
-)
+from typing import Any  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
 from uuid import UUID, uuid4
 
 from openai import OpenAI, Timeout
 from openai.types.chat import ChatCompletion
 
+from digillm import cache as _cache
+from digillm import overrides as _overrides
+from digillm import types as _types
 from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
@@ -72,6 +71,31 @@ from digillm.telemetry import (
     TelemetryObserver,
     emit_telemetry,
 )
+
+ChatCompletionMessage = _types.ChatCompletionMessage
+JsonSchemaResponseFormat = _types.JsonSchemaResponseFormat
+ToolArguments = _types.ToolArguments
+ToolCallDict = _types.ToolCallDict
+ToolCallFunction = _types.ToolCallFunction
+ToolDefinition = _types.ToolDefinition
+ToolFunctionSpec = _types.ToolFunctionSpec
+
+_byok_override = _overrides._byok_override
+_proxy_key_override = _overrides._proxy_key_override
+byok = _overrides.byok
+clear_byok = _overrides.clear_byok
+get_byok = _overrides.get_byok
+get_proxy_key = _overrides.get_proxy_key
+proxy_key = _overrides.proxy_key
+reset_byok = _overrides.reset_byok
+reset_proxy_key = _overrides.reset_proxy_key
+set_byok = _overrides.set_byok
+set_proxy_key = _overrides.set_proxy_key
+
+_clear_response_cache = _cache.clear_response_cache
+_llm_cache_get = _cache.llm_cache_get
+_llm_cache_key = _cache.llm_cache_key
+_llm_cache_set = _cache.llm_cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -91,149 +115,6 @@ except ImportError:  # pragma: no cover - exercised only when digismith is absen
 
 # Cap tool result text injected into the next LLM turn (full blobs stay upstream).
 _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
-
-
-# ── Type definitions ────────────────────────────────────────────────────────
-
-
-class ToolCallFunction(TypedDict, total=False):
-    """Function block on an assistant ``tool_call``."""
-
-    name: str
-    arguments: str
-
-
-class ToolCallDict(TypedDict, total=False):
-    """OpenAI assistant ``tool_call`` entry."""
-
-    id: str
-    type: str
-    function: ToolCallFunction
-
-
-class ChatCompletionMessage(TypedDict, total=False):
-    """OpenAI chat message shape for ``chat.completions.create``."""
-
-    role: str
-    content: str | list[dict[str, Any]] | None
-    name: str
-    tool_call_id: str
-    tool_calls: list[ToolCallDict]
-
-
-class ToolFunctionSpec(TypedDict, total=False):
-    """Function spec inside a :class:`ToolDefinition`."""
-
-    name: str
-    description: str
-    parameters: dict[str, Any]
-
-
-class ToolDefinition(TypedDict, total=False):
-    """A single tool exposed to the model."""
-
-    type: str
-    function: ToolFunctionSpec
-
-
-class JsonSchemaResponseFormat(TypedDict, total=False):
-    """OpenAI ``response_format`` descriptor for json_schema structured output."""
-
-    type: str
-    json_schema: dict[str, Any]
-
-
-ToolArguments = dict[str, Any]
-
-
-# ── Per-request overrides (contextvars) ──────────────────────────────────────
-# These are plain contextvar setters. The consuming service parses request
-# headers (e.g. ``X-LiteLLM-Proxy-Key``, ``X-BYOK-Key``/``X-BYOK-Base-URL``) and
-# calls these — digillm itself never touches FastAPI/Request objects.
-
-# Proxy-key override: forwards a per-request LiteLLM proxy / bearer token used on
-# the default (non-prefixed) client path.
-_proxy_key_override: ContextVar[str | None] = ContextVar("digillm_proxy_key_override", default=None)
-
-# BYOK (bring-your-own-key) override: a per-request (api_key, base_url) pair.
-# Never logged or persisted; the resulting client is never cached.
-_byok_override: ContextVar[tuple[str, str] | None] = ContextVar(
-    "digillm_byok_override", default=None
-)
-
-
-def set_proxy_key(token: str | None) -> object:
-    """Set the per-request proxy/bearer key override; return a reset token.
-
-    Pass the returned token to :func:`reset_proxy_key` (typically in a
-    ``finally`` block) to restore the previous value.
-    """
-    val = token.strip() if token else None
-    return _proxy_key_override.set(val)
-
-
-def reset_proxy_key(token: object) -> None:
-    """Restore the proxy-key override to the value before :func:`set_proxy_key`."""
-    _proxy_key_override.reset(token)  # type: ignore[arg-type]
-
-
-def get_proxy_key() -> str | None:
-    """Return the active per-request proxy-key override, or ``None``."""
-    return _proxy_key_override.get()
-
-
-def set_byok(api_key: str, base_url: str = "https://api.openai.com/v1") -> object:
-    """Set a per-request BYOK ``(api_key, base_url)`` override; return a reset token.
-
-    The BYOK client is never cached (user credentials must not accumulate in
-    process memory) and bypasses the response cache. Pass the returned token to
-    :func:`reset_byok` to restore the previous value.
-    """
-    val: tuple[str, str] | None = (api_key, base_url) if api_key else None
-    return _byok_override.set(val)
-
-
-def reset_byok(token: object) -> None:
-    """Restore the BYOK override to the value before :func:`set_byok`."""
-    _byok_override.reset(token)  # type: ignore[arg-type]
-
-
-def get_byok() -> tuple[str, str] | None:
-    """Return the active per-request BYOK ``(api_key, base_url)`` override, or ``None``."""
-    return _byok_override.get()
-
-
-def clear_byok() -> None:
-    """Drop the BYOK override outright, without the token :func:`set_byok` returned.
-
-    :func:`reset_byok` needs that token, and the token only exists in the frame that
-    bound it. A worker thread running inside a *copy* of a request's context inherits
-    the binding but never the token, so this is how such a worker drops its own copy
-    when the work finishes -- see ``clear_byok_bindings`` in digigraph's ``llm_auth``.
-    Calling it in the binding frame instead would clear the value but strand the
-    parent's token, so prefer :func:`reset_byok` there.
-    """
-    _byok_override.set(None)
-
-
-@contextlib.contextmanager
-def proxy_key(token: str | None) -> Iterator[None]:
-    """Context manager: set the proxy-key override for the duration of the block."""
-    tok = set_proxy_key(token)
-    try:
-        yield
-    finally:
-        reset_proxy_key(tok)
-
-
-@contextlib.contextmanager
-def byok(api_key: str, base_url: str = "https://api.openai.com/v1") -> Iterator[None]:
-    """Context manager: set the BYOK override for the duration of the block."""
-    tok = set_byok(api_key, base_url)
-    try:
-        yield
-    finally:
-        reset_byok(tok)
 
 
 # ── Provider registry ─────────────────────────────────────────────────────────
@@ -317,8 +198,8 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
 # stripping one still has to leave one behind.
 #
 # Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
-# write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
-# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
+# write the doubled ``openrouter/openrouter/auto`` (README, and the research provider
+# diagnostics under ``digiquant/scripts/research/``; no tier config lists it), but a BYOK
 # caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
 # prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
 # the middleware and the resolver from disagreeing about a hostile header. So the single-
@@ -461,74 +342,9 @@ def get_client_for_model(model: str) -> OpenAI:
     return client
 
 
-# ── Response cache ────────────────────────────────────────────────────────────
-# SHA-256 keyed in-process cache for non-tool, non-BYOK chat completions.
-# TTL configurable via DIGI_LLM_CACHE_TTL_SECONDS (default: 3600s).
-
-_llm_cache: dict[str, tuple[str, float]] = {}
-_LLM_CACHE_MAXSIZE = 256
-
-
-def _llm_cache_ttl() -> float:
-    try:
-        return float(os.environ.get("DIGI_LLM_CACHE_TTL_SECONDS", "3600"))
-    except ValueError:
-        return 3600.0
-
-
-def _llm_cache_key(
-    model: str,
-    messages: list[ChatCompletionMessage],
-    temperature: float,
-    response_format: JsonSchemaResponseFormat | None,
-    max_tokens: int | None,
-) -> str:
-    """Return a stable SHA-256 cache key for the given completion parameters.
-
-    The OpenRouter cost-control env (allowlist + sort + price ceiling) is folded in: it changes
-    which model actually serves the request, so a response cached under one routing regime must
-    not be returned after those settings change.
-    """
-    payload = json.dumps(
-        {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "response_format": response_format,
-            "max_tokens": max_tokens,
-            "cost_controls": [
-                os.environ.get("OPENROUTER_FALLBACK_MODELS", ""),
-                os.environ.get("OPENROUTER_SORT", ""),
-                os.environ.get("OPENROUTER_MAX_PROMPT_PRICE", ""),
-                os.environ.get("OPENROUTER_MAX_COMPLETION_PRICE", ""),
-            ],
-        },
-        sort_keys=True,
-    )
-    return hashlib.sha256(payload.encode()).hexdigest()
-
-
-def _llm_cache_get(key: str) -> str | None:
-    entry = _llm_cache.get(key)
-    if entry is None:
-        return None
-    value, expires_at = entry
-    if time.monotonic() > expires_at:
-        del _llm_cache[key]
-        return None
-    return value
-
-
-def _llm_cache_set(key: str, value: str) -> None:
-    # Evict oldest entry when at capacity (simple FIFO approximation).
-    if len(_llm_cache) >= _LLM_CACHE_MAXSIZE:
-        del _llm_cache[next(iter(_llm_cache))]
-    _llm_cache[key] = (value, time.monotonic() + _llm_cache_ttl())
-
-
 def clear_caches() -> None:
     """Clear the response cache and the client cache (primarily for tests)."""
-    _llm_cache.clear()
+    _clear_response_cache()
     _client_cache.clear()
 
 
@@ -1641,8 +1457,13 @@ def openrouter_web_search(
     """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
 
     ``:online`` models and native-search providers (``perplexity/*``) use built-in web
-    search via a plain completion. Other models fall back to the server-side
-    ``openrouter:web_search`` tool (Exa by default).
+    search via a plain completion — this is the **dashboard grounding** path
+    (:func:`digigraph.model_config.get_grounding_model`).
+
+    Other models fall back to the server-side ``openrouter:web_search`` tool
+    (Exa by default). That branch is a **digillm toolkit** capability for
+    non-native-search models (diagnostics / opt-in callers); dashboard must not
+    assemble ``engine`` / ``max_results`` for production grounding (#2567).
 
     Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
     unset, or the call fails (fail-soft).

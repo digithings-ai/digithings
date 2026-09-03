@@ -43,28 +43,67 @@ import {
   ChatToolCall,
   ChatWidgetFrame,
 } from "@digithings/web";
+import type { MouseEvent } from "react";
 import { distinctHitPath, toCanonRows, type CanonActivityRow } from "../activity-view";
 import type { DigiChatActivity, VaultHitSummary } from "../types";
+
+type ChatActivitiesProps = {
+  activities?: DigiChatActivity[];
+  onOpenSource?: (hit: VaultHitSummary) => void;
+};
 
 /**
  * Retrieved documents, as the fold-out body of a `tool_result` row — the
  * chunks Foundry (or digivault) already attached to that search. Each snippet
  * is a nested `<details>`, closed by default.
  */
-function HitHead({ hit, path }: { hit: VaultHitSummary; path: string | null }) {
+function HitHead({
+  hit,
+  path,
+  onOpen,
+}: {
+  hit: VaultHitSummary;
+  path: string | null;
+  onOpen?: (hit: VaultHitSummary) => void;
+}) {
+  const open = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onOpen?.(hit);
+  };
   return (
     <>
-      <span className="dc-act-hit-title">{hit.title}</span>
+      {onOpen ? (
+        <button type="button" className="dc-act-hit-open" onClick={open}>
+          <span className="dc-act-hit-title">{hit.title}</span>
+        </button>
+      ) : (
+        <span className="dc-act-hit-title">{hit.title}</span>
+      )}
       {hit.tier ? <span className="dc-act-hit-tier">{hit.tier}</span> : null}
       {typeof hit.year === "number" ? (
         <span className="dc-act-hit-year">{hit.year}</span>
       ) : null}
-      {path ? <span className="dc-act-hit-path">{path}</span> : null}
+      {path ? (
+        onOpen ? (
+          <button type="button" className="dc-act-hit-path dc-act-hit-open" onClick={open}>
+            {path}
+          </button>
+        ) : (
+          <span className="dc-act-hit-path">{path}</span>
+        )
+      ) : null}
     </>
   );
 }
 
-function SourceList({ sources }: { sources: VaultHitSummary[] }) {
+function SourceList({
+  sources,
+  onOpenSource,
+}: {
+  sources: VaultHitSummary[];
+  onOpenSource?: (hit: VaultHitSummary) => void;
+}) {
   return (
     <ul className="dc-act-hits">
       {/* path is not unique — two chunks of one vault document share it. */}
@@ -74,7 +113,7 @@ function SourceList({ sources }: { sources: VaultHitSummary[] }) {
         if (!hit.snippet) {
           return (
             <li key={key}>
-              <HitHead hit={hit} path={path} />
+              <HitHead hit={hit} path={path} onOpen={onOpenSource} />
             </li>
           );
         }
@@ -82,7 +121,7 @@ function SourceList({ sources }: { sources: VaultHitSummary[] }) {
           <li key={key}>
             <details className="dc-act-hit">
               <summary className="dc-act-hit-summary">
-                <HitHead hit={hit} path={path} />
+                <HitHead hit={hit} path={path} onOpen={onOpenSource} />
               </summary>
               <p className="dc-act-hit-snippet">{hit.snippet}</p>
             </details>
@@ -93,7 +132,13 @@ function SourceList({ sources }: { sources: VaultHitSummary[] }) {
   );
 }
 
-function ActivityRow({ row }: { row: CanonActivityRow }) {
+function ActivityRow({
+  row,
+  onOpenSource,
+}: {
+  row: CanonActivityRow;
+  onOpenSource?: (hit: VaultHitSummary) => void;
+}) {
   switch (row.kind) {
     case "tool":
       return (
@@ -101,12 +146,11 @@ function ActivityRow({ row }: { row: CanonActivityRow }) {
           name={row.name}
           args={row.args}
           status={row.status}
-          // Outcome count, not a timing — the protocol carries no durations.
-          // See ../activity-view for why this slot is spent this way.
           duration={row.meta}
           defaultOpen={row.defaultOpen}
+          lines={row.lines}
         >
-          {row.sources ? <SourceList sources={row.sources} /> : null}
+          {row.sources ? <SourceList sources={row.sources} onOpenSource={onOpenSource} /> : null}
         </ChatToolCall>
       );
 
@@ -158,7 +202,7 @@ function ActivityRow({ row }: { row: CanonActivityRow }) {
   }
 }
 
-export function ChatActivities({ activities }: { activities?: DigiChatActivity[] }) {
+export function ChatActivities({ activities, onOpenSource }: ChatActivitiesProps) {
   if (!activities?.length) return null;
   const rows = toCanonRows(activities);
   const hasTraces = activities.some((a) => a.kind === "trace");
@@ -168,7 +212,7 @@ export function ChatActivities({ activities }: { activities?: DigiChatActivity[]
       aria-label="Agent steps"
     >
       {rows.map((row) => (
-        <ActivityRow key={row.key} row={row} />
+        <ActivityRow key={row.key} row={row} onOpenSource={onOpenSource} />
       ))}
     </div>
   );

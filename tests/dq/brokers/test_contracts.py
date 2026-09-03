@@ -1,4 +1,4 @@
-"""Tests for the Kairos execution contracts (K0): venue/order/position models and the
+"""Tests for the execution contracts (K0): venue/order/position models and the
 widened `BrokerAdapter` protocol.
 
 Covers each `model_validator`/`field_validator` branch called out in the work package's

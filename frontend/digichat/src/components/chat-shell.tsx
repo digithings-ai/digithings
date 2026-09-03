@@ -30,15 +30,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  canFlushServerMessages,
   loadLocalThreads,
   mergeRemoteAndLocal,
   saveLocalThreads,
+  withHydratedConversation,
   type ChatThreadState,
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
 import { p } from "@/lib/base-path";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
+
+async function fetchConversationBody(
+  id: string,
+): Promise<{ title: string; messages: UIMessage[] } | null> {
+  try {
+    const r = await fetch(p(`/api/conversations/${id}`), { credentials: "include" });
+    if (!r.ok) return null;
+    return (await r.json()) as { title: string; messages: UIMessage[] };
+  } catch {
+    return null;
+  }
+}
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
@@ -96,12 +110,17 @@ export function ChatShell({
   }, [threads]);
 
   const debouncedSaveRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({});
+  /** One-shot: next flush for this thread may intentionally clear server messages. */
+  const allowTruncateRef = useRef<Record<string, boolean>>({});
 
   const flushServerSave = useCallback(
     async (threadId: string) => {
       if (!serverPersistence) return;
       let t = threadsRef.current.find((x) => x.id === threadId);
       if (!t) return;
+      // PUT is a full replace. An unhydrated remote thread still has messages: []
+      // from the list endpoint — flushing it would delete the real history.
+      if (!canFlushServerMessages(t)) return;
 
       if (!t.remote) {
         const cr = await fetch(p("/api/conversations"), {
@@ -116,11 +135,18 @@ export function ChatShell({
       }
 
       const snap = threadsRef.current.find((x) => x.id === threadId) ?? t;
+      if (!canFlushServerMessages(snap)) return;
+      const allowTruncate = !!allowTruncateRef.current[threadId];
+      delete allowTruncateRef.current[threadId];
       await fetch(p(`/api/conversations/${threadId}`), {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: snap.title, messages: snap.messages }),
+        body: JSON.stringify({
+          title: snap.title,
+          messages: snap.messages,
+          ...(allowTruncate ? { allowTruncate: true } : {}),
+        }),
       });
     },
     [serverPersistence],
@@ -160,8 +186,7 @@ export function ChatShell({
       }
       if (cancelled) return;
       setServerPersistence(pers);
-      const merged = mergeRemoteAndLocal(remote, local);
-      setThreads(merged);
+      let merged = mergeRemoteAndLocal(remote, local);
       if (merged.length === 0) {
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
@@ -177,9 +202,25 @@ export function ChatShell({
         setThreads([empty]);
         setActiveId(id);
         saveLocalThreads(userId, [empty]);
-      } else {
-        setActiveId(merged[0]?.id ?? null);
+        setReady(true);
+        return;
       }
+
+      // Auto-select does not go through openThread — hydrate the first remote
+      // thread before the composer mounts, or a send would PUT [] and wipe history.
+      const initial = merged[0]!;
+      if (initial.remote && !initial.hydrated) {
+        const body = await fetchConversationBody(initial.id);
+        if (cancelled) return;
+        if (body) {
+          merged = merged.map((x) =>
+            x.id === initial.id ? withHydratedConversation(x, body) : x,
+          );
+        }
+      }
+      if (cancelled) return;
+      setThreads(merged);
+      setActiveId(merged[0]?.id ?? null);
       setReady(true);
     })();
     return () => {
@@ -193,26 +234,11 @@ export function ChatShell({
     async (id: string) => {
       const t = threads.find((x) => x.id === id);
       if (t?.remote && !t.hydrated) {
-        try {
-          const r = await fetch(p(`/api/conversations/${id}`), { credentials: "include" });
-          if (r.ok) {
-            const j = (await r.json()) as { title: string; messages: UIMessage[] };
-            setThreads((prev) =>
-              prev.map((x) =>
-                x.id === id
-                  ? {
-                      ...x,
-                      title: j.title,
-                      messages: j.messages,
-                      hydrated: true,
-                      hydrateVersion: x.hydrateVersion + 1,
-                    }
-                  : x,
-              ),
-            );
-          }
-        } catch {
-          /* ignore */
+        const body = await fetchConversationBody(id);
+        if (body) {
+          setThreads((prev) =>
+            prev.map((x) => (x.id === id ? withHydratedConversation(x, body) : x)),
+          );
         }
       }
       setActiveId(id);
@@ -296,10 +322,20 @@ export function ChatShell({
 
   const clearActiveThread = useCallback(() => {
     if (!activeId) return;
+    const cur = threadsRef.current.find((x) => x.id === activeId);
+    // Do not clear+PUT an unhydrated remote thread — that would wipe server history.
+    if (cur && !canFlushServerMessages(cur)) return;
+    allowTruncateRef.current[activeId] = true;
     setThreads((prev) => {
       const next = prev.map((t) =>
         t.id === activeId
-          ? { ...t, messages: [], updatedAt: new Date().toISOString(), hydrateVersion: t.hydrateVersion + 1 }
+          ? {
+              ...t,
+              messages: [],
+              updatedAt: new Date().toISOString(),
+              hydrateVersion: t.hydrateVersion + 1,
+              hydrated: true,
+            }
           : t,
       );
       saveLocalThreads(userId, next);
@@ -308,8 +344,16 @@ export function ChatShell({
     scheduleServerSave(activeId);
   }, [activeId, userId, scheduleServerSave]);
 
+  const allowTruncateForThread = useCallback((threadId: string) => {
+    allowTruncateRef.current[threadId] = true;
+  }, []);
+
   const onMessagesCommit = useCallback(
     (threadId: string, messages: UIMessage[]) => {
+      const cur = threadsRef.current.find((x) => x.id === threadId);
+      // Never mark an unhydrated remote thread hydrated from a partial client
+      // array — that would unlock flushServerSave and erase Postgres history.
+      if (cur && !canFlushServerMessages(cur)) return;
       setThreads((prev) => {
         const next = prev.map((t) =>
           t.id === threadId
@@ -509,30 +553,52 @@ export function ChatShell({
         </header>
 
         <main className="app-main">
-          <ChatPanel
-            key={`${activeThread.id}-${activeThread.hydrateVersion}`}
-            threadId={activeThread.id}
-            threadTitle={activeThread.title}
-            initialMessages={activeThread.messages}
-            onMessagesCommit={onMessagesCommit}
-            onTitleDerived={onTitleDerived}
-            byokMode={byokMode}
-            onByokModeChange={setByokMode}
-            onSlashCommand={(cmd) => {
-              const [name] = cmd.trim().split(/\s+/);
-              if (name === "/clear") {
-                clearActiveThread();
-                return true;
-              }
-              if (name === "/history") {
-                setCollapsed(false);
-                const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
-                first?.focus();
-                return true;
-              }
-              return false;
-            }}
-          />
+          {activeThread.remote && !activeThread.hydrated ? (
+            <div className="flex min-h-[40vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+              <p>Could not load this conversation yet.</p>
+              <button
+                type="button"
+                className="underline-offset-2 hover:underline"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "inherit",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontSize: "inherit",
+                }}
+                onClick={() => void openThread(activeThread.id)}
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <ChatPanel
+              key={`${activeThread.id}-${activeThread.hydrateVersion}`}
+              threadId={activeThread.id}
+              threadTitle={activeThread.title}
+              initialMessages={activeThread.messages}
+              onMessagesCommit={onMessagesCommit}
+              onTitleDerived={onTitleDerived}
+              onAllowTruncate={allowTruncateForThread}
+              byokMode={byokMode}
+              onByokModeChange={setByokMode}
+              onSlashCommand={(cmd) => {
+                const [name] = cmd.trim().split(/\s+/);
+                if (name === "/clear") {
+                  clearActiveThread();
+                  return true;
+                }
+                if (name === "/history") {
+                  setCollapsed(false);
+                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
+                  first?.focus();
+                  return true;
+                }
+                return false;
+              }}
+            />
+          )}
         </main>
       </div>
     </div>

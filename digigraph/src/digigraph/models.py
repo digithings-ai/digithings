@@ -77,6 +77,14 @@ class ChatCompletionRequest(BaseModel):
             "lower one the deployment already mandates."
         ),
     )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query. "
+            "Also accepted via X-Digi-Force-Tool. Aliases: search/digisearch, "
+            "docs/digivault. Injected — the model is not asked to write the query."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
@@ -178,6 +186,14 @@ class WorkflowRequest(BaseModel):
     evidence_tier_preference: list[str] | None = Field(
         None,
         description="Preferred evidence_tier values (peer_reviewed, working_paper, …) added as a filter.",
+    )
+    force_tool: str | None = Field(
+        None,
+        description=(
+            "Optional per-request locate tool to run with the user string as its query "
+            "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
+            "is not hinted — the call is injected, then it synthesizes."
+        ),
     )
 
 

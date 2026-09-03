@@ -50,10 +50,10 @@ python3 -m pytest \
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 
-echo "== REM-009: atlas compute-technicals (Polars) =="
-if [[ -f digiquant/scripts/atlas/compute-technicals.py ]]; then
-  python3 digiquant/scripts/atlas/compute-technicals.py --help >/dev/null 2>&1 || true
-  echo "  (run with real data paths per digiquant/scripts/atlas/README if needed)"
+echo "== REM-009: research compute-technicals (Polars) =="
+if [[ -f digiquant/scripts/research/compute-technicals.py ]]; then
+  python3 digiquant/scripts/research/compute-technicals.py --help >/dev/null 2>&1 || true
+  echo "  (run with real data paths per digiquant/scripts/research/README if needed)"
 fi
 
 echo "== REM-095: validate_model_routing =="

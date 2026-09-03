@@ -21,7 +21,7 @@
   margin: 0;
   border: 1px solid var(--hair);
   background: var(--surface);
-  border-radius: 12px;
+  border-radius: 0;
   padding: 1.15rem 0.65rem 0.9rem;
   display: flex;
   flex-direction: column;
@@ -123,7 +123,7 @@
 }
 
 .sym-tile-card {
-  border-radius: 12px;
+  border-radius: 0;
   padding: 1.5rem 1rem 1.1rem;
   display: flex;
   flex-wrap: wrap;

@@ -12,7 +12,7 @@ the SDK import so ``import digiquant.brokers`` succeeds without it; constructing
 Fills: v1 derives ``BrokerFill`` rows from closed orders' ``filled_qty`` /
 ``filled_avg_price`` via REST ``get_orders`` (status=closed, after=since). Account
 activities / websockets are out of scope — Alpaca has no fill webhooks, and the SDK
-``TradingStream`` does not support OAuth (see Kairos spec §6).
+``TradingStream`` does not support OAuth (see execution spec §6).
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "digiquant-atlas"
+project_id = "digiquant-research"
 
 [api]
 enabled = true
@@ -403,7 +403,7 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
 # ---------------------------------------------------------------------------
-# Edge Functions — Olympus billing (T2)
+# Edge Functions — dashboard billing (T2)
 # ---------------------------------------------------------------------------
 # stripe-webhook authenticates via Stripe-Signature (STRIPE_WEBHOOK_SECRET), not
 # a Supabase JWT. Checkout / portal require a logged-in user JWT.
@@ -422,7 +422,7 @@ verify_jwt = true
 verify_jwt = true
 
 # ---------------------------------------------------------------------------
-# Edge Functions — Olympus settings (T3)
+# Edge Functions — dashboard settings (T3)
 # ---------------------------------------------------------------------------
 # Settings requires a logged-in user JWT. Deploy is blocked until K3 vault
 # lands on the deploy target (see functions/settings/README.md).

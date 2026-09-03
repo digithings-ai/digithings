@@ -54,10 +54,10 @@ Connecting to execution venues (Interactive Brokers, Alpaca, QuantConnect) or ex
 - Optimized for vectorized computation (Polars + NumPy/Numba where needed)
 - Exposed as MCP tools so agents can call them programmatically
 
-### 3. Price Data Engine (migrated from Atlas)
-- Migrate the existing Atlas Yahoo Finance pipeline into digiquant
+### 3. Price Data Engine (migrated from research)
+- Migrate the existing research Yahoo Finance pipeline into digiquant
 - digiquant becomes the **source of truth** for price data across the platform
-- Atlas taps into digiquant instead of maintaining its own pipeline
+- research taps into digiquant instead of maintaining its own pipeline
 - Phase 1: Yahoo Finance (already exists), expand to free sources (Alpha Vantage, Twelve Data, CoinGecko for crypto)
 - Price data stored in Supabase (digiquant schema — OHLCV tables per asset/timeframe)
 - Background job that keeps price tables updated on a schedule
@@ -119,7 +119,7 @@ Tables needed:
 Everything needed for a user to say "build me a mean-reversion strategy on BTC using RSI and Bollinger Bands, backtest it on the last 2 years" and get a result back through digichat.
 
 **Milestones:**
-1. **Data Engine** — Migrate Atlas pipeline. Supabase schema. Price update job. MCP tools for price data.
+1. **Data Engine** — Migrate research pipeline. Supabase schema. Price update job. MCP tools for price data.
 2. **Indicator Library** — Wrap ta-lib/pandas-ta. Polars interface. 10 core indicators exposed as MCP tools.
 3. **Strategy Library (seed)** — File structure defined. 3–5 seed strategies documented and implemented. digisearch indexing configured.
 4. **Backtesting (MVP)** — NautilusTrader wrapper. Single-strategy backtest via MCP tool. Structured output.
@@ -141,8 +141,8 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 ### Phase 3 — Agentic Strategy Research (Longer term)
 **Goal: agents autonomously research opportunities and propose/build strategies.**
 
-- Atlas integration: Atlas identifies macro opportunities → digiquant agent builds a strategy to capitalize
-- Example: Atlas flags oil supply disruption → digiquant agent proposes long oil futures or VIX trade, builds and backtests it
+- research integration: research identifies macro opportunities → digiquant agent builds a strategy to capitalize
+- Example: research flags oil supply disruption → digiquant agent proposes long oil futures or VIX trade, builds and backtests it
 - Self-iterating strategy agent: runs optimization rounds, evaluates results, proposes improvements
 - Multi-strategy portfolio construction
 - Broker connections: Alpaca first (simplest API), then Interactive Brokers, then QuantConnect
@@ -180,11 +180,11 @@ Everything needed for a user to say "build me a mean-reversion strategy on BTC u
 
 ### Milestone: Data Engine
 
-**[MIGRATION] Migrate Atlas price pipeline into digiquant**
+**[MIGRATION] Migrate research price pipeline into digiquant**
 - Priority: Critical | Complexity: M | Phase: 1
-- Move Yahoo Finance ingestion job from Atlas into `digiquant/data/`
+- Move Yahoo Finance ingestion job from research into `digiquant/data/`
 - Create Supabase `digiquant` schema with `assets` and `price_ohlcv` tables
-- Atlas updated to call digiquant data MCP tools instead of its own pipeline
+- research updated to call digiquant data MCP tools instead of its own pipeline
 - Background scheduler for price updates
 
 **[FEATURE] MCP tools: price data**
