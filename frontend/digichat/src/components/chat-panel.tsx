@@ -32,7 +32,7 @@ import { p } from "@/lib/base-path";
 import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
-import { ChatActivities } from "@digithings/digichat-ui";
+import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
 const MAX_INPUT_LINES = 5;
@@ -323,15 +323,40 @@ export function ChatPanel({
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
     const plain = messagePlainText(m);
-    try {
-      await navigator.clipboard.writeText(plain);
-    } catch {
-      /* ignore */
-    }
+    const sources =
+      m.role === "assistant"
+        ? citationHits(messageActivities(m)).map((h) => ({ title: h.title, path: h.path }))
+        : undefined;
+    const markdown =
+      m.role === "assistant" ? serializeAssistantMarkdown(plain, sources) : plain.trim();
+    await copyMarkdownWithFallback(markdown, { filename: "digichat-answer.md" });
   }, []);
+
+  const onDownloadThread = useCallback(() => {
+    const turns = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => {
+        const content = messagePlainText(m);
+        if (m.role === "assistant") {
+          return {
+            role: "assistant" as const,
+            content,
+            sources: citationHits(messageActivities(m)).map((h) => ({
+              title: h.title,
+              path: h.path,
+            })),
+          };
+        }
+        return { role: "user" as const, content };
+      });
+    const md = serializeThreadMarkdown(turns);
+    if (!md.trim()) return;
+    downloadMarkdown("digichat-thread.md", md);
+  }, [messages]);
 
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
   const canRegenerate = !busy && !!lastAssistant && messages.length > 0 && status === "ready";
+  const canExportThread = !busy && messages.some((m) => messagePlainText(m).trim());
 
   const startsWithSlash = text.trimStart().startsWith("/");
 
@@ -380,11 +405,23 @@ export function ChatPanel({
                       variant="ghost"
                       size="sm"
                       className="h-6 text-[11px] text-muted-foreground"
-                      onClick={() => onCopyMessage(m)}
+                      onClick={() => void onCopyMessage(m)}
                     >
                       <Copy className="mr-1 size-3" />
                       copy
                     </Button>
+                    {isLastAssistant && canExportThread ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] text-muted-foreground"
+                        onClick={onDownloadThread}
+                        aria-label="Download thread as markdown"
+                      >
+                        md
+                      </Button>
+                    ) : null}
                     {isLastAssistant ? (
                       <Button
                         type="button"

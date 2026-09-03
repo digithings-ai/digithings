@@ -19,6 +19,8 @@ digigraph (digillm + digivault hub). See
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
+
 ### Capability matrix
 
 | Capability | Status |

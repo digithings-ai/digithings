@@ -166,10 +166,16 @@
   top: 0.4rem;
   right: 0.4rem;
 }
+.dc-msg-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
 .dc-msg-copy {
   position: static;
   display: inline-block;
-  margin-top: 0.4rem;
+  margin-top: 0;
 }
 .dc-code-block:hover .dc-code-copy,
 .dc-body:hover .dc-msg-copy,

@@ -142,7 +142,7 @@ describe("assistant turn — settled", () => {
     expect(html).toContain("copy");
   });
 
-  it("hides copy on embed — clipboard is blocked in the cross-origin iframe", () => {
+  it("keeps copy + thread md on embed — clipboard falls back to download (#3465)", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
@@ -151,7 +151,9 @@ describe("assistant turn — settled", () => {
       false,
       "embed",
     );
-    expect(html).not.toContain("dc-msg-copy");
+    expect(html).toContain("dc-msg-copy");
+    expect(html).toContain("Copy answer as markdown");
+    expect(html).toContain("Download thread as markdown");
   });
 
   it("shows no caret when the turn is settled", () => {

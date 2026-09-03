@@ -15,6 +15,15 @@ export {
   type CanonActivityRow,
 } from "./activity-view";
 export {
+  serializeAssistantMarkdown,
+  serializeThreadMarkdown,
+  copyMarkdownWithFallback,
+  downloadMarkdown,
+  type TranscriptTurn,
+  type TranscriptSource,
+  type CopyMarkdownResult,
+} from "./transcript-markdown";
+export {
   parseSlashInput,
   matchingSlashCommands,
   SLASH_COMMANDS,
