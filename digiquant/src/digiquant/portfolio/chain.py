@@ -674,19 +674,25 @@ def cli_main(argv: list[str] | None = None) -> int:
     }
 
     if args.dry_run:
-        # Compile both graphs cleanly, no invocation.
-        compiled = {"research": False, "portfolio": False}
-        try:
-            research_deps = ResearchGraphDeps(
-                preflight=PreflightDeps(client=None, config_loader=None)  # type: ignore[arg-type]
-            )
-            build_research_graph(deps=research_deps, watchlist=research_input.watchlist)
-            compiled["research"] = True
-            build_portfolio_graph(watchlist=list(research_input.watchlist))
-            compiled["portfolio"] = True
-        except Exception as exc:  # pragma: no cover
-            summary["compile_error"] = repr(exc)
-        json.dump({**summary, "dry_run": True, "compiled": compiled}, sys.stdout, default=str)
+        # Compile both graphs cleanly, no invocation (shared with DigiGraph #3415).
+        from digiquant.portfolio.product_compile import compile_research_portfolio
+
+        compile_result = compile_research_portfolio(
+            run_date=research_input.run_date,
+            cadence=research_input.cadence,
+            refresh_scope=research_input.refresh_scope,
+            watchlist=research_input.watchlist,
+        )
+        compiled = {g.name: g.compiled for g in compile_result.graphs}
+        payload = {
+            **summary,
+            "dry_run": True,
+            "compiled": compiled,
+            "idempotency_key": compile_result.idempotency_key,
+        }
+        if any(g.error for g in compile_result.graphs):
+            payload["compile_error"] = next(g.error for g in compile_result.graphs if g.error)
+        json.dump(payload, sys.stdout, default=str)
         sys.stdout.write("\n")
         return 0
 

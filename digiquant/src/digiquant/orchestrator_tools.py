@@ -146,7 +146,6 @@ def build_digiquant_pipeline_delegate_tool() -> dict[str, Any]:
     }
 
 
-
 def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
     return {
         "type": "function",
@@ -161,7 +160,7 @@ def build_digiquant_fetch_coinbase_ohlcv_tool() -> dict[str, Any]:
                 "properties": {
                     "symbols_json": {
                         "type": "string",
-                        "description": "JSON array of CCXT symbols, e.g. [\"BTC/USD\"]",
+                        "description": 'JSON array of CCXT symbols, e.g. ["BTC/USD"]',
                     },
                     "start": {"type": "string"},
                     "cache_dir": {"type": "string"},
@@ -387,6 +386,42 @@ def build_dashboard_get_policy_gate_evaluation_tool() -> dict[str, Any]:
     }
 
 
+def build_digiquant_compile_research_portfolio_tool() -> dict[str, Any]:
+    """Dry compile research + portfolio graphs for DigiGraph product graphs (#3415)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": "digiquant_compile_research_portfolio",
+            "description": (
+                "Compile digiquant research and portfolio LangGraph topologies without "
+                "LLM calls or book writes. Used by DigiGraph product graphs "
+                "(research-portfolio-chain) as the dry-run path (#3415)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "run_date": {
+                        "type": "string",
+                        "description": "ISO date (YYYY-MM-DD). Defaults to UTC today.",
+                    },
+                    "cadence": {"type": "string", "default": "daily"},
+                    "refresh_scope": {"type": "string", "default": "none"},
+                    "watchlist": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tickers for Phase 7C / portfolio width.",
+                    },
+                    "graph_name": {
+                        "type": "string",
+                        "default": "research-portfolio-chain",
+                        "description": "DigiGraph product graph name for idempotency key.",
+                    },
+                },
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     """Return the full digiquant orchestrator tool surface."""
     return [
@@ -401,6 +436,7 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_build_sdca_risk_index_tool(),
         build_digiquant_fetch_bitview_series_tool(),
         build_digiquant_fit_sdca_weights_tool(),
+        build_digiquant_compile_research_portfolio_tool(),
         build_dashboard_run_policy_replay_tool(),
         build_dashboard_get_policy_replay_tool(),
         build_dashboard_get_policy_comparison_tool(),
