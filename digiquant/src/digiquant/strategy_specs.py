@@ -9,6 +9,12 @@ import random
 from pathlib import Path
 from typing import Any
 
+from digiquant.strategy_aliases import (
+    PARAM_SPEC_NAMES,
+    STRATEGY_ALIASES,
+    resolve_param_spec_name,
+)
+
 logger = logging.getLogger(__name__)
 
 # Mtime cache for YAML spec file: (path_str, mtime, result).
@@ -61,15 +67,11 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
 # Hard cap on grid size to prevent accidental combinatorial explosion.
 MAX_GRID_SIZE = 10_000
 
-# Alias -> canonical strategy name (must match registry)
+# Backward-compat: old name meant "alias → STRATEGY_PARAM_SPECS key".
+# Prefer ``resolve_param_spec_name`` / ``digiquant.strategy_aliases``.
 _ALIAS_TO_CANONICAL: dict[str, str] = {
-    "ema": "ema_cross",
-    "s": "ema_cross",  # test shorthand
-    "mean_reversion_tech": "ema_cross",
-    "momentum_tech": "ema_cross",
-    "mean_reversion_stat_arb": "bollinger_mr",
-    "momentum_energy": "rsi_momentum",
-    "btc_sdca": "sdca",
+    **{alias: resolve_param_spec_name(alias) for alias in STRATEGY_ALIASES},
+    **{reg: spec for reg, spec in PARAM_SPEC_NAMES.items()},
 }
 
 # Param spec: (min, max, default, step_hint, type_str)
@@ -135,8 +137,8 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
 
 
 def _resolve_strategy_name(strategy_name: str) -> str:
-    """Resolve alias to canonical strategy name."""
-    return _ALIAS_TO_CANONICAL.get(strategy_name, strategy_name)
+    """Resolve alias to ``STRATEGY_PARAM_SPECS`` key (SDCA: ``btc_sdca`` → ``sdca``)."""
+    return resolve_param_spec_name(strategy_name)
 
 
 def get_param_specs(strategy_name: str) -> dict[str, tuple[float, float, Any, float | None, str]]:

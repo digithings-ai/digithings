@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from digiquant.strategy_aliases import (
+    STRATEGY_ALIASES,
+    aliases_for,
+)
+
 if TYPE_CHECKING:
     from nautilus_trader.trading.strategy import Strategy
 
@@ -21,7 +26,7 @@ class StrategySpec:
 
 
 _REGISTRY: dict[str, StrategySpec] = {}
-_ALIASES: dict[str, str] = {}  # alias -> canonical name
+_ALIASES: dict[str, str] = {}  # runtime aliases from register() — merged with STRATEGY_ALIASES
 
 
 def register(
@@ -33,7 +38,12 @@ def register(
     aliases: list[str] | None = None,
     description: str = "",
 ) -> None:
-    """Register a strategy with its config and default params."""
+    """Register a strategy with its config and default params.
+
+    Prefer declaring static aliases in ``digiquant.strategy_aliases.STRATEGY_ALIASES``
+    so optimize/export/CLI resolve without importing Nautilus. ``aliases=`` still
+    registers runtime aliases for ``list_strategies`` and late-bound names.
+    """
     _REGISTRY[name] = StrategySpec(
         strategy_cls=strategy_cls,
         config_cls=config_cls,
@@ -44,9 +54,16 @@ def register(
         _ALIASES[alias] = name
 
 
+def resolve_strategy_name(strategy_name: str) -> str:
+    """Resolve alias → registry canonical (static map + runtime ``register`` aliases)."""
+    if strategy_name in STRATEGY_ALIASES:
+        return STRATEGY_ALIASES[strategy_name]
+    return _ALIASES.get(strategy_name, strategy_name)
+
+
 def _resolve_name(strategy_name: str) -> str:
     """Resolve alias or unknown name to canonical registry key."""
-    return _ALIASES.get(strategy_name, strategy_name)
+    return resolve_strategy_name(strategy_name)
 
 
 def _config_fields(config_cls: type) -> frozenset[str]:
@@ -109,7 +126,9 @@ def list_strategies() -> list[dict[str, Any]]:
         if name in seen:
             continue
         seen.add(name)
-        aliases = [a for a, c in _ALIASES.items() if c == name]
+        static = aliases_for(name)
+        runtime = [a for a, c in _ALIASES.items() if c == name and a not in static]
+        aliases = sorted({*static, *runtime})
         result.append(
             {
                 "name": name,
@@ -119,3 +138,13 @@ def list_strategies() -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+__all__ = [
+    "StrategySpec",
+    "config_declares_field",
+    "get_strategy",
+    "list_strategies",
+    "register",
+    "resolve_strategy_name",
+]
