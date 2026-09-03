@@ -685,10 +685,11 @@ Track only **exchange-traded funds (ETFs)**:
 
 ## ADR-016: Three-Tier LLM Provider Routing
 
-**Status**: Superseded (Jun 2026) — routing moved to OpenRouter capability pools in
+**Status**: Superseded (Jun 2026) — routing moved to digiquant capability pools in
 `config/digiquant_models.yaml` × `OLYMPUS_MODEL_TIER` after the Gemini free tier's per-minute
-caps broke the daily workflows (#569/#570/#572). See
-[ARCHITECTURE.md "LLM Routing — OpenRouter capability tiers"](agentic/ARCHITECTURE.md#llm-routing--openrouter-capability-tiers)
+caps broke the daily workflows (#569/#570/#572); house traffic is caller → digillm → LiteLLM
+as of #3413/#3414 (tiers are digiquant model categories, not a vendor preference). See
+[ARCHITECTURE.md "LLM Routing — digiquant capability tiers"](agentic/ARCHITECTURE.md#llm-routing--digiquant-capability-tiers)
 and [RUNBOOK.md "OpenRouter model tiers"](RUNBOOK.md#openrouter-model-tiers-configdashboard_modelsyaml).
 The table below is the historical 2026-04 design.  
 **Date**: 2026-04

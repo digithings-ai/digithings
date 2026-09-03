@@ -41,7 +41,7 @@ def compile_cmd(
     model: str | None = typer.Option(
         None,
         "--model",
-        help="Model string for --llm synthesis (default: DIGISKILLS_SYNTHESIS_MODEL env or openrouter/auto)",
+        help="Model string for --llm synthesis (default: DIGISKILLS_SYNTHESIS_MODEL env or openai/gpt-oss-20b:free)",
     ),
     zip_output: bool = typer.Option(False, "--zip", help="Also write a <out>/<name>.zip archive"),
     max_files: int | None = typer.Option(
