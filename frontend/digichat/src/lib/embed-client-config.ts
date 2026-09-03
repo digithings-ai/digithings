@@ -34,6 +34,8 @@ export type EmbedTenantClientConfig = {
   layout?: "page" | "embed";
   llmAccess?: EmbedLlmAccess;
   showLanguageSelector?: boolean;
+  /** Tenant allows opt-in web search UI (#3420). Default false. */
+  webSearch?: boolean;
   /**
    * Discriminator only — never project Foundry endpoints / digigraph URLs.
    * DigiChatSession uses this to enable regenerate/edit when the BFF turn
@@ -53,6 +55,7 @@ export const DEFAULT_EMBED_TENANT_CONFIG: EmbedTenantClientConfig = {
   showByok: false,
   layout: "embed",
   showLanguageSelector: false,
+  webSearch: false,
 };
 
 /** Registry entry → client-safe config. Copies declared fields only; `token`
@@ -78,6 +81,8 @@ export function toEmbedClientConfig(cfg: EmbedTenantConfig): EmbedTenantClientCo
     // showByok, by product decision (#2103). DEFAULT_EMBED_TENANT_CONFIG
     // above (the unresolved/gated fallback) stays false.
     showLanguageSelector: cfg.showLanguageSelector ?? true,
+    // Default OFF — corpus-only until tenant + user both opt in (#3420).
+    webSearch: cfg.webSearch === true,
     backendType: cfg.backend.type,
   };
 }

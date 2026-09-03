@@ -41,6 +41,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
+| Opt-in web search (tenant + user; External cites; default off) | Built |
 | Auto-migration on container boot (`DIGICHAT_AUTO_MIGRATE=1`) | Built |
 | Docker Compose profile (`digichat` + `digichat-db`) | Built |
 | OpenClaw gateway integration | Not yet (Phase 2) |
