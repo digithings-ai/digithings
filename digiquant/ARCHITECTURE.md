@@ -911,6 +911,13 @@ The `_normalize_symbols()` helper in `server.py` normalizes symbols in `v1_orche
 
 OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. digiquant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
 
+### Dashboard digichat popup (#3422)
+
+The operator UI at `/dashboard/` (`frontend/dashboard`) mounts a Desk+ digichat
+popup that iframes digichat `/embed` (digigraph backend → digillm). Grounding,
+web search, and model tiers are digichat tenant config (`DIGICHAT_EMBED_TENANTS`
+for `digiquant.io`), not digiquant HTTP. Plan gate: `glassbox_economics` (Desk+).
+
 ### digiclaw Heartbeat and ADDM Drift Detection
 
 The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from digiclaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
