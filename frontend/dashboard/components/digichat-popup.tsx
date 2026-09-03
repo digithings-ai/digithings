@@ -132,7 +132,7 @@ export default function DigichatPopup({
         className={[
           'pointer-events-auto fixed right-5 bottom-[5.5rem] z-[2147483000]',
           'h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-          'overflow-hidden rounded-2xl bg-surface shadow-lg',
+          'overflow-hidden bg-surface shadow-lg',
           open ? 'block' : 'hidden',
         ].join(' ')}
       >
