@@ -12,6 +12,7 @@ byte-for-byte. Probe-only (``--check`` / ``--dry-run``); never ``--execute``.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -24,12 +25,24 @@ WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 SPEC = REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "kairos-cron-check.workflow.yml"
 INSTALLED = WORKFLOW_DIR / "execution-cron-check.yml"
 HOUSE = WORKFLOW_DIR / "pipeline-digiquant.yml"
+JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
 MAILGUN_FRAGMENT = (
     REPO_ROOT / "docs" / "agent-backlog" / "kairos-tenancy" / "pipeline-olympus-mailgun.env.yml"
 )
 MAILGUN_KEYS = ("MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM")
 
 FORBIDDEN_APPLY = ("--execute", "--all", "portfolio.chain")
+
+
+def _worker_jobs() -> dict[str, str]:
+    pairs = re.findall(
+        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        JOBS_SOURCE.read_text(encoding="utf-8"),
+        flags=re.DOTALL,
+    )
+    jobs = dict(pairs)
+    assert pairs and len(jobs) == len(pairs), "Worker job IDs must be unique literals"
+    return jobs
 
 
 def _triggers(doc: dict[str | bool, object]) -> dict[str, object]:
@@ -63,13 +76,19 @@ class TestExecutionCronSpecIsProbeOnly:
     def test_spec_file_exists(self) -> None:
         assert SPEC.is_file()
 
-    def test_schedule_is_offset_from_house(self) -> None:
+    def test_worker_schedule_is_offset_from_house(self) -> None:
         doc = yaml.safe_load(SPEC.read_text(encoding="utf-8"))
-        crons = [entry["cron"] for entry in _triggers(doc)["schedule"]]
+        assert _triggers(doc) == {"workflow_dispatch": None}
+        jobs = _worker_jobs()
+        crons = [jobs["execution-cron-check"]]
         assert crons == ["15 12 * * *"]
-        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
-        house_crons = [entry["cron"] for entry in _triggers(house)["schedule"]]
-        assert house_crons == ["17 9 * * *", "17 10 * * *", "17 11 * * *", "17 12 * * *"]
+        house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
+        assert house_crons == [
+            "17 9 * * 1-5",
+            "17 10 * * 1-5",
+            "17 11 * * 1-5",
+            "17 12 * * 1-5",
+        ]
         assert "0 12 * * *" not in house_crons
         assert "0 12 * * *" not in crons
         for cron in house_crons:
@@ -128,9 +147,14 @@ class TestHouseScheduleRetriesOffPeak:
     """Same anti-congestion pattern as FX Hub (`17 */2` in pipeline-digiquant-prices)."""
 
     def test_house_crons_avoid_top_of_hour_and_retry_before_ny_open(self) -> None:
-        house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
-        crons = [entry["cron"] for entry in _triggers(house)["schedule"]]
-        assert crons == ["17 9 * * *", "17 10 * * *", "17 11 * * *", "17 12 * * *"]
+        jobs = _worker_jobs()
+        crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
+        assert crons == [
+            "17 9 * * 1-5",
+            "17 10 * * 1-5",
+            "17 11 * * 1-5",
+            "17 12 * * 1-5",
+        ]
         for cron in crons:
             minute, _hour, *_rest = cron.split()
             assert minute != "0", cron

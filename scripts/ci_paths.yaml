@@ -104,6 +104,9 @@ dashboard:
 web:
   - frontend/digithings-web/**
   - frontend/digiquant-web/**
+  # Org-wide Cloudflare cron Worker. This lane owns its Vitest + typecheck
+  # because it already installs the root npm workspaces.
+  - frontend/digithings-cron/**
   # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
   # session.css + cursor.css, so a change there is a change to this app.
   - frontend/digichat-ui/**
@@ -240,6 +243,9 @@ ruff_and_scripts:
   - agents/**
   - .github/workflows/ci.yml
   - scripts/ci_paths.yaml
+  # Python schedule invariants parse the Worker's typed job map and wrangler
+  # triggers after #3579 moved production clocks out of workflow `schedule:`.
+  - frontend/digithings-cron/**
   # This job's "Validate model routing (config only)" step runs
   # scripts/validate_model_routing.py --routing against the REAL
   # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
