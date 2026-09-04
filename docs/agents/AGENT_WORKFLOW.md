@@ -21,13 +21,20 @@ Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS
 
 ## 2. Test commands
 
+Prefer `agents.yml` `components[].test_cmd` (kept in sync with
+`.github/workflows/test-<component>.yml` — #1182). Quick reference:
+
 | Component | Command |
 |-----------|---------|
-| digigraph | `pytest -m unit -k digigraph -v` |
-| digiquant | `pytest -m unit -k digiquant -v` |
-| digisearch | `pytest -m unit -k digisearch -v` |
-| digismith / digiclaw / digibase / digikey | `pytest -m unit -k {component} -v` |
-| digichat | `cd frontend/digichat && npm run lint && npm run test` |
+| digigraph | `pytest tests/dg/ tests/contracts/ -m unit -v --tb=short` |
+| digiquant | `pytest tests/dq/ -m unit -v --tb=short` |
+| digisearch | `pytest tests/ds/ -m unit -v --tb=short` |
+| digismith | `pytest tests/dsm/ -m unit -v --tb=short` |
+| digiclaw | `pytest tests/dc/ -m unit -v --tb=short` |
+| digibase | `pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short` |
+| digikey | `pytest tests/dk/ -m unit -v --tb=short` |
+| digiskills | `pytest tests/dsk/ -m unit -v --tb=short` |
+| digichat | `npm run test --workspace digichat` |
 | All | `make test-unit` |
 
 Run `ruff check . && ruff format --check .` after all Python changes.

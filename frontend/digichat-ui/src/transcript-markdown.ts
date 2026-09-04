@@ -67,15 +67,15 @@ function formatSources(sources?: readonly TranscriptSource[]): string {
 }
 
 /** Iframe-safe download — always available when `document` exists. */
-export function downloadMarkdown(filename: string, text: string): void {
+export function downloadTextFile(filename: string, text: string, mime: string): void {
   if (typeof document === "undefined") {
-    throw new Error("downloadMarkdown requires a document");
+    throw new Error("downloadTextFile requires a document");
   }
-  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename.endsWith(".md") ? filename : `${filename}.md`;
+  a.download = filename;
   a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
@@ -86,6 +86,26 @@ export function downloadMarkdown(filename: string, text: string): void {
     return 0;
   });
   later(() => URL.revokeObjectURL(url), 2_000);
+}
+
+export function downloadMarkdown(filename: string, text: string): void {
+  downloadTextFile(
+    filename.endsWith(".md") ? filename : `${filename}.md`,
+    text,
+    "text/markdown;charset=utf-8",
+  );
+}
+
+/** Plain-text export — same serializer output with fence delimiters stripped. */
+export function downloadPlainText(filename: string, markdown: string): void {
+  const name = filename.endsWith(".txt") ? filename : `${filename}.txt`;
+  downloadTextFile(name, markdownToPlainText(markdown), "text/plain;charset=utf-8");
+}
+
+/** Minimal HTML export — pre-wrapped markdown, no renderer dependency. */
+export function downloadHtml(filename: string, markdown: string, title = "digichat transcript"): void {
+  const name = filename.endsWith(".html") ? filename : `${filename}.html`;
+  downloadTextFile(name, markdownToHtmlDocument(markdown, title), "text/html;charset=utf-8");
 }
 
 function tryParentCopyPostMessage(text: string): boolean {
@@ -170,4 +190,203 @@ export async function copyMarkdownWithFallback(
 
   showSelectableTextareaFallback(text);
   return "textarea";
+}
+
+/* ---------------------------------------------------------------------------
+ * Print + mailto + txt/html export (#3510). Reuses the #3465 serializers —
+ * no vault bodies, tool JSON, or BYOK payloads ever enter these strings.
+ * ------------------------------------------------------------------------- */
+
+/** Safe `mailto:` body budget after `encodeURIComponent` (spec: ~1500–2000). */
+export const MAILTO_MAX_ENCODED_LEN = 1800;
+
+/** Appended when the mailto body is cut to fit the URL budget. */
+export const MAILTO_TRUNCATION_NOTE = "…(truncated — download .md for full thread)";
+
+export type TruncateForMailtoResult = { text: string; truncated: boolean };
+
+/**
+ * Cut `body` so `encodeURIComponent(text)` fits `maxEncoded` chars.
+ * Binary-searches the longest fitting prefix, then appends the truncation
+ * note. Pure — covered by vitest.
+ */
+export function truncateForMailto(
+  body: string,
+  maxEncoded: number = MAILTO_MAX_ENCODED_LEN,
+): TruncateForMailtoResult {
+  if (encodeURIComponent(body).length <= maxEncoded) {
+    return { text: body, truncated: false };
+  }
+  const note = `\n\n${MAILTO_TRUNCATION_NOTE}`;
+  if (encodeURIComponent(note).length >= maxEncoded) {
+    let cut = note;
+    while (cut.length > 1 && encodeURIComponent(`${cut}…`).length >= maxEncoded) {
+      cut = cut.slice(0, -1);
+    }
+    return { text: cut, truncated: true };
+  }
+  let lo = 0;
+  let hi = body.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const candidate = body.slice(0, mid).trimEnd() + note;
+    if (encodeURIComponent(candidate).length <= maxEncoded) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return { text: `${body.slice(0, lo).trimEnd()}${note}`, truncated: true };
+}
+
+/** `mailto:` URL with a short subject and a truncation-safe body. No network. */
+export function buildMailtoUrl(
+  subject: string,
+  body: string,
+  opts?: { maxEncoded?: number },
+): string {
+  const { text } = truncateForMailto(body, opts?.maxEncoded ?? MAILTO_MAX_ENCODED_LEN);
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+}
+
+/** Last-assistant mailto — mirrors the per-turn copy payload. */
+export function buildAnswerMailto(markdown: string, opts?: { maxEncoded?: number }): string {
+  return buildMailtoUrl("digichat answer", markdown, opts);
+}
+
+/** Full-thread mailto — mirrors the thread `.md` download payload. */
+export function buildThreadMailto(markdown: string, opts?: { maxEncoded?: number }): string {
+  return buildMailtoUrl("digichat transcript", markdown, opts);
+}
+
+export type MailtoOpenResult = "mailto" | "download";
+
+export type ExportFallbackOpts = {
+  fallbackMarkdown?: string;
+  fallbackFilename?: string;
+  /**
+   * When true (embed / sandboxed iframe), skip mailto/print and download
+   * immediately. Sandboxed embeds often expose `print` and allow `a.click()`
+   * without throwing, so a try/catch-only fallback would silently no-op.
+   */
+  preferDownload?: boolean;
+};
+
+/**
+ * Open a `mailto:` URL; on blocked navigation fall back to a `.md` download
+ * (same spirit as the #3465 clipboard fallback). Never throws when `document`
+ * exists — worst case the caller gets `"download"`.
+ */
+export function openMailtoWithFallback(
+  mailtoUrl: string,
+  opts?: ExportFallbackOpts,
+): MailtoOpenResult {
+  const fallback = () => {
+    if (opts?.fallbackMarkdown !== undefined && typeof document !== "undefined") {
+      try {
+        downloadMarkdown(opts.fallbackFilename ?? "digichat-thread.md", opts.fallbackMarkdown);
+      } catch {
+        /* download also blocked — caller already has the markdown */
+      }
+    }
+  };
+  if (!mailtoUrl.startsWith("mailto:")) {
+    fallback();
+    return "download";
+  }
+  if (opts?.preferDownload || typeof document === "undefined") {
+    fallback();
+    return "download";
+  }
+  try {
+    const a = document.createElement("a");
+    a.href = mailtoUrl;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return "mailto";
+  } catch {
+    fallback();
+    return "download";
+  }
+}
+
+export type PrintTranscriptResult = "print" | "download";
+
+/**
+ * `window.print()` for the transcript; when print is unavailable/blocked
+ * (no window, embed sandbox), fall back to a `.md` download so the action
+ * is never a silent no-op.
+ */
+export function printTranscriptWithFallback(
+  opts?: ExportFallbackOpts,
+): PrintTranscriptResult {
+  const fallback = () => {
+    if (opts?.fallbackMarkdown !== undefined && typeof document !== "undefined") {
+      try {
+        downloadMarkdown(opts.fallbackFilename ?? "digichat-thread.md", opts.fallbackMarkdown);
+      } catch {
+        /* ignore — print already failed */
+      }
+    }
+  };
+  if (opts?.preferDownload) {
+    fallback();
+    return "download";
+  }
+  if (typeof window !== "undefined" && typeof window.print === "function") {
+    try {
+      window.print();
+      return "print";
+    } catch {
+      fallback();
+      return "download";
+    }
+  }
+  fallback();
+  return "download";
+}
+
+/**
+ * Lightweight markdown → plain text for `.txt` export. Strips fence
+ * delimiter lines only; prose (including code content) is kept as-is.
+ */
+export function markdownToPlainText(markdown: string): string {
+  return markdown
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("```"))
+    .join("\n")
+    .trim();
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Minimal HTML document for `.html` export — the markdown pre-wrapped in
+ * `<pre>`. Deliberately no GFM renderer dependency.
+ */
+export function markdownToHtmlDocument(markdown: string, title = "digichat transcript"): string {
+  const safeTitle = escapeHtml(title);
+  const safeBody = escapeHtml(markdown);
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    `<title>${safeTitle}</title>`,
+    "</head>",
+    "<body>",
+    `<h1>${safeTitle}</h1>`,
+    `<pre>${safeBody}</pre>`,
+    "</body>",
+    "</html>",
+    "",
+  ].join("\n");
 }

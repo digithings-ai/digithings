@@ -704,3 +704,52 @@
   width: 100%;
   border: 0;
 }
+
+/* ---------------------------------------------------------------------------
+ * Print transcript (#3510). Hide interactive chrome — composer, slash rows,
+ * stop/copy/regen toolbars, BYOK banners, searching chain — and keep turn
+ * text + optional Sources cards. Browser Save as PDF is the PDF path.
+ * ------------------------------------------------------------------------- */
+@media print {
+  .dc-form,
+  .dc-slash,
+  .dc-slash-note,
+  .dc-msg-actions,
+  .dc-msg-copy,
+  .dc-code-copy,
+  .dc-stop,
+  .dc-send,
+  .dc-suggest,
+  .dc-quota-banner,
+  .dc-byok-flow,
+  .dc-intro-byok,
+  .dc-activities,
+  .dc-doc-pane,
+  .dc-msg[aria-busy="true"],
+  .dt-cur {
+    display: none !important;
+  }
+  .dc-page,
+  .dc-session {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-width: none;
+  }
+  .dc-session-main {
+    display: block;
+  }
+  .dc-thread {
+    overflow: visible;
+    display: block;
+  }
+  .dc-msg {
+    break-inside: avoid;
+  }
+  .dc-session,
+  .dc-body,
+  .dc-user .dc-body,
+  .dc-intro .dc-body {
+    color: #000;
+  }
+}
