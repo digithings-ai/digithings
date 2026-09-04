@@ -6,19 +6,23 @@ enabled series becomes a causal rolling z-score (liquidity-positive = +z), then:
 
 1. **Continuous blend** — weight-normalized ``composite_z`` ∈ [-3, 3] maps to
    ``regime_score`` ∈ [0, 100] (100 = max expansion / risk-on).
-2. **Equal-weight vote** — same latch-free 0/1 state pattern as
-   ``M2SignalComputer`` (z > 0 → bull vote), averaged into ``avg_vote``.
+2. **Equal-weight vote** — per-day 0/1 state from ``z > 0`` (latch-free; unlike
+   ``M2SignalComputer``'s crossover latch), averaged into ``avg_vote``.
+   ``avg_vote`` ignores ``MacroSeriesSpec.weight``; weighted consumers should
+   read ``regime_score`` / ``composite_z``.
 3. **Discrete state** — ``expansion`` / ``neutral`` / ``contraction`` from
    score thresholds; ``risk_on`` is true only in expansion (gate open).
 
 Series are expected as ``{name: DataFrame[date, value]}`` already sourced from
 the macro pipeline (``macro_series_observations`` / FRED via
 ``digiquant prices fetch-macro``). This module never fetches and never holds
-secrets.
+secrets. Default YoY specs need roughly ``roc_days + min_samples`` calendar
+days (~395) before ``regime_score`` is non-null.
 
 The gate backtest (``backtest_regime_gate``) is a CI-only long-vs-cash harness
 for documenting whether the gate helps vs always-invested — **not** a
-published ``BacktestResult`` and not a Nautilus path.
+published ``BacktestResult`` and not a Nautilus path (same CI-parity exception
+as ``strategies/sdca/backtest.py``).
 """
 
 from __future__ import annotations
@@ -171,9 +175,9 @@ def align_to_dates(
 def _apply_transform(aligned: pl.Series, spec: MacroSeriesSpec) -> pl.Series:
     if spec.transform == "level":
         return aligned
-    if spec.transform == "yoy":
-        return aligned / aligned.shift(spec.roc_days) - 1.0
-    if spec.transform == "roc":
+    # ``yoy`` and ``roc`` both mean percent change over ``roc_days`` (default 365).
+    # Kept as separate tokens so callers can label intent; semantics are identical.
+    if spec.transform in ("yoy", "roc"):
         return aligned / aligned.shift(spec.roc_days) - 1.0
     raise ValueError(f"unknown transform: {spec.transform}")
 

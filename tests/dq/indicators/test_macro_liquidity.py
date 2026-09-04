@@ -157,6 +157,21 @@ class TestMacroLiquidityModel:
         )
         assert risk in (None, True, False)
 
+    def test_null_z_nulls_composite_no_partial_blend(self) -> None:
+        dates, series = _synthetic_bundle(450)
+        # Truncate DXY so early calendar has forward-filled nulls only after join
+        # start — drop the first half of DXY observations entirely.
+        dxy = series["dxy"].sort("date")
+        series["dxy"] = dxy.slice(len(dxy) // 2)
+        out = MacroLiquidityModel().compute(dates, series)
+        # Days before DXY appears must be null on composite (no partial blend).
+        first_dxy = series["dxy"]["date"][0]
+        early = out.filter(pl.col("date") < first_dxy)
+        assert early["dxy_z"].null_count() == len(early)
+        assert early["regime_score"].null_count() == len(early)
+        # After all series are warm, at least some scores materialize.
+        assert out["regime_score"].drop_nulls().len() > 0
+
     def test_config_rejects_inverted_thresholds(self) -> None:
         with pytest.raises(ValidationError):
             MacroLiquidityConfig(expansion_threshold=40.0, contraction_threshold=60.0)
