@@ -85,6 +85,15 @@ class ChatCompletionRequest(BaseModel):
             "docs/digivault. Injected — the model is not asked to write the query."
         ),
     )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in public web search via the digigraph ``web_search`` tool (digillm). "
+            "Default off — corpus-only. Also accepted via X-Digi-Enable-Web-Search. "
+            "When off, the model must not call web; when on, External cites supplement "
+            "vault/search hits and never replace them (#3420)."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
@@ -193,6 +202,13 @@ class WorkflowRequest(BaseModel):
             "Optional per-request locate tool to run with the user string as its query "
             "(X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. The model "
             "is not hinted — the call is injected, then it synthesizes."
+        ),
+    )
+    enable_web_search: bool = Field(
+        False,
+        description=(
+            "Opt-in digigraph ``web_search`` tool (digillm). Default off. "
+            "Also via X-Digi-Enable-Web-Search (#3420)."
         ),
     )
 

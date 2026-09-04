@@ -41,6 +41,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
+| Opt-in web search (tenant + user; External cites; default off) | Built |
 | Auto-migration on container boot (`DIGICHAT_AUTO_MIGRATE=1`) | Built |
 | Docker Compose profile (`digichat` + `digichat-db`) | Built |
 | OpenClaw gateway integration | Not yet (Phase 2) |
@@ -59,7 +60,8 @@ thread state. On mount it merges `localStorage` threads with a server `GET
 /api/conversations` call, **hydrates the auto-selected remote thread** via
 `GET /api/conversations/[id]` before mounting the composer (when local cache is
 missing or older than the server summary `updatedAt`), then renders a shadcn
-Sidebar with conversation list, New chat button, rename/delete overflow menus, and
+Sidebar with conversation list, New chat button, title search filter, date
+buckets (Today / Yesterday / Last 7 days / Older), rename/delete overflow menus, and
 the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
 (`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
 refuses to flush a remote thread that is still `hydrated: false`, and the API
@@ -767,6 +769,16 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 `event.origin` against the digichat embed origin (`ChatEmbedShell`). Validators
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
+
+**postMessage page-context (popup widget #3421).** Hosts that load
+`public/widget.js` may post `{ type: "digichat:page-context", text, screenshotDataUrl?, ts }`
+after `digichat:ready`. Accepted only from the immediate parent browsing-context
+origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
+registered third-party site can describe **its own already-visible** DOM. Text is
+capped (`embed-page-context-messages.ts`); screenshot data URLs are optional and
+never inlined into the model prompt (acknowledgment only). The embed prepends
+formatted context to the next `wrappedSend` once. Config/URL helpers:
+`src/lib/embed-popup-config.ts`.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /

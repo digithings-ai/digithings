@@ -33,10 +33,12 @@ export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
   showByok: boolean;
   layout: "page" | "embed";
   showLanguageSelector: boolean;
+  webSearch: boolean;
 } {
   return {
     showByok: cfg.showByok === true,
     layout: cfg.layout === "page" ? "page" : "embed",
     showLanguageSelector: cfg.showLanguageSelector === true,
+    webSearch: cfg.webSearch === true,
   };
 }

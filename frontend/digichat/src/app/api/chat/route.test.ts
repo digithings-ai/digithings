@@ -353,6 +353,48 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-Digi-Force-Tool"]).toBe("digisearch");
   });
 
+  it("forwards X-Digi-Enable-Web-Search only when DIGICHAT_WEB_SEARCH=1 (#3420)", async () => {
+    process.env.DIGICHAT_WEB_SEARCH = "1";
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBe("1");
+  });
+
+  it("does not forward web search when env gate is off (#3420)", async () => {
+    delete process.env.DIGICHAT_WEB_SEARCH;
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-enable-web-search": "1",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "news" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Enable-Web-Search"]).toBeUndefined();
+  });
+
   it("ignores X-Digi-Force-Tool on regenerate (send-only)", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {

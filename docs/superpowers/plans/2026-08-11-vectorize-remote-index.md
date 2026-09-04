@@ -19,7 +19,7 @@
   - Auth header on every call: `Authorization: Bearer <token>`
 - **Vectorize limits:** max 1536 dimensions; metadata 10 KiB per vector; **max 10 metadata *indexes*, each indexing ≤64 bytes per vector**; topK ≤50 when returning metadata; HTTP batch upsert ≤5,000 vectors.
 - **Embeddings are MiniLM, 384 dimensions.** Upsert and query MUST use the same model — this is the invariant that makes the index usable at all.
-- **Two separate Vectorize indexes**, not namespaces: `digithings-docs` and `occ-help`.
+- **Two separate Vectorize indexes**, not namespaces: `digithings_docs` and `occ_help` (underscore form is canonical — verified live; see `docs/ops/vectorize-cutover.md`).
 - `digisearch/src/digisearch/core/models.py` types are **stdlib dataclasses, not pydantic**. `Chunk(id, content, doc_id, embedding, metadata)`; `Result(chunk, score, source_doc, rank)`.
 - `Chunk` is always constructed with all five fields as keywords including explicit `embedding=None`.
 - ruff: line-length 100, target py312. Everything under `tests/` must be ruff-clean.
@@ -367,11 +367,11 @@ def _chunk(i: int) -> Chunk:
 @pytest.mark.unit
 def test_add_posts_ndjson_multipart_to_upsert() -> None:
     post = _RecordingPost()
-    backend = VectorizeBackend("digithings-docs", account_id="acct", api_token="tok", http_post=post)
+    backend = VectorizeBackend("digithings_docs", account_id="acct", api_token="tok", http_post=post)
     backend.add([_chunk(0), _chunk(1)])
     assert len(post.calls) == 1
     url, headers, body, content_type = post.calls[0]
-    assert url.endswith("/accounts/acct/vectorize/v2/indexes/digithings-docs/upsert")
+    assert url.endswith("/accounts/acct/vectorize/v2/indexes/digithings_docs/upsert")
     assert headers["Authorization"] == "Bearer tok"
     assert content_type.startswith("multipart/form-data; boundary=")
     assert b'name="vectors"' in body
@@ -900,10 +900,10 @@ def test_vectorize_selected_when_configured(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(
         "digisearch.indexes.backends.vectorize.VectorizeBackend", _Stub, raising=True
     )
-    response = _stub._vectorize_backend(Query(text="hi", top_k=3, embedding=[0.0] * 384), "occ-help")
+    response = _stub._vectorize_backend(Query(text="hi", top_k=3, embedding=[0.0] * 384), "occ_help")
     assert response is not None
     assert response.backend == BACKEND_VECTORIZE
-    assert captured["name"] == "occ-help"
+    assert captured["name"] == "occ_help"
 
 
 @pytest.mark.unit
@@ -1126,7 +1126,7 @@ Apply::
 
     CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \\
     VECTORIZE_ACCOUNT_ID=… VECTORIZE_API_TOKEN=… \\
-      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings-docs
+      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs
 """
 
 from __future__ import annotations
@@ -1222,7 +1222,7 @@ def _segments_for(body: str) -> list[Segment]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--prefix", required=True, help="vault_path prefix, e.g. clients/digithings")
-    parser.add_argument("--index", required=True, help="Vectorize index name, e.g. digithings-docs")
+    parser.add_argument("--index", required=True, help="Vectorize index name, e.g. digithings_docs")
     parser.add_argument("--dry-run", action="store_true", help="Chunk and count; do not upsert.")
     args = parser.parse_args(argv)
 
@@ -1595,7 +1595,7 @@ Refs #2201"
 
 Deliberately **not** in this plan:
 
-1. **Creating the Vectorize indexes and running the first sync.** That is an operator step needing a Cloudflare API token: create `digithings-docs` and `occ-help` with **384 dimensions** and cosine metric, then run `scripts/vectorize_sync.py --dry-run` for each prefix before applying. The spec requires a manual live check (fixture index → upsert → query → verify segment metadata → delete) before production cutover.
+1. **Creating the Vectorize indexes and running the first sync.** That is an operator step needing a Cloudflare API token: create `digithings_docs` and `occ_help` with **384 dimensions** and cosine metric, then run `scripts/vectorize_sync.py --dry-run` for each prefix before applying. The spec requires a manual live check (fixture index → upsert → query → verify segment metadata → delete) before production cutover.
 2. **Deploying.** Production only picks this up after a `wrangler deploy` **and** the secrets being set. Note the image must be rebuilt — `docker compose up` reuses a baked image, which already caused one silently invalid live test.
 3. **Retiring the baked seed corpus.** `container/seed/` stays for local and offline use; this plan only stops production depending on it.
 4. **The digivault half.** Keyword search still reads Supabase and has its own three production blockers (missing `supabase` extra in the image, `entrypoint.sh` re-defaulting an empty `DIGIVAULT_ROOT`, and the same `envVars` whitelist gap). Task 1 here adds `list_notes` to `SupabaseStore` but does not address those.
