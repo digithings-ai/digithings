@@ -42,6 +42,8 @@
 @source "../../digiweb/web/src/components/finance-tearsheet";
 @source "../../digiweb/web/src/components/finance-composites";
 @source "../../digiweb/web/src/components/symbols";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../digiweb/web/src/components/contact";
 
 :root[data-theme] {
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;

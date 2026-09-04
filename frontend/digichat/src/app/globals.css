@@ -74,6 +74,8 @@
 @source "../../../digiweb/web/src/components/controls";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
 @source "../../../digiweb/web/src/components/terminal";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../../digiweb/web/src/components/contact";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -428,35 +430,6 @@
 }
 .dc-byok-star:hover {
   color: var(--accent);
-}
-
-.dc-byok-tier-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0 0 0.5rem;
-}
-.dc-byok-tier-tab {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 2px 10px;
-  border-radius: 0;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.dc-byok-tier-tab:hover {
-  color: var(--text-primary);
-}
-.dc-byok-tier-tab-active {
-  border-color: color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
-  background: color-mix(in srgb, var(--accent, var(--fg)) 12%, transparent);
-  color: var(--text-primary);
 }
 
 .dc-sources {

@@ -4,9 +4,10 @@ import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import {
   CONTACT_MANAGED_FEATURES,
   CONTACT_SELF_FEATURES,
-  MANAGED_CONTACT_MAILTO,
+  MANAGED_CONTACT_EMAIL,
+  MANAGED_CONTACT_SUBJECT,
 } from "../_contact";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
 import { CloneRepoButton } from "@/components/landing/CloneRepoButton";
@@ -70,7 +71,11 @@ export default function ContactPage() {
                   priceLine="contact us"
                   features={[...CONTACT_MANAGED_FEATURES]}
                   cta={
-                    <ContactMailto className="btn btn-primary" href={MANAGED_CONTACT_MAILTO}>
+                    <ContactMailto
+                      className="btn btn-primary"
+                      email={MANAGED_CONTACT_EMAIL}
+                      subject={MANAGED_CONTACT_SUBJECT}
+                    >
                       Email us <span aria-hidden="true">→</span>
                     </ContactMailto>
                   }
@@ -81,7 +86,11 @@ export default function ContactPage() {
             <Reveal>
               <p className="mx-auto mt-[2.4rem] max-w-[52ch] text-center text-[0.9rem] text-ink-mute">
                 Not sure which fits? Start self-managed — it&rsquo;s the full product — and{" "}
-                <ContactMailto className="text-accent" href={MANAGED_CONTACT_MAILTO}>
+                <ContactMailto
+                  className="text-accent"
+                  email={MANAGED_CONTACT_EMAIL}
+                  subject={MANAGED_CONTACT_SUBJECT}
+                >
                   get in touch
                 </ContactMailto>{" "}
                 if you later want it managed.

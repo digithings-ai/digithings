@@ -11,7 +11,8 @@ import {
   type OdometerStat,
   type StackItem,
 } from "@digithings/web";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
@@ -325,15 +326,15 @@ export default function Home() {
               on your own infrastructure.
             </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
-              <ContactMailto className="btn btn-primary" subject="digithings%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20inquiry">
                 Email us <span aria-hidden="true">→</span>
               </ContactMailto>
-              <ContactMailto className="btn btn-ghost" subject="digithings%20enterprise">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20enterprise">
                 Enterprise
               </ContactMailto>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto
+              <ContactMailto email={DT_CONTACT_EMAIL}
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
               >

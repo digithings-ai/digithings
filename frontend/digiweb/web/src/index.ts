@@ -224,6 +224,9 @@ export { Slider, sliderFill, type SliderProps } from "./components/controls/Slid
 // conviction family — dashboard F6 vocabulary, promoted verbatim
 export { ConvictionMeter, SignedConvictionBadge } from "./components/conviction";
 
+// contact family — Cloudflare-safe mailto link, promoted from the app forks
+export { ContactMailto, buildMailtoHref } from "./components/contact";
+
 // finance-charts family (#1450)
 export {
   PriceChart,

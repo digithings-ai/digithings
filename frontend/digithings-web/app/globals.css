@@ -52,6 +52,8 @@
 @source "../../digiweb/web/src/components/symbols";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
 @source "../../digiweb/web/src/components/terminal";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../digiweb/web/src/components/contact";
 
 /* Point the token font families at the self-hosted next/font variable.
    Utilitarian v0.1: mono is the default voice for claim, body, and chrome.

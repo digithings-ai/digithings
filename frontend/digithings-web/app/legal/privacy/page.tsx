@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { DtFooter } from "@/components/DtFooter";
 import { Mono, PageHead, RuledList, RuledRow } from "../../_company/prose";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -61,7 +62,7 @@ export default function PrivacyPage() {
                 <div>
                   <dt className="font-mono text-ink-mute">Contact</dt>
                   <dd className="mt-[0.2rem]">
-                    <ContactMailto
+                    <ContactMailto email={DT_CONTACT_EMAIL}
                       className="text-accent [text-underline-offset:2px] hover:text-ink"
                       subject="digithings%20privacy%20question"
                       showAddress
@@ -157,7 +158,7 @@ export default function PrivacyPage() {
                 <p>
                   To ask what data we hold about you, request deletion of data we control, or raise
                   another privacy question, email{" "}
-                  <ContactMailto
+                  <ContactMailto email={DT_CONTACT_EMAIL}
                     className="text-accent [text-underline-offset:2px] hover:text-ink"
                     subject="digithings%20privacy%20request"
                     showAddress

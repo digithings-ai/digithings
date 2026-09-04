@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Reveal } from "@digithings/web";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead, RuledList, RuledRow } from "../_company/prose";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -122,7 +123,7 @@ export default function ServicesPage() {
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <ContactMailto className="btn btn-primary" subject="digithings%20services%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20services%20inquiry">
                 Email about a project <span aria-hidden="true">→</span>
               </ContactMailto>
               <Link className="btn btn-ghost" href="/docs">
@@ -133,7 +134,7 @@ export default function ServicesPage() {
               </Link>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto
+              <ContactMailto email={DT_CONTACT_EMAIL}
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
               >
