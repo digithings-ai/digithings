@@ -17,7 +17,8 @@ from digivault.models import (
     ValidationIssue,
     VaultConfig,
 )
-from digivault.vault import Vault, VaultError
+from digivault.store import VaultStore
+from digivault.vault import FilesystemStore, Vault, VaultError
 from digivault.wikilinks import parse_links, rewrite_target
 
 __version__ = "0.1.0"
@@ -26,6 +27,8 @@ __all__ = [
     "Vault",
     "VaultError",
     "VaultConfig",
+    "VaultStore",
+    "FilesystemStore",
     "Note",
     "LinkRef",
     "LintReport",

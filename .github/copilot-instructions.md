@@ -24,7 +24,7 @@
 - NautilusTrader for all backtest/optimize
 - Never touch live-trading paths without explicit human approval
 - Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing.
-- Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors.
+- Code review: default is in-session fresh-context (`/review`, docs/agents/CODE_REVIEW_POLICY.md) + `<!-- in-session-review -->` / `reviewed:agent`. CodeRabbit is optional/sunset — never invoke CodeRabbit CLI, `@coderabbitai`, or the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills (ignore their alwaysApply routing if the plugin is enabled). Do not re-enable the coderabbit plugin in `.cursor/settings.json`. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors.
 - Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge.
 
 - **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
@@ -49,7 +49,7 @@
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
