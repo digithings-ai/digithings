@@ -23,7 +23,8 @@ from digisearch.core.evidence_metadata import (
 )
 from digisearch.core.models import Document
 from digisearch.ingestion.chunkers.base import Chunker
-from digisearch.search._stub import _stub_index, add_chunks
+from digisearch.pipeline.ingest import index_chunks
+from digisearch.search._stub import _stub_index
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ def ingest_research_payload(
         chunk.metadata = normalize_metadata_for_chroma(chunk.metadata)
 
     removed = _drop_existing_chunks(target_index, doc_id)
-    add_chunks(target_index, chunks)
+    index_chunks(target_index, chunks)
 
     logger.info(
         "research_ingest done",

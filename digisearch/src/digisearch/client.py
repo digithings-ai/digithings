@@ -78,14 +78,19 @@ class DigiSearch:
         return query_index(q, index_name=index_name).results
 
     def ingest(self, doc: Document, index_name: str = "default") -> int:
-        """Ingest document into index. Returns chunks created."""
+        """Index an already-chunked document. Returns chunks created.
+
+        Filesystem parse → chunk → embed lives in
+        :func:`digisearch.pipeline.ingest.ingest_source`. This method only
+        writes ``doc.chunks`` to a configured DigiIndex or the backend router.
+        """
         idx = self.get_index(index_name)
         if idx and doc.chunks:
             idx.add(doc.chunks)
             return len(doc.chunks)
-        from digisearch.search._stub import route_add_chunks
+        from digisearch.pipeline.ingest import index_chunks
 
-        route_add_chunks(index_name, doc.chunks)
+        index_chunks(index_name, doc.chunks)
         return len(doc.chunks)
 
     def as_mcp_server(self) -> object:

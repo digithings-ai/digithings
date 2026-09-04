@@ -119,6 +119,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Agent citations helper | Implemented | `agent/citations.py` |
 | Crossref discovery | Implemented | `discovery/crossref.py` |
 | Bulk ingest worker | **Placeholder** — logs and exits | `ingest_worker.py` |
+| Canonical filesystem ingest (`ingest_source` / `ingest_paths`) | Implemented | `pipeline/ingest.py` |
 | HTTP client helpers | Implemented | `http_client.py` |
 | EDGAR dev corpus exporter | Implemented (dev/test) | `dev/edgar_sample_export.py` |
 
@@ -183,9 +184,11 @@ Request:  IngestRequest { source: str, index_name: str, doc_type: str?, metadata
 Response: IngestResponse { doc_id, chunks_created, index_name, status }
 ```
 
-Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker` over the selected `ChunkerBackend`, default Chonkie Semantic; falls through to the inner backend when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
-
-Chunker selection (no code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`, or per-index YAML `chunker:` via `DigiSearchConfig`.
+Ingest pipeline: delegated to `digisearch.pipeline.ingest.ingest_source`
+(parse → sidecar YAML → merge metadata → chunk via `get_ingest_chunker` /
+`SegmentAwareChunker` → optional embed hook → `route_add_chunks`). Chunker
+selection (no code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`,
+or per-index YAML `chunker:` via `DigiSearchConfig`.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
 
@@ -243,7 +246,7 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 
 | Command | Description |
 |---------|-------------|
-| `digisearch ingest --index <name> <path>` | Ingest file or directory with optional YAML sidecar; uses stub backend |
+| `digisearch ingest --index <name> <path>` | Ingest file or directory via `pipeline.ingest.ingest_source` |
 | `digisearch ingest-batch --index <name> <dir>` | Batch-ingest all supported files under a directory |
 | `digisearch discover-crossref <doi>` | Fetch Crossref metadata and print YAML sidecar snippet |
 | `digisearch query --index <name> --text <q>` | Run search query and print ranked results |
@@ -252,11 +255,14 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
-**Note:** CLI ingest routes through `route_add_chunks` — Chroma when `CHROMA_PATH` /
-`CHROMA_HOST` is set (Profile A seed), otherwise the in-memory stub only when
-`DIGISEARCH_ALLOW_STUB=1`. Chunk metadata always inherits `Document.source` as
-`source` / `path` / `source_url` (plus a basename `title` when missing) via
-`merge_document_metadata_into_chunks` so citation UIs are not UUID-only.
+**Note:** CLI and HTTP ingest both call `digisearch.pipeline.ingest.ingest_source`
+(batch via `ingest_paths`). That path writes through `route_add_chunks` —
+Chroma when `CHROMA_PATH` / `CHROMA_HOST` is set (Profile A seed), otherwise the
+in-memory stub only when `DIGISEARCH_ALLOW_STUB=1`. Optional `embedding_provider`
+on the pipeline embeds chunks before the backend write. Chunk metadata always
+inherits `Document.source` as `source` / `path` / `source_url` (plus a basename
+`title` when missing) via `merge_document_metadata_into_chunks` so citation UIs
+are not UUID-only.
 
 ---
 
@@ -410,7 +416,9 @@ digisearch/src/digisearch/
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
-├── cli.py                     # Typer CLI (digisearch)
+├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
+├── pipeline/
+│   └── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
 ├── client.py                  # digisearch Python client
