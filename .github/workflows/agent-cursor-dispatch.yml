@@ -49,7 +49,9 @@ jobs:
           tiers = routing.get('tiers', {})
           names = [l['name'] for l in json.load(sys.stdin)]
           comp = next((n for n in names if n.startswith('component:')), None)
-          print(tiers.get(comp, tiers.get('default', 'cursor')))
+          # Fail closed: unknown tier (corrupt routing config) routes AWAY from
+          # cloud auto-execution. Normal components fall through to default cursor.
+          print(tiers.get(comp, tiers.get('default', 'claude')))
           ")
           echo "tier=$TIER" >> "$GITHUB_OUTPUT"
           if [[ "$TIER" != "cursor" ]]; then
@@ -70,6 +72,17 @@ jobs:
             --json number --jq 'length')
           if [[ "${OPEN_PR:-0}" != "0" ]]; then
             echo "Issue already has an open linked PR — skipping @cursor to avoid a duplicate session."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # In-session review #3535: bouncing agent-task (manual, replay, or the
+          # quota-reset backstop) before a PR exists would post a 2nd @cursor and
+          # start a duplicate Cloud session racing on the same branch. Suppress
+          # re-mentions within 24h; replay remains the path for older stuck issues.
+          LAST_MENTION=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("@cursor")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_MENTION" ]] && [[ "$LAST_MENTION" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "An @cursor mention was already posted within 24h ($LAST_MENTION) — skipping duplicate."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
 

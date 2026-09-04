@@ -1768,7 +1768,15 @@ def create_issue(issue: dict, dry_run: bool = False) -> str | None:
         "pipeline:",
         "phase:",
     )
-    retired_exact = {"enhancement", "exec:copilot"}
+    retired_exact = {
+        "enhancement",
+        "exec:copilot",
+        "needs-human",
+        "needs-human-review",
+        "maintenance",
+        "housekeeping",
+        "agentic-workflows",
+    }
     labels_extra = [
         lbl
         for lbl in labels_extra

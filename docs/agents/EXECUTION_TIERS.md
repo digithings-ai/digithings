@@ -26,8 +26,9 @@ kept the bare minimum: `component:*`, `priority:*`, `reviewed:*`,
 
 The tier distinction survives, minus the labels:
 
-- **cursor** (default, every component except digikey): the issue auto-executes
-  via Cursor Automation. Judgment that used to be expressed per-issue with
+- **cursor** (default, every component except digikey): the issue gets an
+  `@cursor` mention via `agent-cursor-dispatch.yml`, which starts a Cloud Agent
+  session. Judgment that used to be expressed per-issue with
   `risk:high` is now expressed in planning (priority, spec quality) and
   enforced at merge (review coverage + path-based safety gate).
 - **claude** (`component:digikey` only): auth/crypto needs supervised hands.

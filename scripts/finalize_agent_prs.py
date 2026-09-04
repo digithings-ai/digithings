@@ -99,15 +99,19 @@ def _issue_labels(repo: str, issue_number: int) -> list[str]:
 
 
 def _issue_tier(repo: str, issue_number: int) -> str:
-    """Dispatch tier for the linked issue's component (tiers in project_routing.json)."""
+    """Dispatch tier for the linked issue's component (tiers in project_routing.json).
+
+    Fail CLOSED: unreadable config routes to claude-tier (supervised), never to
+    auto-execution.
+    """
     try:
         routing = json.loads((REPO_ROOT / "scripts" / "project_routing.json").read_text())
     except (OSError, json.JSONDecodeError):
-        return "cursor"
+        return "claude"
     tiers = routing.get("tiers", {})
     names = _issue_labels(repo, issue_number)
     comp = next((n for n in names if n.startswith("component:")), None)
-    return tiers.get(comp, tiers.get("default", "cursor"))
+    return tiers.get(comp, tiers.get("default", "claude"))
 
 
 def _linked_issue(body: str, title: str) -> int | None:

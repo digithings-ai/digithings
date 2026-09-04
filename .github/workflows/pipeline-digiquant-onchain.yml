@@ -54,16 +54,17 @@ jobs:
             const stamp    = new Date().toISOString().slice(0, 16);
             const title    = 'digiquant-onchain Bitview — recurring failures';
             // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
-            // dedup is by exact title + marker; agent-task keeps dispatch firing.
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
             const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
             const marker   = '<!-- digiquant-onchain-bitview-tracker -->';
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner, repo: context.repo.repo,
               state: 'open', per_page: 100,
             });
-            const tracker = existing.find(i => i.title === title && (i.body || '').includes(marker));
+            const tracker = existing.find(i => (i.body || '').includes(marker));
 
             if (tracker) {
               const MAX_LINES = 20;

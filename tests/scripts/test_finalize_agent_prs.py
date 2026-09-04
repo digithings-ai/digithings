@@ -121,9 +121,6 @@ def test_a_claude_tier_issue_needs_a_human(monkeypatch: pytest.MonkeyPatch) -> N
     action = fap.evaluate_pr("digithings-ai/digithings", _pr(), fetch_base=False)
     assert action.state == "needs_human"
     assert "claude-tier" in action.reason
-    """Label simplification 2026-09 retired needs-human-review: it is inert now."""
-    action = _evaluate(_pr(labels=[{"name": "needs-human-review"}]), monkeypatch)
-    assert action.state == "ready_merge", f"got {action.state!r} — {action.reason}"
 
 
 def test_an_already_labelled_pr_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:

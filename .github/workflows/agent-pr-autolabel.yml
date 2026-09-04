@@ -70,8 +70,10 @@ jobs:
             exit 0
           fi
           # Label simplification 2026-09: no label-based human gate remains.
-          # Merge-time safety is path-based (scripts/verify_agent_automerge_pr.py
-          # deny-list: digikey/, brokers/, live-trading, workflows), enforced below.
+          # Merge-time safety is path-based: verify_agent_automerge_pr.py runs in
+          # agent-pr-automerge.yml before auto-merge is enabled (deny-list covers
+          # digikey/, brokers/, live-trading, workflows). Autolabel itself only
+          # marks CI-green agent PRs as candidates.
           HEAD_BRANCH=$(echo "$PR" | jq -r '.headRefName')
           HEAD_SHA=$(echo "$PR" | jq -r '.headRefOid')
           if ! python3 scripts/agent_pr_checks.py "$REPO" "$NUM" "$HEAD_BRANCH" "$HEAD_SHA"; then

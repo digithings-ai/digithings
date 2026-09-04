@@ -83,7 +83,9 @@ jobs:
           for i in json.load(sys.stdin):
               names = [l['name'] for l in i.get('labels', [])]
               comp = next((n for n in names if n.startswith('component:')), None)
-              if tiers.get(comp, tiers.get('default', 'cursor')) == want:
+              # Fail closed like the dispatch workflows: unknown tier never joins
+              # the cursor list.
+              if tiers.get(comp, tiers.get('default', 'claude')) == want:
                   out.append(i)
           print(json.dumps(out))
           "

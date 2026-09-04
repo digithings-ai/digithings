@@ -48,7 +48,9 @@ jobs:
     name: Append inferred row to project_fields.tsv
     # Paused: do not open bot/stub-tsv-* PRs unless repo var STUB_TSV_ENABLED=true.
     # Original: github.event.label.name == 'agent-task'
-    if: vars.STUB_TSV_ENABLED == 'true'
+    # [housekeeping-titled issues are exempt (label retired 2026-09) — same rule
+    # as stub-tsv-phase; maintenance trackers carry agent-task.
+    if: vars.STUB_TSV_ENABLED == 'true' && !startsWith(github.event.issue.title, '[housekeeping')
     runs-on: ubuntu-latest
 
     steps:

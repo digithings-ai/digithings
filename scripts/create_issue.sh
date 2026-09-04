@@ -168,10 +168,9 @@ print(tiers.get('component:$comp', tiers.get('default', 'cursor')))
 }
 
 EXEC_TIER_EXPLICIT=true
-if [[ -z "$EXEC_TIER" ]]; then
-  EXEC_TIER=$(derive_exec_tier "$COMPONENT")
-  EXEC_TIER_EXPLICIT=false
-fi
+# Derived AFTER component validation below (in-session review #3533: deriving
+# first interpolated an unvalidated $COMPONENT into python and died with a
+# SyntaxError instead of the clean die() message).
 
 # ── Validation ────────────────────────────────────────────────────────────────
 [[ -z "$COMPONENT" ]] && die "--component is required"
@@ -209,9 +208,14 @@ fi
 # shellcheck disable=SC2086
 contains "$MODEL" $VALID_MODELS || \
   die "Invalid model '${MODEL}'. Valid: ${VALID_MODELS}"
-# shellcheck disable=SC2086
-contains "$EXEC_TIER" $VALID_EXEC || \
-  die "Invalid exec tier '${EXEC_TIER}'. Valid: ${VALID_EXEC}"
+if [[ -z "$EXEC_TIER" ]]; then
+  EXEC_TIER=$(derive_exec_tier "$COMPONENT")
+  EXEC_TIER_EXPLICIT=false
+else
+  # shellcheck disable=SC2086
+  contains "$EXEC_TIER" $VALID_EXEC || \
+    die "Invalid exec tier '${EXEC_TIER}'. Valid: ${VALID_EXEC}"
+fi
 
 # ── Normalize title ───────────────────────────────────────────────────────────
 # Strip leading [agent] if user added it; we'll add our own prefix

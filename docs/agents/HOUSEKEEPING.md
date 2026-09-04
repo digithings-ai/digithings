@@ -50,7 +50,7 @@ the broader delegation framework.
 |---|---|---|---|
 | Scheduled-workflow failure digest | `pipeline-maintenance.yml` — `workflow-health` job | weekly Mon 08:00 UTC | Aggregates failed scheduled runs from the past 7 days, one tracker issue (dedup by title) |
 | PR-branch CI failures | `agent-ci-failure-triage.yml` | on workflow_run failure | Files a `ci:failure` triage issue per failed PR-branch workflow (dispatched at the cursor tier) |
-| digiquant pipeline trackers | `pipeline-digiquant-{prices,onchain,tearsheets}.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per pipeline (dedup by exact title + marker) instead of a new issue each failure |
+| digiquant pipeline trackers | `pipeline-digiquant-{prices,onchain,tearsheets}.yml` — tracker update on failure | per-run | Maintains one persistent tracker issue per pipeline (dedup by body marker, paginated) instead of a new issue each failure |
 | Stale branches | `pipeline-maintenance.yml` — `stale-branches` job | weekly | Identifies branches merged into develop >14d ago, files a cleanup issue |
 
 ## Continuous improvement

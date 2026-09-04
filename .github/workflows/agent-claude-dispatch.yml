@@ -42,6 +42,8 @@ jobs:
       - name: Resolve component metadata + tier
         id: meta
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE:  ${{ github.event.issue.title }}
         run: |
@@ -52,12 +54,22 @@ jobs:
           tiers = routing.get('tiers', {})
           names = [l['name'] for l in json.load(sys.stdin)]
           component = next((n.split(':', 1)[1] for n in names if n.startswith('component:')), 'root')
-          print(json.dumps({'component': component, 'tier': tiers.get(f'component:{component}', tiers.get('default', 'cursor'))}))
+          print(json.dumps({'component': component, 'tier': tiers.get(f'component:{component}', tiers.get('default', 'claude'))}))
           ")
           echo "$META" | python3 -c "import json,sys; print('tier=' + json.load(sys.stdin)['tier'])" >> "$GITHUB_OUTPUT"
           COMPONENT=$(echo "$META" | python3 -c "import json,sys; print(json.load(sys.stdin)['component'])")
           if [[ "$(echo "$META" | python3 -c "import json,sys; print(json.load(sys.stdin)['tier'])")" != "claude" ]]; then
-            echo "Tier is cursor — cloud automation owns this issue, nothing to post."
+            echo "Tier is cursor — @cursor dispatch owns this issue, nothing to post."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Same 24h duplicate suppression as the cursor-dispatch workflow:
+          # bouncing agent-task before anyone runs make task must not stack
+          # duplicate instruction comments.
+          LAST_NOTE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("Claude tier")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_NOTE" ]] && [[ "$LAST_NOTE" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "Local-dispatch instructions posted within 24h ($LAST_NOTE) — skipping duplicate."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
