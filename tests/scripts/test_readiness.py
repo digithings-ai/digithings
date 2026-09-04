@@ -161,6 +161,11 @@ def test_collect_degrades_bad_section_to_unknown(mod: Any, monkeypatch: pytest.M
     def boom() -> Any:
         raise RuntimeError("kaput")
 
+    # Hermetic: never call real gh/git. Without this, fetch_issues() can fail on
+    # CI (no network auth) and collect() early-returns without a Docs row.
+    monkeypatch.setattr(mod, "fetch_issues", lambda: [_issue(1, ["priority:high", "component:root"])])
+    monkeypatch.setattr(mod, "_gh", lambda *a, **k: [])
+    monkeypatch.setattr(mod, "_run", lambda *a, **k: "")
     monkeypatch.setattr(mod, "m_docs", boom)
     rows = mod.collect()
     docs_row = next(r for r in rows if r[0] == "Docs freshness")
