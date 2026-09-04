@@ -65,7 +65,9 @@
 @source "../../digiweb/web/src/components/chat/ChatMarkdown.tsx";
 
 /* Tailwind never scans package sources — point it at the shared components
-   this app renders (load-bearing; see MIGRATION.md rule 3). */
+   this app renders (load-bearing; see MIGRATION.md rule 3). Paths stay
+   file-relative on purpose: the scanner does not traverse the node_modules
+   workspace symlink. */
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/effects-chrome";
 

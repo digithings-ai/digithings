@@ -52,7 +52,7 @@ export default function ContactPage() {
                   name="Self hosted"
                   priceLine={
                     <>
-                      open core · <span className="text-up">free</span>
+                      open core · <span className="text-accent">free</span>
                     </>
                   }
                   features={[...CONTACT_SELF_FEATURES]}

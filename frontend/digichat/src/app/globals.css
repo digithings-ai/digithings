@@ -65,7 +65,9 @@
 @import "@digithings/digichat-ui/styles/session.css";
 
 /* Tailwind never scans package sources — generate the token utilities the
-   shared chat components carry (MIGRATION.md rule 3). */
+   shared chat components carry (MIGRATION.md rule 3). Paths stay
+   file-relative on purpose: the scanner does not traverse the node_modules
+   workspace symlink. */
 @source "../../../digiweb/web/src/components/chat";
 /* … and the utilities the shared behavioral controls carry (#1419) — the
    @source is load-bearing for controls-overlay's components. */

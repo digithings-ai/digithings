@@ -76,8 +76,8 @@ export function readFinancePalette(host: HTMLElement | null): FinanceChartPalett
     inkMute: cssVar("--ink-mute", "#8A9097"),
     hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
     accent: cssVar("--accent", "#3dd6c4"),
-    up: cssVar("--up", "#3FB984"),
-    down: cssVar("--down", "#E0654B"),
+    up: cssVar("--up", "#3DD6C4"),
+    down: cssVar("--down", "#E5533E"),
     mono: cssVar("--font-mono", "monospace"),
   };
 }

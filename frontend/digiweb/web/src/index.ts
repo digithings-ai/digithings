@@ -138,6 +138,26 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+  Breadcrumbs,
+  Pagination,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -149,6 +169,10 @@ export {
   type DropdownMenuContentProps,
   type DropdownMenuItemProps,
   type SheetContentProps,
+  type DialogContentProps,
+  type TableDensity,
+  type Crumb,
+  type PaginationProps,
   type TooltipContentProps,
 } from "./components/controls";
 
@@ -184,6 +208,18 @@ export {
 } from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
+export { Field } from "./components/controls/Field";
+export { Checkbox, RadioGroup, Radio, Switch } from "./components/controls/Selection";
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectPopup,
+  SelectItem,
+  SelectItemIndicator,
+  SelectSeparator,
+} from "./components/controls/Select";
+export { Slider, sliderFill, type SliderProps } from "./components/controls/Slider";
 
 // finance-charts family (#1450)
 export {

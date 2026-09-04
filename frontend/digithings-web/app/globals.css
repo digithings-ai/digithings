@@ -38,7 +38,9 @@
 @import "@digithings/digichat-ui/styles/session.css";
 
 /* Tailwind must scan the shared components that carry token utilities —
-   paths relative to this file (frontend/digiweb/web). */
+   paths relative to this file (frontend/digiweb/web). Do NOT rewrite these
+   through node_modules/@digithings/web: Tailwind's scanner does not traverse
+   the workspace symlink and silently generates nothing. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/TerminalManifest.tsx";
 @source "../../digiweb/web/src/components/docs";
@@ -234,8 +236,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
 .dc-settings-primary:hover { opacity: 0.92; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-.dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
-.dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+.dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--danger); }
+.dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--accent); }
 
 /* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
    fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's

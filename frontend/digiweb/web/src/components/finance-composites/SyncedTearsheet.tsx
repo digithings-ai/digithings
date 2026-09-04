@@ -100,7 +100,7 @@ export function SyncedTearsheet({
       inkMute: cssVar("--ink-mute", "#8A9097"),
       hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
       accent: cssVar("--accent", "#3dd6c4"),
-      down: cssVar("--down", "#E0654B"),
+      down: cssVar("--down", "#E5533E"),
       mono: cssVar("--font-mono", "monospace"),
     });
     let p = palette();

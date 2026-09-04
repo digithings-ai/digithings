@@ -9,15 +9,41 @@ import { describe, expect, it } from "vitest";
 
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "./Avatar";
 import { Badge } from "./Badge";
+import { Breadcrumbs } from "./Breadcrumbs";
 import { Button } from "./Button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./Card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./Dialog";
 import { EmptyState } from "./EmptyState";
+import { Field } from "./Field";
 import { Input } from "./Input";
 import { Label } from "./Label";
 import { DatePager, formatDatePagerLabel } from "./DatePager";
 import { IconButton, Pager, PagerPage, SegmentedControl } from "./NavButtons";
+import { Pagination, paginationWindow } from "./Pagination";
+import { Checkbox, Radio, RadioGroup, Switch } from "./Selection";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./Select";
+import { Slider, sliderFill } from "./Slider";
 import { SearchBar } from "./SearchBar";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./Table";
 import { TagsInput } from "./TagsInput";
 
 describe("Button", () => {
@@ -329,5 +355,241 @@ describe("Avatar", () => {
     expect(html).toContain('data-size="lg"');
     expect(html).toContain("ctl-avatar-fallback");
     expect(html).toContain("ctl-avatar-group-count");
+  });
+});
+
+describe("Table", () => {
+  it("renders the hairline ledger with slots and numeric alignment", () => {
+    const html = renderToStaticMarkup(
+      <Table>
+        <TableCaption>Four calibrated runs.</TableCaption>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Run</TableHead>
+            <TableHead numeric>CAGR</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow>
+            <TableCell>btc_slapper</TableCell>
+            <TableCell numeric>+333.10%</TableCell>
+          </TableRow>
+        </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell>Mean</TableCell>
+            <TableCell numeric>+120.4%</TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>
+    );
+    expect(html).toContain("ctl-table");
+    expect(html).toContain('data-slot="table-head"');
+    expect(html).toContain('data-slot="table-caption"');
+    expect(html).toContain("ctl-table-num");
+    expect(html).toContain("<table");
+    expect(html).toContain("<caption");
+  });
+
+  it("supports compact density", () => {
+    const html = renderToStaticMarkup(
+      <Table density="compact">
+        <TableBody>
+          <TableRow>
+            <TableCell>x</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    );
+    expect(html).toContain('data-density="compact"');
+  });
+});
+
+describe("Breadcrumbs", () => {
+  it("marks the href-less last item as current page", () => {
+    const html = renderToStaticMarkup(
+      <Breadcrumbs
+        items={[{ label: "Pipeline", href: "/#pipeline" }, { label: "Research" }]}
+      />
+    );
+    expect(html).toContain('aria-label="Breadcrumb"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("ctl-crumbs-current");
+    expect(html).toContain("ctl-crumbs-sep");
+    expect(html).toContain("<nav");
+    expect(html).toContain("<ol");
+  });
+});
+
+describe("Pagination", () => {
+  it("renders the window with the loud current page and edge steps", () => {
+    const html = renderToStaticMarkup(
+      <Pagination page={5} pageCount={12} onPageChange={() => undefined} />
+    );
+    expect(html).toContain('aria-label="Pagination"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("is-current");
+    expect(html).toContain('aria-label="Previous page"');
+    expect(html).toContain('aria-label="Next page"');
+    expect(html).toContain("<nav");
+  });
+
+  it("disables prev on the first page and renders links with hrefForPage", () => {
+    const html = renderToStaticMarkup(
+      <Pagination page={1} pageCount={4} hrefForPage={(p) => `/log?p=${p}`} />
+    );
+    expect(html).toContain("disabled");
+    expect(html).toContain('href="/log?p=2"');
+  });
+
+  it("computes the ellipsis window", () => {
+    expect(paginationWindow(5, 12)).toEqual([1, "…", 4, 5, 6, "…", 12]);
+    expect(paginationWindow(1, 3)).toEqual([1, 2, 3]);
+    expect(paginationWindow(2, 2)).toEqual([1, 2]);
+  });
+});
+
+describe("Dialog", () => {
+  it("renders the trigger without mounting the popup when closed", () => {
+    const html = renderToStaticMarkup(
+      <Dialog>
+        <DialogTrigger>Delete run</DialogTrigger>
+        <DialogContent tone="danger">
+          <DialogHeader>
+            <DialogTitle>Delete this backtest?</DialogTitle>
+            <DialogDescription>Saved tearsheets are kept.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose>Cancel</DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+    expect(html).toContain('data-slot="dialog-trigger"');
+    expect(html).not.toContain("ctl-dialog-card");
+  });
+
+  // The open popup is client-only (base-ui gates the portal on mount, so
+  // nothing SSRs past the trigger) — like Sheet, the open state is covered
+  // by the reference dialog specimen plus a live browser check, not here.
+  it("carries the danger tone prop onto the content", () => {
+    const html = renderToStaticMarkup(
+      <Dialog>
+        <DialogTrigger>Delete run</DialogTrigger>
+        <DialogContent tone="danger">
+          <DialogHeader>
+            <DialogTitle>Delete this backtest?</DialogTitle>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+    expect(html).toContain('data-slot="dialog-trigger"');
+    expect(html).not.toContain("ctl-dialog-card");
+  });
+});
+
+describe("Field", () => {
+  it("meshes label, hint, and ids into the child control", () => {
+    const html = renderToStaticMarkup(
+      <Field label="Strategy name" hint="Lowercase, snake_case.">
+        <input type="text" defaultValue="trend_xsec" />
+      </Field>
+    );
+    expect(html).toContain('data-slot="field"');
+    expect(html).toContain('data-slot="label"');
+    expect(html).toContain("Strategy name");
+    expect(html).toContain("Lowercase, snake_case.");
+    // the injected control id matches the label htmlFor and the hint wiring
+    const id = html.match(/<input[^>]* id="([^"]+)"/)?.[1];
+    expect(id).toBeTruthy();
+    expect(html).toContain(`for="${id}"`);
+    expect(html).toContain(`aria-describedby="`);
+    expect(html).not.toContain("ctl-field-error");
+  });
+
+  it("replaces the hint with the error and flags the control invalid", () => {
+    const html = renderToStaticMarkup(
+      <Field label="API key" hint="Never share it." error="Key is revoked — issue a new one.">
+        <input type="text" defaultValue="dk_live_9f2…" />
+      </Field>
+    );
+    expect(html).toContain("ctl-field-error");
+    expect(html).toContain("Key is revoked");
+    expect(html).not.toContain("Never share it.");
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('data-invalid="true"');
+  });
+});
+
+describe("Checkbox", () => {
+  it("renders the box, mounting the glyph only when checked", () => {
+    const off = renderToStaticMarkup(<Checkbox aria-label="Paper only" />);
+    expect(off).toContain("ctl-check");
+    expect(off).toContain('data-slot="checkbox"');
+    expect(off).not.toContain("ctl-check-indicator");
+    const on = renderToStaticMarkup(<Checkbox aria-label="Paper only" checked />);
+    expect(on).toContain("ctl-check-indicator");
+    expect(on).toContain("data-checked");
+  });
+});
+
+describe("Radio", () => {
+  it("renders the group with roving items", () => {
+    const html = renderToStaticMarkup(
+      <RadioGroup aria-label="Mode" defaultValue="paper">
+        <Radio aria-label="Paper" value="paper" />
+        <Radio aria-label="Live" value="live" />
+      </RadioGroup>
+    );
+    expect(html).toContain("ctl-radio-group");
+    expect(html).toContain('data-slot="radio"');
+    expect(html).toContain('role="radiogroup"');
+  });
+});
+
+describe("Switch", () => {
+  it("renders the track with the knob", () => {
+    const html = renderToStaticMarkup(<Switch aria-label="Motion" />);
+    expect(html).toContain("ctl-switch");
+    expect(html).toContain("ctl-switch-knob");
+    expect(html).toContain('data-slot="switch"');
+  });
+});
+
+describe("Select", () => {
+  it("renders the trigger and the popup grammar server-side", () => {
+    const html = renderToStaticMarkup(
+      <Select>
+        <SelectTrigger>
+          <SelectValue placeholder="Choose a venue" />
+        </SelectTrigger>
+        <SelectPopup>
+          <SelectItem value="paper">paper</SelectItem>
+        </SelectPopup>
+      </Select>
+    );
+    expect(html).toContain("ctl-select");
+    expect(html).toContain("Choose a venue");
+    expect(html).toContain("ctl-select-popup");
+    expect(html).toContain("ctl-select-item");
+  });
+});
+
+describe("Slider", () => {
+  it("renders the labelled native range with a computed fill", () => {
+    const html = renderToStaticMarkup(
+      <Slider label="Lookback" min={20} max={400} value={120} format={(v) => `${v}d`} ticks={[20, 400]} />
+    );
+    expect(html).toContain("ctl-slider");
+    expect(html).toContain('type="range"');
+    expect(html).toContain("120d");
+    expect(html).toContain("ctl-slider-ticks");
+    expect(html).toContain("linear-gradient(to right, var(--accent)");
+  });
+
+  it("computes the fill percentage", () => {
+    expect(sliderFill(120, 20, 400)).toContain("26.31578947368421%");
+    expect(sliderFill(0, 0, 100)).toContain("0%");
+    expect(sliderFill(100, 0, 100)).toContain("100%");
   });
 });

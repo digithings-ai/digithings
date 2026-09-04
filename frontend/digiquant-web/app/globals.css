@@ -30,7 +30,9 @@
 @import "@digithings/web/styles/finance-composites.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
-   Tailwind never scans package sources on its own — point it at them. */
+   Tailwind never scans package sources on its own — point it at them.
+   Paths stay file-relative on purpose: Tailwind's scanner does not traverse
+   the node_modules workspace symlink and silently generates nothing. */
 @source "../../digiweb/web/src/components/NavShell.tsx";
 @source "../../digiweb/web/src/components/pricing";
 @source "../../digiweb/web/src/components/marquee";
@@ -317,7 +319,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   border-color: var(--accent); background: var(--accent);
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 70%, transparent);
 }
-.dqpipe-step.is-exec.is-visible .dqpipe-rail { border-color: var(--up); background: var(--up); box-shadow: 0 0 14px color-mix(in srgb, var(--up) 55%, transparent); }
+.dqpipe-step.is-exec.is-visible .dqpipe-rail { border-color: var(--accent); background: var(--accent); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent); }
 .dqpipe-step:not(.is-right) .dqpipe-rail { right: -1.45rem; }
 .dqpipe-step.is-right .dqpipe-rail { left: -1.45rem; }
 @media (max-width: 720px) {

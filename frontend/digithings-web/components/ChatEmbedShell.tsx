@@ -263,7 +263,7 @@ export function ChatEmbedShell({
             margin: 0,
             padding: "0.85rem 0.75rem",
             fontSize: "0.8rem",
-            color: "color-mix(in srgb, var(--down) 80%, var(--ink))",
+            color: "color-mix(in srgb, var(--danger) 80%, var(--ink))",
           }}
           role="alert"
         >

@@ -542,6 +542,105 @@
   }
 }
 
+/* ── dialog — the centered modal (components/controls/Dialog.tsx) ─────────
+   Canon dress directly (no digichat look to reproduce): radius 0, hairline,
+   --surface panel, canon black dim scrim. The card reuses the shared .ctl-pop
+   enter/exit above; the X is the sheet's borderless glyph grammar. */
+@layer components {
+  .ctl-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgb(0 0 0 / 0.5);
+    transition: opacity 0.15s ease;
+  }
+
+  .ctl-dialog-overlay[data-starting-style],
+  .ctl-dialog-overlay[data-ending-style] {
+    opacity: 0;
+  }
+
+  .ctl-dialog-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    pointer-events: none;
+  }
+
+  .ctl-dialog-card {
+    position: relative;
+    pointer-events: auto;
+    width: 100%;
+    max-width: 28rem;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 0;
+    padding: 1.4rem 1.5rem;
+  }
+
+  .ctl-dialog-title {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--ink);
+    margin: 0;
+    padding-right: 2rem;
+  }
+
+  .ctl-dialog-card[data-tone="danger"] .ctl-dialog-title {
+    color: var(--danger);
+  }
+
+  .ctl-dialog-description {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 0.4rem 0 0;
+  }
+
+  .ctl-dialog-header {
+    margin-bottom: 0.2rem;
+  }
+
+  .ctl-dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 1.4rem;
+  }
+
+  .ctl-dialog-x {
+    position: absolute;
+    top: 0.7rem;
+    right: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink-soft);
+    font: inherit;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .ctl-dialog-x:hover {
+    color: var(--ink);
+  }
+
+  .ctl-dialog-x svg {
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
 /* ── reduced motion: no travel, instant states ───────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .ctl-pop[data-open],
@@ -551,6 +650,10 @@
 
   .ctl-sheet,
   .ctl-sheet-overlay {
+    transition: none;
+  }
+
+  .ctl-dialog-overlay {
     transition: none;
   }
 }
