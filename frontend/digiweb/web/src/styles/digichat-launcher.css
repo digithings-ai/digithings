@@ -135,6 +135,10 @@
   pointer-events: none;
 }
 
+.digichat-launcher__panel.is-hidden {
+  display: none;
+}
+
 .digichat-launcher__header {
   display: flex;
   min-height: var(--digichat-launcher-size);

@@ -10,7 +10,12 @@ vi.mock('@/lib/use-entitlement', () => ({
 }));
 
 import DigichatPopup from './digichat-popup';
-import type { DigichatPopupConfig } from '@/lib/digichat-popup';
+import {
+  DIGICHAT_READY,
+  type DigichatPopupConfig,
+} from '@/lib/digichat-popup';
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const CFG: DigichatPopupConfig = {
   origin: 'https://digithings.ai',
@@ -32,6 +37,7 @@ describe('DigichatPopup', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     document.documentElement.setAttribute('data-theme', 'dark');
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
@@ -39,6 +45,7 @@ describe('DigichatPopup', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
 
   it('renders nothing for Brief (below Desk)', () => {
@@ -77,6 +84,43 @@ describe('DigichatPopup', () => {
     expect(iframe.src).toContain('https://digithings.ai/embed');
     expect(iframe.src).toContain('host=digiquant.io');
     expect(iframe.src).toContain('layout=embed');
+  });
+
+  it('keeps the iframe mounted across close and reopen', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const trigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => trigger.click());
+    const iframe = document.body.querySelector(
+      '#digichat-popup-iframe',
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, 'postMessage');
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: CFG.origin,
+          data: { type: DIGICHAT_READY },
+        }),
+      );
+    });
+    const readyCallCount = postMessage.mock.calls.length;
+
+    const close = document.body.querySelector(
+      '.digichat-launcher__close',
+    ) as HTMLButtonElement;
+    act(() => close.click());
+    act(() => vi.advanceTimersByTime(340));
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBe(iframe);
+
+    const reopenedTrigger = document.body.querySelector(
+      '.digichat-launcher__trigger',
+    ) as HTMLButtonElement;
+    act(() => reopenedTrigger.click());
+    expect(document.body.querySelector('#digichat-popup-iframe')).toBe(iframe);
+    expect(postMessage.mock.calls.length).toBeGreaterThan(readyCallCount);
   });
 
   it('renders nothing when config is null', () => {

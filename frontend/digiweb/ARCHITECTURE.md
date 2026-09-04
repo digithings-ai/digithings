@@ -74,10 +74,12 @@ height and border. Opening runs a two-step expansion out of that square — the
 square widens into a composer-height bar, then the bar lifts to full height —
 and closing reverses both steps. It dismisses via its header, Escape, or the
 transparent outside-click backdrop. `CLOSE_MS` in the component mirrors the
-close animation duration in the sheet; change both together. It portals to
-`document.body` by default to escape transformed/backdrop-filter app shells;
-`portal={false}` contains reference specimens. Product apps pass the iframe or
-other chat body as `children` rather than forking launcher behavior.
+close animation duration in the sheet; reduced-motion closes immediately.
+After the first open, the hidden panel keeps its children mounted so an iframe
+conversation survives close/reopen. It portals to `document.body` by default
+to escape transformed/backdrop-filter app shells; `portal={false}` contains
+reference specimens. Product apps pass the iframe or other chat body as
+`children` rather than forking launcher behavior.
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own

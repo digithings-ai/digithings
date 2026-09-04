@@ -21,6 +21,7 @@ describe("DigichatLauncher interactions", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -71,6 +72,7 @@ describe("DigichatLauncher interactions", () => {
     act(() => trigger.click());
     expect(container.querySelector(".digichat-launcher__panel")).not.toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(true);
+    const chatBody = container.querySelector("[data-chat-body]");
 
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -80,9 +82,20 @@ describe("DigichatLauncher interactions", () => {
     ).not.toBeNull();
 
     act(() => vi.advanceTimersByTime(340));
-    expect(container.querySelector(".digichat-launcher__panel")).toBeNull();
+    expect(
+      container.querySelector(".digichat-launcher__panel.is-hidden"),
+    ).not.toBeNull();
     expect(container.querySelector(".digichat-launcher__trigger")).not.toBeNull();
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
+
+    const reopenedTrigger = container.querySelector(
+      ".digichat-launcher__trigger",
+    ) as HTMLButtonElement;
+    act(() => reopenedTrigger.click());
+    expect(container.querySelector("[data-chat-body]")).toBe(chatBody);
+    expect(
+      container.querySelector(".digichat-launcher__panel.is-hidden"),
+    ).toBeNull();
   });
 
   it("dismisses when the transparent outside-click backdrop is clicked", () => {
@@ -98,7 +111,34 @@ describe("DigichatLauncher interactions", () => {
     act(() => backdrop.click());
     act(() => vi.advanceTimersByTime(340));
 
-    expect(container.querySelector(".digichat-launcher__panel")).toBeNull();
+    expect(
+      container.querySelector(".digichat-launcher__panel.is-hidden"),
+    ).not.toBeNull();
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("closes immediately when reduced motion is requested", () => {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query) =>
+        ({
+          matches: query === "(prefers-reduced-motion: reduce)",
+        }) as MediaQueryList,
+    );
+    const onOpenChange = renderLauncher();
+    const trigger = container.querySelector(
+      ".digichat-launcher__trigger",
+    ) as HTMLButtonElement;
+
+    act(() => trigger.click());
+    const close = container.querySelector(
+      ".digichat-launcher__close",
+    ) as HTMLButtonElement;
+    act(() => close.click());
+
+    expect(
+      container.querySelector(".digichat-launcher__panel.is-hidden"),
+    ).not.toBeNull();
+    expect(container.querySelector(".digichat-launcher__trigger")).not.toBeNull();
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });
 });

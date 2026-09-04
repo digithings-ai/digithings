@@ -59,6 +59,7 @@ export default function DigichatPopup({
   const [open, setOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeReadyRef = useRef(false);
   const pageContextSentRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
 
@@ -83,41 +84,56 @@ export default function DigichatPopup({
   useEffect(() => {
     if (!open || !config) return;
     pageContextSentRef.current = false;
-    setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
-  }, [open, config]);
+    const nextSrc = buildDigichatEmbedSrc(config, themeRef.current);
+    if (nextSrc === iframeSrc) return;
+    iframeReadyRef.current = false;
+    setIframeSrc(nextSrc);
+  }, [open, config, iframeSrc]);
 
   const sendPageContext = useCallback(() => {
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const text = extractVisiblePageText();
-  const html = extractPageHtml();
+    const html = extractPageHtml();
     try {
-    win.postMessage(
-      buildPageContextMessage(text, { html: html || undefined }),
-      config.origin,
-    );
+      win.postMessage(
+        buildPageContextMessage(text, { html: html || undefined }),
+        config.origin,
+      );
       pageContextSentRef.current = true;
     } catch {
       /* allow retry on next ready */
     }
   }, [config]);
 
+  // A closed launcher retains its iframe so the conversation survives. On
+  // reopen, refresh the theme and page context without waiting for another
+  // `digichat:ready` event (the retained document will not emit one).
   useEffect(() => {
-    if (!config || !open) return;
+    if (!config || !open || !iframeReadyRef.current) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(buildThemeMessage(themeRef.current), config.origin);
+    sendPageContext();
+  }, [config, open, sendPageContext]);
+
+  useEffect(() => {
+    if (!config || !iframeSrc) return;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== config!.origin) return;
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== DIGICHAT_READY) return;
+      iframeReadyRef.current = true;
       const win = iframeRef.current?.contentWindow;
       if (win) {
         win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
       }
-      sendPageContext();
+      if (open) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [config, open, sendPageContext]);
+  }, [config, iframeSrc, open, sendPageContext]);
 
   if (!config || !entitled) return null;
 

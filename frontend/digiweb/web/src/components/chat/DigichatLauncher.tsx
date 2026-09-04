@@ -76,6 +76,7 @@ export function DigichatLauncher({
   );
   const [open, setOpen] = useState(defaultOpen);
   const [closing, setClosing] = useState(false);
+  const [hasOpened, setHasOpened] = useState(defaultOpen);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const typedRef = useRef<HTMLSpanElement>(null);
@@ -128,6 +129,7 @@ export function DigichatLauncher({
 
   const openPanel = () => {
     stopTyping();
+    setHasOpened(true);
     setOpen(true);
     onOpenChange?.(true);
   };
@@ -136,6 +138,11 @@ export function DigichatLauncher({
     (options?: { typeOnReturn?: boolean }) => {
       if (!open || closing) return;
       pendingReturnRef.current = { type: options?.typeOnReturn === true };
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+        setOpen(false);
+        onOpenChange?.(false);
+        return;
+      }
       setClosing(true);
       closeTimerRef.current = window.setTimeout(() => {
         setOpen(false);
@@ -195,6 +202,7 @@ export function DigichatLauncher({
     [],
   );
 
+  const retainPanel = open || closing || hasOpened;
   const launcher = (
     <div
       className={[
@@ -207,46 +215,53 @@ export function DigichatLauncher({
       style={style}
     >
       {open ? (
-        <>
-          <button
-            type="button"
-            className="digichat-launcher__backdrop"
-            aria-label="Close digichat"
-            tabIndex={-1}
-            onClick={() => closePanel()}
-          />
-          <section
-            className={`digichat-launcher__panel${closing ? " is-closing" : ""}`}
-            role="dialog"
-            aria-label={ariaLabel}
-          >
-            <header className="digichat-launcher__header">
-              <span>{title}</span>
-              <button
-                ref={closeRef}
-                type="button"
-                className="digichat-launcher__close"
-                aria-label="Close digichat"
-                onClick={() => closePanel()}
+        <button
+          type="button"
+          className="digichat-launcher__backdrop"
+          aria-label="Close digichat"
+          tabIndex={-1}
+          onClick={() => closePanel()}
+        />
+      ) : null}
+      {retainPanel ? (
+        <section
+          className={[
+            "digichat-launcher__panel",
+            closing ? "is-closing" : "",
+            !open && !closing ? "is-hidden" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          role="dialog"
+          aria-label={ariaLabel}
+        >
+          <header className="digichat-launcher__header">
+            <span>{title}</span>
+            <button
+              ref={closeRef}
+              type="button"
+              className="digichat-launcher__close"
+              aria-label="Close digichat"
+              onClick={() => closePanel()}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                aria-hidden="true"
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  aria-hidden="true"
-                >
-                  <path d="M6 6l12 12M18 6 6 18" />
-                </svg>
-              </button>
-            </header>
-            <div className="digichat-launcher__body">{children}</div>
-          </section>
-        </>
-      ) : (
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </header>
+          <div className="digichat-launcher__body">{children}</div>
+        </section>
+      ) : null}
+      {!open && !closing ? (
         <button
           ref={attachTrigger}
           type="button"
@@ -272,7 +287,7 @@ export function DigichatLauncher({
             <span className="digichat-launcher__cursor" />
           </span>
         </button>
-      )}
+      ) : null}
     </div>
   );
 
