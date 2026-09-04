@@ -20,7 +20,6 @@ from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.core.models import Query
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
-from digisearch.ingest_paths import resolve_ingest_source
 from digisearch.logging import configure_logging
 from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH,
@@ -28,13 +27,14 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
     OpenAIToolDict,
 )
-from digisearch.search._stub import _first_env, query_index, route_add_chunks
+from digisearch.pipeline.ingest import IngestError, ingest_source
+from digisearch.search._stub import _first_env, query_index
 
 configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,13 @@ class QueryRequest(BaseModel):
     text: str = Field(..., min_length=1, description="Search query text")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
-    mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
+    mode: str = Field(
+        default="hybrid",
+        description=(
+            "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
+            "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
+        ),
+    )
     format: str = Field(
         default="default",
         description="default | table — table returns formatted markdown in response.formatted",
@@ -213,6 +219,13 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional tenant/workspace id for index isolation or filters (enterprise).",
     )
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_query_mode(cls, value: object) -> str:
+        from digisearch.embedding.factory import normalize_query_mode
+
+        return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
 class QueryResponse(BaseModel):
@@ -268,13 +281,26 @@ class ResearchTurnRequest(BaseModel):
     user_message: str = Field(..., min_length=1, description="User question or search intent")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
-    mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
+    mode: str = Field(
+        default="hybrid",
+        description=(
+            "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
+            "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
+        ),
+    )
     filter: str | None = Field(default=None, description="Raw OData filter when index allows")
     filters: list[dict[str, Any]] | None = Field(
         default=None,
         description="Structured filters [{field, op, value}]",
     )
     session_id: str | None = Field(default=None, description="Optional session id for tracing")
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_query_mode(cls, value: object) -> str:
+        from digisearch.embedding.factory import normalize_query_mode
+
+        return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
 @app.get("/health")
@@ -336,11 +362,17 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
 def run_query(req: QueryRequest) -> QueryResponse:
     """Core query implementation; shared by ``POST /query`` and orchestrator invoke."""
     from digisearch.core.standard_hits import normalize_query_hit
+    from digisearch.embedding.factory import effective_query_mode, normalize_query_mode
+
+    try:
+        mode = normalize_query_mode(req.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     q = Query(
         text=req.text,
         top_k=req.top_k,
-        mode=req.mode,
+        mode=mode,
         filters=_build_query_filters(req),
         columns=req.columns,
         facets=req.facets,
@@ -374,6 +406,18 @@ def run_query(req: QueryRequest) -> QueryResponse:
 
         formatted = format_results_table(out_results, req.text, top_k=req.top_k)
     total = response.total_count if response.total_count is not None else len(results)
+    effective = effective_query_mode(mode, response.backend)
+    if effective != mode:
+        logger.info(
+            "query.mode coerced for backend",
+            extra={
+                "operation": "query_mode",
+                "requested_mode": mode,
+                "effective_mode": effective,
+                "backend": response.backend,
+                "index_name": req.index_name,
+            },
+        )
     return QueryResponse(
         results=out_results,
         query=req.text,
@@ -680,62 +724,22 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
 
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
-    """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
+    """Ingest a document via :func:`digisearch.pipeline.ingest.ingest_source`."""
     try:
-        from digisearch.chunking.factory import get_ingest_chunker
-        from digisearch.core.config import DigiSearchConfig
-        from digisearch.ingestion.registry import ParserRegistry
-
-        try:
-            path = resolve_ingest_source(req.source)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if not path.exists():
-            raise HTTPException(status_code=404, detail=f"Source file not found: {req.source}")
-        registry = ParserRegistry()
-        doc = registry.parse(path)
-        from digisearch.core.evidence_metadata import (
-            load_sidecar_yaml,
-            merge_document_metadata_into_chunks,
-            metadata_from_sidecar_dict,
-        )
-
-        side = path.parent / f"{path.stem}.yaml"
-        if not side.is_file():
-            side = path.parent / f"{path.stem}.yml"
-        side_meta = metadata_from_sidecar_dict(load_sidecar_yaml(side))
-        merged: dict[str, Any] = {**(doc.metadata or {}), **side_meta}
-        if req.metadata:
-            merged = {**merged, **req.metadata}
-        doc.metadata = merged
-        index_cfg = DigiSearchConfig.from_env().get_index_config(req.index_name)
-        chunker = get_ingest_chunker(index_config=index_cfg)
-        chunks = chunker.chunk(doc)
-        merge_document_metadata_into_chunks(doc, chunks)
-        doc.chunks = chunks
-        try:
-            route_add_chunks(req.index_name, chunks)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        return IngestResponse(
-            doc_id=doc.id,
-            chunks_created=len(chunks),
+        result = ingest_source(
+            req.source,
             index_name=req.index_name,
+            metadata=req.metadata,
+            enforce_ingest_root=True,
         )
-    except HTTPException:
-        raise
-    except ImportError as e:
-        logger.error("Ingestion dependencies not installed: %s", e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"Ingestion backend unavailable (missing dependency: {e}). Install digisearch[parsers].",
-        )
-    except (OSError, ValueError, RuntimeError, TypeError) as e:
-        logger.error("Ingestion failed for source '%s': %s", req.source, e)
-        raise HTTPException(
-            status_code=503,
-            detail=f"Ingestion failed: {e}",
-        )
+    except IngestError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=exc.message) from exc
+    return IngestResponse(
+        doc_id=result.doc_id,
+        chunks_created=result.chunks_created,
+        index_name=result.index_name,
+        status=result.status,
+    )
 
 
 @app.get("/indexes")

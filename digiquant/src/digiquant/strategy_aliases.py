@@ -23,6 +23,8 @@ STRATEGY_ALIASES: dict[str, str] = {
     "btc_slapper_mr_trend": "btc_slapper",
     "eth_slapper_mr_trend": "eth_slapper",
     "sol_slapper_mr_trend": "sol_slapper",
+    "relative_strength_rotation": "rs_rotation",
+    "asset_rotation": "rs_rotation",
 }
 
 # registry canonical → STRATEGY_PARAM_SPECS key (when they differ)

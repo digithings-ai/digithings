@@ -797,6 +797,54 @@ which is a negative percent — check each field's own docstring before comparin
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).
 
+### Macro-liquidity regime gauge (#1085)
+
+`indicators/macro_liquidity.py` expands the M2-only vote in
+`indicators/m2_signals.py` into a pluggable **macro-liquidity regime model**
+for downstream gates (RS rotation #1084, active books, composition #1078).
+
+| Piece | Role |
+|---|---|
+| `MacroSeriesSpec` | Pluggable vote: `name`, FRED `series_id`, `weight`, `sign` (±1), `transform` (`level` / `yoy` / `roc`) |
+| `MacroLiquidityConfig` | Rolling window + expansion/contraction score thresholds + specs tuple |
+| `MacroLiquidityModel.compute` | Align → transform → causal rolling-z → signed blend + equal-weight 0/1 vote → `regime_score` [0,100], `regime_state`, `risk_on` |
+| `write_regime_series` / `load_regime_series` / `regime_index_by_date` | Consumer surface (parquet + date map) — no Nautilus dependency |
+| `backtest_regime_gate` | CI-only long-vs-cash harness documenting gated vs always-invested returns — **not** a published `BacktestResult` |
+
+**Default blend** (equal weights): `M2SL` YoY (+), `DTWEXBGS` level (−, strong dollar = contraction), `UNRATE` level (−), `MANEMP` YoY (+) as the manufacturing-activity / PMI proxy — FRED does not carry live ISM PMI. Score map: `regime_score = 50 + composite_z × 50/3` (100 = max expansion). Discrete: `expansion` if score ≥ 60, `contraction` if ≤ 40, else `neutral`. `risk_on` is true only in expansion (gate open); neutral/contraction raise cash in the CI gate harness.
+
+**Data path.** Series land via the existing macro pipeline
+(`digiquant prices fetch-macro` → `macro_series_observations`). Manifest
+`research/config/macro_series.yaml` lists `M2SL`, `DTWEXBGS`, `UNRATE`, and
+`MANEMP` — no hardcoded secrets. Callers pass already-fetched
+`{name: DataFrame[date, value]}` into `compute`; the model never fetches.
+
+**Consumers.** Other strategies read the regime parquet / `regime_index_by_date`
+map. `M2LiquidityStrategy` stays the M2-ROC Nautilus book; it is not rewritten
+here. Weight/window tuning belongs to the optimization engine (#1079).
+
+**Gate backtest (documented effect).** On a synthetic rise-then-crash path with
+`risk_on` true only on the rising half, `backtest_regime_gate` shows
+`gated_return_pct > always_in_return_pct` (cash through the drawdown). Unit
+pin: `tests/dq/indicators/test_macro_liquidity.py`. Run
+`pytest -m unit -k "macro or liquidity or m2"`.
+
+### Relative-strength asset rotation (#1084)
+
+Phase-0 design note: [`docs/research/rs-rotation-v1.md`](../docs/research/rs-rotation-v1.md)
+(dual momentum + risk-adjusted cross-sectional rank; weekly rebalance; cash when
+no absolute-strength qualifier).
+
+| Piece | Role |
+|---|---|
+| `indicators/rs_ranker.py` (`RsRanker`) | Pool → per-asset absolute return, vol, risk-adj score, cross-sectional `rs_rank` (1=strongest), `qualifies` (abs return > threshold). Shared RS signal for SDCA #1082 / composition #1078. |
+| `strategies/rotation/backtest.py` | CI-only long-only top-N rotator vs equal-weight + buy-&-hold — **not** a published `BacktestResult`. Absolute gate → cash; optional `#1085` `risk_on` overlay forces cash when false/null. |
+| `strategies/rotation/nautilus_strategy.py` | Nautilus long-only rotator: loads `date,symbol,weight` parquet (precompute → drive, same pattern as `m2_liquidity` / SDCA). Registered as `rs_rotation`. |
+
+**v1 defaults.** Lookback 90 / skip ≥1 (default 7) / absolute threshold 0 / top-N 1 / rebalance every 7 days. Phase 2+ (long/short, spreads, vol targeting, correlation-aware pool, default-on regime gate) stays deferred. Window/weight search belongs to #1079. No live-trading; no `--push-supabase`.
+
+**Tests.** `pytest -m unit -k "rotation or rs"` (ranker + rotation harness + Nautilus config when installed).
+
 ### Optimization Engine Selection
 
 The dispatch in `run_optimize()`:

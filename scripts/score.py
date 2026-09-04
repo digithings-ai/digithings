@@ -196,7 +196,13 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
         "accuracy",
         True,
     ),
-    (re.compile(r"TODO|FIXME|HACK|XXX"), "unresolved TODO/FIXME in diff", "accuracy", True),
+    # Word boundaries: bare ``TODO_TOOL`` / ``XXX_HASH`` must not trip this.
+    (
+        re.compile(r"\bTODO\b|\bFIXME\b|\bHACK\b|\bXXX\b"),
+        "unresolved TODO/FIXME in diff",
+        "accuracy",
+        True,
+    ),
     (
         re.compile(r"raise NotImplementedError"),
         "NotImplementedError stub in production path",

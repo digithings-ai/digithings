@@ -95,6 +95,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `EmbeddingProvider` abstract base | Implemented | `embedding/base.py` |
 | `EmbeddingCache` (SQLite-backed) | Implemented | `embedding/cache.py` |
 | `BatchEmbedder` (batching + retry) | Implemented | `embedding/batch.py` |
+| Embed pipeline factory + `query.mode` helpers | Implemented | `embedding/factory.py` |
 | `OpenAIEmbedder` provider | Implemented | `embedding/providers/openai.py` |
 | `EmbeddingModelSpec` versioning | Implemented | `embeddings/config.py` |
 | `DigiIndex` abstract interface | Implemented | `indexes/base.py` |
@@ -119,6 +120,8 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Agent citations helper | Implemented | `agent/citations.py` |
 | Crossref discovery | Implemented | `discovery/crossref.py` |
 | Bulk ingest worker | **Placeholder** — logs and exits | `ingest_worker.py` |
+| Canonical filesystem ingest (`ingest_source` / `ingest_paths`) | Implemented | `pipeline/ingest.py` |
+| Embed pipeline factory (`resolve_embedding_pipeline`) | Implemented | `embedding/factory.py` |
 | HTTP client helpers | Implemented | `http_client.py` |
 | EDGAR dev corpus exporter | Implemented (dev/test) | `dev/edgar_sample_export.py` |
 
@@ -158,7 +161,7 @@ Key request fields:
 | `text` | `str` | Query text (required) |
 | `index_name` | `str` | Default: `"default"` |
 | `top_k` | `int` | 1–100; default 10 |
-| `mode` | `str` | `keyword` \| `vector` \| `hybrid` |
+| `mode` | `str` | `keyword` \| `vector` \| `hybrid` (validated). Backend capability hint — see [query.mode semantics](#querymode-semantics) |
 | `filter` | `str?` | Raw OData (only when `allow_raw_filter` is on) |
 | `filters` | `list[dict]?` | Structured: `[{field, op, value}]` |
 | `columns` | `list[str]?` | Metadata fields to return |
@@ -183,11 +186,33 @@ Request:  IngestRequest { source: str, index_name: str, doc_type: str?, metadata
 Response: IngestResponse { doc_id, chunks_created, index_name, status }
 ```
 
-Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker` over the selected `ChunkerBackend`, default Chonkie Semantic; falls through to the inner backend when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
-
-Chunker selection (no code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`, or per-index YAML `chunker:` via `DigiSearchConfig`.
+Ingest pipeline: delegated to `digisearch.pipeline.ingest.ingest_source`
+(parse → sidecar YAML → merge metadata → chunk via `get_ingest_chunker` /
+`SegmentAwareChunker` → **embed** via
+`EmbeddingCache → BatchEmbedder → EmbeddingProvider` from
+`embedding.factory.resolve_embedding_pipeline` → `route_add_chunks`).
+Pass an explicit `embedding_provider=` to override; set `DIGISEARCH_EMBED=0` to
+skip the pipeline-level step (backends may still embed). Explicit provider
+config that cannot load raises — never a silent no-op. Chunker selection (no
+code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`, or per-index
+YAML `chunker:` via `DigiSearchConfig`.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
+
+#### query.mode semantics
+
+`Query.mode` / `QueryRequest.mode` is retained as a **validated capability hint**
+(`keyword` | `vector` | `hybrid`). Invalid values are rejected (HTTP 400 /
+CLI exit 2).
+
+| Backend | Behavior |
+|---------|----------|
+| Chroma / Vectorize / stub | ANN (or substring for stub) only. `keyword` and `hybrid` **coerce to `vector`**; the server logs `requested_mode` → `effective_mode`. |
+| Azure AI Search | Text BM25 (`query_type=simple`, or `semantic` when the index config names a semantic configuration). Native Azure vector / hybrid query types are **not** selected from `mode` today — Azure still runs keyword/semantic text search for all three values. |
+
+This matches the historical passthrough contract without removing the field from
+OpenAPI / MCP / CLI. Callers that need true BM25+vector fusion on Chroma must
+wait for a higher-level `HybridSearcher` wire-up (out of scope here).
 
 #### `GET /indexes`
 
@@ -243,7 +268,7 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 
 | Command | Description |
 |---------|-------------|
-| `digisearch ingest --index <name> <path>` | Ingest file or directory with optional YAML sidecar; uses stub backend |
+| `digisearch ingest --index <name> <path>` | Ingest file or directory via `pipeline.ingest.ingest_source` |
 | `digisearch ingest-batch --index <name> <dir>` | Batch-ingest all supported files under a directory |
 | `digisearch discover-crossref <doi>` | Fetch Crossref metadata and print YAML sidecar snippet |
 | `digisearch query --index <name> --text <q>` | Run search query and print ranked results |
@@ -252,11 +277,14 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
-**Note:** CLI ingest routes through `route_add_chunks` — Chroma when `CHROMA_PATH` /
-`CHROMA_HOST` is set (Profile A seed), otherwise the in-memory stub only when
-`DIGISEARCH_ALLOW_STUB=1`. Chunk metadata always inherits `Document.source` as
-`source` / `path` / `source_url` (plus a basename `title` when missing) via
-`merge_document_metadata_into_chunks` so citation UIs are not UUID-only.
+**Note:** CLI and HTTP ingest both call `digisearch.pipeline.ingest.ingest_source`
+(batch via `ingest_paths`). That path writes through `route_add_chunks` —
+Chroma when `CHROMA_PATH` / `CHROMA_HOST` is set (Profile A seed), otherwise the
+in-memory stub only when `DIGISEARCH_ALLOW_STUB=1`. Optional `embedding_provider`
+on the pipeline embeds chunks before the backend write. Chunk metadata always
+inherits `Document.source` as `source` / `path` / `source_url` (plus a basename
+`title` when missing) via `merge_document_metadata_into_chunks` so citation UIs
+are not UUID-only.
 
 ---
 
@@ -410,7 +438,9 @@ digisearch/src/digisearch/
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
-├── cli.py                     # Typer CLI (digisearch)
+├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
+├── pipeline/
+│   └── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
 ├── client.py                  # digisearch Python client
@@ -429,6 +459,7 @@ digisearch/src/digisearch/
 │   ├── base.py                # EmbeddingProvider ABC
 │   ├── cache.py               # EmbeddingCache (SQLite, keyed by SHA-256 content hash)
 │   ├── batch.py               # BatchEmbedder (batch_size=100, retry, linear backoff)
+│   ├── factory.py             # resolve_embedding_pipeline + query.mode helpers
 │   └── providers/
 │       ├── openai.py          # OpenAIEmbedder (others: azure_openai, cohere, huggingface, ollama)
 │       └── minilm.py          # MiniLMEmbedder (local ONNX, 384-dim; Vectorize's default embedder)
@@ -675,7 +706,7 @@ RRF_score(rank, k=60) = 1 / (60 + rank)
 
 Default `alpha = 0.6` (60% weight on vector results). The RRF constant `k=60` is hardcoded and not configurable.
 
-**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure, Vectorize, or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally. Neither Chroma nor Vectorize supports BM25 natively — the `HybridSearcher` would need to be wired at a higher level for hybrid on either. The current server uses `mode` as a passthrough hint to the backend, but Chroma and Vectorize only support ANN (cosine distance) — `mode="keyword"` or `mode="hybrid"` on either backend falls back to vector-only.
+**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure, Vectorize, or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally but digisearch does not yet map `mode` onto Azure vector query types. Neither Chroma nor Vectorize supports BM25 natively — the `HybridSearcher` would need to be wired at a higher level for hybrid on either. Validated `mode` values are accepted on the public API; Chroma/Vectorize/stub **coerce** `keyword`/`hybrid` to vector-only ANN and log the coercion (see [query.mode semantics](#querymode-semantics)).
 
 ### Orchestrator dispatch pattern
 
@@ -936,7 +967,11 @@ docker compose --profile digisearch-mcp up
 | `DIGISEARCH_CONFIG_PATH` | _(unset)_ | Path to YAML/TOML DigiSearchConfig |
 | `DIGISEARCH_ALLOW_STUB` | `0` | Enable in-memory stub (unit tests only) |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
-| `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id for versioning |
+| `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
+| `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |
+| `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |
+| `DIGISEARCH_EMBED_BATCH_SIZE` | `100` | BatchEmbedder batch size |
+| `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id (OpenAI model or versioning) |
 | `DIGISEARCH_EMBEDDING_DIM` | `1536` | Vector dimension for versioning |
 | `DIGISEARCH_EMBEDDING_VERSION` | `1` | Logical version for index migration |
 | `OPENAI_API_KEY` | _(unset)_ | OpenAI API key for OpenAIEmbedder |
