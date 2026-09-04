@@ -19,6 +19,7 @@
     "./styles/chat-core.css": "./src/styles/chat-core.css",
     "./styles/chat-math.css": "./src/styles/chat-math.css",
     "./styles/chat-widgets.css": "./src/styles/chat-widgets.css",
+    "./styles/digichat-launcher.css": "./src/styles/digichat-launcher.css",
     "./styles/controls-core.css": "./src/styles/controls-core.css",
     "./styles/controls-overlay.css": "./src/styles/controls-overlay.css",
     "./styles/finance-composites.css": "./src/styles/finance-composites.css",

@@ -237,6 +237,10 @@ The panel iframes digichat `/embed?layout=embed` with page-context
 the panel (#3590); the model receives HTML+text via the existing
 prompt-prefix path (screenshot/vision multimodal deferred). Same contract as
 digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+The launcher chrome is the shared digiweb `DigichatLauncher`: a 30px square
+compact terminal mark whose hover/focus types `digichat`, then opens in two
+stages (horizontal composer bar, upward panel). The ×, Escape, and transparent
+outside-click backdrop reverse that expansion without blurring the dashboard.
 
 Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
 plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in

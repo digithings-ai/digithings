@@ -1,21 +1,26 @@
 'use client';
 
 /**
- * Desk+ digichat popup (#3422 / #3581 / #3587) — bottom-right launcher + floating iframe.
- * Mirrors digichat `widget.js` (#3421) without loading an external script (CSP).
- * Compact Digi D-mark launcher; hover typewriter “ask digichat”; expand/collapse;
- * HTML page context.
+ * Desk+ digichat popup (#3422) — dashboard adapter around digiweb's shared
+ * square-to-panel launcher. This file owns entitlement, embed URL, theme, and
+ * page-context messaging; @digithings/web owns all launcher chrome and motion.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DigichatLauncher } from '@digithings/web';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   buildPageContextMessage,
   buildThemeMessage,
   canUseDigichatPopup,
-  DIGICHAT_LAUNCHER_CLOSE_LABEL,
-  DIGICHAT_LAUNCHER_LABEL,
   DIGICHAT_READY,
   extractPageHtml,
   extractVisiblePageText,
@@ -25,7 +30,6 @@ import {
   type DigichatPopupTheme,
   type PlanTier,
 } from '@/lib/digichat-popup';
-
 
 export {
   canUseDigichatPopup,
@@ -38,55 +42,6 @@ type DigichatPopupProps = {
   tier?: PlanTier;
   config?: DigichatPopupConfig | null;
 };
-
-/** D-in-block mark (digithings digi-app) — square chrome, ink via currentColor. */
-function DigichatLauncherMark({ size = 22 }: { size?: number }) {
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      className="shrink-0"
-    >
-      <rect width="100" height="100" fill="currentColor" opacity="0.12" />
-      <g fill="currentColor">
-        <path d="M26.135 70.21Q21.118 70.21 17.463 67.773Q13.808 65.337 11.838 60.893Q9.867 56.45 9.867 50.358Q9.867 44.267 11.838 39.823Q13.808 35.38 17.463 32.943Q21.118 30.507 26.135 30.507Q29.217 30.507 31.689 31.653Q34.162 32.8 35.846 34.52Q37.53 36.24 38.175 38.032L37.53 39.537V18.467H43.55V69.35H38.103L37.745 60.75L38.677 61.825Q37.817 64.405 35.989 66.304Q34.162 68.203 31.653 69.207Q29.145 70.21 26.135 70.21ZM26.493 64.477Q29.933 64.477 32.406 62.757Q34.878 61.037 36.204 57.848Q37.53 54.658 37.53 50.358Q37.53 45.915 36.204 42.762Q34.878 39.608 32.37 37.924Q29.862 36.24 26.35 36.24Q21.692 36.24 18.933 40.003Q16.173 43.765 16.173 50.358Q16.173 56.88 18.933 60.678Q21.692 64.477 26.493 64.477Z" />
-        <rect x="50" y="18.47" width="43" height="50.88" />
-      </g>
-    </svg>
-  );
-}
-
-function TypewriterLabel({
-  text,
-  ms = 26,
-  className,
-}: {
-  text: string;
-  ms?: number;
-  className?: string;
-}) {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    let i = 0;
-    const id = window.setInterval(() => {
-      i += 1;
-      setN(i);
-      if (i >= text.length) window.clearInterval(id);
-    }, ms);
-    return () => window.clearInterval(id);
-  }, [text, ms]);
-  return (
-    <span data-testid="digichat-launcher-label" className={className}>
-      {text.slice(0, n)}
-      <span
-        aria-hidden="true"
-        className="ml-0.5 inline-block h-[0.9em] w-[0.45em] animate-pulse bg-accent"
-      />
-    </span>
-  );
-}
 
 export default function DigichatPopup({
   tier: tierOverride,
@@ -102,15 +57,10 @@ export default function DigichatPopup({
 
   const entitled = canUseDigichatPopup(tier);
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
-  const [launcherHover, setLauncherHover] = useState(false);
-  const [launcherFocus, setLauncherFocus] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pageContextSentRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
-
-  const typeActive = !open && (launcherHover || launcherFocus);
 
   useEffect(() => {
     if (!config || !entitled) return;
@@ -136,31 +86,17 @@ export default function DigichatPopup({
     setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
   }, [open, config]);
 
-  const closePanel = useCallback(() => {
-    setOpen(false);
-    setExpanded(false);
-  }, []);
-
-  const togglePanel = useCallback(() => {
-    if (open) {
-      setOpen(false);
-      setExpanded(false);
-    } else {
-      setOpen(true);
-    }
-  }, [open]);
-
   const sendPageContext = useCallback(() => {
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const text = extractVisiblePageText();
-    const html = extractPageHtml();
+  const html = extractPageHtml();
     try {
-      win.postMessage(
-        buildPageContextMessage(text, { html: html || undefined }),
-        config.origin,
-      );
+    win.postMessage(
+      buildPageContextMessage(text, { html: html || undefined }),
+      config.origin,
+    );
       pageContextSentRef.current = true;
     } catch {
       /* allow retry on next ready */
@@ -183,57 +119,23 @@ export default function DigichatPopup({
     return () => window.removeEventListener('message', onMessage);
   }, [config, open, sendPageContext]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key !== 'Escape') return;
-      if (expanded) {
-        setExpanded(false);
-        return;
-      }
-      closePanel();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, expanded, closePanel]);
-
   if (!config || !entitled) return null;
 
-  const wide = open || typeActive;
-
   return (
-    <div
-      data-digichat-popup="1"
-      className="pointer-events-none fixed inset-0 z-[2147483000]"
-      aria-live="polite"
-    >
-      <div
-        id="digichat-popup-panel"
-        role="dialog"
-        aria-label="digichat"
-        data-open={open ? '1' : '0'}
-        data-expanded={expanded ? '1' : '0'}
-        className={[
-          'pointer-events-auto fixed z-[2147483000] flex flex-col overflow-hidden',
-          'border border-hair bg-surface shadow-lg',
-          open ? 'flex' : 'hidden',
-          expanded
-            ? 'inset-3 h-auto w-auto'
-            : 'right-5 bottom-[5.5rem] h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-        ].join(' ')}
+    <div data-digichat-popup="1" aria-live="polite">
+      <DigichatLauncher
+        ariaLabel="digichat dashboard assistant"
+        onOpenChange={setOpen}
+        style={
+          {
+            '--digichat-launcher-panel-width':
+              'min(400px, calc(100vw - 2.5rem))',
+            '--digichat-launcher-panel-height':
+              'min(640px, calc(100dvh - 2.5rem))',
+            zIndex: 2147483000,
+          } as CSSProperties
+        }
       >
-        <div className="flex shrink-0 items-center justify-end gap-1 border-b border-hair px-2 py-1">
-          <button
-            type="button"
-            id="digichat-popup-expand"
-            aria-label={expanded ? 'Collapse digichat' : 'Expand digichat'}
-            aria-pressed={expanded}
-            onClick={() => setExpanded((v) => !v)}
-            className="cursor-pointer border-0 bg-transparent px-2 py-1 font-mono text-[0.72rem] text-ink-mute hover:text-ink"
-          >
-            {expanded ? 'collapse' : 'expand'}
-          </button>
-        </div>
         {iframeSrc ? (
           <iframe
             ref={iframeRef}
@@ -241,49 +143,10 @@ export default function DigichatPopup({
             title="digichat"
             src={iframeSrc}
             allow="clipboard-write"
-            className="min-h-0 w-full flex-1 border-0 bg-surface"
+            className="h-full w-full border-0 bg-transparent"
           />
         ) : null}
-      </div>
-      <button
-        id="digichat-popup-launcher"
-        type="button"
-        data-mode="icon"
-        data-open={open ? '1' : '0'}
-        aria-label={open ? 'Close digichat' : 'Open digichat'}
-        aria-expanded={open}
-        aria-controls="digichat-popup-panel"
-        onClick={togglePanel}
-        onMouseEnter={() => setLauncherHover(true)}
-        onMouseLeave={() => setLauncherHover(false)}
-        onFocus={() => setLauncherFocus(true)}
-        onBlur={() => setLauncherFocus(false)}
-        className={[
-          'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'flex h-11 items-center gap-2 rounded-none border-2 border-accent',
-          'bg-surface text-ink shadow-lg ring-1 ring-accent/40',
-          'cursor-pointer overflow-hidden',
-          'transition-[width,padding,transform,box-shadow] duration-150 ease-out',
-          'hover:-translate-y-px hover:bg-accent/10 hover:ring-accent/70',
-          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
-          wide ? 'w-auto min-w-[11rem] px-3' : 'w-11 justify-center px-0',
-        ].join(' ')}
-      >
-        <DigichatLauncherMark size={22} />
-        {open ? (
-          <span
-            data-testid="digichat-launcher-label"
-            className="font-mono text-[0.78rem] tracking-tight text-accent"
-          >
-            {DIGICHAT_LAUNCHER_CLOSE_LABEL}
-          </span>
-        ) : typeActive ? (
-          <TypewriterLabel
-            text={DIGICHAT_LAUNCHER_LABEL}
-            className="inline-flex min-w-[7.5rem] items-center font-mono text-[0.78rem] tracking-tight text-ink"
-          />
-        ) : null}
-      </button>
+      </DigichatLauncher>
     </div>
   );
 }
