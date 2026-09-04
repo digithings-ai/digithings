@@ -61,6 +61,8 @@ class WorkflowState(TypedDict, total=False):
     response_language: str | None
     # Per-request locate tool to inject with the user string as its query (#3418).
     force_tool: str | None
+    # Opt-in digillm web search (#3420). Default off — never silent RAG mix.
+    enable_web_search: bool
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
