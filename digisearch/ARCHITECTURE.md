@@ -559,6 +559,7 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 | `[chroma]` | `chromadb` | Chroma backend |
 | `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
 | `[embedding]` | `openai` | OpenAI embedder |
+| `[rerank]` | `sentence-transformers` | BGE cross-encoder (`Reranker` provider=`bge`); kept separate from `[embedding]` so OpenAI-only installs stay light (#2441) |
 | `[agent]` | `langgraph` | research-turn graph (§11) |
 | `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
 
@@ -582,9 +583,11 @@ query_index(query, index_name):
   for backend in _backends:
     resp = backend(query, index_name)
     if resp is not None:
-      return resp
-  # fall through to stub or empty
+      return _maybe_rerank(query, resp)  # DIGISEARCH_RERANK_ENABLED, off by default
+  # fall through to stub or empty (also through _maybe_rerank)
 ```
+
+When `DIGISEARCH_RERANK_ENABLED` is truthy and `Query.skip_rerank` is false, `_maybe_rerank` runs `Reranker` over `resp.results` with `top_n=query.top_k` before returning. Provider defaults to `bge` (`BAAI/bge-reranker-v2-m3` via `[rerank]` / sentence-transformers); override with `DIGISEARCH_RERANK_PROVIDER=cohere` (already-multilingual `rerank-multilingual-v3.0`). `digisearch_fetch_all` sets `skip_rerank=True` on every page because it shares `run_query` → `query_index` with single-shot `/query` — reordering a partial page would break exhaustive pagination (#2441 / ADR-0025 Phase 4).
 
 Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
@@ -855,13 +858,13 @@ For SEC filings (EDGAR corpus) and research/earnings transcripts, keep the seman
 
 ### Reranker latency tradeoff
 
-`Reranker` runs as a second-pass over the initial candidate set (default `top_n=5`). Cost:
+`Reranker` runs as a second-pass over the initial candidate set. When constructed without an explicit `top_n`, it no longer silently caps at 5 — callers (including `query_index`) pass `top_n=query.top_k`. Cost:
 
 - **Cohere Rerank API:** ~200–500ms per call, network-dependent
-- **BGE local (sentence-transformers `CrossEncoder`):** ~50–200ms for a batch of 10 candidates on CPU; ~10ms on GPU
+- **BGE local (`BAAI/bge-reranker-v2-m3` via sentence-transformers `CrossEncoder`):** ~50–200ms for a batch of 10 candidates on CPU; ~10ms on GPU
 - Model load on first call adds several seconds for BGE
 
-The reranker is not wired into the production `POST /query` path. It is available as a class but callers must instantiate and invoke it explicitly. It is not part of the `query_index()` router.
+Wiring is gated by `DIGISEARCH_RERANK_ENABLED` (default off) inside `query_index()` (#2441 / ADR-0025 Phase 4). With the flag unset, output is unchanged. `digisearch_fetch_all` sets `Query.skip_rerank=True` so partial pages are never reordered even when the flag is on.
 
 ### Index backends (production inventory)
 
@@ -966,6 +969,8 @@ docker compose --profile digisearch-mcp up
 | `DIGISEARCH_INDEX_CONFIG` | _(unset)_ | Path to index YAML (field_mapping, schema) |
 | `DIGISEARCH_CONFIG_PATH` | _(unset)_ | Path to YAML/TOML DigiSearchConfig |
 | `DIGISEARCH_ALLOW_STUB` | `0` | Enable in-memory stub (unit tests only) |
+| `DIGISEARCH_RERANK_ENABLED` | `0` | When truthy, `query_index()` runs `Reranker` over results (`top_n=query.top_k`); off by default (#2441) |
+| `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` — explicit provider (fails loud if unloadable) |
@@ -1032,7 +1037,7 @@ Without this, `workspace_id` is decorative on backends that neither filter nor f
 
 ### Reranker wiring
 
-The `Reranker` class is implemented but not wired into the `POST /query` path or `query_index()`. Enabling it requires explicit instantiation by the caller or a configuration-driven pipeline.
+`Reranker` is wired into `query_index()` behind `DIGISEARCH_RERANK_ENABLED` (default off). BGE uses `BAAI/bge-reranker-v2-m3` (install `digisearch[rerank]`); Cohere stays on `rerank-multilingual-v3.0`. Failures log a warning naming the provider and fall back to the original order. `Query.skip_rerank` / `QueryRequest.skip_rerank` suppress the pass for `digisearch_fetch_all` pages that share the same `run_query` → `query_index` chain.
 
 ### Missing HTTP endpoints
 
