@@ -3,6 +3,7 @@
 # No Containers / Durable Objects. Deploy from main only.
 # wrangler deploy is the source of truth for [triggers] crons.
 name = "digithings-cron"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 main = "src/index.ts"
 compatibility_date = "2026-09-04"
 workers_dev = true
