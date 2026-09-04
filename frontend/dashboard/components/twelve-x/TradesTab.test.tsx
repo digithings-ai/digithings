@@ -116,12 +116,25 @@ describe('TradesTab', () => {
     );
 
     expect(html).toContain('data-testid="impact-min-slider"');
+    expect(html).toContain('ctl-slider-input');
     expect(html).toContain('|Impact| ≥ 0%');
     expect(html).toContain('aria-label="Filter by board date range"');
     expect(html).toContain('All boards');
     expect(html).not.toContain('|Impact| ≥ 0.1%');
     expect(html).not.toContain('Filter by board date"');
     expect(html).not.toContain('<option value="all">All boards</option>');
+  });
+
+  it('uses DigiWeb DropdownMenu for pair filter (not native select)', () => {
+    const html = renderToStaticMarkup(
+      createElement(TradesTab, { ideas, ideaEval }),
+    );
+
+    expect(html).toContain('data-testid="pair-filter"');
+    expect(html).toContain('aria-label="Filter by pair"');
+    expect(html).toContain('All pairs');
+    expect(html).not.toMatch(/<select[\s>]/);
+    expect(html).not.toContain('<option value="all">All pairs</option>');
   });
 });
 

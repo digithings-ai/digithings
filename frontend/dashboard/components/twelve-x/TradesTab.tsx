@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@digithings/web';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   assembleTradeHistory,
@@ -96,8 +103,50 @@ function SortHeader({
   );
 }
 
-function selectClassName(): string {
-  return 'border border-hair bg-term-bg px-2 py-1 text-[11px] text-ink';
+/** DigiWeb-aligned track fill (same recipe as digiweb Slider). */
+function impactSliderFill(pct: number): string {
+  const span = IMPACT_MAX_PCT - IMPACT_MIN_PCT;
+  const filled = span <= 0 ? 0 : ((pct - IMPACT_MIN_PCT) / span) * 100;
+  return `linear-gradient(to right, var(--accent) 0 ${filled}%, color-mix(in srgb, var(--ink) 14%, transparent) ${filled}% 100%)`;
+}
+
+function PairFilterDropdown({
+  value,
+  pairs,
+  onChange,
+}: {
+  value: string;
+  pairs: readonly string[];
+  onChange: (pair: string) => void;
+}) {
+  const label = value === 'all' ? 'All pairs' : value;
+  const active = value !== 'all';
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        type="button"
+        aria-label="Filter by pair"
+        data-testid="pair-filter"
+        className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+          active
+            ? 'border-accent/40 bg-accent/15 text-accent'
+            : 'border-hair text-ink-mute hover:text-ink'
+        }`}
+      >
+        {label}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent skin="reference" align="start" sideOffset={4} className="max-h-64 min-w-[8rem]">
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          <DropdownMenuRadioItem value="all">All pairs</DropdownMenuRadioItem>
+          {pairs.map((p) => (
+            <DropdownMenuRadioItem key={p} value={p}>
+              {p}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export default function TradesTab({
@@ -222,22 +271,11 @@ export default function TradesTab({
                 </button>
               );
             })}
-            <label className="flex items-center gap-1.5 text-[11px] text-ink-mute">
-              <span className="sr-only">Pair</span>
-              <select
-                className={selectClassName()}
-                value={pairFilter}
-                onChange={(e) => setPairFilter(e.target.value)}
-                aria-label="Filter by pair"
-              >
-                <option value="all">All pairs</option>
-                {pairs.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <PairFilterDropdown
+              value={pairFilter}
+              pairs={pairs}
+              onChange={setPairFilter}
+            />
             <BoardDateRangeFilter
               boards={boards}
               boardFrom={boardFrom}
@@ -263,7 +301,8 @@ export default function TradesTab({
                 onChange={(e) => setImpactMinPct(Number(e.target.value))}
                 aria-label="Minimum absolute Impact percent"
                 data-testid="impact-min-slider"
-                className="h-1 w-full flex-1 cursor-pointer accent-[var(--accent)]"
+                className="ctl-slider-input flex-1"
+                style={{ background: impactSliderFill(impactMinPct) }}
               />
             </label>
           </div>
