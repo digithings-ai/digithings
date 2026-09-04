@@ -7,7 +7,7 @@ Selection is config-only via ``DIGISEARCH_RETRIEVAL_BACKEND`` (default:
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any  # score:allow untyped any — backend constructor kwargs
 
 from digisearch.retrieval.backend import RetrievalBackend
 from digisearch.retrieval.lightrag import LightRAGBackend

@@ -14,7 +14,7 @@ import math
 import os
 import re
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Protocol  # score:allow untyped any — embedder / psycopg connection seam
 from urllib.parse import urlparse
 
 from digisearch.core.models import Document

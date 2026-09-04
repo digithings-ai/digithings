@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any  # score:allow untyped any — fake LightRAG kwargs / response doubles
 
 import pytest
 from digisearch.core.models import Document
