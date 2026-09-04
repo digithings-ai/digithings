@@ -301,7 +301,7 @@ export default function TradesTab({
                 onChange={(e) => setImpactMinPct(Number(e.target.value))}
                 aria-label="Minimum absolute Impact percent"
                 data-testid="impact-min-slider"
-                className="fx-impact-slider flex-1"
+                className="ctl-slider-input flex-1"
                 style={{ background: impactSliderFill(impactMinPct) }}
               />
             </label>

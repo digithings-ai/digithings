@@ -116,7 +116,7 @@ describe('TradesTab', () => {
     );
 
     expect(html).toContain('data-testid="impact-min-slider"');
-    expect(html).toContain('fx-impact-slider');
+    expect(html).toContain('ctl-slider-input');
     expect(html).toContain('|Impact| ≥ 0%');
     expect(html).toContain('aria-label="Filter by board date range"');
     expect(html).toContain('All boards');
