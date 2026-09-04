@@ -1,9 +1,8 @@
 # Refresh docs/agent-backlog/generated-snapshot.md from open agent-task issues.
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Agent: backlog snapshot"
 
 on:
-  schedule:
-    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:
