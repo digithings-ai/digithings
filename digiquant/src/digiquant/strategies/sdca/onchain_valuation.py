@@ -162,14 +162,6 @@ def load_onchain_parquet_frames(
     return out
 
 
-def _z_for_series(series_id: str, values: pl.Series) -> pl.Series:
-    indicator = _SERIES_TO_INDICATOR.get(series_id, series_id)
-    if series_id == "mvrv":
-        return mvrv_z_score(values)
-    # aSOPR oscillates around 1; Puell/RHODL are high-when-rich.
-    return onchain_metric_z(values, name=indicator, invert=True)
-
-
 def build_onchain_indicator_weights(
     dates: pl.Series,
     series_frames: dict[str, pl.DataFrame],
