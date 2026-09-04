@@ -783,4 +783,4 @@ def delete_document(name: str, doc_id: str) -> dict:
 
 
 register_fastapi_error_handlers(app, service="digisearch")
-setup_otel_fastapi(app, service_name="digisearch")
+setup_otel_fastapi(app, service_name="digisearch", service_version=__version__)
