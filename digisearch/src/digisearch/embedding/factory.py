@@ -102,9 +102,9 @@ def _provider_name_and_model(config: DigiSearchConfig | None) -> tuple[str | Non
 
 def _build_raw_provider(name: str, model: str | None) -> EmbeddingProvider:
     if name in ("minilm", "local", "onnx"):
-        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+        from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
-        return MiniLMEmbedder()
+        return get_default_minilm_embedder()
     if name in ("openai", "oai"):
         api_key = os.environ.get("OPENAI_API_KEY", "").strip()
         if not api_key:
