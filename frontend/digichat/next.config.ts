@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   // root from surrounding lockfiles, which breaks in git worktrees and would
   // silently move server.js out from under the Dockerfile's COPY paths (#675).
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // The dev badge is fixed to a viewport corner, and /embed is routinely viewed
+  // inside a ~400px popup frame where every corner is chrome — it landed on the
+  // composer and hid the placeholder. Dev-only; the error overlay is unaffected.
+  devIndicators: false,
   turbopack: {
     root: path.join(__dirname, "../.."),
   },

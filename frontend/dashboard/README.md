@@ -233,8 +233,8 @@ near-fullscreen overlay; Escape collapses first, then closes.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
 (`digichat:page-context`) for the visible dashboard DOM — sanitized **HTML**
-(preferred, ≤12k chars) plus visible text (≤8k). The embed shows a small
-“looking at this page” HTML preview; the model receives HTML+text via the existing
+(preferred, ≤12k chars) plus visible text (≤8k). Nothing is rendered for it in
+the panel (#3590); the model receives HTML+text via the existing
 prompt-prefix path (screenshot/vision multimodal deferred). Same contract as
 digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
 

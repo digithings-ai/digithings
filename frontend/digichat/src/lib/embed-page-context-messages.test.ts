@@ -4,7 +4,6 @@ import {
   buildPageContextMessage,
   extractVisiblePageText,
   formatPageContextForPrompt,
-  formatPageContextPreview,
   parsePageContextMessage,
   sanitizePageHtml,
 } from "@/lib/embed-page-context-messages";
@@ -100,15 +99,5 @@ describe("embed-page-context-messages", () => {
     expect(formatted).toContain("screenshot");
     expect(formatted).toContain("vision multimodal is not enabled");
     expect(formatted).not.toContain("base64");
-  });
-
-  it("builds a compact preview snippet from HTML", () => {
-    const preview = formatPageContextPreview({
-      text: "fallback",
-      html: "<main><h1>Brief</h1><p>House positions</p></main>",
-    });
-    expect(preview).toContain("Brief");
-    expect(preview).toContain("House positions");
-    expect(preview).not.toContain("fallback");
   });
 });

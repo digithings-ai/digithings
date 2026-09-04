@@ -276,9 +276,11 @@
 }
 /* iOS Safari auto-zooms the page on focusing any input/textarea under 16px —
  * there is no CSS opt-out for that behavior, only staying above the
- * threshold. Scoped to the width Safari treats as a phone, not a general
- * mobile/touch query, so a compact tablet or desktop keeps the tighter 0.8rem. */
-@media (max-width: 640px) {
+ * threshold. Width alone is the wrong test: the popup launcher embeds this
+ * session in a ~400px iframe on a desktop, where the 16px input towered over
+ * the 0.8rem transcript beside it. `pointer: coarse` is what separates a phone
+ * from a narrow frame, and a phone is the only place the zoom happens. */
+@media (max-width: 640px) and (pointer: coarse) {
   .dc-textarea {
     font-size: 1rem;
   }
