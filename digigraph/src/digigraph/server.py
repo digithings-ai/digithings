@@ -726,4 +726,4 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
 app.include_router(v1)
 
 register_fastapi_error_handlers(app, service="digigraph")
-setup_otel_fastapi(app, service_name="digigraph")
+setup_otel_fastapi(app, service_name="digigraph", service_version=__version__)

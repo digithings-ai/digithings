@@ -972,4 +972,4 @@ register_runtime_handler(TOOL_VAULT_SEARCH_NOTES, _runtime_tool_claimed(TOOL_VAU
 register_runtime_handler(TOOL_VAULT_GET_NOTE, _runtime_tool_claimed(TOOL_VAULT_GET_NOTE))
 
 register_fastapi_error_handlers(app, service="digivault")
-setup_otel_fastapi(app, service_name="digivault")
+setup_otel_fastapi(app, service_name="digivault", service_version=__version__)
