@@ -980,22 +980,3 @@ export function ChatPanel({
     </div>
   );
 }
-
-/** Kept for back-compat with any external importers. Renders a simple mono strip. */
-export function ChatChrome({
-  threadTitle,
-  userSubtitle,
-  leading,
-}: {
-  threadTitle: string;
-  userSubtitle: string;
-  leading?: React.ReactNode;
-}) {
-  return (
-    <header className="app-topbar">
-      {leading}
-      <span className="app-topbar-title">{threadTitle || "digichat"}</span>
-      <span className="app-topbar-meta">{userSubtitle}</span>
-    </header>
-  );
-}
