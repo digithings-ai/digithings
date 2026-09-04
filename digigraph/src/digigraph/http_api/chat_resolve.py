@@ -131,5 +131,7 @@ def _log_and_store_request_summary(summary: dict) -> None:
         summary["prompt_len"],
         summary["session_id"],
     )
-    global _DEBUG_REQUEST_LOG
-    _DEBUG_REQUEST_LOG = [summary] + _DEBUG_REQUEST_LOG[: _DEBUG_REQUEST_LOG_MAX - 1]
+    # Mutate in place so server.py's shared list (assigned at import) stays the
+    # same object — a rebind would orphan the list that debug_input_messages reads.
+    _DEBUG_REQUEST_LOG.insert(0, summary)
+    del _DEBUG_REQUEST_LOG[_DEBUG_REQUEST_LOG_MAX:]

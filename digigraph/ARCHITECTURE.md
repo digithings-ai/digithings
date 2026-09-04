@@ -772,7 +772,7 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 ### 8.3 digistore for LLM Context Reduction
 
-Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
+Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `orchestration/tool_common.py`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
 `digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
 
@@ -839,7 +839,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.
-- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `builtin.py:34`.
+- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `orchestration/tool_common.py`.
 - **Env:** `DIGISEARCH_URL` (required; empty = digisearch tools disabled). In Docker: `http://digisearch:8002`.
 
 ### 9.2 digiquant
