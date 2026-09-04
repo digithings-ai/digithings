@@ -978,4 +978,4 @@ def api_run_pipeline(req: PipelineRequest) -> dict[str, Any]:
 app.include_router(v1)
 
 register_fastapi_error_handlers(app, service="digiquant")
-setup_otel_fastapi(app, service_name="digiquant")
+setup_otel_fastapi(app, service_name="digiquant", service_version=__version__)
