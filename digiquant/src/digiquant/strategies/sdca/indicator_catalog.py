@@ -286,16 +286,18 @@ def build_extra_indicators(
 ) -> list[IndicatorWeight]:
     """Materialize enabled extras, plus the always-on price oscillators for display.
 
-    Macro extras (M2 / rs_eth / DXY) are only materialized at weight > 0 (a
-    zero weight omits them entirely, so they never null the blend). The
-    price oscillators (``weekly_rsi`` / ``sma_band``) are pure price-derived
-    and allowlist-gated only, not weight-gated: they're always materialized
-    with ``enabled=False`` when their weight is 0, so ``build_risk_index``
-    can still write their z-series into the risk parquet for the frontend
-    Indicators tab, while ``compute_composite_risk`` (which filters on
-    ``ind.enabled``, not weight) excludes them from the actual composite
-    risk / trading signal exactly as before. ``weekly_macd`` stays
-    weight-gated like the macro extras.
+    M2 and DXY are only materialized at weight > 0 (a zero weight omits them
+    entirely, so a missing macro row never nulls the blend). Everything else
+    — the price oscillators (``weekly_rsi`` / ``weekly_macd`` / ``sma_band``)
+    plus ``rs_eth`` when its ETH source series is available — is allowlist-
+    gated only, not weight-gated: always materialized with ``enabled=False``
+    when its weight is 0, so ``build_risk_index`` can still write its
+    z-series into the risk parquet for the frontend Indicators tab, while
+    ``compute_composite_risk`` (which filters on ``ind.enabled``, not
+    weight) excludes it from the actual composite risk / trading signal
+    exactly as before. ``rs_eth`` still requires its ETH source pair when
+    its weight is positive (``_require_pair`` raises if missing); at weight
+    0 with no ETH source loaded it's simply omitted, same as before.
 
     ``btc_price`` is the *asset* close (BTC, ETH, or another series). Macro
     extras (M2 / rs_eth / DXY) are BTC-oriented plugins; pass ``allowlist``
@@ -325,7 +327,9 @@ def build_extra_indicators(
                 weight=enabled["m2"],
             )
         )
-    if "rs_eth" in enabled:
+    rs_eth_allowed = allowlist is None or "rs_eth" in allowlist
+    rs_eth_has_source = sources.eth_dates is not None and sources.eth_close is not None
+    if rs_eth_allowed and (weights.rs_eth > 0.0 or rs_eth_has_source):
         eth_dates = _require_pair(sources.eth_dates, sources.eth_close, "rs_eth")
         extras.append(
             IndicatorWeight(
@@ -340,7 +344,8 @@ def build_extra_indicators(
                     fast_window=spec.rs_eth_fast_window,
                     fast_min_samples=spec.rs_eth_fast_min_samples,
                 ),
-                weight=enabled["rs_eth"],
+                weight=weights.rs_eth,
+                enabled=weights.rs_eth > 0.0,
             )
         )
     if "dxy" in enabled:
@@ -372,7 +377,7 @@ def build_extra_indicators(
                 enabled=weights.weekly_rsi > 0.0,
             )
         )
-    if "weekly_macd" in enabled:
+    if allowlist is None or "weekly_macd" in allowlist:
         extras.append(
             IndicatorWeight(
                 name="weekly_macd",
@@ -386,7 +391,8 @@ def build_extra_indicators(
                     daily_z_window=spec.macd_daily_z_window,
                     daily_min_samples=spec.macd_daily_min_samples,
                 ),
-                weight=enabled["weekly_macd"],
+                weight=weights.weekly_macd,
+                enabled=weights.weekly_macd > 0.0,
             )
         )
     if allowlist is None or "sma_band" in allowlist:

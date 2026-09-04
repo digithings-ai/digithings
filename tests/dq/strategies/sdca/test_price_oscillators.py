@@ -777,7 +777,9 @@ class TestCatalogWiring:
         assert w.power_law == pytest.approx(1.0)
         assert w.enabled_extras() == {}
 
-    def test_zero_weight_skips_oscillators(self) -> None:
+    def test_zero_weight_oscillators_materialize_disabled(self) -> None:
+        """Price oscillators are allowlist-gated, not weight-gated: they still
+        show up (disabled) at weight 0 so the Indicators tab can chart them."""
         dates = _dates(30)
         extras = build_extra_indicators(
             dates,
@@ -785,7 +787,8 @@ class TestCatalogWiring:
             SdcaCompositeWeights(),
             ExtraIndicatorSources(),
         )
-        assert extras == []
+        assert {e.name for e in extras} == set(PRICE_OSCILLATOR_NAMES)
+        assert all(not e.enabled for e in extras)
 
     def test_positive_weekly_rsi_weight_emits_series(self) -> None:
         n = 200
@@ -798,9 +801,12 @@ class TestCatalogWiring:
             window=20,
             min_samples=10,
         )
-        names = [e.name for e in extras]
-        assert names == ["weekly_rsi"]
-        assert extras[0].z.len() == n
+        by_name = {e.name: e for e in extras}
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert by_name["weekly_rsi"].enabled
+        assert not by_name["weekly_macd"].enabled
+        assert not by_name["sma_band"].enabled
+        assert by_name["weekly_rsi"].z.len() == n
 
     def test_from_params_defaults_keep_btc_charts(self) -> None:
         w = composite_weights_from_params({"buy_max_rate": 10.0})

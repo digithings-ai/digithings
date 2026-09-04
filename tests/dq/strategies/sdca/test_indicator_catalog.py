@@ -225,7 +225,9 @@ class TestOscillatorSpecRsEthFast:
 
 
 class TestBuildExtraIndicators:
-    def test_zero_weights_emit_no_extras_even_when_sources_exist(self) -> None:
+    def test_zero_weights_emit_no_enabled_extras_even_when_sources_exist(self) -> None:
+        """M2 stays weight-gated (source present, weight 0 → omitted); the always-on
+        price oscillators still materialize for display, but disabled."""
         dates = _dates(30)
         m2 = pl.Series([100.0] * 30)
         sources = ExtraIndicatorSources(m2_dates=dates, m2_values=m2)
@@ -238,7 +240,41 @@ class TestBuildExtraIndicators:
             min_samples=5,
             roc_days=5,
         )
-        assert extras == []
+        assert {e.name for e in extras} == {"weekly_rsi", "weekly_macd", "sma_band"}
+        assert all(not e.enabled for e in extras)
+
+    def test_zero_rs_eth_weight_still_materializes_when_eth_source_exists(self) -> None:
+        """rs_eth is a display-only diagnostic at weight 0, like the price
+        oscillators, as long as its ETH source series was loaded."""
+        dates = _dates(30)
+        eth = pl.Series([50.0 + 0.1 * i for i in range(30)])
+        sources = ExtraIndicatorSources(eth_dates=dates, eth_close=eth)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0] * 30),
+            SdcaCompositeWeights(),
+            sources,
+            window=10,
+            min_samples=5,
+        )
+        by_name = {e.name: e for e in extras}
+        assert "rs_eth" in by_name
+        assert by_name["rs_eth"].weight == 0.0
+        assert not by_name["rs_eth"].enabled
+
+    def test_zero_rs_eth_weight_omitted_when_no_eth_source(self) -> None:
+        """Without an ETH source, rs_eth can't be charted, so it's simply absent
+        (same as before) rather than raising like the weight>0 case does."""
+        dates = _dates(30)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0] * 30),
+            SdcaCompositeWeights(),
+            ExtraIndicatorSources(),
+            window=10,
+            min_samples=5,
+        )
+        assert "rs_eth" not in {e.name for e in extras}
 
     def test_positive_m2_weight_without_source_raises(self) -> None:
         dates = _dates(30)
@@ -291,9 +327,10 @@ class TestBuildExtraIndicators:
             ExtraIndicatorSources(),
             oscillators=spec,
         )
-        assert len(extras) == 1
+        by_name = {e.name: e for e in extras}
         expected = rsi_confluence_z(dates, close, weekly_length=10, daily_length=6)
-        assert extras[0].z.to_list() == expected.to_list()
+        assert by_name["weekly_rsi"].z.to_list() == expected.to_list()
+        assert by_name["weekly_rsi"].enabled
 
     def test_weekly_macd_slot_is_the_confluence_sub_aggregate(self) -> None:
         """weekly_macd now wires to macd_confluence_z (weekly+daily), not weekly-only."""
@@ -308,11 +345,12 @@ class TestBuildExtraIndicators:
             ExtraIndicatorSources(),
             oscillators=spec,
         )
-        assert len(extras) == 1
+        by_name = {e.name: e for e in extras}
         expected = macd_confluence_z(
             dates, close, weekly_fast=8, weekly_slow=21, daily_fast=5, daily_slow=10
         )
-        assert extras[0].z.to_list() == expected.to_list()
+        assert by_name["weekly_macd"].z.to_list() == expected.to_list()
+        assert by_name["weekly_macd"].enabled
 
     def test_sma_band_slot_is_the_confluence_sub_aggregate(self) -> None:
         """sma_band now wires to sma_band_confluence_z (slow+fast), not the raw single-window z."""
@@ -329,11 +367,12 @@ class TestBuildExtraIndicators:
             ExtraIndicatorSources(),
             oscillators=spec,
         )
-        assert len(extras) == 1
+        by_name = {e.name: e for e in extras}
         expected = sma_band_confluence_z(
             dates, close, slow_window=80, fast_window=15, fast_min_samples=8
         )
-        assert extras[0].z.to_list() == expected.to_list()
+        assert by_name["sma_band"].z.to_list() == expected.to_list()
+        assert by_name["sma_band"].enabled
 
     def test_rs_eth_slot_is_the_confluence_sub_aggregate(self) -> None:
         """rs_eth now wires to rs_eth_confluence_z (slow+fast), not the raw single-window z."""
@@ -352,11 +391,12 @@ class TestBuildExtraIndicators:
             sources,
             oscillators=spec,
         )
-        assert len(extras) == 1
+        by_name = {e.name: e for e in extras}
         expected = rs_eth_confluence_z(
             dates, btc, dates, eth, slow_window=60, fast_window=12, fast_min_samples=6
         )
-        assert extras[0].z.to_list() == expected.to_list()
+        assert by_name["rs_eth"].z.to_list() == expected.to_list()
+        assert by_name["rs_eth"].enabled
 
 
 class TestDefaultMatchesPowerLawOnly:

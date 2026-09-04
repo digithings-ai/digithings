@@ -200,7 +200,13 @@ class TestGenericTechnicalsFromAnyOhlcv:
             oscillators=profile.oscillators,
             allowlist=profile.extra_indicators,
         )
-        assert [e.name for e in extras] == ["weekly_rsi", "sma_band"]
+        # weekly_macd is allowlist-gated only (like weekly_rsi/sma_band), so it's
+        # still materialized here for display even though its weight is 0.
+        by_name = {e.name: e for e in extras}
+        assert set(by_name) == {"weekly_rsi", "weekly_macd", "sma_band"}
+        assert by_name["weekly_rsi"].enabled
+        assert by_name["sma_band"].enabled
+        assert not by_name["weekly_macd"].enabled
 
 
 class TestSecondAssetSmoke:
