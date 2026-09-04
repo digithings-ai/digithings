@@ -2,38 +2,42 @@
 
 import { useState } from "react";
 
+import { copyMarkdownWithFallback } from "../transcript-markdown";
+
 /**
  * CopyButton — a tiny "copy / copied" button shared by the chat's code blocks and
- * per-message copy affordances. Write-only clipboard access (no read), with a
- * 1.2s confirmation flip and a no-op rejection handler for blocked clipboards
- * (e.g. cross-origin iframes).
+ * per-message copy affordances. Write-only clipboard access first; on embed/
+ * blocked clipboards falls back to `.md` download → parent `digichat:copy`
+ * postMessage → selectable textarea (#3465). Never a silent no-op.
  */
 export function CopyButton({
   text,
   className,
   ariaLabel,
+  filename,
 }: {
   text: string;
   className?: string;
   ariaLabel: string;
+  /** Filename used when the embed fallback downloads `.md`. */
+  filename?: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [label, setLabel] = useState<"copy" | "copied" | "saved">("copy");
   return (
     <button
       type="button"
       className={className}
       aria-label={ariaLabel}
-      onClick={() =>
-        navigator.clipboard?.writeText(text).then(
-          () => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1200);
+      onClick={() => {
+        void copyMarkdownWithFallback(text, { filename: filename ?? "digichat-answer.md" }).then(
+          (result) => {
+            setLabel(result === "download" ? "saved" : "copied");
+            setTimeout(() => setLabel("copy"), 1200);
           },
-          () => {},
-        )
-      }
+        );
+      }}
     >
-      {copied ? "copied" : "copy"}
+      {label}
     </button>
   );
 }

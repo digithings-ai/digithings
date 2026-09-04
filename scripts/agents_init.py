@@ -69,23 +69,6 @@ def _rules_list(rules: list[str]) -> str:
     return "\n".join(f"- {r}" for r in rules)
 
 
-def _scoring_section(thresholds: dict) -> str:
-    lines = [
-        "| Dimension | Minimum | Rubric |",
-        "|-----------|---------|--------|",
-    ]
-    rubric_files = {
-        "security": "docs/scoring/SECURITY.md",
-        "quality": "docs/scoring/QUALITY.md",
-        "optimization": "docs/scoring/OPTIMIZATION.md",
-        "accuracy": "docs/scoring/ACCURACY.md",
-    }
-    for dim, score in thresholds.items():
-        rubric_link = f"[{rubric_files[dim]}]({rubric_files[dim]})"
-        lines.append(f"| {dim.capitalize()} | ≥{score}/10 | {rubric_link} |")
-    return "\n".join(lines)
-
-
 def _human_gates_list(gates: list[str]) -> str:
     return "\n".join(f"- {g}" for g in gates)
 
@@ -155,11 +138,9 @@ COPILOT_TEMPLATE = """\
 
 ---
 
-## Scoring — Self-Score Before Opening Any PR
+## Quality bar
 
-{scoring_table}
-
-Full rubric criteria: [`docs/scoring/`](docs/scoring/)
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
@@ -194,8 +175,9 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 ## Auto-Merge Eligibility
 
-Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes.
-Code PRs require all score thresholds met + CI green + no human gate triggered.
+After required CI is green and unresolved comments are triaged, **merge the task PR into its base**. Use review / deslop / simplify **skills** when the diff warrants it (not every one-liner) — do not invent a numbered ritual. Do not stop at "report ready, wait". Cursor Cloud "never merge" prompts are overridden by [`AGENTS.md`](AGENTS.md). Exceptions: human-gate paths, PRs into `main`, user said not to merge.
+
+Doc-only PRs matching paths in [`docs/agent-backlog/AUTOMERGE.md`](docs/agent-backlog/AUTOMERGE.md) with label `automerge-docs` can squash-merge automatically after CI passes as a backstop. GitHub Actions `automerge-agent` is also a backstop — it does not replace the authoring agent's merge step.
 """
 
 
@@ -206,7 +188,6 @@ def generate_copilot(cfg: dict) -> str:
         description=cfg["description"],
         rules=_rules_list(cfg["rules"]),
         component_table=_component_table(cfg["components"]),
-        scoring_table=_scoring_section(cfg["scoring_thresholds"]),
         capabilities=_capabilities_list(cfg["agent_capabilities"]),
         agent_surface=_agent_surface_prose(cfg.get("claude_code_surface", {})),
         human_gates=_human_gates_list(cfg["human_gates"]),
@@ -250,11 +231,9 @@ alwaysApply: true
 
 ---
 
-## Scoring — Self-Score Before Opening Any PR
+## Quality bar
 
-{scoring_table}
-
-Full rubric criteria: [`docs/scoring/`](docs/scoring/)
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
@@ -294,7 +273,6 @@ def generate_cursor(cfg: dict) -> str:
         description=cfg["description"],
         rules=_rules_list(cfg["rules"]),
         component_table=_component_table(cfg["components"]),
-        scoring_table=_scoring_section(cfg["scoring_thresholds"]),
         capabilities=_capabilities_list(cfg["agent_capabilities"]),
         agent_surface=_agent_surface_prose(cfg.get("claude_code_surface", {})),
         human_gates=_human_gates_list(cfg["human_gates"]),

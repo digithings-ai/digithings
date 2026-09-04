@@ -143,7 +143,7 @@ def _merge_seen(left: dict[str, str] | None, right: dict[str, str] | None) -> di
 
 
 class _FanState(BaseModel):
-    """Mimics ``phase_hermes``: a runtime item list + a reducer-merged result dict."""
+    """Mimics ``phase_portfolio``: a runtime item list + a reducer-merged result dict."""
 
     items: list[str] = Field(default_factory=list)
     cursor: str | None = None  # transient per-Send fan-out cursor

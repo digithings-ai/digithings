@@ -7,8 +7,9 @@ import {
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
   type FoundryStreamEvent,
+  type FoundryConversationItem,
 } from "./stream";
-import { toDigiChatActivity, type ActivitySpan } from "@/lib/chat-activity";
+import { toDigiChatActivity, MAX_DOCUMENTS, type ActivitySpan } from "@/lib/chat-activity";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -84,14 +85,37 @@ async function drain(res: Response): Promise<string> {
 
 function fakeClient(
   events: FoundryStreamEvent[],
-  conversationId = "conv_9"
+  conversationId = "conv_9",
+  opts?: {
+    items?: {
+      list: FoundryConversationItem[];
+      deleted: string[];
+      created: unknown[];
+    };
+  },
 ): { client: OpenAIResponsesClientLike; createSpy: { calls: unknown[][] } } {
   const createSpy: { calls: unknown[][] } = { calls: [] };
+  const itemsState = opts?.items;
   const client: OpenAIResponsesClientLike = {
     conversations: {
       async create() {
         return { id: conversationId };
       },
+      ...(itemsState
+        ? {
+            items: {
+              async list() {
+                return { data: itemsState.list };
+              },
+              async delete(itemId: string, params: { conversation_id: string }) {
+                itemsState.deleted.push(`${params.conversation_id}:${itemId}`);
+              },
+              async create(_conversationId: string, body: unknown) {
+                itemsState.created.push(body);
+              },
+            },
+          }
+        : {}),
     },
     responses: {
       async create(params, options) {
@@ -438,6 +462,86 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][0]).toMatchObject({ conversation: "conv_existing", input: "again" });
   });
 
+  it("regenerate deletes trailing assistant items and does not re-send user text", async () => {
+    const items = {
+      list: [
+        { id: "msg_asst", type: "message", role: "assistant" },
+        { id: "tool_1", type: "azure_ai_search_call" },
+        { id: "msg_user", type: "message", role: "user" },
+      ] satisfies FoundryConversationItem[],
+      deleted: [] as string[],
+      created: [] as unknown[],
+    };
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }], "conv_old", {
+      items,
+    });
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("same user text")],
+        conversationId: "conv_old",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+        turnMode: "regenerate",
+      }),
+    );
+    expect(items.deleted).toEqual(["conv_old:msg_asst", "conv_old:tool_1"]);
+    expect(items.created).toEqual([]);
+    expect(createSpy.calls[0][0]).toEqual({ conversation: "conv_old", stream: true });
+    expect(createSpy.calls[0][0]).not.toHaveProperty("input");
+  });
+
+  it("edit_last_user deletes through the last user item then creates the edited text", async () => {
+    const items = {
+      list: [
+        { id: "msg_asst", type: "message", role: "assistant" },
+        { id: "msg_user", type: "message", role: "user" },
+        { id: "msg_prior", type: "message", role: "assistant" },
+      ] satisfies FoundryConversationItem[],
+      deleted: [] as string[],
+      created: [] as unknown[],
+    };
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }], "conv_edit", {
+      items,
+    });
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("edited question")],
+        conversationId: "conv_edit",
+        responseHeaders: {},
+        activityDetail: "full",
+        openAIClientFactory: () => client,
+        turnMode: "edit_last_user",
+      }),
+    );
+    expect(items.deleted).toEqual(["conv_edit:msg_asst", "conv_edit:msg_user"]);
+    expect(items.created).toEqual([
+      { items: [{ type: "message", role: "user", content: "edited question" }] },
+    ]);
+    expect(createSpy.calls[0][0]).toEqual({ conversation: "conv_edit", stream: true });
+  });
+
+  it("returns 501 when regenerate is requested without an item mutation API", async () => {
+    const { client } = fakeClient([{ type: "response.completed" }]);
+    const res = await createFoundryStreamResponse({
+      projectEndpoint: "https://proj.example.com",
+      agentName: "digichat",
+      messages: [userMessage("q")],
+      conversationId: "conv_old",
+      responseHeaders: {},
+      activityDetail: "full",
+      openAIClientFactory: () => client,
+      turnMode: "regenerate",
+    });
+    expect(res.status).toBe(501);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("not_supported");
+  });
+
   it("prepends a language directive to input when responseLanguage is a non-English curated code", async () => {
     const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
     await drain(
@@ -656,7 +760,7 @@ describe("createFoundryStreamResponse activity detail", () => {
   // upstream response with many citations ships all of them over the wire
   // before the client ever gets a chance to truncate at render.
   it("caps an oversized citation list to MAX_DOCUMENTS before it reaches the stream", async () => {
-    const manyAnnotations = Array.from({ length: 20 }, (_, i) => ({
+    const manyAnnotations = Array.from({ length: MAX_DOCUMENTS + 5 }, (_, i) => ({
       type: "url_citation" as const,
       url: `https://x/doc-${i}`,
       title: `Doc ${i}`,
@@ -682,9 +786,9 @@ describe("createFoundryStreamResponse activity detail", () => {
     );
 
     expect(body).toContain("https://x/doc-0");
-    expect(body).toContain("https://x/doc-7");
-    expect(body).not.toContain("https://x/doc-8");
-    expect(body).not.toContain("https://x/doc-19");
+    expect(body).toContain(`https://x/doc-${MAX_DOCUMENTS - 1}`);
+    expect(body).not.toContain(`https://x/doc-${MAX_DOCUMENTS}`);
+    expect(body).not.toContain(`https://x/doc-${MAX_DOCUMENTS + 4}`);
   });
 
   // The gate is server-side: a labels tenant must not receive the titles at all.

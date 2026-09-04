@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - email
 data_privacy_on_free: unknown
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://openrouter.ai/docs#rate-limits
   - https://openrouter.ai/models?q=%3Afree
@@ -34,7 +34,7 @@ OpenRouter is an aggregator that routes requests to underlying providers via a s
 | `deepseek/deepseek-chat-v3:free` | 163,840 | 8,192 | active |
 | `deepseek/deepseek-chat-v3-0324:free` | 163,840 | 8,192 | active |
 | `deepseek/deepseek-r1:free` | 163,840 | 8,192 | active |
-| `meta-llama/llama-3.3-70b-instruct:free` | 131,072 | 8,192 | ⚠️ Error code: 429 - {'error': {'message': 'Provider returned error', 'code': 429, 'metadata': {'raw': 'meta-llama/llama-3.3-70b-instruct:free is temporarily rate-limited upstream...', 'provider_name': 'Venice'}}} |
+| `meta-llama/llama-3.3-70b-instruct:free` | 131,072 | 8,192 | ⚠️ Error code: 404 - {'error': {'message': 'This model is unavailable for free. The paid version is available now - use this slug instead: meta-llama/llama-3.3-70b-instruct', 'code': 404}, 'user_id': 'user_39VqjYY9ILDK33RaFifdSj9boBt'} |
 | `google/gemini-2.0-flash-exp:free` | 1,048,576 | 8,192 | active |
 | `qwen/qwen3-235b-a22b:free` | 131,072 | 8,192 | active |
 | `openai/gpt-oss-20b:free` | 131,072 | 8,192 | active |
@@ -90,7 +90,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (fallback tail in chain) |
 | Single-shot 100k | Yes, via `google/gemini-2.0-flash-exp:free` (1M ctx) — when available |
 | Privacy safe | Unknown — check per-model data policy card on openrouter.ai |
-| Atlas/Hermes role | Fallback if primary providers hit rate limits |
+| research/portfolio role | Fallback if primary providers hit rate limits |
 
 ---
 
@@ -116,3 +116,4 @@ Deposit credit ($10 minimum recommended to unlock 1,000 RPD). Routes to upstream
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

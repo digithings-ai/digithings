@@ -20,7 +20,7 @@ doc blindly; it has drifted from reality before (that's the story this section t
 
 | Check name | Workflow | What it validates |
 |---|---|---|
-| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled`. Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
+| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
 | `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
 | `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
 
@@ -62,7 +62,8 @@ This check does not require a live approving review on the promotion PR
 (`required_approving_review_count: 0`, `require_code_owner_reviews: false` — verified via
 API). Instead, `scripts/check_review_coverage.py` walks every commit in the PR's range
 (merge and bot commits exempt) and requires each one to already carry review evidence from
-its own task PR, satisfied by any one of:
+its own task PR. The walker batches GitHub GraphQL (PR hatch state + associated SHAs)
+instead of sequential `gh pr view`; hatch rules are unchanged, satisfied by any one of:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|
@@ -75,7 +76,7 @@ its own task PR, satisfied by any one of:
 
 Full rationale — why reviewing the promotion diff itself is the wrong moment, and why this
 is deliberately *not* a required `Cursor Bugbot` check on `main` — is in
-[`CLAUDE.md` § Review coverage](../CLAUDE.md#review-coverage-the-gate-before-production).
+[`AGENTS.md` § Review coverage](../AGENTS.md#review-coverage-the-gate-before-production).
 
 **Why not a live reviewer-request instead?** [#1612](https://github.com/digithings-ai/digithings/issues/1612)
 proposed auto-requesting a non-author reviewer on every promotion PR to work around

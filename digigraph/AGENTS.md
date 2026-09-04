@@ -36,11 +36,12 @@ Before making any change to `digigraph/`:
 Beyond root `AGENTS.md`:
 
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
+- **Tool modules**: Register new tools from `orchestration/builtin.py`; put handlers in the matching `orchestration/*_tools.py` module (or add one). DigiSearch tool calls must use `vertical_orchestrator.digisearch_hub`, not ad-hoc HTTP shims.
 - **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
 - **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use digistore (`digistore.py`) for large data.
 - **Tool allowlist respected**: New tools must work correctly when `ToolContext.allowed_tool_names` is set to a subset. Never bypass the allowlist check.
 - **LLM routing via digillm**: All LLM calls go through `digigraph.llm_client` (`completion` / `completion_text` / `run_tools`), which wraps the `digillm` toolkit client. No direct OpenAI SDK `chat.completions.create()` calls.
-- **Context compaction (#399)**: Long research transcripts use two-tier compaction in `digigraph.compaction` (tier-1 tool-result truncation + tier-2 tagged summarisation). Config: `CompactionConfig` / `DIGI_COMPACTION_*` env vars (see ARCHITECTURE §8.3.1). Store lean `_compaction_event` on `WorkflowState`; originals live in the session workspace. Do not invent a parallel graph node for compaction.
+- **Context compaction (#399)**: Long research transcripts use two-tier compaction in `digigraph.compaction` (tier-1 tool-result truncation + tier-2 tagged summarisation). Config: `CompactionConfig` / `DIGI_COMPACTION_*` env vars (see ARCHITECTURE §8.3.1). Store lean `_compaction_event` on `WorkflowState`; originals live in the session workspace. Do not invent a parallel graph node for compaction. Do **not** stub same-turn `execute_tool` results before digillm injects them — digillm's `DIGI_TOOL_MESSAGE_MAX_CHARS` already caps; workspace stubs are only for prior-turn lists outside `keep_recent_messages`.
 - **Never MemorySaver in production**: Default is fine for dev, but document `DIGI_CHECKPOINTER=postgres` for production.
 - **Checkpointer env**: Set `DIGI_CHECKPOINTER=memory|sqlite|postgres` explicitly in prod; `memory` does not survive restarts.
 - **MCP auth**: Bind MCP to loopback; set `DIGI_MCP_REQUIRE_AUTH=1` when exposing beyond localhost. The `workflow` tool refuses unauthenticated calls when auth is required.

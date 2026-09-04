@@ -13,7 +13,7 @@
   align-items: center;
   gap: 1.4rem;
   padding: 0.7rem 1rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   transition: border-color 0.3s var(--ease), background-color 0.3s var(--ease),
@@ -40,7 +40,7 @@
   height: 10.5rem;
   margin-top: 0;
   overflow: clip;
-  border-radius: 12px;
+  border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--surface);
 }
@@ -101,7 +101,7 @@
 .ref-footer-theme {
   display: inline-flex;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
 }
 

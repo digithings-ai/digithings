@@ -14,8 +14,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -24,7 +23,7 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.comparison import (
+from digiquant.dashboard.replay.comparison import (
     ArmFoldEvidence,
     EvidenceMode,
     MetricDirection,
@@ -34,7 +33,7 @@ from digiquant.olympus.replay.comparison import (
     SignalQualityTelemetry,
     compare_policy_pair,
 )
-from digiquant.olympus.replay.governance import (
+from digiquant.dashboard.replay.governance import (
     ConfidenceBoundRule,
     CriterionOutcome,
     GateCriterion,
@@ -47,7 +46,7 @@ from digiquant.olympus.replay.governance import (
     persist_gate_evaluation,
     to_store_criteria_version,
 )
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     HoldingSnapshot,
     InstrumentBarSeries,
@@ -67,7 +66,8 @@ from digiquant.olympus.replay.models import (
     build_replay_pair,
     portfolio_replay_result_content_hash,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.portfolio.allocation_hashes import sha256_hex
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -362,7 +362,7 @@ def _criterion(
 
 def _criteria(
     *criteria: GateCriterion,
-    author: str = "human-governance@olympus",
+    author: str = "human-governance@dashboard",
     rationale: str = "pre-versioned promotion gate",
     criteria_version_id: UUID | None = None,
 ) -> HumanAuthoredGateCriteria:
@@ -400,7 +400,7 @@ def test_empty_criteria_fails_closed() -> None:
 
 def test_evaluator_cannot_author_criteria() -> None:
     assert not hasattr(evaluate_gate_criteria, "author_criteria")
-    from digiquant.olympus.replay import governance as gov
+    from digiquant.dashboard.replay import governance as gov
 
     assert not hasattr(gov, "author_gate_criteria")
     assert not hasattr(gov, "mint_criteria_from_report")
@@ -562,8 +562,8 @@ def test_tampered_criteria_hash_rejected() -> None:
 
 
 def test_to_store_criteria_preserves_author_not_evaluator() -> None:
-    criteria = _criteria(_criterion(), author="alice@olympus")
+    criteria = _criteria(_criterion(), author="alice@dashboard")
     row = to_store_criteria_version(criteria)
-    assert row.author == "alice@olympus"
+    assert row.author == "alice@dashboard"
     assert row.author != "evaluator"
     assert row.content_hash == criteria.content_hash

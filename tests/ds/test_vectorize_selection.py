@@ -136,10 +136,9 @@ def test_default_embedder_constructed_once_across_n_queries_via_dispatcher(
     monkeypatch.delenv("CHROMA_HOST", raising=False)
 
     import digisearch.embedding.providers.minilm as minilm_module
-    import digisearch.indexes.backends.vectorize as vectorize_module
 
     # Force a cold cache regardless of what earlier tests left behind.
-    monkeypatch.setattr(vectorize_module, "_default_embedder_singleton", None, raising=False)
+    monkeypatch.setattr(minilm_module, "_default_minilm_singleton", None, raising=False)
 
     construction_count = 0
 
@@ -156,6 +155,7 @@ def test_default_embedder_constructed_once_across_n_queries_via_dispatcher(
             return 384
 
     monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _StubEmbedder, raising=True)
+    monkeypatch.setattr(minilm_module, "_default_minilm_singleton", None, raising=False)
 
     class _RecordingPost:
         def __call__(
@@ -230,7 +230,9 @@ def test_vectorize_selected_with_canonical_cloudflare_vars(monkeypatch: pytest.M
     )
     response = _stub._vectorize_backend(Query(text="hi", top_k=3), "occ-help")
     assert response is not None
-    assert captured["kwargs"] == {"account_id": "acct", "api_token": "tok"}
+    assert captured["kwargs"]["account_id"] == "acct"
+    assert captured["kwargs"]["api_token"] == "tok"
+    assert captured["kwargs"].get("embedding_provider") is not None
 
 
 @pytest.mark.unit
@@ -281,7 +283,9 @@ def test_vectorize_backend_canonical_wins_over_legacy_values(
         "digisearch.indexes.backends.vectorize.VectorizeBackend", _Stub, raising=True
     )
     _stub._vectorize_backend(Query(text="hi", top_k=3), "occ-help")
-    assert captured["kwargs"] == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+    assert captured["kwargs"]["account_id"] == "canonical-acct"
+    assert captured["kwargs"]["api_token"] == "canonical-tok"
+    assert captured["kwargs"].get("embedding_provider") is not None
 
 
 @pytest.mark.unit

@@ -123,7 +123,8 @@ jobs:
                       f"**Manual review required** — not enabling auto-merge.\n\nReason: {reason}"
                   )
                   if not dry_run:
-                      gh("pr", "edit", str(pr), "--repo", repo, "--add-label", "needs-human-review")
+                      # Label simplification 2026-09: needs-human-review retired.
+                      # The comment is the record; no label to apply.
                       gh("pr", "comment", str(pr), "--repo", repo, "--body", body)
                   else:
                       print(body)

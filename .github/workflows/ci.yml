@@ -31,12 +31,12 @@ jobs:
       digillm: ${{ steps.filter.outputs.digillm }}
       digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
-      olympus: ${{ steps.filter.outputs.olympus }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
       web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
-      atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
+      research_graph: ${{ steps.filter.outputs.research_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -80,6 +80,7 @@ jobs:
             digigraph:
               - 'digigraph/**'
               - 'tests/dg/**'
+              - 'tests/contracts/**'
               - '.github/workflows/test-digigraph.yml'
               - 'config/**'
               - 'infra/digichat-release/config/**'
@@ -97,19 +98,20 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-digichat.yml'
-            olympus:
-              - 'frontend/olympus/**'
+            dashboard:
+              - 'frontend/dashboard/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/test-olympus.yml'
+              - '.github/workflows/test-dashboard.yml'
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/brand/**'
               - 'frontend/digiweb/reference/**'
               - 'frontend/digichat-cloudflare/**'
               - 'frontend/digithings-stack-cloudflare/**'
@@ -152,24 +154,24 @@ jobs:
               - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
               - 'tests/dq/replay/test_nautilus_portfolio.py'
               - 'tests/dq/replay/test_worker.py'
-              - 'digiquant/src/digiquant/olympus/replay/**'
+              - 'digiquant/src/digiquant/dashboard/replay/**'
               - '.github/workflows/test-nautilus.yml'
-            atlas_graph:
-              - 'digiquant/src/digiquant/olympus/atlas/**'
-              - 'digiquant/scripts/atlas/**'
+            research_graph:
+              - 'digiquant/src/digiquant/research/**'
+              - 'digiquant/scripts/research/**'
               - 'digiquant/supabase/**'
-              - 'tests/dq/atlas/**'
-              - 'digiquant/src/digiquant/olympus/edit_mode/**'
-              - 'digiquant/src/digiquant/olympus/hermes/**'
-              - 'digiquant/src/digiquant/olympus/learning/**'
-              - 'digiquant/src/digiquant/olympus/replay/walk_forward.py'
+              - 'tests/dq/research/**'
+              - 'digiquant/src/digiquant/dashboard/edit_mode/**'
+              - 'digiquant/src/digiquant/portfolio/**'
+              - 'digiquant/src/digiquant/dashboard/learning/**'
+              - 'digiquant/src/digiquant/dashboard/replay/walk_forward.py'
               - 'tests/dq/replay/test_walk_forward.py'
               - 'tests/dq/replay/phase4_e2e_fixtures.py'
               - 'tests/dq/replay/test_phase4_end_to_end.py'
-              - 'tests/dq/hermes/**'
+              - 'tests/dq/portfolio/**'
               - 'tests/dq/learning/**'
-              - '.github/workflows/test-atlas-graph.yml'
-              - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/test-research-graph.yml'
+              - '.github/workflows/pipeline-digiquant.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -192,7 +194,7 @@ jobs:
               - '.github/workflows/release-please-digichat.yml'
               - '.github/workflows/pipeline-digiquant-prices.yml'
               - '.github/workflows/db-migrate.yml'
-              - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/pipeline-digiquant.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
               - '.github/workflows/deploy-digiquant-cloudflare.yml'
               - '.github/workflows/**'
@@ -298,10 +300,10 @@ jobs:
     if: needs.changes.outputs.digichat == 'true'
     uses: ./.github/workflows/test-digichat.yml
 
-  olympus:
+  dashboard:
     needs: changes
-    if: needs.changes.outputs.olympus == 'true'
-    uses: ./.github/workflows/test-olympus.yml
+    if: needs.changes.outputs.dashboard == 'true'
+    uses: ./.github/workflows/test-dashboard.yml
 
   web:
     needs: changes
@@ -323,10 +325,10 @@ jobs:
     if: needs.changes.outputs.nautilus_smoke == 'true'
     uses: ./.github/workflows/test-nautilus.yml
 
-  atlas-graph:
+  research-graph:
     needs: changes
-    if: needs.changes.outputs.atlas_graph == 'true'
-    uses: ./.github/workflows/test-atlas-graph.yml
+    if: needs.changes.outputs.research_graph == 'true'
+    uses: ./.github/workflows/test-research-graph.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
@@ -381,24 +383,17 @@ jobs:
         # uv run so the script's own `python3` calls resolve to the locked venv.
         run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
+      - name: Install ripgrep (pandas boundary gate)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
       - name: Pandas boundary (REM-132)
-        # Not wrapped in `uv run`: this script is pure bash + ripgrep and calls no
-        # Python, so the venv would buy nothing.
-        #
-        # NOTE (#1715): this gate is currently a no-op on runners without
-        # ripgrep. Its scan ends in `|| true`, so a missing `rg` yields an empty
-        # violation list and prints "pandas boundary OK". Run locally with rg
-        # present it FAILS on digiquant/scripts/fetch_real_ohlcv.py:17
-        # (`import pandas as pd`), which is outside the allowlist and contrary to
-        # the Polars-only rule. Left as-is here because fixing it is a digiquant
-        # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
 
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
   # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
-  # edits to ci.yml itself. The predecessor was a job inside test-atlas-graph.yml
-  # with `files: ".github/workflows/pipeline-olympus.yml"`, invoked only from the
-  # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
+  # edits to ci.yml itself. The predecessor was a job inside test-research-graph.yml
+  # with `files: ".github/workflows/pipeline-digiquant.yml"`, invoked only from the
+  # research_graph lane; a workflow-only PR skipped that lane entirely and got no
   # actionlint at all. Suppressions live in .github/actionlint.yaml.
   actionlint:
     name: actionlint
@@ -557,6 +552,11 @@ jobs:
   # This job always runs, tolerates `skipped` on every dependency, and fails only
   # if something it depends on actually failed or was cancelled — so IT is the
   # one stable name to require on develop.
+  #
+  # Exception — `score` is advisory (#3528): AGENTS.md treats `make score` as
+  # optional human/CI tooling. Keeping it in `needs` still runs the job and
+  # surfaces a red `score / score` check; the aggregator must not fail on it
+  # or module promotions get forced into `--admin` merges.
   required-checks:
     name: Required checks passed
     if: always()
@@ -574,12 +574,12 @@ jobs:
       - digillm
       - digifetch
       - digichat
-      - olympus
+      - dashboard
       - web
       - score
       - e2e-contract
       - nautilus-smoke
-      - atlas-graph
+      - research-graph
       - pip-audit
       - ruff-and-scripts
       - actionlint
@@ -590,7 +590,7 @@ jobs:
 
       # Drift guard: this job's own `needs:` list was hand-enumerated once
       # and already went stale silently (e2e-contract/nautilus-smoke/
-      # atlas-graph were added to ci.yml after required-checks existed and
+      # research-graph were added to ci.yml after required-checks existed and
       # never got added here — a real false-green gap, not hypothetical).
       # Fail loudly instead of trusting the list matches the file forever.
       - name: Verify needs list covers every job in this file
@@ -613,16 +613,7 @@ jobs:
           print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
           "
 
-      - name: Fail if any dependency failed or was cancelled
+      - name: Fail if any non-advisory dependency failed or was cancelled
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: |
-          python3 -c "
-          import json, os, sys
-          results = json.loads(os.environ['RESULTS'])
-          bad = {k: v['result'] for k, v in results.items() if v['result'] not in ('success', 'skipped')}
-          if bad:
-              print('Failed or cancelled required jobs:', bad)
-              sys.exit(1)
-          print('All required jobs passed or were skipped:', {k: v['result'] for k, v in results.items()})
-          "
+        run: python3 scripts/ci_required_checks_aggregate.py

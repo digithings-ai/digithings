@@ -126,7 +126,7 @@
   font-family: var(--font-mono);
   font-size: 0.82em;
   background: color-mix(in srgb, var(--ink) 9%, transparent);
-  border-radius: 5px;
+  border-radius: 0;
   padding: 0.05rem 0.3rem;
 }
 .dc-code-block {
@@ -137,7 +137,7 @@
   margin: 0;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 9px;
+  border-radius: 0;
   padding: 0.7rem 0.8rem;
   overflow-x: auto;
 }
@@ -155,7 +155,7 @@
   color: var(--ink-mute);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
   border: 1px solid var(--hair);
-  border-radius: 6px;
+  border-radius: 0;
   padding: 0.12rem 0.4rem;
   cursor: pointer;
   opacity: 0;
@@ -166,13 +166,41 @@
   top: 0.4rem;
   right: 0.4rem;
 }
+.dc-msg-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+.dc-msg-actions-visible .dc-msg-copy {
+  opacity: 1;
+}
 .dc-msg-copy {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: static;
+  display: inline-block;
+  margin-top: 0;
+}
+.dc-edit-last {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+.dc-edit-textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 0;
+  padding: 0.45rem 0.55rem;
+  box-sizing: border-box;
 }
 .dc-code-block:hover .dc-code-copy,
-.dc-msg:hover .dc-msg-copy,
+.dc-body:hover .dc-msg-copy,
 .dc-code-copy:focus-visible,
 .dc-msg-copy:focus-visible {
   opacity: 1;
@@ -193,6 +221,45 @@
   padding: 0.5rem 0.75rem 0.75rem;
   border-top: 1px solid var(--hair);
   background: transparent;
+  position: relative;
+}
+.dc-slash {
+  grid-column: 1 / -1;
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0 0.35rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-slash-item {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  padding: 0.28rem 0;
+  cursor: pointer;
+}
+.dc-slash-item:hover,
+.dc-slash-item:focus-visible {
+  color: var(--accent);
+}
+.dc-slash-cmd {
+  font-family: var(--font-mono);
+  min-width: 5.5rem;
+}
+.dc-slash-hint {
+  color: var(--ink-mute);
+}
+.dc-slash-note pre {
+  margin: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  color: var(--ink-mute);
 }
 .dc-textarea {
   font: inherit;
@@ -225,24 +292,30 @@
 .dc-stop {
   font: inherit;
   align-self: stretch;
-  color: var(--accent);
-  background: transparent;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   cursor: pointer;
   padding: 0.3rem 0.65rem;
-  transition: background 0.18s var(--ease, ease);
+  transition: background 0.18s var(--ease, ease), color 0.18s var(--ease, ease);
 }
 .dc-send {
   font-size: 1rem;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 .dc-stop {
   font-size: 0.8rem;
   color: var(--ink-soft);
+  background: transparent;
 }
-.dc-send:hover:not(:disabled),
+.dc-send:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
 .dc-stop:hover {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
 }
 .dc-send:disabled {
   opacity: 0.4;
@@ -410,7 +483,7 @@
   margin: 0.2rem 0 0 1.6rem;
   padding: 0.45rem 0.65rem;
   border: 1px solid color-mix(in srgb, var(--down) 35%, var(--hair));
-  border-radius: 8px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--down) 8%, transparent);
   font-size: 0.74rem;
   color: var(--ink-soft);
@@ -454,7 +527,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 0;
 }
 .dc-byok-option:hover,
 .dc-byok-option-active {
@@ -473,7 +546,7 @@
   margin-top: 0.25rem;
   padding: 0.4rem 0.55rem;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--bg-term, transparent);
   color: var(--text-primary);
   font-family: var(--font-family-mono);
@@ -517,4 +590,166 @@
 .dc-attribution a {
   color: var(--accent);
   text-decoration: underline;
+}
+
+.dc-session-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.dc-session-with-pane .dc-session-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+}
+.dc-session-main .dc-thread {
+  flex: 1;
+  min-width: 0;
+}
+
+.dc-source-cards {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.dc-source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  max-width: 16rem;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.dc-source-card:hover,
+.dc-source-card:focus-visible {
+  border-color: var(--accent);
+}
+.dc-source-card-title {
+  color: var(--accent);
+}
+.dc-source-card-path {
+  color: var(--ink-mute);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.dc-act-hit-open {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+.dc-act-hit-open:hover,
+.dc-act-hit-open:focus-visible {
+  text-decoration: underline;
+}
+
+.dc-doc-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--hair);
+  background: var(--bg);
+}
+.dc-doc-pane-head {
+  display: flex;
+  align-items: start;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--hair);
+}
+.dc-doc-pane-title {
+  flex: 1;
+  font-size: 0.82rem;
+}
+.dc-doc-pane-close {
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+}
+.dc-doc-pane-path,
+.dc-doc-pane-snippet,
+.dc-doc-pane-empty {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.74rem;
+  color: var(--ink-mute);
+}
+.dc-doc-pane-body,
+.dc-doc-pane-frame {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.6rem 0.7rem;
+}
+.dc-doc-pane-frame {
+  width: 100%;
+  border: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Print transcript (#3510). Hide interactive chrome — composer, slash rows,
+ * stop/copy/regen toolbars, BYOK banners, searching chain — and keep turn
+ * text + optional Sources cards. Browser Save as PDF is the PDF path.
+ * ------------------------------------------------------------------------- */
+@media print {
+  .dc-form,
+  .dc-slash,
+  .dc-slash-note,
+  .dc-msg-actions,
+  .dc-msg-copy,
+  .dc-code-copy,
+  .dc-stop,
+  .dc-send,
+  .dc-suggest,
+  .dc-quota-banner,
+  .dc-byok-flow,
+  .dc-intro-byok,
+  .dc-activities,
+  .dc-doc-pane,
+  .dc-msg[aria-busy="true"],
+  .dt-cur {
+    display: none !important;
+  }
+  .dc-page,
+  .dc-session {
+    display: block;
+    height: auto;
+    min-height: 0;
+    max-width: none;
+  }
+  .dc-session-main {
+    display: block;
+  }
+  .dc-thread {
+    overflow: visible;
+    display: block;
+  }
+  .dc-msg {
+    break-inside: avoid;
+  }
+  .dc-session,
+  .dc-body,
+  .dc-user .dc-body,
+  .dc-intro .dc-body {
+    color: #000;
+  }
 }

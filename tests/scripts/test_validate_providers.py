@@ -1,6 +1,6 @@
-"""Unit tests for OpenRouter connectivity check in scripts/atlas/validate-providers.py (#2374).
+"""Unit tests for OpenRouter connectivity check in digiquant/scripts/research/validate-providers.py (#2374).
 
-The 2026-08-11/12/15/18/19/20 daily olympus runs all died at this preflight ping: a bare,
+The 2026-08-11/12/15/18/19/20 daily dashboard runs all died at this preflight ping: a bare,
 unconstrained ``openrouter/auto`` call made through a standalone OpenAI client with its own
 ad-hoc retry loop — bypassing every protection (empty-completion self-heal, provider fallback
 swap) that digillm gives every other call in the codebase, and pinging a model no real phase
@@ -12,6 +12,7 @@ contract without touching OpenRouter.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,7 +22,7 @@ from unittest.mock import patch
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "atlas" / "validate-providers.py"
+_SCRIPT = REPO_ROOT / "digiquant" / "scripts" / "research" / "validate-providers.py"
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +52,7 @@ def _fake_response(content: str | None) -> SimpleNamespace:
 
 def test_default_model_is_pinned_not_bare_auto(vp: Any) -> None:
     """The regression: the ping must pin to a known-good model, never bare openrouter/auto."""
-    assert vp._CONNECTIVITY_PING_MODEL == "openrouter/deepseek/deepseek-v4-flash"
+    assert vp._CONNECTIVITY_PING_MODEL == "deepseek/deepseek-v4-flash"
 
 
 def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
@@ -111,6 +112,50 @@ def test_accepts_an_explicit_model_override(vp: Any) -> None:
     assert calls[0]["model"] == "openrouter/some-model"
 
 
+def test_preflight_configures_bounded_digillm_env(vp: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """digillm reads timeout/retry env at import — preflight must set them first (#2528/#2531)."""
+    monkeypatch.delenv("DIGILLM_REQUEST_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("DIGILLM_EMPTY_RETRY_MAX", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ["DIGILLM_REQUEST_TIMEOUT_SECONDS"] == str(
+        vp._PREFLIGHT_REQUEST_TIMEOUT_SECONDS
+    )
+    assert os.environ["DIGILLM_EMPTY_RETRY_MAX"] == str(vp._PREFLIGHT_EMPTY_RETRY_MAX)
+
+
+def test_preflight_applies_openrouter_allowed_models(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preflight must call apply_digiquant_openrouter_env so check 3 matches production (#2532)."""
+    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
+    vp._configure_preflight_environment()
+    assert os.environ.get("OPENROUTER_ALLOWED_MODELS", "").strip()
+
+
+def test_structured_auto_router_request_shape_matches_production(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """openrouter/auto with a constrained pool uses the auto-router plugin, not require_parameters."""
+    monkeypatch.delenv("OPENROUTER_ALLOWED_MODELS", raising=False)
+    vp._configure_preflight_environment()
+    from digillm.client import _with_openrouter_cost_controls
+
+    kwargs = {
+        "model": "openrouter/openrouter/auto",
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "ping", "schema": {"type": "object"}},
+        },
+    }
+    merged = _with_openrouter_cost_controls(kwargs, "openrouter")
+    extra = merged["extra_body"]
+    auto_plugins = [p for p in extra.get("plugins", []) if p.get("id") == "auto-router"]
+    assert auto_plugins, "production constrains openrouter/auto via auto-router plugin"
+    assert auto_plugins[0]["allowed_models"]
+    provider = extra.get("provider") or {}
+    assert "require_parameters" not in provider
+
+
 def _fake_tier_config(models: list[str]) -> Any:
     tier_cfg = SimpleNamespace(allowed_models={"phase": models})
     return SimpleNamespace(tiers={"cheap": tier_cfg})
@@ -121,9 +166,9 @@ def test_function_tools_pass_on_text_content(vp: Any) -> None:
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/some-model"]),
         ),
         patch("digillm.client.completion", return_value=response),
@@ -139,9 +184,9 @@ def test_function_tools_pass_on_tool_calls_with_no_content(vp: Any) -> None:
         ]
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/some-model"]),
         ),
         patch("digillm.client.completion", return_value=response),
@@ -155,9 +200,9 @@ def test_function_tools_fail_on_truly_empty_response(vp: Any) -> None:
         choices=[SimpleNamespace(message=SimpleNamespace(content="", tool_calls=None))]
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/some-model"]),
         ),
         patch("digillm.client.completion", return_value=response),
@@ -173,7 +218,7 @@ def test_function_tools_pass_but_reports_substitution(vp: Any) -> None:
     substitution must NOT hard-fail the preflight, but must be visible in the detail text.
 
     Uses a real three-segment pool slug (``openrouter/deepseek/deepseek-v4-flash``, matching
-    config/olympus_models.yaml) rather than a two-segment stand-in: a two-segment fixture
+    config/digiquant_models.yaml) rather than a two-segment stand-in: a two-segment fixture
     can't distinguish a correct ``removeprefix("openrouter/")`` from a broken
     ``model.split("/")[-1]``-style implementation, since both happen to agree on two segments.
     """
@@ -182,9 +227,9 @@ def test_function_tools_pass_but_reports_substitution(vp: Any) -> None:
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
         ),
         patch("digillm.client.completion", return_value=response),
@@ -203,9 +248,9 @@ def test_function_tools_reports_served_model_when_matching_requested(vp: Any) ->
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
         ),
         patch("digillm.client.completion", return_value=response),
@@ -223,14 +268,34 @@ def test_function_tools_pass_when_response_has_no_model_field(vp: Any) -> None:
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
         ),
         patch("digillm.client.completion", return_value=response),
     ):
         assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_reports_substitution_on_unprefixed_house_slug(vp: Any) -> None:
+    """House pins are unprefixed OpenRouter slugs (#3414); substitution still surfaces."""
+    response = SimpleNamespace(
+        model="anthropic/claude-sonnet-5",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_digiquant_models",
+            return_value=_fake_tier_config(["deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by anthropic/claude-sonnet-5" in detail
+    assert "substitution" in detail.lower()
 
 
 def test_function_tools_skips_substitution_check_for_non_openrouter_models(vp: Any) -> None:
@@ -243,9 +308,9 @@ def test_function_tools_skips_substitution_check_for_non_openrouter_models(vp: A
         choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
     )
     with (
-        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch("digigraph.model_config.get_digiquant_tier", return_value="cheap"),
         patch(
-            "digigraph.model_config._load_olympus_models",
+            "digigraph.model_config._load_digiquant_models",
             return_value=_fake_tier_config(["gemini/gemini-3.7-flash"]),
         ),
         patch("digillm.client.completion", return_value=response),

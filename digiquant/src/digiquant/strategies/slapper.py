@@ -456,7 +456,7 @@ register(
     SlapperConfig,
     _params("btc_slapper"),
     aliases=["btc_slapper_mr_trend"],
-    description="BTC Slapper: ADF+RSI+BB mean reversion + DPSD trend, with reversal stop",
+    description="BTC L/S: ADF+RSI+BB mean reversion + DPSD trend, with reversal stop",
 )
 
 register(
@@ -465,7 +465,7 @@ register(
     SlapperConfig,
     _params("eth_slapper"),
     aliases=["eth_slapper_mr_trend"],
-    description="ETH Slapper: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
+    description="ETH L/S: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
 )
 
 register(
@@ -474,5 +474,5 @@ register(
     SlapperConfig,
     _params("sol_slapper"),
     aliases=["sol_slapper_mr_trend"],
-    description="SOL Slapper: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
+    description="SOL L/S: ADF+RSI+BB mean reversion + DPSD trend (no reversal stop)",
 )

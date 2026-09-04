@@ -1,0 +1,45 @@
+{
+  "genesis": "2009-01-03",
+  "mu": 8.35578988444108,
+  "fit_start": "2015-07-20",
+  "fit_end": "2026-08-29",
+  "fit_rows": 4059,
+  "notes": "Real Coinbase daily BTC/USD fit (#3173). Source: CCXT coinbase fetch_ohlcv timeframe=1d into data/price-history/BTC-USD.csv. Window 2015-07-20 to 2026-08-29 (4059 daily bars). In-sample coverage of close vs rearranged rails matches the quantile targets within 0.1pp (q10=10.05%, q95=94.95%). low/high default kept at q10/q95. Truncated refits (through 2020 and through 2023) move 2024-2026 risk bands on ~88% of days — documented in ARCHITECTURE.md; methodology unchanged (#3175).",
+  "quantiles": {
+    "q01": {
+      "c": 3.8296658235245107,
+      "a": 2.301193339033391,
+      "b": -0.650051899150169
+    },
+    "q10": {
+      "c": 3.9242007277740045,
+      "a": 2.432082483055838,
+      "b": -0.7234380425800614
+    },
+    "q25": {
+      "c": 4.00402690020853,
+      "a": 2.4528173986133703,
+      "b": -0.9440435491566693
+    },
+    "q50": {
+      "c": 4.193554176517493,
+      "a": 2.479502685978214,
+      "b": -1.4648979613131095
+    },
+    "q75": {
+      "c": 4.423417670796361,
+      "a": 2.3834631077718926,
+      "b": -2.198496152006864
+    },
+    "q95": {
+      "c": 4.663055879188197,
+      "a": 2.121793469583662,
+      "b": -2.874706250853998
+    },
+    "q99": {
+      "c": 4.699488809987522,
+      "a": 1.601562419444494,
+      "b": -1.5005166481043406
+    }
+  }
+}

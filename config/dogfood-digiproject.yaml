@@ -24,9 +24,9 @@ agents:
   # not config/model_modes.yaml. Swap model when OpenRouter retires a :free slug.
   llm_mode: free
   llm:
-    provider: openrouter
+    provider: litellm
     model: openai/gpt-oss-20b:free
-    api_key_env: OPENROUTER_API_KEY
+    api_key_env: LITELLM_PROXY_API_KEY
   # Skip ResearchBrief post-pass so the SSE stream ends when answer text completes.
   research_brief: false
   allowed_tools:

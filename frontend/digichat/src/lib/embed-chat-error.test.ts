@@ -8,6 +8,13 @@ import {
 } from "./embed-chat-error";
 import { LEGACY_EMBED_DISABLED_MESSAGE } from "./embed-legacy-gate";
 
+describe("BYOK_MODEL_REMEDIABLE_MESSAGE (#2529)", () => {
+  it("points at the in-chat settings affordance, not a full page reload", () => {
+    expect(BYOK_MODEL_REMEDIABLE_MESSAGE).toMatch(/Update your key/i);
+    expect(BYOK_MODEL_REMEDIABLE_MESSAGE).not.toMatch(/Reload/i);
+  });
+});
+
 describe("formatEmbedChatError", () => {
   it("returns null for empty errors", () => {
     expect(formatEmbedChatError(undefined)).toBeNull();
@@ -188,7 +195,11 @@ describe("model-remediable BYOK refusals (#2490)", () => {
   // property of the deployment, which the frontend cannot predict). Both are fixed
   // by naming a model, so both must reopen the BYOK sequence and both must surface
   // digigraph's own message rather than generic quota copy.
-  const REMEDIABLE = ["byok_model_required", "byok_default_model_provider_mismatch"] as const;
+  const REMEDIABLE = [
+    "byok_model_required",
+    "byok_default_model_provider_mismatch",
+    "byok_model_provider_mismatch",
+  ] as const;
 
   for (const errorCode of REMEDIABLE) {
     it(`suggests BYOK for free_then_byok on ${errorCode}`, () => {
@@ -230,7 +241,11 @@ describe("model-remediable BYOK refusals (#2490)", () => {
 // X-BYOK-Provider header. Without copy of our own, a code-only payload fell
 // through to the raw-JSON tail and the visitor saw a dead end (#2515).
 describe("model-remediable refusals with no upstream message", () => {
-  for (const code of ["byok_model_required", "byok_default_model_provider_mismatch"]) {
+  for (const code of [
+    "byok_model_required",
+    "byok_default_model_provider_mismatch",
+    "byok_model_provider_mismatch",
+  ]) {
     it(`gives actionable copy for a bare ${code}`, () => {
       const formatted = formatEmbedChatError(new Error(JSON.stringify({ error: code })));
       expect(formatted).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);

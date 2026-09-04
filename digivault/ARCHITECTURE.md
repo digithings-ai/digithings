@@ -30,7 +30,7 @@ extra.
 | `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`, `NoteRow` (shared list-notes shape — not the same shape as `Note`, hence the distinct name — returned by both `SupabaseStore.list_notes` and `D1Store.list_notes`. `scripts/vectorize_sync.py` reads only `D1Store.list_notes` since #2239 repointed it from Supabase to D1; `SupabaseStore.list_notes` now has exactly one caller, `scripts/d1_sync.py --from-supabase`'s one-time backfill), `VaultSearchHit` (shared ranked-hit shape for both `SupabaseStore.search` and `D1Store.search`), `NoteDetail` (one note whole: body + frontmatter together — what a by-path fetch returns; also carries `segment_label` as its own top-level field, mirrored by `D1Store.get_note` out of `frontmatter["segment_label"]` — there is no dedicated D1 column for it, unlike `segment_index` — because the original Task 3 brief documented `{vault_path, title, body_markdown, frontmatter, segment_label}` as the returned shape and a consumer reading `segment_label` at that top level would otherwise find nothing, #2239 review). |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
-| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `prune_children(parent_doc, keep_names, subdir)` for scoped docs_onboard convergence, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
 | `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Optional `path_prefix` filter for multi-tenant corpora. Query tokens drop common English stopwords so a broad, question-shaped query does not score every note. Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC (optional `path_prefix`; migration 068). Optional `[supabase]` extra, lazily imported. |
 | `digivault/d1_errors.py` | `D1StoreError(RuntimeError)` — isolated in its own module so it stays importable even if importing `d1_store.py` fails (mirrors `digisearch`'s `vectorize_errors.py`). |
@@ -57,8 +57,8 @@ vault = Vault("docs/vision")
 vault.list_notes()              # -> list[Note] (with backlinks)
 vault.backlinks("digigraph")    # -> tuple[str, ...]
 vault.search_by_tag("module")   # -> list[Note]
-vault.create_note("kairos", frontmatter={"title": "Kairos"}, body="see [[digiquant]]")
-vault.rename("atlas", "atlas-research")   # rewrites every inbound [[atlas]]
+vault.create_note("execution", frontmatter={"title": "execution"}, body="see [[digiquant]]")
+vault.rename("research", "research-research")   # rewrites every inbound [[research]]
 report = vault.lint()           # -> LintReport(ok, note_count, issues)
 ```
 
@@ -76,12 +76,19 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 - **Vault root:** `DIGIVAULT_ROOT` (required for filesystem-backed note routes;
   those return 503 when unset). **Exception:** `POST /v1/notes/by-path` is D1-only
   and opens D1 directly (`_fetch_note_by_path`) — it needs no `DIGIVAULT_ROOT` at
-  all. The vault is re-read from disk per request — small docs vault, correctness
-  over caching.
+  all. Single HTTP requests build a fresh vault for cross-process filesystem
+  correctness. `POST /v1/notes/batch` opens it once and applies its writes and
+  stale-child pruning incrementally, so bulk ingest is linear rather than
+  rescanning the corpus for every note.
 - **Note upsert:** `POST /v1/notes` accepts `overwrite: true` (and optional
   `frontmatter`) so docs_onboard can idempotently upsert via
   `Vault.write_note(..., overwrite=True)`. Default `overwrite: false` preserves
   create-only behavior.
+- **Scoped child prune:** `POST /v1/notes/prune-children` is write-scoped and removes
+  only stale `{parent_doc}__*` segment notes with matching `parent_doc` frontmatter
+  inside the requested subdirectory. docs_onboard invokes it after writing the current
+  children and hub, making structural re-ingests converge without exposing a general
+  recursive-delete or MCP capability (#2190).
 - **By-path fetch:** `POST /v1/notes/by-path` loads one note whole (body +
   frontmatter, as `NoteDetail`) by its exact `vault_path`, from D1 only — there
   is no filesystem/Supabase fallback for this route. `path_prefix` in the
@@ -243,9 +250,12 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 
 - **Core/service split.** The vault semantics are useful as a library (CI doc
   linting, scripts, other services); FastAPI is an optional delivery surface.
-- **Re-read per request.** A documentation vault is small; recomputing the index
-  from disk avoids a whole class of cache-coherency bugs. If a large vault ever
-  needs it, add an explicit cache behind `reindex`.
+- **Fresh request index, incremental write batch.** A standalone HTTP request
+  rebuilds its index from disk, avoiding a cross-process cache-coherency contract.
+  Within a `POST /v1/notes/batch` request, `Vault.write_note` and
+  `Vault.prune_children` update the in-memory link and parent-child indexes
+  incrementally. This keeps bulk ingest linear while preserving a fresh index at
+  the next request boundary.
 - **Storage is pluggable (filesystem + Supabase).** digivault owns *how knowledge
   is organized and traversed* (frontmatter, wikilinks, backlinks, taxonomy). The
   on-disk `Vault(root)` is the default; `Vault.from_sources` builds the same index

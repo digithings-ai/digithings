@@ -39,7 +39,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Sanctioned homes for concrete color values.
 ALLOWLIST = {
-    "frontend/olympus/lib/chart-colors.ts",  # categorical/benchmark chart hues
+    "frontend/dashboard/lib/chart-colors.ts",  # categorical/benchmark chart hues
     # tenant embed accent overrides — ACCENT_CSS moved here with the client
     # tree when /embed/page.tsx became the server shell (#2001).
     "frontend/digichat/src/app/embed/embed-client.tsx",
@@ -79,7 +79,7 @@ RAW_UTILITY = re.compile(
     rf"-(?:(?:{SIDE_OFFSET})-)?(?:{PALETTE_FAMILIES})-\d{{2,3}}(?:/\d{{1,3}})?\b"
 )
 
-# 2. Pre-canon vocabulary (olympus pre-#1402 bridge + fin-* semantics).
+# 2. Pre-canon vocabulary (dashboard pre-#1402 bridge + fin-* semantics).
 LEGACY_VOCAB = re.compile(
     r"\b(?:(?:text|bg|border|divide)-(?:text|bg|border)-(?:primary|secondary"
     r"|muted|subtle|glow|glass)|(?:text|bg|border|stroke|fill)-fin-(?:green"
@@ -122,7 +122,7 @@ def literal_scan_text(line: str) -> str:
 FAMILY_BASELINE = REPO / "scripts" / "frontend_class_families.json"
 # Apps under the family-census ratchet (#1421). digiweb (reference + shared
 # packages) is exempt — it is WHERE new families are supposed to be born.
-CENSUS_APPS = ("digithings-web", "digiquant-web", "olympus", "digichat", "digichat-ui")
+CENSUS_APPS = ("digithings-web", "digiquant-web", "dashboard", "digichat", "digichat-ui")
 CLASS_DEF = re.compile(r"^\.([a-z][a-z0-9]+)(?:-|\s|:|\.|,|\{)", re.M)
 
 

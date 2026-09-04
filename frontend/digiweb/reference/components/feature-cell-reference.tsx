@@ -21,16 +21,16 @@ const CELLS: Cell[] = [
   {
     eyebrow: "research",
     outcome: "Ideas that arrive already tested",
-    mechanism: "atlas pulls free macro and market data, proposes directions, and hands each to a backtest before you ever see it.",
-    tag: "atlas · research",
-    accent: "atlas",
+    mechanism: "research pulls free macro and market data, proposes directions, and hands each to a backtest before you ever see it.",
+    tag: "research · research",
+    accent: "research",
   },
   {
     eyebrow: "execution",
     outcome: "From signal to order, timed",
-    mechanism: "hermes routes a validated signal to the sizer and kairos holds it until the moment the rules actually fire.",
-    tag: "hermes · risk",
-    accent: "hermes",
+    mechanism: "portfolio routes a validated signal to the sizer and execution holds it until the moment the rules actually fire.",
+    tag: "portfolio · risk",
+    accent: "portfolio",
   },
 ];
 

@@ -4,7 +4,7 @@
    plus the promoted controls patterns (#1548): Skeleton (sk-*), EmptyState
    (ctl-empty*), SegmentedControl/Pager/IconButton (nb-*), TagsInput (tg-*),
    SearchBar (ctl-search / sb-*). The #1548 families carry the reference
-   dress, plus olympus's shipped dresses where the two differ (nb-pager
+   dress, plus dashboard's shipped dresses where the two differ (nb-pager
    "capsule", nb-seg "accent" — see the NavButtons dresses section;
    tg-chip-quant accent chip and ctl-search-row dropdown filter row — see
    the TagsInput / SearchBar sections); they
@@ -19,8 +19,8 @@
      controls grammar, value-for-value copies of the specimen CSS —
      .btn-primary / .btn-ghost / .btn-quiet / .btn-danger / .btn-icon
      (reference/app/globals.css + styles/nav-shell.css), .ff-input
-     (reference/app/controls/controls.css), and the .dg-tier pill
-     (styles/web-theme.css). Mono type, pill radii, hairline borders,
+     (reference/app/controls/controls.css), and the .dg-tier badge
+     (styles/web-theme.css). Mono type, radius 0, hairline borders,
      srgb color-mix — kept verbatim so a specimen swap is pixel-faithful.
 
    - the CHAT dress (`*-chat` classes): digichat's current shadcn-derived
@@ -71,16 +71,17 @@
   font-family: var(--font-mono);
   font-size: 0.78rem;
   letter-spacing: 0.02em;
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.62rem 1.3rem;
   cursor: pointer;
   border: 1px solid transparent;
 }
 
 .ctl-btn-ref--primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  /* Utilitarian v0.1: loud = ink/paper fill; accent = focus/live only. */
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .ctl-btn-ref--primary:disabled {
@@ -154,8 +155,8 @@
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
-  border-top-color: var(--on-accent);
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
   animation: ctl-btn-spin 0.7s linear infinite;
 }
 
@@ -176,7 +177,7 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-lg, 0.625rem);
+    border-radius: 0;
     border: 1px solid transparent;
     background-clip: padding-box;
     font-size: 0.875rem;
@@ -191,8 +192,9 @@
   /* variants — hovers sit under (hover: hover) further down, exactly as
      Tailwind v4 emits digichat's hover: utilities */
   .ctl-btn-chat--default {
-    background: var(--primary, var(--accent));
-    color: var(--primary-foreground, var(--on-accent));
+    /* Utilitarian v0.1: loud fill is ink/paper; accent stays for focus/live. */
+    background: var(--ink);
+    color: var(--bg);
   }
 
   .ctl-btn-chat--outline {
@@ -286,7 +288,7 @@
 
 @media (hover: hover) {
   a.ctl-btn-chat--default:hover {
-    background: color-mix(in oklab, var(--primary, var(--accent)) 80%, transparent);
+    background: color-mix(in oklab, var(--ink) 80%, transparent);
   }
 
   .ctl-btn-chat--outline:hover {
@@ -336,7 +338,7 @@
   .ctl-btn-chat--size-xs {
     height: 1.5rem;
     gap: 0.25rem;
-    border-radius: min(var(--radius-md, 0.5rem), 10px);
+    border-radius: 0;
     padding-inline: 0.5rem;
     font-size: 0.75rem;
     line-height: calc(1 / 0.75);
@@ -345,7 +347,7 @@
   .ctl-btn-chat--size-sm {
     height: 1.75rem;
     gap: 0.25rem;
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
     padding-inline: 0.625rem;
     font-size: 0.8rem;
   }
@@ -364,13 +366,13 @@
   .ctl-btn-chat--size-icon-xs {
     width: 1.5rem;
     height: 1.5rem;
-    border-radius: min(var(--radius-md, 0.5rem), 10px);
+    border-radius: 0;
   }
 
   .ctl-btn-chat--size-icon-sm {
     width: 1.75rem;
     height: 1.75rem;
-    border-radius: min(var(--radius-md, 0.5rem), 12px);
+    border-radius: 0;
   }
 
   .ctl-btn-chat--size-icon-lg {
@@ -431,10 +433,10 @@
 [data-slot="button-group"] .ctl-btn-chat--size-sm,
 [data-slot="button-group"] .ctl-btn-chat--size-icon-xs,
 [data-slot="button-group"] .ctl-btn-chat--size-icon-sm {
-  border-radius: var(--radius-lg, 0.625rem);
+  border-radius: 0;
 }
 
-/* ── Badge — reference dress (web-theme.css .dg-tier pill grammar) ──────── */
+/* ── Badge — reference dress (web-theme.css .dg-tier badge grammar) ──────── */
 
 .ctl-badge-ref {
   font-family: var(--font-mono);
@@ -443,7 +445,7 @@
   text-transform: uppercase;
   color: var(--ink-mute);
   border: 1px solid var(--hair);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.16rem 0.5rem;
 }
 
@@ -480,7 +482,7 @@
     justify-content: center;
     gap: 0.25rem;
     overflow: hidden;
-    border-radius: var(--radius-4xl, 1.625rem);
+    border-radius: 0;
     border: 1px solid transparent;
     padding: 0.125rem 0.5rem;
     font-size: 0.75rem;
@@ -596,7 +598,7 @@
 
 .ctl-card-ref {
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--surface);
   overflow: hidden;
 }
@@ -652,7 +654,7 @@
     flex-direction: column;
     gap: 1rem;
     overflow: hidden;
-    border-radius: var(--radius-xl, 0.875rem);
+    border-radius: 0;
     background: var(--card, var(--surface));
     padding-block: 1rem;
     font-size: 0.875rem;
@@ -667,8 +669,8 @@
     grid-auto-rows: min-content;
     align-items: start;
     gap: 0.25rem;
-    border-top-left-radius: var(--radius-xl, 0.875rem);
-    border-top-right-radius: var(--radius-xl, 0.875rem);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
     padding-inline: 1rem;
   }
 
@@ -695,8 +697,8 @@
     border-top: 1px solid var(--border, var(--hair));
     background: color-mix(in oklab, var(--muted, var(--surface-2)) 50%, transparent);
     padding: 1rem;
-    border-bottom-left-radius: var(--radius-xl, 0.875rem);
-    border-bottom-right-radius: var(--radius-xl, 0.875rem);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
   }
 
   /* the action slot places itself the same way under both dresses */
@@ -726,13 +728,13 @@
 }
 
 .ctl-card-chat > img:first-child {
-  border-top-left-radius: var(--radius-xl, 0.875rem);
-  border-top-right-radius: var(--radius-xl, 0.875rem);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 .ctl-card-chat > img:last-child {
-  border-bottom-left-radius: var(--radius-xl, 0.875rem);
-  border-bottom-right-radius: var(--radius-xl, 0.875rem);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 
 .ctl-card-chat .ctl-card-header:has([data-slot="card-action"]) {
@@ -776,7 +778,7 @@
   width: 100%;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--surface);
   color: var(--ink);
   font-family: var(--font-mono);
@@ -815,7 +817,7 @@
     height: 2rem;
     width: 100%;
     min-width: 0;
-    border-radius: var(--radius-lg, 0.625rem);
+    border-radius: 0;
     border: 1px solid var(--input, var(--hair));
     background: transparent;
     padding: 0.25rem 0.625rem;
@@ -1041,7 +1043,7 @@
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    border-radius: 9999px;
+    border-radius: 0;
     background: var(--muted, var(--surface-2));
     font-size: 0.875rem;
     line-height: calc(1.25 / 0.875);
@@ -1086,7 +1088,7 @@
 /* ── Skeleton — the sk-* shimmer grammar (#1548, from
       reference/app/controls/controls.css). Shape defaults in
       @layer components so call-site width/height utilities can size them
-      (olympus's snapshot skeleton uses h-20 blocks); the ::after shimmer,
+      (dashboard's snapshot skeleton uses h-20 blocks); the ::after shimmer,
       keyframes, and reduced-motion guard stay unlayered ─────────────────── */
 
 @layer components {
@@ -1094,7 +1096,7 @@
     position: relative;
     overflow: hidden;
     background: color-mix(in srgb, var(--ink) 9%, transparent);
-    border-radius: 6px;
+    border-radius: 0;
   }
 
   .sk-circle {
@@ -1115,14 +1117,14 @@
   .sk-btn {
     width: 6.6rem;
     height: 2rem;
-    border-radius: 999px;
+    border-radius: 0;
     flex-shrink: 0;
   }
 
   .sk-block {
     height: 1.5rem;
     width: 60%;
-    border-radius: 5px;
+    border-radius: 0;
   }
 }
 
@@ -1159,7 +1161,7 @@
     align-items: center;
     gap: 0.55rem;
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: 0;
     background: color-mix(in oklab, var(--surface) 55%, transparent);
     padding: 1.8rem 1.3rem;
     text-align: center;
@@ -1192,7 +1194,7 @@
     color: var(--ink-mute);
   }
 
-  /* note — the italic "why it's empty" secondary line (olympus observability) */
+  /* note — the italic "why it's empty" secondary line (dashboard observability) */
   .ctl-empty-note {
     margin: 0;
     max-width: 24ch;
@@ -1208,10 +1210,10 @@
   color: var(--danger);
 }
 
-/* ── EmptyState glass dresses (#1548 olympus adoption) — the app's shipped
+/* ── EmptyState glass dresses (#1548 dashboard adoption) — the app's shipped
       looks, value-for-value from components/observability/shared.tsx and
       components/db-unavailable.tsx. Type/spacing only: the surface stays the
-      call-site class (olympus `.glass-card`, unlayered app CSS, so it wins
+      call-site class (dashboard `.glass-card`, unlayered app CSS, so it wins
       the card chrome AND keeps the app's motion-reveal hook). No state rules
       here, so everything sits in @layer components — call-site utilities may
       still adjust geometry (e.g. db-unavailable's `max-w-md mx-auto`). ────── */
@@ -1283,7 +1285,7 @@
     display: inline-flex;
     overflow: hidden;
     border: 1px solid var(--hair);
-    border-radius: 8px;
+    border-radius: 0;
   }
 
   .nb-seg {
@@ -1318,7 +1320,7 @@
     height: 2rem;
     padding: 0 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 8px;
+    border-radius: 0;
     background: var(--surface);
     color: var(--ink-soft);
     font-family: var(--font-mono);
@@ -1334,7 +1336,7 @@
     align-items: center;
     justify-content: center;
     border: none;
-    border-radius: 8px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink-mute);
     cursor: pointer;
@@ -1377,7 +1379,7 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-/* ── NavButtons dresses (#1548) — olympus's shipped looks, translated
+/* ── NavButtons dresses (#1548) — dashboard's shipped looks, translated
       exactly from its Tailwind utilities. Defaults in @layer components;
       state overrides unlayered AFTER the reference state rules so they win
       the tie at higher specificity. color-mix(in oklab, …) matches Tailwind
@@ -1385,12 +1387,12 @@
 
       - .nb-pager--capsule (Pager dress="capsule"): one bordered term-bg
         capsule (9px radius, mono 12.5px tabular) with borderless chevron
-        edges pinned in auto columns — olympus DatePager / pipeline + briefs.
+        edges pinned in auto columns — dashboard DatePager / pipeline + briefs.
       - .nb-pager--date .nb-pager-date: fixed-width centered label slot
         sized for the longest en-US short format ("Wed, Sep 30, 2026").
       - .nb-seg-group--accent (SegmentedControl dress="accent"): sans
         font-medium cells on a transparent track, accent/20 wash + accent
-        text on the selection — olympus PerformanceDateRange. ─────────── */
+        text on the selection — dashboard PerformanceDateRange. ─────────── */
 
 @layer components {
   .nb-pager--capsule {
@@ -1401,7 +1403,7 @@
     gap: 0.5rem;
     padding: 0.375rem 0.625rem;
     border: 1px solid var(--hair);
-    border-radius: 9px;
+    border-radius: 0;
     background: var(--term-bg);
     font-family: var(--font-mono);
     font-size: 12.5px;
@@ -1444,7 +1446,7 @@
     margin: 0;
     padding: 0;
     border: none;
-    border-radius: 4px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink);
     font: inherit;
@@ -1520,7 +1522,7 @@
     gap: 0.4rem;
     padding: 0.5rem 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: 0;
     background: var(--surface);
     cursor: text;
     transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
@@ -1532,7 +1534,7 @@
     gap: 0.35rem;
     padding: 0.22rem 0.35rem 0.22rem 0.6rem;
     border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--hair));
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--accent) 12%, transparent);
     font-family: var(--font-mono);
     font-size: 0.74rem;
@@ -1549,7 +1551,7 @@
     background: transparent;
     color: var(--ink-mute);
     cursor: pointer;
-    border-radius: 999px;
+    border-radius: 0;
     transition: color 0.15s var(--ease);
   }
 
@@ -1588,7 +1590,7 @@
   .tg-suggest-chip {
     padding: 0.25rem 0.6rem;
     border: 1px solid var(--hair);
-    border-radius: 999px;
+    border-radius: 0;
     background: transparent;
     color: var(--ink-soft);
     font-family: var(--font-mono);
@@ -1619,7 +1621,7 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
 }
 
-/* quant dress (#1548 olympus adoption — the NAV-comparables picker in
+/* quant dress (#1548 dashboard adoption — the NAV-comparables picker in
    components/portfolio/performance-chart-workspace.tsx): a rounded-md 11px
    accent chip, NOT the reference pill. Translated utility-for-utility from
    the shipped chip (gap-0.5 pl-2 pr-1 py-0.5 rounded-md text-[11px]
@@ -1632,7 +1634,7 @@
     gap: 0.125rem;
     padding: 0.125rem 0.25rem 0.125rem 0.5rem;
     border-color: color-mix(in srgb, var(--accent) 35%, transparent);
-    border-radius: 0.375rem;
+    border-radius: 0;
     background: color-mix(in srgb, var(--accent) 10%, transparent);
     font-size: 11px;
     font-weight: 500;
@@ -1642,7 +1644,7 @@
 
 .tg-chip-quant .tg-x {
   padding: 0.125rem;
-  border-radius: 0.25rem;
+  border-radius: 0;
   color: var(--ink-soft);
 }
 
@@ -1667,7 +1669,7 @@
     gap: 0.55rem;
     padding: 0.55rem 0.7rem;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: 0;
     background: var(--surface);
     transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
   }
@@ -1716,7 +1718,7 @@
   color: var(--ink);
 }
 
-/* row dress (#1548 olympus adoption — the ticker filter row inside the
+/* row dress (#1548 dashboard adoption — the ticker filter row inside the
    NAV-comparables dropdown pane, performance-chart-workspace.tsx): a
    full-width radius-less hairline-bottom row with an inset accent focus
    ring and no leading glyph. Translated utility-for-utility from the

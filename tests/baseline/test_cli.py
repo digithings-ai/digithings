@@ -27,6 +27,15 @@ def test_digiquant_prices_help() -> None:
 
 
 @pytest.mark.baseline
+def test_digiquant_strategy_help() -> None:
+    """digiquant strategy subgroup registers and returns exit code 0."""
+    result = CliRunner().invoke(digiquant_main, ["strategy", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "list" in result.output
+    assert "search" in result.output
+
+
+@pytest.mark.baseline
 def test_digiquant_backtest_help() -> None:
     """digiquant backtest command registers and returns exit code 0."""
     result = CliRunner().invoke(digiquant_main, ["backtest", "--help"])

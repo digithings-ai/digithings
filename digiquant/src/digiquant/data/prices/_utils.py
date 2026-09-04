@@ -38,7 +38,7 @@ def safe_float(v: Any, decimals: int | None = 4) -> float | None:
 
     Single source of truth — previously duplicated in both
     ``supabase_writer.py`` and the legacy
-    ``digiquant/scripts/atlas/compute-technicals.py`` shim.
+    ``digiquant/scripts/research/compute-technicals.py`` shim.
     """
     try:
         f = float(v)

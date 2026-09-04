@@ -20,14 +20,14 @@ const chipTitleStyle: React.CSSProperties = {
 export function ToolInvocationCard({ part }: { part: MsgPart }) {
   if (!isToolOrDynamicToolUIPart(part)) {
     return (
-      <pre className="overflow-x-auto rounded-md border border-border/50 bg-term-bg p-3 text-xs">
+      <pre className="overflow-x-auto rounded-none border border-border/50 bg-term-bg p-3 text-xs">
         {JSON.stringify(part, null, 2)}
       </pre>
     );
   }
   if (part.type === "dynamic-tool") {
     return (
-      <details className="rounded-lg border px-3 py-2 text-xs" style={chipStyle}>
+      <details className="rounded-none border px-3 py-2 text-xs" style={chipStyle}>
         <summary className="flex cursor-pointer list-none items-center gap-2 font-medium" style={chipTitleStyle}>
           <Wrench className="h-3.5 w-3.5" />
           <span>{part.toolName}</span>
@@ -42,7 +42,7 @@ export function ToolInvocationCard({ part }: { part: MsgPart }) {
     );
   }
   return (
-    <details className="rounded-lg border px-3 py-2 text-xs" style={chipStyle}>
+    <details className="rounded-none border px-3 py-2 text-xs" style={chipStyle}>
       <summary className="flex cursor-pointer list-none items-center gap-2 font-medium" style={chipTitleStyle}>
         <Wrench className="h-3.5 w-3.5" />
         <span>{part.type.replace(/^tool-/, "")}</span>

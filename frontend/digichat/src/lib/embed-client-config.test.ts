@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   DEFAULT_EMBED_TENANT_CONFIG,
   resolveEmbedClientConfigFromParams,
+  resolveEmbedHostParamOrReferer,
   toEmbedClientConfig,
 } from "./embed-client-config";
 import { parseEmbedTenants, resetEmbedTenantRegistryForTests } from "./embed-tenants";
@@ -94,10 +95,38 @@ describe("resolveEmbedClientConfigFromParams", () => {
     const cfg = resolveEmbedClientConfigFromParams(undefined, "https://digithings.ai");
     expect(cfg.slug).toBe("digithings");
   });
+
+  it("trims whitespace from the token param before comparison (#2006)", () => {
+    withRegistry();
+    const cfg = resolveEmbedClientConfigFromParams(
+      "datatap-dev-secret ",
+      "https://dev.datatap.stream",
+    );
+    expect(cfg.slug).toBe("datatap-dev");
+    expect(cfg.theme).toBe("light");
+  });
+});
+
+describe("resolveEmbedHostParamOrReferer", () => {
+  it("prefers explicit host over referer", () => {
+    expect(
+      resolveEmbedHostParamOrReferer("https://explicit.example", "https://parent.example/page"),
+    ).toBe("https://explicit.example");
+  });
+
+  it("falls back to referer origin when host param is absent (#2006)", () => {
+    expect(resolveEmbedHostParamOrReferer(undefined, "https://dev.datatap.stream/embed")).toBe(
+      "https://dev.datatap.stream",
+    );
+  });
+
+  it("returns undefined when both host and referer are absent", () => {
+    expect(resolveEmbedHostParamOrReferer(undefined, undefined)).toBeUndefined();
+  });
 });
 
 describe("toEmbedClientConfig", () => {
-  it("never projects the tenant token or backend into the client config", () => {
+  it("never projects the tenant token or backend secrets into the client config", () => {
     const registry = parseEmbedTenants(REGISTRY);
     const cfg = toEmbedClientConfig(registry.get("dev.datatap.stream")!);
     const serialized = JSON.stringify(cfg);
@@ -106,6 +135,13 @@ describe("toEmbedClientConfig", () => {
     expect(cfg).not.toHaveProperty("token");
     expect(cfg).not.toHaveProperty("backend");
     expect(cfg).not.toHaveProperty("activityDetail");
+    // Discriminator only — enough for Foundry-unsafe chrome (#3466).
+    expect(cfg.backendType).toBe("foundry");
+  });
+
+  it("projects digigraph backendType for first-party tenants", () => {
+    const registry = parseEmbedTenants(REGISTRY);
+    expect(toEmbedClientConfig(registry.get("digithings.ai")!).backendType).toBe("digigraph");
   });
 });
 

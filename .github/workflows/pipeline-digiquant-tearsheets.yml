@@ -1,18 +1,23 @@
 name: "Pipeline: digiquant tearsheets"
 
-# Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
+# Daily Slapper + BTC-SDCA tearsheet regeneration for digiquant.io
+# (#1068, #1069, #3453).
 #
 # DB-driven delivery: the job regenerates and upserts the tearsheet payload
 # (headline metrics + equity curve + trade list + current signal) to Supabase
 # `strategy_tearsheets`. digiquant.io reads that table live at runtime, so there
 # is NO repo commit and NO deploy in this path — updating the row updates the site.
+# `settings.json` is the target list (btc_slapper / eth_slapper / sol_slapper /
+# btc_sdca). Pinning checkout to `main` (#1626) means a family is unpublished
+# until that settings entry is on main — do not assume develop-only keys land.
 #
 # Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
-# 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
-# 3. Upsert the tearsheet payload + current signal to Supabase (service role)
+# 2. Stage M2SL / DTWEXBGS CSVs so btc_sdca keeps its published composite weights
+# 3. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
+# 4. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
   schedule:
@@ -26,7 +31,7 @@ permissions:
 
 jobs:
   tearsheets:
-    name: Regenerate Slapper tearsheets
+    name: Regenerate Slapper + BTC-SDCA tearsheets
     runs-on: ubuntu-latest
     timeout-minutes: 45
     concurrency:
@@ -37,6 +42,7 @@ jobs:
       CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,17 +72,33 @@ jobs:
       - name: Fetch Coinbase daily OHLCV
         run: uv run --frozen --with ccxt python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
+      - name: Stage SDCA macro siblings (M2, DXY)
+        # Workflow YAML comes from the default branch (develop); this job checks
+        # out `main`. Skip until the script exists on main so a develop-only
+        # step cannot fail the nightly (#3456 review).
+        run: |
+          if [ -f digiquant/scripts/export_sdca_macro.py ]; then
+            uv run --frozen --no-sync python digiquant/scripts/export_sdca_macro.py
+          else
+            echo "export_sdca_macro.py not on this checkout (main lags develop) — skip staging"
+          fi
+
       - name: Generate tearsheets + push to Supabase
         # --push-supabase: upsert the tearsheet payload + current signal to
         # strategy_tearsheets (service role). --signal-delay-days 3 (#1462):
         # public figures lag reality by 3 days (end-date shift) so the live
         # position can't be read off the curve. No repo commit — the DB is the
         # delivery; digiquant.io reads strategy_tearsheets live.
+        # --cache-dir must match fetch_coinbase / export_sdca_macro defaults
+        # (digiquant/data/price-history). Explicit so the job still works while
+        # checkout stays on main (#1626) and DEFAULT_CACHE has not yet been
+        # promoted (#3472 — REPO_ROOT vs DIGIQUANT_ROOT mismatch).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
-            --signal-delay-days 3
+            --signal-delay-days 3 \
+            --cache-dir digiquant/data/price-history
 
       - name: Update persistent failure issue
         if: failure()
@@ -86,15 +108,17 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp = new Date().toISOString().slice(0, 16);
             const title = "digiquant-tearsheets — recurring failures";
-            const labels = ["ci-failure", "component:digiquant", "pipeline:tearsheets"];
+            // Label simplification 2026-09: pipeline:* retired. Tracker dedup
+            // is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels = ["ci-failure", "component:digiquant", "agent-task", "priority:medium"];
             const marker = "<!-- digiquant-tearsheets-tracker -->";
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
-              labels: "ci-failure,pipeline:tearsheets",
               per_page: 100,
             });
             const tracker = existing.find((i) => (i.body || "").includes(marker));
@@ -117,7 +141,7 @@ jobs:
                 marker,
                 "## Persistent tracker for digiquant-tearsheets failures",
                 "",
-                "Scheduled Slapper tearsheet pipeline (`0 0 * * *`) has been failing.",
+                "Scheduled Slapper + BTC-SDCA tearsheet pipeline (`0 0 * * *`) has been failing.",
                 "",
                 "**Likely causes:** missing strategy_calibrations (run sync_strategy_calibrations.py),",
                 "Nautilus crash on Linux, Coinbase/ccxt outage, Supabase credentials.",

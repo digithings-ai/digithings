@@ -3,7 +3,7 @@
 /**
  * Lightweight-charts scaffold (#1450 batch E) — the persistent-chart
  * counterpart to `useFinanceChart` (chart-host.tsx), converged from the
- * olympus `lib/lw-chart.tsx` scaffold (#1420) so dashboards and display
+ * dashboard `lib/lw-chart.tsx` scaffold (#1420) so dashboards and display
  * surfaces share ONE canon. Two sanctioned lifecycles:
  *
  *   - `useFinanceChart` (chart-host.tsx) — setup-callback style; a data
@@ -12,14 +12,14 @@
  *   - `useLightweightChart` (here) — the chart is exposed as state and
  *     persists across data changes; callers own their series in effects,
  *     guarding cleanup with `isAlive()`. Right for live dashboards
- *     (olympus portfolio surfaces, tearsheet workspaces).
+ *     (dashboard portfolio surfaces, tearsheet workspaces).
  *
  * Both wear the same token chrome (`chartChromeOptions`), keep the canvas
  * transparent with the attribution logo off, disable kinetic-scroll inertia
  * under prefers-reduced-motion (the resting chart IS the final state), and
  * are SSR-safe — charts exist only after mount; hosts render as plain divs
  * with no JS. This module is palette-agnostic: the caller supplies resolved
- * token colors (olympus binds its ChartColors; package consumers pair it
+ * token colors (dashboard binds its ChartColors; package consumers pair it
  * with `useFinanceChartPalette()` from chart-host.tsx).
  */
 
@@ -114,7 +114,7 @@ export interface UseLightweightChartConfig<C> {
   /**
    * Resolved theme colors — a NEW identity re-applies the themed options,
    * so pass a per-theme-cached snapshot (`useFinanceChartPalette()` or an
-   * app hook like olympus's `useChartColors()`), not a fresh object per
+   * app hook like dashboard's `useChartColors()`), not a fresh object per
    * render.
    */
   colors: C;
@@ -283,7 +283,7 @@ export function useChartTip(
 export function ChartTipShell({ tip, children }: { tip: ChartTip; children: ReactNode }) {
   return (
     <div
-      className="pointer-events-none absolute z-10 rounded-lg border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-[240px]"
+      className="pointer-events-none absolute z-10 rounded-none border border-hair bg-term-bg px-3 py-2 text-[0.82rem] shadow-lg max-w-[240px]"
       style={{ left: tip.left, top: tip.top }}
     >
       {children}

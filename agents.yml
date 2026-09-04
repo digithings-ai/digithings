@@ -2,7 +2,7 @@ project: digithings
 description: "Open-core modular agentic stack — quant finance, RAG, document search, general agents"
 
 docs:
-  agents: CLAUDE.md
+  agents: AGENTS.md
   architecture: ARCHITECTURE.md
   workflow: docs/agents/AGENT_WORKFLOW.md
   scoring: docs/scoring/
@@ -11,7 +11,7 @@ docs:
   spec_template: docs/agent-backlog/SPEC_TEMPLATE.md
 
 platforms:
-  claude_code: CLAUDE.md
+  claude_code: CLAUDE.md  # Claude Code loader stub; canonical rules are AGENTS.md
   copilot: .github/copilot-instructions.md
   cursor: .cursor/rules/digithings.mdc
 
@@ -22,10 +22,10 @@ rules:
   - "LangGraph supervisor+subgraph orchestration only"
   - "LiteLLM routing (caching mandatory)"
   - "NautilusTrader for all backtest/optimize"
-  - "Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR"
   - "Never touch live-trading paths without explicit human approval"
   - "Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing."
   - "Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors."
+  - "Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge."
 
 scoring_thresholds:
   security: 8
@@ -34,10 +34,11 @@ scoring_thresholds:
   accuracy: 9
 
 execution_tiers:
-  # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
-  # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
-  - label: "exec:cursor"
-    name: "Tier 2 — Cursor Cloud Agent"
+  # Dispatch tier is a property of the COMPONENT (tiers in
+  # scripts/project_routing.json), not a per-issue label — exec:* labels were
+  # deleted in the 2026-09 label simplification. A human on Claude Code can
+  # take anything. See docs/agents/EXECUTION_TIERS.md.
+  - name: "cursor tier — Cursor Cloud Agent (default, all components except digikey)"
     scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
     examples:
       - "Bug fixes with a concrete repro"
@@ -45,42 +46,31 @@ execution_tiers:
       - "Docstrings / typed models / small MCP tools"
       - "Scoped refactors inside a single component"
     never:
-      - "Cross-module integration"
-      - "Ambiguous success criteria"
-      - "Architectural or novel design"
-  - label: "exec:claude"
-    name: "Tier 3 — Claude Code Max (human-supervised, LOCAL only)"
+      - "Anything requiring mid-task dialogue"
+      - "Auth/crypto (digikey is claude-tier)"
+  - name: "claude tier — Claude Code Max (human-supervised, LOCAL only)"
     scope: >
-      Interactive, cross-module, architectural, or human-gated work. LOCAL
-      ONLY — cloud auto-dispatch is disabled. The label is a tier marker;
-      execution happens via `make task ISSUE=N` on a human's workstation.
+      component:digikey (auth/crypto). LOCAL ONLY — cloud auto-dispatch is
+      disabled. Execution happens via `make task ISSUE=N` on a workstation.
     examples:
-      - "Architecture and new-module scaffolding"
-      - "Complex debugging, optimization, security review"
-      - "Strategy / iterative design work"
-      - "Decomposing milestones into Tier 1/2 tasks; reviewing agent PRs"
+      - "Auth, JWT, or crypto changes"
     dispatch: "local-only (make task ISSUE=N)"
     never:
-      - "Auto-execution from a GitHub label — only Copilot and Cursor auto-execute"
+      - "Auto-execution from a GitHub label"
 
-# Heuristics for default tier when a creator hasn't classified explicitly.
-# risk:high OR matches a human_gate → exec:claude.
-# Everything else → exec:cursor.
+# Dispatch tier lookup. Component → tier lives in scripts/project_routing.json
+# (tiers map). These notes record the reasoning, not the mapping.
 tier_routing:
   claude_triggers:
-    - "risk:high"
-    - "human_gate:yes"
     - "component:digikey (auth/JWT changes)"
-    - "live-trading paths"
-    - "cross-component integration"
+  cursor_default:
+    - "Everything else — safety enforced at merge (path-based gate + review coverage)"
 
 
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
   - "Any change that touches live-trading paths"
-  - "Score below threshold on any dimension"
   - "New external service dependency or infrastructure change"
-  - "Novel architecture decision not covered by existing ARCHITECTURE.md specs"
 
 components:
   - name: digigraph
@@ -88,49 +78,50 @@ components:
     description: "LangGraph orchestration brain — MCP tools, OpenAI-compatible API"
     agents_doc: digigraph/AGENTS.md
     arch_doc: digigraph/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digigraph -v"
+    # Match .github/workflows/test-digigraph.yml (cov flags are CI-only).
+    test_cmd: "pytest tests/dg/ tests/contracts/ -m unit -v --tb=short"
 
   - name: digiquant
     port: 8001
     description: "NautilusTrader backtest/optimize, strategy registry"
     agents_doc: digiquant/AGENTS.md
     arch_doc: digiquant/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digiquant -v"
+    test_cmd: "pytest tests/dq/ -m unit -v --tb=short"
 
   - name: digisearch
     port: 8002
     description: "RAG pipeline — ingest, chunk, embed, vector search"
     agents_doc: digisearch/AGENTS.md
     arch_doc: digisearch/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digisearch -v"
+    test_cmd: "pytest tests/ds/ -m unit -v --tb=short"
 
   - name: digismith
     port: 8003
     description: "LangSmith-aligned observability library + status API"
     agents_doc: digismith/AGENTS.md
     arch_doc: digismith/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digismith -v"
+    test_cmd: "pytest tests/dsm/ -m unit -v --tb=short"
 
   - name: digiclaw
     port: null
     description: "Heartbeat runner + append-only JSONL audit log"
     agents_doc: digiclaw/AGENTS.md
     arch_doc: digiclaw/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digiclaw -v"
+    test_cmd: "pytest tests/dc/ -m unit -v --tb=short"
 
   - name: digibase
     port: null
     description: "Shared Python library — error envelopes, HTTP helpers, OTel"
     agents_doc: digibase/AGENTS.md
     arch_doc: digibase/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digibase -v"
+    test_cmd: "pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short"
 
   - name: digikey
     port: 8005
     description: "JWT + scoped API key auth plane — RS256, JWKS, token exchange"
     agents_doc: digikey/AGENTS.md
     arch_doc: digikey/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digikey -v"
+    test_cmd: "pytest tests/dk/ -m unit -v --tb=short"
 
   - name: digichat
     port: 3005
@@ -144,7 +135,8 @@ components:
     description: "Compiles a codebase/docs source into an installable Agent Skill package"
     agents_doc: digiskills/AGENTS.md
     arch_doc: digiskills/ARCHITECTURE.md
-    test_cmd: "pytest -m unit -k digiskills -v"
+    # No dedicated workflow yet; path matches digiskills/AGENTS.md + tests/dsk/.
+    test_cmd: "pytest tests/dsk/ -m unit -v --tb=short"
 
 agent_capabilities:
   - id: agents-init
@@ -153,7 +145,7 @@ agent_capabilities:
     make_target: agents-init
 
   - id: scorer
-    description: "Self-score staged changes against 4-dimension rubrics"
+    description: "Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight)"
     script: scripts/score.py
     make_target: score
 
@@ -219,13 +211,6 @@ claude_code_surface:
     - name: test-first-implementer
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
-  skills:
-    - name: triage
-      path: .claude/skills/triage/SKILL.md
-    - name: ci-triage
-      path: .claude/skills/ci-triage/SKILL.md
-    - name: digiweb
-      path: .claude/skills/digiweb/SKILL.md
   commands:
     - name: /normalize
       path: .claude/commands/normalize.md
@@ -235,8 +220,6 @@ claude_code_surface:
       path: .claude/commands/score.md
     - name: /task
       path: .claude/commands/task.md
-    - name: /triage
-      path: .claude/commands/triage.md
     - name: /opsx-propose
       path: .claude/commands/opsx-propose.md
     - name: /opsx-apply
@@ -251,12 +234,15 @@ orchestration:
   worktree_root: .worktrees
   task_label: agent-task
   issue_template: .github/ISSUE_TEMPLATE/agent_task.yml
+  # make task plumbing only — session agents pick skills (see AGENTS.md § How to work), not this list as a ritual.
   pipeline:
     - fetch_task
     - create_worktree
     - implement
     - test
-    - finish_task  # run make score, commit, open PR
+    - finish_task  # commit, open PR
+    - autopilot     # CI + comments; review/deslop skills when the diff warrants it
+    - merge         # merge-ready task PRs into their base (see AGENTS.md)
     - cleanup_worktree
   human_gates:
     - pattern: "digikey/|RS256|bcrypt|JWKS|jwt.*sign"

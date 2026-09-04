@@ -18,8 +18,8 @@ const CORPUS = [
   "kelly sizing — position cap",
   "Sharpe ratio — risk-adjusted return",
   "maxDD — maximum drawdown",
-  "atlas — research scheduler",
-  "hermes — signal messenger",
+  "research — research scheduler",
+  "portfolio — signal messenger",
   "tearsheet — re-runnable receipt",
 ];
 
@@ -82,7 +82,7 @@ export function SearchBarReference() {
             {results.length ? `${results.length} result${results.length === 1 ? "" : "s"}` : "No results"}
           </p>
           <div
-            className="mt-[0.5rem] w-[min(100%,26rem)] overflow-hidden rounded-[10px] border border-hair bg-surface"
+            className="mt-[0.5rem] w-[min(100%,26rem)] overflow-hidden rounded-none border border-hair bg-surface"
             role="listbox"
             aria-label="Results"
           >

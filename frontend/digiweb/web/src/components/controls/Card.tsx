@@ -6,12 +6,11 @@
  * via descendant CSS, exactly like digichat's group/card scoping:
  *
  * - dress="reference" (default): the hairline frame grammar — 1px hair
- *   border, 12px radius, surface fill, hairline-ruled head and foot rows
+ *   border, 0 radius, surface fill, hairline-ruled head and foot rows
  *   (the ChatWidgetFrame card paddings), mono title.
- * - dress="chat": digichat's current dress translated exactly (ring-1
- *   foreground/10 shadow, 14px radius, block padding + gap, muted-washed
- *   footer, `size` "default" | "sm") so digichat's wrapper can pin
- *   dress="chat" and re-export with no rendered-look change.
+ * - dress="chat": same zero-radius tonal slab with digichat's part API
+ *   (ring-1 hairline, block padding + gap, muted-washed footer,
+ *   `size` "default" | "sm") so the wrapper can pin dress="chat".
  *
  * All dress lives in styles/controls-core.css (import once app-wide).
  */

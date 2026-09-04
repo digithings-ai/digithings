@@ -11,7 +11,7 @@ access_requirements:
   - email
   - phone_verification
 data_privacy_on_free: trains_on_data
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://docs.mistral.ai/deployment/cloud/laplateforme/
   - https://mistral.ai/technology/#pricing
@@ -91,7 +91,7 @@ model_list:
 | DIGI_LLM_MODE tier | `medium` (Large); `test` (Small) |
 | Single-shot 100k | Yes — 128k on Large, 256k on Codestral |
 | Privacy safe | **No (free)** / Yes (paid — zero-retention) |
-| Atlas/Hermes role | 128k single-shot research summarisation; Codestral for code analysis |
+| research/portfolio role | 128k single-shot research summarisation; Codestral for code analysis |
 
 ---
 
@@ -117,3 +117,4 @@ Enable billing in console. Same API key. Large ~$2/$6 per 1M in/out; Small ~$0.2
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

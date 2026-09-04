@@ -7,7 +7,6 @@ const COLUMNS = [
   { title: "Product", links: ["digigraph", "digiquant", "digisearch", "digichat"] },
   { title: "Company", links: ["About", "Careers", "Blog"] },
   { title: "Resources", links: ["Docs", "Changelog", "Status"] },
-  { title: "Connect", links: ["GitHub", "Discord", "X"] },
 ];
 
 const THEMES = ["System", "Light", "Dark"] as const;
@@ -15,9 +14,8 @@ const THEMES = ["System", "Light", "Dark"] as const;
 /**
  * Footer & chrome — utility link columns, a status/theme/copyright row, and the
  * one sanctioned personality moment: an ambient bloom under a giant outlined
- * colophon. Scroll into it and an accent glow sweeps left→right across the
- * wordmark, scrubbed by the colophon's own scroll progress; reduced motion
- * parks the sweep off-screen so no glow travels.
+ * colophon. Company socials are a dedicated SocialsReference, not a Connect
+ * column here.
  */
 export function FooterReference() {
   const [theme, setTheme] = useState<(typeof THEMES)[number]>("System");
@@ -50,8 +48,8 @@ export function FooterReference() {
         scroll progress. Everywhere else stays hairline.
       </p>
 
-      <footer className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair px-[1.4rem] pt-[1.4rem]">
-        <div className="grid grid-cols-4 gap-[0.8rem] max-[900px]:grid-cols-2">
+      <footer className="mt-[1.2rem] overflow-hidden rounded-none border border-hair px-[1.4rem] pt-[1.4rem]">
+        <div className="grid grid-cols-3 gap-[0.8rem] max-[900px]:grid-cols-2">
           {COLUMNS.map((col) => (
             <div key={col.title}>
               <p className="text-[0.78rem] text-ink">{col.title}</p>

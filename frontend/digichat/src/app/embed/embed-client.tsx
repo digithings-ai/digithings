@@ -15,6 +15,11 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  isWebSearchEnabled,
+  readWebSearchPref,
+  writeWebSearchPref,
+} from "@/lib/web-search-pref";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,6 +31,7 @@ import {
 } from "@/hooks/use-byok-key";
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
+  BYOK_MODEL_REMEDIABLE_CODES,
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
 } from "@/lib/embed-chat-error";
@@ -56,7 +62,6 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
-import { LanguageSelect } from "@/components/language-select";
 import { detectBrowserLanguageCode } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
@@ -75,6 +80,10 @@ import {
   parseThemeMessage,
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
+import {
+  formatPageContextForPrompt,
+  parsePageContextMessage,
+} from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -262,11 +271,10 @@ function EmbedChat({
   const [language, setLanguage] = useState(() => detectBrowserLanguageCode());
   // useEmbedDigiChat's transport is frozen on first render (#1339) — a
   // `language` value passed by plain value would stay stuck at whatever
-  // detectBrowserLanguageCode() returned at mount, so picking a language in
-  // the dropdown would never reach the outgoing header (#2103 final review,
-  // Critical finding). Mutate the ref directly in the render body (the
-  // "useLatest" idiom) rather than in a useEffect — an effect would lag one
-  // render behind and could race a fast pick-then-send. The value is
+  // detectBrowserLanguageCode() returned at mount, so `/lang` would never
+  // reach the outgoing header (#2103 / #3418). Mutate the ref directly in
+  // the render body (the "useLatest" idiom) rather than in a useEffect — an
+  // effect would lag one render behind and could race a fast pick-then-send. The value is
   // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
   // approved design is session-only, resetting to a fresh browser-locale
   // auto-detect on every reload.
@@ -281,6 +289,50 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   languageRef.current = language;
   const getResponseLanguage = useCallback(() => languageRef.current, []);
+
+  // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
+  // Adjust during render when scope changes (same pattern as trialUnlockedFor).
+  const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
+  const [webSearchState, setWebSearchState] = useState<{
+    scope: string;
+    pref: boolean;
+  }>(() => ({ scope: webSearchScope, pref: false }));
+  if (webSearchState.scope !== webSearchScope) {
+    setWebSearchState({
+      scope: webSearchScope,
+      pref: typeof window !== "undefined" ? readWebSearchPref(webSearchScope) : false,
+    });
+  }
+  // Hydrate from localStorage once on the client (SSR starts false).
+  const [webHydrated, setWebHydrated] = useState(false);
+  if (typeof window !== "undefined" && !webHydrated) {
+    setWebHydrated(true);
+    const stored = readWebSearchPref(webSearchScope);
+    if (stored !== webSearchState.pref) {
+      setWebSearchState({ scope: webSearchScope, pref: stored });
+    }
+  }
+  const webSearchPref = webSearchState.pref;
+  const webSearchUserRef = useRef(webSearchPref);
+  // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
+  webSearchUserRef.current = webSearchPref;
+  const tenantAllowsWeb = uiFlags.webSearch;
+  const getEnableWebSearch = useCallback(
+    () =>
+      isWebSearchEnabled({
+        tenantAllows: tenantAllowsWeb,
+        userPref: webSearchUserRef.current,
+      }),
+    [tenantAllowsWeb],
+  );
+  const toggleWebSearch = useCallback(() => {
+    setWebSearchState((prev) => {
+      const next = !prev.pref;
+      writeWebSearchPref(prev.scope, next);
+      return { scope: prev.scope, pref: next };
+    });
+  }, []);
+
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -322,6 +374,8 @@ function EmbedChat({
   const [quotaPrompt, setQuotaPrompt] = useState(false);
   /** After BYOK save following a free-quota error, regenerate with X-BYOK-* headers. */
   const pendingByokRetryRef = useRef(false);
+  /** Panel opened for a model-remediable refusal while a key is already bound — no retry until save. */
+  const pendingByokRemediateRef = useRef(false);
   /** Dedupes quota→BYOK open for the same AI SDK error instance/message. */
   const handledQuotaErrorRef = useRef<string | null>(null);
 
@@ -356,6 +410,8 @@ function EmbedChat({
   /** The question that arrived after the free turns were spent, and the one
    *  already released — refs, so neither triggers a render of its own. */
   const heldQuestionRef = useRef<string | null>(null);
+  /** Force-tool for a held question (`/search` / `/docs`) — same lifetime as heldQuestionRef. */
+  const heldForceToolRef = useRef<string | undefined>(undefined);
   const sentHeldRef = useRef<string | null>(null);
   /**
    * Set (never incremented directly) by every gated send below, then charged
@@ -369,6 +425,16 @@ function EmbedChat({
    * signal to gate the charge on.
    */
   const pendingGateChargeRef = useRef(false);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<string | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
+  const consumePageContextPrefix = useCallback((question: string): string => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return question;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+  }, []);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -403,6 +469,12 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    getEnableWebSearch,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
+    // Missing backendType (gated default) must not enable regen/edit.
+    allowClientTurnMutation:
+      tenantCfg.backendType === "digigraph" || tenantCfg.backendType === "foundry",
   });
 
   // Charge the free-tier gate only once a gated send actually settles
@@ -418,9 +490,9 @@ function EmbedChat({
     if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
   }, [chat.busy, chat.rawError, gate]);
 
-  // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
+  // Free-tier / rate-limit / model-remediable → stop turn + open in-chat BYOK.
   useEffect(() => {
-    if (!chat.rawError || byokIsSet) return;
+    if (!chat.rawError) return;
     const errKey = chat.rawError.message;
     if (handledQuotaErrorRef.current === errKey) return;
     const parsed = parseEmbedChatError(chat.rawError);
@@ -434,12 +506,21 @@ function EmbedChat({
     ) {
       return;
     }
+    const remediateWhileBound =
+      byokIsSet &&
+      !!parsed?.code &&
+      BYOK_MODEL_REMEDIABLE_CODES.has(parsed.code);
+    if (byokIsSet && !remediateWhileBound) return;
     handledQuotaErrorRef.current = errKey;
     void chat.stop?.();
-    pendingByokRetryRef.current = true;
+    if (remediateWhileBound) {
+      pendingByokRemediateRef.current = true;
+    } else {
+      pendingByokRetryRef.current = true;
+    }
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setQuotaPrompt(true);
+      setQuotaPrompt(!remediateWhileBound);
       setSettingsOpen(true);
     });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
@@ -448,6 +529,7 @@ function EmbedChat({
   // or release a question held at the gate / byok_only prompt.
   useEffect(() => {
     if (!byokIsSet || chat.busy) return;
+    if (pendingByokRemediateRef.current && !pendingByokRetryRef.current) return;
     const held = heldQuestionRef.current;
     if (pendingByokRetryRef.current) {
       pendingByokRetryRef.current = false;
@@ -455,7 +537,9 @@ function EmbedChat({
       setSettingsOpen(false);
       if (held) {
         heldQuestionRef.current = null;
-        void chat.send(held);
+        const forceTool = heldForceToolRef.current;
+        heldForceToolRef.current = undefined;
+        void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -464,10 +548,23 @@ function EmbedChat({
     }
     if (held && !gate.locked) {
       heldQuestionRef.current = null;
-      void chat.send(held);
+      const forceTool = heldForceToolRef.current;
+      heldForceToolRef.current = undefined;
+      void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
       if (!ungated) pendingGateChargeRef.current = true;
     }
-  }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
+  }, [
+    byokIsSet,
+    byokKey,
+    byokProvider,
+    byokModel,
+    chat.busy,
+    chat.onRetry,
+    chat.send,
+    ungated,
+    gate,
+    consumePageContextPrefix,
+  ]);
 
   const openSettings = useCallback(() => {
     setQuotaPrompt(false);
@@ -476,10 +573,12 @@ function EmbedChat({
 
   const onByokSaved = useCallback(
     (key: string, provider: BYOKProvider, model: string) => {
+      pendingByokRemediateRef.current = false;
+      pendingByokRetryRef.current = true;
       setByokKey(key, provider, model);
       emit("embed_byok_saved", { provider });
       setSettingsOpen(false);
-      // Retry effect runs once byokIsSet flips (pendingByokRetryRef may already be set).
+      // Retry effect runs once byokIsSet flips (pendingByokRetryRef set above).
     },
     [setByokKey],
   );
@@ -563,6 +662,30 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
+  // Popup widget (#3421): accept visible-page context from the immediate parent
+  // after digichat:ready. Not first-party-only — registered third-party hosts
+  // describe their own already-visible DOM (no behind-auth scrape).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const parentOrigin = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parsePageContextMessage(event, parentOrigin);
+      if (!parsed) return;
+      const formatted = formatPageContextForPrompt(parsed);
+      if (!formatted) return;
+      pageContextRef.current = formatted;
+      setPageContextAttached(true);
+      setHandshakeError(null);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
   //
@@ -604,14 +727,18 @@ function EmbedChat({
     if (!trialUnlocked || !question || chat.busy) return;
     if (sentHeldRef.current === question) return;
     sentHeldRef.current = question;
-    void chat.send(question);
+    const forceTool = heldForceToolRef.current;
+    heldForceToolRef.current = undefined;
+    const hadCtx = pageContextRef.current != null;
+    void chat.send(consumePageContextPrefix(question), forceTool ? { forceTool } : undefined);
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
       byok: byokIsSet,
+      page_context: hadCtx,
     });
-  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContextPrefix]);
 
   const reopenTrialForm = useCallback(() => {
     lastGatedPost.current = null;
@@ -663,26 +790,34 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
-    if (ungated) {
-      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    let base: string;
+    if (uiParams.welcome) base = uiParams.welcome;
+    else if (tenantCfg.welcome) base = tenantCfg.welcome;
+    else if (ungated) {
+      base =
+        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    } else {
+      base = DEFAULT_WELCOME.replace(
+        "the first few turns are free",
+        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+      );
     }
-    return DEFAULT_WELCOME.replace(
-      "the first few turns are free",
-      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-    );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+    if (pageContextAttached) {
+      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
+    }
+    return base;
+  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
   const headerTitle = tenantCfg.title;
 
   const wrappedSend = useCallback(
-    (question: string) => {
+    (question: string, opts?: { forceTool?: string }) => {
       // byok_only: require a key before any send
       if (llmAccess === "byok_only" && !byokIsSet) {
         heldQuestionRef.current = question;
+        heldForceToolRef.current = opts?.forceTool;
         pendingByokRetryRef.current = true;
         setSettingsOpen(true);
         return;
@@ -692,19 +827,22 @@ function EmbedChat({
       // vanished — they had typed it, pressed send, and got nothing back.
       if ((gate.locked || trialLocked) && !ungated) {
         heldQuestionRef.current = question;
+        heldForceToolRef.current = opts?.forceTool;
         lastGatedPost.current = null;
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      void chat.send(question);
+      const hadCtx = pageContextRef.current != null;
+      void chat.send(consumePageContextPrefix(question), opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
+        page_context: hadCtx,
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContextPrefix],
   );
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
@@ -715,9 +853,10 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot = headerTitle || uiFlags.showLanguageSelector ? (
+  // Language is `/lang` on the composer (#3418) — the top-right dropdown is gone.
+  const headerSlot = headerTitle ? (
     <header className="dc-brand">
-      {headerTitle ? <span>{headerTitle}</span> : null}
+      <span>{headerTitle}</span>
       {headerAttribution ? (
         <span className="dc-brand-by">
           (
@@ -732,21 +871,34 @@ function EmbedChat({
           )
         </span>
       ) : null}
-      {uiFlags.showLanguageSelector ? (
-        <LanguageSelect value={language} onChange={setLanguage} />
-      ) : null}
     </header>
   ) : null;
 
-  const footerSlot = footerAttribution ? (
-    <p className="dc-attribution">
-      powered by digichat — a{" "}
-      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-        digithings
-      </a>{" "}
-      product.
-    </p>
-  ) : null;
+  const footerSlot =
+    tenantAllowsWeb || footerAttribution ? (
+      <>
+        {tenantAllowsWeb ? (
+          <label className="dc-web-search-toggle">
+            <input
+              type="checkbox"
+              checked={webSearchPref}
+              onChange={toggleWebSearch}
+              aria-label="Enable web search"
+            />
+            <span>Web search {webSearchPref ? "on" : "off"} (External cites)</span>
+          </label>
+        ) : null}
+        {footerAttribution ? (
+          <p className="dc-attribution">
+            powered by digichat — a{" "}
+            <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
+              digithings
+            </a>{" "}
+            product.
+          </p>
+        ) : null}
+      </>
+    ) : null;
 
   const showByokOnError =
     !handshakeError &&
@@ -777,6 +929,7 @@ function EmbedChat({
         providerIsSet: byokIsSet,
         openSettings: showByok ? openSettings : undefined,
         send: wrappedSend,
+        reset: chat.reset,
         stop: chat.stop,
         onRetry: handshakeError
           ? // regenerate() cannot repair a parent handshake/load failure; match
@@ -791,6 +944,7 @@ function EmbedChat({
             : chat.onRetry,
       }}
       headerSlot={headerSlot}
+      onLanguageChange={setLanguage}
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
@@ -910,7 +1064,6 @@ function PaywallCard({
           type="button"
           size="sm"
           onClick={() => setShowBYOK(true)}
-          style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Key className="mr-1.5 size-3.5" />
           Bring your own key
@@ -920,7 +1073,7 @@ function PaywallCard({
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}
-          className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          className="inline-flex items-center rounded-none border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
           Open digichat

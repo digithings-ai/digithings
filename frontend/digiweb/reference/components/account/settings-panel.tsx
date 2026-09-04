@@ -3,10 +3,8 @@
 import { useState } from "react";
 
 /**
- * Settings — every preference stacked in one card: label and consequence on the
- * left, control (toggle, segmented switch, or select) on the right, a hairline
- * between each decision. The danger zone sits last behind one more hairline, the
- * only place red is spent. An interactive display template.
+ * Settings — preference rows in one card, plus the tab-visibility rule: a lower
+ * plan never sees Custom+ tabs (they are omitted, not greyed). Danger zone last.
  */
 
 type Theme = "system" | "light" | "dark";
@@ -52,7 +50,7 @@ export function SettingsPanel() {
         hairline — red is reserved for it.
       </p>
 
-      <div className="mt-[1.2rem] rounded-[12px] border border-hair bg-surface">
+      <div className="mt-[1.2rem] rounded-none border border-hair bg-surface">
         <div className="acct-setting-row">
           <div>
             <p className="block text-[0.88rem] text-ink" id="setting-digests">
@@ -119,9 +117,36 @@ export function SettingsPanel() {
           </span>
         </div>
 
+        <div className="acct-setting-tabs" role="tablist" aria-label="Settings (custom plan)">
+          {["Profile", "Pipeline", "Keys", "Brokers", "Notifications", "Billing", "About"].map(
+            (label, index) => (
+              <span
+                key={label}
+                className={index === 0 ? "acct-setting-tab acct-setting-tab-on" : "acct-setting-tab"}
+              >
+                {label}
+              </span>
+            ),
+          )}
+        </div>
+        <p className="acct-setting-tab-note">
+          Custom+ sees every tab. Observer (free) never sees Profile, Pipeline, Keys, or Brokers —
+          those controls are omitted, not greyed out.
+        </p>
+        <div className="acct-setting-tabs" role="tablist" aria-label="Settings (observer plan)">
+          {["Notifications", "Billing", "About"].map((label, index) => (
+            <span
+              key={label}
+              className={index === 0 ? "acct-setting-tab acct-setting-tab-on" : "acct-setting-tab"}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+
         <div className="acct-danger">
           <div>
-            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-down">danger zone</p>
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-danger">danger zone</p>
             <p className="acct-setting-desc">
               Deletes every strategy, backtest, and API key in this workspace. No undo.
             </p>

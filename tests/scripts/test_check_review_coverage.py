@@ -22,7 +22,9 @@ to GitHub's commit-to-PR association for those commits.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -92,15 +94,15 @@ def test_a_human_approval_is_a_review() -> None:
     assert "chrizefan" in why
 
 
-def test_the_risk_low_label_is_an_explicit_decision_to_skip() -> None:
-    reviewed, why = crc.verdict_for(_state(labels={"risk:low", "component:website"}))
-    assert reviewed
-    assert "risk:low" in why
+def test_the_retired_risk_low_label_no_longer_clears_the_gate() -> None:
+    """Label simplification 2026-09 retired risk:*. The label is inert now."""
+    reviewed, _ = crc.verdict_for(_state(labels={"risk:low", "component:website"}))
+    assert not reviewed
 
 
 def test_a_label_clears_the_gate_even_when_bugbot_is_unavailable() -> None:
     """An outage at Cursor must never be able to freeze a deploy."""
-    reviewed, _ = crc.verdict_for(_state(labels={"risk:low"}, bugbot="NEUTRAL"))
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, bugbot="NEUTRAL"))
     assert reviewed
 
 
@@ -113,9 +115,10 @@ def test_nothing_at_all_is_not_a_review() -> None:
 # ── the reviewed:owner hatch ─────────────────────────────────────────────────
 #
 # Added because the gate's own first run had no honest hatch: a solo maintainer
-# cannot self-approve, Bugbot was out of quota, and the only remaining option was
-# to label a blocking CI change `risk:low`. A gate that pressures you into
-# mislabelling is worse than no gate.
+# cannot self-approve, and with Bugbot out of quota there was no satisfiable
+# claim that left a record. A gate that pressures you into a silent bypass is
+# worse than no gate. (A risk:low skip hatch existed until the 2026-09 label
+# simplification retired it; trivial diffs now clear via reviewed:owner.)
 
 
 def test_reviewed_owner_is_a_review() -> None:
@@ -148,17 +151,11 @@ def test_reviewed_owner_clears_the_gate_despite_a_neutral_bugbot() -> None:
     assert reviewed
 
 
-def test_the_two_labels_are_distinct_and_report_distinct_reasons() -> None:
-    """`risk:low` means it did not need reading; `reviewed:owner` means it was read.
-
-    Conflating them is the failure mode the hatch exists to prevent, so the verdict
-    strings must not be interchangeable.
-    """
-    assert crc.OWNER_REVIEW_LABEL != crc.SKIP_LABEL
+def test_the_owner_hatch_reports_actor_and_date() -> None:
+    """The self-applicable hatch is only worth having if it leaves a record."""
     _, owner_why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}))
-    _, skip_why = crc.verdict_for(_state(labels={crc.SKIP_LABEL}))
-    assert owner_why != skip_why
-    assert "not to warrant" in skip_why
+    _, bare_why = crc.verdict_for(_state())
+    assert owner_why != bare_why
 
 
 def test_a_completed_bugbot_run_outranks_a_self_applied_label() -> None:
@@ -447,13 +444,13 @@ def test_a_completed_bugbot_run_outranks_an_in_session_review() -> None:
     assert "Bugbot completed" in why
 
 
-def test_the_three_self_served_hatches_are_distinct_labels() -> None:
-    assert len({crc.AGENT_REVIEW_LABEL, crc.OWNER_REVIEW_LABEL, crc.SKIP_LABEL}) == 3
+def test_the_two_self_served_hatches_are_distinct_labels() -> None:
+    assert len({crc.AGENT_REVIEW_LABEL, crc.OWNER_REVIEW_LABEL}) == 2
 
 
 def test_a_missing_agent_review_does_not_block_the_other_hatches() -> None:
-    """A PR with risk:low and no agent label must not be dragged into the new branch."""
-    reviewed, _ = crc.verdict_for(_state(labels={crc.SKIP_LABEL}, agent_review=None))
+    """A PR with reviewed:owner and no agent review must clear via the owner hatch."""
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, agent_review=None))
     assert reviewed
 
 
@@ -658,6 +655,12 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
     Skips (rather than fails) when a ref can't be resolved at all -- e.g. a
     shallow or partial clone that never fetched one of these branches -- since
     that's an environment limitation, not a claim about BASELINE_SHA itself.
+    The same hatch applies when BASELINE_SHA itself is missing from the object
+    database of a shallow clone: ``git merge-base --is-ancestor`` then exits 128
+    with ``fatal: Not a valid object name``, which is what ``ruff-and-scripts``
+    on ``ci.yml`` (default fetch-depth 1) reported against ``origin/main``.
+    A full clone with a bad pin still fails: the skip is gated on
+    ``git rev-parse --is-shallow-repository``.
     """
     for ref in ("origin/main", "origin/develop"):
         resolvable = subprocess.run(
@@ -668,9 +671,491 @@ def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
         if resolvable.returncode != 0:
             pytest.skip(f"{ref} is not resolvable in this checkout")
 
+        baseline_present = subprocess.run(
+            ["git", "cat-file", "-e", f"{crc.BASELINE_SHA}^{{commit}}"],
+            cwd=crc.REPO_ROOT,
+            capture_output=True,
+        )
+        if baseline_present.returncode != 0:
+            shallow = subprocess.run(
+                ["git", "rev-parse", "--is-shallow-repository"],
+                cwd=crc.REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+            if shallow.returncode == 0 and shallow.stdout.strip() == "true":
+                pytest.skip(
+                    "BASELINE_SHA is not in this clone's object database "
+                    "(shallow checkout — ci.yml ruff-and-scripts uses default fetch-depth 1)"
+                )
+            pytest.fail(
+                f"BASELINE_SHA {crc.BASELINE_SHA} is not a valid commit object in a full clone"
+            )
+
         result = subprocess.run(
             ["git", "merge-base", "--is-ancestor", crc.BASELINE_SHA, ref],
             cwd=crc.REPO_ROOT,
             capture_output=True,
         )
         assert result.returncode == 0, f"BASELINE_SHA is not an ancestor of {ref}"
+
+
+def test_ancestor_pin_treats_a_missing_baseline_object_as_environment() -> None:
+    """Shallow clones must skip; a full clone with a bad pin must still fail."""
+    src = Path(__file__).read_text(encoding="utf-8")
+    assert '["git", "cat-file", "-e"' in src
+    assert "--is-shallow-repository" in src
+    assert "pytest.fail" in src
+
+
+# ── batched GitHub fetch (no live network) ───────────────────────────────────
+#
+# Sequential `gh pr view` + per-SHA `/commits/{sha}/pulls` is the promotion-range
+# bottleneck (~1.9s per full view). Hatch rules stay in `verdict_for`; these tests
+# pin that the walker batches GraphQL and still refuses `reviewed:agent` without
+# the in-session marker.
+
+
+def _graphql_pr(
+    *,
+    number: int = 1,
+    title: str = "fix",
+    labels: list[str] | None = None,
+    reviews: list[dict[str, Any]] | None = None,
+    comments: list[dict[str, Any]] | None = None,
+    checks: list[dict[str, Any]] | None = None,
+    labeled: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": title,
+        "labels": {"nodes": [{"name": name} for name in (labels or [])]},
+        "reviews": {"nodes": reviews or []},
+        "comments": {"nodes": comments or []},
+        "timelineItems": {"nodes": labeled or []},
+        "commits": {
+            "nodes": [
+                {
+                    "commit": {
+                        "statusCheckRollup": {
+                            "contexts": checks or [],
+                        }
+                    }
+                }
+            ]
+        },
+    }
+
+
+def test_graphql_pr_counts_coderabbit_review_without_comment_bodies() -> None:
+    state = crc.state_from_graphql_pr(
+        _graphql_pr(
+            reviews=[
+                {"author": {"login": "coderabbitai"}, "state": "COMMENTED"},
+            ]
+        )
+    )
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "coderabbitai" in why
+
+
+def test_graphql_pr_reviewed_agent_requires_the_marker() -> None:
+    """Do not weaken the hatch: the label alone is still a refusal."""
+    without = crc.state_from_graphql_pr(
+        _graphql_pr(
+            labels=[crc.AGENT_REVIEW_LABEL],
+            comments=[
+                {"author": {"login": "a"}, "body": "looks fine", "createdAt": "t", "url": "u"}
+            ],
+        )
+    )
+    reviewed, why = crc.verdict_for(without)
+    assert not reviewed
+    assert crc.AGENT_REVIEW_MARKER in why
+
+    with_marker = crc.state_from_graphql_pr(
+        _graphql_pr(
+            labels=[crc.AGENT_REVIEW_LABEL],
+            comments=[
+                {
+                    "author": {"login": "chrizefan"},
+                    "body": f"{crc.AGENT_REVIEW_MARKER}\nfindings",
+                    "createdAt": "2026-09-02T00:00:00Z",
+                    "url": "https://github.com/o/r/pull/1#issuecomment-1",
+                }
+            ],
+        )
+    )
+    reviewed, why = crc.verdict_for(with_marker)
+    assert reviewed
+    assert "in-session review" in why
+    assert "issuecomment-1" in why
+
+
+def test_prefetch_pr_states_uses_one_graphql_query_for_a_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del variables
+        calls.append(query)
+        return {
+            "data": {
+                "repository": {
+                    "p1894": _graphql_pr(
+                        number=1894,
+                        checks=[{"name": "Cursor Bugbot", "conclusion": "SUCCESS"}],
+                    ),
+                    "p1893": _graphql_pr(number=1893, labels=["reviewed:owner"]),
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1894, 1893, 1894], cache, invalid)
+
+    assert len(calls) == 1, "distinct PR numbers in one range must share one GraphQL query"
+    assert "p1894" in calls[0] and "p1893" in calls[0]
+    reviewed, why = crc.verdict_for(cache[1894])
+    assert reviewed
+    assert "Bugbot completed" in why
+    reviewed, why = crc.verdict_for(cache[1893])
+    assert reviewed
+    assert "reviewed:owner" in why
+    assert not invalid
+
+
+def test_prefetch_pr_states_treats_a_null_node_as_not_a_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An issue number cited as '(#2103)' must not crash; it is invalid, not reviewed."""
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        return {"data": {"repository": {"p2103": None}}}
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([2103], cache, invalid)
+    assert 2103 in invalid
+    assert 2103 not in cache
+
+
+def test_prefetch_pr_states_does_not_re_query_cached_numbers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del query, variables
+        nonlocal calls
+        calls += 1
+        return {"data": {"repository": {"p1": _graphql_pr(number=1, labels=["risk:low"])}}}
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.prefetch_pr_states([1], cache, invalid)
+    crc.prefetch_pr_states([1], cache, invalid)
+    assert calls == 1
+
+
+def test_prefetch_associated_prs_batches_unnumbered_shas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_graphql(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
+        del variables
+        calls.append(query)
+        return {
+            "data": {
+                "repository": {
+                    "c0": {
+                        "associatedPullRequests": {
+                            "nodes": [
+                                {"number": 1900, "mergedAt": None},
+                                {"number": 1899, "mergedAt": "2026-08-05T19:51:00Z"},
+                            ]
+                        }
+                    },
+                    "c1": {"associatedPullRequests": {"nodes": [{"number": 7, "mergedAt": None}]}},
+                }
+            }
+        }
+
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(crc, "_gh_graphql", fake_graphql)
+    found = crc.prefetch_associated_prs(["aaa1111", "bbb2222"])
+    assert len(calls) == 1
+    assert found["aaa1111"] == 1899
+    assert found["bbb2222"] is None
+
+
+def test_repo_slug_is_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> str:
+        runs.append(args)
+        return "digithings-ai/digithings"
+
+    monkeypatch.setattr(crc, "_run", fake_run)
+    crc._repo_slug.cache_clear()
+    assert crc._repo_slug() == "digithings-ai/digithings"
+    assert crc._repo_slug() == "digithings-ai/digithings"
+    assert len(runs) == 1
+
+
+def test_baseline_ancestor_set_is_one_rev_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    runs: list[list[str]] = []
+
+    def fake_run(args: list[str]) -> str:
+        runs.append(args)
+        return "aaa\nbbb\n"
+
+    monkeypatch.setattr(crc, "_run", fake_run)
+    ancestors = crc.baseline_ancestor_shas("e03c7095")
+    assert ancestors == {"aaa", "bbb"}
+    assert runs == [["git", "rev-list", "e03c7095"]]
+
+
+# ── the direct-push hatch (a commit with no source PR) ───────────────────────
+#
+# Every other hatch hangs off a pull request, so a commit pushed straight to
+# develop could carry none of them: it was refused permanently, and the only ways
+# out were advancing BASELINE_SHA (retroactively skipping unrelated history) or
+# never promoting. This hatch asks for the same artifact `reviewed:agent` asks
+# for, addressed to the commit instead of the branch — marker AND short sha, on an
+# issue or PR that itself carries the label.
+#
+# The tests that matter most are the negative ones. Marker without the sha would
+# let one review clear every direct push in the range; sha without the marker would
+# let a passing mention in unrelated prose stand in for a review; and neither means
+# anything if the label is not on the thing carrying the comment.
+
+_SHA = "d28e727cc9a3126fa2345298c2d42649fc9f9ad8"
+_SHORT = "d28e727c"
+
+
+def _fake_github(
+    candidates: list[int],
+    labels: dict[int, list[str]],
+    comments: dict[int, list[dict[str, Any]]],
+) -> Any:
+    """Stand in for the three endpoints the hatch reads: search, labels, comments."""
+
+    def fake(args: list[str]) -> Any:
+        if "search/issues" in args:
+            return {"items": [{"number": number} for number in candidates]}
+        endpoint = args[-1]
+        if endpoint.endswith("/comments"):
+            number = int(endpoint.rsplit("/", 2)[-2])
+            return comments.get(number, [])
+        number = int(endpoint.rsplit("/", 1)[-1])
+        return {"labels": [{"name": name} for name in labels.get(number, [])]}
+
+    return fake
+
+
+def _direct_push_comment(body: str) -> dict[str, Any]:
+    return {
+        "body": body,
+        "user": {"login": "chrizefan"},
+        "created_at": "2026-09-02T14:00:00Z",
+        "html_url": "https://github.com/o/r/pull/3256#issuecomment-1",
+    }
+
+
+def _hatch(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    body: str,
+    labels: list[str],
+    candidates: list[int] | None = None,
+) -> dict[str, Any] | None:
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        _fake_github(
+            candidates if candidates is not None else [3256],
+            {3256: labels},
+            {3256: [_direct_push_comment(body)]},
+        ),
+    )
+    return crc.direct_push_review(_SHA)
+
+
+def test_a_direct_push_is_hatched_by_a_review_quoting_its_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    found = _hatch(
+        monkeypatch,
+        body=f"{crc.AGENT_REVIEW_MARKER}\n### {_SHORT} docs: rename\nNo blocking findings.",
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found
+    assert found["actor"] == "chrizefan"
+    assert found["on"] == 3256
+    assert found["url"].endswith("issuecomment-1"), "the verdict must link the findings"
+
+
+def test_the_review_must_quote_the_sha_and_not_merely_carry_the_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Otherwise one in-session review hatches every direct push in the range."""
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\nReviewed the promotion. Looks fine.",
+            labels=[crc.AGENT_REVIEW_LABEL],
+        )
+        is None
+    )
+
+
+def test_the_review_must_carry_the_marker_and_not_merely_quote_the_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sha mentioned in unrelated prose is not a review of that commit."""
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"Rebased onto {_SHORT}, will look at it later.",
+            labels=[crc.AGENT_REVIEW_LABEL],
+        )
+        is None
+    )
+
+
+def test_the_label_has_to_be_on_the_thing_carrying_the_comment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}: reviewed",
+            labels=["risk:low", "component:root"],
+        )
+        is None
+    )
+
+
+def test_a_full_sha_in_the_comment_also_satisfies_the_short_sha_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`git log --oneline` prints 8; a reviewer pasting all 40 has still named it."""
+    found = _hatch(
+        monkeypatch,
+        body=f"{crc.AGENT_REVIEW_MARKER}\nReviewed {_SHA} — no findings.",
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found
+
+
+def test_a_sha_named_only_in_a_review_header_table_still_clears_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A known, accepted limit — pinned so nobody reads the hatch as stronger.
+
+    Requiring marker AND sha narrows the claim; it does not prove this commit was
+    read. Every promotion review on #3256 names the range tip in its header table
+    ("`origin/develop` (reviewed tip) | `46c9ab76…`"), and that comment does clear
+    that commit. Tightening past this means guessing at prose structure, which
+    would refuse real reviews to catch a case the review author has no reason to
+    game. The honest framing is `reviewed:owner`'s: an accountability record.
+    """
+    found = _hatch(
+        monkeypatch,
+        body=(
+            f"{crc.AGENT_REVIEW_MARKER}\n"
+            "| ref | sha |\n|---|---|\n"
+            f"| `origin/develop` (reviewed tip) | `{_SHA}` |\n"
+        ),
+        labels=[crc.AGENT_REVIEW_LABEL],
+    )
+    assert found, "documents the limit; see the docstring before tightening this"
+
+
+def test_no_candidate_mentions_the_sha_anywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert (
+        _hatch(
+            monkeypatch,
+            body=f"{crc.AGENT_REVIEW_MARKER}\n{_SHORT}",
+            labels=[crc.AGENT_REVIEW_LABEL],
+            candidates=[],
+        )
+        is None
+    )
+
+
+def test_the_search_lookup_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A transient API failure must refuse, never hatch — as `associated_pr_number` does."""
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fail(_args: list[str]) -> Any:
+        raise subprocess.CalledProcessError(1, "gh api")
+
+    monkeypatch.setattr(crc, "_gh_json", fail)
+    assert crc._sha_mentioned_in(_SHORT) == []
+    assert crc._issue_labels(3256) == set()
+    assert crc.direct_push_review(_SHA) is None
+
+
+def test_search_discovery_is_never_trusted_on_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Search matches tokenized text and is eventually consistent.
+
+    So a candidate it returns is re-read: the label comes from the issue itself and
+    the sha from the comment body. A search hit alone must not hatch anything.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+    monkeypatch.setattr(
+        crc,
+        "_gh_json",
+        _fake_github([3256], {3256: [crc.AGENT_REVIEW_LABEL]}, {3256: []}),
+    )
+    assert crc.direct_push_review(_SHA) is None
+
+
+def test_the_hatch_is_unreachable_for_a_commit_that_has_a_pull_request() -> None:
+    """The narrowness guarantee: this is not a sixth way to clear a PR.
+
+    A commit with a source PR must keep being judged by that PR's own state, so the
+    single call site has to sit behind the `number is None` guard. Pinned
+    structurally because a later refactor could hoist it out without any test that
+    exercises the PR path noticing.
+    """
+    tree = ast.parse(inspect.getsource(crc.main))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "direct_push_review"
+    ]
+    assert len(calls) == 1, "exactly one call site, inside the no-source-PR branch"
+
+    guards = [
+        node for node in ast.walk(tree) if isinstance(node, ast.If) and calls[0] in ast.walk(node)
+    ]
+    innermost = min(guards, key=lambda node: len(list(ast.walk(node))))
+    assert ast.unparse(innermost.test) == "number is None"
+
+
+def test_the_pr_verdict_never_consults_the_direct_push_hatch() -> None:
+    assert "direct_push_review" not in inspect.getsource(crc.verdict_for)
+
+
+def test_the_failure_guidance_tells_you_how_to_hatch_a_direct_push() -> None:
+    """A gate whose refusal names no remedy is how BASELINE_SHA gets advanced."""
+    src = SCRIPT.read_text(encoding="utf-8")
+    assert "it has no PR at all" in src
+    assert "no merged source pull request" in src

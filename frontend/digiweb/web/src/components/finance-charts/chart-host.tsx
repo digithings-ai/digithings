@@ -4,7 +4,7 @@
  * Finance-charts host scaffold (#1450) — the family's shared TradingView
  * Lightweight Charts lifecycle, promoted from the design reference
  * (finance/price-chart · equity-curve · drawdown). Since batch E this IS the
- * chart-scaffold canon: olympus's `lib/lw-chart.tsx` is a thin adapter over
+ * chart-scaffold canon: dashboard's `lib/lw-chart.tsx` is a thin adapter over
  * this family (see lw-chart.tsx here for the persistent-chart lifecycle).
  * Token-themed via CSS-variable reads with SSR fallbacks, `autoSize: true`,
  * transparent canvas, attribution logo off, a MutationObserver on

@@ -1,13 +1,17 @@
-# Atlas Supabase Schema
+# research Supabase Schema
 
-Live Atlas Supabase schema. Source of truth: the numbered migrations under
+<!--
+# score:allow todo
+-->
+
+Live research Supabase schema. Source of truth: the numbered migrations under
 `digiquant/supabase/migrations/`. This document inventories the high-value tables and
-relationships; later sections cover internal operational tables added after the original Atlas
+relationships; later sections cover internal operational tables added after the original research
 schema.
 
-> ADRs: [ADR-0008 research schema](../../../docs/adr/0008-atlas-research-schema.md),
-> [ADR-0009 Supabase persistence](../../../docs/adr/0009-atlas-supabase-persistence.md),
-> [ADR-0010 first-class thesis + deliberation](../../../docs/adr/0010-atlas-first-class-thesis-deliberation.md).
+> ADRs: [ADR-0008 research schema](../../../docs/adr/0008-research-research-schema.md),
+> [ADR-0009 Supabase persistence](../../../docs/adr/0009-research-supabase-persistence.md),
+> [ADR-0010 first-class thesis + deliberation](../../../docs/adr/0010-research-first-class-thesis-deliberation.md).
 
 ## ERD (primary relationships)
 
@@ -50,12 +54,12 @@ erDiagram
 | Table | PK | Purpose |
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
-| `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. |
-| `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
-| `nav_history` | `(date)` | Daily portfolio NAV. |
-| `portfolio_metrics` | `(date, metric)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
+| `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
+| `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
+| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `OLYMPUS_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
+| `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
+| `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
 > `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) now live as rows in `price_history`.
 
@@ -68,7 +72,7 @@ erDiagram
 | `macro_series_observations` | `(source, series_id, obs_date)` | FRED / Frankfurter / crypto FNG time series. |
 | `price_history_tickers` | _(view)_ | Distinct tickers currently in `price_history`. |
 
-### Hermes deliberation — new in migration 024
+### portfolio deliberation — new in migration 024
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -81,7 +85,7 @@ erDiagram
 ### Strategy store — new in migration 046 (#1064)
 
 This project is the unified digiquant **`core`** backend (Supabase display name `core`;
-local alias still `project_id "digiquant-atlas"`). Migration 046 adds the strategy store
+local alias still `project_id "digiquant-research"`). Migration 046 adds the strategy store
 (additive only — no existing table touched). See
 [`docs/adr/0021-digiquant-supabase-project-topology.md`](../../docs/adr/0021-digiquant-supabase-project-topology.md).
 
@@ -108,10 +112,12 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 
 ### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084/085
 
-Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
-for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
-**Never GRANT** base accounting tables to `anon`/`authenticated`. Rollback = repoint
-adapters to `public_nav_history` / `nav_history` without deleting accounting rows.
+Curated security-definer views over private `dashboard_accounting_*` tips. Prefer these
+for digiquant.io / dashboard performance readers after the shadow reconciliation gate.
+**Never GRANT** base accounting tables to `anon`. T0 migration 098 adds workspace-scoped
+`authenticated` SELECT (own-workspace RLS only; `service_role` remains the sole writer).
+Rollback = repoint adapters to `public_nav_history` / `nav_history` without deleting
+accounting rows.
 
 | View | Purpose |
 |------|---------|
@@ -137,7 +143,7 @@ public tip.
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable
 `OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
-**Prod deploy invariant (#3029):** Olympus / digiquant.io readers already query
+**Prod deploy invariant (#3029):** dashboard / digiquant.io readers already query
 `public_accounting_nav_history`. If that view is missing (`PGRST205`), Performance and
 the homepage live book fail closed with a typed contract error — they must **not** silently
 re-point to `public_nav_history` in the browser. Apply migrations **072–074** (and later
@@ -145,7 +151,7 @@ re-point to `public_nav_history` in the browser. Apply migrations **072–074** 
 
 ### ProfileConfig — migration 075 (#2609 / Track B)
 
-Private append-only versioned investment overlay pins for Olympus preflight. The
+Private append-only versioned investment overlay pins for dashboard preflight. The
 digithings-owned **house** row (`profile_key='house'`, `is_house_default=true`) is the
 immutable always-on default run. Overlay rows may request different universe / risk /
 themes / budgets; they must not claim the house key or cancel/replace the house run.
@@ -157,8 +163,8 @@ themes / budgets; they must not claim the house key or cancel/replace the house 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_profile_config_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/loader:
-`digiquant.olympus.profile_config`. Preflight pins via
-`pin_profile_config_for_preflight` into `AtlasConfigBundle.profile_config*`.
+`digiquant.dashboard.profile_config`. Preflight pins via
+`pin_profile_config_for_preflight` into `ResearchConfigBundle.profile_config*`.
 
 ### Shared research corpus — migration 076 (#2613 / Track B WP12-class)
 
@@ -174,7 +180,7 @@ layer). Portfolio/book data does not belong here.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_research_corpus_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
-`digiquant.olympus.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
+`digiquant.dashboard.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
 
 ### Research-state store — migration 088 (#2854 / WP12.2)
 
@@ -183,7 +189,7 @@ Private append-only exact-version research memory for Phase 3 WP12 contracts
 `LegacyDocumentRef`, `ResearchStateVersion`, `ResearchStatePin`). Distinct from
 Track B corpus pins (theme/asset/segment identity). Dark launch: no public base
 view, no historical backfill, no prose parsing. Application boundary:
-`digiquant.olympus.research_retrieval.store.ResearchStateStore` (in-memory for
+`digiquant.dashboard.research_retrieval.store.ResearchStateStore` (in-memory for
 unit tests; migration 088 is the durable schema — SQL IO adapter later). Pin
 temporal ordering is also enforced in SQL via migration 089
 (`requested_as_of <= knowledge_cutoff_at <= pinned_at`).
@@ -194,7 +200,7 @@ temporal ordering is also enforced in SQL via migration 089
 | `olympus_research_belief_versions` | `(belief_version_id UUID)` | Append-only belief versions; supersession via child INSERT. |
 | `olympus_research_expected_event_versions` | `(expected_event_version_id UUID)` | Append-only expected-event versions. |
 | `olympus_research_patches` | `(patch_id UUID)` | Structured research patches (never derived from prose). |
-| `olympus_research_legacy_refs` | `(legacy_ref_id UUID)` | Inventory-only legacy prose refs; `known_at` CHECK NULL; strict readers exclude. WP12.4 inventory library/script (`scripts/atlas/backfill_research_state.py`, #2870) targets in-memory `ResearchStateStore` today; SQL IO adapter later. |
+| `olympus_research_legacy_refs` | `(legacy_ref_id UUID)` | Inventory-only legacy prose refs; `known_at` CHECK NULL; strict readers exclude. WP12.4 inventory library/script (`digiquant/scripts/research/backfill_research_state.py`, #2870) targets in-memory `ResearchStateStore` today; SQL IO adapter later. |
 | `olympus_research_state_versions` | `(state_version_id UUID)` | Content-addressed state snapshots + optional parent FK + manifest payload. |
 | `olympus_research_state_pins` | `(run_id, attempt_id)` | Exact run/attempt pin to one `state_version_id`; no `load_latest` after pin. |
 
@@ -203,7 +209,7 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Preflight wiring of pins = WP12.3.
 Compiled prose brief/digest views (#2877 / WP12.5) are deterministic dual-write
 documents (`research-state-brief` / `research-state-digest`) from exact pinned
-versions — not authoritative state tables. Default Atlas/Hermes CLI leave
+versions — not authoritative state tables. Default research/portfolio CLI leave
 `research_state_store` unwired, so these document keys are not published until
 callers inject the store.
 
@@ -211,10 +217,10 @@ callers inject the store.
 
 Private append-only H5 base evidence bundles and H6 missing-fact amendments.
 Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
-`EvidenceBundleAmendment` in `digiquant.olympus.research_retrieval.models`.
+`EvidenceBundleAmendment` in `digiquant.dashboard.research_retrieval.models`.
 Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
 adapter later). WP11.2 builds typed H5 bases into
-`phase_hermes.ticker_evidence_bundles` before the provider call; default Hermes
+`phase_portfolio.ticker_evidence_bundles` before the provider call; default portfolio
 graph leaves the store unwired (append + `OLYMPUS_EVIDENCE_BUNDLE_WRITER` only
 when a caller injects a store). Dark launch: no public base view, no historical
 backfill, no H6 selection cutover (WP11.3+), not operator-durable until SQL IO
@@ -240,7 +246,7 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 
 Private append-only research attention plans, decisions, context manifests, and
 policy evaluations. Links each decision to WP1 `olympus_provider_attempts` for
-planned-vs-actual reconciliation (WP13.5/WP16). No runtime Atlas/Hermes
+planned-vs-actual reconciliation (WP13.5/WP16). No runtime research/portfolio
 activation in 13.2 — storage boundary only; no public base view.
 
 | Table | PK | Purpose |
@@ -254,13 +260,13 @@ activation in 13.2 — storage boundary only; no public base view.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_attention_context_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/reader:
-`digiquant.olympus.research_retrieval.store.AttentionStore`.
+`digiquant.dashboard.research_retrieval.store.AttentionStore`.
 
 ### Outcome learning — migration 093 (#2959 / WP15.2)
 
 Private append-only outcome episodes, component attribution reports, and structured
 lesson versions. Contracts: `OutcomeEpisode`, `ComponentAttributionReport`,
-`OutcomeLessonVersion` in `digiquant.olympus.learning.outcome_models`.
+`OutcomeLessonVersion` in `digiquant.dashboard.learning.outcome_models`.
 Application boundary: `OutcomeLearningStore` (in-memory for unit tests; SQL IO
 adapter later). Dark launch: no public base view, no historical backfill, no
 assembler/compiler wiring (WP15.3+). Supersession appends child versions;
@@ -282,7 +288,7 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 Private append-only policy replay manifests, pairs, run lifecycle events, arm
 results, comparison reports, gate criteria versions, evaluations, and human
 governance decisions. Contracts: WP16.1 replay models plus
-`digiquant.olympus.replay.governance_models` persistence envelopes.
+`digiquant.dashboard.replay.governance_models` persistence envelopes.
 Application boundary: `PolicyReplayStore` (in-memory for unit tests; SQL IO
 adapter later). Dark launch: no public base view, no historical backfill, no
 worker/governance evaluator wiring (WP16.3+). Run status is derived from
@@ -318,16 +324,16 @@ backfill, no prompt/reasoning bodies, no public base view.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_registry_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
-`digiquant.olympus.atlas.forecast_registry`.
+`digiquant.research.forecast_registry`.
 
 ### Forecast calibration registry — migration 080 (#2672 / WP5.1, writers #2676+#2680+#2684)
 
 Private append-only prospective outcome labels and shadow calibration versions.
 No historical backfill, no portfolio-contribution columns, no public base view.
 WP5.1 shipped schema + Pydantic contracts; WP5.2 adds the trading-session outcome
-resolver (`digiquant.olympus.atlas.forecast_outcomes`) writing
+resolver (`digiquant.research.forecast_outcomes`) writing
 `olympus_forecast_outcomes` only. WP5.3 adds the pure deterministic shrinkage
-calibrator (`digiquant.olympus.hermes.forecast_calibration`). WP5.4 attaches at the
+calibrator (`digiquant.portfolio.forecast_calibration`). WP5.4 attaches at the
 H6→H7 boundary and persists via `forecast_registry.persist_shadow_calibrations`
 into `olympus_forecast_calibrations` + `olympus_calibrated_forecasts` (H9 fail-soft).
 H8 cutover remains later.
@@ -341,16 +347,16 @@ H8 cutover remains later.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_calibration_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
-`digiquant.olympus.hermes.models.forecast_calibration`. Outcome writer:
-`digiquant.olympus.atlas.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
-`digiquant.olympus.hermes.forecast_calibration` (WP5.3/5.4). Calibration table writers:
-`digiquant.olympus.atlas.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
+`digiquant.portfolio.models.forecast_calibration`. Outcome writer:
+`digiquant.research.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
+`digiquant.portfolio.forecast_calibration` (WP5.3/5.4). Calibration table writers:
+`digiquant.research.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
 
 ### Risk policy snapshot registry — migration 081 (#2698 / WP6.3)
 
 Private append-only resolved H8 risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
 per run, plus a run ref binding `source_run_id`. Resolver runs at the H8 entry boundary;
-H9 fail-soft persistence via `digiquant.olympus.atlas.risk_policy_registry` after booking.
+H9 fail-soft persistence via `digiquant.research.risk_policy_registry` after booking.
 Phase 1 audit artifact for policy/covariance; WP8.4 may consume the paired
 `AllocationInputBundle` for calibrated raw weights while leaving these registry
 tables observational.
@@ -362,8 +368,8 @@ tables observational.
 | `olympus_h8_risk_run_refs` | `(source_run_id text)` | One ref per run: run_date, policy_id FK, snapshot_id FK, effective_at. |
 
 RLS enabled with **zero** policies; append-only via `reject_olympus_risk_policy_snapshot_mutation()`.
-Models: `digiquant.olympus.hermes.models.risk_policy`. Resolver: `digiquant.olympus.hermes.risk_policy`.
-Registry: `digiquant.olympus.atlas.risk_policy_registry` (exact-ID reads only).
+Models: `digiquant.portfolio.models.risk_policy`. Resolver: `digiquant.portfolio.risk_policy`.
+Registry: `digiquant.research.risk_policy_registry` (exact-ID reads only).
 
 ### Pre-trade risk report registry — migration 083 (#2754 / WP9.4)
 
@@ -378,9 +384,9 @@ Rollout: `OLYMPUS_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
 | `olympus_pretrade_risk_reports` | `(report_id UUID)` | Immutable report: source_run_id, session_date, status, report_content_hash, allocation_input_bundle_hash, final_book_weights_fingerprint, optional ledger_commit_id, full `report_body` jsonb. |
 
 RLS enabled with **zero** policies; append-only via `reject_olympus_pretrade_risk_report_mutation()`.
-Contract: `digiquant.olympus.hermes.allocation_contracts.PreTradeRiskReport`.
-Registry: `digiquant.olympus.atlas.pretrade_risk_registry`.
-H9 surface: `hermes.writers.commit_io.validate_pretrade_risk_report` /
+Contract: `digiquant.portfolio.allocation_contracts.PreTradeRiskReport`.
+Registry: `digiquant.research.pretrade_risk_registry`.
+H9 surface: `portfolio.writers.commit_io.validate_pretrade_risk_report` /
 `persist_validated_pretrade_risk_report`.
 
 ### Live quote transport — new in migration 063 (#1807)
@@ -461,9 +467,9 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
 
   `fanout_key` (#1978) is an opaque producer-supplied label, bounded 1–200 to match
   `NodeRunRecord.fanout_key`. NULL means *this execution had no fan-out cursor* — never
-  *instrumentation missing*: Atlas sector nodes and the compile-time per-ticker Hermes variants
+  *instrumentation missing*: research sector nodes and the compile-time per-ticker portfolio variants
   carry their discriminator in `node_name` instead. The column is deliberately generic; `ticker`
-  and `symbol` are in the migration test's forbidden-column list so the Olympus vocabulary cannot
+  and `symbol` are in the migration test's forbidden-column list so the dashboard vocabulary cannot
   leak into the shared ledger.
 
   All three tables use `timestamptz` for producer event times and add `recorded_at` from the database
@@ -518,8 +524,9 @@ of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration al
 ### Period accounting - migration 072 (#2596) + finalizer (#2597)
 
 Private event-boundary EOD accounting schema (Phase 0 Tasks 3.1–3.2). User-private
-portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
-views land in migration `074_olympus_accounting_views.sql` (#2599).
+portfolio/accounting — never grant base tables to `anon`. T0 migration 098 adds
+`authenticated` SELECT (workspace-scoped RLS) only; writes remain `service_role`.
+Curated public views land in migration `074_olympus_accounting_views.sql` (#2599).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -527,13 +534,14 @@ views land in migration `074_olympus_accounting_views.sql` (#2599).
 | `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. Deterministic ids from `(period_id, symbol)`. |
 | `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. Deterministic ids from `(period_id, symbol)`. |
 
-RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
-`service_role` reset then `SELECT, INSERT` only; `reject_olympus_accounting_mutation()`
-blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial unique indexes enforce one current root period
-per `period_date` and at most one superseder per prior id. Models/engine/io:
-`digiquant.olympus.accounting`.
+RLS enabled with **zero anon policies**; T0 migration 098 adds workspace-scoped
+`authenticated` SELECT. `PUBLIC`/`anon` fully revoked; `authenticated` receives
+SELECT only via 098. `service_role` reset then `SELECT, INSERT` only;
+`reject_olympus_accounting_mutation()` blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial
+unique indexes enforce one current root period per `period_date` and at most one
+superseder per prior id. Models/engine/io: `digiquant.dashboard.accounting`.
 
-**Finalizer semantics (`accounting/io.py` + `scripts/atlas/finalize_period_accounting.py`):**
+**Finalizer semantics (`accounting/io.py` + `digiquant/scripts/research/finalize_period_accounting.py`):**
 
 - Append-only INSERT; exact same-input retry is idempotent (same PKs; no-op or child repair).
 - Restatement appends a new period that `supersedes_id`-points at the prior tip — never mutates.
@@ -555,19 +563,21 @@ Separates the 21-day current-book diagnostic from realized period contribution
 |--------|------|---------|
 | `current_book_lookback` | table (renamed from `position_attribution`) | Diagnostic only: today's book weights × trailing return window (default 21 calendar days). Columns include `window_start_date`, `window_end_date`, `lookback_days`, `contract='current_book_lookback'`. Anon SELECT (dashboard). |
 | `position_attribution` | compatibility VIEW | Deprecated alias over `current_book_lookback`. Same columns; delete after all readers migrate (Task 3.4 follow-up). |
-| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `olympus_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT; public curated twin is `public_daily_realized_attribution` (074). |
+| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `dashboard_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT; public curated twin is `public_daily_realized_attribution` (074). |
 
-Writer: `scripts/atlas/refresh_attribution.py` upserts `current_book_lookback` only.
+Writer: `digiquant/scripts/research/refresh_attribution.py` upserts `current_book_lookback` only.
 Realized rows come from the accounting finalizer (#2597), not the lookback job.
 
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
 DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is
-enabled with **zero** policies and all privileges revoked from `PUBLIC`, `anon`, and
-`authenticated`. `service_role` is reset then granted `SELECT, INSERT` only — no
-`UPDATE`/`DELETE` at the grant layer — and a shared `reject_portfolio_ledger_mutation()`
-trigger denies `UPDATE`/`DELETE` per row and `TRUNCATE` per statement on every table, so
-append-only holds even for a `service_role` session that bypasses the grant.
+enabled; migration 069 revoked `PUBLIC`/`anon`/`authenticated` entirely, and T0
+migration 098 re-grants workspace-scoped `authenticated` SELECT (own-workspace via
+`workspace_members` only — no system-workspace OR branch on the ledger). `service_role`
+is reset then granted `SELECT, INSERT` only — no `UPDATE`/`DELETE` at the grant layer —
+and a shared `reject_portfolio_ledger_mutation()` trigger denies `UPDATE`/`DELETE` per row
+and `TRUNCATE` per statement on every table, so append-only holds even for a
+`service_role` session that bypasses the grant.
 
 **Currency via partial unique indexes, not status.** A plain table `UNIQUE` constraint
 cannot carry a `WHERE` clause, so "at most one current row" is expressed instead as six
@@ -610,6 +620,321 @@ producer (dual-writing from H7/H8/H9) before any consumer (a paper executor, the
 accounting/learning) can read them. See `digiquant/ARCHITECTURE.md` → "Portfolio lineage
 ledger (private, #2415)" for the full chain and failure-mode writeup.
 
+## Tenancy — migrations 096–098 (T0, execution + tenancy program)
+
+Multi-tenant privacy boundary. Typed contracts live in
+`digiquant.dashboard.tenancy` (`Workspace`, `PlanTier`, deterministic
+`system_workspace_id()` / `house_workspace_id()`). **Do not apply these migrations to
+live Supabase from this WP alone** — schema files + structural tests only until the
+T0/T1 release train is reviewed.
+
+### Observer workspace bootstrap (107)
+
+New Auth users need a personal `type='user'` workspace + `owner` membership before
+settings/checkout can resolve the caller. Migration **107** adds:
+
+| Object | Purpose |
+|--------|---------|
+| `ensure_personal_workspace(p_user_id uuid)` | SECURITY DEFINER, idempotent; creates `plan_tier='free'` workspace (`slug = 'u-' \|\| hex(uuid)`) + owner row when the user has none. Refuses system/house seed ids. |
+| `ensure_my_workspace()` | Authenticated wrapper (`auth.uid()`). |
+| Trigger `on_auth_user_created_ensure_workspace` | `AFTER INSERT ON auth.users` → `ensure_personal_workspace(NEW.id)`. |
+| Backfill DO block | Existing `auth.users` with zero memberships (e.g. Agentmail users created before 107). |
+
+Settings / billing Edge Functions call the RPC via `service_role` when
+`resolveCallerWorkspace` returns null (`ensureCallerWorkspace` in
+`_shared/supabase-admin.ts`), so pre-trigger users still bootstrap on first JWT
+settings call.
+
+**EXECUTE grants (#3461 / migration 117):** Supabase default-grants EXECUTE to
+`anon`/`authenticated`/`service_role` (not only `PUBLIC`). Migration 107's
+`REVOKE … FROM PUBLIC` alone left `anon` able to call the bootstrap definers.
+117 revokes `anon` (and `authenticated` on `ensure_personal_workspace` /
+`handle_new_auth_user_workspace`). Signed-in clients use `ensure_my_workspace()`;
+signup continues via the `auth.users` trigger + service_role edge-function path.
+`my_access()` keeps authenticated EXECUTE on purpose — lint 0029 is accepted for
+that RPC only (product entitlement snapshot; not callable by anon).
+
+### Creator / client-product grants (108)
+
+Product gating without widening free Observer:
+
+| Object | Purpose |
+|--------|---------|
+| `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`brief`,`desk`,`studio`,`enterprise`) after migration 115. Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `studio` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
+| `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom dashboard products reuse the same table. 12x client emails via ops insert **or** hashed invite redeem (migration 112). Seed: creator → `fx_hub`. |
+| `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. Authenticated EXECUTE retained (#3461); anon revoked. |
+| `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math; `search_path` pinned empty in 117. |
+| `product_invite_codes` | SHA-256 hex of invite codes (`product_key`, `code_hash`). service_role only. |
+| `product_invite_redemptions` | Who redeemed (user_id, email, source `env`\|`table`). Admin ledger. |
+| `product_invite_attempts` | Rate-limit ledger for redeem. |
+
+dashboard UI + settings EF resolve **effective** tier (never JWT claim alone) so creator
+baseline/execution works while Stripe captchas block Checkout. Free remains teaser-only
+(`digest_summary` + `portfolio_teaser`; no brokers/automations).
+
+### New tables (096)
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`brief`,`desk`,`studio`,`enterprise`) after migration 115 (D1 `baseline`→`desk`, `custom`→`studio`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
+| `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
+| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
+| `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here via `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`); `MemoryJobRunStore` is the test seam. Status vocabulary: 104 adds `skipped` / `budget_exhausted`; 105 adds `persist_disabled`. Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |
+| `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
+
+**Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
+`stripe-webhook` (signature-verified, `verify_jwt=false`), `create-checkout-session`,
+`customer-portal`. Webhook inserts `stripe_events` first (`applied_at` NULL; duplicate
+with `applied_at` set ⇒ no-op; duplicate pending ⇒ re-apply), CAS-updates `workspaces`
+via `last_stripe_event_created`, applies roadmap P4 column mapping (`baseline`/`custom`
+from env price ids; deleted/incomplete ⇒ `free`), then syncs Supabase Auth
+`app_metadata.plan_tier` for every workspace member on **every** applied event.
+Claim-sync failure sets `workspaces.claim_sync_pending=true` and still returns HTTP 200
+to Stripe after marking `applied_at`. Migrations: `100_workspaces_claim_sync_pending.sql`,
+`101_stripe_webhook_applied_and_ordering.sql` (099 reserved for K3).
+
+
+Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
+`broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
+`profiles` remains out of scope (T3). BYOK LLM keys land in migration 104
+(`workspace_provider_credentials`).
+
+### Notification prefs — migration 103 (K5, execution tenancy)
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `notification_prefs` | `(workspace_id)` | Per-workspace email toggles: `daily_digest`, `holding_change_alerts`, `execution_alerts`, `digest_hour_utc` (0–23 UTC). T3 settings UI is the product writer. |
+| `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
+
+RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
+Typed dispatch: `digiquant.notify.dispatch` (fail-soft Mailgun client in `notify/mailgun.py`).
+
+### `workspace_id` on the private set (097)
+
+NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
+
+| Table | Backfill target | Column DEFAULT | Constraints changed |
+|-------|-----------------|----------------|---------------------|
+| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 stages the drop in `cutover/113`, not auto-applied) |
+| `position_events` | house | house id | **keep** `position_events_date_ticker_key`; **add** `uq_position_events_workspace_date_ticker` |
+| `nav_history` | house | house id | **keep** PK `(date)`; **add** `uq_nav_history_workspace_date (workspace_id, date)` |
+| `portfolio_metrics` | house | house id | **keep** `portfolio_metrics_date_key`; **add** `uq_portfolio_metrics_workspace_date` |
+| all `portfolio_ledger_*` (8) | house | **none** | column + FK only (lineage UNIQUEs unchanged — T4) |
+| all `dashboard_accounting_*` (3) | house | **none** | column + FK only |
+| `olympus_profile_config` | **system** (house-default row) | **none** | column + FK only |
+
+House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_snapshot`,
+`accounting.io`, `execute_at_open`, `portfolio_materialize`,
+`refresh_performance_metrics`) stamp `house_workspace_id()` explicitly.
+Ops / recovery scripts (`sync_positions_from_rebalance.py`, `update_tearsheet.py`,
+`materialize_snapshot.py` positions, `backfill_execution_prices.py`,
+`reconcile_position_events_from_positions.py`) now stamp the same house id and
+target the widened UNIQUEs. P6 stages the 097 legacy date-only drop in
+`migrations/cutover/113_drop_legacy_book_uniques.sql` (not auto-applied;
+`db-migrate.yml` is `-maxdepth 1`). Do **not** copy 113 to top-level or apply
+it on `core` until `main` house GHA writers are on the widened conflict
+(`origin/main` `commit_io` / `portfolio_materialize` still `on_conflict=date`).
+`require_overlay_legacy_book_safe` stays until 113 is actually applied.
+Proof: `tests/dq/dashboard/test_cutover_113.py`.
+
+### Authenticated RLS (098) — anon untouched until T1
+
+New `authenticated` SELECT policies. Private-book tables (positions / NAV / ledger /
+accounting) are **own-workspace only** — no system-workspace OR branch (a mis-stamped
+system row must not expose the house book). System-workspace OR branch is kept **only**
+on `workspaces` (`type='system'`) and `olympus_profile_config` (house-default overlay),
+both marked `TODO(T5)` for the tier CHECK. **No existing `anon_read` policy is dropped
+or narrowed in this WP** — that cutover ships inside T1's release train. Two-JWT
+executable proof is documented in the 098 header; structural assertions live in
+`tests/dq/dashboard/test_migration_tenancy.py`.
+
+### Authenticated house teaser read — migration 109 (hotfix)
+
+Auth Pages JWT (`role=authenticated`) emptied Brief/Portfolio because classic
+`anon_read` policies are `TO anon` only. Pre-cutover **900** (do **not** apply
+cutover here), migration 109 adds:
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `authenticated_read_house_teaser` | `daily_snapshots`, `theses`, `instruments` | `true` (shared teaser; no `workspace_id`) |
+| `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
+
+`anon_read` on those book tables was **USING (true)** until **110**. Proof:
+`tests/dq/dashboard/test_migration_109_house_teaser.py`. Numbering: **108** is
+creator/product grants (independent); **109** is this RLS hotfix.
+
+### Anon house-only private books — migration 110
+
+Pre-cutover: 109 made authenticated SELECT house-OR-membership, but left
+`anon_read USING (true)` — anon was wider than a signed-in member. Overlay
+persist would have leaked private books. Migration **110** recreates
+`anon_read` (same policy name so cutover 900 still DROPs it):
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `anon_read` | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID only |
+| `anon_read` | `documents` | house **OR** system |
+
+Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
+`instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
+**Documents** may persist under `OLYMPUS_OVERLAY_PERSIST=1` after 110.
+**positions / nav_history / ledger** stay refused (`legacy_book_unique`) while
+097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
+069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
+`develop` already upsert the widened `(workspace_id, …)` targets; the leftover
+097 keys still reject a second workspace's same-date row. Staged cutover **113**
+(`migrations/cutover/113_drop_legacy_book_uniques.sql`) DROPs those 097 keys and
+widens the 069 one-root indexes to `(workspace_id, run_date[, symbol])`. It is
+**not** auto-applied. Do not copy it to top-level or apply on `core` until
+`main` house GHA writers are also widened. Staging 113 does **not** lift
+`require_overlay_legacy_book_safe`. This is **not** cutover 900: anon can still
+read house weights/NAV. `daily_snapshots` `UNIQUE(date)` is kept (house-only).
+Proof: `tests/dq/dashboard/test_migration_110_anon_house_only.py`,
+`tests/dq/dashboard/overlay/test_persist.py`, and
+`tests/dq/dashboard/test_cutover_113.py`.
+
+### Authenticated read parity on public reference — migration 116 (hotfix)
+
+109 fixed three teaser tables and stopped there. Eighteen more kept RLS on, a
+SELECT grant to `authenticated`, and no policy for that role — which Postgres
+answers with zero rows and PostgREST reports as `200 []`. Signed-out visitors
+therefore saw more of digiquant.io/dashboard than signed-in ones, with no error
+anywhere to point at it. Migration **116** mirrors each table's anon SELECT
+policy (all `USING (true)` today) as `authenticated_read_public_reference`:
+
+| Group | Tables |
+|-------|--------|
+| Market / reference | `price_history`, `price_technicals`, `trading_calendar`, `fx_economic_calendar`, `macro_series_observations`, `onchain_cohort_positioning`, `strategy_tearsheets` |
+| Research artefacts | `decision_log`, `analyst_coverage`, `thesis_vehicles`, `deep_dive_triggers`, `deliberation_sessions`, `deliberation_rounds`, `architecture_notes` |
+| House projections already anon-public | `portfolio_lots`, `portfolio_trades`, `portfolio_holdings_daily`, `current_book_lookback` |
+
+Not a widening: the anon key already reads every one of these. Tables that are
+deliberately anon-denied (`atlas_run_diagnostics`, `checkpoint*`,
+`strategy_calibrations`, all `portfolio_ledger_*` / `olympus_accounting_*`) are
+untouched and stay own-workspace-only.
+
+Two `security_invoker=true` views sit downstream and were empty for the same
+reason, with no policy of their own to fix: `position_attribution` and
+`price_history_tickers` both read `price_history`.
+
+Cutover **900** must re-scope the third group behind the plan-tier gate rather
+than simply dropping it — those rows are house-derived, unlike the first two
+groups. Proof: `tests/dq/research/test_migration_116.py`, whose
+`test_no_anon_select_without_authenticated_counterpart` replays every top-level
+migration and fails on the next table opened to anon without a signed-in twin.
+
+Staged cutover **900** section A2 restores 098 membership-only
+`authenticated_select_own_workspace` on the four book tables and drops
+`authenticated_read_house_teaser` on `daily_snapshots` (SELECT already REVOKEd
+in 900 §B). `theses` / `instruments` teasers stay (T5 research). 900 is not
+auto-applied; do not promote it to `core` until T1-train cutover. Proof:
+`tests/dq/dashboard/test_cutover_900.py` plus `scripts/rls_proof/` (59/59 with
+900 applied on a throwaway DB).
+
+### Broker credential vault — migration 099 (K3, execution tenancy)
+
+Sealed broker credentials, one row per `(workspace_id, broker, env)`. This is the only
+table in the schema whose contents are a *secret* rather than research output, so it is
+built to a different standard than everything above it: the plaintext never exists in
+Postgres at all. The secret is an AES-256-GCM envelope produced by
+`digiquant.vault.envelope` before the row is written, and the row stores only
+`ciphertext`, `nonce`, `key_id`, and a `fingerprint`.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_connections` | `(id UUID)` | Sealed per-workspace broker credential; partial unique on `(workspace_id, broker, env) WHERE status = 'active'`. |
+
+The envelope's AAD is the string `workspace_id:broker:env`, which makes the row's own
+identity part of what the tag authenticates. That is what stops the attack this table
+would otherwise invite: a `ciphertext`/`nonce` pair copied from another row (another
+workspace, or the same workspace's paper row pasted onto its live row) fails
+authentication instead of decrypting, so a writer who can INSERT cannot promote a
+paper credential to live by moving bytes between rows. `key_id` names the *master-key
+version* that sealed the row (`DIGIQUANT_VAULT_KEY_ID`, e.g. `v1`) — it is not a
+broker-side key identifier; an API key's own key id lives *inside* the sealed payload,
+and conflating the two is the fastest way for a reviewer to conclude a secret is in
+the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret material
+and is the only display-safe artifact: a label, never an identity — 32 bits collide,
+so it must never be compared to decide two rows hold the same credential.
+
+`workspace_id` **REFERENCES `public.workspaces(id)`** (T0 migrations 096–098 land first
+on this branch, so 099 constrains at CREATE time rather than staying FK-less). `CHECK`
+constraints pin the envelope's shape at the storage layer rather than trusting the
+writer — `octet_length(nonce) = 12`,
+`octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
+`fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
+`revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.
+Re-connecting a broker is **revoke + insert**, never an update — which is why uniqueness
+is a **partial** unique index on `(workspace_id, broker, env) WHERE status = 'active'`
+rather than a table-wide UNIQUE. DELETE is not granted to `service_role`, so an
+unconditional unique on the triple would make that documented reconnect flow collide;
+a revoked row and a new active row for the same triple must be able to coexist.
+
+There is no rotation path in this migration and no historical backfill; `key_id` exists
+so one can be added without a schema change. Nothing in a live-trading path reads this
+table yet — K3 is the vault and its store; K4's router/sync opens a lease only for the
+duration of one broker call.
+
+### execution broker mirror — migration 102 (K4)
+
+Append-only mirrors for external-venue orders, fills, and position snapshots (D10: the
+broker is authoritative; digithings never forges internal `portfolio_ledger_paper_executions`
+from them). Status changes append a new `broker_orders` row with backward
+`supersedes_id` (same convention as `portfolio_ledger_order_intents`). **No `upsert`.**
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_orders` | `(id uuid)` | Submission + status mirror; deterministic submit id `uuid5(ns, order_intent_id:broker:date)`; `connection_id` → `broker_connections`; `workspace_id` → `workspaces`. |
+| `broker_executions` | `(id uuid)` | Fill mirror; id = `uuid5(connection_id, external_fill_id)`; `UNIQUE (broker_order_id, external_fill_id)`. |
+| `broker_position_snapshots` | `(id uuid)` | Point-in-time broker truth; `UNIQUE (connection_id, as_of)`; `reconciliation_diverged` + report when mirror disagrees — never auto-trades. |
+
+**Router authority (writers, not DDL):** `route_pending_orders` may only submit intents
+whose `workspace_id` matches the connection; house/system identities and
+`connection.env != paper` never reach `submit_order`. Live venue tokens raise
+`LiveVenueNotAuthorizedError` on the public `resolve_venue` / router path. Ledger reads
+remain date-scoped at the helper layer; the router post-filters to the connection
+workspace (see `digiquant/ARCHITECTURE.md` → execution router + mirror).
+
+RLS enabled with **no** policies (deny-by-default). `service_role` holds SELECT + INSERT
+only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migration
+number 102 originally skipped 100/101 for the sibling T2 branch; those migrations
+now live in-tree (`100_workspaces_claim_sync_pending.sql`,
+`101_stripe_webhook_applied_and_ordering.sql`). Structural tests:
+`tests/dq/dashboard/execution/test_migration_102.py`.
+
+### BYOK LLM keys + job_runs status — migration 104 (T4)
+
+Sealed overlay LLM credentials. Mirrors 099 (`broker_connections`): RLS-none,
+column-level UPDATE on lifecycle columns only, partial unique on the active row,
+credential-column immutability trigger. Crypto is K3's envelope unchanged.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `workspace_provider_credentials` | `(id uuid)` | Sealed BYOK LLM key; partial unique on `(workspace_id, provider) WHERE status = 'active'`. AAD = `workspace_id:provider:llm`. FK → `workspaces`. |
+
+`job_runs.status` CHECK is extended to `skipped` (reason in `error`:
+`not_entitled` / `no_credentials`) and `budget_exhausted` (research budget hard
+stop). Structural tests: `tests/dq/dashboard/overlay/test_migration_104.py`.
+
+### Documents workspace_id — migration 105 (T4)
+
+Adds `documents.workspace_id` (nullable → backfill house
+`6b753576-ced9-5319-9bfa-c5d0aacd9319` → NOT NULL + FK). The legacy
+`UNIQUE(date, document_key)` is **dropped and replaced** by
+`UNIQUE(workspace_id, date, document_key)` — keeping the old unique would still
+collide overlay+house rows that share a key. Authenticated policy
+`authenticated_select_documents`: house + system readable; other workspaces are
+own-member only. **`anon_read` is not dropped or rewritten** (T1-train).
+
+`job_runs.status` CHECK is extended with `persist_disabled` (overlay
+private-phase refuse when `OLYMPUS_OVERLAY_PERSIST` is off). Production may set
+that flag only after the T1-train anon-policy drop. Structural tests:
+`tests/dq/dashboard/overlay/test_migration_105.py`.
+
+Every live `documents` upsert writer is enumerated in the migration header and
+updated to `on_conflict="workspace_id,date,document_key"` plus a workspace stamp
+in the same change.
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
@@ -617,7 +942,28 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   001-era tables) policy granting `SELECT TO anon USING (true)`.
 - Writes: require the Supabase `service_role` key. Supabase grants
   service_role bypass at the GRANT layer, so there is no explicit
-  `service_role` policy on any Atlas table.
+  `service_role` policy on any research table.
+- **Exception — Tenancy authenticated SELECT (migrations 096–098, T0):** new
+  `authenticated_select_own_*` policies on `workspaces`, `workspace_members`, and every
+  private-set table that gained `workspace_id`. Private-book policies are
+  own-workspace only; the system-workspace OR branch is kept **only** on `workspaces`
+  and `olympus_profile_config` (`TODO(T5)` tier CHECK deferred). **Anon `USING (true)`
+  policies are deliberately untouched** — removal ships inside T1's login release
+  train. `GRANT SELECT TO authenticated` is added on `portfolio_ledger_*` /
+  `dashboard_accounting_*` / `olympus_profile_config` / `workspaces` /
+  `workspace_members` (previously fully revoked) so the new policies can fire; write
+  grants stay `service_role`-only.
+- **Exception — Authenticated house teaser (migration 109, hotfix):** Auth Pages
+  JWT (`role=authenticated`) could not SELECT house Brief/Portfolio rows because
+  `anon_read` is `TO anon` only. 109 adds `authenticated_read_house_teaser`
+  (`USING (true)`) on `daily_snapshots` / `theses` / `instruments`, and expands
+  `authenticated_select_own_workspace` on `positions` / `position_events` /
+  `nav_history` / `portfolio_metrics` with a house-workspace OR. **Anon policies
+  are untouched.** The dashboard still filters those Group A tables to
+  the house UUID via `houseBook()` so overlay rows a Custom JWT can SELECT
+  never mix into Brief / Holdings / Performance. Staged cutover 900 §A2 reverts
+  the book-table house UUID so
+  free JWTs cannot read house weights after `anon_read` is dropped.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
@@ -636,7 +982,7 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
   anon/authenticated grants revoked — anon access to live signals would bypass the
   3-day public signal delay (PR #1479). `strategy_tearsheets` keeps its anon policy
-  (the pipeline writes the delayed view there). The Atlas research tables
+  (the pipeline writes the delayed view there). The research tables
   (`documents`, `theses`, `decision_log`, `deliberation_*`, `positions` incl.
   `rationale`/`pm_notes`) stay anon-readable **by design** — see
   [`README.md`](README.md), "What is public on purpose".
@@ -690,6 +1036,23 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   revoked. It is harmless only because nothing subscribes to it any more; a message pushed
   there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
   hole in full. See [`README.md`](README.md), "The transport is a table we own".
+- **Exception — `broker_connections` (migration 099, K3): RLS enabled with ZERO policies,
+  every client grant revoked, and `service_role`'s UPDATE narrowed to three columns.**
+  Follows the `prices_live_lease` idiom above (no policy at all, so only `rolbypassrls`
+  holders get past row security, and `REVOKE ALL … FROM PUBLIC, anon, authenticated` means
+  anon never reaches RLS in the first place) and then goes further, because the failure mode
+  here is credential disclosure rather than a burned lease. `service_role` gets `SELECT` and
+  `INSERT`, but **no table-wide `UPDATE` and no `DELETE`**; `UPDATE` is granted
+  column-level on exactly `(status, revoked_at, last_used_at)`. So the compromise of a
+  service-role key still cannot rewrite `ciphertext`, `nonce`, `key_id`, `fingerprint`,
+  `workspace_id`, `broker`, or `env` — the lifecycle is writable and the credential is not.
+  A `BEFORE UPDATE` trigger re-rejects any change to those columns anyway: the
+  column-level grant is the control, and the trigger is the thing that still holds if a
+  future migration widens the grant by accident. `DELETE` is **deliberately not blocked**,
+  unlike every append-only table above — those are audit history, whereas a credential
+  store must stay erasable, and "we cannot delete your broker credential" is not a
+  position this schema should be able to take. Do not "complete" the policy set and do not
+  add a DELETE-blocking trigger by analogy with 069/094.
 - **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags
@@ -698,6 +1061,30 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   shipped no REVOKE at all and so left the platform-default DML grants standing — that
   omission was #1757, closed by migration 060 (see "Grants" below). Migration 066 starts with
   explicit `REVOKE ALL` on both its base table and public view, then grants view `SELECT` only.
+
+### Security / performance advisors — Now pile (#3461 / migration 117)
+
+Live `get_advisors` on core (2026-09-03) flagged mutable `search_path`, anon EXECUTE on
+workspace-bootstrap SECURITY DEFINER RPCs, and `auth.uid()` RLS initplan on the
+authenticated workspace policies. Migration **117** addresses that pile only:
+
+- Pins `search_path` on the listed triggers/helpers (and soft-alters live-only
+  `knowledge_notes_set_updated_at` when present).
+- Revokes anon EXECUTE on `ensure_*` / `handle_new_auth_user_workspace` / `my_access`
+  (see Observer bootstrap note above).
+- Recreates the 19 authenticated policies with `(SELECT auth.uid())` — same USING
+  semantics as 098/105/109.
+
+**Explicitly deferred / accepted (not in 117):**
+
+- Lint **0010** `security_definer_view` on `public_*` portfolio/price views — powers
+  digiquant.io public tape; invoker cutover is a separate issue.
+- Lint **0029** authenticated EXECUTE on `my_access()` — product need; documented above.
+- Leaked-password protection (HaveIBeenPwned) — Auth dashboard toggle, not SQL. Operator
+  must enable under Authentication → Providers → Email → Password → Leaked password
+  protection. [#3461](https://github.com/digithings-ai/digithings/issues/3461)
+- Unused indexes / unindexed FKs / RLS-enabled-no-policy service-role tables — out of
+  scope for this pass.
 
 ## Grants (migration 060, #1757)
 
@@ -734,15 +1121,15 @@ stood between the *published* anon JWT and a write.
 
 ## LangGraph checkpointer tables — retention added in migration 061 (#1758)
 
-Not part of the Atlas schema: `checkpoints`, `checkpoint_writes`, `checkpoint_blobs`
+Not part of the research schema: `checkpoints`, `checkpoint_writes`, `checkpoint_blobs`
 and `checkpoint_migrations` are auto-created in `public` by the LangGraph Postgres
 checkpointer (#665, `DIGI_CHECKPOINTER=postgres`). They are internal orchestration
 state — no frontend and no pipeline query reads them. Migration 036 locked them down
 with RLS; migration 061 bounds their growth.
 
 They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
-~50-58 MB/day since 2026-07-21, with `thread_id` = `"<GITHUB_RUN_ID>::atlas"` /
-`"::hermes"` (never reused, so nothing ever became collectable).
+~50-58 MB/day since 2026-07-21, with `thread_id` = `"<GITHUB_RUN_ID>::research"` /
+`"::portfolio"` (never reused, so nothing ever became collectable).
 
 | pg_cron job | Schedule (UTC) | Does |
 |---|---|---|
@@ -750,7 +1137,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 | `langgraph-checkpoint-vacuum` | `50 5 * * *` | plain `VACUUM (ANALYZE)` over the three tables |
 
 - **Retention is 14 days** by user ruling (D6, 2026-08-01). It is also the cap on
-  `pipeline-olympus.yml`'s `resume_run_id` input — a run older than the window can no
+  `pipeline-digiquant.yml`'s `resume_run_id` input — a run older than the window can no
   longer be resumed from its checkpoint. `retain_days` is validated `>= 1`.
 - **Pruning is thread-scoped, not checkpoint-scoped.** `checkpoint_blobs` is keyed
   `(thread_id, checkpoint_ns, channel, version)` with no `checkpoint_id`, so anything
@@ -774,7 +1161,7 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
   no policy) and skips the VACUUM, silently — so 061 asserts ownership at apply time.
 
 > **Still open:** 94% of the bytes are the `__pregel_tasks` channel — one full
-> `AtlasResearchState` copy per H5/H6 fan-out target (`hermes/focus_roster.py:29`),
+> `ResearchState` copy per H5/H6 fan-out target (`portfolio/focus_roster.py:29`),
 > which violates `digigraph/AGENTS.md` "State stays lean". Retention caps the
 > footprint but does not reduce the ~48 MB/day of write volume. Deferred from #1758
 > as a human-gated architecture change.
@@ -807,8 +1194,8 @@ They dominated the database before 061: 952 MB of a 1263 MB total (75%), growing
 1. Create a new migration under `supabase/migrations/NNN_description.sql`.
 2. Follow the RLS pattern above.
 3. If the new table holds a structured projection of a `documents` payload,
-   add a reference to it in this file under the "Hermes deliberation"
+   add a reference to it in this file under the "portfolio deliberation"
    section pattern and cite the source ADR.
-4. Add a test under `tests/dq/atlas/test_migration_NNN.py`
+4. Add a test under `tests/dq/research/test_migration_NNN.py`
    following the pattern in `test_migration_024.py` — pure-SQL parse check
    for offline unit tests, or `psycopg` round-trip for integration.

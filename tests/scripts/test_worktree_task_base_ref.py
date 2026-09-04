@@ -109,7 +109,13 @@ def _install_gh_stub(root: Path, component: str) -> Path:
     return bin_dir
 
 
-def _seed(root: Path, *, module_at_tip: bool, module_ahead: bool = False) -> dict[str, object]:
+def _seed(
+    root: Path,
+    *,
+    module_at_tip: bool,
+    module_ahead: bool = False,
+    component_changed: bool = False,
+) -> dict[str, object]:
     """A bare `origin`, and a clone whose refs are deliberately one commit behind it.
 
     `module_at_tip` decides whether the module branch on the remote has caught up
@@ -139,7 +145,15 @@ def _seed(root: Path, *, module_at_tip: bool, module_ahead: bool = False) -> dic
     _git(work, "config", "user.email", "test@example.com")
     _git(work, "config", "user.name", "test")
 
-    new = _commit(src, "newer")
+    if component_changed:
+        component_path = TWO_HOP_COMPONENT.removeprefix("component:")
+        changed_file = src / component_path / "changed.txt"
+        changed_file.parent.mkdir(parents=True)
+        changed_file.write_text("changed on develop\n", encoding="utf-8")
+        _git(src, "add", changed_file.relative_to(src).as_posix())
+        new = _commit(src, "change component path")
+    else:
+        new = _commit(src, "newer")
     to_push = ["develop", f"develop:{TWO_HOP_BRANCH}"] if module_at_tip else ["develop"]
     _git(src, "push", "--quiet", "origin", *to_push)
 
@@ -172,9 +186,19 @@ def seed(tmp_path_factory: pytest.TempPathFactory):
     when a failure is "the script chose the wrong ref" and the repos are the evidence.
     """
 
-    def make(*, module_at_tip: bool = False, module_ahead: bool = False) -> dict[str, object]:
+    def make(
+        *,
+        module_at_tip: bool = False,
+        module_ahead: bool = False,
+        component_changed: bool = False,
+    ) -> dict[str, object]:
         root = tmp_path_factory.mktemp("worktree-task").resolve()
-        return _seed(root, module_at_tip=module_at_tip or module_ahead, module_ahead=module_ahead)
+        return _seed(
+            root,
+            module_at_tip=module_at_tip or module_ahead,
+            module_ahead=module_ahead,
+            component_changed=component_changed,
+        )
 
     return make
 
@@ -254,8 +278,8 @@ def test_last_stdout_line_is_the_worktree_path(seed) -> None:
     )
 
 
-def test_stale_module_base_is_refused_with_its_behind_count(seed) -> None:
-    fx = seed(module_at_tip=False)
+def test_stale_module_base_with_component_changes_is_refused_with_its_behind_count(seed) -> None:
+    fx = seed(module_at_tip=False, component_changed=True)
     work = fx["work"]
     done = _run(fx, TWO_HOP_COMPONENT)
 
@@ -268,8 +292,17 @@ def test_stale_module_base_is_refused_with_its_behind_count(seed) -> None:
     assert not list(work.glob(f".worktrees/task/{ISSUE}-*")), "worktree created despite refusal"
 
 
-def test_stale_module_base_can_be_overridden_explicitly(seed) -> None:
+def test_stale_module_base_without_component_changes_is_accepted(seed) -> None:
     fx = seed(module_at_tip=False)
+    done = _run(fx, TWO_HOP_COMPONENT)
+
+    assert done.returncode == 0, done.stderr
+    assert _created_branch_tip(fx["work"]) == fx["module_tip"]
+    assert "refusing to branch from a stale module base" not in done.stderr, done.stderr
+
+
+def test_stale_module_base_can_be_overridden_explicitly(seed) -> None:
+    fx = seed(module_at_tip=False, component_changed=True)
     done = _run(fx, TWO_HOP_COMPONENT, env={"WORKTREE_TASK_ALLOW_STALE_MODULE": "1"})
     assert done.returncode == 0, done.stderr
     assert _created_branch_tip(fx["work"]) == fx["module_tip"]
@@ -377,7 +410,7 @@ def test_a_falsy_opt_out_does_not_enable_it(seed) -> None:
 
 def test_a_falsy_stale_module_override_does_not_downgrade_the_refusal(seed) -> None:
     """The refusal is the load-bearing half of #2547's module tier, so pin it separately."""
-    fx = seed(module_at_tip=False)
+    fx = seed(module_at_tip=False, component_changed=True)
     work = fx["work"]
     assert isinstance(work, Path)
 

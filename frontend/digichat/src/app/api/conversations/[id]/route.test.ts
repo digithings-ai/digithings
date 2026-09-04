@@ -54,7 +54,7 @@ describe("/api/conversations/[id]", () => {
   });
 
   it("PUT returns 204 on success", async () => {
-    vi.mocked(replaceConversationMessages).mockResolvedValue(true);
+    vi.mocked(replaceConversationMessages).mockResolvedValue("ok");
     const res = await PUT(
       new Request("http://localhost/api/conversations/conv-1", {
         method: "PUT",
@@ -64,6 +64,21 @@ describe("/api/conversations/[id]", () => {
       routeCtx
     );
     expect(res.status).toBe(204);
+  });
+
+  it("PUT returns 409 when replace would truncate history", async () => {
+    vi.mocked(replaceConversationMessages).mockResolvedValue("would_truncate");
+    const res = await PUT(
+      new Request("http://localhost/api/conversations/conv-1", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [] }),
+      }),
+      routeCtx
+    );
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error).toBe("would_truncate");
   });
 
   it("DELETE returns 401 without auth", async () => {

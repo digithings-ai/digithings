@@ -1,7 +1,7 @@
 """Unit tests for SupabaseConnector — the supabase client is faked, no live DB.
 
 Typed-result assertions over the success/failure paths, reusing the in-memory
-fake-client shape from ``tests/dq/atlas/test_supabase_io.py`` (records calls,
+fake-client shape from ``tests/dq/research/test_supabase_io.py`` (records calls,
 honours filters).
 
 The connector is imported directly from the submodule rather than via the
@@ -40,7 +40,7 @@ class _FakeQuery:
     """Records calls and returns canned rows, honouring eq/gte/lte/in_/order/limit.
 
     Filters are applied for real (not no-ops) so a connector that forgets a
-    filter breaks loudly — same philosophy as the Atlas supabase_io fake.
+    filter breaks loudly — same philosophy as the research supabase_io fake.
     """
 
     table_name: str
@@ -48,6 +48,7 @@ class _FakeQuery:
     canned: list[dict[str, Any]] = field(default_factory=list)
     raise_on_execute: Exception | None = None
     _upsert_rows: list[dict[str, Any]] | None = None
+    _delete: bool = False
     _on_conflict: str | None = None
     _on_conflict_passed: bool = False
     _count_mode: str | None = None
@@ -94,6 +95,10 @@ class _FakeQuery:
         self._on_conflict = kwargs.get("on_conflict")
         return self
 
+    def delete(self) -> _FakeQuery:
+        self._delete = True
+        return self
+
     def execute(self) -> _FakeResponse:
         if self.raise_on_execute is not None:
             raise self.raise_on_execute
@@ -102,6 +107,16 @@ class _FakeQuery:
             for row in self._upsert_rows:
                 stored.append({**row, "_on_conflict": self._on_conflict})
             return _FakeResponse(data=list(self._upsert_rows))
+        if self._delete:
+            stored = self.store.setdefault(self.table_name, [])
+            deleted = list(stored)
+            for op, col, val in self._filters:
+                if op == "eq":
+                    deleted = [row for row in deleted if row.get(col) == val]
+                elif op == "in_":
+                    deleted = [row for row in deleted if row.get(col) in val]
+            self.store[self.table_name] = [row for row in stored if row not in deleted]
+            return _FakeResponse(data=deleted)
         rows = list(self.canned)
         for op, col, val in self._filters:
             if op == "eq":
@@ -292,6 +307,39 @@ class TestUpsert:
         # Row body values are never audited.
         assert "sk-super-secret" not in msg
         assert "pii-data" not in msg
+
+
+@pytest.mark.unit
+class TestDelete:
+    def test_delete_is_filtered_and_returns_deleted_count(self) -> None:
+        client = FakeSupabaseClient(
+            store={
+                "architecture_notes": [
+                    {"vault_path": "clients/acme/current"},
+                    {"vault_path": "clients/acme/stale"},
+                    {"vault_path": "clients/other/stale"},
+                ]
+            }
+        )
+
+        result = SupabaseConnector(client).delete(
+            "architecture_notes",
+            in_={"vault_path": ["clients/acme/stale"]},
+        )
+
+        assert result.success is True
+        assert result.rows == 1
+        assert client.store["architecture_notes"] == [
+            {"vault_path": "clients/acme/current"},
+            {"vault_path": "clients/other/stale"},
+        ]
+
+    def test_delete_refuses_no_filters(self) -> None:
+        client = FakeSupabaseClient()
+        result = SupabaseConnector(client).delete("architecture_notes")
+        assert result.success is False
+        assert "filter" in result.error
+        assert client.last_query is None
 
 
 # ─── select ────────────────────────────────────────────────────────────────

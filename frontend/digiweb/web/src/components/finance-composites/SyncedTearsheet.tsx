@@ -58,7 +58,7 @@ export type SyncedTearsheetProps = {
   className?: string;
   /**
    * Let page scroll/wheel/touch-drag pass through instead of panning or
-   * zooming the chart. Off by default — this component rides real Olympus
+   * zooming the chart. Off by default — this component rides real dashboard
    * dashboard surfaces (e.g. a workspace's drawdown view) where pan/zoom on
    * the chart is an intended interaction. Turn it on only for a display
    * specimen embedded in scrolling prose (see synced-tearsheet-reference.tsx)

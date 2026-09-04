@@ -25,7 +25,7 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 - **`task/<N>-<slug>`** branches from its module branch (auto-detected from issue's `component:` label by `make task ISSUE=N`). PRs target the module branch.
 - **`module/<component>`** accumulates task PRs for a sprint, then PRs into `develop` as one batch. Use `make module-pr MODULE=<component>`.
 - **`develop`** is the integration branch. Holds cross-cutting work and module-sprint merges.
-- Some components skip the module tier and branch directly from `develop`. `scripts/project_routing.json` is the source of truth for which — read its `branches` map rather than trusting a list in prose (as of 2026-08-01: `component:root`, `component:digivault`, `component:website`, `component:digiquant-web`, `component:design-system`, and the `default` fallback).
+- Some components skip the module tier and branch directly from `develop`. `scripts/project_routing.json` is the source of truth for which — read its `branches` map rather than trusting a list in prose (as of 2026-09: `component:root`, `component:digivault`, `component:website`, and the `default` fallback).
 
 **Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
 **Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
@@ -50,9 +50,9 @@ Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 **Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
-command here. As of 2026-08 that was `module/website`, `module/olympus`,
-`module/digiskills` and `module/digiquant-atlas` — **a snapshot, not an invariant**
-(`module/digiquant-atlas` was queued for deletion when this was written). Check rather
+command here. As of 2026-08 that was `module/website`, `module/dashboard`,
+`module/digiskills` and `module/digiquant-research` — **a snapshot, not an invariant**
+(`module/digiquant-research` was queued for deletion when this was written). Check rather
 than trust the list:
 
 ```bash
@@ -64,8 +64,8 @@ The second was empty for all four at the 2026-08 sync (PRs #2397, #2401, #2402;
 `module/digiskills` needed none — it is a plain ancestor of `develop`). Where such a branch
 is ahead of `develop` at all, the extra commits are its own `chore/sync-*` merges:
 **dormant, not divergent, with no work stranded on any of them.** Don't revive one —
-branch from `develop`. `module/digiquant-atlas` was cut in the pre-migration
-`apps/digiquant-atlas/` era, and the Wave 1 / Wave 2 plan docs that name it as a PR target
+branch from `develop`. `module/digiquant-research` was cut in the pre-migration
+`digiquant/src/digiquant/research/` era, and the Wave 1 / Wave 2 plan docs that name it as a PR target
 are archival.
 
 Deleting a dormant module branch is **not** a plain `git push origin --delete`. The

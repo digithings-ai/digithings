@@ -25,8 +25,8 @@ LITELLM_PRICING_URL = (
 DECISION_SCAN_PATHS = [
     "config/model_modes.yaml",
     "config/litellm.yaml",
-    "digiquant/src/digiquant/olympus/atlas/config",
-    "digiquant/src/digiquant/olympus/hermes/config",
+    "digiquant/src/digiquant/research/config",
+    "digiquant/src/digiquant/portfolio/config",
 ]
 _DECISION_LOOKAHEAD = 5  # lines scanned after tag to find the model assignment
 

@@ -26,10 +26,10 @@ alwaysApply: true
 - LangGraph supervisor+subgraph orchestration only
 - LiteLLM routing (caching mandatory)
 - NautilusTrader for all backtest/optimize
-- Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
 - Never touch live-trading paths without explicit human approval
 - Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing.
 - Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors.
+- Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge.
 
 - **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
 
@@ -51,23 +51,16 @@ alwaysApply: true
 
 ---
 
-## Scoring — Self-Score Before Opening Any PR
+## Quality bar
 
-| Dimension | Minimum | Rubric |
-|-----------|---------|--------|
-| Security | ≥8/10 | [docs/scoring/SECURITY.md](docs/scoring/SECURITY.md) |
-| Quality | ≥8/10 | [docs/scoring/QUALITY.md](docs/scoring/QUALITY.md) |
-| Optimization | ≥7/10 | [docs/scoring/OPTIMIZATION.md](docs/scoring/OPTIMIZATION.md) |
-| Accuracy | ≥9/10 | [docs/scoring/ACCURACY.md](docs/scoring/ACCURACY.md) |
-
-Full rubric criteria: [`docs/scoring/`](docs/scoring/)
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
 ## Agent Capabilities (run from repo root)
 
 - `make agents-init` — Generate platform adapter files from agents.yml (`scripts/agents_init.py`)
-- `make score` — Self-score staged changes against 4-dimension rubrics (`scripts/score.py`)
+- `make score` — Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight) (`scripts/score.py`)
 - `make clean-imports` — Remove unused Python imports with ruff (dry-run by default) (`scripts/clean_imports.py`)
 - `make find-stale` — Detect unused functions, classes, and variables (`scripts/find_stale.py`)
 - `make commit` — Conventional commit helper — validates type(component): description format (`scripts/commit_helper.sh`)
@@ -90,19 +83,12 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `spec-writer` — Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml
 - `test-first-implementer` — Red/green/refactor TDD loop bound to the component test command
 
-**Skills** (prompted workflows — invoke by name or when the trigger fits):
-
-- `triage` — see `.claude/skills/triage/SKILL.md`
-- `ci-triage` — see `.claude/skills/ci-triage/SKILL.md`
-- `digiweb` — see `.claude/skills/digiweb/SKILL.md`
-
 **Slash commands** (Claude Code) / prompted workflows (other tools):
 
 - `/normalize` — see `.claude/commands/normalize.md`
 - `/spec` — see `.claude/commands/spec.md`
 - `/score` — see `.claude/commands/score.md`
 - `/task` — see `.claude/commands/task.md`
-- `/triage` — see `.claude/commands/triage.md`
 - `/opsx-propose` — see `.claude/commands/opsx-propose.md`
 - `/opsx-apply` — see `.claude/commands/opsx-apply.md`
 - `/opsx-archive` — see `.claude/commands/opsx-archive.md`
@@ -124,6 +110,4 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 - Any change to auth, JWT, or cryptography code (digikey/)
 - Any change that touches live-trading paths
-- Score below threshold on any dimension
 - New external service dependency or infrastructure change
-- Novel architecture decision not covered by existing ARCHITECTURE.md specs

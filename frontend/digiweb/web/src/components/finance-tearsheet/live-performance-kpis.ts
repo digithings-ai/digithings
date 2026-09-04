@@ -1,5 +1,5 @@
 /**
- * Live portfolio performance KPIs — shared by digiquant.io landing, olympus Brief,
+ * Live portfolio performance KPIs — shared by digiquant.io landing, dashboard Brief,
  * and (via series helpers) the Performance tearsheet.
  *
  * Computes percentage returns (day, since inception, vs benchmark) from:

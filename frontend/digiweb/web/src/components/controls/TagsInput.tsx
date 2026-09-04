@@ -10,7 +10,7 @@
  * lights the accent on focus-within, and the input stretches to the full
  * row only while the field is chipless.
  *
- * Shaped against the olympus adoption target: the NAV-comparables picker in
+ * Shaped against the dashboard adoption target: the NAV-comparables picker in
  * components/portfolio/performance-chart-workspace.tsx (chips with remove,
  * filter-as-you-type, capped multi-select, outside-click dismissal — the
  * pane/dismissal stays caller-side; the chips row + filter input is this).
