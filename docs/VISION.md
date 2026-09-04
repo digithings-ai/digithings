@@ -27,14 +27,14 @@ Two public domains, plus a developer-tooling product line.
 
 ### `digiquant.io` — financial AI hub
 - **digiquant product** — algorithmic strategy generation, backtesting, optimization, broker connections, deployment.
-- **Olympus** — the human-facing dashboard (`frontend/olympus`) for digiquant's finance sub-graph trio. Atlas now lives inside `digiquant` as `digiquant.olympus` (see ADR-0014, ADR-0015); the three sub-graphs are:
-  - **Atlas** — high-level fundamental/research engine; runs daily batch research, structured outputs, DB-persisted.
-  - **Hermes** — portfolio deliberation (bull/bear theses, risk debate) with a **human approval gate** before any execution.
-  - **Kairos** — chat-based strategy development; a quant researcher's interactive strategy workbench inside digichat.
+- **dashboard** — the human-facing dashboard (`frontend/dashboard`) for digiquant's finance sub-graph trio. research now lives inside `digiquant` as `digiquant.dashboard` (see ADR-0014, ADR-0015); the three sub-graphs are:
+  - **research** — high-level fundamental/research engine; runs daily batch research, structured outputs, DB-persisted.
+  - **portfolio** — portfolio deliberation (bull/bear theses, risk debate) with a **human approval gate** before any execution.
+  - **execution** — chat-based strategy development; a quant researcher's interactive strategy workbench inside digichat.
 - Tiering and posture:
-  - **Execution layer** — Atlas/Hermes biases feed digiquant strategies (research → live orders is the commercial, human-gated path).
+  - **Execution layer** — research/portfolio biases feed digiquant strategies (research → live orders is the commercial, human-gated path).
   - **Tiering** — free tier: daily batch research across shared domains; paid tier: user-level preferences, prompts, portfolios, custom domains.
-  - **Embedded digichat** — navigation + research Q&A inside the Olympus UI.
+  - **Embedded digichat** — navigation + research Q&A inside the dashboard UI.
 
 ### Client and pilot projects
 Stored under `projects/` (confidential — never pushed to public remotes). Each is a **digithings Project** (see ADR-0001): a thin config-driven composition of components.
@@ -79,14 +79,14 @@ See **ADR-0001: digithings Project Spec** for the formal definition and **ADR-00
               │  digisearch    │    │  digiquant    │
               │  (RAG/search) │    │  (Nautilus)   │
               └────────────────┘    └──────┬────────┘
-                                           │ olympus sub-graphs
+                                           │ dashboard sub-graphs
                                   ┌────────▼────────────┐
-                                  │  Atlas / Hermes /   │
-                                  │  Kairos             │
+                                  │  research / portfolio /   │
+                                  │  execution             │
                                   └─────────────────────┘
 
     digiquant.io ────▶  digiquant product UI
-       Olympus    ────▶  Atlas + Hermes + Kairos dashboard (frontend/olympus)
+       dashboard    ────▶  research + portfolio + execution dashboard (frontend/dashboard)
                           └─▶ digigraph ──▶ digisearch / digiquant (execution, human-gated)
 
     projects/client-pilot ──▶  digigraph + digisearch (no digiquant)
@@ -106,9 +106,9 @@ Cross-cutting:
 ## Strategic posture
 
 - **Open core.** Components MIT/Apache; client-specific configuration and deployment stay private under `projects/`.
-- **Consultancy + product.** Revenue from (a) client engagements using the stack as the delivery vehicle, and (b) hosted products (digiquant, Atlas) that dogfood the stack.
+- **Consultancy + product.** Revenue from (a) client engagements using the stack as the delivery vehicle, and (b) hosted products (digiquant, research) that dogfood the stack.
 - **Hedge-fund-in-a-box is the flagship** but not the only shape — RAG, document search, and general agent workflows share the same substrate.
-- **Financial tier gets the highest bar.** Security ≥8, Accuracy ≥9, human gates before live trades — these are non-negotiable for digiquant/Atlas and raise the quality floor for everything else.
+- **Financial tier gets the highest bar.** Security ≥8, Accuracy ≥9, human gates before live trades — these are non-negotiable for digiquant/research and raise the quality floor for everything else.
 
 ## What this document is not
 
@@ -120,11 +120,11 @@ Cross-cutting:
 
 **Last updated:** 2026-06-14.
 
-### Atlas tiering — hybrid
+### research tiering — hybrid
 
 - **Free tier:** daily batch research across shared domains, public outputs, no customization.
-- **Paid seats:** flat monthly subscription unlocks user-level preferences, custom prompts, custom domains, portfolio tracking, Atlas-embedded digichat.
-- **Metered API:** developer/programmatic access priced per research run or per token, for users who want to integrate Atlas output into their own systems.
+- **Paid seats:** flat monthly subscription unlocks user-level preferences, custom prompts, custom domains, portfolio tracking, research-embedded digichat.
+- **Metered API:** developer/programmatic access priced per research run or per token, for users who want to integrate research output into their own systems.
 
 Seat pricing and metered unit cost are TBD — will be nailed down when Phase 5 planning starts or when the first prospect asks.
 
@@ -138,7 +138,7 @@ The BYOK requirement from ADR-0002 stands: zero server-side persistence of user 
 ### Open-source vs. managed — core open, some premium closed
 
 - **Open core** (MIT/Apache): `digigraph`, `digisearch`, `digiquant` (backtest/optimize only), `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase` (single-tenant library), `digillm`, `digifetch`, `digidev` (kit core; premium agents/skills closed).
-- **Closed / commercial:** the finance sub-graph *implementations* — Atlas research cycles, Hermes portfolio deliberation, Kairos strategy execution (research → live orders); multi-tenant digibase credential broker; managed hosting of digithings Projects; premium digidev agents/skills; any client-specific IP developed under `projects/`.
+- **Closed / commercial:** the finance sub-graph *implementations* — research cycles, portfolio deliberation, execution strategy execution (research → live orders); multi-tenant digibase credential broker; managed hosting of digithings Projects; premium digidev agents/skills; any client-specific IP developed under `projects/`.
 - **Consultancy** stays its own revenue line, independent of the open/closed split.
 
 The exact boundary evolves. Guardrail: anything that's a meaningful moat for the commercial product (execution, multi-tenancy, hosting) can be closed; anything a user could reasonably want to self-host for their own agent work stays open.
@@ -151,7 +151,7 @@ The exact boundary evolves. Guardrail: anything that's a meaningful moat for the
 
 ## Open questions
 
-- Atlas seat price point and metered unit cost (defer to Phase 5 planning).
+- research seat price point and metered unit cost (defer to Phase 5 planning).
 - Guest-tier rate limits on `digithings.ai/chat` (defer to Phase 3b implementation).
 - Exact list of "closed" components — only the finance sub-graph implementations + multi-tenant digibase + hosting + premium digidev add-ons are committed today; others may migrate into the closed column as commercial value becomes clear.
 - Library extraction is uneven: `digillm` and `digifetch` have shipped as standalone open-core libraries, while `digilink` (connector/protocol layer) and `digistore` (storage abstraction) remain designed-but-unshipped — their functions still live inside individual services for now.

@@ -1,4 +1,4 @@
-import { MAX_DOC_FIELD_CHARS, type ActivityDocument } from "@/lib/chat-activity";
+import { MAX_DOC_FIELD_CHARS, MAX_NOTE_BODY_CHARS, type ActivityDocument } from "@/lib/chat-activity";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +71,7 @@ export function resolveSourceTitle(
 export function ragToolDisplayName(tool: unknown): string {
   const t = typeof tool === "string" ? tool.trim() : "";
   if (!t || t === "rag_sources") return "digisearch";
+  if (t === "web_search") return "web_search";
   if (t === "digivault_search_notes") return "digivault_search_notes";
   if (t === "digivault_get_note") return "digivault_get_note";
   if (t === "digivault") return "digivault";
@@ -99,11 +100,17 @@ export function mapRawSourceToDocument(raw: Record<string, unknown>): ActivityDo
   const doc: ActivityDocument = { title, path };
   const tier =
     (typeof meta.evidence_tier === "string" && meta.evidence_tier.trim()) ||
+    (meta.source_kind === "external" ? "External" : undefined) ||
     (meta.peer_reviewed === true ? "peer_reviewed" : undefined);
   if (tier) doc.tier = tier;
   if (typeof meta.publication_year === "number" && Number.isFinite(meta.publication_year)) {
     doc.year = Math.trunc(meta.publication_year);
   }
   if (snippet) doc.snippet = snippet;
+  const bodyRaw =
+    (typeof raw.body === "string" && raw.body.trim()) ||
+    (typeof raw.body_markdown === "string" && raw.body_markdown.trim()) ||
+    "";
+  if (bodyRaw) doc.body = bodyRaw.slice(0, MAX_NOTE_BODY_CHARS);
   return doc;
 }

@@ -7,20 +7,20 @@
  * (on the glyph disc). Each variant ships a default glyph; the `icon` slot
  * replaces it. Dress lives in styles/controls-core.css (ctl-empty*).
  *
- * Shaped against the olympus adoption targets:
+ * Shaped against the dashboard adoption targets:
  * components/observability/shared.tsx EmptyState (title/message/note),
  * components/db-unavailable.tsx (title/body/Retry action), and the inline
  * "No matches" / "No runs recorded yet" strings.
  *
  * Dress axis: the reference dress is the hairline tonal slab with a glyph
- * disc and a mono title. Olympus still has two glyphless cuts (API names
+ * disc and a mono title. dashboard still has two glyphless cuts (API names
  * kept; package chrome is radius 0):
  * - dress="glass"          — observability quiet card (text-sm title,
  *                            text-xs body, italic note).
  * - dress="glass-display"  — full-page gate card (font-display 2xl title,
  *                            text-sm relaxed body) used by db-unavailable.
  * Both restyle type/spacing/slots ONLY — the surface class stays call-site
- * (olympus `.glass-card` until Phase 3 retires it) so the app's
+ * (dashboard `.glass-card` until Phase 3 retires it) so the app's
  * motion-reveal hook keeps firing.
  */
 import type { HTMLAttributes, ReactNode } from "react";
@@ -33,7 +33,7 @@ export type EmptyStateDress = "reference" | "glass" | "glass-display";
 
 export type EmptyStateProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
   variant?: EmptyStateVariant;
-  /** Look cut — "reference" (default) or the olympus glass cuts (see docblock). */
+  /** Look cut — "reference" (default) or the dashboard glass cuts (see docblock). */
   dress?: EmptyStateDress;
   /** Replaces the variant's default glyph inside the disc. */
   icon?: ReactNode;
@@ -79,10 +79,10 @@ export function EmptyState({
   children,
   ...props
 }: EmptyStateProps) {
-  // The olympus glass dresses ship without a glyph disc; an explicit `icon`
+  // The dashboard glass dresses ship without a glyph disc; an explicit `icon`
   // still renders one. The reference dress always wears its variant glyph.
   const glyphless = dress !== "reference" && icon == null;
-  // WCAG 4.1.3 fix (full-UI-suite critique, olympus Brief target): "error" is
+  // WCAG 4.1.3 fix (full-UI-suite critique, dashboard Brief target): "error" is
   // the one variant that can appear or replace prior content asynchronously
   // (a data fetch failing after the page has already loaded and the user has
   // moved focus elsewhere) -- with no role/aria-live, a screen reader user

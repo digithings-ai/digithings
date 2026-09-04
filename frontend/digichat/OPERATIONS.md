@@ -23,6 +23,19 @@ digichat follows the **digithings.ai** marketing palette from **digiweb** tokens
 - **Docker** `digichat` + `digichat-db` under Compose **profile `digichat`**.
 - **Health**: `GET /api/health` (digigraph + DB checks).
 
+## Foundry activity and reasoning summaries
+
+Client deployments using `backend.type: foundry` translate Foundry's
+`azure_ai_search` events into the same search and source activity rows as
+digigraph. The adapter renders a **Thinking** disclosure only when a Foundry
+reasoning event contains summary text.
+
+Enable that summary on the Foundry agent definition. It cannot be requested on
+an individual Responses API call when the request uses `agent_reference`;
+Foundry rejects per-call `reasoning.summary` in that configuration. When the
+agent emits empty reasoning items, digichat deliberately omits the disclosure
+rather than showing a row with no reader-visible content.
+
 ## Capability matrix (federated hub)
 
 Deployments can describe which Digi ecosystem surfaces the BFF and UI treat as **enabled** (health checks, future admin toggles, copy in the ecosystem sheet):

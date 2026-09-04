@@ -83,7 +83,7 @@ model_list:
 | DIGI_LLM_MODE tier | `test` (fallback) |
 | Single-shot 100k | Yes — 131k context on Llama models |
 | Privacy safe | Unknown |
-| Atlas/Hermes role | Speed fallback when Groq/Cerebras hit limits |
+| research/portfolio role | Speed fallback when Groq/Cerebras hit limits |
 
 ---
 

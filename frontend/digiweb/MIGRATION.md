@@ -6,7 +6,7 @@ playbook that migrated all five apps (#1399, 2026-07) and the contract the
 forward. The guard runs as a dedicated **unconditional** `frontend-canon` job
 in `ci.yml` on every PR/push (#1434) — it scans the whole `frontend/` tree via
 `git ls-files`, not just the diff, so it must not be path-gated — and also runs
-(redundantly) inside the web/olympus/digichat test jobs.
+(redundantly) inside the web/dashboard/digichat test jobs.
 
 ## The wiring (every app, in this order)
 
@@ -40,8 +40,10 @@ Three rules that are load-bearing, learned the hard way:
    call-site utilities must override) and unlayered (state/structural rules
    that must keep outranking plain utilities) — `chat-core.css`,
    `chat-widgets.css`, `controls-core.css`, `controls-overlay.css` (#1418,
-   #1419), and `finance-tearsheet.css` (#1463 — its unlayered portion includes
-   the ENTIRE `@media print` grammar, the tearsheet family's differentiator).
+   #1419), `finance-tearsheet.css` (#1463 — its unlayered portion includes
+   the ENTIRE `@media print` grammar, the tearsheet family's differentiator),
+   and `repo-activity.css` (#3445 — hairline lists, two-column collapse, clone
+   box).
    Wrapping those in `layer(…)` demotes their state rules and breaks
    digichat's rendered-look parity (or, for the tearsheet, the PDF export).
 3. **`@source` any package component you render.** Without it the shared
@@ -66,7 +68,7 @@ descendant selectors, two-color `color-mix()`, custom-prop readers, print
 blocks, and unlayered-override classes. Re-point their color values at
 tokens; never leave raw hex without a comment naming the token it mirrors.
 
-**Concrete colors are sanctioned only in:** `olympus/lib/chart-colors.ts`
+**Concrete colors are sanctioned only in:** `dashboard/lib/chart-colors.ts`
 (categorical/benchmark hues), tenant embed accents, SSR `theme-color` metas
 (commented), canvas scenes, print pins, and the reference livery swatch
 table — the guard's ALLOWLIST. Anything else needs a
@@ -78,7 +80,7 @@ review.
 Before writing new UI, check `frontend/digiweb/MANIFEST.json` (90 components,
 14 families) and `@digithings/web` exports: NavShell, Footer/Colophon,
 DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages,
-PerfMetrics/StatCounter, TerminalManifest, the chat family (ChatTranscript/
+PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family (ChatTranscript/
 ChatMessage/ChatMarkdown/ChatToolCall/…), the controls layer (Button/Badge/
 Card/Input/Label/Avatar/DropdownMenu/Sheet/Tooltip/Collapsible on the `dress`
 axis), Terminal, Emblem/StackRow, ModuleCard, Reveal/Stagger/HeroEntrance,

@@ -87,7 +87,7 @@ model_list:
 | DIGI_LLM_MODE tier | `best` (evaluation only — credits deplete) |
 | Single-shot 100k | Yes — 128–163k context on supported models |
 | Privacy safe | Unknown |
-| Atlas/Hermes role | Benchmarking new models; evaluating Nemotron/reasoning variants |
+| research/portfolio role | Benchmarking new models; evaluating Nemotron/reasoning variants |
 
 ---
 

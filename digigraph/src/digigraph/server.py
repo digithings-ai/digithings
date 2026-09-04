@@ -129,7 +129,7 @@ def _byok_default_routes_elsewhere(provider: str) -> bool:
     is wider than the free-mode ``ValueError``) lets the resolver judge the same string
     this function could not resolve. On the phase path, ``get_model_for_phase`` never
     calls ``operator_default_model`` at all: it hands the resolver a ``phase_models``
-    override or an ``olympus_models.yaml`` capability model, neither of which this
+    override or an ``digiquant_models.yaml`` capability model, neither of which this
     middleware ever sees, and the resolver refuses on *that* string. Either way the
     refusal — or the failure — lands on whatever the request would actually have been
     billed for.
@@ -404,6 +404,12 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
     lang = http_request.headers.get("x-digi-language")
     if lang and lang.strip():
         updates["response_language"] = lang.strip().lower()[:16]
+    from digigraph.retrieval import resolve_force_tool
+
+    force_raw = http_request.headers.get("x-digi-force-tool")
+    resolved_force = resolve_force_tool(force_raw)
+    if resolved_force:
+        updates["force_tool"] = resolved_force
     return updates
 
 
@@ -769,6 +775,8 @@ def _stream_completions_progressive(
     request_id: str | None = None,
     workflow_extras: dict | None = None,
     suppress_tool_stream: bool = False,
+    force_tool: str | None = None,
+    enable_web_search: bool = False,
 ):
     """
     Generator: run workflow in thread, consume queue, yield SSE deltas.
@@ -784,9 +792,12 @@ def _stream_completions_progressive(
         "allowed_tools": allowed_tools,
         "require_tool_calls": require_tool_calls,
         "request_id": request_id,
+        "enable_web_search": enable_web_search,
     }
     if workflow_extras:
         wf_kw.update(workflow_extras)
+    # Resolved body-or-header force_tool wins over a header-only extras copy.
+    wf_kw["force_tool"] = force_tool
     workflow_req = WorkflowRequest(**wf_kw)
 
     from digigraph.llm_auth import clear_byok_bindings
@@ -979,6 +990,23 @@ def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Reques
     return None
 
 
+def _resolve_force_tool_chat(req: ChatCompletionRequest, request: Request) -> str | None:
+    """Locate tool to inject from JSON body or X-Digi-Force-Tool. None = model-driven."""
+    from digigraph.retrieval import resolve_force_tool
+
+    return resolve_force_tool(req.force_tool) or resolve_force_tool(
+        request.headers.get("X-Digi-Force-Tool")
+    )
+
+
+def _resolve_enable_web_search_chat(req: ChatCompletionRequest, request: Request) -> bool:
+    """Opt-in digillm web search (#3420). Body or X-Digi-Enable-Web-Search; default off."""
+    if req.enable_web_search:
+        return True
+    h = (request.headers.get("X-Digi-Enable-Web-Search") or "").strip().lower()
+    return h in ("1", "true", "yes")
+
+
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
     """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
     sid = getattr(req, "session_id", None)
@@ -1045,6 +1073,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     require_tool_calls = _resolve_require_tool_calls_chat(req, request)
+    enable_web_search = _resolve_enable_web_search_chat(req, request)
     limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
     if limited is not None:
         return limited
@@ -1079,6 +1108,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 request_id=request_id,
                 workflow_extras=wf_extras,
                 suppress_tool_stream=suppress_tool_stream,
+                force_tool=_resolve_force_tool_chat(req, request),
+                enable_web_search=enable_web_search,
             ),
             media_type="text/event-stream",
             headers={
@@ -1098,6 +1129,8 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             allowed_tools=allowed_tools,
             require_tool_calls=require_tool_calls,
             request_id=request_id,
+            force_tool=_resolve_force_tool_chat(req, request),
+            enable_web_search=enable_web_search,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
         if not result.success and result.error_code in ("free_quota_exceeded", "rate_limit"):

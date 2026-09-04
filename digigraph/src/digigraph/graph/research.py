@@ -13,10 +13,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
+from digigraph.chat_prompt import last_user_turn
 from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
-    wrap_execute_tool_for_tier1,
 )
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
@@ -24,6 +24,12 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
+from digigraph.retrieval import (
+    auto_load_notes,
+    force_tool_messages,
+    query_from_tool_args,
+    resolve_force_tool,
+)
 from digigraph.tool_policy import frozen_from_state_list
 from digigraph.tools.digisearch import digisearch
 from digigraph.trace_events import merge_rag_sources_accumulator
@@ -343,7 +349,11 @@ def _run_document_rag_path(
     from digigraph.orchestration import ToolContext, execute
     from digigraph.skills import get_tools_for_skills
 
-    skill_ids = cfg.get_enabled_skills() if cfg else ["search", "project_rag"]
+    skill_ids = list(cfg.get_enabled_skills() if cfg else ["search", "project_rag"])
+    # Opt-in web skill (#3420) — not in digiproject.yaml by default; appended only
+    # when this request enabled web search so corpus-only deploys stay corpus-only.
+    if state.get("enable_web_search") and "web" not in skill_ids:
+        skill_ids.append("web")
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
     # empty allowlist → None and silently opens every tool — the documented
@@ -378,25 +388,6 @@ def _run_document_rag_path(
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
 
-    def execute_search(name: str, args: dict) -> str | dict:
-        result = execute(name, args, context)
-        if isinstance(result, dict) and result.get("stored_dataset_profile"):
-            p = result["stored_dataset_profile"]
-            if isinstance(p, dict) and p.get("ref"):
-                collected_stored[p["ref"]] = p
-        if isinstance(result, dict) and result.get("rag_sources"):
-            merge_rag_sources_accumulator(collected_rag, result["rag_sources"])
-        # Make every tool call visible in the activity UI, including zero-hit
-        # searches: without hit_count, "searched and found nothing" and "never
-        # searched" look identical downstream. setdefault so a tool that already
-        # sets these (e.g. a future handler) is not clobbered.
-        if isinstance(result, dict):
-            result.setdefault("hit_count", len(result.get("rag_sources") or []))
-            query_arg = args.get("query") or args.get("vault_path")
-            if query_arg:
-                result.setdefault("query", str(query_arg))
-        return result
-
     writer = _safe_stream_writer()
 
     def stream_callback(event_type: str, data: Any) -> None:
@@ -407,6 +398,46 @@ def _run_document_rag_path(
         ):
             data = {**data, "index_name": index_display_name}
         writer((event_type, data))
+
+    def execute_one(name: str, args: dict) -> str | dict:
+        result = execute(name, args, context)
+        if isinstance(result, dict) and result.get("stored_dataset_profile"):
+            p = result["stored_dataset_profile"]
+            if isinstance(p, dict) and p.get("ref"):
+                collected_stored[p["ref"]] = p
+        if isinstance(result, dict) and result.get("rag_sources"):
+            # WorkflowState stays lean — full get_note bodies stream on the
+            # rag_sources trace for digichat DocumentPane (#3419) but must not
+            # enter LangGraph checkpoints.
+            lean_sources = [
+                {k: v for k, v in item.items() if k != "body"} if isinstance(item, dict) else item
+                for item in result["rag_sources"]
+            ]
+            merge_rag_sources_accumulator(collected_rag, lean_sources)
+        # Make every tool call visible in the activity UI, including zero-hit
+        # searches: without hit_count, "searched and found nothing" and "never
+        # searched" look identical downstream. setdefault so a tool that already
+        # sets these (e.g. a future handler) is not clobbered.
+        if isinstance(result, dict):
+            result.setdefault("hit_count", len(result.get("rag_sources") or []))
+            query_arg = query_from_tool_args(args)
+            if query_arg:
+                result.setdefault("query", query_arg)
+        return result
+
+    def execute_search(name: str, args: dict) -> str | dict:
+        result = execute_one(name, args)
+        if isinstance(result, dict):
+            # #3417: load full notes after a locate so the model synthesizes
+            # instead of asking permission to read what it already found.
+            result = auto_load_notes(
+                locate_tool=name,
+                locate_result=result,
+                execute_fn=execute_one,
+                emit=stream_callback,
+                allowed_names=_allowed_names,
+            )
+        return result
 
     user_content = str(prompt)
 
@@ -456,10 +487,13 @@ def _run_document_rag_path(
     # exactly 1).
     #
     # Two-tier compaction (#399): prior-turn ``llm_messages`` (when present) plus the
-    # current system/user pair are compacted *before* digillm sees them. Tier-1 also
-    # wraps ``execute_search`` so large tool payloads are offloaded before digillm
-    # appends them to its local transcript. The checkpoint keeps ``_compaction_event``
-    # (refs only); originals live under the session workspace.
+    # current system/user pair are compacted *before* digillm sees them.
+    # Do **not** wrap ``execute_search`` with ``wrap_execute_tool_for_tier1``: that
+    # replaced same-turn digisearch payloads (>2 KB) with workspace stubs the model
+    # cannot read, so project-mode RAG answers were synthesized from stubs alone.
+    # digillm already caps injected tool text via ``DIGI_TOOL_MESSAGE_MAX_CHARS``.
+    # The checkpoint keeps ``_compaction_event`` (refs only); originals live under
+    # the session workspace when tier-1/2 run on the pre-LLM message list.
     compaction_cfg = compaction_config_from_env()
     prior = state.get("llm_messages")
     base_messages: list[dict[str, Any]] = [
@@ -476,21 +510,37 @@ def _run_document_rag_path(
         compaction_cfg,
         session_id=state.get("session_id"),
     )
-    tier1_refs: list[str] = list(compaction.event.tier1_refs) if compaction.event else []
-    execute_for_llm = wrap_execute_tool_for_tier1(
-        execute_search,
-        config=compaction_cfg,
-        session_id=state.get("session_id"),
-        refs_out=tier1_refs,
-    )
+    llm_messages = list(compaction.llm_messages)
+    forced = resolve_force_tool(state.get("force_tool"))
+    force_query = last_user_turn(str(prompt))
+    # Skip inject when the tenant allowlist excludes the tool. execute() would
+    # deny it anyway, but we must not emit a started tool_call / Searching…
+    # row or feed the deny blob into force_tool_messages. None = unrestricted
+    # (public embed); a set must contain the forced tool.
+    if forced and force_query and (_allowed_names is None or forced in _allowed_names):
+        # #3418: inject the locate call with the user string as the argument.
+        # Do not hint the model — it only synthesizes after the result lands.
+        hop_args = {"query": force_query}
+        stream_callback("tool_call", {"name": forced, "arguments": hop_args})
+        forced_result = execute_search(forced, hop_args)
+        if isinstance(forced_result, dict):
+            stream_callback("tool_result", {**forced_result, "name": forced})
+            llm_messages.extend(force_tool_messages(forced, force_query, forced_result))
+        else:
+            stream_callback("tool_result", {"name": forced, "content": str(forced_result)})
+            llm_messages.extend(
+                force_tool_messages(forced, force_query, {"content": str(forced_result)})
+            )
     content = run_tools(
         model=get_model_for_mode(),
-        messages=compaction.llm_messages,
+        messages=llm_messages,
         tools=tools_for_llm,
-        execute_tool=execute_for_llm,
+        execute_tool=execute_search,
         max_tool_rounds=4,
         on_tool_step=stream_callback,
-        tool_choice="required" if state.get("require_tool_calls") else "auto",
+        tool_choice="auto"
+        if forced
+        else ("required" if state.get("require_tool_calls") else "auto"),
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -535,19 +585,7 @@ def _run_document_rag_path(
         "llm_messages": compaction.llm_messages,
     }
     if compaction.event is not None:
-        event_payload = compaction.event.model_dump()
-        if tier1_refs and len(tier1_refs) > event_payload.get("tier1_truncated", 0):
-            event_payload["tier1_refs"] = list(dict.fromkeys(tier1_refs))
-            event_payload["tier1_truncated"] = len(event_payload["tier1_refs"])
-        out_state["_compaction_event"] = event_payload
-    elif tier1_refs:
-        from digigraph.compaction import CompactionEvent
-
-        out_state["_compaction_event"] = CompactionEvent(
-            event_id="tier1-only",
-            tier1_truncated=len(tier1_refs),
-            tier1_refs=list(dict.fromkeys(tier1_refs)),
-        ).model_dump()
+        out_state["_compaction_event"] = compaction.event.model_dump()
     if collected_stored:
         merged = dict(state.get("stored_datasets") or {})
         for ref, profile in collected_stored.items():

@@ -91,7 +91,7 @@ model_list:
 | DIGI_LLM_MODE tier | `medium` (Large); `test` (Small) |
 | Single-shot 100k | Yes — 128k on Large, 256k on Codestral |
 | Privacy safe | **No (free)** / Yes (paid — zero-retention) |
-| Atlas/Hermes role | 128k single-shot research summarisation; Codestral for code analysis |
+| research/portfolio role | 128k single-shot research summarisation; Codestral for code analysis |
 
 ---
 

@@ -92,7 +92,7 @@ directory/zip. `compile_skill` wraps the middle two steps and reports
   concrete `description` (the agent-discovery trigger) and a `body`
   (step-by-step usage instructions) from a size-bounded excerpt of the corpus
   (`_MAX_PROMPT_CHARS`, currently 60k chars). Model defaults to
-  `DIGISKILLS_SYNTHESIS_MODEL` env or `openrouter/auto`; pass `model=` to
+  `DIGISKILLS_SYNTHESIS_MODEL` env or `openai/gpt-oss-20b:free`; pass `model=` to
   override per call.
 
 ### Corpus builders
@@ -202,7 +202,7 @@ trust-flagging pass.
 
 | Variable | Used by | Purpose |
 |----------|---------|---------|
-| `DIGISKILLS_SYNTHESIS_MODEL` | `DigiLLMSynthesizer` | Default model string (falls back to `openrouter/auto`); pass `model=` to override per instance. |
+| `DIGISKILLS_SYNTHESIS_MODEL` | `DigiLLMSynthesizer` | Default model string (falls back to `openai/gpt-oss-20b:free`); pass `model=` to override per instance. |
 
 No other configuration — the core library and `LocalPathCorpusBuilder` need
 no environment variables at all.

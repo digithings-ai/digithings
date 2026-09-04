@@ -1,7 +1,7 @@
 # IBKR Web API — operational notes (K2)
 
 Operational companion to `digiquant.brokers.ibkr.IbkrAdapter`. Binding ground truth lives
-in `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md` §7; this note
+in `docs/superpowers/specs/2026-08-29-execution-tenancy-implementation-spec.md` §7; this note
 captures the session model, onboarding path, and pacing rules the adapter implements.
 
 ## Product path vs dev path

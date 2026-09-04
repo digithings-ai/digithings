@@ -1,10 +1,10 @@
 """Shared in-memory FakeSupabaseClient for unit tests (#1196).
 
-Canonical location for the Atlas/Hermes/overlay PostgREST fake. Prefer::
+Canonical location for the research/portfolio/overlay PostgREST fake. Prefer::
 
     from tests.fixtures.fake_supabase import FakeSupabaseClient
 
-``tests.dq.atlas.test_supabase_io`` re-exports the same symbols for older
+``tests.dq.research.test_supabase_io`` re-exports the same symbols for older
 imports. Simpler upsert-only stubs in ``tests/dq/data/`` and friends stay
 local — they intentionally omit filter semantics.
 
@@ -18,7 +18,7 @@ from typing import (
     Any,  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
 )
 
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.dashboard.tenancy import house_workspace_id
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
@@ -69,6 +69,10 @@ class _FakeQuery:
         self._filters.append(("eq", col, val))
         return self
 
+    def neq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("neq", col, val))
+        return self
+
     def in_(self, col: str, vals: list[Any] | tuple[Any, ...]) -> "_FakeQuery":
         # Match the Supabase Python client surface — ``in_`` filters rows whose
         # column value is one of ``vals``.
@@ -78,6 +82,15 @@ class _FakeQuery:
     def like(self, col: str, pattern: str) -> "_FakeQuery":
         # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
         self._filters.append(("like", col, pattern))
+        return self
+
+    def ilike(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``ilike``; fixtures are already lowercase so prefix ``like`` matches.
+        return self.like(col, pattern)
+
+    def is_(self, col: str, val: str) -> "_FakeQuery":
+        # PostgREST ``.is_(col, "null")``. Used by house ops scripts.
+        self._filters.append(("is", col, val))
         return self
 
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
@@ -136,6 +149,8 @@ class _FakeQuery:
                 continue
             if op == "eq" and row_val != val:
                 return False
+            if op == "neq" and row_val == val:
+                return False
             if op == "lt" and str(row.get(col, "")) >= str(val):
                 return False
             if op == "lte" and str(row.get(col, "")) > str(val):
@@ -146,6 +161,11 @@ class _FakeQuery:
                 return False
             if op == "like" and not str(row.get(col, "")).startswith(str(val).rstrip("%")):
                 return False
+            if op == "is":
+                if str(val).lower() == "null" and row_val is not None:
+                    return False
+                if str(val).lower() != "null" and row_val is None:
+                    return False
         return True
 
     def execute(self) -> _FakeResponse:

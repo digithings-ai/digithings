@@ -10,16 +10,11 @@ import sys
 def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str, str, str, str, str]:
     names = {label["name"] for label in labels}
 
+    # Board cleanup 2026-09: phase-0..phase-5 labels deleted (phase now lives
+    # on the milestone, which this script doesn't see). Default + human
+    # verification on the stub PR (its body says "verify before merging").
     phase = "Phase 3 — Domain unification"
-    if "phase-0" in names or "phase-2" in names:
-        phase = "Phase 2 — Hardening"
-    elif "phase-3" in names:
-        phase = "Phase 3 — Domain unification"
-    elif "phase-4" in names:
-        phase = "Phase 4 — Atlas on digigraph"
-    elif "phase-5" in names:
-        phase = "Phase 5 — Atlas tiering"
-    elif "client-pilot" in names:
+    if "client-pilot" in names:
         phase = "Client Pilot"
 
     area = "Cross-cutting"
@@ -42,10 +37,8 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
     kind = "Task"
     if "epic" in names:
         kind = "Epic"
-    elif "phase-0" in names:
-        kind = "Feature"
 
-    priority = "P1" if ("epic" in names or "phase-0" in names) else "P2"
+    priority = "P1" if "epic" in names else "P2"
     model = "opus" if "risk:high" in names else "sonnet"
 
     return (

@@ -251,8 +251,12 @@ services:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
-    environment:
-      - REDIS_URL=${REDIS_URL:-}
+    # Do not inject REDIS_URL with an empty default: an empty string makes
+    # LiteLLM main-stable treat Redis as configured and exit 3
+    # (ValueError: Redis URL must specify one of the following schemes).
+    # Leave the var unset for the default local cache. When using
+    # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
+    # env_file passes a real URL through.
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
     volumes:
       - ./config:/app/config:ro
@@ -282,6 +286,52 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
+
+  # ─── OmniRoute (optional profile: omniroute) — #3413 ───
+  # Off by default. Self-host OpenAI-compat at 127.0.0.1:20128/v1.
+  # Do not enable cookie / MITM / web-session providers. Do not cut digiquant
+  # house pins over to OmniRoute. See docs/providers/omniroute.md.
+  #
+  # Compose interpolates env for EVERY service at `docker compose config`,
+  # including inactive profiles — never use ${VAR:?} here or compose-validate
+  # fails without OMNIROUTE_AUTH_PASSWORD. Require the password only when the
+  # profile actually starts (omniroute-auth-guard below).
+  omniroute-auth-guard:
+    image: busybox:1.36
+    container_name: digi-omniroute-auth-guard
+    profiles:
+      - omniroute
+    environment:
+      - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$OMNIROUTE_AUTH_PASSWORD" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD is required to start the omniroute profile" >&2
+          exit 1
+        fi
+        if [ "$$OMNIROUTE_AUTH_PASSWORD" = "CHANGEME" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD must not be the vendor default" >&2
+          exit 1
+        fi
+  omniroute:
+    # Pin a version tag + index digest, never :latest (#3432 Gate 1).
+    image: diegosouzapw/omniroute:3.8.50@sha256:085c57adf499a8aaa9f35ccde95c0df9c11bd9ecd18d6c9edbf3b68b8079ba9d
+    container_name: digi-omniroute
+    profiles:
+      - omniroute
+    depends_on:
+      omniroute-auth-guard:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      - PORT=20128
+      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+      - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
+    volumes:
+      - omniroute_data:/app/data
 
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
@@ -456,6 +506,7 @@ services:
 
 volumes:
   ollama_data:
+  omniroute_data:
   digichat_pg:
   digikey_data:
   digisearch_chroma:

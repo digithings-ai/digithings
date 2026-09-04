@@ -126,7 +126,7 @@ describe("resolveEmbedHostParamOrReferer", () => {
 });
 
 describe("toEmbedClientConfig", () => {
-  it("never projects the tenant token or backend into the client config", () => {
+  it("never projects the tenant token or backend secrets into the client config", () => {
     const registry = parseEmbedTenants(REGISTRY);
     const cfg = toEmbedClientConfig(registry.get("dev.datatap.stream")!);
     const serialized = JSON.stringify(cfg);
@@ -135,6 +135,13 @@ describe("toEmbedClientConfig", () => {
     expect(cfg).not.toHaveProperty("token");
     expect(cfg).not.toHaveProperty("backend");
     expect(cfg).not.toHaveProperty("activityDetail");
+    // Discriminator only — enough for Foundry-unsafe chrome (#3466).
+    expect(cfg.backendType).toBe("foundry");
+  });
+
+  it("projects digigraph backendType for first-party tenants", () => {
+    const registry = parseEmbedTenants(REGISTRY);
+    expect(toEmbedClientConfig(registry.get("digithings.ai")!).backendType).toBe("digigraph");
   });
 });
 

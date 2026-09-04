@@ -34,8 +34,11 @@
 --     `sync_positions_from_rebalance.py`, `update_tearsheet.py`, …) still upsert with
 --     `on_conflict="date"` / `"date,ticker"`; dropping those arbiters would raise
 --     Postgres 42P10 on the next metrics job. `UNIQUE(date)` / `UNIQUE(date, ticker)`
---     stays correct while only the house workspace writes. Roadmap P6 drops the
---     legacy keys after every writer is patched to the widened arbiter.
+--     stays correct while only the house workspace writes. Roadmap P6 stages the
+--     drop in migrations/cutover/113_drop_legacy_book_uniques.sql (not
+--     auto-applied). Copy to top-level only after main house GHA writers use
+--     the widened arbiter — applying while origin/main still upserts
+--     on_conflict=date raises 42P10.
 --     Every constraint this migration ADDS (enumerate for reviewers / T0 acceptance):
 --       KEEP positions_date_ticker_key
 --         + ADD uq_positions_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
@@ -342,6 +345,11 @@ CREATE INDEX IF NOT EXISTS idx_olympus_accounting_holdings_workspace
 -- ============================================================================
 
 ALTER TABLE public.olympus_profile_config ADD COLUMN IF NOT EXISTS workspace_id uuid;
+-- Migration 075 makes this table append-only. Temporarily remove only its
+-- row-mutation trigger while this schema migration backfills the new tenant key;
+-- the TRUNCATE guard remains installed throughout.
+DROP TRIGGER IF EXISTS reject_olympus_profile_config_mutation
+    ON public.olympus_profile_config;
 -- The house row is the digithings-owned always-on default every workspace reads —
 -- shared space, not the house *book* Groups A/B backfill to.
 UPDATE public.olympus_profile_config
@@ -351,6 +359,9 @@ UPDATE public.olympus_profile_config
 -- but guard anyway: any row this UPDATE cannot classify blocks the NOT NULL below
 -- loudly rather than silently landing in the wrong workspace.
 ALTER TABLE public.olympus_profile_config ALTER COLUMN workspace_id SET NOT NULL;
+CREATE TRIGGER reject_olympus_profile_config_mutation
+    BEFORE UPDATE OR DELETE ON public.olympus_profile_config
+    FOR EACH ROW EXECUTE FUNCTION public.reject_olympus_profile_config_mutation();
 DO $$ BEGIN
     ALTER TABLE public.olympus_profile_config
         ADD CONSTRAINT fk_olympus_profile_config_workspace

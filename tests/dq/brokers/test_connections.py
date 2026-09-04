@@ -1,7 +1,7 @@
 """Contract tests for the K3 `broker_connections` store.
 
 No live database: :class:`FakeSupabaseClient` is a small in-memory stand-in for the
-PostgREST fluent chain, mirroring the fake-client pattern the atlas suite uses. What it
+PostgREST fluent chain, mirroring the fake-client pattern the research suite uses. What it
 buys beyond "the code runs" is the ability to assert on the *requests* the store makes —
 that a listing never selects the ciphertext column, that a revoke is guarded so a replay
 cannot move ``revoked_at``, and that ``bytea`` values go out in Postgres' hex literal form

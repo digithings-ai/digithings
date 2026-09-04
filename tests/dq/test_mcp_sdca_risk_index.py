@@ -108,3 +108,77 @@ class TestBuildSdcaRiskIndexTool:
         assert loaded.height == 15
         assert loaded["date"].dtype == pl.Date
         assert loaded["date"][0] == date(2020, 1, 1)
+
+    def test_default_weights_match_valuation_only_risk(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, n=15)
+        out_default = tmp_path / "risk_default.parquet"
+        out_explicit = tmp_path / "risk_explicit.parquet"
+        base = dict(
+            ticker="BTC-USD",
+            cache_dir=str(tmp_path),
+            refresh=False,
+            coefficients_path=str(_EXAMPLE_COEFFICIENTS),
+        )
+        a = json.loads(_tool()(**base, output_path=str(out_default)))
+        b = json.loads(
+            _tool()(
+                **base,
+                output_path=str(out_explicit),
+                indicator_weights='{"valuation": 1.0, "m2": 0.0, "rs_eth": 0.0, "dxy": 0.0}',
+            )
+        )
+        assert "error" not in a and "error" not in b
+        default_risk = pl.read_parquet(out_default)["risk"].to_list()
+        explicit_risk = pl.read_parquet(out_explicit)["risk"].to_list()
+        assert default_risk == pytest.approx(explicit_risk)
+
+    def test_m2_weight_changes_risk_when_series_present(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, n=80)
+        m2_path = tmp_path / "M2SL.csv"
+        start = date(2020, 1, 1)
+        rows = ["date,value"]
+        for i in range(80):
+            d = start + timedelta(days=i)
+            rows.append(f"{d},{100.0 + i}")
+        m2_path.write_text("\n".join(rows) + "\n")
+        out_solo = tmp_path / "solo.parquet"
+        out_blend = tmp_path / "blend.parquet"
+        base = dict(
+            ticker="BTC-USD",
+            cache_dir=str(tmp_path),
+            refresh=False,
+            coefficients_path=str(_EXAMPLE_COEFFICIENTS),
+        )
+        json.loads(_tool()(**base, output_path=str(out_solo)))
+        payload = json.loads(
+            _tool()(
+                **base,
+                output_path=str(out_blend),
+                indicator_weights='{"valuation": 1.0, "m2": 1.0}',
+                m2_path=str(m2_path),
+            )
+        )
+        assert "error" not in payload
+        solo = pl.read_parquet(out_solo)["risk"]
+        blend = pl.read_parquet(out_blend)["risk"]
+        assert solo.to_list() != blend.to_list()
+
+    def test_rolling_z_selector_builds_parquet(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, n=40)
+        out = tmp_path / "risk_z.parquet"
+        payload = json.loads(
+            _tool()(
+                ticker="BTC-USD",
+                cache_dir=str(tmp_path),
+                refresh=False,
+                risk_model="rolling_z",
+                rolling_window=10,
+                output_path=str(out),
+            )
+        )
+        assert "error" not in payload
+        assert payload["row_count"] == 40
+        assert payload["null_risk_days"] >= 1
+        loaded = pl.read_parquet(out)
+        assert loaded.height == 40
+        assert loaded["risk"].null_count() >= 1

@@ -35,6 +35,11 @@ import {
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
+import {
+  acquireChatRunLock,
+  releaseChatRunLockOnResponseEnd,
+} from "@/lib/chat-run-lock";
+import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
 
 export const maxDuration = 120;
 
@@ -49,6 +54,18 @@ function rateLimitResponse(message: string, retryAfterSec: number): Response {
       },
     }
   );
+}
+
+function jsonError(
+  status: number,
+  error: string,
+  message: string,
+  headers?: Record<string, string>,
+): Response {
+  return new Response(JSON.stringify({ error, message }), {
+    status,
+    headers: { "content-type": "application/json", ...headers },
+  });
 }
 
 export async function POST(req: Request) {
@@ -113,6 +130,17 @@ export async function POST(req: Request) {
 
   const rid =
     req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+
+  const turnModeParsed = parseDigiTurnMode(req.headers.get("x-digi-turn-mode"));
+  if (turnModeParsed === "invalid") {
+    return jsonError(
+      400,
+      "invalid_turn_mode",
+      "X-Digi-Turn-Mode must be send, regenerate, or edit_last_user",
+    );
+  }
+  const turnMode = turnModeParsed;
+  const runId = req.headers.get("x-digi-run-id")?.trim() || null;
 
   const responseHeaders = {
     "X-Digichat-Session": sessionId,
@@ -179,30 +207,68 @@ export async function POST(req: Request) {
     }
   }
 
-  if (embedConfig?.backend.type === "foundry") {
-    return await createFoundryStreamResponse({
-      projectEndpoint: embedConfig.backend.projectEndpoint,
-      agentName: embedConfig.backend.agentName,
-      messages,
-      conversationId: req.headers.get("x-external-conversation"),
+  const externalConversation = req.headers.get("x-external-conversation")?.trim() || null;
+  const runLockKey = externalConversation
+    ? `chat-run:${tenantSlug}:${sessionId}:${externalConversation}`
+    : `chat-run:${tenantSlug}:${sessionId}`;
+  const runLock = acquireChatRunLock(runLockKey, runId);
+  if (!runLock.ok) {
+    return jsonError(
+      409,
+      runLock.error,
+      runLock.error === "run_in_progress"
+        ? "A chat run is already in progress for this session."
+        : "Duplicate X-Digi-Run-Id for this session; do not re-invoke.",
       responseHeaders,
-      activityDetail: embedConfig.activityDetail,
-      signal: req.signal,
-      responseLanguage: languageCode,
-    });
+    );
   }
 
-  const coreMessages = await convertToModelMessages(
-    messages.map((m) => {
-      const { id: _omit, ...rest } = m;
-      void _omit;
-      return rest;
-    }) as Omit<UIMessage, "id">[]
-  );
+  const finish = (res: Response) => releaseChatRunLockOnResponseEnd(res, runLock.release);
+
+  if (embedConfig?.backend.type === "foundry") {
+    let foundryRes: Response;
+    try {
+      foundryRes = await createFoundryStreamResponse({
+        projectEndpoint: embedConfig.backend.projectEndpoint,
+        agentName: embedConfig.backend.agentName,
+        messages,
+        conversationId: externalConversation,
+        responseHeaders,
+        activityDetail: embedConfig.activityDetail,
+        signal: req.signal,
+        responseLanguage: languageCode,
+        turnMode,
+      });
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
+    // JSON 4xx/501 from the adapter are not streams — release immediately.
+    if (foundryRes.headers.get("content-type")?.includes("application/json")) {
+      runLock.release();
+      return foundryRes;
+    }
+    return finish(foundryRes);
+  }
+
+  let coreMessages;
+  try {
+    coreMessages = await convertToModelMessages(
+      messages.map((m) => {
+        const { id: _omit, ...rest } = m;
+        void _omit;
+        return rest;
+      }) as Omit<UIMessage, "id">[]
+    );
+  } catch (err) {
+    runLock.release();
+    throw err;
+  }
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
   const byokNeedsModel = byokRequiresModel(byokProvider);
   if (byokKey && byokNeedsModel && !byokModel) {
+    runLock.release();
     return new Response(
       JSON.stringify({
         error: "byok_model_required",
@@ -219,6 +285,7 @@ export async function POST(req: Request) {
     upstreamBearer = up.bearer;
     litellmProxyApiKey = up.litellmProxyApiKey;
   } catch (e) {
+    runLock.release();
     const msg =
       e instanceof DigigraphUpstreamAuthError
         ? e.message
@@ -257,6 +324,23 @@ export async function POST(req: Request) {
   if (languageCode !== "en") {
     upstreamHeaders["X-Digi-Language"] = languageCode;
   }
+  // X-Digi-Force-Tool is send-only — ignore leftover slash force on regen/edit (#3475).
+  const forceTool = req.headers.get("x-digi-force-tool")?.trim();
+  if (forceTool && !isMutatingTurnMode(turnMode)) {
+    upstreamHeaders["X-Digi-Force-Tool"] = forceTool;
+  }
+
+  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
+  // Never forward on a silent default — corpus-only unless both gates pass.
+  const clientWantsWeb =
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
+  const tenantAllowsWeb =
+    embedConfig?.webSearch === true ||
+    (!embedConfig && process.env.DIGICHAT_WEB_SEARCH === "1");
+  if (clientWantsWeb && tenantAllowsWeb) {
+    upstreamHeaders["X-Digi-Enable-Web-Search"] = "1";
+  }
 
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (byokKey) {
@@ -278,13 +362,21 @@ export async function POST(req: Request) {
     process.env.DIGICHAT_TRACE_UI !== "0" && headerWantsTrace !== "0";
 
   if (useTraceStream) {
-    return await createDigigraphTraceStreamResponse({
-      messages,
-      digigraphBaseUrl: eco.digigraphUrl ?? "",
-      upstreamHeaders,
-      responseHeaders,
-      activityDetail: embedConfig?.activityDetail ?? "full",
-    });
+    try {
+      return finish(
+        await createDigigraphTraceStreamResponse({
+          messages,
+          digigraphBaseUrl: eco.digigraphUrl ?? "",
+          upstreamHeaders,
+          responseHeaders,
+          activityDetail: embedConfig?.activityDetail ?? "full",
+          signal: req.signal,
+        }),
+      );
+    } catch (err) {
+      runLock.release();
+      throw err;
+    }
   }
 
   const result = streamText({
@@ -295,7 +387,9 @@ export async function POST(req: Request) {
     experimental_transform: smoothStream({ chunking: "word" }),
   });
 
-  return result.toUIMessageStreamResponse({
-    headers: responseHeaders,
-  });
+  return finish(
+    result.toUIMessageStreamResponse({
+      headers: responseHeaders,
+    }),
+  );
 }

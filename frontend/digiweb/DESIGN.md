@@ -1,6 +1,6 @@
 ---
 name: digiweb
-description: The shared design system behind digithings.ai, digiquant.io, olympus, and digichat.
+description: The shared design system behind digithings.ai, digiquant.io, dashboard, and digichat.
 colors:
   bg-canvas: "#0A0E0C"
   surface: "#121417"
@@ -114,7 +114,7 @@ As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicit
 - **Sparse section rhythm** via `--section-y`; dashboards may tighten locally.
 - Still reject glass, violet washes, synthwave, Inter-as-brand, and multi-accent chrome.
 
-Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, olympus `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
+Phases 2–3 product-local debt is stripped on this branch (marketing Fraunces heroes, digichat shadcn radius, dashboard `.glass-card` and `rounded-*` chrome). Gallery `uv-` CSS stays reference-only.
 
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
@@ -143,7 +143,7 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 - **Lavender** — digivault (`#9D8FC9`, the "Obsidian-kinship hue")
 - **Periwinkle** — digistore (`#7B7FC7`)
 
-**The One-Livery Rule.** Exactly one module accent is active at a time, set via a global livery switcher or a local `.accent-<module>` scope class — never two module hues visible in the same view. `atlas`, `hermes`, and `kairos` are backend LangGraph sub-graph names, not colored products: their accents collapse to plain `--ink` on any redesigned surface by explicit ruling, so they never appear in the livery switcher.
+**The One-Livery Rule.** Exactly one module accent is active at a time, set via a global livery switcher or a local `.accent-<module>` scope class — never two module hues visible in the same view. `research`, `portfolio`, and `execution` are backend LangGraph sub-graph names, not colored products: their accents collapse to plain `--ink` on any redesigned surface by explicit ruling, so they never appear in the livery switcher.
 
 ### Tertiary — Money (fenced off from livery, never scoped)
 - **Gain** (`#3DD6C4` dark / `#0C7C71` light): positive P&L and returns only. Light value darkened alongside Phosphor Teal above (2026-08-12, WCAG 1.4.3) — `--up` is a literal, kept in sync with `--accent`'s light hex by convention, not a live reference.
@@ -196,17 +196,17 @@ The grid is content-container-based rather than a rigid 12-column system: a `118
 
 Two structural patterns recur across every family and are load-bearing rather than decorative:
 
-**The Command-Band-Then-Ledger Rule.** Every dashboard surface (olympus's portfolio workspace, its decision-monitoring views) composes the same way: one restrained command band naming the primary state (a large mono statistic, a compact metrics `dl`, an as-of timestamp), followed by a single full-width hairline ledger table. Never a stack of nested decorative cards competing for attention.
+**The Command-Band-Then-Ledger Rule.** Every dashboard surface (dashboard's portfolio workspace, its decision-monitoring views) composes the same way: one restrained command band naming the primary state (a large mono statistic, a compact metrics `dl`, an as-of timestamp), followed by a single full-width hairline ledger table. Never a stack of nested decorative cards competing for attention.
 
 **Hierarchy by geometry, not color.** The bento/module grid communicates importance through cell *span* (hero = 2×2, wide = 2×1, tall = 1×2, unit = 1×1) while background and border stay neutral — only the hero cell gets a faint accent wash. A grayscale screenshot of the grid should still read its hierarchy correctly.
 
-Responsive behavior collapses through one shared breakpoint (`760px`) for most multi-column grids (feature cells, bento grid) and a device-appropriate breakpoint elsewhere (`900px` card-deck pinning, `640px`–`720px` for dense metric/ratio grids). Device mockups (the olympus phone frame) deliberately opt out of breakpoints entirely and resize fluidly via `clamp()`, because hardware should look like hardware at any width, not requeue its layout.
+Responsive behavior collapses through one shared breakpoint (`760px`) for most multi-column grids (feature cells, bento grid) and a device-appropriate breakpoint elsewhere (`900px` card-deck pinning, `640px`–`720px` for dense metric/ratio grids). Device mockups (the dashboard phone frame) deliberately opt out of breakpoints entirely and resize fluidly via `clamp()`, because hardware should look like hardware at any width, not requeue its layout.
 
 **The Crop-Never-Break Rule.** Product screenshots inside a `ProductFrame` scale down to fit their container (`Math.min(1, containerWidth / artboardWidth)`) but never scale up past their authored size — an undersized container crops via `overflow: hidden` rather than letting the artwork reflow or blow out its box.
 
 ## Elevation & Depth
 
-**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. Olympus states this as an explicit house rule: "FLAT — no glass morphism on content."
+**Flat by default; shadow means overlay; glow means alive.** The system does not use ambient elevation shadows on ordinary content. A card, a panel, a form field, a finance dashboard composite — all of them read depth from a single 1px hairline border and a flat surface fill, escalating only to the stronger `hairline-strong` border on hover. The dashboard states this as an explicit house rule: "FLAT — no glass morphism on content."
 
 A soft, theme-invariant black shadow (`rgba(0,0,0,.45–.65)`, always a plain black rgba, never `color-mix`-tinted) is reserved *exclusively* for genuinely floating overlay chrome that sits above the page: the dropdown menu pane, the tooltip bubble, the typed hero terminal, the toast stack, and the command palette. These are the only surfaces in the entire system that cast a real elevation shadow.
 
@@ -273,7 +273,7 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 - **Accent is furniture, never prose.** Inside rendered markdown, accent touches only list markers, the blockquote rule, and links; body text stays ink/ink-soft so a long streamed answer stays calm despite a saturated module color.
 - **The streaming cursor** is a solid 7×14px accent block with a hard binary blink (`steps(1)`, no fade) — the same primitive should back every wait-state and streaming caret in the system rather than a bespoke redraw per surface.
 
-### Dashboard / Finance Panels (signature — the olympus surface)
+### Dashboard / Finance Panels (signature — the dashboard surface)
 - **Money vs. identity are different tokens, always.** An equity curve or allocation bar wears `--accent` (identity/chrome) even when its values are positive; only a signed P&L or return figure wears `--up`/`--down`. Never let a positive-but-non-financial value borrow the gain color.
 - **Charts stay flat and token-themed.** Canvas charts (candles, equity curves, drawdown) are transparent-background, re-themed live via a `data-theme` observer — never a page reload. Anything with a PDF export path uses the separate SVG tearsheet family instead of canvas, because canvas rasterizes and races the print dialog.
 - **Dense hairline grids** (ratio strips, returns matrices, ledger tables) key their internal dividers off a `data-cols` attribute since Tailwind can't express `nth-child` — a documented, intentional CSS escape hatch.
@@ -293,7 +293,7 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 - **Don't** mix the legacy unscoped `:root` token system (`--radius-sm/md/lg` = 6/8/12px, `--space-1..9`, Inter as `--font-family`) into new work — it exists only to serve un-migrated legacy pages and is a genuinely different scale from the current one, not a rename.
 - **Don't** apply a box-shadow to ordinary content (cards, panels, dashboard composites). If it isn't a dropdown, tooltip, toast, command palette, or the hero terminal, it stays flat.
 - **Don't** color two different module liveries in the same view — the system is strictly one-livery-at-a-time.
-- **Don't** let `atlas`, `hermes`, or `kairos` render as colored products on a redesigned surface — they name backend LangGraph sub-graphs and must collapse to plain ink.
-- **Don't** reuse the diff palette (`--rv-add`/`--rv-del`) for anything except unified-diff review UI, and don't reuse money colors for a non-financial positive/negative read (olympus's bull/bear sentiment bar deliberately uses `--accent`/`--warn`, not `--up`/`--down`, for exactly this reason).
+- **Don't** let `research`, `portfolio`, or `execution` render as colored products on a redesigned surface — they name backend LangGraph sub-graphs and must collapse to plain ink.
+- **Don't** reuse the diff palette (`--rv-add`/`--rv-del`) for anything except unified-diff review UI, and don't reuse money colors for a non-financial positive/negative read (dashboard's bull/bear sentiment bar deliberately uses `--accent`/`--warn`, not `--up`/`--down`, for exactly this reason).
 - **Don't** put a message in a bubble or box inside the chat transcript — plain turns are grid rows; only rich embedded objects earn a frame.
 - **Don't** carry forward the reference implementation's remaining known gaps as if they were intentional: missing `:disabled` styling on ghost/quiet/danger buttons, and the digichat light-theme accent (`--accent-digichat`, 2.4:1 contrast) failing to fall back to the AA-safe neutral teal the codebase itself documents as the fix. Treat these as bugs to fix in new work, not patterns to imitate. (The reference implementation's undeclared `--surface-inverse` fallback — the cause of illegible button text under the default monochrome livery — was fixed by routing every `.btn-primary`/`.ctl-btn-ref--primary`/`.cw-btn--primary`/toggle-knob text color through the already-correct `--on-accent` token instead.)

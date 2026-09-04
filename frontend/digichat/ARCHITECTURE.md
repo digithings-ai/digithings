@@ -19,6 +19,10 @@ digigraph (digillm + digivault hub). See
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md)
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op).
+
+**Last-turn regen + edit (#3466 / #3475).** Digigraph and Foundry surfaces expose **regen** on the last settled assistant and **edit** on the last user turn. Clients send `X-Digi-Turn-Mode: send | regenerate | edit_last_user` and optional `X-Digi-Run-Id` on `POST /api/chat`. Digigraph replays the **full workflow** on the same session from the truncated client transcript (tools re-run; digistore may accumulate — not “as if it never happened”). Foundry mutates conversation items (delete trailing assistant / user+assistant, then `responses.create` with no new input) via `@azure/ai-projects` OpenAI client; without an item API the BFF returns **501 `not_supported`**. Concurrent runs on the same session → **409 `run_in_progress`**; duplicate run ids → **409 `run_id_replay`**. Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. `X-Digi-Force-Tool` is send-only.
+
 ### Capability matrix
 
 | Capability | Status |
@@ -37,6 +41,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
 | Ecosystem side panel (service URLs + health badges) | Built |
+| Opt-in web search (tenant + user; External cites; default off) | Built |
 | Auto-migration on container boot (`DIGICHAT_AUTO_MIGRATE=1`) | Built |
 | Docker Compose profile (`digichat` + `digichat-db`) | Built |
 | OpenClaw gateway integration | Not yet (Phase 2) |
@@ -52,14 +57,22 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 **React chat shell** (`src/components/chat-shell.tsx`): Client component that owns
 thread state. On mount it merges `localStorage` threads with a server `GET
-/api/conversations` call, then renders a shadcn Sidebar with conversation list, New
-chat button, rename/delete overflow menus, and the main `ChatPanel`.
+/api/conversations` call, **hydrates the auto-selected remote thread** via
+`GET /api/conversations/[id]` before mounting the composer (when local cache is
+missing or older than the server summary `updatedAt`), then renders a shadcn
+Sidebar with conversation list, New chat button, title search filter, date
+buckets (Today / Yesterday / Last 7 days / Older), rename/delete overflow menus, and
+the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
+(`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
+refuses to flush a remote thread that is still `hydrated: false`, and the API
+returns **409 `would_truncate`** if a PUT would drop existing rows unless
+`allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
 so upstream digigraph can correlate the same conversation across turns. Scroll
-stick-to-bottom with a "New messages" chip when scrolled up. Copy and Regenerate
-actions on assistant bubbles.
+stick-to-bottom with a "New messages" chip when scrolled up. Copy, Regenerate,
+and Edit-last-user actions on bubbles (first-party is always digigraph).
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
@@ -198,10 +211,10 @@ probe).
 
 **`POST /api/chat`** (also aliased at `POST /api/v1/chat`):
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
-- Request body: `{ messages: UIMessage[] }` (AI SDK UI message format). **Full conversation history** — every prior user+assistant turn — must be posted on each request; the BFF forwards the entire array to digigraph (trace stream and `streamText` paths). Foundry backends intentionally send only the latest user text because Azure holds server-side conversation state.
-- Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
-- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts.
-- The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path or (b) calls `streamText` with `smoothStream` for the legacy path.
+- Request body: `{ messages: UIMessage[] }` (AI SDK UI message format). **Full conversation history after the intended truncation** — every prior user+assistant turn still on the client must be posted; the BFF forwards the entire array to digigraph (trace stream and `streamText` paths). Foundry `send` sends only the latest user text because Azure holds server-side conversation state; Foundry `regenerate` / `edit_last_user` mutate items then create a response without re-appending user text (#3475).
+- Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digi-Turn-Mode` (`send` default | `regenerate` | `edit_last_user`), `X-Digi-Run-Id` (optional idempotency), `X-External-Conversation` (Foundry), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
+- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts. Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
+- The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
@@ -676,19 +689,29 @@ registry there would leak every tenant's token.
 `src/lib/adapters/foundry/stream.ts` (`@azure/ai-projects` +
 `DefaultAzureCredential` — the container's own managed identity, no stored
 key). Conversation state lives in Foundry; the client echoes the conversation
-id via `X-External-Conversation` / `data-externalConversation`. Foundry
-behavior polish is tracked separately from digithings digigraph work.
+id via `X-External-Conversation` / `data-externalConversation`. For ordinary
+`send` turns the adapter appends last-user text. Regen/edit use conversation
+item delete/create when available (#3475); otherwise the BFF returns 501.
+Foundry maps `azure_ai_search` calls and returned chunks into the shared
+`data-digichatActivity` search/source rows. A reasoning disclosure appears
+only when the Foundry event includes summary text. Operators enable that
+summary on the agent definition: the Responses API refuses a per-call
+`reasoning.summary` request when using `agent_reference`. Empty reasoning
+items are intentionally omitted rather than rendered as empty “Thinking”
+chrome. This behavior remains separate from the digithings digigraph path.
 
-**Response language (#2103) — one feature, two independent implementations.**
-The embed header's language selector (`src/lib/languages.ts`'s curated
-`LANGUAGES` list) resolves to a code sent as `X-Digi-Language` on every chat
-request. The two backends have no shared system-prompt mechanism, so each
-adapter enforces the directive its own way:
+**Response language (#2103 / #3418) — `/lang` on the public embed, not a header dropdown.**
+The composer slash `/lang en|de|it|es|fr` (client-only) updates session language and
+sends it as `X-Digi-Language` on subsequent turns. The top-right language dropdown
+was dropped once `/lang` landed. Codes still come from `src/lib/languages.ts`'s
+curated `LANGUAGES` list. The two backends have no shared system-prompt mechanism,
+so each adapter enforces the directive its own way:
 
 - **digigraph** has a system-prompt slot: the BFF forwards the header and
-  digigraph's `research_node` appends a `Respond only in <language>` line to
-  the system prompt server-side once per turn (see `digigraph/ARCHITECTURE.md`
-  and `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
+  digigraph's `research_node` appends a `Respond only in <language>` line (plus
+  "do not translate retrieval queries") to the system prompt server-side once
+  per turn (see `digigraph/ARCHITECTURE.md` and
+  `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
   hand-sync with the frontend's `LANGUAGES` array; there is no shared module
   across the two languages).
 - **Foundry** has no per-call system-prompt slot at all — the `agent_reference`
@@ -698,8 +721,28 @@ adapter enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
+**Embed slash commands (#3418).** `@digithings/digichat-ui` `slash-commands.ts`
+owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
+`/search` and `/docs` (aliases `/digisearch` / `/digivault`) force a locate
+then synthesize — the user string is the tool argument, forwarded as
+`X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
+`/lang`, `/help`, and `/new` never leave the browser. `/new` clears the
+client transcript, drops `sessionStorage` `X-External-Conversation` for the
+embed host, and clears any pending force-tool — so Foundry (and any adapter
+keyed off that id) actually starts a new conversation. Empty `/search` or
+`/docs` wait for an argument. Public copy is "Search the knowledge base" /
+"Find original documents". Signed-in ChatShell keeps its own `/help` `/key`
+`/model` palette.
+
+**Open originals (#3419).** Source cards on a settled turn open a side pane
+(`DocumentPane`). Vault notes render from `body` already loaded by
+`digivault_get_note` (batch ≤20) — paths without `http(s)` never become links.
+Real `http(s)` PDFs use the browser PDF plugin plus Download; never invent a
+URL. Human tool labels live only in `activity-view.toolDisplayName` (identity
+keys still use wire ids).
+
 See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
-for the design rationale behind the dual-backend split.
+for the design rationale behind the dual-backend language split.
 
 digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at digichat
 `/embed` on the tunnel hostname (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, typically
@@ -726,6 +769,16 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 `event.origin` against the digichat embed origin (`ChatEmbedShell`). Validators
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
+
+**postMessage page-context (popup widget #3421).** Hosts that load
+`public/widget.js` may post `{ type: "digichat:page-context", text, screenshotDataUrl?, ts }`
+after `digichat:ready`. Accepted only from the immediate parent browsing-context
+origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
+registered third-party site can describe **its own already-visible** DOM. Text is
+capped (`embed-page-context-messages.ts`); screenshot data URLs are optional and
+never inlined into the model prompt (acknowledgment only). The embed prepends
+formatted context to the next `wrappedSend` once. Config/URL helpers:
+`src/lib/embed-popup-config.ts`.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /

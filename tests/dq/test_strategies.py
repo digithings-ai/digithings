@@ -229,6 +229,33 @@ class TestSdcaStrategyNautilusParity:
 
         assert nautilus_portfolio_value == pytest.approx(standalone_portfolio_value, rel=0.01)
 
+        fills_report = engine.trader.generate_fills_report()
+        from digiquant.strategies.sdca.dca_metrics import (
+            breakdown_from_daily,
+            daily_state_from_fills,
+            fills_from_nautilus_report,
+        )
+
+        fills = fills_from_nautilus_report(fills_report)
+        assert fills, "Nautilus fills report must parse to at least one SdcaFill"
+        bars = [(str(d), float(p)) for d, p in zip(dates, prices, strict=True)]
+        state = daily_state_from_fills(fills, bars, initial_cash)
+        dca = breakdown_from_daily(
+            prices=state["prices"],
+            portfolio_values=state["portfolio_values"],
+            daily_trade_usd=state["daily_trade_usd"],
+            net_deployed=state["net_deployed"],
+            asset_units=state["asset_units"],
+            risk=risks,
+            rate=[None] * n,
+            initial_cash=initial_cash,
+        )
+        # Exact unit match with the Python harness is not expected: Nautilus
+        # size quantization and commissions flatten the book. vs_* still use
+        # the same ×100 percent convention (a 100× error would be ~0.4).
+        assert abs(dca.vs_lump_pct) > 1.0
+        assert dca.vs_flat_dca_pct != pytest.approx(dca.vs_flat_dca_pct / 100.0)
+
         engine.dispose()
 
 

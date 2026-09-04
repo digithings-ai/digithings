@@ -23,11 +23,9 @@ export const Brand = () => (
   </>
 );
 
-/** v7 nav: homepage anchor wayfinding + digithings.ai backlink. Order: Pipeline,
- *  Olympus, Strategies, Pricing. */
 export const DQ_NAV_PRIMARY: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
-  { label: "Olympus", href: "/#olympus" },
+  { label: "Desk", href: "/#desk" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Changelog", href: "/changelog" },
@@ -36,7 +34,7 @@ export const DQ_NAV_PRIMARY: NavLink[] = [
 
 export const DQ_FOOTER: NavLink[] = [
   { label: "Pipeline", href: "/#pipeline" },
-  { label: "Olympus", href: "/#olympus" },
+  { label: "Desk", href: "/#desk" },
   { label: "Strategies", href: "/#strategies" },
   { label: "Pricing", href: "/#pricing" },
   { label: "Changelog", href: "/changelog" },

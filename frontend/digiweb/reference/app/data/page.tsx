@@ -8,6 +8,7 @@ import { MarqueeTickerReference } from "@/components/marquee-ticker-reference";
 import { OdometerReference } from "@/components/odometer-reference";
 import { PricingMatrixReference } from "@/components/pricing-matrix-reference";
 import { PricingReference } from "@/components/pricing-reference";
+import { RepoActivityReference } from "@/components/repo-activity-reference";
 import { RoadmapGanttReference } from "@/components/roadmap-gantt-reference";
 import { SortableTableReference } from "@/components/sortable-table-reference";
 import { StatCounterReference } from "@/components/stat-counter-reference";
@@ -98,6 +99,7 @@ export default function DataPage() {
       </section>
 
       <ChangelogRailReference />
+      <RepoActivityReference />
       <SortableTableReference />
       <ConvictionReference />
       <RoadmapGanttReference />

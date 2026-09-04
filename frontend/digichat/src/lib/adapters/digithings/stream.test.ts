@@ -112,6 +112,57 @@ it("posts the full multi-turn history to digigraph chat completions", async () =
   expect(payload.messages?.map((m) => m.content)).toEqual(["first", "reply", "second"]);
 });
 
+it("forwards a regenerate-shaped transcript without the dropped assistant turn", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  );
+
+  // Client already truncated: last assistant dropped; ends on the user turn being re-answered.
+  const messages = [
+    { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+    { id: "2", role: "assistant", parts: [{ type: "text", text: "old reply" }] },
+    { id: "3", role: "user", parts: [{ type: "text", text: "ask again" }] },
+  ] as UIMessage[];
+
+  await createDigigraphTraceStreamResponse({
+    messages: messages.slice(0, 3), // ends on user — no trailing assistant
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+
+  const init = fetchSpy.mock.calls[0]?.[1] as { body?: string; signal?: AbortSignal };
+  const payload = JSON.parse(init.body ?? "{}") as {
+    messages?: Array<{ role: string; content: string }>;
+  };
+  expect(payload.messages?.map((m) => m.content)).toEqual(["first", "old reply", "ask again"]);
+  expect(payload.messages?.at(-1)?.role).toBe("user");
+});
+
+it("passes AbortSignal through to digigraph fetch (Stop)", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    }),
+  );
+  const controller = new AbortController();
+  await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "full",
+    signal: controller.signal,
+  });
+  const init = fetchSpy.mock.calls[0]?.[1] as { signal?: AbortSignal };
+  expect(init.signal).toBe(controller.signal);
+});
+
 // On the embed path with activityDetail: "off", neither the legacy part nor
 // the gated activity span should be emitted — this prevents disclosure of
 // internal payload fields like workflow_id to anonymous visitors.

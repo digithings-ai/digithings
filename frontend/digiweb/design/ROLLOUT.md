@@ -15,7 +15,7 @@ Canon: [`BLEND.md`](BLEND.md) · [`DESIGN.md`](../DESIGN.md) · reference `/iter
 | digithings.ai | `frontend/digithings-web/` | **Phase 2 — this branch** |
 | digiquant.io | `frontend/digiquant-web/` | **Phase 2 — this branch** |
 | digichat | `frontend/digichat/` | Phase 3 |
-| olympus + FX Hub (twelve-x) | `frontend/olympus/` | Phase 3 |
+| dashboard + FX Hub (twelve-x) | `frontend/dashboard/` | Phase 3 |
 
 Same atoms everywhere: **radius 0 · mono voice · white/ink loud CTA · tonal slabs · `//` kickers · sparse marketing / instrument dashboards**.
 
@@ -26,7 +26,7 @@ digiweb is a **shared library**, not a screenshot to copy. Live surfaces wire:
 1. `@digithings/design/tokens.css` — palette, type, radius, section rhythm
 2. `@digithings/web` React primitives + family CSS — NavShell, Button, Card, TabStrip, chat, finance, …
 
-So the design-reference + `@digithings/web` restyle **is** the product restyle for every import. Phases 2–3 exist only to **strip product-local fights** that still override the library: Fraunces/`--serif` in marketing `globals.css` (Phase 2, stripped), digichat shadcn `--radius-*` / local `@theme`, olympus `.glass-card`, page-level `rounded-*` that never went through a shared component.
+So the design-reference + `@digithings/web` restyle **is** the product restyle for every import. Phases 2–3 exist only to **strip product-local fights** that still override the library: Fraunces/`--serif` in marketing `globals.css` (Phase 2, stripped), digichat shadcn `--radius-*` / local `@theme`, dashboard `.glass-card`, page-level `rounded-*` that never went through a shared component.
 
 Do not invent a second design system per product. If a landing needs a new block, add it to the reference first, then import it.
 
@@ -49,7 +49,7 @@ digithings-web + digiquant-web already import NavShell / tokens. This pass dropp
 
 ## Phase 3 — Product apps (strip local overrides)
 
-digichat (local shadcn `--radius` / `@theme` leftovers — pinned to 0), olympus
+digichat (local shadcn `--radius` / `@theme` leftovers — pinned to 0), dashboard
 (retired `.glass-card`; dashboard chrome `rounded-*` stripped to slabs;
 loud actions ink/paper), twelve-x / FX Hub (hairline slabs). Shared
 primitives they already import pick up Phase 1 automatically. Remaining
@@ -68,7 +68,7 @@ circles are geometry only (live dots, avatars, spinners).
 - [x] `tokens.css` ships radius 0 + mono display
 - [x] digithings.ai / digiquant.io heroes use claim+install grammar
 - [x] digichat transcript + chrome are zero-radius mono (composer may keep sans island if still needed)
-- [x] olympus + FX Hub: no glass, no pill chrome, same type stack
+- [x] dashboard + FX Hub: no glass, no pill chrome, same type stack
 - [ ] `scripts/check_frontend_canon.py` still green; update allowlists only with comment
 
 ## How to run the next wave

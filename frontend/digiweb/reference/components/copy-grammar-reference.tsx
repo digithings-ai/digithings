@@ -14,14 +14,14 @@ const HEADLINES: Formula[] = [
 const CTAS: { theirs: string; ours: string }[] = [
   { theirs: "Download for macOS", ours: "git clone · docker compose" },
   { theirs: "Get API key", ours: "make stack-local · issue a key" },
-  { theirs: "Get started", ours: "ask digichat · open olympus" },
+  { theirs: "Get started", ours: "ask digichat · open dashboard" },
   { theirs: "Start free trial", ours: "run a backtest" },
   { theirs: "Explore / Contact sales", ours: "read docs · contact@digithings.ai" },
 ];
 
 const DOCTRINE: { label: string; value: string }[] = [
   { label: "voice", value: "Technical, precise, ownership-oriented — infrastructure, not consumer warmth." },
-  { label: "naming", value: "every module and sub-graph is lowercase (digithings · digiquant · digichat · atlas · hermes · kairos · olympus); capitals are reserved for third-party tools (NautilusTrader, LangGraph)." },
+  { label: "naming", value: "product names lowercase (digithings · digiquant · digichat); on digiquant.io the operator surface is the dashboard; research / portfolio / execution are jobs, not brands. Capitals are reserved for third-party tools (NautilusTrader, LangGraph)." },
   { label: "social proof", value: "{NN}% + label, or {Org} × digiquant — real numbers and real orgs only." },
 ];
 

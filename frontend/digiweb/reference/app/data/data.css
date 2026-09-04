@@ -1,5 +1,14 @@
 /* Data page — dot-matrix stat, card deck, pricing precision table. */
 
+/* Specimen labels for the two RepoActivity densities on this page. */
+.ra-specimen-kicker {
+  margin-top: 1.4rem;
+}
+
+.ra-specimen-kicker-next {
+  margin-top: 2rem;
+}
+
 /* Dot-matrix stat — promoted to @digithings/web (#1450): <DotMatrixStat/>
    (components/data-layout/DotMatrixStat.tsx) carries the utilities; the
    dms-* LED cluster lives in @digithings/web/styles/data-layout.css,
@@ -422,12 +431,12 @@
    @digithings/web/styles/finance-composites.css, imported from globals.css. */
 
 /* ── conviction vocabulary ───────────────────────────────────────────────────────── */
-/* RECORDED-FROM-OLYMPUS, pending a promotion ruling (#1577) — no
+/* RECORDED-FROM-DASHBOARD, pending a promotion ruling (#1577) — no
    @digithings/web export exists yet, so conviction-reference.tsx owns static
-   markup class-for-class from frontend/olympus/components/shared/
+   markup class-for-class from frontend/dashboard/components/shared/
    conviction-meter.tsx + signed-conviction-badge.tsx. The pip/badge dress
    itself stays inline utilities (bg-accent / bg-hair / text-up / text-down)
-   to mirror the olympus source exactly; the cvx-* classes below are
+   to mirror the dashboard source exactly; the cvx-* classes below are
    specimen-local LAYOUT only (scale cards, row grid, the three-encodings
    legend), tokens throughout. */
 

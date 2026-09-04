@@ -119,7 +119,13 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 
 # ── Provider registry ─────────────────────────────────────────────────────────
 # Maps a ``provider/`` model prefix to its OpenAI-compatible base_url + the env
-# var holding its API key. Add providers here; no other code changes required.
+# var holding its API key. House traffic does **not** use this table: when
+# ``OPENAI_API_BASE`` points at LiteLLM, prefixes stay on the wire as model ids.
+# BYOK through LiteLLM puts the user's key/base in ``extra_body`` (clientside
+# credentials). The CLI OpenRouter rewrite of ``OPENAI_API_BASE`` is **not**
+# LiteLLM — registered prefixes open vendor clients there, and BYOK uses the
+# user Bearer directly. The registry is diagnostics-only without a LiteLLM
+# base. Do not default callers onto a hosted marketplace.
 
 _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
     "xai": {
@@ -198,8 +204,8 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
 # stripping one still has to leave one behind.
 #
 # Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
-# write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
-# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
+# write the doubled ``openrouter/openrouter/auto`` (README, and the research provider
+# diagnostics under ``digiquant/scripts/research/``; no tier config lists it), but a BYOK
 # caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
 # prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
 # the middleware and the resolver from disagreeing about a hostile header. So the single-
@@ -275,15 +281,17 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
-    When a BYOK override is active, returns an *uncached* client pointed at the
-    BYOK ``base_url`` with the BYOK key — user credentials must never accumulate
-    in process memory. Otherwise returns a client cached by
-    ``(api_key, base_url)`` so the httpx connection pool is reused; the cache key
-    embeds both env-derived values so the client is recreated automatically when
-    either changes (e.g. in tests).
+    When a LiteLLM proxy is configured (``OPENAI_API_BASE`` set and not
+    ``openrouter.ai``), this is always that proxy client — house key as Bearer,
+    BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
+    The leftover CLI OpenRouter rewrite is a default base, not LiteLLM: BYOK
+    then returns an *uncached* client at the user's ``base_url``.
+    Otherwise returns a client cached by ``(api_key, base_url)`` so the httpx
+    connection pool is reused; the cache key embeds both env-derived values so
+    the client is recreated automatically when either changes (e.g. in tests).
     """
     byok_override = _byok_override.get()
-    if byok_override:
+    if byok_override and not _litellm_proxy_configured():
         api_key, base_url = byok_override
         return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
 
@@ -302,30 +310,127 @@ def get_client() -> OpenAI:
     return client
 
 
+def _default_base_configured() -> bool:
+    """True when ``OPENAI_API_BASE`` is set (LiteLLM *or* leftover OpenRouter rewrite)."""
+    return bool((os.environ.get("OPENAI_API_BASE") or "").strip())
+
+
+def _api_base_is_openrouter() -> bool:
+    """True when the default client talks to OpenRouter's OpenAI-compat API (CLI/GHA)."""
+    return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+
+
+def _litellm_proxy_configured() -> bool:
+    """True when ``OPENAI_API_BASE`` is a LiteLLM (or other non-OpenRouter) proxy."""
+    return _default_base_configured() and not _api_base_is_openrouter()
+
+
+# OpenRouter org slugs used as house ``model_name`` keys in ``config/litellm.yaml``.
+# Not leftover vendor prefixes (``gemini/``, ``xai/``) and not native OpenAI ids
+# (``gpt-4o-mini``) or self-hosted ``ollama/`` / ``omniroute/`` models.
+_OPENROUTER_HOUSE_SLUG_PREFIXES: tuple[str, ...] = (
+    "deepseek/",
+    "anthropic/",
+    "openai/",
+    "google/",
+    "meta-llama/",
+    "x-ai/",
+    "perplexity/",
+    "openrouter/",
+)
+
+
+def _is_openrouter_backed_house_slug(model: str) -> bool:
+    return model.startswith(_OPENROUTER_HOUSE_SLUG_PREFIXES)
+
+
+def _use_default_base_client(model: str) -> bool:
+    """Route a registered prefix through ``OPENAI_API_BASE`` when that is the house path.
+
+    LiteLLM: every prefix (caller → digillm → LiteLLM). Leftover OpenRouter rewrite:
+    house OpenRouter slugs that collide with the registry (``anthropic/``, leftover
+    ``openrouter/``) stay on the default client so ``anthropic/claude-sonnet-5`` does
+    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients.
+    """
+    provider, _ = _parse_provider_prefix(model)
+    if provider is None or not _default_base_configured():
+        return False
+    if _litellm_proxy_configured():
+        return True
+    return provider in {"anthropic", "openrouter"}
+
+
+def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Attach LiteLLM clientside credentials when BYOK is bound on the proxy path.
+
+    Only when ``OPENAI_API_BASE`` is a LiteLLM proxy, not the leftover OpenRouter
+    rewrite. HTTP still authenticates to LiteLLM with the house proxy key.
+    ``extra_body`` ``api_key`` / ``api_base`` are LiteLLM's request-level
+    pass-through so the proxy uses the user's token against that vendor or the
+    user's own OpenAI-compat endpoint. No-op without LiteLLM or without BYOK.
+    """
+    if not _litellm_proxy_configured():
+        return kwargs
+    byok_override = _byok_override.get()
+    if not byok_override:
+        return kwargs
+    api_key, base_url = byok_override
+    merged = dict(kwargs)
+    extra = dict(merged.get("extra_body") or {})
+    extra["api_key"] = api_key
+    extra["api_base"] = base_url.rstrip("/")
+    merged["extra_body"] = extra
+    return merged
+
+
+def _effective_model_id(model: str) -> str:
+    """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    provider, model_id = _parse_provider_prefix(model)
+    if _use_default_base_client(model):
+        return model
+    return _wire_model(provider, model_id, model)
+
+
+def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | None:
+    """Attach OpenRouter extra_body for OpenRouter prefixes, a direct OR base, or
+    OpenRouter-backed house slugs through LiteLLM. Not ``gpt-4o-mini`` / ``ollama/*``.
+    """
+    if parsed_provider == "openrouter" or _api_base_is_openrouter():
+        return "openrouter"
+    if _litellm_proxy_configured() and _is_openrouter_backed_house_slug(model):
+        return "openrouter"
+    return parsed_provider
+
+
 def get_client_for_model(model: str) -> OpenAI:
     """Return the OpenAI client for ``model`` (the single public client entry point).
 
-    A ``provider/model_id`` prefix matching a registered external provider
-    (``xai/``, ``gemini/``, ``openrouter/``, plus any added via
-    :func:`register_provider`) yields a dedicated, cached client pointed at that
-    provider's endpoint. Every other model string falls back to
-    :func:`get_client` (the ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` path, which
-    also honors the proxy-key and BYOK overrides).
+    LiteLLM (``OPENAI_API_BASE`` set and not ``openrouter.ai``): house and BYOK
+    use :func:`get_client`. Registered prefixes are LiteLLM ``model_name`` keys.
+    BYOK keys ride ``extra_body``.
 
-    When a BYOK override is active and its ``base_url`` matches the provider's
-    endpoint, returns an *uncached* client with the user's key (never cached).
+    Default base set (including leftover OpenRouter rewrite): house
+    ``anthropic/`` / leftover ``openrouter/`` stay on :func:`get_client` so
+    they do not hit api.anthropic.com. Prefixed BYOK uses the user Bearer
+    against the vendor URL. ``gemini/`` / ``xai/`` stay vendor clients.
+
+    No default base: a ``provider/model_id`` prefix matching a registered
+    provider yields a dedicated vendor client (BYOK: uncached user key;
+    otherwise cached operator key). Every other model string uses
+    :func:`get_client`.
 
     Raises:
-        RuntimeError: when a registered provider's API key env var is unset.
+        RuntimeError: when a registered provider's API key env var is unset
+            **and** the call is not using the default-base client.
     """
     provider, _ = _parse_provider_prefix(model)
     byok_override = _byok_override.get()
-    if provider is not None and byok_override:
+    if byok_override and not _litellm_proxy_configured() and provider is not None:
         api_key, base_url = byok_override
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
-    if provider is None:
+    if provider is None or _use_default_base_client(model):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]
     api_key = os.environ.get(cfg["api_key_env"], "").strip()
@@ -915,6 +1020,7 @@ def _create_with_retry(
     with _logical_attempt_scope() as scope:
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
+        kwargs = _with_byok_litellm_pass_through(kwargs)
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
@@ -1251,11 +1357,12 @@ def completion(
 ) -> ChatCompletion:
     """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
 
-    The model string is used as given: a registered ``provider/model_id`` prefix
-    routes to that provider (and the bare ``model_id`` is sent on the wire);
-    every other string is passed through unchanged to the default client. No
-    hidden env/YAML model substitution happens here — use :func:`resolve_model`
-    explicitly if you want mode-based selection.
+    The model string is used as given: when ``OPENAI_API_BASE`` is set (house
+    LiteLLM path), the full caller id is sent on the wire so it matches
+    ``config/litellm.yaml`` ``model_name`` keys. Without a proxy, a registered
+    ``provider/model_id`` prefix routes to that vendor (bare ``model_id`` on the
+    wire). No hidden env/YAML model substitution happens here — use
+    :func:`resolve_model` explicitly if you want mode-based selection.
 
     Behavior:
     - Returns the OpenAI ``ChatCompletion`` object — read
@@ -1273,9 +1380,9 @@ def completion(
     Raises:
         RuntimeError: when a registered provider's API key env var is unset.
     """
-    provider, model_id = _parse_provider_prefix(model)
+    provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = _wire_model(provider, model_id, model)
+    effective_model = _effective_model_id(model)
     usage_started = time.perf_counter()
     provider_attempts = 0
 
@@ -1296,7 +1403,9 @@ def completion(
     # when the real xAI client is active (reaching here for an ``xai/`` model means its
     # key was set — get_client_for_model raises otherwise). It is time-sensitive and not
     # captured by the cache key, so a search request bypasses the cache like tool calls.
-    xai_live_search = search_parameters is not None and provider == "xai"
+    xai_live_search = (
+        search_parameters is not None and provider == "xai" and not _use_default_base_client(model)
+    )
 
     attempt_scope = _attempt_scope.get()
     cache_status = (
@@ -1341,7 +1450,7 @@ def completion(
 
     # Bound OpenRouter's automatic selection to affordable models on the PRIMARY request
     # (cheap-model allowlist + price ceiling); a no-op unless the OPENROUTER_* env is set.
-    kwargs = _with_openrouter_cost_controls(kwargs, provider)
+    kwargs = _with_openrouter_cost_controls(kwargs, _cost_controls_provider(provider, model))
 
     try:
         try:
@@ -1378,7 +1487,9 @@ def completion(
     while _is_empty_completion(r) and empty_attempts < _EMPTY_RETRY_MAX:
         empty_attempts += 1
         retry_kwargs = (
-            _with_openrouter_fallback(kwargs, provider) if empty_attempts == 1 else kwargs
+            _with_openrouter_fallback(kwargs, _cost_controls_provider(provider, model))
+            if empty_attempts == 1
+            else kwargs
         )
         logger.warning(
             "empty completion from %s (empty-retry %d/%d); backing off %.1fs",
@@ -1446,6 +1557,17 @@ def _urls_from_grounding_text(text: str) -> list[str]:
     return urls
 
 
+def _grounding_slug(model: str) -> str:
+    """OpenRouter-style slug for grounding checks (strip a registered prefix if present)."""
+    provider, model_id = _parse_provider_prefix(model)
+    return model_id if provider is not None else model
+
+
+def _is_native_web_search_model(model: str) -> bool:
+    slug = _grounding_slug(model)
+    return ":online" in slug or slug.startswith("perplexity/")
+
+
 def openrouter_web_search(
     model: str,
     query: str,
@@ -1454,21 +1576,35 @@ def openrouter_web_search(
     max_results: int = 8,
     engine: str = "exa",
 ) -> tuple[str, list[str]] | None:
-    """Run OpenRouter web search grounding and return ``(summary_text, source_urls)``.
+    """Run web-search grounding and return ``(summary_text, source_urls)``.
 
-    ``:online`` models and native-search providers (``perplexity/*``) use built-in web
-    search via a plain completion. Other models fall back to the server-side
-    ``openrouter:web_search`` tool (Exa by default).
+    House digiquant grounding pins are unprefixed ``:online`` / ``perplexity/*``
+    slugs sent through LiteLLM (``OPENAI_API_BASE``). Leftover ``openrouter/``
+    prefixes still work for diagnostics when ``OPENROUTER_API_KEY`` is set.
 
-    Returns ``None`` when the model isn't OpenRouter, ``OPENROUTER_API_KEY`` is
-    unset, or the call fails (fail-soft).
+    ``:online`` models and native-search providers (``perplexity/*``) use built-in
+    web search via a plain completion — this is the digiquant grounding path
+    (:func:`digigraph.model_config.get_grounding_model`).
+
+    Other prefixed OpenRouter models fall back to the server-side
+    ``openrouter:web_search`` tool (Exa by default). That branch is a digillm
+    toolkit capability for non-native-search models; digiquant must not assemble
+    ``engine`` / ``max_results`` for production grounding (#2567).
+
+    Returns ``None`` when the model is not a grounding slug, neither a default
+    ``OPENAI_API_BASE`` (LiteLLM or OpenRouter rewrite) nor ``OPENROUTER_API_KEY``
+    is configured, or the call fails (fail-soft).
     """
-    provider, model_id = _parse_provider_prefix(model)
-    if provider != "openrouter":
-        logger.debug("openrouter_web_search skipped: %s is not an OpenRouter model", model)
+    provider, _ = _parse_provider_prefix(model)
+    native = _is_native_web_search_model(model)
+    if not native and provider != "openrouter":
+        logger.debug("openrouter_web_search skipped: %s is not a grounding model", model)
         return None
-    if not os.environ.get(_EXTERNAL_PROVIDERS["openrouter"]["api_key_env"], "").strip():
-        logger.debug("openrouter_web_search skipped: OPENROUTER_API_KEY not set")
+    or_key = bool(os.environ.get(_EXTERNAL_PROVIDERS["openrouter"]["api_key_env"], "").strip())
+    if not _default_base_configured() and not or_key:
+        logger.debug(
+            "openrouter_web_search skipped: no OPENAI_API_BASE and OPENROUTER_API_KEY unset"
+        )
         return None
 
     messages: list[ChatCompletionMessage] = [
@@ -1485,7 +1621,7 @@ def openrouter_web_search(
     try:
         # ``:online`` and native-search (perplexity) models use built-in web search —
         # do NOT attach ``openrouter:web_search`` (404 on endpoints that lack the tool).
-        if ":online" in model_id or model_id.startswith("perplexity/"):
+        if native:
             resp = completion(
                 model,
                 messages,
@@ -1714,9 +1850,9 @@ def _stream_completion_one_turn(
     model called no tool (caller returns the content), else the accumulated calls
     for the caller to run before looping.
     """
-    provider, model_id = _parse_provider_prefix(model)
+    provider, _ = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = _wire_model(provider, model_id, model)
+    effective_model = _effective_model_id(model)
 
     kwargs: dict[str, Any] = {
         "model": effective_model,
@@ -1727,6 +1863,8 @@ def _stream_completion_one_turn(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = tool_choice
+
+    kwargs = _with_openrouter_cost_controls(kwargs, _cost_controls_provider(provider, model))
 
     stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
         client,

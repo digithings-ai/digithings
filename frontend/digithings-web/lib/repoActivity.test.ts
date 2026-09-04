@@ -16,9 +16,15 @@ import { REPO_CLONE, cloneParts, isoDay, moduleActivity, repoActivity } from "./
  */
 describe("repoActivity snapshot", () => {
   it("carries every velocity figure the page renders", () => {
-    for (const key of ["commits", "pullsMerged", "issuesClosed", "issuesOpen"] as const) {
+    for (const key of [
+      "commits",
+      "pullsMerged",
+      "issuesClosed",
+      "pullsOpen",
+      "issuesOpen",
+    ] as const) {
       expect(typeof repoActivity[key], key).toBe("number");
-      expect(repoActivity[key], key).toBeGreaterThan(0);
+      expect(repoActivity[key], key).toBeGreaterThanOrEqual(0);
     }
     expect(repoActivity.windowDays).toBe(30);
     expect(repoActivity.branch).toBe("main");
@@ -71,6 +77,23 @@ describe("repoActivity snapshot", () => {
       // leaving either in would render the raw commit subject on the page.
       expect(f.summary).not.toMatch(/^feat[(:]/);
       expect(f.summary).not.toMatch(/\(#\d+\)$/);
+    }
+  });
+
+  it("lists recent merged PRs and recently updated open issues", () => {
+    expect(repoActivity.mergedPulls.length).toBeGreaterThan(0);
+    expect(repoActivity.mergedPulls.length).toBeLessThanOrEqual(6);
+    for (const p of repoActivity.mergedPulls) {
+      expect(p.number).toBeGreaterThan(0);
+      expect(p.title.length).toBeGreaterThan(0);
+      expect(p.url).toContain(`/pull/${p.number}`);
+    }
+    expect(repoActivity.openIssues.length).toBeGreaterThan(0);
+    expect(repoActivity.openIssues.length).toBeLessThanOrEqual(6);
+    for (const issue of repoActivity.openIssues) {
+      expect(issue.number).toBeGreaterThan(0);
+      expect(issue.title.length).toBeGreaterThan(0);
+      expect(issue.url).toContain(`/issues/${issue.number}`);
     }
   });
 

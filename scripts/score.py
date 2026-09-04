@@ -55,10 +55,10 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
         "digigraph/src/digigraph/tools/analytics/execute_python_sandbox.py",
         "subprocess",
     ),
-    # Atlas agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
-    ("digiquant/scripts/atlas/preload-history.py", "pandas"),
-    ("digiquant/scripts/atlas/preload-history.py", "pd."),
-    ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
+    # research agent scripts: yfinance/pandas_ta boundary (SIMP-038/039 deferred Polars migration)
+    ("digiquant/scripts/research/preload-history.py", "pandas"),
+    ("digiquant/scripts/research/preload-history.py", "pd."),
+    ("digiquant/scripts/research/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
     ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
@@ -73,6 +73,7 @@ _FILE_ALLOW_CACHE: dict[str, frozenset[str]] = {}
 # Paths excluded from scoring (meta-tooling, audit prose, security policy docs).
 SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     "scripts/score.py",
+    "docs/agent-backlog/",
     "docs/reviews/",
     "digigraph/docs/SECURITY.md",
     "digigraph/src/digigraph/tools/analytics/execute_python.py",

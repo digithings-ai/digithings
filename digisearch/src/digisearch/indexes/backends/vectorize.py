@@ -34,27 +34,36 @@ MAX_TOP_K = 50
 # must stay importable even when importing *this* module fails.
 
 
-#: Process-wide singleton for the default embedder, shared across every
-#: `VectorizeBackend` instance. `_vectorize_backend` in `_stub.py` constructs a
-#: fresh `VectorizeBackend` on every query (no production call site injects
-#: `embedding_provider` or populates `Query.embedding`), so per-instance
-#: memoization alone still reloads the ONNX model on every single query. The
-#: default embedder is stateless and identical for every caller, so sharing it
-#: process-wide is safe. This cache is for the *default* embedder only -- an
-#: *injected* `embedding_provider` always stays on `self.embedding_provider`
-#: (per-instance) and is never read from or written into this global.
-_default_embedder_singleton: object | None = None
+#: Process-wide MiniLM default lives in
+#: ``digisearch.embedding.providers.minilm.get_default_minilm_embedder`` so
+#: Chroma and Vectorize share one ONNX load. `_vectorize_backend` constructs a
+#: fresh `VectorizeBackend` on every query, so callers must use that shared
+#: helper rather than per-instance memoization.
 
 
 def _get_default_embedder() -> object:
-    """Return the module-level default embedder, constructing it at most once
-    per process (see `_default_embedder_singleton`)."""
-    global _default_embedder_singleton
-    if _default_embedder_singleton is None:
-        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+    """Return the process-wide MiniLM default embedder."""
+    from digisearch.embedding.providers.minilm import get_default_minilm_embedder
 
-        _default_embedder_singleton = MiniLMEmbedder()
-    return _default_embedder_singleton
+    return get_default_minilm_embedder()
+
+
+def _reject_unsupported_query_filters(query: Query) -> None:
+    """Raise if *query* carries filters Vectorize cannot honour.
+
+    Acceptance for #2219: fail loud until metadata-filter translation lands.
+    Empty ``filters`` and blank ``workspace_id`` stay allowed — that is the
+    single-tenant / per-index isolation path used in production today.
+    """
+    workspace = (query.workspace_id or "").strip()
+    filters = query.filters or {}
+    if workspace or filters:
+        raise VectorizeBackendError(
+            "VectorizeBackend does not support Query.filters or workspace_id isolation "
+            "(see digisearch ARCHITECTURE.md §6 / #2219). Use a per-workspace Vectorize "
+            "index, query without filters, or switch to Chroma/Azure until metadata "
+            "filter translation lands."
+        )
 
 
 def _default_http_post(
@@ -262,6 +271,7 @@ class VectorizeBackend(DigiIndex):
         return _get_default_embedder()
 
     def query(self, query: Query) -> list[Result]:
+        _reject_unsupported_query_filters(query)
         perf_start = time.perf_counter()
         vector = list(query.embedding or [])
         if not vector:
