@@ -34,7 +34,6 @@ import { EntitledSurface } from '@/components/entitled-surface';
 import { PortfolioTeaserSurface } from '@/components/tier/portfolio-teaser-surface';
 import {
   navContractBadgeLabel,
-  performanceFreshnessNote,
   type PerformanceSsotMeta,
 } from '@/lib/performance-ssot';
 import {
@@ -283,7 +282,6 @@ export function DailyBriefWorkspace({
     decision.active[0] != null
       ? tickerDossierHref(decision.active[0].ticker)
       : buildPipelineHref({ date: digestDate, stage: 'selection', node: 'pm-rebalance' });
-  const freshnessNote = performanceSsot ? performanceFreshnessNote(performanceSsot) : null;
   const investedNote =
     performanceSsot?.investedDefinition === 'accounting_nav_tip'
       ? `${book.cashPct.toFixed(0)}% cash · accounting tip`
@@ -458,14 +456,6 @@ export function DailyBriefWorkspace({
             <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
             <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={investedNote} />
           </dl>
-          {freshnessNote ? (
-            <p
-              data-testid="brief-performance-freshness"
-              className="border-t border-hair px-4 py-2 font-mono text-[0.58rem] text-ink-mute sm:px-5"
-            >
-              {freshnessNote}
-            </p>
-          ) : null}
         </BriefCardLink>
       </EntitledSurface>
 
