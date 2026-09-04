@@ -272,7 +272,7 @@ a manual check.
 ## Monorepo integration
 
 - Registered in `agents.yml` under `components:` (`agents_doc`, `arch_doc`,
-  `test_cmd: pytest -m unit -k digiskills -v`).
+  `test_cmd: pytest tests/dsk/ -m unit -v --tb=short`).
 - `pytest.ini`'s root `pythonpath` includes `digiskills/src` so
   `import digiskills` resolves without an editable install during `pytest`
   from the repo root.
