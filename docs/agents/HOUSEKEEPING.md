@@ -68,7 +68,7 @@ the broader delegation framework.
 | Auto PR review | `agent-claude-review.yml` | on PR open / sync / reopened / ready_for_review | Runs Claude's `/code-review` plugin on the PR diff. Member-gated, 15-min timeout, concurrency-cancelled on updates |
 | `@claude` mention | `agent-claude.yml` | on issue / comment / review `@claude` mention | Targeted help |
 | claude-tier dispatch | `agent-claude-dispatch.yml` | on `agent-task` where component tier is claude | Local instructions (`make task ISSUE=N`) |
-| cursor-tier dispatch | Cursor Automation (cloud) | on `agent-task` where component tier is cursor | Starts Cursor Cloud Agent session; quota-checked; fallback: `agent-dispatch-replay.yml` |
+| cursor-tier dispatch | `agent-cursor-dispatch.yml` | on `agent-task` where component tier is cursor | Posts `@cursor` mention with task prompt; GitHub App starts a Cloud Agent session |
 | Stuck dispatch replay | `agent-dispatch-replay.yml` | manual `workflow_dispatch` | Bounces `agent-task` on stuck backlog issues (dry-run default) |
 | Agent PR autolabel | `agent-pr-autolabel.yml` | on CI success | Adds `automerge-agent` to agent-branch PRs |
 | Agent PR auto-merge | `agent-pr-automerge.yml` | on `automerge-agent` label + green CI | Squash auto-merge for agent PRs clearing the path-based safety gate (`verify_agent_automerge_pr.py`) |
@@ -93,7 +93,6 @@ Tracked as issues (see #3533):
 - **npm audit for `frontend/`** — only Python CVEs are scanned today. → #3523
 - **ADR numbering audit** — no check that `docs/adr/NNNN-*.md` files are sequentially numbered or without duplicates. → #3524
 - **Per-module ARCHITECTURE.md drift** — no check that module architecture docs are updated when the module's public interface changes. → #3525
-- **Cursor Automation trigger** — one-time manual step: the Automation must listen for the `agent-task` label (it used to listen for `exec:cursor`).
 
 ## Reference
 

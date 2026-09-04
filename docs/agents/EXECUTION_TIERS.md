@@ -38,10 +38,10 @@ The tier distinction survives, minus the labels:
 sweep, its cadence, and what it escalates.
 
 **Caveat worth knowing before relying on dispatch:** the backlog is deep and
-the Cursor Automation is metered. Retargeting stops work being stranded on a
-queue with no consumer; it does not by itself mean the work gets done. Whether
-the Automation is actually running is a separate question — the weekly
-continuous-improvement digest and the dispatch-replay workflow exist for that.
+Cloud Agent runs are metered. Nothing here guarantees the work gets done —
+whether the GitHub App is actually starting sessions is a separate question.
+The weekly continuous-improvement digest and the dispatch-replay workflow
+exist for exactly that.
 
 **PR code review:** default is in-session (see [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)).
 Cursor Bugbot, when available, is invoked by hand with a `bugbot run` comment once a
@@ -61,7 +61,7 @@ Minimal-gate paths never auto-merge — that is path-based now, not label-based.
 
 **Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC as backstop for agent PRs.
 
-### cursor tier — Cursor Cloud Agent (Cursor Automations)
+### cursor tier — Cursor Cloud Agent (@cursor dispatch)
 
 Autonomous, asynchronous. Describable in one paragraph with clear acceptance criteria. Opens a PR for human review.
 
@@ -70,14 +70,14 @@ Autonomous, asynchronous. Describable in one paragraph with clear acceptance cri
 **Never:** anything requiring mid-task dialogue; auth/crypto (digikey is claude-tier).
 
 **Setup & operations:** see `docs/agents/CURSOR_AGENT_ONBOARDING.md`.
-**Dispatch:** applying the `agent-task` label to an issue whose component routes
-to the cursor tier (everything except digikey) triggers a **Cursor Automation**
-configured at [cursor.com/settings/automations](https://cursor.com/settings/automations).
-The Automation fires a Cloud Agent session with the task context and custom
-instructions. **One-time manual step:** the Automation trigger must listen for
-the `agent-task` label (it used to listen for `exec:cursor`). If quota is
-exhausted the session fails naturally; the issue stays open until quota resets.
-Stuck backlog: run **Agent dispatch replay** workflow (`agent-dispatch-replay.yml`).
+**Dispatch:** applying the `agent-task` label to a cursor-tier issue triggers
+`.github/workflows/agent-cursor-dispatch.yml`, which posts an `@cursor` mention
+with the task prompt — Cursor's GitHub App starts a Cloud Agent session. No
+dashboard Automation needed (Automations UI exposes only PR-label triggers).
+If quota is exhausted the session fails naturally; the issue stays open until
+quota resets. Stuck backlog: run **Agent dispatch replay** workflow
+(`agent-dispatch-replay.yml`). Manual fallback: `@cursor` comment by hand, or
+`make task ISSUE=N` locally.
 
 ### claude tier — Claude Code (human-supervised, LOCAL only)
 
@@ -132,7 +132,7 @@ per-issue any more. Priority and spec quality are the planning-time levers.
 
 ## Cursor setup (one-time)
 
-1. Configure the Cursor Automation as described in `docs/agents/CURSOR_AGENT_ONBOARDING.md` — trigger on the **`agent-task`** label.
+1. Install the Cursor GitHub App on the org (see `docs/agents/CURSOR_AGENT_ONBOARDING.md` §1) — this is what reacts to `@cursor`.
 2. Verify `.cursor/rules/digithings.mdc` is loaded (run `make agents-init` if stale).
 
 See `docs/agents/CURSOR_AGENT_ONBOARDING.md` for the full agent operating protocol.

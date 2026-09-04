@@ -1,0 +1,98 @@
+name: "Agent: Cursor dispatch"
+
+# Fires when the agent-task label is applied to an issue whose component routes
+# to the cursor tier (see tiers in scripts/project_routing.json). Posts an
+# @cursor mention so Cursor's GitHub App starts a Cloud Agent session — no
+# dashboard Automation needed (Automations UI exposes only PR-label triggers;
+# issue-label triggers are documented but not configurable as of 2026-08).
+#
+# Idempotency: skips when the issue already has an open agent-branch PR.
+# Re-fire a stuck issue by bouncing the agent-task label
+# (see agent-dispatch-replay.yml).
+
+on:
+  issues:
+    types: [labeled, opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  dispatch:
+    name: Mention @cursor on cursor-tier agent tasks
+    runs-on: ubuntu-latest
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'agent-task') ||
+      ((github.event.action == 'opened' || github.event.action == 'reopened') &&
+       contains(github.event.issue.labels.*.name, 'agent-task'))
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: develop
+
+      - name: Resolve tier and skip if already in progress
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          LABELS: ${{ toJson(github.event.issue.labels) }}
+        run: |
+          TIER=$(echo "$LABELS" | python3 -c "
+          import json, sys
+          routing = json.load(open('scripts/project_routing.json'))
+          tiers = routing.get('tiers', {})
+          names = [l['name'] for l in json.load(sys.stdin)]
+          comp = next((n for n in names if n.startswith('component:')), None)
+          print(tiers.get(comp, tiers.get('default', 'cursor')))
+          ")
+          echo "tier=$TIER" >> "$GITHUB_OUTPUT"
+          if [[ "$TIER" != "cursor" ]]; then
+            echo "Tier is $TIER — claude-tier dispatch owns this issue, skipping @cursor."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          COMPONENT=$(echo "$LABELS" | python3 -c "
+          import json, sys
+          names = [l['name'] for l in json.load(sys.stdin)]
+          print(next((n.split(':', 1)[1] for n in names if n.startswith('component:')), 'root'))
+          ")
+          echo "component=$COMPONENT" >> "$GITHUB_OUTPUT"
+          SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' |
+                 sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | cut -c1-40 | sed 's/-$//')
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          OPEN_PR=$(gh pr list --repo "$REPO" --state open --search "#${ISSUE_NUMBER} in:body" \
+            --json number --jq 'length')
+          if [[ "${OPEN_PR:-0}" != "0" ]]; then
+            echo "Issue already has an open linked PR — skipping @cursor to avoid a duplicate session."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post @cursor dispatch prompt
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          COMPONENT: ${{ steps.gate.outputs.component }}
+          SLUG: ${{ steps.gate.outputs.slug }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
+          @cursor Execute this issue (cursor-tier dispatch).
+
+          Title: ${ISSUE_TITLE}
+
+          Protocol:
+          1. Read \`${COMPONENT}/AGENTS.md\` and \`${COMPONENT}/ARCHITECTURE.md\` first (root AGENTS.md if the component has none).
+          2. Scope check: single component, <5 files, clear acceptance criteria. If the scope does not fit, comment why and stop — do not proceed.
+          3. Never touch: \`.github/workflows/\`, \`digikey/\`, \`docs/scoring/\`, \`SECURITY.md\`, live-trading paths (\`digiquant/live/\`, \`digiquant/brokers/\`, \`config/live*\`).
+          4. Branch \`cursor/${ISSUE_NUMBER}-${SLUG}\` from \`develop\`. Polars only, Pydantic v2, \`ruff check\` clean.
+          5. Open a PR targeting \`develop\` with \`Closes #${ISSUE_NUMBER}\` in the body.
+
+          Full protocol: \`docs/agents/CURSOR_AGENT_ONBOARDING.md\`."

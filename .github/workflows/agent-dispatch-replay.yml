@@ -5,8 +5,8 @@ name: "Agent: dispatch replay"
 # Also useful after fixing dispatch workflows or clearing quota flags.
 #
 # Dispatch tiers come from tiers in scripts/project_routing.json:
-#         cursor tier re-fires by bouncing the agent-task label, which
-#         triggers the Cursor Automation (configure it to fire on agent-task).
+#         cursor tier re-fires by bouncing the label, which triggers the
+#         @cursor-mention dispatch workflow.
 #         claude tier bounces the label to trigger the local-dispatch comment workflow.
 #
 # Manual: Actions → Agent dispatch replay → Run workflow
@@ -93,9 +93,8 @@ jobs:
 
           if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then
             echo ""
-            echo "--- cursor tier (no Cursor Automation dispatch yet) ---"
-            # Bouncing agent-task fires the Cursor Automation (must be
-            # configured to trigger on the agent-task label).
+            echo "--- cursor tier (no Cloud Agent session yet) ---"
+            # Bouncing agent-task re-fires the @cursor-mention dispatch workflow.
             list_tier "cursor" | python3 -c "
           import json, sys, subprocess, os
           repo = os.environ['REPO']
@@ -105,7 +104,7 @@ jobs:
               i for i in issues
               if 'pending:quota' not in [l['name'] for l in i.get('labels', [])]
           ]
-          # A dispatched cursor issue has a 'Cursor dispatch' or 'Cursor Automation' comment.
+          # A dispatched cursor issue has an '@cursor' dispatch comment.
           dispatched = []
           for iss in stuck:
               num = iss['number']
@@ -117,7 +116,7 @@ jobs:
                   dispatched.append(iss)
                   continue
               comments = json.loads(r.stdout).get('comments', [])
-              if not any('Cursor' in c.get('body', '') for c in comments):
+              if not any('@cursor' in c.get('body', '') for c in comments):
                   dispatched.append(iss)
           for iss in dispatched:
               print(f\"#{iss['number']}\t{iss['title'][:80]}\")

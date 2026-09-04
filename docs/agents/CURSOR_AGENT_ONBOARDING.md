@@ -46,7 +46,7 @@ execution tier definitions. No additional configuration needed.
 
 ---
 
-## 2. How dispatch works (Cursor Automations)
+## 2. How dispatch works (@cursor mention)
 
 ### Label convention
 
@@ -54,40 +54,24 @@ Every issue eligible for Cursor carries the label **`agent-task`** and a
 `component:*` label routing to the cursor tier (everything except
 `component:digikey` — see `tiers` in `scripts/project_routing.json`).
 
-### Automated dispatch via Cursor Automation
+### Automated dispatch via the GitHub App
 
-Dispatch is handled by a **Cursor Automation** (not a GitHub Actions workflow). When `agent-task` is applied to an issue the Automation fires and starts a Cloud Agent session with the task context.
+Dispatch is handled by a **repo workflow** (not a dashboard Automation —
+Automations UI exposes only PR-label triggers).
+`.github/workflows/agent-cursor-dispatch.yml` fires when `agent-task` is
+applied to a cursor-tier issue and posts an `@cursor` mention with the task
+prompt; Cursor's GitHub App starts a Cloud Agent session. Skips issues that
+already have an open linked PR (idempotency); bounce `agent-task` via the
+**Agent dispatch replay** workflow to re-fire a stuck issue.
 
-#### Creating the Cursor Automation (one-time setup)
+No dashboard configuration needed — the only prerequisite is the GitHub App
+install in §1.
 
-Configure the following Automation at [cursor.com/settings/automations](https://cursor.com/settings/automations):
+### Manual fallback
 
-| Field | Value |
-|-------|-------|
-| **Name** | `digithings agent-task dispatch` |
-| **Trigger** | GitHub — issue labeled `agent-task` |
-| **Repository** | `digithings-ai/digithings` |
-| **Base branch** | `develop` |
-| **Tools** | GitHub MCP (read issues, PRs) |
-| **Instructions** | See below |
-
-**Instructions (paste verbatim):**
-
-```
-You are executing a digithings cursor-tier task. Work through this sequence:
-
-1. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
-   identified from the issue labels (e.g. component:digisearch → digisearch/AGENTS.md).
-   If no component label, read AGENTS.md (root).
-
-2. SCOPE CHECK: Confirm the issue is cursor-tier:
-   - Component is NOT digikey (auth/crypto is claude-tier: comment that it needs
-     a supervised local run, then stop — do not attempt it)
-   - Single component, estimated < 5 files
-   - Clear acceptance criteria, no ambiguity
-   - No cross-module integration required
-   - No live-trading paths (digiquant/live/, digiquant/brokers/, config/live*)
-   If any condition fails (other than digikey): comment explaining why and stop.
+Post `@cursor <task prompt>` on the issue by hand, or open the Background
+Agents panel (`Cmd/Ctrl + Shift + A`) and paste the issue URL, or run
+`make task ISSUE=<N>` locally.
 
 3. IMPLEMENTATION: Follow the full protocol in docs/agents/CURSOR_AGENT_ONBOARDING.md.
    Branch: cursor/<issue-number>-<slug> from develop.
@@ -212,11 +196,11 @@ Use `/spec` in Claude Code to generate compliant issue bodies automatically.
 
 | Path | Requires | Billing | Status |
 |---|---|---|---|
-| Cursor Automation (primary) | Automation configured at cursor.com | Pro subscription | Active default |
+| @cursor dispatch (primary) | GitHub App installed (§1) | Pro subscription | Active default |
 | Manual Background Agent | Nothing | Pro subscription | Always available as fallback |
 | `make task ISSUE=N` (local) | Local Cursor IDE | Pro subscription | Supervised fallback |
 
-**Primary path:** configure the Cursor Automation (section 2) — zero GitHub secrets, fully cloud-native.
+**Primary path:** label the issue `agent-task` — the dispatch workflow posts `@cursor` automatically. Zero GitHub secrets, no dashboard config.
 
 ---
 
