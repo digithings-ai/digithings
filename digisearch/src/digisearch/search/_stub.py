@@ -16,11 +16,14 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+if TYPE_CHECKING:
+    from digisearch.search.reranker import Reranker
 
 logger = logging.getLogger(__name__)
 
@@ -156,9 +159,23 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
 
 _stub_index: dict[str, list[Chunk]] = {"default": []}
 
+# Process-scoped Reranker instances so BGE CrossEncoder is not reloaded per query.
+_reranker_by_provider: dict[str, Reranker] = {}
+
 
 def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _get_reranker(provider: str) -> Reranker:
+    from digisearch.search.reranker import Reranker as _Reranker
+
+    cached = _reranker_by_provider.get(provider)
+    if cached is not None:
+        return cached
+    reranker = _Reranker(provider=provider)
+    _reranker_by_provider[provider] = reranker
+    return reranker
 
 
 def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
@@ -171,10 +188,9 @@ def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
         return resp
     if not resp.results:
         return resp
-    from digisearch.search.reranker import Reranker
 
     provider = (os.environ.get("DIGISEARCH_RERANK_PROVIDER") or "bge").strip().lower() or "bge"
-    reranker = Reranker(provider=provider)
+    reranker = _get_reranker(provider)
     resp.results = reranker.rerank(query.text, resp.results, top_n=query.top_k)
     return resp
 

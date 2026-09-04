@@ -109,8 +109,10 @@ class TestQueryIndexRerank:
         monkeypatch.setenv("DIGISEARCH_RERANK_ENABLED", "1")
         monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
         monkeypatch.setenv("DIGISEARCH_RERANK_PROVIDER", "bge")
+        from digisearch.search import _stub as stub_mod
         from digisearch.search._stub import _stub_index, query_index
 
+        stub_mod._reranker_by_provider.clear()
         _stub_index.clear()
         _stub_index["rr2"] = [
             _chunk("1", "alpha beta gamma"),
@@ -131,6 +133,23 @@ class TestQueryIndexRerank:
         with patch.object(Reranker, "rerank", _reorder):
             resp = query_index(Query(text="alpha", top_k=10), index_name="rr2")
         assert [r.chunk.id for r in resp.results] == ["3", "2", "1"]
+
+    def test_query_index_reranker_instance_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGISEARCH_RERANK_ENABLED", "1")
+        monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
+        monkeypatch.setenv("DIGISEARCH_RERANK_PROVIDER", "bge")
+        from digisearch.search import _stub as stub_mod
+        from digisearch.search._stub import _stub_index, query_index
+
+        stub_mod._reranker_by_provider.clear()
+        _stub_index.clear()
+        _stub_index["rr3"] = [_chunk("1", "alpha once")]
+
+        with patch.object(Reranker, "rerank", lambda self, q, results, top_n=None: results):
+            query_index(Query(text="alpha", top_k=5), index_name="rr3")
+            query_index(Query(text="alpha", top_k=5), index_name="rr3")
+        assert len(stub_mod._reranker_by_provider) == 1
+        assert "bge" in stub_mod._reranker_by_provider
 
 
 @pytest.mark.unit
