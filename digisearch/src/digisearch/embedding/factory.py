@@ -132,13 +132,57 @@ def wrap_embedding_pipeline(
     size = batch_size
     if size is None:
         raw = os.environ.get("DIGISEARCH_EMBED_BATCH_SIZE", "").strip()
-        size = int(raw) if raw else 100
+        if raw:
+            try:
+                size = int(raw)
+            except ValueError as exc:
+                raise EmbeddingConfigError(
+                    f"DIGISEARCH_EMBED_BATCH_SIZE must be an integer, got {raw!r}"
+                ) from exc
+        else:
+            size = 100
+    if size < 1:
+        raise EmbeddingConfigError(f"DIGISEARCH_EMBED_BATCH_SIZE must be >= 1, got {size}")
     batched: EmbeddingProvider = BatchEmbedder(provider, batch_size=size)
     cache_on = _env_truthy("DIGISEARCH_EMBED_CACHE", "1") if use_cache is None else use_cache
     if not cache_on:
         return batched
     path = cache_path or os.environ.get("DIGISEARCH_CACHE_PATH")
     return EmbeddingCache(batched, db_path=path)
+
+
+def unwrap_embedding_provider(provider: EmbeddingProvider) -> EmbeddingProvider:
+    """Return the innermost provider under BatchEmbedder / EmbeddingCache wrappers."""
+    current: EmbeddingProvider = provider
+    seen: set[int] = set()
+    while True:
+        ident = id(current)
+        if ident in seen:
+            return current
+        seen.add(ident)
+        inner = getattr(current, "provider", None)
+        if not isinstance(inner, EmbeddingProvider) or inner is current:
+            return current
+        current = inner
+
+
+def resolve_backend_embedding_provider(
+    config: DigiSearchConfig | None = None,
+) -> EmbeddingProvider:
+    """Raw EmbeddingProvider for Chroma/Vectorize construction (no cache wrap).
+
+    Always returns a provider (default MiniLM). Uses the same env/config resolution
+    as the ingest pipeline so query-time and ingest-time models stay aligned.
+    """
+    name, model = _provider_name_and_model(config)
+    if name is None:
+        name = "minilm"
+    try:
+        return _build_raw_provider(name, model)
+    except EmbeddingConfigError:
+        raise
+    except Exception as exc:
+        raise EmbeddingConfigError(f"failed to load embedding provider {name!r}: {exc}") from exc
 
 
 def resolve_embedding_pipeline(
@@ -195,7 +239,9 @@ __all__ = [
     "QueryMode",
     "effective_query_mode",
     "normalize_query_mode",
+    "resolve_backend_embedding_provider",
     "resolve_embedding_pipeline",
+    "unwrap_embedding_provider",
     "vector_backend_configured",
     "wrap_embedding_pipeline",
 ]

@@ -145,3 +145,48 @@ def test_index_chunks_raises_on_bad_embed_config(monkeypatch: pytest.MonkeyPatch
     with pytest.raises(IngestError, match="OPENAI_API_KEY") as exc_info:
         index_chunks("bad-embed", chunks)
     assert exc_info.value.code == "ingest_embed_config"
+
+
+@pytest.mark.unit
+def test_wrap_pipeline_cache_namespace_uses_inner_model_id(tmp_path: Path) -> None:
+    raw = _RecordingEmbedder()
+    pipeline = wrap_embedding_pipeline(raw, use_cache=True, cache_path=str(tmp_path / "n.db"))
+    assert isinstance(pipeline, EmbeddingCache)
+    assert pipeline._model_namespace().startswith("recording-test:")
+
+
+@pytest.mark.unit
+def test_bad_embed_batch_size_raises_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGISEARCH_EMBED_BATCH_SIZE", "nope")
+    with pytest.raises(EmbeddingConfigError, match="DIGISEARCH_EMBED_BATCH_SIZE"):
+        wrap_embedding_pipeline(_RecordingEmbedder())
+
+
+@pytest.mark.unit
+def test_backend_provider_matches_pipeline_raw(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digisearch.embedding.factory import (
+        resolve_backend_embedding_provider,
+        unwrap_embedding_provider,
+    )
+    from digisearch.embedding.providers.minilm import MiniLMEmbedder
+
+    monkeypatch.setenv("DIGISEARCH_EMBEDDING_PROVIDER", "minilm")
+    monkeypatch.delenv("DIGISEARCH_EMBED", raising=False)
+    pipeline = resolve_embedding_pipeline()
+    assert pipeline is not None
+    backend = resolve_backend_embedding_provider()
+    assert isinstance(unwrap_embedding_provider(pipeline), MiniLMEmbedder)
+    assert isinstance(backend, MiniLMEmbedder)
+    assert unwrap_embedding_provider(pipeline).dimensions == backend.dimensions
+
+
+@pytest.mark.unit
+def test_query_request_normalizes_mode_case() -> None:
+    from digisearch.server import QueryRequest
+
+    req = QueryRequest(text="hello", mode="Hybrid")
+    assert req.mode == "hybrid"
+    with pytest.raises(Exception):
+        QueryRequest(text="hello", mode="semantic")

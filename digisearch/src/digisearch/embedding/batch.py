@@ -31,6 +31,21 @@ class BatchEmbedder(EmbeddingProvider):
     def dimensions(self) -> int:
         return self.provider.dimensions
 
+    @property
+    def model_id(self) -> str | None:
+        mid = getattr(self.provider, "model_id", None)
+        return mid if isinstance(mid, str) else None
+
+    @property
+    def model(self) -> str | None:
+        model = getattr(self.provider, "model", None)
+        return model if isinstance(model, str) else None
+
+    @property
+    def version(self) -> str | None:
+        ver = getattr(self.provider, "version", None)
+        return ver if isinstance(ver, str) else None
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Embed in batches with retry."""
         perf_start = time.perf_counter()

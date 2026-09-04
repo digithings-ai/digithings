@@ -27,6 +27,16 @@ class EmbeddingCache(EmbeddingProvider):
     def dimensions(self) -> int:
         return self.provider.dimensions
 
+    @property
+    def model_id(self) -> str | None:
+        mid = getattr(self.provider, "model_id", None)
+        return mid if isinstance(mid, str) else None
+
+    @property
+    def model(self) -> str | None:
+        model = getattr(self.provider, "model", None)
+        return model if isinstance(model, str) else None
+
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
             self._conn = sqlite3.connect(str(self._path))

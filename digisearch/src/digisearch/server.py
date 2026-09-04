@@ -34,7 +34,7 @@ configure_logging()
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,6 @@ class QueryRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     mode: str = Field(
         default="hybrid",
-        pattern="^(keyword|vector|hybrid)$",
         description=(
             "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
             "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
@@ -220,6 +219,13 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional tenant/workspace id for index isolation or filters (enterprise).",
     )
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_query_mode(cls, value: object) -> str:
+        from digisearch.embedding.factory import normalize_query_mode
+
+        return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
 class QueryResponse(BaseModel):
@@ -277,7 +283,6 @@ class ResearchTurnRequest(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     mode: str = Field(
         default="hybrid",
-        pattern="^(keyword|vector|hybrid)$",
         description=(
             "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
             "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
@@ -289,6 +294,13 @@ class ResearchTurnRequest(BaseModel):
         description="Structured filters [{field, op, value}]",
     )
     session_id: str | None = Field(default=None, description="Optional session id for tracing")
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_query_mode(cls, value: object) -> str:
+        from digisearch.embedding.factory import normalize_query_mode
+
+        return normalize_query_mode(str(value) if value is not None else "hybrid")
 
 
 @app.get("/health")
