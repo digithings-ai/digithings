@@ -2,7 +2,8 @@
  * @vitest-environment happy-dom
  */
 import { createElement, act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const entitlement = vi.hoisted(() => ({ tier: 'free' as string }));
@@ -168,6 +169,30 @@ describe('Settings page tab visibility', () => {
     expect(container.textContent).toContain('remaining-hops');
     expect(container.textContent).toContain('about-body');
     expect(container.textContent).not.toContain('notify-body');
+  });
+
+  it('hydrating a deep link lights the linked tab, not the default one', async () => {
+    // Prerendered markup knows no URL (static export), so the highlight has to
+    // survive hydration as a real update — React does not repair a mismatched
+    // attribute. See TwelveXClient.hydration.test.tsx for the same seam.
+    window.history.replaceState(null, '', '/settings/');
+    const prerendered = document.createElement('div');
+    prerendered.innerHTML = renderToString(createElement(SettingsPage));
+    document.body.appendChild(prerendered);
+
+    window.history.replaceState(null, '', '/settings/?tab=billing');
+    let hydrated!: Root;
+    await act(async () => {
+      hydrated = hydrateRoot(prerendered, createElement(SettingsPage));
+    });
+
+    const on = [...prerendered.querySelectorAll('.tab-on')].map((el) => el.textContent?.trim());
+    expect(on).toEqual(['Billing']);
+
+    act(() => {
+      hydrated.unmount();
+    });
+    prerendered.remove();
   });
 
   it('clicking Billing writes #billing and shows the billing body', async () => {

@@ -18,10 +18,6 @@ export const MAX_PAGE_CONTEXT_TEXT_CHARS = 8_000;
 export const MAX_PAGE_CONTEXT_HTML_CHARS = 12_000;
 export const MAX_PAGE_CONTEXT_SCREENSHOT_CHARS = 400_000;
 export const MAX_PAGE_CONTEXT_AGE_MS = 5 * 60 * 1000;
-
-/** UI preview cap — short snippet so the banner stays compact. */
-export const PAGE_CONTEXT_PREVIEW_CHARS = 720;
-
 export type PageContextMessage = {
   type: typeof PAGE_CONTEXT_MESSAGE_TYPE;
   text: string;
@@ -176,15 +172,4 @@ export function formatPageContextForPrompt(ctx: {
     );
   }
   return lines.join("\n");
-}
-
-/** Compact monospace snippet for the embed “looking at” preview box. */
-export function formatPageContextPreview(ctx: {
-  text: string;
-  html?: string;
-}): string {
-  const src = (ctx.html?.trim() || ctx.text.trim()).replace(/\s+/g, " ").trim();
-  if (!src) return "";
-  if (src.length <= PAGE_CONTEXT_PREVIEW_CHARS) return src;
-  return `${src.slice(0, PAGE_CONTEXT_PREVIEW_CHARS)}…`;
 }
