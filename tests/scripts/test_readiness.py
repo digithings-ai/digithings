@@ -157,6 +157,47 @@ def test_render_produces_eight_rows(mod: Any) -> None:
 
 
 @pytest.mark.unit
+def test_render_html_orders_sick_first_with_start_here(mod: Any) -> None:
+    rows = [
+        ("Backlog hygiene", "10 open", "healthy", "ok"),
+        (
+            "Ops health",
+            "9 failed",
+            "sick",
+            "w x9 https://github.com/digithings-ai/digithings/actions/runs/1",
+        ),
+        ("Docs freshness", "1 candidate", "watch", "candidates=[digiquant]"),
+    ]
+    page = mod.render_html(rows, "2026-09-04 12:00 UTC")
+    first = page.index("<section class='card'")
+    assert "Ops health" in page[first : first + 300]
+    assert "Start here:" in page
+    assert "Open the latest failed run" in page
+    assert "<a href='https://github.com/digithings-ai/digithings/actions/runs/1'>" in page
+
+
+@pytest.mark.unit
+def test_render_html_all_healthy_says_so(mod: Any) -> None:
+    rows = [("Backlog hygiene", "0 open", "healthy", "ok")]
+    page = mod.render_html(rows, "stamp")
+    assert "All healthy" in page
+
+
+@pytest.mark.unit
+def test_linkify_issue_numbers(mod: Any) -> None:
+    out = mod._linkify("stuck=['#12', '#345']")
+    assert "issues/12" in out and "issues/345" in out
+    assert mod._linkify("no refs") == "no refs"
+
+
+@pytest.mark.unit
+def test_ops_detail_carries_run_urls(mod: Any) -> None:
+    failures = [{"name": "w", "url": "https://github.com/digithings-ai/digithings/actions/runs/9"}]
+    _, _, detail = mod.m_ops(failures, 0)
+    assert "runs/9" in detail
+
+
+@pytest.mark.unit
 def test_render_html_is_self_contained_dashboard(mod: Any) -> None:
     rows = [
         ("Backlog hygiene", "139 open", "watch", "missing=[1]"),
@@ -220,7 +261,7 @@ def test_dispatch_counts_tiers_and_finds_stuck(mod: Any, monkeypatch: pytest.Mon
     value, band, detail = mod.m_dispatch(issues, {"component:digikey": "claude"})
     assert "'cursor': 1" in value and "'claude': 1" in value
     assert band == "watch"
-    assert "stuck=[1, 2]" in detail
+    assert "stuck=['#1', '#2']" in detail
 
 
 @pytest.mark.unit

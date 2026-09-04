@@ -8,6 +8,7 @@ issue per novel finding.
 Usage:
     REPO=digithings-ai/digithings GH_TOKEN=... python scripts/provider_review/create_issues.py
 """
+
 from __future__ import annotations
 
 import json
@@ -27,25 +28,58 @@ def ensure_label(repo: str) -> None:
     """Create the provider-review label if it doesn't exist."""
     result = subprocess.run(
         ["gh", "label", "list", "--repo", repo, "--json", "name"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     existing = {item["name"] for item in json.loads(result.stdout or "[]")}
     if LABEL not in existing:
-        subprocess.run(
-            ["gh", "label", "create", LABEL, "--repo", repo,
-             "--color", "0075ca",
-             "--description", "Automated provider review finding"],
-            check=True,
+        created = subprocess.run(
+            [
+                "gh",
+                "label",
+                "create",
+                LABEL,
+                "--repo",
+                repo,
+                "--color",
+                "0075ca",
+                "--description",
+                "Automated provider review finding",
+            ],
+            capture_output=True,
+            text=True,
         )
+        # Tolerate a lost list-then-create race (label appeared meanwhile).
+        if created.returncode != 0 and "already exists" not in created.stderr:
+            print(created.stderr, file=sys.stderr)
+            raise subprocess.CalledProcessError(
+                created.returncode, created.args, created.stdout, created.stderr
+            )
         print(f"  Created label: {LABEL}")
 
 
 def get_open_provider_issues(repo: str) -> list[dict]:
     """Fetch all open issues tagged provider-review."""
     result = subprocess.run(
-        ["gh", "issue", "list", "--repo", repo, "--label", LABEL,
-         "--state", "open", "--json", "number,title,body", "--limit", "100"],
-        capture_output=True, text=True, check=True,
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            repo,
+            "--label",
+            LABEL,
+            "--state",
+            "open",
+            "--json",
+            "number,title,body",
+            "--limit",
+            "100",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
     )
     return json.loads(result.stdout or "[]")
 
@@ -63,17 +97,17 @@ def build_body(finding: dict) -> str:
     tags_str = " ".join(finding.get("tags", []))
     return f"""{MARKER}
 <!-- dedup-key: {key} -->
-## Provider change detected: {finding['provider']} — {finding['summary']}
+## Provider change detected: {finding["provider"]} — {finding["summary"]}
 
-**Trigger:** {finding['trigger']}
-**Affected config:** `{finding.get('config_file', 'N/A')}` (`# llm-decision: {tags_str}`)
-**Current model:** `{finding.get('current_model', 'N/A')}`
-**Finding:** {finding['detail']}
+**Trigger:** {finding["trigger"]}
+**Affected config:** `{finding.get("config_file", "N/A")}` (`# llm-decision: {tags_str}`)
+**Current model:** `{finding.get("current_model", "N/A")}`
+**Finding:** {finding["detail"]}
 
 ### Cost-benefit assessment
-{finding.get('cost_benefit_table', '_Agent assessment not available_')}
+{finding.get("cost_benefit_table", "_Agent assessment not available_")}
 
-**Recommendation:** {finding.get('recommendation', 'Review and update the affected config entry.')}
+**Recommendation:** {finding.get("recommendation", "Review and update the affected config entry.")}
 
 ### Next steps
 - [ ] Review the affected config entry
@@ -111,9 +145,22 @@ def run(findings_path: str = FINDINGS_PATH) -> None:
         title = f"[provider-review] {finding['provider']}: {finding['summary']}"
         body = build_body(finding)
         result = subprocess.run(
-            ["gh", "issue", "create", "--repo", repo,
-             "--title", title, "--label", ISSUE_LABELS, "--body", body],
-            capture_output=True, text=True, check=True,
+            [
+                "gh",
+                "issue",
+                "create",
+                "--repo",
+                repo,
+                "--title",
+                title,
+                "--label",
+                ISSUE_LABELS,
+                "--body",
+                body,
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         url = result.stdout.strip()
         print(f"  CREATE {finding['provider']}:{finding['trigger']} → {url}")

@@ -179,12 +179,16 @@ def m_docs() -> tuple[str, str, str]:
 def m_ops(failures: list[dict], ci_open: int) -> tuple[str, str, str]:
     """Scheduled-workflow failures (7d) + open ci:failure issues."""
     by_wf: dict[str, int] = {}
+    latest: dict[str, str] = {}
     for f in failures:
-        by_wf[f.get("name", "?")] = by_wf.get(f.get("name", "?"), 0) + 1
+        name = f.get("name", "?")
+        by_wf[name] = by_wf.get(name, 0) + 1
+        latest[name] = f.get("url", "")
     value = f"{len(failures)} failed runs / {len(by_wf)} workflows, {ci_open} open ci:failure"
     band = band_of(not failures, len(failures) <= WATCH_FAILURES)
-    top = sorted(by_wf.items(), key=lambda kv: kv[1], reverse=True)[:5]
-    return value, band, f"top={top}"
+    ranked = sorted(by_wf.items(), key=lambda kv: kv[1], reverse=True)[:5]
+    detail = "; ".join(f"{name} x{count} {latest.get(name, '')}" for name, count in ranked)
+    return value, band, detail or "no failures"
 
 
 def _issue_tier(names: list[str], tiers: dict) -> str:
@@ -227,7 +231,7 @@ def m_dispatch(issues: list[dict], tiers: dict) -> tuple[str, str, str]:
             continue
     value = f"{len(tasks)} agent-task {by_tier}, {len(stuck)} stuck"
     band = band_of(not stuck, len(stuck) <= HEALTHY_STUCK)
-    detail = f"stuck={stuck[:10]}" + (" truncated=True" if truncated else "")
+    detail = f"stuck={[f'#{n}' for n in stuck[:10]]}" + (" truncated=True" if truncated else "")
     return value, band, detail
 
 
@@ -250,8 +254,9 @@ def m_releases(prs: list[dict]) -> tuple[str, str, str]:
     oldest = max((a for _, a in ages), default=0)
     value = f"{len(ages)} open release PRs, oldest {oldest}d"
     # Accumulation is the intended design; only age is a signal.
-    band = band_of(oldest <= 7, oldest <= WATCH_RELEASE_AGE)
-    return value, band, f"{ages[:8]}"
+    band = band_of(oldest <= HEALTHY_RELEASE_AGE, oldest <= WATCH_RELEASE_AGE)
+    base = f"https://github.com/{REPO}/pull"
+    return value, band, ", ".join(f"#{n} ({a}d) {base}/{n}" for n, a in ages[:8]) or "none"
 
 
 def m_bootstrap() -> tuple[str, str, str]:
@@ -325,7 +330,7 @@ def collect() -> list[tuple[str, str, str, str]]:
             f"&created=%3E%3D{since}&per_page=100",
             "--paginate",
             "--jq",
-            "[.workflow_runs[] | {name}]",
+            "[.workflow_runs[] | {name, url: .html_url}]",
         )
         assert isinstance(failures, list)
     except Exception:
@@ -345,10 +350,20 @@ def collect() -> list[tuple[str, str, str, str]]:
     safe("Dispatch health", m_dispatch, issues, tiers)
     behind: dict[str, int] = {}
     try:
+        # Only branches that are live routing targets (branches map in
+        # project_routing.json). Dead module branches (atlas/olympus relics)
+        # can't be deleted (module-branch-protection) — don't track them.
+        try:
+            routing_branches = json.loads(
+                (REPO_ROOT / "scripts" / "project_routing.json").read_text()
+            ).get("branches", {})
+        except (OSError, json.JSONDecodeError):
+            routing_branches = {}
+        live = {v for v in routing_branches.values() if v.startswith("module/")}
         refs = _run(["git", "ls-remote", "origin"]).splitlines()
         for line in refs:
             m = re.search(r"refs/heads/(module/\S+)", line)
-            if m:
+            if m and m.group(1) in live:
                 branch = m.group(1)
                 try:
                     n = int(
@@ -398,9 +413,39 @@ BAND_COLORS = {
     "unknown": ("#5f6368", "#f1f3f4"),
 }
 
+# Static "where to start" guidance per dimension for agents and humans.
+ACTION_HINTS = {
+    "Backlog hygiene": "Triage missing labels; close or re-scope stale issues.",
+    "Label-set integrity": "Strip unexpected labels from issues, then delete the labels.",
+    "Docs freshness": "A human judges each candidate; update the ARCHITECTURE.md or record why not.",
+    "Ops health": "Open the latest failed run below; fix the cause or file an agent-task.",
+    "Dispatch health": "Bounce agent-task on stuck issues (dispatch replay, dry-run first).",
+    "Branch routing health": "Sync stale module branches via PR into module/* (force-push is blocked).",
+    "Release discipline": "Decide per PR: merge for a real release, or leave it accumulating.",
+    "Bootstrap essentials": "Restore the missing file/target by hand.",
+}
+
+SEVERITY_ORDER = {"sick": 0, "unknown": 1, "watch": 2, "healthy": 3}
+
 
 def _esc(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _linkify(text: str) -> str:
+    """Link run URLs and #issue numbers in already-escaped text."""
+    text = re.sub(
+        r"https://github\.com/digithings-ai/digithings/[^\s),\"']+",
+        lambda m: f"<a href='{m.group(0)}'>{m.group(0)}</a>",
+        text,
+    )
+    return re.sub(
+        r"#(\d{2,5})",
+        lambda m: (
+            f"<a href='https://github.com/digithings-ai/digithings/issues/{m.group(1)}'>#{m.group(1)}</a>"
+        ),
+        text,
+    )
 
 
 def render_html(rows: list[tuple[str, str, str, str]], stamp: str) -> str:
@@ -413,14 +458,25 @@ def render_html(rows: list[tuple[str, str, str, str]], stamp: str) -> str:
         for b in ("healthy", "watch", "sick", "unknown")
     )
     cards = []
-    for idx, (dim, value, band, detail) in enumerate(rows, 1):
+    ordered = sorted(enumerate(rows, 1), key=lambda t: (SEVERITY_ORDER.get(t[1][2], 9), t[0]))
+    first_bad = next((t for t in ordered if t[1][2] in ("sick", "unknown")), None)
+    if first_bad is None:
+        start_here = "<p class='start ok'>All healthy — nothing needs you.</p>"
+    else:
+        num, (dim, value, band, _d) = first_bad
+        start_here = (
+            f"<p class='start'>Start here: <strong>#{num} {_esc(dim)}</strong> ({band}) — "
+            f"{_esc(value)}. {_esc(ACTION_HINTS.get(dim, ''))}</p>"
+        )
+    for idx, (dim, value, band, detail) in ordered:
         fg, bg = BAND_COLORS.get(band, BAND_COLORS["unknown"])
         cards.append(
             f"<section class='card' style='border-left-color:{fg}'>"
-            f"<header><span class='num'>{idx}</span><h2>{_esc(dim)}</h2>"
+            f"<header><span class='num'>#{idx}</span><h2>{_esc(dim)}</h2>"
             f"<span class='badge' style='color:{fg};background:{bg}'>{band}</span></header>"
             f"<p class='value'>{_esc(value)}</p>"
-            f"<details><summary>detail</summary><code>{_esc(detail)}</code></details>"
+            f"<p class='hint'>{_esc(ACTION_HINTS.get(dim, ''))}</p>"
+            f"<details><summary>detail</summary><code>{_linkify(_esc(detail))}</code></details>"
             "</section>"
         )
     return f"""<!DOCTYPE html>
@@ -445,6 +501,9 @@ header.top p {{ color: #5f6368; margin: 0 0 1rem; }}
 .num {{ color: #5f6368; font-variant-numeric: tabular-nums; }}
 .badge {{ border-radius: 4px; padding: .1rem .5rem; font-size: .8rem; font-weight: 600; }}
 .value {{ font-size: 1.1rem; margin: .5rem 0; }}
+.hint {{ font-size: .9rem; color: #444; margin: .25rem 0 .5rem; }}
+.start {{ background: #fef7e0; border: 1px solid #f9ab00; border-radius: 8px; padding: .7rem 1rem; }}
+.start.ok {{ background: #e6f4ea; border-color: #137333; }}
 details {{ font-size: .85rem; color: #444; }}
 details code {{ word-break: break-all; white-space: pre-wrap; }}
 footer {{ color: #5f6368; font-size: .8rem; margin-top: 2rem; }}
@@ -455,6 +514,7 @@ footer {{ color: #5f6368; font-size: .8rem; margin-top: 2rem; }}
 <h1>digithings readiness</h1>
 <p>Computed {stamp} via <code>make readiness</code> — advisory only, never a gate.</p>
 <p>{summary}</p>
+{start_here}
 </header>
 <main>
 {"".join(cards)}
