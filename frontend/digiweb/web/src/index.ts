@@ -221,6 +221,9 @@ export {
 } from "./components/controls/Select";
 export { Slider, sliderFill, type SliderProps } from "./components/controls/Slider";
 
+// conviction family — dashboard F6 vocabulary, promoted verbatim
+export { ConvictionMeter, SignedConvictionBadge } from "./components/conviction";
+
 // finance-charts family (#1450)
 export {
   PriceChart,

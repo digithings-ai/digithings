@@ -30,6 +30,8 @@ import { DatePager, formatDatePagerLabel } from "./DatePager";
 import { IconButton, Pager, PagerPage, SegmentedControl } from "./NavButtons";
 import { Pagination, paginationWindow } from "./Pagination";
 import { Checkbox, Radio, RadioGroup, Switch } from "./Selection";
+import { ConvictionMeter } from "../conviction/ConvictionMeter";
+import { SignedConvictionBadge } from "../conviction/SignedConvictionBadge";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./Select";
 import { Slider, sliderFill } from "./Slider";
 import { SearchBar } from "./SearchBar";
@@ -591,5 +593,37 @@ describe("Slider", () => {
     expect(sliderFill(120, 20, 400)).toContain("26.31578947368421%");
     expect(sliderFill(0, 0, 100)).toContain("0%");
     expect(sliderFill(100, 0, 100)).toContain("100%");
+  });
+});
+
+describe("ConvictionMeter", () => {
+  it("renders clamped accent pips with test hooks", () => {
+    const html = renderToStaticMarkup(
+      <ConvictionMeter value={2} max={3} srLabel="Conviction medium conviction" />
+    );
+    expect(html).toContain('role="img"');
+    expect(html).toContain('aria-label="Conviction medium conviction"');
+    expect(html.match(/data-filled="true"/g)).toHaveLength(2);
+    expect(html.match(/data-filled="false"/g)).toHaveLength(1);
+    expect(html).toContain("bg-accent");
+    expect(html).toContain("bg-hair");
+  });
+
+  it("clamps out-of-range values", () => {
+    const html = renderToStaticMarkup(<ConvictionMeter value={9} max={3} srLabel="x" />);
+    expect(html.match(/data-filled="true"/g)).toHaveLength(3);
+  });
+});
+
+describe("SignedConvictionBadge", () => {
+  it("tones by sign without clamping", () => {
+    const neg = renderToStaticMarkup(<SignedConvictionBadge value={-3} />);
+    expect(neg).toContain("text-down");
+    expect(neg).toContain("−3");
+    const zero = renderToStaticMarkup(<SignedConvictionBadge value={0} />);
+    expect(zero).toContain("text-up");
+    expect(zero).toContain("+0");
+    const big = renderToStaticMarkup(<SignedConvictionBadge value={12} />);
+    expect(big).toContain("+12");
   });
 });
