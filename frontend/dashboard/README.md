@@ -223,13 +223,13 @@ secure WebSockets (`wss://*.supabase.co`).
 (`https://digithings.ai`, `digichat.digithings.ai`, loopback `:3005`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
-### digichat popup (Desk+ — #3422 / #3581)
+### digichat popup (Desk+ — #3422 / #3581 / #3587)
 
-Desk / Studio / Enterprise sessions see a bottom-right **ask digichat** rectangle
-launcher (Brief and Observer do not) — same casing as digithings-web’s desktop
-CTA. Click opens the embed panel; click again (label becomes **close**) dismisses
-it. The panel top-right **expand** / **collapse** toggles a near-fullscreen
-overlay; Escape collapses first, then closes.
+Desk / Studio / Enterprise sessions see a bottom-right **compact Digi D-mark**
+launcher (Brief and Observer do not). Idle: square logo only. Hover/focus: mono
+**ask digichat** types out (mecha cursor). Open: label becomes **close**; click
+again dismisses. The panel top-right **expand** / **collapse** toggles a
+near-fullscreen overlay; Escape collapses first, then closes.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
 (`digichat:page-context`) for the visible dashboard DOM — sanitized **HTML**
@@ -244,7 +244,8 @@ the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
 direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
 so Turbopack inlines them — passing whole `process.env` leaves the client empty
 and the launcher disappears after hydrate (#3561).
-Default launcher chrome is always the rectangular **ask digichat** control (#3581).
+Local dogfood: digichat on `http://127.0.0.1:3005` + dashboard
+`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`.
 `NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
 to a round ✦ launcher.
 
