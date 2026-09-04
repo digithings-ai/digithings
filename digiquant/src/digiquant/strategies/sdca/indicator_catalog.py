@@ -284,7 +284,18 @@ def build_extra_indicators(
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
 ) -> list[IndicatorWeight]:
-    """Materialize enabled extras. Weight 0 is omitted (does not null the blend).
+    """Materialize enabled extras, plus the always-on price oscillators for display.
+
+    Macro extras (M2 / rs_eth / DXY) are only materialized at weight > 0 (a
+    zero weight omits them entirely, so they never null the blend). The
+    price oscillators (``weekly_rsi`` / ``sma_band``) are pure price-derived
+    and allowlist-gated only, not weight-gated: they're always materialized
+    with ``enabled=False`` when their weight is 0, so ``build_risk_index``
+    can still write their z-series into the risk parquet for the frontend
+    Indicators tab, while ``compute_composite_risk`` (which filters on
+    ``ind.enabled``, not weight) excludes them from the actual composite
+    risk / trading signal exactly as before. ``weekly_macd`` stays
+    weight-gated like the macro extras.
 
     ``btc_price`` is the *asset* close (BTC, ETH, or another series). Macro
     extras (M2 / rs_eth / DXY) are BTC-oriented plugins; pass ``allowlist``
@@ -347,7 +358,7 @@ def build_extra_indicators(
                 weight=enabled["dxy"],
             )
         )
-    if "weekly_rsi" in enabled:
+    if allowlist is None or "weekly_rsi" in allowlist:
         extras.append(
             IndicatorWeight(
                 name="weekly_rsi",
@@ -357,7 +368,8 @@ def build_extra_indicators(
                     weekly_length=spec.rsi_length,
                     daily_length=spec.daily_rsi_length,
                 ),
-                weight=enabled["weekly_rsi"],
+                weight=weights.weekly_rsi,
+                enabled=weights.weekly_rsi > 0.0,
             )
         )
     if "weekly_macd" in enabled:
@@ -377,7 +389,7 @@ def build_extra_indicators(
                 weight=enabled["weekly_macd"],
             )
         )
-    if "sma_band" in enabled:
+    if allowlist is None or "sma_band" in allowlist:
         extras.append(
             IndicatorWeight(
                 name="sma_band",
@@ -389,7 +401,8 @@ def build_extra_indicators(
                     fast_window=spec.sma_band_fast_window,
                     fast_min_samples=spec.sma_band_fast_min_samples,
                 ),
-                weight=enabled["sma_band"],
+                weight=weights.sma_band,
+                enabled=weights.sma_band > 0.0,
             )
         )
     return extras

@@ -159,6 +159,7 @@ function TearsheetUnavailable({ slug, message }: { slug: string; message: string
 }
 
 const CHART_H = 440;
+const INDICATOR_CHART_H = 260;
 
 function PrintHeading({ children }: { children: string }) {
   return <h2 className="ts-print-heading">{children}</h2>;
@@ -673,7 +674,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                   <div className="ts-chart">
                     <MultiTimeSeries
                       series={railsOverlay}
-                      height={CHART_H}
+                      height={INDICATOR_CHART_H}
                       scale={chartScale === "log" ? "log" : "linear"}
                       fmt={fmtCompact}
                       view={chartView}
@@ -695,7 +696,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                     {ind.points.length > 0 ? (
                       <TimeSeries
                         points={clipPoints(ind.points, data.period_start)}
-                        height={200}
+                        height={INDICATOR_CHART_H}
                         scale="linear"
                         tone="accent"
                         fmt={(v) => fmtCompact(v)}

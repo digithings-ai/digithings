@@ -34,8 +34,8 @@
 .ts-fill-dot-sell { fill: var(--down); opacity: 0.7; }
 .ts-indicator-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 20px;
 }
 .ts-indicator-unused { opacity: 0.55; }
 .ts-indicator-caption {
