@@ -35,6 +35,9 @@ class _RecordingEmbedder(EmbeddingProvider):
 def _stub_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGISEARCH_ALLOW_STUB", "1")
     monkeypatch.setenv("DIGISEARCH_CHUNKER", "recursive")
+    # Keep pipeline unit tests free of MiniLM/OpenAI unless a test opts in.
+    monkeypatch.setenv("DIGISEARCH_EMBED", "0")
+    monkeypatch.delenv("DIGISEARCH_EMBEDDING_PROVIDER", raising=False)
     get_stub_index().clear()
 
 

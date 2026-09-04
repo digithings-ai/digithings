@@ -1,12 +1,12 @@
 /**
- * Embed slash commands (#3418). Client-only: /lang, /help, /new never leave
- * the browser. /search and /docs force a locate tool with the user string as
- * the argument — the model is not hinted.
+ * Embed slash commands (#3418, #3511). Client-only: /lang, /help, /new,
+ * /copy, /export never leave the browser. /search and /docs force a locate
+ * tool with the user string as the argument — the model is not hinted.
  */
 export const LANG_CODES = ["en", "de", "it", "es", "fr"] as const;
 export type LangCode = (typeof LANG_CODES)[number];
 
-export type SlashId = "lang" | "help" | "new" | "search" | "docs";
+export type SlashId = "lang" | "help" | "new" | "search" | "docs" | "copy" | "export";
 
 export type SlashDef = {
   id: SlashId;
@@ -37,6 +37,18 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     names: ["/lang"],
     needsArg: true,
     hint: "Switch language (en, de, it, es, fr)",
+  },
+  {
+    id: "copy",
+    names: ["/copy"],
+    needsArg: false,
+    hint: "Copy last answer as markdown",
+  },
+  {
+    id: "export",
+    names: ["/export"],
+    needsArg: false,
+    hint: "Download thread as markdown",
   },
   { id: "help", names: ["/help"], needsArg: false, hint: "Show commands" },
   { id: "new", names: ["/new"], needsArg: false, hint: "Start a new conversation" },

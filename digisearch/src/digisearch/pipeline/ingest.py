@@ -103,16 +103,34 @@ def index_chunks(
     chunks: list[Chunk],
     *,
     embedding_provider: EmbeddingProvider | None = None,
+    auto_embed: bool = True,
 ) -> str | None:
     """Optional embed hook, then write chunks via the search backend router.
+
+    When *embedding_provider* is omitted and *auto_embed* is True, resolves the
+    configured EmbeddingCache → BatchEmbedder → EmbeddingProvider stack via
+    :func:`digisearch.embedding.factory.resolve_embedding_pipeline`. Explicit
+    embed config that cannot load raises :class:`IngestError` (no silent no-op).
 
     Propagates ``RuntimeError`` from :func:`route_add_chunks` unchanged so
     callers (research / client) keep their prior exception contract. Filesystem
     ingest wraps that error in :class:`IngestError` inside :func:`ingest_source`.
     """
 
-    if embedding_provider is not None:
-        apply_embeddings(chunks, embedding_provider)
+    provider = embedding_provider
+    if provider is None and auto_embed:
+        from digisearch.embedding.factory import EmbeddingConfigError, resolve_embedding_pipeline
+
+        try:
+            provider = resolve_embedding_pipeline()
+        except EmbeddingConfigError as exc:
+            raise IngestError(
+                str(exc),
+                code="ingest_embed_config",
+                http_status=503,
+            ) from exc
+    if provider is not None:
+        apply_embeddings(chunks, provider)
     from digisearch.search._stub import route_add_chunks
 
     return route_add_chunks(index_name, chunks)
@@ -143,8 +161,11 @@ def ingest_source(
     enforce_ingest_root:
         Path containment for ``POST /ingest``. CLI leaves this False.
     embedding_provider:
-        Optional embed hook before backend write. Backends that receive
-        precomputed vectors skip their own embed step.
+        Optional embed hook before backend write. When omitted, the configured
+        embed pipeline is resolved automatically (see
+        :func:`digisearch.embedding.factory.resolve_embedding_pipeline`). Pass
+        an explicit provider to override, or set ``DIGISEARCH_EMBED=0`` to skip
+        pipeline-level embedding (backends may still embed).
     """
     try:
         from digisearch.chunking.factory import get_ingest_chunker
