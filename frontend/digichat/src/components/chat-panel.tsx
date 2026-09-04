@@ -208,6 +208,11 @@ export function ChatPanel({
   const [cliSettingsOpen, setCliSettingsOpen] = useState(false);
   const [cliSettingsIndex, setCliSettingsIndex] = useState(0);
   const [paletteIndex, setPaletteIndex] = useState(0);
+  const [paletteTextKey, setPaletteTextKey] = useState(text);
+  if (text !== paletteTextKey) {
+    setPaletteTextKey(text);
+    setPaletteIndex(0);
+  }
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -349,10 +354,6 @@ export function ChatPanel({
     const next = Math.min(ta.scrollHeight, maxHeight);
     ta.style.height = `${next}px`;
     ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
-  }, [text]);
-
-  useEffect(() => {
-    setPaletteIndex(0);
   }, [text]);
 
   const pushSystemNote = useCallback((msg: string) => {
@@ -884,6 +885,7 @@ export function ChatPanel({
             <li key={`${row.cmd}-${row.hint}`}>
               <button
                 type="button"
+                role="option"
                 className={cn(
                   "flex w-full gap-3 px-1 py-1 text-left text-xs",
                   i === paletteIndex && "text-[var(--accent)]",

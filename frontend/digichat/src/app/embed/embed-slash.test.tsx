@@ -81,7 +81,7 @@ describe("public /embed slash surface (#3418)", () => {
     await user.type(box, "/lang");
     await user.keyboard("{Enter}");
     // Current preset (French) stays highlighted after dive-in — not reset to English.
-    const frBtn = screen.getByRole("button", { name: /fr\s+French/i });
+    const frBtn = screen.getByRole("option", { name: /fr\s+French/i });
     expect(frBtn.className).toMatch(/dc-slash-item-active/);
     await user.keyboard("{ArrowUp}");
     await user.keyboard("{Enter}");

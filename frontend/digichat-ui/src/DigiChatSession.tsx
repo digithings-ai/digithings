@@ -103,6 +103,16 @@ export function DigiChatSession({
   const [cliSettingsDiveId, setCliSettingsDiveId] = useState<string | null>(null);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>({ kind: "commands" });
   const [paletteIndex, setPaletteIndex] = useState(0);
+  const [paletteInputKey, setPaletteInputKey] = useState(input);
+  if (input !== paletteInputKey) {
+    setPaletteInputKey(input);
+    if (paletteMode.kind !== "choices") {
+      setPaletteIndex(0);
+    }
+    if (!input.startsWith("/")) {
+      setPaletteMode({ kind: "commands" });
+    }
+  }
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const editTaRef = useRef<HTMLTextAreaElement>(null);
@@ -116,17 +126,6 @@ export function DigiChatSession({
       : [];
   const choiceRows =
     paletteMode.kind === "choices" ? paletteMode.options : ([] as readonly { value: string; label: string }[]);
-
-  useEffect(() => {
-    if (paletteMode.kind === "choices") return;
-    setPaletteIndex(0);
-  }, [input, paletteMode.kind]);
-
-  useEffect(() => {
-    if (!input.startsWith("/")) {
-      setPaletteMode({ kind: "commands" });
-    }
-  }, [input]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -1044,6 +1043,7 @@ export function DigiChatSession({
                 <li key={opt.value}>
                   <button
                     type="button"
+                    role="option"
                     className={`dc-slash-item${i === paletteIndex ? " dc-slash-item-active" : ""}`}
                     aria-selected={i === paletteIndex}
                     onMouseEnter={() => setPaletteIndex(i)}
@@ -1063,6 +1063,7 @@ export function DigiChatSession({
                 <li key={cmd.id}>
                   <button
                     type="button"
+                    role="option"
                     className={`dc-slash-item${i === paletteIndex ? " dc-slash-item-active" : ""}`}
                     aria-selected={i === paletteIndex}
                     onMouseEnter={() => setPaletteIndex(i)}
