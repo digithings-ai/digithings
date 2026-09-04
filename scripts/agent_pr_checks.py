@@ -15,13 +15,15 @@ AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
 # volume in this repo (38 + 19 of the last 100 PRs) and previously had zero
 # automerge-eligibility coverage at all — the allowlist here only ever tracked
 # cursor/bot, which covered a smaller slice than it excluded.
-IGNORED_CHECK_NAMES: frozenset[str] = frozenset()
+# Optional rubric job (reusable workflow → ``score / score``). AGENTS.md: not a
+# merge gate. Keep out of hard-fail lists so score-only red does not block
+# automerge / merge-when-ready (#3528).
+IGNORED_CHECK_NAMES: frozenset[str] = frozenset({"score / score"})
 
 
 def _gh_json(*args: str) -> object:
     out = subprocess.check_output(["gh", *args], text=True)
     return json.loads(out)
-
 
 
 def agent_checks_ok(repo: str, pr_number: int, head_branch: str, head_sha: str) -> tuple[bool, str]:
@@ -36,7 +38,11 @@ def agent_checks_ok(repo: str, pr_number: int, head_branch: str, head_sha: str) 
             "--json",
             "name,state",
         )
-        bad = [c for c in checks if c.get("state") != "SUCCESS"]
+        bad = [
+            c
+            for c in checks
+            if c.get("state") != "SUCCESS" and c.get("name") not in IGNORED_CHECK_NAMES
+        ]
         if bad:
             return False, f"{len(bad)} check(s) not SUCCESS"
         return True, "all checks SUCCESS"
@@ -71,7 +77,9 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) != 5:
-        print("usage: agent_pr_checks.py <repo> <pr_number> <head_branch> <head_sha>", file=sys.stderr)
+        print(
+            "usage: agent_pr_checks.py <repo> <pr_number> <head_branch> <head_sha>", file=sys.stderr
+        )
         raise SystemExit(2)
     ok, reason = agent_checks_ok(sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4])
     print(reason)

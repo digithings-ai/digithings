@@ -27,7 +27,7 @@ The following is built and functional as of this architecture review (March 2026
 
 | Area | State | Key Files |
 |------|-------|-----------|
-| FastAPI HTTP app | Built | `server.py` |
+| FastAPI HTTP app | Built | `server.py` + `http_api/` |
 | LangGraph `StateGraph[WorkflowState]` | Built | `graph/graph.py`, `graph/state.py` |
 | Research subgraph (LLM + tool loop) | Built | `graph/research.py`, `graph/research_subgraph.py` |
 | Two-tier context compaction | Built | `compaction.py` (wired from `graph/research.py`, `graph/research_agent.py`) |
@@ -36,7 +36,7 @@ The following is built and functional as of this architecture review (March 2026
 | Optimize node | Built | `graph/nodes.py` |
 | Supervisor node (opt-in via `DIGI_SUPERVISOR=1`) | Built | `graph/nodes.py` |
 | Orchestrator tool registry | Built | `orchestration/registry.py` |
-| Built-in tools + skills | Built | `orchestration/builtin.py` |
+| Built-in tools + skills | Built | `orchestration/builtin.py` + `*_tools.py` |
 | Vertical hub clients (digisearch, digiquant, digivault) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py`, `vertical_orchestrator/digivault_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
 | LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
@@ -340,7 +340,11 @@ digigraph/src/digigraph/
 ├── chat_prompt.py               Flatten OpenAI chat messages → workflow prompt (multi-turn)
 ├── languages.py                 Curated X-Digi-Language directive (do not translate retrieval queries)
 ├── retrieval.py                 Force-tool aliases, vault-path extraction, auto digivault_get_note hop (batch ≤20)
-├── server.py                    FastAPI app, middleware stack, all HTTP routes
+├── server.py                    FastAPI app, middleware stack, HTTP route wiring
+├── http_api/                    Request helpers extracted from server.py
+│   ├── context.py               digikey field injection, thread config
+│   ├── chat_resolve.py          Chat option resolvers (headers/body)
+│   └── streaming.py             SSE chunk helpers + progressive workflow stream
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
@@ -369,9 +373,17 @@ digigraph/src/digigraph/
 │   └── research_brief.py        research_brief_builder_node
 ├── orchestration/
 │   ├── registry.py              ToolContext, register_tool, register_skill, get_tools, execute
-│   ├── builtin.py               All built-in tool + skill registrations; loads entry points
+│   ├── builtin.py               Tool/skill registration facade; re-exports for tests
+│   ├── tool_common.py           Shared digisearch preview/filter helpers
+│   ├── digisearch_tools.py      digisearch + research_delegate handlers
+│   ├── digivault_tools.py       digivault_search_notes / get_note handlers
+│   ├── agent_tools.py           visualization / analysis / data_* handlers
+│   ├── digistore_tools.py       digistore_list / digistore_profile
+│   ├── planning_tools.py        todo / create_plan
+│   ├── federated_tools.py       digiquant_pipeline_delegate
+│   ├── web_search_tools.py      web_search (External evidence)
 │   └── plugins.py               setuptools entry point loader (digigraph.tools)
-├── vertical_orchestrator/
+├── vertical_orchestrator/       Canonical hub path for vertical tool invoke
 │   ├── digisearch_hub.py        fetch_digisearch_tool_dicts, invoke_digisearch_tool
 │   ├── digiquant_hub.py         fetch_digiquant_tool_dicts, invoke_digiquant_tool
 │   └── digivault_hub.py         fetch_digivault_tool_dicts, invoke_digivault_tool
@@ -382,15 +394,24 @@ digigraph/src/digigraph/
 │   ├── data_prep/               run_data_prep_agent
 │   └── visualization/           run_visualization_agent, VISUALIZATION_AGENT_TOOL
 ├── tools/
-│   └── digisearch.py            Thin POST /query client (non-orchestrator call sites)
+│   └── digisearch.py            Thin POST /query client (research node only; not the tool path)
 ├── planning/
 │   └── executor.py              Plan executor: topo-sort, placeholder resolution, parallel steps
 ├── skills/
 │   └── __init__.py              get_tools_for_skills (delegates to registry)
 ├── formatters/
 │   └── __init__.py              get_stream_formatter, neutral and Open WebUI formatters
-└── connectors/                  (reserved for Phase 2 connector extensions)
 ```
+
+### 5.1.1 DigiSearch integration (single path)
+
+Built-in digisearch **tools** always go through `vertical_orchestrator/digisearch_hub.py`
+(`POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke`). Handlers live in
+`orchestration/digisearch_tools.py` and are registered from `orchestration/builtin.py`.
+
+The only remaining direct digisearch HTTP client is `tools/digisearch.py` (`POST /query`),
+used by the research-node utilities that do not go through the orchestrator tool loop.
+The obsolete `connectors/` package (`/v1/research_turn` / `/v1/workflow` shims) was removed.
 
 ### 5.2 LangGraph StateGraph
 
@@ -430,7 +451,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set. The `web` skill (`web_search` via digillm) activates only when `WorkflowState.enable_web_search` is true — digichat sends `X-Digi-Enable-Web-Search` after tenant + user opt-in (#3420); default off so web never mixes into corpus RAG silently. External cites use `evidence_tier: External` and supplement vault/search hits.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -751,7 +772,7 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 ### 8.3 digistore for LLM Context Reduction
 
-Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
+Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `orchestration/tool_common.py`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
 `digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
 
@@ -818,7 +839,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.
-- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `builtin.py:34`.
+- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `orchestration/tool_common.py`.
 - **Env:** `DIGISEARCH_URL` (required; empty = digisearch tools disabled). In Docker: `http://digisearch:8002`.
 
 ### 9.2 digiquant

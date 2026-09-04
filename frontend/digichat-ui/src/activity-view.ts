@@ -115,6 +115,7 @@ const TOOL_LABELS: Record<string, string> = {
   digivault: "Find original documents",
   digivault_search_notes: "Find original documents",
   digivault_get_note: "Load document",
+  web_search: "Web search (External)",
 };
 
 /** Wire ids whose in-flight fold should read "Searching…", not "Working…". */
@@ -124,6 +125,7 @@ const LOCATE_TOOL_NAMES = new Set([
   "rag_sources",
   "digivault",
   "digivault_search_notes",
+  "web_search",
 ]);
 
 /** Human labels for the head only — identity keys still use the wire tool id. */

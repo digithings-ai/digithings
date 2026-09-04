@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+import pytest
 from digiquant.indicators.m2_signals import M2SignalComputer
+
+pytestmark = pytest.mark.unit
 
 
 def _make_m2_df(n: int = 300) -> pl.DataFrame:

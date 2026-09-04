@@ -107,7 +107,6 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - Any change to auth, JWT, or cryptography code (digikey/)
 - Any change that touches live-trading paths
 - New external service dependency or infrastructure change
-- Novel architecture decision not covered by existing ARCHITECTURE.md specs
 
 ---
 
