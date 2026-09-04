@@ -252,9 +252,8 @@ class LightRAGBackend:
         if hasattr(rag, "adelete_by_doc_id"):
             await rag.adelete_by_doc_id(document_ids)
             return
-        logger.warning(
-            "LightRAG client has no adelete_by_doc_id; delete is a no-op for %s",
-            document_ids,
+        raise NotImplementedError(
+            "LightRAG client has no adelete_by_doc_id; cannot honor RetrievalBackend.delete"
         )
 
     async def health(self) -> bool:

@@ -12,6 +12,7 @@ import json
 import logging
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urlparse
@@ -24,6 +25,24 @@ logger = logging.getLogger(__name__)
 DEFAULT_TABLE = "digisearch_retrieval"
 DEFAULT_DIMENSIONS = 384
 DSN_ENV_VARS = ("DIGISEARCH_PGVECTOR_URL", "DIGISEARCH_DATABASE_URL")
+_TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_MIN_DIM, _MAX_DIM = 1, 8192
+
+
+def _validate_table_name(table: str) -> str:
+    if not _TABLE_NAME_RE.match(table):
+        raise ValueError(
+            f"Invalid pgvector table name {table!r}; use letters, digits, underscore only"
+        )
+    return table
+
+
+def _validate_dimensions(dimensions: int) -> int:
+    if not isinstance(dimensions, int) or not (_MIN_DIM <= dimensions <= _MAX_DIM):
+        raise ValueError(
+            f"Invalid embedding dimensions {dimensions!r}; expected int in [{_MIN_DIM}, {_MAX_DIM}]"
+        )
+    return dimensions
 
 
 def resolve_pgvector_dsn(explicit: str | None = None) -> str | None:
@@ -109,7 +128,7 @@ class PsycopgVectorStore:
 
     def __init__(self, dsn: str, *, table: str = DEFAULT_TABLE) -> None:
         self._dsn = dsn
-        self._table = table
+        self._table = _validate_table_name(table)
         self._dimensions: int | None = None
 
     def _connect(self) -> Any:
@@ -122,7 +141,8 @@ class PsycopgVectorStore:
         return psycopg.AsyncConnection.connect(self._dsn)
 
     async def ensure_schema(self, dimensions: int) -> None:
-        self._dimensions = dimensions
+        dims = _validate_dimensions(dimensions)
+        self._dimensions = dims
         async with await self._connect() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
@@ -131,7 +151,7 @@ class PsycopgVectorStore:
                     CREATE TABLE IF NOT EXISTS {self._table} (
                         document_id TEXT PRIMARY KEY,
                         content TEXT NOT NULL,
-                        embedding vector({dimensions}) NOT NULL,
+                        embedding vector({dims}) NOT NULL,
                         metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
                         source TEXT NOT NULL DEFAULT '',
                         doc_type TEXT NOT NULL DEFAULT ''
@@ -252,15 +272,17 @@ class PgvectorBackend:
     ----------
     dsn:
         Postgres URL. When omitted, reads ``DIGISEARCH_PGVECTOR_URL`` /
-        ``DIGISEARCH_DATABASE_URL``. When still unset, uses an in-memory store
-        (tests / local smoke only — not for production).
+        ``DIGISEARCH_DATABASE_URL``. When still unset, requires ``allow_memory=True``
+        or ``DIGISEARCH_ALLOW_MEMORY_RETRIEVAL=1`` (tests / local smoke only).
     store:
         Optional pre-built :class:`VectorStore` (tests inject fakes).
     embedder:
         Object with ``embed(texts) -> list[list[float]]`` and ``dimensions``.
         Defaults to :class:`~digisearch.embedding.providers.minilm.MiniLMEmbedder`.
     table:
-        Postgres table name (real store only).
+        Postgres table name (real store only); must match ``^[A-Za-z_][A-Za-z0-9_]*$``.
+    allow_memory:
+        When True and no DSN, use an in-memory store. Default False (fail-closed).
     """
 
     name = "pgvector"
@@ -272,9 +294,18 @@ class PgvectorBackend:
         store: VectorStore | None = None,
         embedder: Any | None = None,
         table: str = DEFAULT_TABLE,
-        allow_memory: bool = True,
+        allow_memory: bool | None = None,
     ) -> None:
         resolved = resolve_pgvector_dsn(dsn)
+        if allow_memory is None:
+            allow_memory = os.environ.get(
+                "DIGISEARCH_ALLOW_MEMORY_RETRIEVAL", ""
+            ).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
         if store is not None:
             self._store: VectorStore = store
         elif resolved:
@@ -288,7 +319,8 @@ class PgvectorBackend:
         else:
             raise ValueError(
                 "PgvectorBackend requires DIGISEARCH_DATABASE_URL / "
-                "DIGISEARCH_PGVECTOR_URL when allow_memory=False"
+                "DIGISEARCH_PGVECTOR_URL (or allow_memory=True / "
+                "DIGISEARCH_ALLOW_MEMORY_RETRIEVAL=1 for tests)"
             )
         if embedder is None:
             from digisearch.embedding.providers.minilm import get_default_minilm_embedder

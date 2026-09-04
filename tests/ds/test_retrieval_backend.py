@@ -18,7 +18,7 @@ from digisearch.retrieval import (
     get_retrieval_backend,
     resolve_retrieval_backend_name,
 )
-from digisearch.retrieval.pgvector import InMemoryVectorStore
+from digisearch.retrieval.pgvector import InMemoryVectorStore, PsycopgVectorStore
 
 
 class _FakeEmbedder:
@@ -177,6 +177,43 @@ def test_lightrag_backend_index_retrieve_delete() -> None:
         await backend.delete(["d1"])
         after = await backend.retrieve("graph retrieval", top_k=5)
         assert all(h.document_id != "d1" for h in after)
+
+    asyncio.run(_run())
+
+
+@pytest.mark.unit
+def test_pgvector_fails_closed_without_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGISEARCH_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DIGISEARCH_PGVECTOR_URL", raising=False)
+    monkeypatch.delenv("DIGISEARCH_ALLOW_MEMORY_RETRIEVAL", raising=False)
+    with pytest.raises(ValueError, match="DIGISEARCH_DATABASE_URL"):
+        PgvectorBackend(embedder=_FakeEmbedder())
+
+
+@pytest.mark.unit
+def test_pgvector_rejects_unsafe_table_name() -> None:
+    with pytest.raises(ValueError, match="Invalid pgvector table name"):
+        PsycopgVectorStore("postgresql://localhost/db", table="evil;drop")
+
+
+@pytest.mark.unit
+def test_lightrag_delete_raises_without_adelete() -> None:
+    class _NoDelete:
+        async def initialize_storages(self) -> None:
+            return None
+
+        async def ainsert(self, *args: Any, **kwargs: Any) -> str:
+            del args, kwargs
+            return "t"
+
+        async def aquery(self, *args: Any, **kwargs: Any) -> str:
+            del args, kwargs
+            return ""
+
+    async def _run() -> None:
+        backend = LightRAGBackend(client=_NoDelete())  # type: ignore[arg-type]
+        with pytest.raises(NotImplementedError, match="adelete_by_doc_id"):
+            await backend.delete(["x"])
 
     asyncio.run(_run())
 
