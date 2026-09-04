@@ -108,6 +108,7 @@ jobs:
             web:
               - 'frontend/digithings-web/**'
               - 'frontend/digiquant-web/**'
+              - 'frontend/digithings-cron/**'
               - 'frontend/digichat-ui/**'
               - 'frontend/digiweb/web/**'
               - 'frontend/digiweb/design/**'
@@ -186,6 +187,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - 'frontend/digithings-cron/**'
               - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
