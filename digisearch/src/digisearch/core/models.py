@@ -26,7 +26,9 @@ class Document:
     doc_type: str  # "pdf", "html", "docx", etc.
     metadata: dict[str, Any] = field(default_factory=dict)
     chunks: list["Chunk"] = field(default_factory=list)
-    segments: list["Segment"] = field(default_factory=list)  # structural units; empty = unstructured
+    segments: list["Segment"] = field(
+        default_factory=list
+    )  # structural units; empty = unstructured
 
 
 @dataclass
@@ -49,8 +51,12 @@ class Query:
     top_k: int = 10
     filters: dict[str, Any] = field(default_factory=dict)
     mode: str = "hybrid"
-    columns: list[str] | None = None  # optional metadata columns to return (intersected with index config)
-    facets: list[str] | None = None  # Azure: facet expressions e.g. ["sourceType", "itemType,count:20"]
+    columns: list[str] | None = (
+        None  # optional metadata columns to return (intersected with index config)
+    )
+    facets: list[str] | None = (
+        None  # Azure: facet expressions e.g. ["sourceType", "itemType,count:20"]
+    )
     include_facets: bool = False  # When True, response carries facet counts (from request.facets or index config facets).
     # Azure: hit highlighting (fields must be searchable)
     highlight_fields: list[str] | None = None
@@ -62,6 +68,9 @@ class Query:
     include_total_count: bool = False  # when True, total in response is full match count
     # Multi-tenant / workspace isolation (optional; backends may map to index prefix or ACL filters).
     workspace_id: str | None = None
+    # When True, query_index skips optional DIGISEARCH_RERANK_ENABLED second pass
+    # (fetch_all pages must not reorder partial pages — #2441).
+    skip_rerank: bool = False
 
 
 @dataclass
@@ -80,7 +89,9 @@ class SearchResponse:
 
     results: list["Result"]
     facets: dict[str, list[dict[str, Any]]] | None = None  # field -> [{value, count}, ...]
-    total_count: int | None = None  # full match count when include_total_count was True (Azure get_count())
+    total_count: int | None = (
+        None  # full match count when include_total_count was True (Azure get_count())
+    )
     #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``); None if unknown.
     backend: str | None = None
 
