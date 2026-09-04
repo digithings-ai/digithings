@@ -1,0 +1,167 @@
+"""NautilusTrader long-only relative-strength rotator (#1084 Phase 1).
+
+Precompute → drive pattern (same as ``m2_liquidity`` / SDCA):
+
+1. ``RsRanker.rank`` + ``build_allocation_frame`` write a parquet of
+   ``date, symbol, weight`` (empty date ⇒ cash).
+2. This strategy loads that path in ``on_start`` and, on each clock bar,
+   rebalances sleeves toward the day's target weights.
+
+Optional macro regime gating belongs in the *allocation* parquet (set all
+weights to cash when ``risk_on`` is false) — see ``build_allocation_frame``.
+No live-trading / broker path.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+
+import polars as pl
+from nautilus_trader.config import StrategyConfig
+from nautilus_trader.core.datetime import unix_nanos_to_dt
+from nautilus_trader.model.data import Bar, BarType
+from nautilus_trader.model.enums import OrderSide, TimeInForce
+from nautilus_trader.model.identifiers import InstrumentId
+from nautilus_trader.model.instruments import Instrument
+from nautilus_trader.trading.strategy import Strategy
+
+from digiquant.strategies.registry import register
+
+
+class RsRotationConfig(StrategyConfig, frozen=True):
+    """Configuration for the Phase-1 RS rotation strategy."""
+
+    # Clock instrument drives rebalance checks; other sleeves are still subscribed.
+    instrument_id: InstrumentId
+    bar_type: BarType
+    # Comma-separated InstrumentId / BarType strings for the full sleeve universe.
+    instrument_ids_csv: str
+    bar_types_csv: str
+    allocation_path: str
+    # Notional quote currency allocated when fully invested (split by weight).
+    portfolio_notional: Decimal
+    # Ignore tiny residual diffs when deciding whether to trade.
+    rebalance_tolerance: float = 0.02
+
+
+class RsRotationStrategy(Strategy):
+    """Long-only top-N rotator driven by a precomputed allocation parquet."""
+
+    def __init__(self, config: RsRotationConfig) -> None:
+        super().__init__(config)
+        self._allocations: dict[date, dict[str, float]] = {}
+        self._instruments: dict[InstrumentId, Instrument] = {}
+        self._bar_types: list[BarType] = []
+        self._instrument_ids: list[InstrumentId] = []
+        self._last_rebalance_date: date | None = None
+
+    def _parse_universe(self) -> None:
+        id_tokens = [t.strip() for t in self.config.instrument_ids_csv.split(",") if t.strip()]
+        bt_tokens = [t.strip() for t in self.config.bar_types_csv.split(",") if t.strip()]
+        if not id_tokens or len(id_tokens) != len(bt_tokens):
+            raise ValueError(
+                "instrument_ids_csv and bar_types_csv must be non-empty and equal length"
+            )
+        self._instrument_ids = [InstrumentId.from_str(t) for t in id_tokens]
+        self._bar_types = [BarType.from_str(t) for t in bt_tokens]
+
+    def _load_allocations(self) -> dict[date, dict[str, float]]:
+        df = pl.read_parquet(self.config.allocation_path)
+        required = {"date", "symbol", "weight"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"allocation parquet missing columns: {sorted(missing)}")
+        out: dict[date, dict[str, float]] = {}
+        for row in df.select(["date", "symbol", "weight"]).to_dicts():
+            d = row["date"]
+            key = d if isinstance(d, date) else date.fromisoformat(str(d)[:10])
+            out.setdefault(key, {})[str(row["symbol"])] = float(row["weight"])
+        return out
+
+    def on_start(self) -> None:
+        self._parse_universe()
+        for iid in self._instrument_ids:
+            inst = self.cache.instrument(iid)
+            if inst is None:
+                self.log.error(f"Could not find instrument for {iid}")
+                self.stop()
+                return
+            self._instruments[iid] = inst
+        try:
+            self._allocations = self._load_allocations()
+        except (OSError, ValueError, pl.exceptions.PolarsError) as exc:
+            self.log.error(f"Failed to load allocations: {exc}")
+            self.stop()
+            return
+        for bt in self._bar_types:
+            self.subscribe_bars(bt)
+
+    def on_bar(self, bar: Bar) -> None:
+        # Clock on the configured primary bar_type only.
+        if bar.bar_type != self.config.bar_type:
+            return
+        bar_date = unix_nanos_to_dt(bar.ts_event).date()
+        if self._last_rebalance_date == bar_date:
+            return
+        self._last_rebalance_date = bar_date
+        targets = self._allocations.get(bar_date, {})
+        self._rebalance_to(targets, mark_price=bar.close.as_double())
+
+    def _rebalance_to(self, targets: dict[str, float], *, mark_price: float) -> None:
+        """Flatten to cash when targets empty; else size sleeves by weight."""
+        del mark_price  # reserved for future residual checks against last print
+        notional = float(self.config.portfolio_notional)
+        tol = float(self.config.rebalance_tolerance)
+
+        # First flatten anything not in today's target (including all-cash days).
+        target_ids = {InstrumentId.from_str(sym) for sym in targets} if targets else set()
+        # Allocation symbols may be bare tickers; match against instrument id symbols.
+        target_by_symbol = {sym: w for sym, w in targets.items()}
+
+        for iid, inst in self._instruments.items():
+            symbol_key = str(iid).split(".")[0]
+            # Prefer full InstrumentId string, then bare symbol.
+            weight = target_by_symbol.get(str(iid), target_by_symbol.get(symbol_key, 0.0))
+            pos = self.portfolio.net_position(iid)
+            pos_qty = float(pos) if pos is not None else 0.0
+            # Desired qty from notional * weight / last mid; fall back to flat when weight 0.
+            last = self.cache.price(iid)
+            px = float(last) if last is not None else None
+            if weight <= 0 or px is None or px <= 0:
+                if abs(pos_qty) > 0:
+                    self.close_all_positions(iid)
+                continue
+            desired = (notional * weight) / px
+            if abs(desired - pos_qty) / max(abs(desired), 1.0) < tol:
+                continue
+            delta = desired - pos_qty
+            side = OrderSide.BUY if delta > 0 else OrderSide.SELL
+            qty = abs(delta)
+            order = self.order_factory.market(
+                instrument_id=iid,
+                order_side=side,
+                quantity=inst.make_qty(Decimal(str(round(qty, 8)))),
+                time_in_force=TimeInForce.GTC,
+            )
+            self.submit_order(order)
+            _ = target_ids  # silence unused when symbols are bare tickers
+
+    def on_stop(self) -> None:
+        for iid in self._instrument_ids:
+            self.cancel_all_orders(iid)
+            self.close_all_positions(iid)
+
+
+register(
+    "rs_rotation",
+    RsRotationStrategy,
+    RsRotationConfig,
+    default_params={
+        "portfolio_notional": Decimal("10000"),
+        "rebalance_tolerance": 0.02,
+        # Runtime paths / universe CSVs injected by caller (like m2 signal_path).
+    },
+    aliases=["relative_strength_rotation", "asset_rotation"],
+    description="Long-only relative-strength asset rotator (Phase 1, #1084)",
+)

@@ -829,6 +829,22 @@ here. Weight/window tuning belongs to the optimization engine (#1079).
 pin: `tests/dq/indicators/test_macro_liquidity.py`. Run
 `pytest -m unit -k "macro or liquidity or m2"`.
 
+### Relative-strength asset rotation (#1084)
+
+Phase-0 design note: [`docs/research/rs-rotation-v1.md`](../docs/research/rs-rotation-v1.md)
+(dual momentum + risk-adjusted cross-sectional rank; weekly rebalance; cash when
+no absolute-strength qualifier).
+
+| Piece | Role |
+|---|---|
+| `indicators/rs_ranker.py` (`RsRanker`) | Pool → per-asset absolute return, vol, risk-adj score, cross-sectional `rs_rank` (1=strongest), `qualifies` (abs return > threshold). Shared RS signal for SDCA #1082 / composition #1078. |
+| `strategies/rotation/backtest.py` | CI-only long-only top-N rotator vs equal-weight + buy-&-hold — **not** a published `BacktestResult`. Absolute gate → cash; optional `#1085` `risk_on` overlay forces cash when false/null. |
+| `strategies/rotation/nautilus_strategy.py` | Nautilus long-only rotator: loads `date,symbol,weight` parquet (precompute → drive, same pattern as `m2_liquidity` / SDCA). Registered as `rs_rotation`. |
+
+**v1 defaults.** Lookback 90 / skip 7 / absolute threshold 0 / top-N 1 / rebalance every 7 days. Phase 2+ (long/short, spreads, vol targeting, correlation-aware pool, default-on regime gate) stays deferred. Window/weight search belongs to #1079. No live-trading; no `--push-supabase`.
+
+**Tests.** `pytest -m unit -k "rotation or rs"` (ranker + rotation harness + Nautilus config when installed).
+
 ### Optimization Engine Selection
 
 The dispatch in `run_optimize()`:
