@@ -104,16 +104,18 @@ def index_chunks(
     *,
     embedding_provider: EmbeddingProvider | None = None,
 ) -> str | None:
-    """Optional embed hook, then write chunks via the search backend router."""
+    """Optional embed hook, then write chunks via the search backend router.
+
+    Propagates ``RuntimeError`` from :func:`route_add_chunks` unchanged so
+    callers (research / client) keep their prior exception contract. Filesystem
+    ingest wraps that error in :class:`IngestError` inside :func:`ingest_source`.
+    """
 
     if embedding_provider is not None:
         apply_embeddings(chunks, embedding_provider)
     from digisearch.search._stub import route_add_chunks
 
-    try:
-        return route_add_chunks(index_name, chunks)
-    except RuntimeError as exc:
-        raise IngestError(str(exc), code="ingest_backend_unavailable", http_status=503) from exc
+    return route_add_chunks(index_name, chunks)
 
 
 def ingest_source(
@@ -153,23 +155,15 @@ def ingest_source(
             metadata_from_sidecar_dict,
         )
         from digisearch.ingestion.registry import ParserRegistry
-    except ImportError as exc:
-        raise IngestError(
-            f"Ingestion backend unavailable (missing dependency: {exc}). "
-            "Install digisearch[ingestion].",
-            code="ingest_dependency_missing",
-            http_status=503,
-        ) from exc
 
-    path = _resolve_path(source, enforce_ingest_root=enforce_ingest_root)
-    if not path.exists() or not path.is_file():
-        raise IngestError(
-            f"Source file not found: {source}",
-            code="ingest_source_not_found",
-            http_status=404,
-        )
+        path = _resolve_path(source, enforce_ingest_root=enforce_ingest_root)
+        if not path.exists() or not path.is_file():
+            raise IngestError(
+                f"Source file not found: {source}",
+                code="ingest_source_not_found",
+                http_status=404,
+            )
 
-    try:
         registry = ParserRegistry()
         doc: Document = registry.parse(path)
         side_meta = metadata_from_sidecar_dict(load_sidecar_yaml(_sidecar_path_for(path)))
@@ -184,13 +178,28 @@ def ingest_source(
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks
 
-        backend = index_chunks(
-            index_name,
-            chunks,
-            embedding_provider=embedding_provider,
-        )
+        try:
+            backend = index_chunks(
+                index_name,
+                chunks,
+                embedding_provider=embedding_provider,
+            )
+        except RuntimeError as exc:
+            raise IngestError(
+                str(exc),
+                code="ingest_backend_unavailable",
+                http_status=503,
+            ) from exc
     except IngestError:
         raise
+    except ImportError as exc:
+        logger.error("Ingestion dependencies not installed: %s", exc)
+        raise IngestError(
+            f"Ingestion backend unavailable (missing dependency: {exc}). "
+            "Install digisearch[ingestion].",
+            code="ingest_dependency_missing",
+            http_status=503,
+        ) from exc
     except (OSError, ValueError, RuntimeError, TypeError) as exc:
         logger.error("Ingestion failed for source '%s': %s", source, exc)
         raise IngestError(
