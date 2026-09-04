@@ -60,6 +60,18 @@ def _summary_from_body(body: str) -> str:
     return ""
 
 
+def _normalize_relevance(value: Any) -> list[str]:
+    """Coerce frontmatter relevance to a string list (never character-split a str)."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, (list, tuple)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
+
+
 def build_rows(vault_dir: str, *, vault: str) -> list[dict[str, Any]]:
     """Parse the vault with digivault and map each note to a knowledge_notes row."""
     index = Vault(vault_dir)
@@ -78,7 +90,7 @@ def build_rows(vault_dir: str, *, vault: str) -> list[dict[str, Any]]:
                 ),
                 "status": str(frontmatter.get("status", "stub")),
                 "tags": list(note.tags),
-                "relevance": [str(r) for r in (frontmatter.get("relevance") or [])],
+                "relevance": [str(r) for r in _normalize_relevance(frontmatter.get("relevance"))],
                 "summary": str(frontmatter.get("summary") or _summary_from_body(body)),
                 "body_markdown": body,
                 "frontmatter": _jsonable(frontmatter),

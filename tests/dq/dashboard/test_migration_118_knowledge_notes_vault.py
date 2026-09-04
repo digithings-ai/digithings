@@ -21,5 +21,8 @@ def test_migration_118_adds_vault_namespace_and_composite_unique() -> None:
     assert "add column if not exists vault text not null default 'finance'" in sql
     assert "drop constraint if exists knowledge_notes_vault_path_key" in sql
     assert "knowledge_notes_vault_vault_path_key" in sql
+    assert "knowledge_notes_vault_slug_key" in sql
     assert "unique (vault, vault_path)" in sql
+    assert "unique (vault, slug)" in sql
+    assert "Service-role-only" in sql or "service-role-only" in sql.lower()
     assert "#1142" in sql

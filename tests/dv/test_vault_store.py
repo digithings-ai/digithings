@@ -45,6 +45,11 @@ class _FakeQuery:
         self._payload = row
         return self
 
+    def insert(self, row: dict[str, Any]) -> _FakeQuery:
+        self._op = "insert"
+        self._payload = row
+        return self
+
     def update(self, row: dict[str, Any]) -> _FakeQuery:
         self._op = "update"
         self._payload = row
@@ -69,6 +74,17 @@ class _FakeQuery:
                 if (existing.get("vault"), existing.get("vault_path")) == key:
                     self._table.rows[i] = {**existing, **row}
                     return _Resp([self._table.rows[i]])
+            self._table.rows.append(row)
+            return _Resp([row])
+        if self._op == "insert":
+            row = dict(self._payload)
+            path_key = (row.get("vault"), row.get("vault_path"))
+            slug_key = (row.get("vault"), row.get("slug"))
+            for existing in self._table.rows:
+                if (existing.get("vault"), existing.get("vault_path")) == path_key:
+                    raise VaultError(f"duplicate vault_path: {path_key!r}")
+                if (existing.get("vault"), existing.get("slug")) == slug_key:
+                    raise VaultError(f"duplicate slug: {slug_key!r}")
             self._table.rows.append(row)
             return _Resp([row])
         if self._op == "update":
@@ -99,6 +115,9 @@ class _FakeTable:
 
     def upsert(self, row: dict[str, Any], on_conflict: str | None = None) -> _FakeQuery:
         return _FakeQuery(self).upsert(row, on_conflict=on_conflict)
+
+    def insert(self, row: dict[str, Any]) -> _FakeQuery:
+        return _FakeQuery(self).insert(row)
 
     def update(self, row: dict[str, Any]) -> _FakeQuery:
         return _FakeQuery(self).update(row)
@@ -247,6 +266,45 @@ def test_postgres_rejects_duplicate_create() -> None:
     store = _seed_postgres()
     with pytest.raises(VaultError):
         store.create_note("a")
+
+
+def test_postgres_create_rejects_path_collision() -> None:
+    client = _FakeClient(
+        [
+            {
+                "vault": "finance",
+                "slug": "old",
+                "vault_path": "theory/x",
+                "title": "Old",
+                "note_type": "theory",
+                "status": "stub",
+                "tags": [],
+                "relevance": [],
+                "summary": "",
+                "body_markdown": "old",
+                "frontmatter": {"title": "Old"},
+                "sources": [],
+                "wikilinks": [],
+            }
+        ]
+    )
+    store = PostgresStore(client, vault="finance")
+    with pytest.raises(VaultError, match="path already exists"):
+        store.create_note("x", subdir="theory")
+    assert [n.name for n in store.list_notes()] == ["old"]
+
+
+def test_postgres_rejects_subdir_traversal() -> None:
+    store = _seed_postgres()
+    with pytest.raises(VaultError, match="escapes"):
+        store.create_note("evil", subdir="../outside")
+
+
+def test_postgres_relevance_string_not_char_split() -> None:
+    store = _seed_postgres()
+    store.create_note("rel", frontmatter={"title": "R", "relevance": "all"}, body="x\n")
+    row = store._rows_by_name["rel"]
+    assert row["relevance"] == ["all"]
 
 
 def test_filesystem_neighbors(tmp_path: Path) -> None:

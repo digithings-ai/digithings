@@ -37,7 +37,8 @@ create table if not exists public.knowledge_notes (
     vault         text not null default 'finance',
     created_at    timestamptz not null default now(),
     updated_at    timestamptz not null default now(),
-    constraint knowledge_notes_vault_vault_path_key unique (vault, vault_path)
+    constraint knowledge_notes_vault_vault_path_key unique (vault, vault_path),
+    constraint knowledge_notes_vault_slug_key unique (vault, slug)
 );
 
 comment on table public.knowledge_notes is
@@ -68,6 +69,15 @@ begin
         alter table public.knowledge_notes
             add constraint knowledge_notes_vault_vault_path_key unique (vault, vault_path);
     end if;
+    if not exists (
+        select 1
+        from pg_constraint
+        where conname = 'knowledge_notes_vault_slug_key'
+          and conrelid = 'public.knowledge_notes'::regclass
+    ) then
+        alter table public.knowledge_notes
+            add constraint knowledge_notes_vault_slug_key unique (vault, slug);
+    end if;
 end $$;
 
 create index if not exists idx_knowledge_notes_vault
@@ -77,4 +87,10 @@ create index if not exists idx_knowledge_notes_tags
 create index if not exists idx_knowledge_notes_wikilinks
     on public.knowledge_notes using gin (wikilinks);
 
+-- Service-role-only by design: enable RLS with no anon/authenticated policies.
+-- Unlike architecture_notes (public docs chat, anon SELECT in migration 048),
+-- knowledge_notes holds the digiquant finance KB and must not be anon-readable.
+-- service_role bypasses RLS; digivault PostgresStore / seed scripts use the
+-- service key. Do not add a public SELECT policy here without an explicit
+-- product decision (epic #1141 Phase 4 covers a separate product corpus).
 alter table public.knowledge_notes enable row level security;

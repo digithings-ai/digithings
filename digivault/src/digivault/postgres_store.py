@@ -79,8 +79,36 @@ def _wikilink_refs(targets: Any) -> tuple[LinkRef, ...]:
 
 
 def _vault_path_for(name: str, subdir: str = "") -> str:
-    clean_subdir = subdir.strip().strip("/")
+    clean_subdir = _safe_subdir(subdir)
     return f"{clean_subdir}/{name}" if clean_subdir else name
+
+
+def _safe_subdir(subdir: str) -> str:
+    """Normalize ``subdir`` and refuse path-escape segments (parity with Vault._safe_path)."""
+    clean = subdir.strip().strip("/")
+    if not clean:
+        return ""
+    parts = Path(clean).parts
+    if any(part in ("", ".", "..") or part.startswith("/") for part in parts):
+        raise VaultError(f"Path escapes vault root: {subdir!r}")
+    if Path(clean).is_absolute() or clean.startswith("\\"):
+        raise VaultError(f"Path escapes vault root: {subdir!r}")
+    return "/".join(parts)
+
+
+def _normalize_str_list(value: Any) -> list[str]:
+    """Coerce a frontmatter list-or-string into a list of non-empty strings.
+
+    A bare string becomes a single element (never character-split).
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else []
+    if isinstance(value, (list, tuple)):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
 
 
 class PostgresStore:
@@ -88,6 +116,11 @@ class PostgresStore:
 
     Inject a client for tests, or build one from the environment with
     :meth:`from_env`. Graph indexes come from ``wikilinks`` / ``tags`` columns.
+
+    ``rename`` issues multiple PostgREST calls and is not transactional — a
+    mid-flight failure can leave rewritten backlinks with a partially moved
+    note. Phase-1 callers should retry ``reindex`` / repair rather than assume
+    atomic rename (#1142).
     """
 
     def __init__(
@@ -242,8 +275,15 @@ class PostgresStore:
             raise VaultError(f"Note already exists: {clean!r}")
         fm = dict(frontmatter or {})
         vault_path = _vault_path_for(clean, subdir)
+        if any(
+            (n.rel_path[:-3] if n.rel_path.endswith(".md") else n.rel_path) == vault_path
+            for n in self._notes.values()
+        ):
+            raise VaultError(f"Note path already exists: {vault_path!r}")
         row = self._row_payload(clean, vault_path, fm, body)
-        self._client.table(self._table).upsert(row, on_conflict="vault,vault_path").execute()
+        # Insert (not upsert): create must fail if (vault, vault_path) or
+        # (vault, slug) already exists — never silently overwrite another slug.
+        self._client.table(self._table).insert(row).execute()
         self.reindex()
         created = self._notes.get(clean)
         if created is None:  # pragma: no cover - defensive
@@ -330,7 +370,7 @@ class PostgresStore:
             "note_type": str(frontmatter.get("type", frontmatter.get("note_type", "reference"))),
             "status": str(frontmatter.get("status", "stub")),
             "tags": list(tags),
-            "relevance": [str(r) for r in (frontmatter.get("relevance") or [])],
+            "relevance": _normalize_str_list(frontmatter.get("relevance")),
             "summary": str(frontmatter.get("summary") or ""),
             "body_markdown": body,
             "frontmatter": frontmatter,
