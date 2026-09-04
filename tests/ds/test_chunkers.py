@@ -196,13 +196,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     / Vectorize filter paragraphs in ARCHITECTURE.md; RecursiveChunker unchanged.
     Hashes only (count still 46) for #2437 Chroma EmbeddingProvider / schema
     versioning docs in §(f) — fixture prose only.
+    Re-recorded at count 45 for #1189 (canonical ``pipeline/ingest.py`` docs +
+    module map in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 46
+    assert len(chunks) == 45
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -210,20 +213,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "05ee1579bfb41def",
         "657dd9b7e8689cb3",
         "dbbea9505a0aa65e",
-        "2e3197f02d87ecc8",
+        "fb95dfbabb1e64d9",
         "5c44b3a1c81aaae0",
-        "bfb4594d4666aba2",
-        "33d2f55bb06380b5",
-        "912f5c5541f4c2ea",
-        "25d821be8951a9d6",
-        "fc372c3eb08daea4",
-        "16584e006bbec980",
+        "a424114a865d7551",
+        "224c52d41b5d63b3",
+        "a906998347c3e917",
+        "24d4f4910f267916",
+        "8b3750ac2215c89e",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "941a8a3c77732354",
-        "3f839068d9b0bad1",
-        "d27956f583c6cd8c",
+        "c6c567aa37c542ad",
+        "39cb19d5679c421a",
+        "832b9df5150e6719",
         "819ebadc3320ecc2",
         "5a207132fd65bced",
         "8d9cefe0c746a4da",

@@ -3,55 +3,28 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import typer
 
 app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
-def _pick_chunker(name: str | None) -> Any:
-    from digisearch.chunking.factory import get_ingest_chunker
-
-    # None / blank → factory applies DIGISEARCH_CHUNKER → default semantic.
-    return get_ingest_chunker(name)
-
-
-def _sidecar_path_for(file_path: Path) -> Path:
-    y = file_path.parent / f"{file_path.stem}.yaml"
-    if y.is_file():
-        return y
-    return file_path.parent / f"{file_path.stem}.yml"
-
-
 def _ingest_paths(paths: list[Path], index: str, chunker_name: str | None) -> int:
-    from digisearch.core.evidence_metadata import (
-        load_sidecar_yaml,
-        merge_document_metadata_into_chunks,
-        metadata_from_sidecar_dict,
-    )
-    from digisearch.ingestion.registry import ParserRegistry
-    from digisearch.search._stub import add_chunks
+    from digisearch.pipeline.ingest import IngestError, ingest_paths
 
-    registry = ParserRegistry()
-    ch = _pick_chunker(chunker_name)
-    total = 0
-    for p in paths:
-        if not p.is_file() or not registry.get_parser(str(p)):
-            continue
-        try:
-            doc = registry.parse(p)
-            side = _sidecar_path_for(p)
-            side_meta = metadata_from_sidecar_dict(load_sidecar_yaml(side))
-            doc.metadata = {**(doc.metadata or {}), **side_meta}
-            chunks = ch.chunk(doc)
-            merge_document_metadata_into_chunks(doc, chunks)
-            doc.chunks = chunks
-            add_chunks(index, chunks)
-            total += len(chunks)
-            typer.echo(f"Ingested {p.name}: {len(chunks)} chunks")
-        except Exception as e:
-            typer.echo(f"Skip {p}: {e}", err=True)
+    try:
+        total, results = ingest_paths(
+            paths,
+            index_name=index,
+            chunker_name=chunker_name,
+            skip_errors=True,
+        )
+    except IngestError as exc:
+        typer.echo(f"Ingest failed: {exc.message}", err=True)
+        return 0
+    for result in results:
+        name = Path(result.source).name if result.source else result.doc_id
+        typer.echo(f"Ingested {name}: {result.chunks_created} chunks")
     return total
 
 
