@@ -34,10 +34,11 @@ scoring_thresholds:
   accuracy: 9
 
 execution_tiers:
-  # Minimum-capability ceiling: a lower tier must NEVER pick up a higher-tier task.
-  # A human on Claude Code can take anything. See docs/agents/EXECUTION_TIERS.md.
-  - label: "exec:cursor"
-    name: "Tier 2 — Cursor Cloud Agent"
+  # Dispatch tier is a property of the COMPONENT (tiers in
+  # scripts/project_routing.json), not a per-issue label — exec:* labels were
+  # deleted in the 2026-09 label simplification. A human on Claude Code can
+  # take anything. See docs/agents/EXECUTION_TIERS.md.
+  - name: "cursor tier — Cursor Cloud Agent (default, all components except digikey)"
     scope: "One-paragraph spec, clear acceptance criteria, no mid-task dialogue."
     examples:
       - "Bug fixes with a concrete repro"
@@ -45,41 +46,31 @@ execution_tiers:
       - "Docstrings / typed models / small MCP tools"
       - "Scoped refactors inside a single component"
     never:
-      - "Cross-module integration"
-      - "Ambiguous success criteria"
-      - "Architectural or novel design"
-  - label: "exec:claude"
-    name: "Tier 3 — Claude Code Max (human-supervised, LOCAL only)"
+      - "Anything requiring mid-task dialogue"
+      - "Auth/crypto (digikey is claude-tier)"
+  - name: "claude tier — Claude Code Max (human-supervised, LOCAL only)"
     scope: >
-      Interactive, cross-module, architectural, or human-gated work. LOCAL
-      ONLY — cloud auto-dispatch is disabled. The label is a tier marker;
-      execution happens via `make task ISSUE=N` on a human's workstation.
+      component:digikey (auth/crypto). LOCAL ONLY — cloud auto-dispatch is
+      disabled. Execution happens via `make task ISSUE=N` on a workstation.
     examples:
-      - "Architecture and new-module scaffolding"
-      - "Complex debugging, optimization, security review"
-      - "Strategy / iterative design work"
-      - "Decomposing milestones into Tier 1/2 tasks; reviewing agent PRs"
+      - "Auth, JWT, or crypto changes"
     dispatch: "local-only (make task ISSUE=N)"
     never:
-      - "Auto-execution from a GitHub label — only Copilot and Cursor auto-execute"
+      - "Auto-execution from a GitHub label"
 
-# Heuristics for default tier when a creator hasn't classified explicitly.
-# risk:high OR matches a human_gate → exec:claude.
-# Everything else → exec:cursor.
+# Dispatch tier lookup. Component → tier lives in scripts/project_routing.json
+# (tiers map). These notes record the reasoning, not the mapping.
 tier_routing:
   claude_triggers:
-    - "risk:high"
-    - "human_gate:yes"
     - "component:digikey (auth/JWT changes)"
-    - "live-trading paths"
-    - "cross-component integration"
+  cursor_default:
+    - "Everything else — safety enforced at merge (path-based gate + review coverage)"
 
 
 human_gates:
   - "Any change to auth, JWT, or cryptography code (digikey/)"
   - "Any change that touches live-trading paths"
   - "New external service dependency or infrastructure change"
-  - "Novel architecture decision not covered by existing ARCHITECTURE.md specs"
 
 components:
   - name: digigraph

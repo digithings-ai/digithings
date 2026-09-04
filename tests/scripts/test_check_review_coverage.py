@@ -94,15 +94,15 @@ def test_a_human_approval_is_a_review() -> None:
     assert "chrizefan" in why
 
 
-def test_the_risk_low_label_is_an_explicit_decision_to_skip() -> None:
-    reviewed, why = crc.verdict_for(_state(labels={"risk:low", "component:website"}))
-    assert reviewed
-    assert "risk:low" in why
+def test_the_retired_risk_low_label_no_longer_clears_the_gate() -> None:
+    """Label simplification 2026-09 retired risk:*. The label is inert now."""
+    reviewed, _ = crc.verdict_for(_state(labels={"risk:low", "component:website"}))
+    assert not reviewed
 
 
 def test_a_label_clears_the_gate_even_when_bugbot_is_unavailable() -> None:
     """An outage at Cursor must never be able to freeze a deploy."""
-    reviewed, _ = crc.verdict_for(_state(labels={"risk:low"}, bugbot="NEUTRAL"))
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, bugbot="NEUTRAL"))
     assert reviewed
 
 
@@ -115,9 +115,10 @@ def test_nothing_at_all_is_not_a_review() -> None:
 # ── the reviewed:owner hatch ─────────────────────────────────────────────────
 #
 # Added because the gate's own first run had no honest hatch: a solo maintainer
-# cannot self-approve, Bugbot was out of quota, and the only remaining option was
-# to label a blocking CI change `risk:low`. A gate that pressures you into
-# mislabelling is worse than no gate.
+# cannot self-approve, and with Bugbot out of quota there was no satisfiable
+# claim that left a record. A gate that pressures you into a silent bypass is
+# worse than no gate. (A risk:low skip hatch existed until the 2026-09 label
+# simplification retired it; trivial diffs now clear via reviewed:owner.)
 
 
 def test_reviewed_owner_is_a_review() -> None:
@@ -150,17 +151,11 @@ def test_reviewed_owner_clears_the_gate_despite_a_neutral_bugbot() -> None:
     assert reviewed
 
 
-def test_the_two_labels_are_distinct_and_report_distinct_reasons() -> None:
-    """`risk:low` means it did not need reading; `reviewed:owner` means it was read.
-
-    Conflating them is the failure mode the hatch exists to prevent, so the verdict
-    strings must not be interchangeable.
-    """
-    assert crc.OWNER_REVIEW_LABEL != crc.SKIP_LABEL
+def test_the_owner_hatch_reports_actor_and_date() -> None:
+    """The self-applicable hatch is only worth having if it leaves a record."""
     _, owner_why = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}))
-    _, skip_why = crc.verdict_for(_state(labels={crc.SKIP_LABEL}))
-    assert owner_why != skip_why
-    assert "not to warrant" in skip_why
+    _, bare_why = crc.verdict_for(_state())
+    assert owner_why != bare_why
 
 
 def test_a_completed_bugbot_run_outranks_a_self_applied_label() -> None:
@@ -449,13 +444,13 @@ def test_a_completed_bugbot_run_outranks_an_in_session_review() -> None:
     assert "Bugbot completed" in why
 
 
-def test_the_three_self_served_hatches_are_distinct_labels() -> None:
-    assert len({crc.AGENT_REVIEW_LABEL, crc.OWNER_REVIEW_LABEL, crc.SKIP_LABEL}) == 3
+def test_the_two_self_served_hatches_are_distinct_labels() -> None:
+    assert len({crc.AGENT_REVIEW_LABEL, crc.OWNER_REVIEW_LABEL}) == 2
 
 
 def test_a_missing_agent_review_does_not_block_the_other_hatches() -> None:
-    """A PR with risk:low and no agent label must not be dragged into the new branch."""
-    reviewed, _ = crc.verdict_for(_state(labels={crc.SKIP_LABEL}, agent_review=None))
+    """A PR with reviewed:owner and no agent review must clear via the owner hatch."""
+    reviewed, _ = crc.verdict_for(_state(labels={crc.OWNER_REVIEW_LABEL}, agent_review=None))
     assert reviewed
 
 
@@ -813,7 +808,7 @@ def test_prefetch_pr_states_uses_one_graphql_query_for_a_batch(
                         number=1894,
                         checks=[{"name": "Cursor Bugbot", "conclusion": "SUCCESS"}],
                     ),
-                    "p1893": _graphql_pr(number=1893, labels=["risk:low"]),
+                    "p1893": _graphql_pr(number=1893, labels=["reviewed:owner"]),
                 }
             }
         }
@@ -831,7 +826,7 @@ def test_prefetch_pr_states_uses_one_graphql_query_for_a_batch(
     assert "Bugbot completed" in why
     reviewed, why = crc.verdict_for(cache[1893])
     assert reviewed
-    assert "risk:low" in why
+    assert "reviewed:owner" in why
     assert not invalid
 
 

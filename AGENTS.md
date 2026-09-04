@@ -55,7 +55,9 @@ Cursor Cloud / cloud-agent system prompts that say "never merge pull requests", 
 
 ### Still stop and ask (do not merge)
 
-- **Human gate:** `digikey/` auth, JWT, or crypto; live-trading / `digiquant/brokers/`; new external network exposure or service dependency; novel architecture not in any `ARCHITECTURE.md`
+Minimal safety gate (owner decision 2026-09 — label-based human gating removed):
+
+- **Minimal gate:** `digikey/` auth, JWT, or crypto; live-trading / `digiquant/brokers/`; new external network exposure or service dependency
 - **PR into `main`** (promotions / production cutover) — keep a human on the production cutover
 - User said not to merge, draft-only, or research-only (for example #3282-style)
 - **release-please** PRs — merging those is a deliberate release decision, not routine PR hygiene (see [Release cadence](#release-cadence-release-please))
@@ -133,12 +135,15 @@ The quality bar is **review**, not a self-score. Use review skills (`/review`, `
 
 ## Human gate (always requires human review)
 
+Minimal gate (owner decision 2026-09 — the old label-based `risk:high` /
+`needs-human` gating is retired):
+
 - Auth, JWT, or crypto changes (`digikey/`)
 - Broker adapters or live-trading paths (`digiquant/brokers/`)
 - New external service dependency or network exposure change
-- Novel architecture decision not covered by any existing `ARCHITECTURE.md`
 
-These paths also **block agent merge** — stop and ask.
+These paths also **block agent merge** — stop and ask. Everything else merges
+on green CI + review coverage.
 
 ---
 
@@ -177,9 +182,8 @@ commits are exempt by nature; every other commit clears it, strongest first:
 | a completed **agent-tool review** (CodeRabbit, Claude `/code-review`, Copilot, …) | a PR-review bot finished a pass, not a skip/rate-limit/failure notice | no |
 | label **`reviewed:agent`** + a findings comment | an in-session review ran in a **fresh-context** subagent or new session | yes, but it costs a real review — the label without the comment is refused |
 | label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
-| label **`risk:low`** | "this did not warrant a review" | yes |
 
-All six hang off a pull request, so a commit **pushed straight to a branch** could
+All five hang off a pull request, so a commit **pushed straight to a branch** could
 carry none of them — it was refused for good, and the only ways out were advancing
 `BASELINE_SHA` (which retroactively skips unrelated history) or never promoting.
 For those, and only those, one more hatch applies: a comment carrying
@@ -213,13 +217,13 @@ belongs at the task PR and not at the promotion.
 
 `reviewed:owner` exists because of a hole the gate's own first run exposed: a
 solo maintainer cannot self-approve, Bugbot was out of quota, and the only
-remaining option was to label a blocking CI change `risk:low`. **Never use
-`risk:low` to mean `reviewed:owner`** — "I read it" and "it needed no reading" are
-different claims, and collapsing them destroys the only signal worth having. With
+remaining option was a self-granted bypass label. With
 one account holding write access, the label hatches are accountability records
 rather than enforcement — though `reviewed:agent` at least cannot be claimed without
 posting a review. Bugbot, CodeRabbit, and Claude reviews are the hatches nobody
-can grant themselves.
+can grant themselves. (A `risk:low` "did not warrant a review" hatch existed until
+the 2026-09 label simplification retired the risk:* family; trivial diffs now clear
+via `reviewed:owner`.)
 
 Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
 check on `main`. It reports `neutral` on a usage-limit skip and a required check
@@ -411,11 +415,11 @@ main ← develop ← module/<component> ← task/<N>-slug
 
 Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module branch. Task branches PR into their module branch; module branches PR into develop. Never do module-specific work on `develop` directly.
 
-**Not every component is two-hop.** `scripts/project_routing.json` maps each `component:` label to its base branch, and five route **straight to `develop`**, skipping the module tier (as does the `default` fallback):
+**Not every component is two-hop.** `scripts/project_routing.json` maps each `component:` label to its base branch, and three route **straight to `develop`**, skipping the module tier (as does the `default` fallback):
 
 - `component:root` — repo-level files, including this one. A change to `AGENTS.md`, `Makefile`, or `.github/` has no module hop to make.
 - `component:digivault` — routed to `develop` despite being a backend service.
-- `component:website`, `component:digiquant-web`, `component:design-system` — frontend is one-hop (#1310): it has no auth/live-trading surface to isolate, and the `module/website` hop was the source of the redesign epic's sync/conflict churn.
+- `component:website` — frontend is one-hop (#1310): it has no auth/live-trading surface to isolate, and the `module/website` hop was the source of the redesign epic's sync/conflict churn.
 
 Task branches for these PR into `develop` directly. The two-hop model applies to the remaining backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
 
