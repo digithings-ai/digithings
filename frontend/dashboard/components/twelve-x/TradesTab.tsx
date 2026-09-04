@@ -1,263 +1,382 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
-import type {
-  FxConsensusEvalRow,
-  FxIdeaEvalRow,
-  FxTradeIdeaRow,
-} from '@/lib/twelve-x/types';
+import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
 import {
   assembleTradeHistory,
+  biasLabel,
+  displayableTradeHistory,
+  filterTradeHistory,
   formatHoldPct,
+  formatPctRight,
+  sortTradeHistory,
+  summarizeFilteredTrades,
+  tradeResult,
+  uniqueBoards,
+  uniquePairs,
+  type ResultFilter,
+  type SortDir,
+  type TradeHistoryFilters,
   type TradeHistoryRow,
+  type TradeResult,
+  type TradeSortKey,
 } from '@/lib/twelve-x/trade-history';
-import {
-  openIdeas,
-  summarizeConsensusAccuracy,
-  summarizeConsensusStability,
-  summarizeIdeaOutcomes,
-} from '@/lib/twelve-x/track-record';
-import { formatWilsonPct } from '@/lib/twelve-x/wilson';
 
-function RateCard({
-  title,
-  subtitle,
-  primary,
-  longLabel,
-  shortLabel,
-}: {
-  title: string;
-  subtitle?: string;
-  primary: string;
-  longLabel?: string;
-  shortLabel?: string;
-}) {
-  return (
-    <div className="space-y-1 border border-hair bg-surface/40 px-3 py-2.5">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-ink-mute">{title}</p>
-      {subtitle ? <p className="text-[10px] text-ink-mute">{subtitle}</p> : null}
-      <p className="font-mono text-sm tabular-nums text-ink">{primary}</p>
-      {longLabel || shortLabel ? (
-        <p className="text-[10px] text-ink-mute">
-          {longLabel ? <span>Long {longLabel}</span> : null}
-          {longLabel && shortLabel ? <span> · </span> : null}
-          {shortLabel ? <span>Short {shortLabel}</span> : null}
-        </p>
-      ) : null}
-    </div>
-  );
-}
+const RESULT_FILTERS: { key: ResultFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'wins', label: 'Wins' },
+  { key: 'losses', label: 'Losses' },
+  { key: 'live', label: 'Live' },
+];
 
-function Pill({ tone, children }: { tone: 'live' | 'right' | 'wrong' | 'mute'; children: string }) {
+/** Hide |Impact| below 0.1% when the magnitude gate is on. */
+const IMPACT_FLOOR = 0.001;
+
+/** Initial rows roughly fill a tall viewport; more load on scroll. */
+const PAGE_SIZE = 40;
+
+function ResultPill({ result }: { result: TradeResult }) {
   const toneClass =
-    tone === 'right'
+    result === 'right'
       ? 'border-accent text-accent'
-      : tone === 'wrong'
+      : result === 'wrong'
         ? 'border-warn text-warn'
-        : tone === 'live'
-          ? 'border-ink text-ink'
-          : 'border-hair text-ink-mute';
+        : 'border-ink text-ink';
+  const label = result === 'right' ? 'RIGHT' : result === 'wrong' ? 'WRONG' : 'LIVE';
   return (
     <span className={`inline-block border px-1.5 font-mono text-[10px] ${toneClass}`}>
-      {children}
+      {label}
     </span>
   );
 }
 
-function BiasPill({ row }: { row: TradeHistoryRow }) {
-  if (row.lifecycle === 'live') return <Pill tone="live">LIVE</Pill>;
-  if (row.lifecycle === 'no_data') return <Pill tone="mute">NO DATA</Pill>;
-  if (row.lifecycle === 'unscored') return <Pill tone="mute">—</Pill>;
-  if (row.directionalWin === true) return <Pill tone="right">RIGHT</Pill>;
-  if (row.directionalWin === false) return <Pill tone="wrong">WRONG</Pill>;
-  return <Pill tone="mute">—</Pill>;
+function SortHeader({
+  label,
+  sortKey,
+  activeKey,
+  sortDir,
+  onSort,
+  title,
+  align = 'left',
+}: {
+  label: string;
+  sortKey: TradeSortKey;
+  activeKey: TradeSortKey | null;
+  sortDir: SortDir;
+  onSort: (key: TradeSortKey) => void;
+  title?: string;
+  align?: 'left' | 'right';
+}) {
+  const active = activeKey === sortKey;
+  return (
+    <th
+      className={`px-3 py-2 font-medium ${align === 'right' ? 'text-right' : 'text-left'}`}
+      title={title}
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="hover:text-ink transition-colors"
+      >
+        {label}
+        {active ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+      </button>
+    </th>
+  );
+}
+
+function selectClassName(): string {
+  return 'border border-hair bg-term-bg px-2 py-1 text-[11px] text-ink';
 }
 
 export default function TradesTab({
   ideas,
   ideaEval,
-  consensusEval,
 }: {
   ideas: FxTradeIdeaRow[];
   ideaEval: FxIdeaEvalRow[];
-  consensusEval: FxConsensusEvalRow[];
+  /** Kept optional for call-site compat; consensus sections were removed. */
+  consensusEval?: unknown;
 }) {
-  const history = useMemo(() => assembleTradeHistory(ideas, ideaEval), [ideas, ideaEval]);
-  const ideaSummary = useMemo(() => summarizeIdeaOutcomes(ideaEval), [ideaEval]);
-  const open = useMemo(() => openIdeas(ideaEval), [ideaEval]);
-  const stability = useMemo(() => summarizeConsensusStability(consensusEval), [consensusEval]);
-  const accuracy = useMemo(() => summarizeConsensusAccuracy(consensusEval), [consensusEval]);
+  const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
+  const [pairFilter, setPairFilter] = useState('all');
+  const [boardFilter, setBoardFilter] = useState('all');
+  const [impactFloorOn, setImpactFloorOn] = useState(false);
+  const [sortKey, setSortKey] = useState<TradeSortKey | null>('generated');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  /** Scroll window keyed by filter/sort so changing filters resets without an effect. */
+  const [scroll, setScroll] = useState({ key: '', count: PAGE_SIZE });
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const weightedStab = stability.find((s) => s.weighted);
-  const unweightedStab = stability.find((s) => !s.weighted);
+  const history = useMemo(
+    () => displayableTradeHistory(assembleTradeHistory(ideas, ideaEval)),
+    [ideas, ideaEval],
+  );
+
+  const pairs = useMemo(() => uniquePairs(history), [history]);
+  const boards = useMemo(() => uniqueBoards(history), [history]);
+
+  const filters: TradeHistoryFilters = useMemo(
+    () => ({
+      result: resultFilter,
+      pair: pairFilter,
+      board: boardFilter,
+      minAbsImpact: impactFloorOn ? IMPACT_FLOOR : 0,
+    }),
+    [resultFilter, pairFilter, boardFilter, impactFloorOn],
+  );
+
+  const filtered = useMemo(() => filterTradeHistory(history, filters), [history, filters]);
+  const sorted = useMemo(
+    () => sortTradeHistory(filtered, sortKey, sortDir),
+    [filtered, sortKey, sortDir],
+  );
+  const summary = useMemo(() => summarizeFilteredTrades(filtered), [filtered]);
+
+  const scrollKey = `${resultFilter}|${pairFilter}|${boardFilter}|${impactFloorOn}|${sortKey}|${sortDir}`;
+  const visibleCount = scroll.key === scrollKey ? scroll.count : PAGE_SIZE;
+  const visible = sorted.slice(0, visibleCount);
+  const hasMore = visibleCount < sorted.length;
+
+  const loadMore = useCallback(() => {
+    setScroll((prev) => {
+      const base = prev.key === scrollKey ? prev.count : PAGE_SIZE;
+      return { key: scrollKey, count: Math.min(base + PAGE_SIZE, sorted.length) };
+    });
+  }, [scrollKey, sorted.length]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) loadMore();
+      },
+      { rootMargin: '120px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loadMore, visible.length]);
+
+  function onSort(key: TradeSortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'pair' || key === 'bias' ? 'asc' : 'desc');
+    }
+  }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
         <ClipboardList size={18} className="shrink-0 text-accent" aria-hidden />
         <h2 className="font-display text-2xl tracking-tight text-ink">Trades</h2>
       </div>
-      <p className="max-w-2xl text-xs text-ink-mute">
+      <p className="max-w-2xl px-1 text-xs text-ink-mute">
         Every trade recommendation and whether it worked. Each idea stays live until the
         next board that posts the same pair (successor clock). Directional outcomes use
         daily closes only for now — excursion (spike-capture) and level-touch scoring
         follow once the high/low feed lands. Stop / target levels are quoted as published.
       </p>
 
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-          History — all recommendations
-        </h3>
-        {history.length === 0 ? (
-          <p className="text-sm text-ink-mute">No trade ideas published yet.</p>
-        ) : (
-          <div className="overflow-x-auto border border-hair">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-hair text-left text-[10px] uppercase tracking-wider text-ink-mute">
-                  <th className="px-3 py-2 font-medium">Board</th>
-                  <th className="px-3 py-2 font-medium">Pair · bias</th>
-                  <th className="px-3 py-2 font-medium">Entry</th>
-                  <th className="px-3 py-2 font-medium">Stop · Target</th>
-                  <th className="px-3 py-2 font-medium">Lived</th>
-                  <th className="px-3 py-2 font-medium">Hold</th>
-                  <th className="px-3 py-2 font-medium">Bias</th>
-                  <th className="px-3 py-2 font-medium">Levels</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hair">
-                {history.map((row) => (
-                  <tr key={`${row.runDate}-${row.rank}`}>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">
-                      {row.runDate} · #{row.rank}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-ink">
-                      {row.pair} {row.direction}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
-                      {row.entryBand ?? '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
-                      {row.stop ?? row.target
-                        ? `${row.stop ?? '—'} → ${row.target ?? '—'}`
-                        : '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink-mute">
-                      {row.sessions ?? '—'}
-                      {row.lifecycle === 'live' ? '…' : ''}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
-                      {formatHoldPct(row.holdReturn)}
-                      {row.lifecycle === 'live' && row.holdReturn !== null ? '…' : ''}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      <BiasPill row={row} />
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {row.hasLevels ? <Pill tone="mute">QUOTED</Pill> : <Pill tone="mute">—</Pill>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-          Performance — bias (close-based)
-        </h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {ideaEval.length > 0 ? (
-            <RateCard
-              title="Resolved directional win rate"
-              subtitle="Among successor-exited ideas; win = signed hold return > 0 (zero counts as loss)"
-              primary={formatWilsonPct(ideaSummary.interval)}
-              longLabel={formatWilsonPct(ideaSummary.longInterval)}
-              shortLabel={formatWilsonPct(ideaSummary.shortInterval)}
-            />
-          ) : null}
-          {ideaEval.length > 0 ? (
-            <RateCard
-              title="Outcome split"
-              subtitle={`Wins ${ideaSummary.winCount} · Losses ${ideaSummary.lossCount} · significant moves ${ideaSummary.significantCount}`}
-              primary={`Resolved ${ideaSummary.resolvedCount} · Open ${ideaSummary.openCount} · Missing ${ideaSummary.missingCount}`}
-            />
-          ) : null}
-        </div>
-        {ideaEval.length > 0 ? (
-          <p className="text-[11px] text-ink-mute">
-            Significant move means |hold return| ≥ 0.5 × entry 20d σ (optional overlay on
-            the same hold). Missing rates: {ideaSummary.missingCount}.
-          </p>
-        ) : (
-          <p className="text-sm text-ink-mute">No idea eval rows yet.</p>
-        )}
-
-        <div className="space-y-2">
-          <h4 className="text-[11px] font-medium text-ink-soft">Open ideas</h4>
-          {open.length === 0 ? (
-            <p className="text-[11px] text-ink-mute">No live ideas.</p>
-          ) : (
-            <ul className="divide-y divide-hair border border-hair">
-              {open.map((row) => (
-                <li
-                  key={`${row.run_date}-${row.rank}`}
-                  className="flex flex-wrap items-baseline justify-between gap-2 px-3 py-2 text-xs"
+      {history.length === 0 ? (
+        <p className="px-1 text-sm text-ink-mute">No trade ideas published yet.</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 px-1" role="group" aria-label="Filter trades">
+            {RESULT_FILTERS.map((f) => {
+              const on = resultFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  data-filter={f.key}
+                  aria-pressed={on}
+                  onClick={() => setResultFilter(f.key)}
+                  className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    on
+                      ? 'border-accent/40 bg-accent/15 text-accent'
+                      : 'border-hair text-ink-mute hover:text-ink'
+                  }`}
                 >
-                  <span className="text-ink">
-                    <span className="font-mono text-ink-mute">{row.run_date}</span>
-                    {' · '}
-                    {row.pair} {row.direction}
-                  </span>
-                  <span className="font-mono text-[10px] text-ink-mute">open</span>
-                </li>
-              ))}
-            </ul>
+                  {f.label}
+                </button>
+              );
+            })}
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-mute">
+              <span className="sr-only">Pair</span>
+              <select
+                className={selectClassName()}
+                value={pairFilter}
+                onChange={(e) => setPairFilter(e.target.value)}
+                aria-label="Filter by pair"
+              >
+                <option value="all">All pairs</option>
+                {pairs.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-ink-mute">
+              <span className="sr-only">Board</span>
+              <select
+                className={selectClassName()}
+                value={boardFilter}
+                onChange={(e) => setBoardFilter(e.target.value)}
+                aria-label="Filter by board date"
+              >
+                <option value="all">All boards</option>
+                {boards.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              aria-pressed={impactFloorOn}
+              onClick={() => setImpactFloorOn((v) => !v)}
+              title="Hide rows whose |Impact| is under 0.1%"
+              className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                impactFloorOn
+                  ? 'border-accent/40 bg-accent/15 text-accent'
+                  : 'border-hair text-ink-mute hover:text-ink'
+              }`}
+            >
+              |Impact| ≥ 0.1%
+            </button>
+          </div>
+
+          <div
+            className="flex flex-wrap gap-x-6 gap-y-2 border border-hair bg-surface/40 px-3 py-2.5"
+            data-testid="trades-summary"
+            aria-label="Filtered trade summary"
+          >
+            <Metric label="% right" value={formatPctRight(summary.pctRight)} hint={`${summary.rightCount}/${summary.resolvedCount}`} />
+            <Metric
+              label="Avg return (rights)"
+              value={formatHoldPct(summary.avgReturnRights)}
+            />
+            <Metric
+              label="Avg return (wrongs)"
+              value={formatHoldPct(summary.avgReturnWrongs)}
+            />
+            <span className="self-end font-mono text-[10px] text-ink-mute">
+              {filtered.length} shown
+              {summary.liveCount > 0 ? ` · ${summary.liveCount} live` : ''}
+            </span>
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="px-1 text-sm text-ink-mute">No trades match the current filters.</p>
+          ) : (
+            <div className="overflow-x-auto border border-hair">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-hair text-[10px] uppercase tracking-wider text-ink-mute">
+                    <SortHeader label="Generated" sortKey="generated" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label="Pair" sortKey="pair" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label="Bias" sortKey="bias" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label="Entry" sortKey="entry" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label="Stop" sortKey="stop" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader label="Target" sortKey="target" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                    <SortHeader
+                      label="Active"
+                      sortKey="active"
+                      activeKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={onSort}
+                      title="Sessions held (days)"
+                      align="right"
+                    />
+                    <SortHeader
+                      label="Impact"
+                      sortKey="impact"
+                      activeKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={onSort}
+                      title="Signed hold return if executed (P&L %)"
+                      align="right"
+                    />
+                    <SortHeader label="Result" sortKey="result" activeKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-hair">
+                  {visible.map((row) => (
+                    <TradeRow key={`${row.runDate}-${row.rank}`} row={row} />
+                  ))}
+                </tbody>
+              </table>
+              {hasMore ? (
+                <div
+                  ref={sentinelRef}
+                  className="border-t border-hair px-3 py-2 text-center font-mono text-[10px] text-ink-mute"
+                  data-testid="trades-scroll-sentinel"
+                >
+                  Loading more…
+                </div>
+              ) : null}
+            </div>
           )}
         </div>
-      </section>
-
-      <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
-          Performance — consensus
-        </h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {weightedStab ? (
-            <RateCard
-              title="Stability (weighted medium)"
-              subtitle={
-                weightedStab.medianAbsDelta == null
-                  ? 'No jumps yet'
-                  : `Median |Δscore| ${weightedStab.medianAbsDelta.toFixed(2)} · n=${weightedStab.nJumps}`
-              }
-              primary={`Sign flip ${formatWilsonPct(weightedStab.signFlipPct)}`}
-              longLabel={`|Δ|≥1 ${formatWilsonPct(weightedStab.largeJumpPct)}`}
-            />
-          ) : null}
-          {unweightedStab ? (
-            <RateCard
-              title="Stability (unweighted)"
-              subtitle={
-                unweightedStab.medianAbsDelta == null
-                  ? 'No jumps yet'
-                  : `Median |Δscore| ${unweightedStab.medianAbsDelta.toFixed(2)} · n=${unweightedStab.nJumps}`
-              }
-              primary={`Sign flip ${formatWilsonPct(unweightedStab.signFlipPct)}`}
-              longLabel={`|Δ|≥1 ${formatWilsonPct(unweightedStab.largeJumpPct)}`}
-            />
-          ) : null}
-          <RateCard
-            title="5d currency accuracy"
-            subtitle="Medium score vs USD-cross move — weaker than pair ideas"
-            primary={formatWilsonPct(accuracy.interval)}
-            longLabel={`Significant ${formatWilsonPct(accuracy.significantInterval)}`}
-            shortLabel={`Open ${accuracy.openCount} · Missing ${accuracy.missingCount}`}
-          />
-        </div>
-      </section>
+      )}
     </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="min-w-[7rem]">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-ink-mute">{label}</p>
+      <p className="font-mono text-sm tabular-nums text-ink">
+        {value}
+        {hint ? <span className="ml-1.5 text-[10px] text-ink-mute">{hint}</span> : null}
+      </p>
+    </div>
+  );
+}
+
+function TradeRow({ row }: { row: TradeHistoryRow }) {
+  const result = tradeResult(row);
+  if (result === null) return null;
+  return (
+    <tr>
+      <td className="whitespace-nowrap px-3 py-2 font-mono text-ink-mute">{row.runDate}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-ink">{row.pair}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-ink">{biasLabel(row.direction)}</td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+        {row.entryBand ?? '—'}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+        {row.stop ?? '—'}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 font-mono tabular-nums text-ink">
+        {row.target ?? '—'}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-ink">
+        {row.sessions ?? '—'}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-right font-mono tabular-nums text-ink">
+        {formatHoldPct(row.holdReturn)}
+      </td>
+      <td className="whitespace-nowrap px-3 py-2">
+        <ResultPill result={result} />
+      </td>
+    </tr>
   );
 }
