@@ -51,3 +51,14 @@ try:
     __all__ += ["DPSDTrend"]
 except ImportError:
     pass  # dpsd is optional; available once the submodule lands
+
+try:
+    from digiquant.indicators.macro_liquidity import (
+        MacroLiquidityConfig,
+        MacroLiquidityModel,
+        RegimeState,
+    )
+
+    __all__ += ["MacroLiquidityConfig", "MacroLiquidityModel", "RegimeState"]
+except ImportError:
+    pass  # macro_liquidity is optional; available once the submodule lands

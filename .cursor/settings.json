@@ -4,7 +4,7 @@
       "enabled": true
     },
     "coderabbit": {
-      "enabled": true
+      "enabled": false
     },
     "cursor-sdk": {
       "enabled": true

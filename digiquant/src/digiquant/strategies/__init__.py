@@ -19,8 +19,14 @@ if find_spec("nautilus_trader") is not None:
         rsi_momentum,
         slapper,
     )
+    from digiquant.strategies.rotation import nautilus_strategy as rs_rotation_nautilus_strategy
     from digiquant.strategies.sdca import nautilus_strategy as sdca_nautilus_strategy
 
-from digiquant.strategies.registry import get_strategy, list_strategies, register
+from digiquant.strategies.registry import (
+    get_strategy,
+    list_strategies,
+    register,
+    resolve_strategy_name,
+)
 
-__all__ = ["get_strategy", "list_strategies", "register"]
+__all__ = ["get_strategy", "list_strategies", "register", "resolve_strategy_name"]

@@ -5,8 +5,10 @@ A vault is a directory of ``*.md`` notes. ``Vault`` builds an in-memory index
 maintenance operations that keep the vault consistent (create, rename with
 inbound-link rewrite, set frontmatter, lint, reindex).
 
-Storage is the local filesystem in v1. Everything is recomputed from disk on
-``reindex``; there is no hidden cache to fall out of sync.
+``Vault`` is the filesystem :class:`~digivault.store.VaultStore` implementation
+(:class:`FilesystemStore` is an explicit alias). Postgres-backed vaults live in
+``digivault.postgres_store`` (#1142). Everything is recomputed from the backing
+store on ``reindex``; there is no hidden cache to fall out of sync.
 """
 
 from __future__ import annotations
@@ -257,6 +259,15 @@ class Vault:
         want = tag.strip().lstrip("#")
         return [self._notes[n] for n in sorted(self._notes) if want in self._notes[n].tags]
 
+    def neighbors(self, name: str) -> tuple[str, ...]:
+        """One-hop neighbors: resolved outlinks union backlinks."""
+        note = self._notes.get(name)
+        if note is None:
+            return ()
+        found = {link.target for link in note.outlinks if link.target in self._notes}
+        found.update(note.backlinks)
+        return tuple(sorted(found))
+
     def read_text(self, name: str) -> str:
         note = self._notes.get(name)
         if note is None:
@@ -460,3 +471,11 @@ class Vault:
                 )
             )
         return LintReport(ok=not issues, note_count=len(self._notes), issues=tuple(issues))
+
+
+class FilesystemStore(Vault):
+    """Filesystem :class:`~digivault.store.VaultStore` — identical to :class:`Vault`.
+
+    Kept as an explicit name so callers can depend on the store protocol without
+    caring that the historical public type was ``Vault`` (#1142).
+    """

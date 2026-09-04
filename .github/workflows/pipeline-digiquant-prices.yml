@@ -136,13 +136,16 @@ jobs:
             const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp    = new Date().toISOString().slice(0, 16);
             const title    = 'digiquant-prices intraday — recurring failures';
-            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:prices', 'exec:cursor'];
+            // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
             const marker   = '<!-- digiquant-prices-intraday-tracker -->';
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner, repo: context.repo.repo,
-              state: 'open', labels: 'ci-failure,pipeline:prices', per_page: 100,
+              state: 'open', per_page: 100,
             });
             const tracker = existing.find(i => (i.body || '').includes(marker));
 
@@ -346,13 +349,16 @@ jobs:
             const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp    = new Date().toISOString().slice(0, 10);
             const title    = 'digiquant-prices EOD macro — recurring failures';
-            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:macro', 'exec:cursor'];
+            // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
             const marker   = '<!-- digiquant-prices-eod-macro-tracker -->';
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner, repo: context.repo.repo,
-              state: 'open', labels: 'ci-failure,pipeline:macro', per_page: 100,
+              state: 'open', per_page: 100,
             });
             const tracker = existing.find(i => (i.body || '').includes(marker));
 

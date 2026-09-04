@@ -1,10 +1,11 @@
 name: "Agent: Claude dispatch"
 
-# Fires when exec:claude label is applied to an issue.
+# Fires when the agent-task label is applied to an issue whose component routes
+# to the claude tier (see tiers in scripts/project_routing.json).
 #
-# Policy: Tier 3 (Claude) is LOCAL ONLY. Cloud dispatch is intentionally
-# disabled — only Copilot (Tier 1) and Cursor (Tier 2) auto-execute issues.
-# When a task needs Tier 3, a human runs `make task ISSUE=N` locally.
+# Policy: Tier claude is LOCAL ONLY. Cloud dispatch is intentionally
+# disabled — only cursor-tier issues auto-execute. When a task needs
+# human-supervised execution, a human runs `make task ISSUE=N` locally.
 #
 # This workflow exists solely to:
 #   1. Confirm the label was applied (and surface the expected branch/gate)
@@ -19,18 +20,24 @@ on:
   issues:
     types: [labeled, opened, reopened]
 
+# Same per-issue serialization as the cursor-dispatch workflow (duplicate
+# delivery of opened+labeled in the same second).
+concurrency:
+  group: claude-dispatch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write
 
 jobs:
   dispatch:
-    name: Acknowledge exec:claude label
+    name: Acknowledge claude-tier agent task
     runs-on: ubuntu-latest
     if: |
-      (github.event.action == 'labeled' && github.event.label.name == 'exec:claude') ||
+      (github.event.action == 'labeled' && github.event.label.name == 'agent-task') ||
       ((github.event.action == 'opened' || github.event.action == 'reopened') &&
-       contains(github.event.issue.labels.*.name, 'exec:claude'))
+       contains(github.event.issue.labels.*.name, 'agent-task'))
 
     steps:
       - uses: actions/checkout@v4
@@ -38,22 +45,40 @@ jobs:
           fetch-depth: 0
           ref: develop
 
-      - name: Resolve component metadata
+      - name: Resolve component metadata + tier
         id: meta
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE:  ${{ github.event.issue.title }}
         run: |
           LABELS='${{ toJson(github.event.issue.labels) }}'
-          COMPONENT=$(echo "$LABELS" | python3 -c "
-          import json, sys, re
-          labels = json.load(sys.stdin)
-          for l in labels:
-              m = re.match(r'^component:(.+)$', l['name'])
-              if m:
-                  print(m.group(1))
-                  break
-          " 2>/dev/null || echo "root")
+          META=$(echo "$LABELS" | python3 -c "
+          import json, sys
+          routing = json.load(open('scripts/project_routing.json'))
+          tiers = routing.get('tiers', {})
+          names = [l['name'] for l in json.load(sys.stdin)]
+          component = next((n.split(':', 1)[1] for n in names if n.startswith('component:')), 'root')
+          print(json.dumps({'component': component, 'tier': tiers.get(f'component:{component}', tiers.get('default', 'claude'))}))
+          ")
+          echo "$META" | python3 -c "import json,sys; print('tier=' + json.load(sys.stdin)['tier'])" >> "$GITHUB_OUTPUT"
+          COMPONENT=$(echo "$META" | python3 -c "import json,sys; print(json.load(sys.stdin)['component'])")
+          if [[ "$(echo "$META" | python3 -c "import json,sys; print(json.load(sys.stdin)['tier'])")" != "claude" ]]; then
+            echo "Tier is cursor — @cursor dispatch owns this issue, nothing to post."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Same 24h duplicate suppression as the cursor-dispatch workflow:
+          # bouncing agent-task before anyone runs make task must not stack
+          # duplicate instruction comments.
+          LAST_NOTE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("Claude tier")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_NOTE" ]] && [[ "$LAST_NOTE" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "Local-dispatch instructions posted within 24h ($LAST_NOTE) — skipping duplicate."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           declare -A TEST_CMD=(
             [digigraph]="pytest -m unit -k digigraph -v --tb=short"
@@ -78,6 +103,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Post local-dispatch instructions
+        if: steps.meta.outputs.skip != 'true'
         env:
           GH_TOKEN:     ${{ secrets.GITHUB_TOKEN }}
           REPO:         ${{ github.repository }}
@@ -85,8 +111,15 @@ jobs:
           BRANCH:       ${{ steps.meta.outputs.branch }}
           TEST_CMD:     ${{ steps.meta.outputs.test_cmd }}
         run: |
+          # Re-check immediately before posting (concurrent duplicate delivery).
+          LAST_NOTE=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("Claude tier")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_NOTE" ]] && [[ "$LAST_NOTE" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "Instructions appeared while queued ($LAST_NOTE) — skipping duplicate."
+            exit 0
+          fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
-          **Tier 3 — Claude Code (local, human-supervised)**
+          **Claude tier — human-supervised, local only**
 
           Cloud dispatch is disabled by policy. To execute this task, run locally:
 
