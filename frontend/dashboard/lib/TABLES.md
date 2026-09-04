@@ -72,3 +72,27 @@ instead of hand-rolling sort state — wire
 `layer(…)` — it manages its own layering) plus the matching `@source` line
 per `MIGRATION.md`. Tables with row interaction, grouping, or mixed-tone
 cells stay local until the gaps above are promoted.
+
+---
+
+## Performance SSOT (#3580)
+
+One contracted series and one committed-book date across Brief, Tearsheet,
+Ledger, and Portfolio. Live marks on Brief are a **badged overlay** only —
+never a silent second truth.
+
+| Concern | Canonical source | Notes |
+|---|---|---|
+| **NAV chart** | `public_accounting_nav_history` (`ACCOUNTING_NAV_VIEW`) | Fail closed on query error (#3029). Tip contract badge: `finalized_accounting` vs `legacy_estimate`. |
+| **Headline returns** | Same accounting NAV tip via `getPerformanceBundle` / `buildPerformanceTearsheet` / `persistedHeadlinesFromNav` | Brief without live overlay must match Tearsheet within 0.05 pp. |
+| **Invested %** | Accounting NAV tip `invested_pct` | Fallback: book weights → `portfolio_metrics.invested_pct`. Never mix live weights with book weights silently. |
+| **Book as-of date** | `committedBookDate(daily_snapshots.date, positions.date)` | Portfolio / Ledger / Brief book chrome. Do not imply marks refreshed when `metrics_as_of` is null. |
+| **Ledger events** | `position_events` (house book) | Session day on Brief; full stream on Ledger. |
+| **Persisted risk KPIs** | `portfolio_metrics` | Lag badge when `metrics.as_of` / `date` trails NAV tip by ≥1 day. Pipeline writers: `finalize_period_accounting` + `refresh_performance_metrics` (see #3563 / #3467 for `main` lock unblock). |
+
+Code entrypoints:
+
+- `frontend/dashboard/lib/performance-ssot.ts` — pure SSOT helpers
+- `frontend/dashboard/lib/observability-queries.ts` — `getPerformanceBundle()` (Tearsheet + shared builder)
+- `frontend/dashboard/app/page.tsx` — Brief persisted path + live-marks badge
+- `frontend/dashboard/app/portfolio/performance/page.tsx` — Tearsheet consumer

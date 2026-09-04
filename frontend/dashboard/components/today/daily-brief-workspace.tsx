@@ -33,6 +33,11 @@ import {
 import { EntitledSurface } from '@/components/entitled-surface';
 import { PortfolioTeaserSurface } from '@/components/tier/portfolio-teaser-surface';
 import {
+  navContractBadgeLabel,
+  performanceFreshnessNote,
+  type PerformanceSsotMeta,
+} from '@/lib/performance-ssot';
+import {
   BriefPipelineHealth,
   type BriefRunHealth,
 } from './brief-pipeline-health';
@@ -119,6 +124,10 @@ export interface DailyBriefWorkspaceProps {
     volatility: number | null;
   };
   investedPct: number | null;
+  /** Performance SSOT chrome (#3580) — contract + metrics lag + marks stamp. */
+  performanceSsot?: PerformanceSsotMeta | null;
+  /** True when Brief scoreboard uses live price overlay (must be labeled). */
+  liveMarks?: boolean;
   positions: Position[];
   actionables: ActionableItem[];
   risks: RiskItem[];
@@ -230,6 +239,8 @@ export function DailyBriefWorkspace({
   rationaleByTicker,
   returns,
   investedPct,
+  performanceSsot = null,
+  liveMarks = false,
   positions,
   actionables,
   risks,
@@ -272,6 +283,13 @@ export function DailyBriefWorkspace({
     decision.active[0] != null
       ? tickerDossierHref(decision.active[0].ticker)
       : buildPipelineHref({ date: digestDate, stage: 'selection', node: 'pm-rebalance' });
+  const freshnessNote = performanceSsot ? performanceFreshnessNote(performanceSsot) : null;
+  const investedNote =
+    performanceSsot?.investedDefinition === 'accounting_nav_tip'
+      ? `${book.cashPct.toFixed(0)}% cash · accounting tip`
+      : performanceSsot?.investedDefinition === 'book_weights'
+        ? `${book.cashPct.toFixed(0)}% cash · book weights`
+        : `${book.cashPct.toFixed(0)}% cash`;
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows
@@ -325,6 +343,30 @@ export function DailyBriefWorkspace({
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {liveMarks ? (
+              <span
+                data-testid="brief-live-marks-badge"
+                className="font-mono text-[0.58rem] uppercase tracking-wider text-accent"
+              >
+                live marks
+              </span>
+            ) : null}
+            {performanceSsot?.navContract && performanceSsot.navContract !== 'empty' ? (
+              <span
+                data-testid="brief-nav-contract-badge"
+                className="font-mono text-[0.58rem] uppercase tracking-wider text-ink-mute"
+              >
+                {navContractBadgeLabel(performanceSsot.navContract)}
+              </span>
+            ) : null}
+            {performanceSsot?.metricsLagging ? (
+              <span
+                data-testid="brief-metrics-lag-badge"
+                className="font-mono text-[0.58rem] uppercase tracking-wider text-warn"
+              >
+                metrics lag
+              </span>
+            ) : null}
             <AsOfBadge date={digestDate} />
           </div>
         </div>
@@ -407,13 +449,21 @@ export function DailyBriefWorkspace({
             data-brief-section="scoreboard"
             className="grid grid-cols-2 divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
           >
-            <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
-            <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
+            <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={liveMarks ? 'live marks' : returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
+            <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={liveMarks ? 'live marks' : returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
             <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
             <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
             <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
-            <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
+            <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={investedNote} />
           </dl>
+          {freshnessNote ? (
+            <p
+              data-testid="brief-performance-freshness"
+              className="border-t border-hair px-4 py-2 font-mono text-[0.58rem] text-ink-mute sm:px-5"
+            >
+              {freshnessNote}
+            </p>
+          ) : null}
         </BriefCardLink>
       </EntitledSurface>
 
@@ -519,14 +569,24 @@ export function DailyBriefWorkspace({
 
       <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
       <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Book monitor
             </p>
             <h2 className="mt-0.5 text-lg font-semibold text-ink">Allocation and movers</h2>
           </div>
-          <AsOfBadge date={bookDate} />
+          <div className="flex flex-wrap items-center gap-2">
+            {performanceSsot?.marksUnstamped ? (
+              <span
+                data-testid="brief-marks-unstamped"
+                className="font-mono text-[0.58rem] uppercase tracking-wider text-warn"
+              >
+                marks unstamped
+              </span>
+            ) : null}
+            <AsOfBadge date={bookDate} />
+          </div>
         </div>
 
         <div className="mt-4 grid border-y border-hair lg:grid-cols-[minmax(14rem,0.8fr)_minmax(0,2fr)] lg:divide-x lg:divide-hair">

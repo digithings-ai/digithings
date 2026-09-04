@@ -2025,7 +2025,17 @@ difference in percentage points. All metric writers use
 must read these fields when present. The dashboard Performance view fills only missing
 fields with the same deterministic first/latest calculation over live `nav_history` and
 the benchmark closes inside that exact NAV window, and labels the result as a live-history
-or mixed fallback. Rows in
+or mixed fallback.
+
+**Dashboard UI SSOT (#3580).** Brief and Tearsheet share one performance bundle
+(`frontend/dashboard/lib/observability-queries.ts` → `getPerformanceBundle`, helpers in
+`frontend/dashboard/lib/performance-ssot.ts`). Canonical NAV series is
+`public_accounting_nav_history`; invested % prefers the accounting tip; book as-of is
+`committedBookDate`. Live marks on Brief are explicitly badged and must not silently
+replace the persisted tip. Metrics lag (`portfolio_metrics` behind the NAV tip) and
+`legacy_estimate` contract are visible chrome — do not extend flat legacy as if healthy.
+Writer unblock on `main` (`uv.lock` `atlas` → `research`) is tracked in #3563 / #3467.
+Rows in
 `current_book_lookback` (legacy alias view `position_attribution`) are a trailing-window
 diagnostic with an explicit lookback interval — not inception-to-date contribution and
 not realized daily P&L (#2598). The Performance cumulative contribution chart instead
