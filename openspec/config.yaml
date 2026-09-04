@@ -7,8 +7,8 @@ archive_dir: openspec/changes/archive
 
 domains:
   - digigraph
-  - digiquant/atlas
-  - digiquant/hermes
+  - digiquant/research
+  - digiquant/portfolio
   - digisearch
   - digikey
   - digismith

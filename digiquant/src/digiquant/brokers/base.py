@@ -1,6 +1,6 @@
 """Broker adapter protocol. Phase 2.
 
-Kairos execution contracts (K0) widen this protocol so a real adapter (a later work
+execution contracts (K0) widen this protocol so a real adapter (a later work
 package) has a complete surface to implement: account/position reads, the full order
 lifecycle (submit/get/cancel), and fill polling — not just `connect`/`disconnect` and a
 positional `submit_order`. The legacy positional `submit_order(symbol, side, quantity,

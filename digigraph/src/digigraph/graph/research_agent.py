@@ -1,14 +1,14 @@
 """Generic research-agent node for sub-graphs.
 
-A phase node in an Atlas-style pipeline is "research this scope, produce
+A phase node in an research-style pipeline is "research this scope, produce
 a validated structured output." The *how* (analyst persona, materiality
 filter, citation discipline) lives in this module. The *what* (which sector,
 which data sources, which output schema) is injected per call as
 ``skill_text`` + ``output_model``.
 
-This lets sub-graphs — notably digiquant Atlas (#176/#177) — compose research
+This lets sub-graphs — notably digiquant research (#176/#177) — compose research
 pipelines from declarative phase configs without re-authoring a prompt per
-segment. The module stays generic: no Atlas-specific vocabulary here.
+segment. The module stays generic: no research-specific vocabulary here.
 
 The existing ``digigraph.graph.research`` node is the RAG/tool-loop research
 node invoked by the digigraph supervisor; it is a different concern and is
@@ -34,7 +34,6 @@ from digigraph import usage as _usage
 from digigraph.compaction import (
     compact_messages,
     compaction_config_from_env,
-    wrap_execute_tool_for_tier1,
 )
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
@@ -201,6 +200,7 @@ def run_research_agent(
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
     search_parameters: dict[str, Any] | None = None,
+    max_tool_rounds: int | None = None,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -239,6 +239,8 @@ def run_research_agent(
         search_parameters: Optional xAI Live Search descriptor, forwarded via
             ``extra_body`` for xAI models (no-op otherwise). Applies on both the
             tool and the structured-output paths.
+        max_tool_rounds: Optional cap for the tool-calling loop. None (default)
+            keeps digillm's default (5); Olympus passes 24 via its wrapper.
 
     Tool-path retry (#1739):
         A tool-grounded turn gets **no** provider-side schema enforcement, so a
@@ -326,19 +328,16 @@ def run_research_agent(
         )
         return result
 
-    # Pre-LLM compaction (#399): Atlas phases can ship large phase_inputs / prior
-    # briefs in ``messages``. Tier-1 also wraps the tool executor so digillm never
-    # injects multi-MB tool payloads into its local transcript. Without a session
-    # workspace, compaction is a no-op for offload (keeps full payloads).
+    # Pre-LLM compaction (#399): research phases can ship large phase_inputs / prior
+    # briefs in ``messages``. Do **not** wrap ``execute_tool`` with
+    # ``wrap_execute_tool_for_tier1`` — same-turn stubbing hid tool results from
+    # the model (digillm already caps via ``DIGI_TOOL_MESSAGE_MAX_CHARS``).
+    # Without a session workspace, compaction is a no-op for offload (keeps full
+    # payloads).
     tool_grounded = bool(tools) and execute_tool is not None
     compaction_cfg = compaction_config_from_env()
     compaction = compact_messages(messages, compaction_cfg)
     messages = compaction.llm_messages
-    execute_for_llm = (
-        wrap_execute_tool_for_tier1(traced_execute_tool, config=compaction_cfg)
-        if tool_grounded
-        else traced_execute_tool
-    )
 
     last_error: Exception | None = None
     parent_call_id = None
@@ -370,9 +369,10 @@ def run_research_agent(
                             effective_model,
                             messages,
                             tools=tools,
-                            execute_tool=execute_for_llm,
+                            execute_tool=traced_execute_tool,
                             temperature=temperature,
                             search_parameters=search_parameters,
+                            max_tool_rounds=max_tool_rounds if max_tool_rounds is not None else 5,
                         )
                         parent_call_id = call.last_call_id
                 else:
@@ -401,7 +401,7 @@ def run_research_agent(
                         # Never-worse-than-today guarantee. ``last_error`` is set only on a retry,
                         # i.e. only once a prior attempt already produced an unusable body. If the
                         # enforced retry itself fails at the provider we surface that ORIGINAL parse
-                        # error, so callers (Atlas/Hermes fail-soft, which key off the parse error)
+                        # error, so callers (research/portfolio fail-soft, which key off the parse error)
                         # see exactly the exception they would have seen before this change. Bare
                         # ``Exception`` is deliberate: the guarantee is "any failure degrades to the
                         # prior error", which a narrower tuple would not deliver — an un-enumerated

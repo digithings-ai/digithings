@@ -1,13 +1,15 @@
 /**
- * Stripe price-id → Olympus consumer plan_tier mapping (T2 / spec D1).
+ * Stripe price-id → digiquant consumer plan_tier mapping (T2 / PRICING.md).
  *
- * Consumer tiers here are `free | baseline | custom | enterprise` — NOT ADR-0004's
+ * Consumer tiers: `free | brief | desk | studio | enterprise` — NOT ADR-0004's
  * metered API seat names. Enterprise is invoice-only (no self-serve price id).
  *
  * Price ids come from Deno.env (set via `supabase secrets set`); never hard-code.
  */
 
-export type PlanTier = "free" | "baseline" | "custom" | "enterprise";
+export type PlanTier = "free" | "brief" | "desk" | "studio" | "enterprise";
+
+export type PaidTier = Extract<PlanTier, "brief" | "desk" | "studio">;
 
 export type SubscriptionStatus = "none" | "active" | "past_due" | "canceled";
 
@@ -47,36 +49,55 @@ export function planTierForSubscriptionStatus(
 }
 
 export interface PriceTierEnv {
-  baselineMonthly: string;
-  baselineAnnual: string;
-  customMonthly: string;
-  customAnnual: string;
+  briefMonthly: string;
+  briefAnnual: string;
+  deskMonthly: string;
+  deskAnnual: string;
+  studioMonthly: string;
+  studioAnnual: string;
 }
 
 export function loadPriceTierEnv(
   getEnv: (key: string) => string | undefined = (k) => Deno.env.get(k),
 ): PriceTierEnv {
   return {
-    baselineMonthly: getEnv("STRIPE_PRICE_BASELINE_MONTHLY") ?? "",
-    baselineAnnual: getEnv("STRIPE_PRICE_BASELINE_ANNUAL") ?? "",
-    customMonthly: getEnv("STRIPE_PRICE_CUSTOM_MONTHLY") ?? "",
-    customAnnual: getEnv("STRIPE_PRICE_CUSTOM_ANNUAL") ?? "",
+    briefMonthly: getEnv("STRIPE_PRICE_BRIEF_MONTHLY") ?? "",
+    briefAnnual: getEnv("STRIPE_PRICE_BRIEF_ANNUAL") ?? "",
+    deskMonthly: getEnv("STRIPE_PRICE_DESK_MONTHLY") ?? "",
+    deskAnnual: getEnv("STRIPE_PRICE_DESK_ANNUAL") ?? "",
+    studioMonthly: getEnv("STRIPE_PRICE_STUDIO_MONTHLY") ?? "",
+    studioAnnual: getEnv("STRIPE_PRICE_STUDIO_ANNUAL") ?? "",
   };
 }
 
 /** Env var name for a paid Checkout price — used in PRICE_NOT_CONFIGURED messages. */
-export function priceEnvKey(
-  tier: Extract<PlanTier, "baseline" | "custom">,
-  interval: "monthly" | "annual",
-): string {
-  if (tier === "baseline") {
-    return interval === "monthly"
-      ? "STRIPE_PRICE_BASELINE_MONTHLY"
-      : "STRIPE_PRICE_BASELINE_ANNUAL";
+export function priceEnvKey(tier: PaidTier, interval: "monthly" | "annual"): string {
+  const stem = tier.toUpperCase();
+  return interval === "monthly" ? `STRIPE_PRICE_${stem}_MONTHLY` : `STRIPE_PRICE_${stem}_ANNUAL`;
+}
+
+function paidTierFromPrices(priceId: string, prices: PriceTierEnv): PaidTier | null {
+  const {
+    briefMonthly,
+    briefAnnual,
+    deskMonthly,
+    deskAnnual,
+    studioMonthly,
+    studioAnnual,
+  } = prices;
+  if ((briefMonthly && priceId === briefMonthly) || (briefAnnual && priceId === briefAnnual)) {
+    return "brief";
   }
-  return interval === "monthly"
-    ? "STRIPE_PRICE_CUSTOM_MONTHLY"
-    : "STRIPE_PRICE_CUSTOM_ANNUAL";
+  if ((deskMonthly && priceId === deskMonthly) || (deskAnnual && priceId === deskAnnual)) {
+    return "desk";
+  }
+  if (
+    (studioMonthly && priceId === studioMonthly) ||
+    (studioAnnual && priceId === studioAnnual)
+  ) {
+    return "studio";
+  }
+  return null;
 }
 
 /**
@@ -88,26 +109,24 @@ export function planTierFromPriceId(
   prices: PriceTierEnv = loadPriceTierEnv(),
 ): PlanTier {
   if (!priceId) return "free";
-  const {
-    baselineMonthly,
-    baselineAnnual,
-    customMonthly,
-    customAnnual,
-  } = prices;
-  if (
-    (baselineMonthly && priceId === baselineMonthly) ||
-    (baselineAnnual && priceId === baselineAnnual)
-  ) {
-    return "baseline";
-  }
-  if (
-    (customMonthly && priceId === customMonthly) ||
-    (customAnnual && priceId === customAnnual)
-  ) {
-    return "custom";
-  }
+  const mapped = paidTierFromPrices(priceId, prices);
+  if (mapped) return mapped;
   console.warn("stripe price id not mapped to a plan_tier; defaulting to free", priceId);
   return "free";
+}
+
+export function pickPriceId(
+  tier: PaidTier,
+  interval: "monthly" | "annual",
+  prices: PriceTierEnv,
+): string {
+  if (tier === "brief") {
+    return interval === "monthly" ? prices.briefMonthly : prices.briefAnnual;
+  }
+  if (tier === "desk") {
+    return interval === "monthly" ? prices.deskMonthly : prices.deskAnnual;
+  }
+  return interval === "monthly" ? prices.studioMonthly : prices.studioAnnual;
 }
 
 /** First price id on a Stripe Subscription-like object (items.data[0].price.id). */

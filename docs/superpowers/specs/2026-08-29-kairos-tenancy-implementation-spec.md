@@ -3,7 +3,7 @@
 > **Date:** 2026-08-29  
 > **Status:** Implementation spec — authorizes filing the epic + task issues; runtime changes still land through per-task PRs with normal gates  
 > **Supersedes ambiguity in:** [2026-08-29 milestone brief](../plans/2026-08-29-olympus-kairos-tenancy-milestone-brief.md) (D1–D7 are **locked** here)  
-> **Binds to:** [2026-08-25 vision realignment brief](../plans/2026-08-25-olympus-vision-realignment-brief.md), [metaplan](../plans/2026-08-06-olympus-pipeline-metaplan.md), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
+> **Binds to:** [2026-08-25 vision realignment brief](../plans/2026-08-25-olympus-vision-realignment-brief.md), [metaplan](../plans/2026-08-06-olympus-pipeline-metaplan.md), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
 > **Outcome:** Olympus becomes a client-ready product — users sign up, subscribe, hold private books, connect Alpaca/IBKR (paper first), run overlay pipelines with their own LLM keys, and receive email digests.
 
 ---
@@ -12,7 +12,7 @@
 
 This spec is written so a smaller model can pick up any single work package (WP) cold. Per WP it gives: goal, exact files, interfaces, behavior rules, edge cases, tests, acceptance, and gates. Global rules that apply to **every** WP:
 
-1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/olympus/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
+1. **Read-first, always:** `CLAUDE.md`, `digiquant/AGENTS.md` (for K-track), `frontend/dashboard/README.md` (for UI work), plus the WP's own "Read first" list. Never skip a component AGENTS.md.
 2. **Branching:** K-track WPs are `component:digiquant` → branch from `module/digiquant` via `make task ISSUE=N` (two-hop). Olympus UI WPs and root docs are one-hop to `develop`. Never branch from a stale base — `make task` enforces `origin/<base>`.
 3. **Migration numbers are allocated at execution time** — the next free `digiquant/supabase/migrations/NNN_*.sql` when your PR lands (096+ as of this writing; check, don't assume). Update `digiquant/supabase/SCHEMA.md` in the same PR.
 4. **Human gates (hard):**
@@ -29,7 +29,7 @@ This spec is written so a smaller model can pick up any single work package (WP)
 
 | # | Decision | Ruling | Rationale |
 |---|----------|--------|-----------|
-| **D1** | Tier content split | **Observer** (free, authenticated): Atlas research + Hermes narrative **without** weights/NAV/fills. **Baseline** (tier 1): full house glass-box + house paper book, read-only. **Custom** (tier 2): overlay profiles, private book, broker connect, BYOK. **Enterprise**: contract (multi-seat, SLA) | Free taste without giving away the PM product; matches the user-stated "tier 1 = baseline in full" |
+| **D1** | Tier content split | **Observer** (free, authenticated): teaser only — Atlas research + Hermes narrative / **digest summary conclusions** + light **portfolio glimpse** (names, not weights/NAV/fills). **No** automations, **no** broker/portfolio connections. **Baseline** (tier 1, paid): full house glass-box + house paper book, read-only. **Custom** (tier 2, paid): overlay profiles, private book, broker connect, BYOK. **Enterprise**: contract (multi-seat, SLA). **Creator/ops exception:** emails in `entitlement_grants` get a `plan_floor` (seeded creator → `custom`) so baseline/Kairos works without Stripe for the operator; everyone else still needs a subscription for full product. **Client products** (FX Hub / future): `client_product_grants` email allowlist, not plan_tier | Free taste without reverse-engineering the PM product; creator unblocked while Stripe/Alpaca captchas block vendor onboarding |
 | **D2** | Broker order | **Alpaca paper first**, IBKR second (read-first) | Alpaca: single REST plane, OAuth for third-party apps, paper keys trivial. IBKR: session/gateway model is heavier (§7) |
 | **D3** | Live trading in scope? | **No.** Milestone 1+2 ship paper connect + read + paper orders only. Live cutover is a separate, human-gated epic | Repo invariant; also defers the investment-adviser compliance question (§8) |
 | **D4** | End-user identity plane | **Supabase Auth** (Google + GitHub OAuth) for Olympus users; **digikey** remains the machine/API plane. Entitlements ride Supabase JWT `app_metadata.plan_tier`, enforced by RLS | Wave 3 D3; one login for dashboard + data plane; digikey untouched (no auth-plane change = no digikey human gate in this program) |
@@ -166,7 +166,7 @@ CREATE TABLE notification_prefs (
 );
 ```
 
-T-track tables (`workspaces`, `workspace_members`, `stripe_events`, `job_runs`, BYOK `workspace_provider_credentials`, tenant columns + RLS rewrite) are specified in [Wave 3 roadmap §P2](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) — execute as written there with two deltas: (a) `plan_tier` enum is `free | baseline | custom | enterprise` per D1; (b) tenant columns go on the **private** tables listed in §2 above; corpus/documents shared rows live in the system workspace.
+T-track tables (`workspaces`, `workspace_members`, `stripe_events`, `job_runs`, BYOK `workspace_provider_credentials`, tenant columns + RLS rewrite) are specified in [Wave 3 roadmap §P2](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) — execute as written there with two deltas: (a) `plan_tier` enum is `free | baseline | custom | enterprise` per D1; (b) tenant columns go on the **private** tables listed in §2 above; corpus/documents shared rows live in the system workspace.
 
 ---
 
@@ -305,7 +305,7 @@ class BrokerAccountSnapshot(BaseModel): ...  # account_id, equity, cash, buying_
 
 ## 5. Milestone 2 — Tenancy work packages
 
-Execute [Wave 3 roadmap P2–P8](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) as the detailed schema/acceptance source, with the deltas below. Order: T0 → T1 → T2 → {T3, T5} → T4.
+Execute [Wave 3 roadmap P2–P8](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md) as the detailed schema/acceptance source, with the deltas below. Order: T0 → T1 → T2 → {T3, T5} → T4.
 
 ### T0 — Workspaces + RLS privacy boundary (risk:high — data exposure)
 

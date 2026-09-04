@@ -13,7 +13,7 @@ COPY frontend/digichat/package.json frontend/digichat/
 COPY frontend/digichat-ui/package.json frontend/digichat-ui/
 COPY frontend/digiweb/design/package.json frontend/digiweb/design/
 COPY frontend/digiweb/web/package.json frontend/digiweb/web/
-COPY frontend/olympus/package.json frontend/olympus/
+COPY frontend/dashboard/package.json frontend/dashboard/
 RUN npm ci --workspace frontend/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder

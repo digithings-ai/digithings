@@ -317,7 +317,7 @@ Similar cards for:
 
 | Adopt | Adapt | Avoid |
 |-------|-------|-------|
-| Hero: headline + one CTA + demo | digichat/Olympus embed | Warm off-white if it fights our dark mesh identity |
+| Hero: headline + one CTA + demo | digichat/dashboard embed | Warm off-white if it fights our dark mesh identity |
 | Bento linked cards | Module grid on digithings | 856px-tall mobile cards (too long) |
 | Literal CTAs | `make stack-local`, `ask digichat` | "Get started" without destination |
 | Changelog band | GitHub releases | Duplicate homepage content in /features |

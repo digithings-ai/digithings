@@ -62,7 +62,26 @@ export function mapDigigraphTraceToSpans(
   if (SUPPRESSED_TRACE_TYPES.has(trace.type)) return [];
 
   let raw: ActivitySpan | null = null;
-  if (trace.type === "rag_sources") {
+  if (trace.type === "tool_call") {
+    const payload = trace.payload ?? {};
+    const tool =
+      (typeof payload.tool === "string" && payload.tool.trim()) ||
+      (typeof payload.toolName === "string" && payload.toolName.trim()) ||
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      "";
+    if (!tool) return [];
+    const query =
+      typeof payload.query === "string" && payload.query.trim()
+        ? payload.query.trim()
+        : undefined;
+    raw = {
+      operation: "execute_tool",
+      status: payload.status === "completed" ? "completed" : "started",
+      label: tool,
+      toolName: tool,
+      ...(query ? { query } : {}),
+    };
+  } else if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});
   } else if (
     trace.type === "digivault_get_note" ||

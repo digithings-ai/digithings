@@ -18,7 +18,7 @@ import { useBodyScrollLock } from "../../lib/useBodyScrollLock";
  * input row, the grouped listbox, the keyboard loop (↑/↓/Home/End/↵/esc,
  * focus held on the input) and the listbox ARIA wiring — `role="listbox"`
  * with `role="option"` children and `aria-activedescendant` on the listbox
- * (the pattern the olympus dashboard's palette was fixed to; preserved here).
+ * (the pattern the dashboard's palette was fixed to; preserved here).
  *
  * The CONSUMER owns everything data- and router-shaped: the `open` flag (and
  * whatever global shortcut toggles it — the shell binds no ⌘K), the grouped
@@ -40,7 +40,7 @@ import { useBodyScrollLock } from "../../lib/useBodyScrollLock";
  * Two dresses (styles/command-palette.css):
  * - dress="reference" (default): the design-reference dress — mono rows,
  *   surface-mix panel, token scrim.
- * - dress="glass": the olympus dashboard's shipped ⌘K look, translated
+ * - dress="glass": the dashboard's shipped ⌘K look, translated
  *   exactly — black/75 blurred scrim, term-bg panel (32rem, 12px radius),
  *   sans rows with accent-ring active state.
  */
@@ -48,7 +48,7 @@ export type CommandPaletteItem = {
   /** Stable identity — React key; option DOM ids are index-derived. */
   id: string;
   label: ReactNode;
-  /** Optional muted second line under the label (the olympus "hint"). */
+  /** Optional muted second line under the label (the dashboard "hint"). */
   description?: ReactNode;
   /** Fired when the row is chosen (Enter or click) — router.push lives here. */
   onSelect?: () => void;
@@ -95,7 +95,7 @@ export type CommandPaletteProps = {
   /** Leading input-row slot — defaults to the built-in magnifier glyph. */
   inputLeading?: ReactNode;
   /**
-   * Input `type` attribute (default "text"). Olympus ships type="search"
+   * Input `type` attribute (default "text"). dashboard ships type="search"
    * (native search-cancel affordance in WebKit/Chromium).
    */
   inputType?: string;
@@ -111,7 +111,7 @@ export type CommandPaletteProps = {
   className?: string;
   /** Render into a document.body portal (default) or in place. */
   portal?: boolean;
-  /** Visual dress — "reference" (default) or olympus's "glass". */
+  /** Visual dress — "reference" (default) or dashboard's "glass". */
   dress?: "reference" | "glass";
 };
 
@@ -119,7 +119,7 @@ const defaultEmpty = (query: string): ReactNode =>
   query ? <>No matches for “{query}”.</> : "No matches.";
 
 // Focus-trap boundary query — deliberately generic, not "just the input":
-// consumers can pass interactive inputLeading/inputTrailing content (olympus
+// consumers can pass interactive inputLeading/inputTrailing content (dashboard
 // ships a real Close button there), so the trap must cycle the dialog's
 // actual focusable set rather than assume the input is the only one.
 const FOCUSABLE_SELECTOR =
@@ -206,7 +206,7 @@ export function CommandPalette({
         // Tab past the last focusable back to the first, and Shift+Tab
         // before the first back to the last — rather than pinning focus to
         // the input unconditionally, since a consumer's inputLeading/
-        // inputTrailing slot can carry its own focusable content (olympus's
+        // inputTrailing slot can carry its own focusable content (dashboard's
         // production palette ships a real Close button there).
         const panel = panelRef.current;
         if (!panel) return;

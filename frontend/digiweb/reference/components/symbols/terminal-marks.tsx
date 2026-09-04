@@ -3,7 +3,7 @@
  *
  * Canonical implementation lives in @digithings/web
  * (components/symbols/terminal-marks.tsx); this specimen re-exports it for the
- * symbols page, exactly as marks.tsx does for the olympus signature.
+ * symbols page, exactly as marks.tsx does for the dashboard signature.
  *
  * - TerminalMark: outlined `digi` + block cursor in currentColor, Geist Mono 400
  *   (the weight terminal text renders at). `variant="compact"` is the `d`
@@ -21,7 +21,7 @@
  *
  * Kept in a separate file from marks.tsx on purpose: build-manifest.mjs names an
  * entry from the FIRST PascalCase export it finds, so aliasing these into
- * marks.tsx would silently rename that entry away from OlympusMark.
+ * marks.tsx would silently rename that entry away from DigiquantMark.
  */
 import {
   AnimatedLockup as SharedAnimatedLockup,

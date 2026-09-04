@@ -35,13 +35,14 @@ file exists to not have:
 * **velocity, windowed** — ``commits``, ``pullsMerged``, ``issuesClosed`` — the last
   30 days on ``main``, the deployed branch (not the repo's GitHub default, which is
   ``develop``). Every one of these queries carries a date bound.
-* **current state, NOT windowed** — ``issuesOpen`` and ``latestRelease``. An open
-  issue count is a point in time by nature: "opened in the last 30 days and still
-  open" was 30 against a real backlog of 197, and it answers a question nobody asked.
-  So these are deliberately unbounded, and any surface rendering them must scope them
-  separately from the windowed three. The first draft of the band put ``issuesOpen``
-  inside a ``// last 30 days`` heading, which presented a lifetime figure as a
-  monthly one.
+* **current state, NOT windowed** — ``issuesOpen``, ``pullsOpen`` and
+  ``latestRelease``. An open issue count is a point in time by nature: "opened in
+  the last 30 days and still open" was 30 against a real backlog of 197, and it
+  answers a question nobody asked. So these are deliberately unbounded, and any
+  surface rendering them must scope them separately from the windowed three. The
+  first draft of the band put ``issuesOpen`` inside a ``// last 30 days`` heading,
+  which presented a lifetime figure as a monthly one. ``openIssues`` is the same
+  unwindowed backlog, sorted by most recently updated, for the detailed list.
 * **code shape** — per-module ``files`` and ``lines`` — counted from the local
   checkout at the commit this snapshot is generated at, because the API's tree
   exposes blob *bytes*, never lines.
@@ -252,13 +253,41 @@ def _features(commits: list[dict], limit: int = 6) -> list[dict]:
     return feats
 
 
+def _search_items(payload: object, limit: int) -> list[dict]:
+    """Number / title / url rows from a Search issues payload."""
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: list[dict] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        number = it.get("number")
+        title = it.get("title")
+        url = it.get("html_url")
+        if not isinstance(number, int) or not title or not url:
+            continue
+        out.append(
+            {
+                "number": number,
+                "title": title,
+                "url": url,
+                "updatedAt": it.get("updated_at"),
+                "closedAt": it.get("closed_at"),
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def collect() -> dict:
     since = _since()
     commits = _commits_since(since)
 
     merged = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=1",
+        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=6&sort=updated",
     )
     closed = _gh(
         "api",
@@ -275,7 +304,11 @@ def collect() -> dict:
     # a page that promises "every figure is countable in the repo".
     open_issues = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=1",
+        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=6&sort=updated",
+    )
+    open_prs = _gh(
+        "api",
+        f"search/issues?q=repo:{SLUG}+is:pr+is:open&per_page=1",
     )
 
     releases = _gh("api", f"repos/{SLUG}/releases?per_page=1")
@@ -297,9 +330,28 @@ def collect() -> dict:
         "features": _features(commits),
         "pullsMerged": int(merged.get("total_count", 0)) if isinstance(merged, dict) else 0,
         "issuesClosed": int(closed.get("total_count", 0)) if isinstance(closed, dict) else 0,
+        "pullsOpen": int(open_prs.get("total_count", 0)) if isinstance(open_prs, dict) else 0,
         "issuesOpen": int(open_issues.get("total_count", 0))
         if isinstance(open_issues, dict)
         else 0,
+        "mergedPulls": [
+            {
+                "number": row["number"],
+                "title": row["title"],
+                "url": row["url"],
+                "mergedAt": row["closedAt"],
+            }
+            for row in _search_items(merged, 6)
+        ],
+        "openIssues": [
+            {
+                "number": row["number"],
+                "title": row["title"],
+                "url": row["url"],
+                "updatedAt": row["updatedAt"],
+            }
+            for row in _search_items(open_issues, 6)
+        ],
         "branch": BRANCH,
         "latestRelease": (
             {
@@ -320,8 +372,11 @@ REQUIRED = (
     "commits",
     "pullsMerged",
     "issuesClosed",
+    "pullsOpen",
     "issuesOpen",
     "features",
+    "mergedPulls",
+    "openIssues",
     "modules",
 )
 # Never collected — see the module docstring. Asserted so a future edit that adds
@@ -364,6 +419,9 @@ def check(max_age_days: int | None = None) -> int:
     if not isinstance(data["modules"], dict) or not data["modules"]:
         print("❌  snapshot has no per-module activity", file=sys.stderr)
         return 1
+    if not isinstance(data["mergedPulls"], list) or not isinstance(data["openIssues"], list):
+        print("❌  mergedPulls and openIssues must be lists", file=sys.stderr)
+        return 1
     try:
         stamped = datetime.strptime(data["generatedAt"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     except ValueError as exc:
@@ -398,7 +456,11 @@ def main() -> int:
     print(f"wrote {_shown(OUT)}")
     print(f"  {data['commits']} commits / {data['windowDays']}d on {data['branch']}")
     print(f"  {data['pullsMerged']} PRs merged, {data['issuesClosed']} issues closed")
-    print(f"  {data['issuesOpen']} issues open")
+    print(f"  {data['pullsOpen']} PRs open, {data['issuesOpen']} issues open")
+    for p in data["mergedPulls"]:
+        print(f"  merged #{p['number']}: {p['title'][:56]}")
+    for issue in data["openIssues"]:
+        print(f"  open #{issue['number']}: {issue['title'][:56]}")
     rel = data["latestRelease"]
     print(f"  latest release: {rel['tag']} ({rel['publishedAt'][:10]})" if rel else "  no releases")
     for f in data["features"]:

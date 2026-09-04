@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Footer } from "@digithings/web";
-import { DT_FOOTER, DT_FOOTER_META } from "../../../_nav";
+import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { SwaggerExplorer } from "@/components/docs/SwaggerExplorer";
 import {
@@ -111,7 +110,7 @@ export default async function OpenApiServicePage({
           </div>
         </div>
       </main>
-      <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
+      <DtFooter />
     </>
   );
 }

@@ -54,11 +54,6 @@ def test_default_row_is_phase3_cross_cutting_task_p2_sonnet(mod: Any) -> None:
 @pytest.mark.parametrize(
     ("label", "phase"),
     [
-        ("phase-0", "Phase 2 — Hardening"),
-        ("phase-2", "Phase 2 — Hardening"),
-        ("phase-3", "Phase 3 — Domain unification"),
-        ("phase-4", "Phase 4 — Atlas on digigraph"),
-        ("phase-5", "Phase 5 — Atlas tiering"),
         ("client-pilot", "Client Pilot"),
     ],
 )
@@ -67,6 +62,17 @@ def test_phase_labels_map_to_board_phase_strings(
 ) -> None:
     row = mod.infer_row(7, _labels(label))
     assert row[1] == phase
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "label",
+    ["phase-0", "phase-2", "phase-3", "phase-4", "phase-5"],
+)
+def test_retired_phase_labels_fall_back_to_default(mod: Any, label: str) -> None:
+    """Board cleanup 2026-09 deleted phase-* labels: infer must default."""
+    row = mod.infer_row(7, _labels(label, "component:website"))
+    assert row[1] == "Phase 3 — Domain unification"
 
 
 @pytest.mark.unit
@@ -103,11 +109,14 @@ def test_epic_sets_kind_and_p1(mod: Any) -> None:
 
 
 @pytest.mark.unit
-def test_phase0_sets_kind_feature_and_p1(mod: Any) -> None:
+def test_retired_phase0_confirms_no_special_kind_or_priority(
+    mod: Any,
+) -> None:
+    """Board cleanup 2026-09: phase-0 no longer maps to Feature/P1."""
     row = mod.infer_row(5, _labels("phase-0", "component:website"))
-    assert row[1] == "Phase 2 — Hardening"
-    assert row[3] == "Feature"
-    assert row[4] == "P1"
+    assert row[1] == "Phase 3 — Domain unification"
+    assert row[3] == "Task"
+    assert row[4] == "P2"
 
 
 @pytest.mark.unit

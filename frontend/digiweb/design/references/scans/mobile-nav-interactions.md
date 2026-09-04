@@ -106,7 +106,7 @@ Documented for comparison with references:
 | Header | Hamburger · brand · theme · GitHub |
 | Backdrop | `dqnav-backdrop` — 68% bg tint + 12px blur, below nav |
 | Sheet | Full height below `--dq-nav-h`, solid `--bg` |
-| Sheet footer | Ask digichat (DT) / Olympus (DQ) full-width primary |
+| Sheet footer | Ask digichat (DT) / dashboard (DQ) full-width primary |
 | Close | Hamburger → X, Escape, backdrop tap, link navigate |
 | Body scroll | `overflow: hidden` on open |
 

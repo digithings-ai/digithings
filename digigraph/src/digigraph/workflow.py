@@ -86,6 +86,8 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["research_system_prompt_override"] = req.research_system_prompt_override
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
+    initial["force_tool"] = req.force_tool
+    initial["enable_web_search"] = bool(req.enable_web_search)
     return initial
 
 
@@ -378,7 +380,31 @@ def run_digigraph_workflow_streaming(
                 content_streamed = True
         if event_type == "tool_call" and isinstance(data, dict):
             name = data.get("name")
-            args = data.get("arguments") or {}
+            args = data.get("arguments") or data.get("args") or {}
+            if not isinstance(args, dict):
+                args = {}
+            from digigraph.retrieval import query_from_tool_args
+
+            tool_query = query_from_tool_args(args)
+            if isinstance(name, str) and name.strip():
+                tool_payload: dict[str, Any] = {
+                    "tool": name.strip(),
+                    "status": "started",
+                }
+                if tool_query:
+                    tool_payload["query"] = tool_query
+                emit(
+                    (
+                        "trace",
+                        TraceEventV1(
+                            type="tool_call",
+                            workflow_id=trace_ctx["workflow_id"],
+                            request_id=trace_ctx["request_id"],
+                            session_id=trace_ctx["session_id"],
+                            payload=tool_payload,
+                        ).model_dump(),
+                    )
+                )
             if name in ("data_engineer_agent", "data_engineer"):
                 code = args.get("code") if isinstance(args.get("code"), str) else None
                 task = args.get("task") if isinstance(args.get("task"), str) else None

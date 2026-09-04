@@ -6,7 +6,7 @@ several lookback windows, plus a cross-sectional rank. Derived from
 ``price_history`` closes already stored; no new data source. Polars only.
 
 ``compute_relative_strength`` is pure (frame in, dict out). The reader that
-fetches closes lives in ``olympus/atlas/data/queries.py``.
+fetches closes lives in ``dashboard/research/data/queries.py``.
 """
 
 from __future__ import annotations

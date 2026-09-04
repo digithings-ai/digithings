@@ -9,8 +9,7 @@ from uuid import uuid4
 
 import pytest
 from click.testing import CliRunner
-from digiquant.olympus.hermes.allocation_hashes import sha256_hex
-from digiquant.olympus.replay.canonical import (
+from digiquant.dashboard.replay.canonical import (
     cost_hash_from_execution,
     data_hash_from_request,
     execution_policy_hash,
@@ -19,8 +18,8 @@ from digiquant.olympus.replay.canonical import (
     random_seed_hash,
     replay_input_manifest_content_hash,
 )
-from digiquant.olympus.replay.cli import policy_replay
-from digiquant.olympus.replay.models import (
+from digiquant.dashboard.replay.cli import policy_replay
+from digiquant.dashboard.replay.models import (
     ExecutionPolicy,
     InstrumentBarSeries,
     OhlcvBar,
@@ -35,7 +34,8 @@ from digiquant.olympus.replay.models import (
     TargetWeight,
     build_replay_pair,
 )
-from digiquant.olympus.replay.store import PolicyReplayStore
+from digiquant.dashboard.replay.store import PolicyReplayStore
+from digiquant.portfolio.allocation_hashes import sha256_hex
 from digiquant.service import set_policy_replay_store
 
 pytestmark = pytest.mark.unit

@@ -414,13 +414,73 @@ def test_query_constructs_default_embedder_at_most_once() -> None:
 
     original = minilm_module.MiniLMEmbedder
     minilm_module.MiniLMEmbedder = _StubEmbedder  # type: ignore[misc]
+    minilm_module._default_minilm_singleton = None
     try:
         for _ in range(3):
             backend.query(DsQuery(text="no embedding here", top_k=3))
     finally:
         minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
+        minilm_module._default_minilm_singleton = None
 
     assert construction_count == 1, f"expected 1 construction, got {construction_count}"
+
+
+@pytest.mark.unit
+def test_default_embedder_singleton_is_thread_safe() -> None:
+    """#2225: concurrent cold-cache callers must construct MiniLMEmbedder once.
+
+    Without a lock, N threads can all observe None and each pay an ONNX load.
+    Slow the stub constructor so the race window is real under CI.
+    """
+    import threading
+    import time
+
+    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.indexes.backends.vectorize as vectorize_module
+
+    construction_count = 0
+    barrier = threading.Barrier(8)
+
+    class _SlowStubEmbedder:
+        def __init__(self) -> None:
+            nonlocal construction_count
+            time.sleep(0.05)
+            construction_count += 1
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[0.5] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    original = minilm_module.MiniLMEmbedder
+    minilm_module.MiniLMEmbedder = _SlowStubEmbedder  # type: ignore[misc]
+    minilm_module._default_minilm_singleton = None
+    results: list[object] = []
+    errors: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            barrier.wait(timeout=5)
+            results.append(vectorize_module._get_default_embedder())
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(8)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+    finally:
+        minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
+        minilm_module._default_minilm_singleton = None
+
+    assert not errors, f"worker errors: {errors}"
+    assert construction_count == 1, f"expected 1 construction, got {construction_count}"
+    assert len(results) == 8
+    assert all(r is results[0] for r in results)
 
 
 @pytest.mark.unit
@@ -470,3 +530,52 @@ def test_query_treats_null_score_as_zero() -> None:
     results = backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
     assert len(results) == 1
     assert results[0].score == 0.0
+
+
+@pytest.mark.unit
+def test_query_raises_when_filters_are_present() -> None:
+    """#2219: Vectorize must fail loud on filters rather than silently ignore them."""
+    from digisearch.core.models import Query as DsQuery
+    from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(VectorizeBackendError, match="does not support Query.filters"):
+        backend.query(
+            DsQuery(
+                text="x",
+                top_k=3,
+                embedding=[0.0] * 384,
+                filters={"structured": [{"field": "workspace_id", "op": "eq", "value": "ws-1"}]},
+            )
+        )
+    assert post.calls == []
+
+
+@pytest.mark.unit
+def test_query_raises_when_workspace_id_is_set() -> None:
+    """#2219: workspace_id alone must also fail closed (server may set it without filters)."""
+    from digisearch.core.models import Query as DsQuery
+    from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(VectorizeBackendError, match="workspace_id"):
+        backend.query(
+            DsQuery(text="x", top_k=3, embedding=[0.0] * 384, workspace_id="ws-1")
+        )
+    assert post.calls == []
+
+
+@pytest.mark.unit
+def test_query_allows_empty_filters_and_blank_workspace() -> None:
+    """Unscoped / per-index isolation path remains valid."""
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    results = backend.query(
+        DsQuery(text="x", top_k=3, embedding=[0.0] * 384, filters={}, workspace_id="  ")
+    )
+    assert len(results) == 2
+    assert len(post.calls) == 1

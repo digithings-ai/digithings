@@ -5,8 +5,8 @@ ruling, not an accident:
 
 | Engine | Family | Surfaces | Why |
 |---|---|---|---|
-| **Canvas** — TradingView Lightweight Charts | `finance-charts` (PriceChart, EquityCurve, DrawdownPlot, `useFinanceChart`/`useLightweightChart` scaffolds) + `finance-composites` (SyncedTearsheet, PerformanceDashboard, …) | **Screen-only dashboards**: olympus observability panes, homepage dashboard composites, anything living behind `rAF` with native crosshair/zoom | Persistent chart lifecycle, native pane sync, cheap incremental updates on live data |
-| **SVG** — dependency-free React renderer | `finance-tearsheet` (CandlestickChart, TimeSeries, SignedBars, TradeReturnChart, ReturnsMatrix, KpiStrip, TradeLogTable, TearsheetCard, LiveBadge, `runTearsheetPrint`) | **Print-grade tearsheets**: digiquant `/strategies/*`, olympus performance tear sheet, any surface with a "Download PDF" | The PDF pipeline `flushSync`-re-renders the *same* chart instances at full span and calls `window.print()` — screen and print share ONE render tree. SVG re-renders synchronously and prints crisply; canvas rasterizes and races the print dialog |
+| **Canvas** — TradingView Lightweight Charts | `finance-charts` (PriceChart, EquityCurve, DrawdownPlot, `useFinanceChart`/`useLightweightChart` scaffolds) + `finance-composites` (SyncedTearsheet, PerformanceDashboard, …) | **Screen-only dashboards**: dashboard observability panes, homepage dashboard composites, anything living behind `rAF` with native crosshair/zoom | Persistent chart lifecycle, native pane sync, cheap incremental updates on live data |
+| **SVG** — dependency-free React renderer | `finance-tearsheet` (CandlestickChart, TimeSeries, SignedBars, TradeReturnChart, ReturnsMatrix, KpiStrip, TradeLogTable, TearsheetCard, LiveBadge, `runTearsheetPrint`) | **Print-grade tearsheets**: digiquant `/strategies/*`, dashboard performance tear sheet, any surface with a "Download PDF" | The PDF pipeline `flushSync`-re-renders the *same* chart instances at full span and calls `window.print()` — screen and print share ONE render tree. SVG re-renders synchronously and prints crisply; canvas rasterizes and races the print dialog |
 
 ## The rule
 
@@ -14,7 +14,7 @@ ruling, not an accident:
   **finance-tearsheet** family. Canvas is disqualifying there — this is a hard
   constraint, not a preference (see
   [digiquant's ruling](../digiquant-web/components/tearsheet/CHARTS.md) and
-  [olympus' ruling](../olympus/lib/CHARTS.md), both upheld through the F2/F4
+  [dashboard's ruling](../dashboard/lib/CHARTS.md), both upheld through the F2/F4
   adoption passes).
 - A screen-only dashboard composes **finance-charts / finance-composites**.
   Do not rebuild zoom/pan/crosshair in SVG for a surface that never prints —

@@ -20,7 +20,7 @@ export type PricingTier = {
 import { DQ_CONTACT_EMAIL } from "./_nav";
 
 export const CONTACT_EMAIL = DQ_CONTACT_EMAIL;
-export const WAITLIST_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Managed%20Olympus%20waitlist`;
+export const WAITLIST_MAILTO = `mailto:${CONTACT_EMAIL}?subject=Managed%20digiquant%20waitlist`;
 export const ENTERPRISE_MAILTO = `mailto:${CONTACT_EMAIL}?subject=digiquant%20enterprise`;
 
 export const PRICING_TIERS: readonly PricingTier[] = [

@@ -2,7 +2,7 @@
 
 Consolidates the hand-rolled Supabase access scattered across services
 (twelve-x ``nodes/store.py`` / ``history.py`` / ``fx_calendar/calendar_db.py``;
-digiquant ``atlas/supabase_io.py`` / ``data/prices/supabase_writer.py``) into a
+digiquant ``research/supabase_io.py`` / ``data/prices/supabase_writer.py``) into a
 single ``digibase[supabase]`` optional extra so consumers stop re-implementing
 ``client.table(T).upsert(...)`` / ``.select(...).eq(...)`` chains.
 
@@ -11,7 +11,7 @@ Design (mirrors the existing connectors):
   :meth:`SupabaseConnector.from_env` so ``import digibase.connectors.supabase``
   and the base connector types stay usable on a lightweight base install.
 - The client is dependency-injected via a :class:`SupabaseClient` Protocol
-  (same shape as ``digiquant.atlas.supabase_io.SupabaseClient``) so unit tests
+  (same shape as ``digiquant.research.supabase_io.SupabaseClient``) so unit tests
   pass an in-memory fake without a live DB or the optional dependency.
 - Writes are idempotent upserts on schema-declared unique keys
   (``on_conflict=...``); replays of the same node are safe. Write failures are

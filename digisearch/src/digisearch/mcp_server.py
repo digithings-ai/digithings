@@ -8,9 +8,9 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from digisearch.atlas_search import search_strategies as _search_strategies_impl
 from digisearch.core.models import Query
 from digisearch.logging import configure_logging
+from digisearch.research_search import search_strategies as _search_strategies_impl
 from digisearch.search._stub import query_index
 
 configure_logging()
@@ -110,13 +110,13 @@ def search_strategies(
     run_type: str | None = None,
     index_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Semantic search over the Atlas research library indexed by digisearch.
+    """Semantic search over the research library indexed by digisearch.
 
     Filters are AND-combined. Date range filters use ``date_ordinal`` (an
     integer ``YYYYMMDD`` stamped at ingest); pass e.g. ``date_from_ymd=20260420``
     for "on or after 2026-04-20". String filters (``doc_type``, ``segment``,
     ``sector``, ``run_type``) match exactly and case-sensitively against the
-    metadata stamped by :func:`digisearch.atlas_ingest.ingest_atlas_payload`.
+    metadata stamped by :func:`digisearch.research_ingest.ingest_research_payload`.
 
     Returns up to ``top_k`` typed result dicts:
     ``{chunk_id, doc_id, content, content_length, score, metadata}``. Empty

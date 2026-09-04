@@ -4,7 +4,7 @@
 > **Status:** Planning brief — no runtime implementation authorized by this document  
 > **Scope:** End-to-end product + engineering plan for the two remaining major Olympus milestones after the live house pipeline  
 > **Does not:** rewrite the 2026-08-06 metaplan WP numbers, enable live order submit, or change digikey/auth without separate human-gated issues  
-> **Authority:** Product decisions marked **Proposed** need human lock; decisions marked **Locked** inherit from the [2026-08-25 vision brief](2026-08-25-olympus-vision-realignment-brief.md) and [Wave 3 migration roadmap](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
+> **Authority:** Product decisions marked **Proposed** need human lock; decisions marked **Locked** inherit from the [2026-08-25 vision brief](2026-08-25-olympus-vision-realignment-brief.md) and [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
 
 ---
 
@@ -293,9 +293,9 @@ Each issue should cite this brief + the vision brief + `MIGRATION-ROADMAP-DIGITH
 
 - [Olympus vision realignment brief (2026-08-25)](2026-08-25-olympus-vision-realignment-brief.md)
 - [Olympus pipeline metaplan](2026-08-06-olympus-pipeline-metaplan.md) — Progress / Kairos groundwork strip
-- [Wave 3 migration roadmap](../../../digiquant/src/digiquant/olympus/atlas/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
-- [docs/vision/olympus.md](../../vision/olympus.md), [docs/vision/digiquant.md](../../vision/digiquant.md)
-- [frontend/olympus/AUTH.md](../../../frontend/olympus/AUTH.md), [frontend/olympus/README.md](../../../frontend/olympus/README.md)
+- [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md)
+- [docs/vision/dashboard.md](../../vision/dashboard.md), [docs/vision/digiquant.md](../../vision/digiquant.md)
+- [frontend/dashboard/AUTH.md](../../../frontend/dashboard/AUTH.md), [frontend/dashboard/README.md](../../../frontend/dashboard/README.md)
 - [digiquant/docs/profiles/README.md](../../../digiquant/docs/profiles/README.md)
 - Broker stubs: `digiquant/src/digiquant/brokers/`
 

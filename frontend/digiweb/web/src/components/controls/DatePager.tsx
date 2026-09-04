@@ -1,7 +1,7 @@
 "use client";
 /**
  * DatePager — capsule Pager with a fixed-width date label and a themed
- * month calendar for bigger jumps. Shared by olympus PipelineDaySelector
+ * month calendar for bigger jumps. Shared by dashboard PipelineDaySelector
  * and BriefsIndex so both surfaces stay 1:1.
  *
  * Chevrons stay in the Pager edge columns; the label opens a Popover

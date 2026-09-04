@@ -8,14 +8,17 @@
 > **Naming correction (2026-08-30):** prior drafts used `cursor-cloud-agent-*.env` —
 > those paths are **wrong**. Resume under **digithings** paths only.
 
-## Agentmail (verification inbox)
+## Vendor identity (Proton `admin@digithings.ai`)
+
+Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 | Item | Value |
 |------|-------|
-| **Canonical inbox** | `digithings@agentmail.to` |
-| Interim inbox (accidental; do not prefer) | `cursor-cloud-agent6060@agentmail.to` — created mid-onboard; migrate any pending vendor signups back to digithings@ when re-trying |
-| How to re-fetch mail | Agentmail MCP `list_messages` / `list_threads` on inboxId |
-| Purpose | Email verification for Stripe / Mailgun / Alpaca / Supabase Auth |
+| **Vendor email** | `admin@digithings.ai` (Proton; domain connected) |
+| **Login** | Email + password / vendor 2FA. Owner completes CAPTCHA and Proton confirm codes on the desktop. **No company Google account** (Workspace not purchased). |
+| **Not used** | `digithings@agentmail.to`, `cursor-cloud-agent6060@agentmail.to`; Sign in with Google as the company path |
+| Never store | Proton / Google passwords or 2FA in git or GitHub Secrets |
+| Later | Add `admin@digithings.ai` as owner on Google Cloud / GitHub / Supabase and transfer off the personal Google |
 
 ## Stripe (TEST mode) — BLOCKED on hCaptcha
 
@@ -25,14 +28,14 @@
 | Test mode toggle | Dashboard top-right **Test mode** |
 | Secret key | Developers → API keys → Secret key (`sk_test_…`) |
 | Publishable key | Same page (`pk_test_…`) — not required by current EFs |
-| Products / prices | Product catalog → create **Baseline** + **Custom** (monthly required; annual optional) |
-| Env → price IDs | `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_CUSTOM_MONTHLY`, optional `*_ANNUAL` |
+| Products / prices | Product catalog → **Brief / Desk / Studio** (see [`PRICING.md`](PRICING.md)). Do **not** name products Baseline or Custom. |
+| Env → price IDs | `STRIPE_PRICE_BRIEF_{MONTHLY,ANNUAL}` / `STRIPE_PRICE_DESK_*` / `STRIPE_PRICE_STUDIO_*` |
 | Webhook endpoint | Developers → Webhooks → Add endpoint |
 | Webhook URL | `https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webhook` |
 | Webhook secret | Endpoint → Signing secret (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` |
 | Local file (when ready) | `.local/secrets/digithings-stripe.env` |
-| Human gate | hCaptcha on signup — screenshot `/opt/cursor/artifacts/stripe-hcaptcha-human-needed.png` |
-| Signup attempt email | `digithings@agentmail.to` (re-filled 2026-08-30; hCaptcha image challenge after Create account) |
+| Human gate | hCaptcha on signup — owner on the desktop |
+| Account email | `admin@digithings.ai`. Do not use Agentmail or company Google SSO. |
 
 ## Mailgun — BLOCKED on reCAPTCHA
 
@@ -43,12 +46,11 @@
 | API key | Settings → API Security → Private API key → `MAILGUN_API_KEY` |
 | Domain | Sending → Domains (sandbox `sandbox….mailgun.org` OK for staging) → `MAILGUN_DOMAIN` |
 | From | Verified sender on that domain → `NOTIFY_FROM` |
-| Sandbox recipients | Authorize **`digithings@agentmail.to`** (canonical). Interim `cursor-cloud-agent6060@agentmail.to` only if that signup already completed |
+| Sandbox recipients | Authorize **`admin@digithings.ai`** |
 | Test send | Sending → Send email, or `python -m digiquant.notify.dispatch --require-mailgun` |
 | Local file (when ready) | `.local/secrets/digithings-mailgun.env` |
-| Human gate | reCAPTCHA failed (“Could not validate”) — may also require SMS |
-| Screenshot | `/opt/cursor/artifacts/mailgun-recaptcha-human-needed.png` |
-| Signup attempt email | **digithings@agentmail.to** (re-filled 2026-08-30 recheck; still reCAPTCHA-blocked) |
+| Human gate | reCAPTCHA / SMS — owner on the desktop |
+| Account email | `admin@digithings.ai`. Do not use Agentmail. |
 | MCP status | Mailgun MCP auth fails until API key set |
 
 ## Alpaca (paper) — BLOCKED on Cloudflare Turnstile
@@ -62,10 +64,8 @@
 | Env names | `ALPACA_OAUTH_CLIENT_ID`, `ALPACA_OAUTH_CLIENT_SECRET` |
 | Fallback | Paper API Key ID + Secret (if OAuth console blocked) — map per settings EF / DEPLOYMENT.md |
 | Local file (when ready) | `.local/secrets/digithings-alpaca.env` |
-| Human gate | Cloudflare Turnstile — Sign up stays disabled until solved |
-| Screenshot | `/opt/cursor/artifacts/alpaca-turnstile-human-needed.png` |
-| Signup attempt | **digithings@agentmail.to** (re-filled 2026-08-30; Turnstile still blocks Sign up) |
-| Prior login | `digithings@agentmail.to` → Cognito `NotAuthorizedException` (account never completed) |
+| Human gate | Cloudflare Turnstile — owner on the desktop |
+| Account email | `admin@digithings.ai`. Do not use Agentmail. |
 
 ## Google OAuth (optional Supabase Auth) — not started
 
@@ -77,7 +77,7 @@
 | Env names | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` |
 | Enable in Supabase | Authentication → Providers → Google |
 | Local file (when ready) | `.local/secrets/digithings-google.env` |
-| Note | GitHub Auth already Enabled on `core`; Google optional |
+| Note | GitHub Auth already Enabled on `core`. Product Google login (Supabase) rides the existing personal Google Cloud OAuth client until org transfer. |
 
 ## Already set on `core` EF (names only)
 
@@ -87,27 +87,18 @@
 
 ```bash
 export SUPABASE_ACCESS_TOKEN="$(tr -d '\n' < .local/secrets/digithings-supabase-pat)"
-set -a
-source .local/secrets/digithings-stripe.env
-source .local/secrets/digithings-mailgun.env
-source .local/secrets/digithings-alpaca.env
-set +a
-npx supabase secrets set --project-ref rwagjbkvxkdwqmouagad \
-  STRIPE_SECRET_KEY=… STRIPE_WEBHOOK_SECRET=… \
-  STRIPE_PRICE_BASELINE_MONTHLY=… STRIPE_PRICE_CUSTOM_MONTHLY=… \
-  MAILGUN_API_KEY=… MAILGUN_DOMAIN=… NOTIFY_FROM=… \
-  ALPACA_OAUTH_CLIENT_ID=… ALPACA_OAUTH_CLIENT_SECRET=…
-npx supabase functions deploy stripe-webhook --project-ref rwagjbkvxkdwqmouagad --no-verify-jwt
-npx supabase functions deploy create-checkout-session --project-ref rwagjbkvxkdwqmouagad
-npx supabase functions deploy customer-portal --project-ref rwagjbkvxkdwqmouagad
-npx supabase functions deploy settings --project-ref rwagjbkvxkdwqmouagad
-PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py --apply
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
 ```
 
-## Browser tabs left open for human (paused)
+Check-only (exit 2 until files + required key names exist; never prints values):
 
-1. Stripe register + hCaptcha image challenge (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-stripe-hcaptcha-2026-08-30.png`
-2. Mailgun signup + reCAPTCHA error (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-mailgun-recaptcha-2026-08-30.png`
-3. Alpaca signup + Turnstile (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-alpaca-turnstile-2026-08-30.png`
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py
+```
 
-Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`
+## Human gate
+
+Owner uses **`admin@digithings.ai`** (Proton) on vendor forms and completes
+CAPTCHA / confirm codes on the desktop. No company Google account. Abandoned
+Agentmail form fills are not a signup path.
