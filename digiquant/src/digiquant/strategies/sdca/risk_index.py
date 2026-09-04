@@ -60,6 +60,8 @@ def build_risk_index(
     *,
     composite_rolling_window: int | None = None,
     composite_rolling_min_samples: int | None = None,
+    composite_smoothing_window: int | None = None,
+    composite_smoothing_min_samples: int | None = None,
 ) -> pl.DataFrame:
     """Join a ``RiskModel`` + price series into the SDCA risk index.
 
@@ -73,7 +75,10 @@ def build_risk_index(
     ``SdcaOscillatorSpec()``) configures the trend leg's window.
     ``composite_rolling_window`` (default ``None``, off) forwards to
     ``compute_composite_risk``'s rolling re-normalization of the blended
-    composite — see that function's docstring.
+    composite — see that function's docstring. ``composite_smoothing_window``
+    (default ``None``, off) forwards to that same function's separate causal
+    rolling-mean smoothing of the final composite, applied after any rolling
+    re-normalization — use this one to damp day-to-day noise in the index.
     """
     dates = _require_date_series(dates, name="dates")
     if price.len() != dates.len():
@@ -108,6 +113,8 @@ def build_risk_index(
         indicators,
         rolling_window=composite_rolling_window,
         rolling_min_samples=composite_rolling_min_samples,
+        smoothing_window=composite_smoothing_window,
+        smoothing_min_samples=composite_smoothing_min_samples,
     )
     payload: dict[str, pl.Series] = {
         "date": dates,

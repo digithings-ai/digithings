@@ -52,6 +52,8 @@ def compute_composite_risk(
     *,
     rolling_window: int | None = None,
     rolling_min_samples: int | None = None,
+    smoothing_window: int | None = None,
+    smoothing_min_samples: int | None = None,
 ) -> pl.DataFrame:
     """Weighted blend of enabled indicators -> ``composite_z`` and ``risk`` columns.
 
@@ -74,6 +76,17 @@ def compute_composite_risk(
     the rolling composite stays null until there is enough trailing history to
     trust its mean/std, the same warmup discipline as ``MIN_FIT_HISTORY_DAYS``
     for the power-law fit.
+
+    ``smoothing_window`` (default ``None``, i.e. off) is a *separate* step
+    applied last: a causal rolling mean over the final ``composite_z`` (after
+    the optional rolling re-normalization above), for genuine day-to-day noise
+    reduction. This is not the same knob as ``rolling_window`` — that
+    re-centers/re-scales against a trailing distribution and can *amplify* a
+    sudden move (a spike away from a quiet recent regime reads as an extreme
+    z), it does not damp one. Averaging clipped ``[-3, 3]`` values keeps the
+    result in range, so no re-clip is needed. ``smoothing_min_samples``
+    defaults the same way as ``rolling_min_samples`` (half the window, floored
+    at 20).
     """
     enabled = [ind for ind in indicators if ind.enabled]
     if not enabled:
@@ -111,6 +124,21 @@ def compute_composite_risk(
         composite_z = causal_rolling_z(raw_z, window=rolling_window, min_samples=samples).alias(
             "composite_z"
         )
+
+    if smoothing_window is not None:
+        if smoothing_window < 2:
+            raise ValueError(
+                f"compute_composite_risk smoothing_window must be >= 2, got {smoothing_window}"
+            )
+        smoothing_samples = (
+            smoothing_min_samples
+            if smoothing_min_samples is not None
+            else max(_ROLLING_MIN_SAMPLES_FLOOR, smoothing_window // 2)
+        )
+        composite_z = composite_z.rolling_mean(
+            window_size=smoothing_window, min_samples=smoothing_samples
+        ).alias("composite_z")
+
     risk = (50.0 - composite_z * (50.0 / 3.0)).alias("risk")
 
     return pl.DataFrame({"composite_z": composite_z, "risk": risk})

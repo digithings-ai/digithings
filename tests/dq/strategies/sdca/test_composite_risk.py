@@ -167,3 +167,71 @@ class TestRollingCompositeNormalization:
         rolling = compute_composite_risk(indicators, rolling_window=20, rolling_min_samples=10)
         # weighted avg is flat 0.0 for 39 rows then jumps to 2.0 on the last row
         assert rolling["composite_z"][-1] == pytest.approx(3.0)
+
+
+class TestCompositeSmoothing:
+    """``smoothing_window`` is a causal rolling mean applied after the clip/renorm.
+
+    Distinct from ``rolling_window``: that re-normalizes against a trailing
+    distribution and can amplify a sudden move; this damps noise directly.
+    """
+
+    def test_default_none_leaves_composite_unsmoothed(self) -> None:
+        z = [3.0, -3.0, 3.0, -3.0]
+        indicators = [IndicatorWeight(name="a", z=pl.Series(z), weight=1.0)]
+        off = compute_composite_risk(indicators)
+        explicit_off = compute_composite_risk(indicators, smoothing_window=None)
+        assert off["composite_z"].to_list() == explicit_off["composite_z"].to_list()
+        assert off["composite_z"].to_list() == z
+
+    def test_smoothing_damps_an_alternating_series(self) -> None:
+        z = [3.0, -3.0] * 20
+        indicators = [IndicatorWeight(name="a", z=pl.Series(z), weight=1.0)]
+        result = compute_composite_risk(indicators, smoothing_window=10, smoothing_min_samples=5)
+        last = result["composite_z"][-1]
+        assert last is not None
+        assert abs(last) < 1.0
+
+    def test_smoothing_stays_within_plus_minus_3(self) -> None:
+        z = [3.0] * 25 + [-3.0] * 25
+        indicators = [IndicatorWeight(name="a", z=pl.Series(z), weight=1.0)]
+        result = compute_composite_risk(indicators, smoothing_window=10, smoothing_min_samples=5)
+        for v in result["composite_z"].drop_nulls().to_list():
+            assert -3.0 <= v <= 3.0
+
+    def test_warmup_rows_are_null_until_min_samples(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0] * 10), weight=1.0)]
+        result = compute_composite_risk(indicators, smoothing_window=10, smoothing_min_samples=5)
+        assert result["composite_z"][:4].to_list() == [None, None, None, None]
+        assert result["composite_z"][4] is not None
+
+    def test_min_samples_defaults_to_half_window_floored_at_20(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0] * 200), weight=1.0)]
+        result = compute_composite_risk(indicators, smoothing_window=100)
+        # default min_samples = max(20, 100 // 2) = 50
+        assert result["composite_z"][48] is None
+        assert result["composite_z"][49] is not None
+
+    def test_smoothing_window_below_2_raises(self) -> None:
+        indicators = [IndicatorWeight(name="a", z=pl.Series([1.0, 2.0, 3.0]), weight=1.0)]
+        with pytest.raises(ValueError, match="smoothing_window must be >= 2"):
+            compute_composite_risk(indicators, smoothing_window=1)
+
+    def test_smoothing_composes_with_rolling_renormalization(self) -> None:
+        # Smoothing applies to the already rolling-renormalized composite_z,
+        # not to the pre-renormalization weighted average.
+        z = [1.0] * 60
+        indicators = [IndicatorWeight(name="a", z=pl.Series(z), weight=1.0)]
+        both = compute_composite_risk(
+            indicators,
+            rolling_window=20,
+            rolling_min_samples=10,
+            smoothing_window=10,
+            smoothing_min_samples=5,
+        )
+        rolling_only = compute_composite_risk(indicators, rolling_window=20, rolling_min_samples=10)
+        # A flat input renormalizes to a flat (null-sigma-floored) series, so
+        # smoothing a flat series is a no-op — this just proves both stages ran
+        # without erroring and produced finite output.
+        assert both["composite_z"][-1] is not None
+        assert rolling_only["composite_z"][-1] is not None

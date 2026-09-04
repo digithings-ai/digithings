@@ -78,7 +78,9 @@ that could both be read as "the baseline."
    corrected true baseline above, not the live 5-weight config.
 2. Joint period re-tuning of the five confluence indicators (RSI 8/7, MACD
    6/13 or 8/17, SMA-band 60/10, rs_eth 90/45, power_law-trend 120d) — each
-   was smoke-tested individually; never applied jointly.
+   was smoke-tested individually; never applied jointly. Absorbed into item 6
+   below: the medium-term cycle windows are exactly what the daily/fast legs
+   of this joint re-tune should be scored against, instead of re-tuning blind.
 3. Ask Chris directly whether the "Cursor Agent" process is still active on
    this composite — determines whether reverting `settings.json` to the
    validated baseline is safe to propose.
@@ -88,3 +90,12 @@ that could both be read as "the baseline."
 5. Regenerate the stale `btc_optimized_provenance.json` (predates this
    session's confluence-indicator upgrades, so its cached numbers no longer
    describe the current code path).
+6. **Dual-timeframe valuation framework** (Chris's 2026-09-04 direction — see
+   `../DCA_VALUATION_FRAMEWORK.md`): composite smoothing landed
+   (`compute_composite_risk`'s `smoothing_window`). Still open: reconcile
+   Stage A cycle-overlap vs `weight_search.py` backtest-return as the
+   weight-selection objective; define a medium-term `CycleWindow` set
+   (propose a candidate for Chris's review, don't auto-ship one); a medium-term
+   Stage A pass against it; a two-composite (`risk_long`/`risk_medium`)
+   combination curve; and exposing medium-only / long-only / combined as
+   sibling configurations of the same kernel. See that doc for the full plan.
