@@ -350,6 +350,7 @@ resulting fixes reviewed — the same rule the `ruff.toml` rule selection follow
 ```bash
 make test-unit          # unit tests (no stack required)
 make score              # optional 4-dimension rubric (human/CI; not an agent pre-flight)
+make readiness          # repo-health panel for housekeeping shifts (advisory; never a gate)
 make task ISSUE=N       # isolated git worktree for a backlog task (full pipeline)
 make doc-check          # validate internal markdown links
 ruff check . && ruff format .

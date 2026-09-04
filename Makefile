@@ -224,6 +224,14 @@ score:
 score-delta:
 	python3 scripts/score_delta.py
 
+# Repo-health panel for housekeeping shifts (advisory only — never a gate, never a pre-flight).
+# Prints 8 metric rows and exits 0. Use readiness-write to refresh docs/agents/READINESS.md.
+readiness:
+	python3 scripts/readiness.py $(ARGS)
+
+readiness-write:
+	python3 scripts/readiness.py --write
+
 # Detect unused Python imports with ruff (dry-run by default; set APPLY=1 to fix in-place)
 clean-imports:
 	python3 scripts/clean_imports.py $(if $(APPLY),--fix,)
