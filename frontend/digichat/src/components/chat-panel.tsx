@@ -349,14 +349,117 @@ export function ChatPanel({
     async (e: React.FormEvent) => {
       e.preventDefault();
       const t = text.trim();
-      if (!t || busy) return;
+      if (!t) return;
 
       if (t.startsWith("/")) {
+        const [rawName, ...rest] = t.split(/\s+/);
+        const name = rawName.toLowerCase();
+        const arg = rest.join(" ").trim();
+        // #3511: client-only transcript aliases — never POST to the transport.
+        // Settled-only while busy: drop the in-flight assistant partial.
+        if (name === "/copy" || name === "/export") {
+          setText("");
+          const settled =
+            busy && messages.length > 0 && messages[messages.length - 1]?.role === "assistant"
+              ? messages.slice(0, -1)
+              : messages;
+          const lastSettledAssistant = [...settled]
+            .reverse()
+            .find((m) => m.role === "assistant" && messagePlainText(m).trim());
+          if (name === "/copy") {
+            if (!lastSettledAssistant) {
+              pushSystemNote("No assistant answer to copy yet.");
+              return;
+            }
+            const plain = messagePlainText(lastSettledAssistant);
+            const sources =
+              lastSettledAssistant.role === "assistant"
+                ? citationHits(messageActivities(lastSettledAssistant)).map((h) => ({
+                    title: h.title,
+                    path: h.path,
+                  }))
+                : undefined;
+            const markdown = serializeAssistantMarkdown(plain, sources);
+            if (!markdown.trim()) {
+              pushSystemNote("No assistant answer to copy yet.");
+              return;
+            }
+            const result = await copyMarkdownWithFallback(markdown, {
+              filename: "digichat-answer.md",
+            });
+            pushSystemNote(
+              result === "clipboard"
+                ? "Copied last answer to clipboard."
+                : result === "download"
+                  ? "Clipboard blocked — saved last answer as digichat-answer.md."
+                  : result === "postMessage"
+                    ? "Copied last answer (parent frame)."
+                    : "Clipboard blocked — answer selected below, press ⌘C / ctrl+C.",
+            );
+            return;
+          }
+          const sub = arg.toLowerCase();
+          if (sub && sub !== "last") {
+            pushSystemNote("Use /export or /export last.");
+            return;
+          }
+          if (sub === "last") {
+            if (!lastSettledAssistant) {
+              pushSystemNote("Nothing to export yet.");
+              return;
+            }
+            const plain = messagePlainText(lastSettledAssistant);
+            const sources = citationHits(messageActivities(lastSettledAssistant)).map((h) => ({
+              title: h.title,
+              path: h.path,
+            }));
+            const md = serializeAssistantMarkdown(plain, sources);
+            if (!md.trim()) {
+              pushSystemNote("Nothing to export yet.");
+              return;
+            }
+            try {
+              downloadMarkdown("digichat-answer.md", md);
+              pushSystemNote("Exported last answer as digichat-answer.md.");
+            } catch {
+              pushSystemNote("Export failed in this browser.");
+            }
+            return;
+          }
+          const turns = settled
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => {
+              const content = messagePlainText(m);
+              if (m.role === "assistant") {
+                return {
+                  role: "assistant" as const,
+                  content,
+                  sources: citationHits(messageActivities(m)).map((h) => ({
+                    title: h.title,
+                    path: h.path,
+                  })),
+                };
+              }
+              return { role: "user" as const, content };
+            });
+          const md = serializeThreadMarkdown(turns);
+          if (!md.trim()) {
+            pushSystemNote("Nothing to export yet.");
+            return;
+          }
+          try {
+            downloadMarkdown("digichat-thread.md", md);
+            pushSystemNote("Exported thread as digichat-thread.md.");
+          } catch {
+            pushSystemNote("Export failed in this browser.");
+          }
+          return;
+        }
+        if (busy) return;
         setText("");
-        const [name] = t.split(/\s+/);
         if (name === "/help") {
           pushSystemNote(
-            "available: /help, /clear, /key, /model <id>, /history, /settings, /scope",
+            "available: /help, /clear, /key, /model <id>, /history, /settings, /scope, /copy, /export",
           );
           return;
         }
@@ -380,10 +483,11 @@ export function ChatPanel({
         return;
       }
 
+      if (busy) return;
       setText("");
       await sendMessage({ text: t });
     },
-    [text, busy, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
+    [text, busy, messages, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
   );
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
