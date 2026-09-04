@@ -68,7 +68,12 @@ Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chu
 
 - Filesystem ingest changes go in `digisearch/pipeline/ingest.py` only.
 - Keep HTTP/CLI as thin adapters (auth, path jail, Typer I/O).
-- Optional embed hook: pass `embedding_provider=` into `ingest_source` / `index_chunks`; backends skip re-embed when vectors are already set.
+- Optional embed: `index_chunks` / `ingest_source` resolve
+  `EmbeddingCache → BatchEmbedder → EmbeddingProvider` via
+  `digisearch.embedding.factory.resolve_embedding_pipeline` when no explicit
+  `embedding_provider=` is passed. Set `DIGISEARCH_EMBEDDING_PROVIDER` /
+  config `embedding:` to select a provider; misconfiguration raises (no silent
+  no-op). `DIGISEARCH_EMBED=0` skips the pipeline-level step.
 
 ---
 
