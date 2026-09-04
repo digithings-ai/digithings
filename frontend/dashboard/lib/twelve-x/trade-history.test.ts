@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assembleTradeHistory,
   biasLabel,
+  boardDateInRange,
   displayableTradeHistory,
   filterTradeHistory,
   formatHoldPct,
@@ -203,11 +204,12 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
     ),
   );
 
-  it('filters wins / pair / board / impact floor and recomputes summary', () => {
+  it('filters wins / pair / board range / impact floor and recomputes summary', () => {
     const wins = filterTradeHistory(base, {
       result: 'wins',
       pair: 'all',
-      board: 'all',
+      boardFrom: null,
+      boardTo: null,
       minAbsImpact: 0,
     });
     expect(wins).toHaveLength(2);
@@ -216,7 +218,8 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
     const eur = filterTradeHistory(base, {
       result: 'all',
       pair: 'EUR/USD',
-      board: 'all',
+      boardFrom: null,
+      boardTo: null,
       minAbsImpact: 0,
     });
     expect(eur).toHaveLength(1);
@@ -225,15 +228,30 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
     const board = filterTradeHistory(base, {
       result: 'all',
       pair: 'all',
-      board: '2026-07-24',
+      boardFrom: '2026-07-24',
+      boardTo: '2026-07-24',
       minAbsImpact: 0,
     });
     expect(board).toHaveLength(2);
 
+    const boardRange = filterTradeHistory(base, {
+      result: 'all',
+      pair: 'all',
+      boardFrom: '2026-07-24',
+      boardTo: '2026-07-31',
+      minAbsImpact: 0,
+    });
+    expect(boardRange.map((r) => r.runDate).sort()).toEqual([
+      '2026-07-24',
+      '2026-07-24',
+      '2026-07-31',
+    ]);
+
     const impact = filterTradeHistory(base, {
       result: 'all',
       pair: 'all',
-      board: 'all',
+      boardFrom: null,
+      boardTo: null,
       minAbsImpact: 0.001,
     });
     // Drops AUD tiny +0.05% right; keeps live GBP (+0.2%), JPY right, EUR wrong
@@ -246,6 +264,15 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
     expect(summary.pctRight).toBeCloseTo(2 / 3);
     expect(summary.avgReturnRights).toBeCloseTo((0.012 + 0.0005) / 2);
     expect(summary.avgReturnWrongs).toBeCloseTo(-0.008);
+  });
+
+  it('boardDateInRange is inclusive on both ends and unbound when null', () => {
+    expect(boardDateInRange('2026-07-24', null, null)).toBe(true);
+    expect(boardDateInRange('2026-07-24', '2026-07-24', '2026-07-24')).toBe(true);
+    expect(boardDateInRange('2026-07-20', '2026-07-24', '2026-07-31')).toBe(false);
+    expect(boardDateInRange('2026-08-01', '2026-07-24', '2026-07-31')).toBe(false);
+    expect(boardDateInRange('2026-07-20', null, '2026-07-24')).toBe(true);
+    expect(boardDateInRange('2026-07-31', '2026-07-24', null)).toBe(true);
   });
 
   it('sorts by impact descending', () => {

@@ -3,6 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from '@/lib/twelve-x/types';
+import {
+  formatBoardDateShort,
+  formatBoardRangeLabel,
+} from './BoardDateRangeFilter';
 import TradesTab from './TradesTab';
 
 const ideas: FxTradeIdeaRow[] = [
@@ -48,8 +52,8 @@ const ideaEval: FxIdeaEvalRow[] = [
     status: 'resolved',
     entry_date: '2026-07-24',
     exit_date: '2026-07-31',
-    entry_fix: 148,
-    exit_fix: 149,
+    entry_px: 148,
+    exit_px: 149,
     ret: 0.012,
     hold_return: 0.012,
     sigma_entry: 0.005,
@@ -68,8 +72,8 @@ const ideaEval: FxIdeaEvalRow[] = [
     status: 'missing_rates',
     entry_date: null,
     exit_date: null,
-    entry_fix: null,
-    exit_fix: null,
+    entry_px: null,
+    exit_px: null,
     ret: null,
     hold_return: null,
     sigma_entry: null,
@@ -104,5 +108,31 @@ describe('TradesTab', () => {
     expect(html).not.toContain('NO DATA');
     expect(html).not.toContain('Levels');
     expect(html).not.toContain('…');
+  });
+
+  it('exposes Impact slider and board date range trigger (not binary chip / select)', () => {
+    const html = renderToStaticMarkup(
+      createElement(TradesTab, { ideas, ideaEval }),
+    );
+
+    expect(html).toContain('data-testid="impact-min-slider"');
+    expect(html).toContain('|Impact| ≥ 0%');
+    expect(html).toContain('aria-label="Filter by board date range"');
+    expect(html).toContain('All boards');
+    expect(html).not.toContain('|Impact| ≥ 0.1%');
+    expect(html).not.toContain('Filter by board date"');
+    expect(html).not.toContain('<option value="all">All boards</option>');
+  });
+});
+
+describe('formatBoardRangeLabel', () => {
+  it('labels all / single / range boards', () => {
+    expect(formatBoardRangeLabel(null, null)).toBe('All boards');
+    expect(formatBoardRangeLabel('2026-07-24', '2026-07-24')).toBe(
+      formatBoardDateShort('2026-07-24'),
+    );
+    expect(formatBoardRangeLabel('2026-07-18', '2026-07-31')).toBe(
+      `${formatBoardDateShort('2026-07-18')} – ${formatBoardDateShort('2026-07-31')}`,
+    );
   });
 });
