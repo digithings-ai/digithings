@@ -227,7 +227,10 @@ page-context (`digichat:page-context`) for the visible dashboard DOM — same co
 as digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
 Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
 plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in
-the CSP `frame-src` allowlist or the launcher stays off.
+the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
+direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
+so Turbopack inlines them — passing whole `process.env` leaves the client empty
+and the launcher disappears after hydrate (#3561).
 Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
 BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
 See `.env.local.example`.
