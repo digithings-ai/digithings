@@ -44,6 +44,10 @@ class TestRsRankerConfig:
         with pytest.raises(ValidationError):
             RsRankerConfig(lookback_days=1)
 
+    def test_rejects_zero_skip_days(self) -> None:
+        with pytest.raises(ValidationError):
+            RsRankerConfig(skip_days=0)
+
 
 class TestRsRanker:
     def test_ranks_strongest_first_on_multi_asset_pool(self) -> None:

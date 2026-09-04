@@ -155,6 +155,12 @@ class TestRsRotationNautilusConfig:
             bar_types_csv=f"{bt},{BarType(InstrumentId.from_str('ETH-USD.SIM'), spec)}",
             allocation_path=str(path),
             portfolio_notional=Decimal("10000"),
+            rebalance_every=7,
         )
         strategy = RsRotationStrategy(cfg)
         assert strategy is not None
+        assert cfg.rebalance_every == 7
+        # Bare-symbol allocations resolve without InstrumentId.from_str on the key.
+        assert strategy._weight_for(iid, {"BTC-USD": 1.0}) == pytest.approx(1.0)
+        assert strategy._weight_for(iid, {"BTC-USD.SIM": 0.5}) == pytest.approx(0.5)
+        assert strategy._weight_for(iid, {"ETH-USD": 1.0}) == pytest.approx(0.0)

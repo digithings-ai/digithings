@@ -33,8 +33,8 @@ class RsRankerConfig(BaseModel):
     lookback_days: int = Field(default=90, ge=2, description="Return window length (trading rows).")
     skip_days: int = Field(
         default=7,
-        ge=0,
-        description="Rows skipped after the lookback end (short-term reversal buffer).",
+        ge=1,
+        description="Rows skipped after the lookback end (short-term reversal + same-bar look-ahead buffer).",
     )
     absolute_threshold: float = Field(
         default=0.0,

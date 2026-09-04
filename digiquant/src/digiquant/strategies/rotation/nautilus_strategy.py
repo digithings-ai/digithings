@@ -3,9 +3,10 @@
 Precompute → drive pattern (same as ``m2_liquidity`` / SDCA):
 
 1. ``RsRanker.rank`` + ``build_allocation_frame`` write a parquet of
-   ``date, symbol, weight`` (empty date ⇒ cash).
-2. This strategy loads that path in ``on_start`` and, on each clock bar,
-   rebalances sleeves toward the day's target weights.
+   ``date, symbol, weight`` (empty date ⇒ cash on that rebalance).
+2. This strategy loads that path in ``on_start`` and rebalances on the
+   clock bar every ``rebalance_every`` calendar days (default 7), holding
+   the prior target between scheduled rebalances.
 
 Optional macro regime gating belongs in the *allocation* parquet (set all
 weights to cash when ``risk_on`` is false) — see ``build_allocation_frame``.
@@ -21,7 +22,7 @@ import polars as pl
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.core.datetime import unix_nanos_to_dt
 from nautilus_trader.model.data import Bar, BarType
-from nautilus_trader.model.enums import OrderSide, TimeInForce
+from nautilus_trader.model.enums import OrderSide, PriceType, TimeInForce
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
@@ -43,6 +44,8 @@ class RsRotationConfig(StrategyConfig, frozen=True):
     portfolio_notional: Decimal
     # Ignore tiny residual diffs when deciding whether to trade.
     rebalance_tolerance: float = 0.02
+    # Calendar days between rebalances (matches CI harness default).
+    rebalance_every: int = 7
 
 
 class RsRotationStrategy(Strategy):
@@ -55,6 +58,7 @@ class RsRotationStrategy(Strategy):
         self._bar_types: list[BarType] = []
         self._instrument_ids: list[InstrumentId] = []
         self._last_rebalance_date: date | None = None
+        self._active_targets: dict[str, float] = {}
 
     def _parse_universe(self) -> None:
         id_tokens = [t.strip() for t in self.config.instrument_ids_csv.split(",") if t.strip()]
@@ -79,7 +83,35 @@ class RsRotationStrategy(Strategy):
             out.setdefault(key, {})[str(row["symbol"])] = float(row["weight"])
         return out
 
+    def _weight_for(self, iid: InstrumentId, targets: dict[str, float]) -> float:
+        """Resolve allocation weight for an instrument (full id or bare symbol)."""
+        symbol_key = str(iid).split(".")[0]
+        if str(iid) in targets:
+            return float(targets[str(iid)])
+        if symbol_key in targets:
+            return float(targets[symbol_key])
+        # Also allow InstrumentId.symbol when present.
+        sym = getattr(iid, "symbol", None)
+        if sym is not None and str(sym) in targets:
+            return float(targets[str(sym)])
+        return 0.0
+
+    def _last_price(self, iid: InstrumentId, *, clock_close: float | None) -> float | None:
+        if iid == self.config.instrument_id and clock_close is not None and clock_close > 0:
+            return float(clock_close)
+        last = self.cache.price(iid, PriceType.LAST)
+        if last is None:
+            tick = self.cache.trade_tick(iid)
+            if tick is not None:
+                return float(tick.price)
+            return None
+        return float(last)
+
     def on_start(self) -> None:
+        if int(self.config.rebalance_every) < 1:
+            self.log.error("rebalance_every must be >= 1")
+            self.stop()
+            return
         self._parse_universe()
         for iid in self._instrument_ids:
             inst = self.cache.instrument(iid)
@@ -102,32 +134,25 @@ class RsRotationStrategy(Strategy):
         if bar.bar_type != self.config.bar_type:
             return
         bar_date = unix_nanos_to_dt(bar.ts_event).date()
-        if self._last_rebalance_date == bar_date:
-            return
+        if self._last_rebalance_date is not None:
+            elapsed = (bar_date - self._last_rebalance_date).days
+            if elapsed < int(self.config.rebalance_every):
+                return
         self._last_rebalance_date = bar_date
-        targets = self._allocations.get(bar_date, {})
-        self._rebalance_to(targets, mark_price=bar.close.as_double())
+        # Missing date ⇒ cash target for this rebalance (absolute / regime gate).
+        self._active_targets = dict(self._allocations.get(bar_date, {}))
+        self._rebalance_to(self._active_targets, clock_close=bar.close.as_double())
 
-    def _rebalance_to(self, targets: dict[str, float], *, mark_price: float) -> None:
+    def _rebalance_to(self, targets: dict[str, float], *, clock_close: float) -> None:
         """Flatten to cash when targets empty; else size sleeves by weight."""
-        del mark_price  # reserved for future residual checks against last print
         notional = float(self.config.portfolio_notional)
         tol = float(self.config.rebalance_tolerance)
 
-        # First flatten anything not in today's target (including all-cash days).
-        target_ids = {InstrumentId.from_str(sym) for sym in targets} if targets else set()
-        # Allocation symbols may be bare tickers; match against instrument id symbols.
-        target_by_symbol = {sym: w for sym, w in targets.items()}
-
         for iid, inst in self._instruments.items():
-            symbol_key = str(iid).split(".")[0]
-            # Prefer full InstrumentId string, then bare symbol.
-            weight = target_by_symbol.get(str(iid), target_by_symbol.get(symbol_key, 0.0))
+            weight = self._weight_for(iid, targets)
             pos = self.portfolio.net_position(iid)
             pos_qty = float(pos) if pos is not None else 0.0
-            # Desired qty from notional * weight / last mid; fall back to flat when weight 0.
-            last = self.cache.price(iid)
-            px = float(last) if last is not None else None
+            px = self._last_price(iid, clock_close=clock_close)
             if weight <= 0 or px is None or px <= 0:
                 if abs(pos_qty) > 0:
                     self.close_all_positions(iid)
@@ -145,7 +170,6 @@ class RsRotationStrategy(Strategy):
                 time_in_force=TimeInForce.GTC,
             )
             self.submit_order(order)
-            _ = target_ids  # silence unused when symbols are bare tickers
 
     def on_stop(self) -> None:
         for iid in self._instrument_ids:
@@ -160,6 +184,7 @@ register(
     default_params={
         "portfolio_notional": Decimal("10000"),
         "rebalance_tolerance": 0.02,
+        "rebalance_every": 7,
         # Runtime paths / universe CSVs injected by caller (like m2 signal_path).
     },
     aliases=["relative_strength_rotation", "asset_rotation"],

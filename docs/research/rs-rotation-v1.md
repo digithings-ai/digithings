@@ -27,6 +27,8 @@
 5. **Absolute gate** — asset *qualifies* iff \(R > 0\) (dual-momentum cash rule).
 6. **RS rank** — among assets with a finite score that day, rank by risk-adjusted score (1 = strongest). Missing history → null score, not ranked.
 
+**Look-ahead.** `skip_days` is required ≥ 1 so the signal never uses the same bar’s close that the rotator trades on.
+
 **Portfolio.** Long-only top-\(N\) (default \(N=1\)) equal-weight among *qualifying* names; **cash** when none qualify. Rebalance every \(R_b=7\) calendar days on the ranking grid. No shorts, no spreads, no vol targeting in v1.
 
 **Benchmarks (CI harness, not published `BacktestResult`).** Equal-weight always-invested (same rebalance cadence) and buy-&-hold equal initial sleeves (no rebalance). Nautilus remains the sole published engine; the Polars harness documents allocation math the same way SDCA/`backtest_regime_gate` do.
