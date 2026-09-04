@@ -83,7 +83,7 @@ export const JOBS: readonly Job[] = [
   wd("prices-fx-refresh", "19 */2 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "fx-refresh" },
   }),
-  wd("prices-fx-refresh-sun", "19 22 * * 0", DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-fx-refresh-sun", "19 22 * * SUN", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "fx-refresh" },
   }),
   wd("prices-eod-macro", "27 21 * * 1-5", DIGITHINGS, "pipeline-digiquant-prices.yml", {
@@ -104,12 +104,12 @@ export const JOBS: readonly Job[] = [
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   wd(
     "continuous-improvement",
-    "8 22 * * 0",
+    "8 22 * * SUN",
     DIGITHINGS,
     "pipeline-continuous-improvement.yml",
   ),
   wd("maintenance", "8 8 * * 1", DIGITHINGS, "pipeline-maintenance.yml"),
-  wd("provider-review", "9 0 * * 0", DIGITHINGS, "pipeline-provider-review.yml"),
+  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event.
   wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
