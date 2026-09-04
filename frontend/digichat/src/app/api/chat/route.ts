@@ -330,6 +330,18 @@ export async function POST(req: Request) {
     upstreamHeaders["X-Digi-Force-Tool"] = forceTool;
   }
 
+  // Opt-in web search (#3420): client must ask AND tenant/env must allow.
+  // Never forward on a silent default — corpus-only unless both gates pass.
+  const clientWantsWeb =
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "1" ||
+    (req.headers.get("x-digi-enable-web-search") || "").trim().toLowerCase() === "true";
+  const tenantAllowsWeb =
+    embedConfig?.webSearch === true ||
+    (!embedConfig && process.env.DIGICHAT_WEB_SEARCH === "1");
+  if (clientWantsWeb && tenantAllowsWeb) {
+    upstreamHeaders["X-Digi-Enable-Web-Search"] = "1";
+  }
+
   // BYOK: forward per-request key to digigraph; never log or persist.
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;

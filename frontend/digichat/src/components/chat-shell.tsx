@@ -30,6 +30,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  filterThreadsByQuery,
+  groupThreadsByDate,
+} from "@/lib/conversation-sidebar";
+import {
   canFlushServerMessages,
   loadLocalThreads,
   mergeRemoteAndLocal,
@@ -64,24 +68,6 @@ const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/settings", hint: "alias for /key" },
 ];
 
-function groupByDate(threads: ChatThreadState[]): Array<{ label: string; items: ChatThreadState[] }> {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
-  const buckets: Record<string, ChatThreadState[]> = { Today: [], Yesterday: [], "This week": [], Older: [] };
-  for (const t of threads) {
-    const ts = Date.parse(t.updatedAt);
-    if (Number.isNaN(ts) || ts >= todayStart) buckets.Today!.push(t);
-    else if (ts >= yesterdayStart) buckets.Yesterday!.push(t);
-    else if (ts >= weekStart) buckets["This week"]!.push(t);
-    else buckets.Older!.push(t);
-  }
-  return Object.entries(buckets)
-    .filter(([, v]) => v.length > 0)
-    .map(([label, items]) => ({ label, items }));
-}
-
 function formatTimestamp(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
@@ -103,6 +89,7 @@ export function ChatShell({
   const [ready, setReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [byokMode, setByokMode] = useState(false);
+  const [threadQuery, setThreadQuery] = useState("");
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -408,7 +395,10 @@ export function ChatShell({
     return () => document.removeEventListener("keydown", onKey);
   }, [byokMode]);
 
-  const grouped = useMemo(() => groupByDate(threads), [threads]);
+  const grouped = useMemo(
+    () => groupThreadsByDate(filterThreadsByQuery(threads, threadQuery)),
+    [threads, threadQuery],
+  );
   const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
 
   if (!ready || !activeThread) {
@@ -435,61 +425,79 @@ export function ChatShell({
             + new chat
           </button>
 
-          {grouped.map((g) => (
-            <section key={g.label} className="app-sidebar-section">
-              <h3>{g.label}</h3>
-              <ul>
-                {g.items.map((t) => (
-                  <li key={t.id} style={{ padding: 0 }}>
-                    <div
-                      className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
-                      onClick={() => void openThread(t.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          void openThread(t.id);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={t.id === activeId}
-                    >
-                      <span className="dc-sidebar-thread-title">{t.title}</span>
-                      <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          aria-label={`Actions for ${t.title}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <MoreHorizontal className="size-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const next = window.prompt("Rename chat", t.title);
-                              if (next != null) renameThread(t.id, next);
-                            }}
+          <label className="dc-sidebar-search">
+            <span className="sr-only">Search conversations</span>
+            <input
+              type="search"
+              value={threadQuery}
+              onChange={(e) => setThreadQuery(e.target.value)}
+              placeholder="Search chats…"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+
+          {grouped.length === 0 ? (
+            <p className="dc-sidebar-empty" role="status">
+              {threadQuery.trim() ? "No chats match that search." : "No chats yet."}
+            </p>
+          ) : (
+            grouped.map((g) => (
+              <section key={g.label} className="app-sidebar-section">
+                <h3>{g.label}</h3>
+                <ul>
+                  {g.items.map((t) => (
+                    <li key={t.id} style={{ padding: 0 }}>
+                      <div
+                        className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
+                        onClick={() => void openThread(t.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            void openThread(t.id);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={t.id === activeId}
+                      >
+                        <span className="dc-sidebar-thread-title">{t.title}</span>
+                        <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label={`Actions for ${t.title}`}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            className="text-muted-foreground hover:text-foreground"
                           >
-                            <Pencil className="size-3.5" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => void deleteThread(t.id)}
-                          >
-                            <Trash2 className="size-3.5" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                            <MoreHorizontal className="size-3.5" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const next = window.prompt("Rename chat", t.title);
+                                if (next != null) renameThread(t.id, next);
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => void deleteThread(t.id)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
 
           <section className="app-sidebar-section">
             <h3>Commands</h3>

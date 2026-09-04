@@ -585,7 +585,9 @@ Two operational notes. First, upsert and query share one embedding model:
 whenever no `embedding_provider` is injected and `Query.embedding` is absent —
 this is also the model `ChromaBackend` embeds with internally, so a Chroma-built
 and a Vectorize-built index over the same corpus are directly comparable. The
-`embedding_model` stamp in vector metadata and the mismatch guard
+default-embedder singleton is initialised under a `threading.Lock` (double-checked
+locking) so concurrent first queries construct at most one ONNX load per process.
+The `embedding_model` stamp in vector metadata and the mismatch guard
 (`assert_index_model()`, which probes one existing vector before a sync and
 refuses to upsert under a different model) both live in `vectorize_sync.py`,
 not in `VectorizeBackend` itself — a chunk added through the generic
@@ -706,7 +708,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 
 ### Multi-tenant isolation
 
-When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize applies no filter at all** — `VectorizeBackend.query()` sends only `{vector, topK, returnMetadata, returnValues}` and does not consult `Query.filters`, so `workspace_id` isolation is not enforced for this backend today.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize does not translate filters yet** — `VectorizeBackend.query()` still sends only `{vector, topK, returnMetadata, returnValues}`, but if `Query.filters` is non-empty or `workspace_id` is set it now raises `VectorizeBackendError` instead of silently returning unscoped matches (#2219). Production corpora that isolate by separate per-corpus indexes keep querying without filters.
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
@@ -970,14 +972,14 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 
 ### Multi-tenant enforcement
 
-`workspace_id` exists in the data model but is not enforced by any backend. Required work per backend:
+`workspace_id` exists in the data model. Enforcement status per backend:
 
 - **Chroma:** route to a named collection per workspace (`{workspace_id}_{index_name}`) or inject `{"workspace_id": workspace_id}` as a mandatory `where` clause
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
-- **Vectorize:** `VectorizeBackend.query()` sends no filter field today; post-filter matches by `metadata.workspace_id`, route to a per-workspace index, or adopt the Vectorize API's own metadata-filter support if applicable
+- **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
 
-Without this, `workspace_id` is decorative.
+Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 
 ### Bulk ingest queue
 
@@ -1090,16 +1092,28 @@ The embedding cache already logs hit rates at INFO level — these should become
 
 ### (f) Schema versioning for evidence metadata
 
-**Problem:** When the embedding model changes (e.g. from `text-embedding-3-small` to `text-embedding-3-large`), vectors in the index are incompatible. There is no mechanism to detect this or trigger a re-index. The `EmbeddingModelSpec` version string is tracked but not enforced at query time.
+**Status (Chroma, #2437):** Implemented for the Chroma backend. `ChromaBackend`
+writes `embedding_model_id`, `embedding_dimensions`, and `embedding_version` into
+collection metadata (on create and stamped on first `add` for legacy
+collections). Construction against an existing collection whose stored
+`embedding_model_id` differs from the active provider raises before any
+query/add. Azure / Vectorize still rely on their own guards
+(`scripts/vectorize_sync.py` `assert_index_model` probes per-vector metadata).
 
-**Recommendation:**
+**Problem (historical):** When the embedding model changes (e.g. from
+`text-embedding-3-small` to `text-embedding-3-large`), vectors in the index are
+incompatible. There was no mechanism to detect this or trigger a re-index. The
+`EmbeddingModelSpec` version string was tracked but not enforced at query time.
 
-1. Store `embedding_model_id`, `embedding_dimensions`, and `embedding_version` in Chroma collection metadata and in Azure index document schema
-2. At startup, verify that the configured embedding spec matches the spec stored in the index
-3. If there is a mismatch, log an error and optionally raise (configurable via `DIGISEARCH_STRICT_VERSION_CHECK=1`)
-4. Provide a `digisearch index reembed --index <name>` CLI command that re-embeds and upserts all chunks under the new model
+**Remaining:**
 
-The `EmbeddingModelSpec.version` field in `embeddings/config.py` is the right anchor point — it needs to be persisted to and read from the index, not just held in env vars.
+1. Persist the same three fields on Azure index document schema
+2. Optionally gate mismatch with `DIGISEARCH_STRICT_VERSION_CHECK=1` for soft vs hard fail
+3. Provide a `digisearch index reembed --index <name>` CLI command that re-embeds and upserts all chunks under the new model
+
+The `EmbeddingModelSpec.version` field in `embeddings/config.py` remains the
+env-config anchor; Chroma now also persists the active provider's identity on
+the collection itself.
 
 ## Observability
 

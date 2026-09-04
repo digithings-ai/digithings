@@ -190,6 +190,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     D1_API_TOKEN credential fallback chain — fixture prose only.
     Re-recorded at count 46 for CHR-88 / #403 (Chonkie chunking docs + module
     map in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
+    Hashes only (count still 46) for #2225 embedder-lock note in the Vectorize
+    operational section — fixture prose only.
+    Hashes only (count still 46) for #2219 Vectorize fail-loud docs — multi-tenant
+    / Vectorize filter paragraphs in ARCHITECTURE.md; RecursiveChunker unchanged.
+    Hashes only (count still 46) for #2437 Chroma EmbeddingProvider / schema
+    versioning docs in §(f) — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -221,29 +227,29 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "819ebadc3320ecc2",
         "5a207132fd65bced",
         "8d9cefe0c746a4da",
-        "b56e3e5173fa2b82",
+        "3f0cb2fd8839c77a",
         "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "5b438889eafdfbb9",
-        "2181660c1f2b61f1",
-        "b36181233771c6b2",
-        "f2687d4521d1e069",
-        "112fe01c18768a54",
-        "cdf4f0c7a56c56e7",
-        "8200c214c753f6dd",
-        "cb634adc42cb989f",
-        "be08ae708ef1595a",
-        "2093dd287bc13660",
-        "05c34cda6e56fd63",
+        "44f158c16c20596f",
+        "0d565dcd93278ab7",
+        "c01731fed9b486f9",
+        "ae1e6da2f77138e0",
+        "c945e162a543358e",
+        "96c4e4c20cd1b0a1",
+        "b8242daa43601ada",
+        "c25b30546ac6978d",
+        "6bab3662a2e1ea3f",
+        "5849d4f9b080523c",
         "dccc3e4f6ff514e6",
         "1bc8e963fdd4c124",
-        "17b58004ca6d9f7b",
-        "87f70c3f0e892260",
+        "a0c3eeac2a656b2f",
+        "f58c6d8a261323d6",
         "a2a8fe99c2eece30",
         "deae7c288ab01590",
         "ac8dbe83a57bf4f4",
-        "7b92c8753a4f1d27",
-        "0f0940ad5aa21435",
-        "f45e1c5392b5eef0",
+        "8b8c754092fe534f",
+        "059d9ccf5c138f8c",
+        "22f9d694bae83638",
     ]
