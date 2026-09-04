@@ -58,23 +58,34 @@ function DigichatLauncherMark({ size = 22 }: { size?: number }) {
   );
 }
 
-function useTypewriter(full: string, active: boolean, ms = 26) {
-  const [typed, setTyped] = useState('');
+function TypewriterLabel({
+  text,
+  ms = 26,
+  className,
+}: {
+  text: string;
+  ms?: number;
+  className?: string;
+}) {
+  const [n, setN] = useState(0);
   useEffect(() => {
-    if (!active) {
-      setTyped('');
-      return;
-    }
     let i = 0;
-    setTyped('');
     const id = window.setInterval(() => {
       i += 1;
-      setTyped(full.slice(0, i));
-      if (i >= full.length) window.clearInterval(id);
+      setN(i);
+      if (i >= text.length) window.clearInterval(id);
     }, ms);
     return () => window.clearInterval(id);
-  }, [active, full, ms]);
-  return typed;
+  }, [text, ms]);
+  return (
+    <span data-testid="digichat-launcher-label" className={className}>
+      {text.slice(0, n)}
+      <span
+        aria-hidden="true"
+        className="ml-0.5 inline-block h-[0.9em] w-[0.45em] animate-pulse bg-accent"
+      />
+    </span>
+  );
 }
 
 export default function DigichatPopup({
@@ -99,11 +110,7 @@ export default function DigichatPopup({
   const pageContextSentRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
 
-  const revealLabel = open
-    ? DIGICHAT_LAUNCHER_CLOSE_LABEL
-    : DIGICHAT_LAUNCHER_LABEL;
   const typeActive = !open && (launcherHover || launcherFocus);
-  const typed = useTypewriter(revealLabel, typeActive);
 
   useEffect(() => {
     if (!config || !entitled) return;
@@ -271,16 +278,10 @@ export default function DigichatPopup({
             {DIGICHAT_LAUNCHER_CLOSE_LABEL}
           </span>
         ) : typeActive ? (
-          <span
-            data-testid="digichat-launcher-label"
+          <TypewriterLabel
+            text={DIGICHAT_LAUNCHER_LABEL}
             className="inline-flex min-w-[7.5rem] items-center font-mono text-[0.78rem] tracking-tight text-ink"
-          >
-            {typed}
-            <span
-              aria-hidden="true"
-              className="ml-0.5 inline-block h-[0.9em] w-[0.45em] animate-pulse bg-accent"
-            />
-          </span>
+          />
         ) : null}
       </button>
     </div>
