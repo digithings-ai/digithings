@@ -162,7 +162,7 @@ The Copilot request job was removed from `ci.yml` when that subscription lapsed
 
 **CodeRabbit is optional / sunset.** Keep the CodeRabbit Cursor plugin **disabled**
 in [`.cursor/settings.json`](.cursor/settings.json); [`.cursor/rules/no-coderabbit.mdc`](.cursor/rules/no-coderabbit.mdc)
-overrides plugin alwaysApply routing if it is re-enabled. While the GitHub App
+counter-instructs agents to ignore plugin alwaysApply routing if it is re-enabled. While the GitHub App
 still runs, it auto-reviews only bases listed in [`.coderabbit.yaml`](.coderabbit.yaml)
 (`develop` default plus `main`, `module/*`, `release/*`). Do **not** run CodeRabbit
 CLI, `@coderabbitai review`, or plugin skills for CI nits, docs, or one-line fixes.

@@ -39,7 +39,7 @@ Do not run every lens at opus on a tiny diff. Do not leave review `model` unset 
 ## What not to do
 
 - Do not maintain a bespoke “org CodeRabbit clone” skill.
-- Do not follow CodeRabbit Cursor plugin alwaysApply routing (`code-review-routing.mdc`) — org rule `.cursor/rules/no-coderabbit.mdc` overrides it; keep the plugin disabled.
+- Do not follow CodeRabbit Cursor plugin alwaysApply routing (`code-review-routing.mdc`) — org rule `.cursor/rules/no-coderabbit.mdc` counter-instructs agents to ignore it; keep the plugin disabled.
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
