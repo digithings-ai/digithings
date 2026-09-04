@@ -1,7 +1,7 @@
-# Cursor Agent Onboarding — Tier 2 Delegation
+# Cursor Agent Onboarding — Cursor-Tier Delegation
 
 This document covers everything needed to connect a Cursor Pro background agent to
-the digithings issue board and have it autonomously execute `exec:cursor` tasks.
+the digithings issue board and have it autonomously execute cursor-tier `agent-task` issues.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ the digithings issue board and have it autonomously execute `exec:cursor` tasks.
 3. That's it. The Cursor backend now listens for `@cursor` mentions in issues and PRs on this repo.
 
 Once installed, the dispatch workflow automatically posts `@cursor <task prompt>` when
-an issue is labeled `exec:cursor`, and a Background Agent starts on Cursor's cloud using
+an `agent-task` issue routes to the cursor tier, and a Background Agent starts on Cursor's cloud using
 the org owner's Pro subscription — **no API key, no extra billing**.
 
 > **Known org issue:** Cursor's GitHub App occasionally fails to trigger on org repos
@@ -46,15 +46,17 @@ execution tier definitions. No additional configuration needed.
 
 ---
 
-## 2. How dispatch works (Tier C — Cursor Automations)
+## 2. How dispatch works (Cursor Automations)
 
 ### Label convention
 
-Every issue eligible for Cursor carries the label **`exec:cursor`**.
+Every issue eligible for Cursor carries the label **`agent-task`** and a
+`component:*` label routing to the cursor tier (everything except
+`component:digikey` — see `tiers` in `scripts/project_routing.json`).
 
 ### Automated dispatch via Cursor Automation
 
-Dispatch is handled by a **Cursor Automation** (not a GitHub Actions workflow). When `exec:cursor` is applied to an issue the Automation fires and starts a Cloud Agent session with the task context.
+Dispatch is handled by a **Cursor Automation** (not a GitHub Actions workflow). When `agent-task` is applied to an issue the Automation fires and starts a Cloud Agent session with the task context.
 
 #### Creating the Cursor Automation (one-time setup)
 
@@ -62,8 +64,8 @@ Configure the following Automation at [cursor.com/settings/automations](https://
 
 | Field | Value |
 |-------|-------|
-| **Name** | `digithings exec:cursor dispatch` |
-| **Trigger** | GitHub — issue labeled `exec:cursor` |
+| **Name** | `digithings agent-task dispatch` |
+| **Trigger** | GitHub — issue labeled `agent-task` |
 | **Repository** | `digithings-ai/digithings` |
 | **Base branch** | `develop` |
 | **Tools** | GitHub MCP (read issues, PRs) |
@@ -72,18 +74,20 @@ Configure the following Automation at [cursor.com/settings/automations](https://
 **Instructions (paste verbatim):**
 
 ```
-You are executing a digithings exec:cursor task. Work through this sequence:
+You are executing a digithings cursor-tier task. Work through this sequence:
 
 1. PRE-FLIGHT: Read the component AGENTS.md and ARCHITECTURE.md for the component
    identified from the issue labels (e.g. component:digisearch → digisearch/AGENTS.md).
    If no component label, read AGENTS.md (root).
 
-2. SCOPE CHECK: Confirm the issue is exec:cursor:
+2. SCOPE CHECK: Confirm the issue is cursor-tier:
+   - Component is NOT digikey (auth/crypto is claude-tier: comment that it needs
+     a supervised local run, then stop — do not attempt it)
    - Single component, estimated < 5 files
    - Clear acceptance criteria, no ambiguity
    - No cross-module integration required
-   - No live-trading paths (digiquant/live/, config/live*)
-   If any condition fails: comment explaining why, relabel exec:claude, stop.
+   - No live-trading paths (digiquant/live/, digiquant/brokers/, config/live*)
+   If any condition fails (other than digikey): comment explaining why and stop.
 
 3. IMPLEMENTATION: Follow the full protocol in docs/agents/CURSOR_AGENT_ONBOARDING.md.
    Branch: cursor/<issue-number>-<slug> from develop.
@@ -113,12 +117,13 @@ Cursor agents operating on this repo **must follow this sequence**:
 ```
 1. Read {component}/AGENTS.md            ← pre-flight checklist for that module
 2. Read {component}/ARCHITECTURE.md      ← module map, extension points
-3. Confirm the issue is exec:cursor:
+3. Confirm the issue is cursor-tier:
+   - Component is NOT digikey
    - Single component, <5 files estimated
    - Clear acceptance criteria (no ambiguity)
    - No cross-module integration required
-   - No live-trading paths (digiquant/live/, config/live*)
-   If any condition fails → comment on issue explaining why, relabel exec:claude, stop.
+   - No live-trading paths (digiquant/live/, digiquant/brokers/, config/live*)
+   If any condition fails → comment on issue explaining why and stop.
 ```
 
 ### 3b. Branch naming
@@ -180,15 +185,15 @@ PR must:
 | No changes to `digikey/` auth | Auth changes require Tier 3 + security review |
 | No changes to live-trading paths | Always human-gated |
 | No cross-module changes in one PR | Increases blast radius; split into per-module issues |
-| No `exec:claude` issues | Relabel and comment instead of attempting |
+| No claude-tier (digikey) issues | Comment and stop instead of attempting |
 | No force-push | Branch history must be clean |
 
-If any constraint is violated mid-task: open an `exec:claude` issue describing the
-situation, close the cursor branch without pushing, and comment on the original issue.
+If any constraint is violated mid-task: comment on the original issue describing the
+situation, close the cursor branch without pushing.
 
 ---
 
-## 5. Issue quality checklist (for the human filing exec:cursor issues)
+## 5. Issue quality checklist (for the human filing agent-task issues)
 
 For Cursor to succeed, the issue body must have:
 
@@ -196,7 +201,7 @@ For Cursor to succeed, the issue body must have:
 - [ ] **Goal** — one paragraph, no ambiguity
 - [ ] **Acceptance criteria** — 3–5 testable bullet points
 - [ ] **Docs expectation** — will ARCHITECTURE.md need updating? (yes/no)
-- [ ] **Risk** set to `low` or `medium` (high → exec:claude)
+- [ ] **Priority** set (critical/high/medium/low)
 - [ ] **No dependency on another open issue**
 
 Use `/spec` in Claude Code to generate compliant issue bodies automatically.
@@ -207,9 +212,9 @@ Use `/spec` in Claude Code to generate compliant issue bodies automatically.
 
 | Path | Requires | Billing | Status |
 |---|---|---|---|
-| Cursor Automation (primary) | Automation configured at cursor.com | Pro subscription | Active — Tier C default |
+| Cursor Automation (primary) | Automation configured at cursor.com | Pro subscription | Active default |
 | Manual Background Agent | Nothing | Pro subscription | Always available as fallback |
-| `make task ISSUE=N` (local) | Local Cursor IDE | Pro subscription | Tier 3 fallback |
+| `make task ISSUE=N` (local) | Local Cursor IDE | Pro subscription | Supervised fallback |
 
 **Primary path:** configure the Cursor Automation (section 2) — zero GitHub secrets, fully cloud-native.
 
@@ -218,12 +223,12 @@ Use `/spec` in Claude Code to generate compliant issue bodies automatically.
 ## 7. Monitoring running agents
 
 - **Cursor UI:** Background Agents panel shows active agents, logs, and PR links
-- **GitHub:** PRs from `cursor/*` branches appear in the PR list; labelled `exec:cursor`
+- **GitHub:** PRs from `cursor/*` branches appear in the PR list, linked to their `agent-task` issue
 - **Issue board:** The dispatch comment is updated when the agent opens its PR
 - **CI:** Standard PR quality gate + component tests run automatically on the branch
 
 If an agent appears stuck (no PR after 30 min for a scoped task), cancel it in Cursor
-and file an `exec:claude` issue with the error logs from the Background Agents panel.
+and comment on the issue with the error logs from the Background Agents panel.
 
 ---
 
