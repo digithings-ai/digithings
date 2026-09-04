@@ -45,12 +45,13 @@ paths = [
   # deployable code; never pushed to public remotes (see CLAUDE.md).
   '''^projects/[^/]+/vault/''',
 
-  # DELETED file (removed in the digiquant/src/digiquant/research -> digiquant/src migration)
-  # that historically held real free-tier data-API keys (FRED / CoinGecko /
+  # DELETED files moved from apps/digiquant-atlas into digiquant research,
+  # then removed. They historically held real free-tier data-API keys (FRED / CoinGecko /
   # Alpha Vantage). Owner confirmed these keys are dead/rotated (2026-06-18); no
-  # live credential remains. The file is absent at HEAD on develop; history can't
-  # be rewritten cheaply for dead free-tier keys, so the historical path is
-  # allowlisted. NOT a fixture — see SECURITY.md "Secrets scanning".
+  # live credential remains. Both paths are absent at HEAD on develop; history
+  # can't be rewritten cheaply for dead free-tier keys, so only the two exact
+  # historical paths are allowlisted. NOT fixtures — see SECURITY.md "Secrets scanning".
+  '''^apps/digiquant-atlas/config/mcp\.secrets\.env\.example$''',
   '''^digiquant/src/digiquant/research/config/mcp\.secrets\.env\.example$''',
 ]
 
