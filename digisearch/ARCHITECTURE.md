@@ -77,6 +77,34 @@ digisearch uses a **backend registry** pattern (`search/_stub.py`). Backends reg
 
 The in-memory stub (`DIGISEARCH_ALLOW_STUB=1`) is permanently last and exists for unit tests only. Startup enforcement (`_require_real_search_backend`) prevents the stub from activating in production.
 
+### RetrievalBackend protocol (#402)
+
+Document-level async retrieval is a **separate** swappable seam from the DigiIndex `/query` router. Callers depend on `RetrievalBackend` only; concrete backends register in `retrieval/registry.py` and are selected via `DIGISEARCH_RETRIEVAL_BACKEND`.
+
+```
+                    DIGISEARCH_RETRIEVAL_BACKEND
+                              │
+                              ▼
+                    get_retrieval_backend()
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+     PgvectorBackend (default)         LightRAGBackend
+     DIGISEARCH_DATABASE_URL           DIGISEARCH_RETRIEVAL_BACKEND=lightrag
+     + pgvector extension              + Postgres storages / local embeddings
+              │                               │
+              └───────────────┬───────────────┘
+                              ▼
+                    index / retrieve / delete / health
+```
+
+| Backend | Extra | Notes |
+|---------|-------|-------|
+| `pgvector` | `digisearch[pgvector]` (`psycopg`) | Default. MiniLM embeddings. In-memory store when no DSN (tests). |
+| `lightrag` | `digisearch[lightrag]` | Graph-enhanced upgrade. Embeddings default to Ollama `nomic-embed-text` or `DIGISEARCH_LIGHTRAG_EMBEDDING=minilm` — not OpenAI. |
+
+**Infra note:** production pgvector needs a reachable Postgres with `CREATE EXTENSION vector` and a DSN in `DIGISEARCH_DATABASE_URL` / `DIGISEARCH_PGVECTOR_URL` (human/secrets). This issue does not provision a new database service.
+
 ---
 
 ## 2. Current Implementation State
@@ -112,6 +140,10 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `ParserRegistry` + PDF/DOCX/HTML/MD/CSV/text parsers | Implemented | `ingestion/` |
 | OCR providers (Tesseract, Azure DI) | Implemented | `ingestion/ocr/` |
 | Chunkers: Chonkie Semantic (default) + Token via `ChunkerBackend`; legacy Fixed/Recursive/Sentence/Sliding/Semantic | Implemented | `chunking/`, `ingestion/chunkers/` |
+| `RetrievalBackend` Protocol + `RetrievalResult` | Implemented | `retrieval/backend.py` |
+| `PgvectorBackend` (default retrieval) | Implemented | `retrieval/pgvector.py` |
+| `LightRAGBackend` (env-selected upgrade) | Implemented | `retrieval/lightrag.py` |
+| Retrieval registry (`DIGISEARCH_RETRIEVAL_BACKEND`) | Implemented | `retrieval/registry.py` |
 | `FastAPI` server | Implemented | `server.py` |
 | MCP server (`FastMCP`) | Implemented | `mcp_server.py` |
 | CLI (Typer) | Implemented | `cli.py` |
@@ -493,6 +525,12 @@ digisearch/src/digisearch/
 │   ├── chonkie_token.py       # ChonkieTokenChunker (short news/alerts)
 │   ├── document_adapter.py    # BackendDocumentChunker (text backend → Document Chunker)
 │   └── factory.py             # DIGISEARCH_CHUNKER / per-index selection
+│
+├── retrieval/                 # RetrievalBackend Protocol (#402) — document-level async swap
+│   ├── backend.py             # RetrievalBackend Protocol + RetrievalResult
+│   ├── pgvector.py            # PgvectorBackend (default; Postgres + pgvector / in-memory tests)
+│   ├── lightrag.py            # LightRAGBackend (graph upgrade; DIGISEARCH_RETRIEVAL_BACKEND=lightrag)
+│   └── registry.py            # BACKENDS + get_retrieval_backend() env factory
 │
 ├── ingestion/
 │   ├── base.py                # Parser ABC
@@ -969,6 +1007,11 @@ docker compose --profile digisearch-mcp up
 | `DIGISEARCH_INDEX_CONFIG` | _(unset)_ | Path to index YAML (field_mapping, schema) |
 | `DIGISEARCH_CONFIG_PATH` | _(unset)_ | Path to YAML/TOML DigiSearchConfig |
 | `DIGISEARCH_ALLOW_STUB` | `0` | Enable in-memory stub (unit tests only) |
+| `DIGISEARCH_RETRIEVAL_BACKEND` | `pgvector` | `pgvector` \| `lightrag` — document-level RetrievalBackend (#402) |
+| `DIGISEARCH_DATABASE_URL` | _(unset)_ | Postgres DSN for PgvectorBackend / LightRAG PG storage |
+| `DIGISEARCH_PGVECTOR_URL` | _(unset)_ | Optional alias; wins over `DIGISEARCH_DATABASE_URL` |
+| `DIGISEARCH_LIGHTRAG_EMBEDDING` | `ollama` | `ollama` (nomic-embed-text) \| `minilm` (local ONNX) |
+| `DIGISEARCH_LIGHTRAG_WORKING_DIR` | `.lightrag` | LightRAG working directory |
 | `DIGISEARCH_RERANK_ENABLED` | `0` | When truthy, `query_index()` runs `Reranker` over results (`top_n=query.top_k`); off by default (#2441) |
 | `DIGISEARCH_RERANK_PROVIDER` | `bge` | `bge` (`BAAI/bge-reranker-v2-m3`) or `cohere` (`rerank-multilingual-v3.0`) when rerank is enabled |
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
