@@ -22,6 +22,7 @@ import {
   type TradeResult,
   type TradeSortKey,
 } from '@/lib/twelve-x/trade-history';
+import BoardDateRangeFilter from './BoardDateRangeFilter';
 
 const RESULT_FILTERS: { key: ResultFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -30,11 +31,19 @@ const RESULT_FILTERS: { key: ResultFilter; label: string }[] = [
   { key: 'live', label: 'Live' },
 ];
 
-/** Hide |Impact| below 0.1% when the magnitude gate is on. */
-const IMPACT_FLOOR = 0.001;
+/** Slider span for min |Impact| (percent points). Default 0 = no floor. */
+const IMPACT_MIN_PCT = 0;
+const IMPACT_MAX_PCT = 2;
+const IMPACT_STEP_PCT = 0.05;
+const IMPACT_DEFAULT_PCT = 0;
 
 /** Initial rows roughly fill a tall viewport; more load on scroll. */
 const PAGE_SIZE = 40;
+
+function formatImpactThresholdLabel(pct: number): string {
+  const shown = Number.isInteger(pct) ? pct.toFixed(0) : pct.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+  return `|Impact| ≥ ${shown}%`;
+}
 
 function ResultPill({ result }: { result: TradeResult }) {
   const toneClass =
@@ -102,8 +111,9 @@ export default function TradesTab({
 }) {
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
   const [pairFilter, setPairFilter] = useState('all');
-  const [boardFilter, setBoardFilter] = useState('all');
-  const [impactFloorOn, setImpactFloorOn] = useState(false);
+  const [boardFrom, setBoardFrom] = useState<string | null>(null);
+  const [boardTo, setBoardTo] = useState<string | null>(null);
+  const [impactMinPct, setImpactMinPct] = useState(IMPACT_DEFAULT_PCT);
   const [sortKey, setSortKey] = useState<TradeSortKey | null>('generated');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   /** Scroll window keyed by filter/sort so changing filters resets without an effect. */
@@ -122,10 +132,11 @@ export default function TradesTab({
     () => ({
       result: resultFilter,
       pair: pairFilter,
-      board: boardFilter,
-      minAbsImpact: impactFloorOn ? IMPACT_FLOOR : 0,
+      boardFrom,
+      boardTo,
+      minAbsImpact: impactMinPct / 100,
     }),
-    [resultFilter, pairFilter, boardFilter, impactFloorOn],
+    [resultFilter, pairFilter, boardFrom, boardTo, impactMinPct],
   );
 
   const filtered = useMemo(() => filterTradeHistory(history, filters), [history, filters]);
@@ -135,7 +146,7 @@ export default function TradesTab({
   );
   const summary = useMemo(() => summarizeFilteredTrades(filtered), [filtered]);
 
-  const scrollKey = `${resultFilter}|${pairFilter}|${boardFilter}|${impactFloorOn}|${sortKey}|${sortDir}`;
+  const scrollKey = `${resultFilter}|${pairFilter}|${boardFrom}|${boardTo}|${impactMinPct}|${sortKey}|${sortDir}`;
   const visibleCount = scroll.key === scrollKey ? scroll.count : PAGE_SIZE;
   const visible = sorted.slice(0, visibleCount);
   const hasMore = visibleCount < sorted.length;
@@ -227,35 +238,34 @@ export default function TradesTab({
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-1.5 text-[11px] text-ink-mute">
-              <span className="sr-only">Board</span>
-              <select
-                className={selectClassName()}
-                value={boardFilter}
-                onChange={(e) => setBoardFilter(e.target.value)}
-                aria-label="Filter by board date"
-              >
-                <option value="all">All boards</option>
-                {boards.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              aria-pressed={impactFloorOn}
-              onClick={() => setImpactFloorOn((v) => !v)}
-              title="Hide rows whose |Impact| is under 0.1%"
-              className={`border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                impactFloorOn
-                  ? 'border-accent/40 bg-accent/15 text-accent'
-                  : 'border-hair text-ink-mute hover:text-ink'
-              }`}
+            <BoardDateRangeFilter
+              boards={boards}
+              boardFrom={boardFrom}
+              boardTo={boardTo}
+              onChange={(from, to) => {
+                setBoardFrom(from);
+                setBoardTo(to);
+              }}
+            />
+            <label
+              className="flex min-w-[11rem] flex-1 items-center gap-2 text-[11px] text-ink-mute sm:max-w-[16rem]"
+              title="Hide rows whose absolute Impact is below this threshold"
             >
-              |Impact| ≥ 0.1%
-            </button>
+              <span className="shrink-0 font-mono tabular-nums text-ink">
+                {formatImpactThresholdLabel(impactMinPct)}
+              </span>
+              <input
+                type="range"
+                min={IMPACT_MIN_PCT}
+                max={IMPACT_MAX_PCT}
+                step={IMPACT_STEP_PCT}
+                value={impactMinPct}
+                onChange={(e) => setImpactMinPct(Number(e.target.value))}
+                aria-label="Minimum absolute Impact percent"
+                data-testid="impact-min-slider"
+                className="h-1 w-full flex-1 cursor-pointer accent-[var(--accent)]"
+              />
+            </label>
           </div>
 
           <div

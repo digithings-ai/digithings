@@ -37,8 +37,12 @@ export interface TradeHistoryFilters {
   result: ResultFilter;
   /** Exact pair match, or 'all'. */
   pair: string;
-  /** Board / generated run_date, or 'all'. */
-  board: string;
+  /**
+   * Inclusive board-date range (YYYY-MM-DD). `null` means unbound on that side.
+   * Both null → all boards.
+   */
+  boardFrom: string | null;
+  boardTo: string | null;
   /**
    * Minimum absolute Impact (hold return) to keep.
    * 0.001 = 0.1%. Rows without a finite hold return fail this gate when > 0.
@@ -165,6 +169,17 @@ export function assembleTradeHistory(
     .sort((a, b) => b.runDate.localeCompare(a.runDate) || a.rank - b.rank);
 }
 
+/** True when `runDate` falls in inclusive `[from, to]` (null = unbound). */
+export function boardDateInRange(
+  runDate: string,
+  from: string | null,
+  to: string | null,
+): boolean {
+  if (from !== null && runDate < from) return false;
+  if (to !== null && runDate > to) return false;
+  return true;
+}
+
 export function filterTradeHistory(
   rows: TradeHistoryRow[],
   filters: TradeHistoryFilters,
@@ -178,7 +193,7 @@ export function filterTradeHistory(
     if (filters.result === 'live' && result !== 'live') return false;
 
     if (filters.pair !== 'all' && row.pair !== filters.pair) return false;
-    if (filters.board !== 'all' && row.runDate !== filters.board) return false;
+    if (!boardDateInRange(row.runDate, filters.boardFrom, filters.boardTo)) return false;
 
     if (filters.minAbsImpact > 0) {
       if (row.holdReturn === null || !Number.isFinite(row.holdReturn)) return false;
