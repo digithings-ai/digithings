@@ -108,11 +108,23 @@ rate — a single system, not two pluggable ones. Specifically missing:
    than either hand-picking without a proposal or shipping an unreviewed
    automated set — mirrors how `cycle_windows.py`'s existing pins are curated,
    not mined.
-4. **Add a medium-term Stage A pass.** Reuse `cycle_overlap_score()` against
-   the new medium-term windows to produce a second `SdcaCompositeWeights`
-   (likely weighted toward the daily/fast legs of the existing confluence
-   indicators, vs. the long-term pass which likely favors the weekly/slow
-   legs and `power_law`).
+4. **Done (2026-09-04):** medium-term Stage A pass, via the new
+   `scripts/run_stage_a_cycle_overlap.py` (reuses `cycle_overlap_score()`/
+   `optimize_stage_a_weights()` against both window sets, real BTC data). The
+   two layers pick different composites, confirming the prediction above:
+   - Long-term (`btc_v1()`, corrected 2025-10-06 peak): `power_law=1.0`
+     wins outright (objective 64.2, spread 41.4pp); every extra hurts —
+     forcing one in (`require_extras=True`) drops the objective to 58.4.
+   - Medium-term (`btc_medium_term_v1()`, 75-pivot set): `power_law=0.0,
+     sma_band=0.5` wins instead (objective 41.4, spread 24.2) — power-law's
+     whole-history position is the wrong signal for turns this frequent;
+     the fast/slow SMA-band confluence catches them better.
+   Lower medium-term objective is expected, not a regression: its windows
+   are far denser (757 trough-days + 748 peak-days vs. long-term's 182+273),
+   so separating the two means is a harder problem by construction.
+   This only answers the cycle-overlap objective, not the backtest-return
+   one `weight_search.py` actually ships with — see step 2's still-open
+   reconciliation question before treating either weight set as a candidate.
 5. **Build the combination layer.** Recommended shape: two independent
    `IndicatorWeight` sets → two independent `compute_composite_risk()` calls →
    two risk scores (`risk_long`, `risk_medium`) → a combination function that

@@ -92,10 +92,15 @@ that could both be read as "the baseline."
    describe the current code path).
 6. **Dual-timeframe valuation framework** (Chris's 2026-09-04 direction — see
    `../DCA_VALUATION_FRAMEWORK.md`): composite smoothing landed
-   (`compute_composite_risk`'s `smoothing_window`). Still open: reconcile
-   Stage A cycle-overlap vs `weight_search.py` backtest-return as the
-   weight-selection objective; define a medium-term `CycleWindow` set
-   (propose a candidate for Chris's review, don't auto-ship one); a medium-term
-   Stage A pass against it; a two-composite (`risk_long`/`risk_medium`)
-   combination curve; and exposing medium-only / long-only / combined as
-   sibling configurations of the same kernel. See that doc for the full plan.
+   (`compute_composite_risk`'s `smoothing_window`); a medium-term `CycleWindow`
+   set landed (75-pivot zigzag, `cycle_windows.py`, chart-review-corrected
+   2026-09-04); the medium-term Stage A cycle-overlap pass now landed too, via
+   `scripts/run_stage_a_cycle_overlap.py` — **diagnostic only, not accepted as
+   a candidate**: long-term wants `power_law=1.0` alone (objective 64.2),
+   medium-term wants `power_law=0.0, sma_band=0.5` alone (objective 41.4),
+   confirming the two timeframes need separate composites. Still open:
+   reconcile Stage A cycle-overlap vs `weight_search.py` backtest-return as
+   the actual weight-selection objective (this diagnostic doesn't resolve
+   that); a two-composite (`risk_long`/`risk_medium`) combination curve; and
+   exposing medium-only / long-only / combined as sibling configurations of
+   the same kernel. See that doc for the full plan.
