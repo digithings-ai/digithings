@@ -205,21 +205,25 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 47 for #2441 (DIGISEARCH_RERANK_ENABLED / BGE v2-m3
     wiring docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 48 for #402 (RetrievalBackend protocol + pgvector /
+    LightRAG docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 47
+    assert len(chunks) == 48
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
         "2a6c63aff18cb155",
         "05ee1579bfb41def",
-        "657dd9b7e8689cb3",
+        "7e6b7b2044358888",
+        "cea76b9e90df056e",
         "6f61da3b9ed54d44",
-        "cd2c6e3f30505620",
+        "5c87a98eae4b4c24",
         "5c44b3a1c81aaae0",
         "4fe2b5f10b829673",
         "e446cea04444b3a8",
@@ -231,8 +235,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
         "bb49fa9bd8d8d792",
-        "a0c037931c01430e",
-        "12edc9da027739e1",
+        "674f45e22421aa20",
+        "f4a0993928428a57",
         "819ebadc3320ecc2",
         "9febcd11d9848e18",
         "8c403dc89d35fe82",
@@ -252,8 +256,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5881d77c9811fa5d",
         "217c7d169b90a8be",
         "e98012ae08e70074",
-        "c66bb2bf8f97d7a2",
-        "87effdcfaaee2a76",
+        "9496728548f7cd2a",
+        "11a2313f67dd5137",
         "a0c3eeac2a656b2f",
         "44050a77e280c022",
         "79ae674b8661ea64",

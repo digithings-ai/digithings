@@ -77,11 +77,37 @@ Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chu
 
 ---
 
+## RetrievalBackend selection guide (#402)
+
+Document-oriented async retrieval (separate from the HTTP `/query` DigiIndex router) is selected via env only:
+
+| Backend | When | Env |
+|---------|------|-----|
+| **pgvector** (default) | Existing Postgres + `vector` extension | omit or `DIGISEARCH_RETRIEVAL_BACKEND=pgvector` + `DIGISEARCH_DATABASE_URL` |
+| **lightrag** | Graph-enhanced upgrade path | `DIGISEARCH_RETRIEVAL_BACKEND=lightrag` + `pip install digisearch[lightrag]` |
+
+```python
+from digisearch.retrieval import get_retrieval_backend
+
+backend = get_retrieval_backend()  # reads DIGISEARCH_RETRIEVAL_BACKEND
+await backend.index(documents)
+hits = await backend.retrieve("revenue growth", top_k=10)
+```
+
+- LightRAG embeddings default to local/free (`ollama` / `nomic-embed-text`, or `DIGISEARCH_LIGHTRAG_EMBEDDING=minilm`) — not OpenAI.
+- Production pgvector needs a DSN and `CREATE EXTENSION vector` (human/infra). Without a DSN, `PgvectorBackend` uses an in-memory store for unit tests only.
+- Factory: `digisearch.retrieval.registry.get_retrieval_backend`. Protocol: `digisearch.retrieval.backend.RetrievalBackend`.
+
+---
+
 ## Test Commands
 
 ```bash
 # Unit tests (no stack required)
 pytest tests/ -m unit -k "digisearch" -v
+
+# RetrievalBackend protocol + pgvector/lightrag adapters
+pytest -m unit -k retrieval_backend -v
 
 # Chunking / Chonkie backends
 pytest -m unit -k chunking -v
