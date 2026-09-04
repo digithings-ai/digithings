@@ -157,13 +157,32 @@ def test_render_produces_eight_rows(mod: Any) -> None:
 
 
 @pytest.mark.unit
+def test_render_html_is_self_contained_dashboard(mod: Any) -> None:
+    rows = [
+        ("Backlog hygiene", "139 open", "watch", "missing=[1]"),
+        ("Label-set integrity", "28 labels", "healthy", "ok"),
+        ("Ops health", "0 failed", "sick", "x <y> & z"),
+    ]
+    page = mod.render_html(rows, "2026-09-04 12:00 UTC")
+    assert "<!DOCTYPE html>" in page
+    assert "http" not in page.replace("http-equiv", "").replace("https://", "X")
+    assert page.count("<section class='card'") == 3
+    assert "1 watch" in page and "1 healthy" in page and "1 sick" in page
+    assert "2026-09-04 12:00 UTC" in page
+    assert "&lt;y&gt; &amp; z" in page  # detail is escaped
+    assert "<details>" in page
+
+
+@pytest.mark.unit
 def test_collect_degrades_bad_section_to_unknown(mod: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     def boom() -> Any:
         raise RuntimeError("kaput")
 
     # Hermetic: never call real gh/git. Without this, fetch_issues() can fail on
     # CI (no network auth) and collect() early-returns without a Docs row.
-    monkeypatch.setattr(mod, "fetch_issues", lambda: [_issue(1, ["priority:high", "component:root"])])
+    monkeypatch.setattr(
+        mod, "fetch_issues", lambda: [_issue(1, ["priority:high", "component:root"])]
+    )
     monkeypatch.setattr(mod, "_gh", lambda *a, **k: [])
     monkeypatch.setattr(mod, "_run", lambda *a, **k: "")
     monkeypatch.setattr(mod, "m_docs", boom)

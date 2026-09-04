@@ -39,22 +39,31 @@ bootstrapping fails, not on every run:
 - [ ] `.env.example` lists every variable the stack actually reads (no tribal `.env` entries)
 - [ ] Node 22 / Python 3.12+ pins match between CI and AGENTS.md
 
+## Dashboard artifact
+
+`make readiness-html` renders this table as a self-contained page at
+`dist/readiness.html` (gitignored build output — regenerate, don't commit) and
+opens it locally. No external assets: works from `file://`, printable, and
+safe to attach to a bot report. Bots should quote
+`make readiness ARGS=--format=json` for the machine-readable numbers and link
+the artifact for the human.
+
 ## Computed table
 
-Do not hand-edit between the markers — `make readiness --write` owns it.
+Do not hand-edit between the markers — `make readiness-write` owns it.
 
 <!-- readiness:begin -->
 
-_Last computed: 2026-09-04 12:13 UTC via `make readiness` (advisory only)._ 
+_Last computed: 2026-09-04 12:23 UTC via `make readiness` (advisory only)._ 
 
 | # | Dimension | Value | Band |
 |---|-----------|-------|------|
-| 1 | Backlog hygiene | 138 open (4 missing labels, 0 stale, 7 epics) | watch |
+| 1 | Backlog hygiene | 137 open (4 missing labels, 0 stale, 7 epics) | watch |
 | 2 | Label-set integrity | 28 labels (0 unexpected) | healthy |
 | 3 | Docs freshness | 5 drift candidates, 0 dupes, 0 gaps (27 ADRs) | sick |
 | 4 | Ops health | 29 failed runs / 12 workflows, 4 open ci:failure | sick |
-| 5 | Dispatch health | 77 agent-task {'cursor': 69, 'claude': 8}, 0 stuck | healthy |
-| 6 | Branch routing health | 12 module branches, worst behind=1565 | sick |
+| 5 | Dispatch health | 76 agent-task {'cursor': 68, 'claude': 8}, 0 stuck | healthy |
+| 6 | Branch routing health | 12 module branches, worst behind=1572 | sick |
 | 7 | Release discipline | 1 open release PRs, oldest 1d | healthy |
 | 8 | Bootstrap essentials | 4/4 essentials present | healthy |
 

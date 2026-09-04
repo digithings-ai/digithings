@@ -391,6 +391,80 @@ def render(rows: list[tuple[str, str, str, str]]) -> str:
     return "\n".join(lines)
 
 
+BAND_COLORS = {
+    "healthy": ("#137333", "#e6f4ea"),
+    "watch": ("#795809", "#fef7e0"),
+    "sick": ("#a50e0e", "#fce8e6"),
+    "unknown": ("#5f6368", "#f1f3f4"),
+}
+
+
+def _esc(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def render_html(rows: list[tuple[str, str, str, str]], stamp: str) -> str:
+    """Self-contained dashboard page: inline CSS only, works from file://."""
+    counts = {"healthy": 0, "watch": 0, "sick": 0, "unknown": 0}
+    for _, _, band, _ in rows:
+        counts[band] = counts.get(band, 0) + 1
+    summary = " · ".join(
+        f"<span class='pill {b}'>{counts[b]} {b}</span>"
+        for b in ("healthy", "watch", "sick", "unknown")
+    )
+    cards = []
+    for idx, (dim, value, band, detail) in enumerate(rows, 1):
+        fg, bg = BAND_COLORS.get(band, BAND_COLORS["unknown"])
+        cards.append(
+            f"<section class='card' style='border-left-color:{fg}'>"
+            f"<header><span class='num'>{idx}</span><h2>{_esc(dim)}</h2>"
+            f"<span class='badge' style='color:{fg};background:{bg}'>{band}</span></header>"
+            f"<p class='value'>{_esc(value)}</p>"
+            f"<details><summary>detail</summary><code>{_esc(detail)}</code></details>"
+            "</section>"
+        )
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>digithings readiness — {stamp}</title>
+<style>
+:root {{ color-scheme: light dark; }}
+body {{ font-family: -apple-system, system-ui, sans-serif; max-width: 880px; margin: 2rem auto; padding: 0 1rem; }}
+header.top h1 {{ margin: 0 0 .25rem; font-size: 1.4rem; }}
+header.top p {{ color: #5f6368; margin: 0 0 1rem; }}
+.pill {{ display: inline-block; border-radius: 999px; padding: .1rem .6rem; margin-right: .4rem; font-size: .85rem; }}
+.pill.healthy {{ background: #e6f4ea; color: #137333; }}
+.pill.watch {{ background: #fef7e0; color: #795809; }}
+.pill.sick {{ background: #fce8e6; color: #a50e0e; }}
+.pill.unknown {{ background: #f1f3f4; color: #5f6368; }}
+.card {{ border: 1px solid #dadce0; border-left: 6px solid; border-radius: 8px; padding: .8rem 1rem; margin: .8rem 0; }}
+.card header {{ display: flex; align-items: baseline; gap: .6rem; }}
+.card h2 {{ font-size: 1.05rem; margin: 0; flex: 1; }}
+.num {{ color: #5f6368; font-variant-numeric: tabular-nums; }}
+.badge {{ border-radius: 4px; padding: .1rem .5rem; font-size: .8rem; font-weight: 600; }}
+.value {{ font-size: 1.1rem; margin: .5rem 0; }}
+details {{ font-size: .85rem; color: #444; }}
+details code {{ word-break: break-all; white-space: pre-wrap; }}
+footer {{ color: #5f6368; font-size: .8rem; margin-top: 2rem; }}
+</style>
+</head>
+<body>
+<header class="top">
+<h1>digithings readiness</h1>
+<p>Computed {stamp} via <code>make readiness</code> — advisory only, never a gate.</p>
+<p>{summary}</p>
+</header>
+<main>
+{"".join(cards)}
+</main>
+<footer>Regenerate: <code>make readiness-html</code> · Detail: <code>make readiness ARGS=--format=json</code> · Bands: <code>docs/agents/READINESS.md</code></footer>
+</body>
+</html>
+"""
+
+
 def write_doc(table: str) -> None:
     try:
         text = READINESS_DOC.read_text()
@@ -418,9 +492,10 @@ def main() -> int:
     parser.add_argument(
         "--write", action="store_true", help="refresh computed table in docs/agents/READINESS.md"
     )
-    parser.add_argument("--format", choices=["md", "json"], default="md")
+    parser.add_argument("--format", choices=["md", "json", "html"], default="md")
     args = parser.parse_args()
     rows = collect()
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     if args.format == "json":
         print(
             json.dumps(
@@ -428,6 +503,8 @@ def main() -> int:
                 indent=2,
             )
         )
+    elif args.format == "html":
+        print(render_html(rows, stamp))
     else:
         print(render(rows))
     if args.write:
