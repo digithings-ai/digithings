@@ -25,7 +25,6 @@ import {
   ReturnsMatrix,
   RiskBandStrip,
   AllocationStepChart,
-  AllocatedVsCostBasisChart,
   SegToggle,
   TerminalMark,
   TimeSeries,
@@ -725,6 +724,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                     allocated={chartAllocated}
                     markers={chartFills}
                     priceOverlay={chartSpot}
+                    costBasis={dcaBook ? chartCost : undefined}
                     markerAxis={dcaBook ? "price" : "allocated"}
                     height={CHART_H}
                     view={chartView}
@@ -733,29 +733,13 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                     resetView={presetView}
                     ariaLabel={
                       dcaBook
-                        ? "Price with fill dots at their actual fill price, sized by fraction of book moved"
+                        ? "Price with fill dots at their actual fill price sized by fraction of book moved, cost basis, and percent allocated on a right axis"
                         : "Percent allocated (mark-to-market), step chart, with fill dots sized by fraction of book moved"
                     }
                   />
                 </div>
               ) : null}
-              {dcaBook ? (
-                chartAllocated.length > 0 || chartCost.length > 0 ? (
-                  <div className="ts-chart ts-chart-sm">
-                    <AllocatedVsCostBasisChart
-                      allocated={chartAllocated}
-                      costBasis={chartCost}
-                      costScale={chartScale === "log" ? "log" : "linear"}
-                      height={Math.round(CHART_H * 0.55)}
-                      view={chartView}
-                      onView={setViewFromChart}
-                      fullSpan={fullSpan}
-                      resetView={presetView}
-                      ariaLabel="Percent allocated versus cost basis, independent axes"
-                    />
-                  </div>
-                ) : null
-              ) : chartCost.length > 0 ? (
+              {!dcaBook && chartCost.length > 0 ? (
                 <div className="ts-chart ts-chart-sm">
                   <MultiTimeSeries
                     series={[

@@ -196,6 +196,8 @@
 .ts-tone-up.ts-area { fill: var(--up); }
 .ts-tone-down.ts-line { stroke: var(--down); }
 .ts-tone-down.ts-area { fill: var(--down); }
+.ts-tone-warn.ts-line { stroke: var(--warn); }
+.ts-tone-warn.ts-area { fill: var(--warn); }
 .ts-bar.ts-tone-up { fill: var(--up); opacity: 0.82; }
 .ts-bar.ts-tone-down { fill: var(--down); opacity: 0.82; }
 .ts-bar.ts-bar-open {

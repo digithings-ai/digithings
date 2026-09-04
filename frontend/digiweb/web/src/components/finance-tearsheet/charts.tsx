@@ -2243,6 +2243,13 @@ export interface AllocationStepChartProps {
   allocated: TearsheetSeriesPoint[];
   markers: AllocationFillMarker[];
   priceOverlay?: TearsheetSeriesPoint[];
+  /**
+   * Cost basis, quote currency. Only drawn when `markerAxis === "price"` —
+   * shares the price series' left axis and log scale, since both are
+   * directly comparable dollar figures (dashed line, so it stays legible
+   * against the solid price line and fill dots).
+   */
+  costBasis?: TearsheetSeriesPoint[];
   height?: number;
   view?: ViewWindow;
   onView?: (v: ViewWindow) => void;
@@ -2253,10 +2260,11 @@ export interface AllocationStepChartProps {
   /**
    * Which series the fill dots (and left axis) sit on. `"allocated"` (default)
    * draws the % allocated step line with dots on it and price as a faint
-   * overlay — the original behaviour. `"price"` drops the allocated line
-   * entirely and draws price as the primary series (left axis, log-scale
-   * ticks) with dots sitting on the price line itself, so buy/sell fills read
-   * against the price they actually filled at.
+   * overlay — the original behaviour. `"price"` draws price (and, if given,
+   * cost basis) as the primary series on the left axis (log-scale ticks),
+   * with dots sitting on the price line itself so buy/sell fills read
+   * against the price they actually filled at, and moves the % allocated
+   * step line to a secondary right axis (0-100).
    */
   markerAxis?: "allocated" | "price";
 }
@@ -2274,7 +2282,12 @@ function stepPath(
   return d;
 }
 
-/** Step % allocated (MTM) with sized buy/sell fill dots and faint log price. Cash is the inverse of allocated and is not drawn. */
+/**
+ * Step % allocated (MTM) with sized buy/sell fill dots and faint log price
+ * (`markerAxis: "allocated"`), or price + cost basis on the left axis with
+ * dots on the price line and % allocated moved to a right axis
+ * (`markerAxis: "price"`). Cash is the inverse of allocated and is not drawn.
+ */
 export function AllocationStepChart(props: AllocationStepChartProps) {
   const { allocated, height = 320 } = props;
   if (!allocated || allocated.length === 0) return <Empty height={height} msg="no data" />;
@@ -2285,6 +2298,7 @@ function AllocationStepChartBody({
   allocated: allAllocated,
   markers,
   priceOverlay = [],
+  costBasis: allCostBasis = [],
   height,
   view,
   onView,
@@ -2301,6 +2315,7 @@ function AllocationStepChartBody({
   const clipId = `ts-alloc-clip-${useId().replace(/:/g, "")}`;
   const allocated = sliceByView(allAllocated, view, fullSpan);
   const pricePts = sliceByView(priceOverlay, view, fullSpan);
+  const costBasis = sliceByView(allCostBasis, view, fullSpan);
   const control = viewHandlers(view, onView, pad, vbW, resetView);
   const plotW = vbW - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
@@ -2310,16 +2325,22 @@ function AllocationStepChartBody({
   const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = (val: number) => pad.top + plotH - (val / 100) * plotH;
   const priceIsPrimary = markerAxis === "price";
-  const allocPath = priceIsPrimary ? "" : stepPath(allocated, xAt, yAt);
+  const allocPath = stepPath(allocated, xAt, yAt);
   const dateIx = new Map(allocated.map((p, i) => [p.t.slice(0, 10), i]));
 
   const priceMap = new Map(pricePts.map((p) => [p.t, p.v]));
+  const costMap = new Map(costBasis.map((p) => [p.t, p.v]));
   const priceVals = allocated
     .map((p) => priceMap.get(p.t))
     .filter((v): v is number => v != null && v > 0);
+  const costVals = priceIsPrimary
+    ? allocated.map((p) => costMap.get(p.t)).filter((v): v is number => v != null && v > 0)
+    : [];
   const priceScale = makeScale("log");
   const priceDom =
-    priceVals.length > 0 ? dataDomain(priceVals, priceScale, { padRatio: 0.04 }) : { lo: 0, hi: 1 };
+    priceVals.length > 0 || costVals.length > 0
+      ? dataDomain([...priceVals, ...costVals], priceScale, { padRatio: 0.04 })
+      : { lo: 0, hi: 1 };
   const yPrice = (val: number) =>
     pad.top + plotH - ((priceScale.f(val) - priceDom.lo) / (priceDom.hi - priceDom.lo)) * plotH;
   let priceLine = "";
@@ -2333,12 +2354,26 @@ function AllocationStepChartBody({
     priceLine += `${drawingPrice ? "L" : "M"}${xAt(i).toFixed(1)} ${yPrice(v).toFixed(1)} `;
     drawingPrice = true;
   }
+  let costLine = "";
+  let drawingCost = false;
+  if (priceIsPrimary) {
+    for (let i = 0; i < n; i++) {
+      const v = costMap.get(allocated[i].t);
+      if (v == null || !(v > 0)) {
+        drawingCost = false;
+        continue;
+      }
+      costLine += `${drawingCost ? "L" : "M"}${xAt(i).toFixed(1)} ${yPrice(v).toFixed(1)} `;
+      drawingCost = true;
+    }
+  }
   const priceTicks =
-    priceIsPrimary && priceVals.length > 0
+    priceIsPrimary && (priceVals.length > 0 || costVals.length > 0)
       ? logTicks(priceScale.inv(priceDom.lo), priceScale.inv(priceDom.hi), 4)
       : [];
 
   const ticks = [0, 25, 50, 75, 100];
+  const allocRightTicks = priceIsPrimary && n > 0 ? [0, 25, 50, 75, 100] : [];
   const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
 
   const onChartMouseMove = useCallback(
@@ -2361,19 +2396,24 @@ function AllocationStepChartBody({
         setHover(null);
         return;
       }
-      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 80);
-      const priceAtPt = priceMap.get(pt.t);
-      const value = priceIsPrimary
-        ? priceAtPt != null
-          ? fmtCompact(priceAtPt)
-          : `${pt.v.toFixed(1)}% allocated`
-        : `${pt.v.toFixed(1)}% allocated`;
-      setHover({
-        ...pos,
-        content: <SeriesTipContent date={pt.t} value={value} />,
-      });
+      if (priceIsPrimary) {
+        const rows: { label: string; value: string }[] = [];
+        const priceAtPt = priceMap.get(pt.t);
+        if (priceAtPt != null) rows.push({ label: "Price", value: fmtCompact(priceAtPt) });
+        const costAtPt = costMap.get(pt.t);
+        if (costAtPt != null) rows.push({ label: "Cost basis", value: fmtCompact(costAtPt) });
+        rows.push({ label: "Allocated", value: `${pt.v.toFixed(1)}%` });
+        const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 24 + rows.length * 22);
+        setHover({ ...pos, content: <OverlayTipContent date={pt.t} rows={rows} /> });
+      } else {
+        const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 80);
+        setHover({
+          ...pos,
+          content: <SeriesTipContent date={pt.t} value={`${pt.v.toFixed(1)}% allocated`} />,
+        });
+      }
     },
-    [allocated, height, n, pad.left, pad.right, plotBottom, plotTop, priceIsPrimary, priceMap, vbW],
+    [allocated, costMap, height, n, pad.left, pad.right, plotBottom, plotTop, priceIsPrimary, priceMap, vbW],
   );
 
   return (
@@ -2408,14 +2448,35 @@ function AllocationStepChartBody({
                 </text>
               </g>
             ))}
+        {allocRightTicks.map((tv) => (
+          <text
+            key={`gar${tv}`}
+            x={vbW - pad.right + 8}
+            y={axisLabelY(yAt(tv), plotTop, plotBottom)}
+            textAnchor="start"
+            className="ts-axis ts-axis-mute"
+          >
+            {tv}%
+          </text>
+        ))}
         {priceLine ? (
           <g clipPath={`url(#${clipId})`} data-chart-layer="price-overlay">
             <path d={priceLine} fill="none" className={priceIsPrimary ? "ts-line ts-tone-mute" : "ts-line ts-price-faint"} />
           </g>
         ) : null}
+        {costLine ? (
+          <g clipPath={`url(#${clipId})`} data-chart-layer="cost-basis">
+            <path d={costLine} fill="none" className="ts-line ts-line-dashed ts-tone-warn" />
+          </g>
+        ) : null}
         {allocPath ? (
           <g clipPath={`url(#${clipId})`}>
-            <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
+            <path
+              d={allocPath}
+              fill="none"
+              className={priceIsPrimary ? "ts-line ts-line-dashed ts-tone-accent" : "ts-line ts-tone-accent"}
+              data-chart-layer="alloc-step"
+            />
           </g>
         ) : null}
         <g clipPath={`url(#${clipId})`} data-chart-layer="fill-markers">
