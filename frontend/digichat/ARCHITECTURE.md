@@ -721,18 +721,19 @@ so each adapter enforces the directive its own way:
   the outgoing input text, resent on every turn since Foundry (not this
   adapter) holds conversation history.
 
-**Embed slash commands (#3418).** `@digithings/digichat-ui` `slash-commands.ts`
+**Embed slash commands (#3418 / #3511 / #3556).** `@digithings/digichat-ui` `slash-commands.ts`
 owns the public palette on `/embed` (and therefore digithings.ai `/chat`):
-`/search` and `/docs` (aliases `/digisearch` / `/digivault`) force a locate
+`/search` and `/vault` (aliases `/docs` / `/digisearch` / `/digivault`) force a locate
 then synthesize — the user string is the tool argument, forwarded as
 `X-Digi-Force-Tool` by `use-embed-digi-chat.ts` and the `/api/chat` BFF.
-`/lang`, `/help`, and `/new` never leave the browser. `/new` clears the
-client transcript, drops `sessionStorage` `X-External-Conversation` for the
-embed host, and clears any pending force-tool — so Foundry (and any adapter
-keyed off that id) actually starts a new conversation. Empty `/search` or
-`/docs` wait for an argument. Public copy is "Search the knowledge base" /
-"Find original documents". Signed-in ChatShell keeps its own `/help` `/key`
-`/model` palette.
+`/lang`, `/help`, `/new`, `/copy`, `/export`, `/websearch`, `/settings`, and `/byok`
+(alias `/key`) never leave the browser. `/websearch` toggles opt-in External cites
+when the tenant allows it (footer checkbox removed). `/settings` opens an in-chat
+CLI settings list (Up/Down + Enter); `/byok` opens the BYOK flow after a chat has
+started. Palette keyboard: Up/Down navigate, Enter select; language presets dive
+in with Up/Down (no free-typing required). Public copy labels Vault (not Docs).
+Signed-in ChatShell keeps `/clear` `/history` `/scope` plus the same `/byok` /
+`/websearch` / `/settings` surface.
 
 **Open originals (#3419).** Source cards on a settled turn open a side pane
 (`DocumentPane`). Vault notes render from `body` already loaded by

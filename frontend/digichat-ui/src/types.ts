@@ -95,4 +95,12 @@ export type DigiChatSessionProps = DigiChatSessionConfig & {
   showIntro?: boolean;
   /** /lang on the embed — the session does not own language state. */
   onLanguageChange?: (code: string) => void;
+  /** Current language code for /settings and /lang dive-in highlight. */
+  languageCode?: string;
+  /** Tenant allows opt-in web search (#3420 / #3556). */
+  webSearchAllowed?: boolean;
+  /** User web-search preference (local). */
+  webSearchEnabled?: boolean;
+  /** Toggle web search when `/websearch` runs or settings flips it. */
+  onWebSearchToggle?: () => void;
 };

@@ -244,7 +244,8 @@
   cursor: pointer;
 }
 .dc-slash-item:hover,
-.dc-slash-item:focus-visible {
+.dc-slash-item:focus-visible,
+.dc-slash-item-active {
   color: var(--accent);
 }
 .dc-slash-cmd {
