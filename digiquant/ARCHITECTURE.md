@@ -265,6 +265,7 @@ Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or dash
 | `strategy list` | `cli/strategy.py` → `service_list_strategies` | JSON; twin of MCP `digiquant_list_strategies` / `GET /strategies` (#160) |
 | `strategy search <query>` | `cli/strategy.py` | Case-insensitive filter on name, aliases, description |
 | `prices …` | `cli/prices.py` | OHLCV / technicals / macro cron surface |
+| `onchain fetch-bitview` | `cli/onchain.py` | Bitview/BRK day1 → parquet + optional `macro_series_observations` (#1086) |
 | `policy-replay …` | `dashboard/replay/cli.py` | Read-only governance summaries |
 
 Still open from #160 AC: dedicated `indicator list` / `indicator compute` (closest today: `prices compute-technicals`; MCP indicator tools tracked in #152).
@@ -661,9 +662,10 @@ upstream for cached price history.
 | `sdca/valuation.py` | `valuation_z_score(price, low, median, high)` — log-space position of price within the `RiskModel` rails, in `[-3, 3]` (cheap = +3, rich = −3). The default/primary indicator. Validates finite, positive rails with `low < median < high` on rows where all four inputs are present; a row with any null input passes through as null. |
 | `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
 | `sdca/providers.py` | String selector `btc_power_law` \| `generic_valuation` \| `rolling_z` → `resolve_sdca_risk_model()` (#3175). |
+| `sdca/onchain_valuation.py` | On-chain-enhanced valuation tier (#1086). Local MVRV-Z (causal expanding z of `−mvrv`) plus aSOPR / Puell / RHODL z → `IndicatorWeight` votes consumable by `compute_composite_risk`. `OnChainValuationProvider` loads Bitview parquet; `resolve_sdca_valuation_tier` falls back to basic `RollingZRiskModel` when coverage is thin (ETH/SOL) or the cache is empty. **Not** enabled in published `btc_sdca` weights yet (composite null-rule). |
 | `sdca/quantile_rails.py` | Shared QuantReg + rearrangement + span-widen helpers used by generic valuation. |
 | `sdca/generic_valuation.py` | Per-asset log-price trend rails from the first cached bar (not BTC genesis). Short history widens the corridor. `max_fit_rows` (optional) evenly subsamples QuantReg across the **full** span — rails/scores still cover every input date. Never a 900-day prefix (that ended Coinbase BTC in January 2018). If `log_quadratic` IRLS does not converge (observed on decade-scale ETH), retry `log_linear` on the same window and record it in `notes`. |
-| `sdca/rolling_z.py` | Short-series fallback: causal rolling log-price mean ± z·std as rails. |
+| `sdca/rolling_z.py` | Short-series fallback / basic valuation tier (#1086): causal rolling log-price mean ± z·std as rails. |
 | `sdca/asset_profile.py` | `SdcaAssetProfile` — per-asset `symbol`, `risk_model`, `SdcaOscillatorSpec`, `cycle_windows`, extra-indicator allowlist, `signal_delay_days` (default 0; publish delay stays in `generate_tearsheets`). Factories: `btc_v1()`, `eth_research_v1()` (research-only, not in `settings.json`). `daily_closes_from_cache` / `technicals_from_ohlcv` are the shared OHLCV path (full cache, no 900-day cap). `union_date_range` is the overlay x-axis helper — union of spans, not an inner join that would clip BTC to ETH. |
 | `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, committed as of #3173) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
 | `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
@@ -673,7 +675,8 @@ upstream for cached price history.
 | `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
 | `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
 | `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
-| `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. |
+| `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. BRK MIT; Coin Metrics community CC BY-NC is research-only (not fetched). |
+| `data/onchain/ingest.py` | Scheduled/CLI path (#1086): `ingest_bitview` → parquet under `data/onchain/bitview/` + optional `macro_series_observations` upsert (`source=bitview`). `frame_to_macro_rows` is HTTP-free. Workflow: `pipeline-digiquant-onchain.yml` (daily 22:40 UTC, persistent failure tracker). |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
 | `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
@@ -691,6 +694,19 @@ upstream for cached price history.
 | `sdca/nautilus_evaluator.py` | Production fitness: Nautilus fills → `dca_metrics`. pandas only at the BarDataWrangler boundary. |
 | `charts/sdca.py` | matplotlib diagnostic figures (equity vs hold, index+knees, indicator multiples, allocation step + fill dots). Allocation draws MTM allocated % only — not a cash line. Optional `matplotlib` extra. |
 | `sdca/btc_optimized_provenance.json` | Fit window, folds, objective, OOS vs-flat-DCA, sensitivity. Honest even when OOS is negative. |
+
+**Valuation tiers (#1086).** Two ladders sit beside the rail providers:
+
+- **Basic (any asset)** — `RollingZRiskModel` / `generic_valuation` (std-dev
+  bands / %-from-MA style). Always available from cached OHLCV.
+- **Enhanced (BTC)** — Bitview/BRK on-chain z (`mvrv_z` computed locally from
+  `mvrv`, plus `asopr` / `puell` / `rhodl`) via `OnChainValuationProvider`.
+  Scheduled ingest: `pipeline-digiquant-onchain.yml` → parquet +
+  `macro_series_observations` (`source=bitview`). Coverage map: BTC rich;
+  ETH/SOL none → `resolve_sdca_valuation_tier` returns basic. Sources /
+  licensing: see `docs/research/sdca-btc-onchain-valuation.md` (BRK MIT;
+  Coin Metrics community CC BY-NC research-only). **Not** enabled as
+  published composite votes yet — enable only after skip-missing exists.
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
 day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
@@ -742,9 +758,9 @@ research; do not scrape put/call or paid on-chain here.
    (±45d). Calibrate `SdcaOscillatorSpec` windows to its cycle (long-term,
    or medium-term if it persistently trends up).
 4. Allowlist extras: generic technicals (`weekly_rsi` / `weekly_macd` /
-   `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; later
-   on-chain SOPR/MVRV as #1086, equity put/call). Do not enable BTC plugins
-   on a second asset.
+   `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; on-chain
+   z via `OnChainValuationProvider` — research only until skip-missing;
+   equity put/call later). Do not enable BTC plugins on a second asset.
 5. Run Stage A (backtest keep/drop of extras, cycle overlap as diagnostic) → Stage B (walk-forward curve) → regularize.
    Trust the composite as a top/bottom indicator only when that historical
    backtest looks comfortable.
