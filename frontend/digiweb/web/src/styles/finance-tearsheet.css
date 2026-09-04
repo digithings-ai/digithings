@@ -123,6 +123,7 @@
   .ts-kpis-primary .ts-kpi-label { letter-spacing: 0.04em; }
   .ts-kpis-primary .ts-kpi-value { font-size: clamp(0.78rem, 2.8vw, 0.95rem); }
   .ts-tab-content .ts-chart { height: clamp(200px, 58vw, 360px); }
+  .ts-tab-content .ts-chart.ts-chart-sm { height: clamp(150px, 40vw, 220px); }
   .ts-svg .ts-axis { font-size: 9px; }
 }
 
@@ -178,6 +179,11 @@
 }
 
 .ts-tab-content .ts-chart { height: clamp(220px, 52vw, 440px); }
+/* Indicators-tab sub-panels pass height={INDICATOR_CHART_H} (260) to the SVG's
+   viewBox — the wrapper's actual CSS height must track that, or the viewBox
+   and rendered box disagree and every SVG length (axis font included) scales
+   up by the mismatch ratio. See tearsheet-view.tsx INDICATOR_CHART_H. */
+.ts-tab-content .ts-chart.ts-chart-sm { height: clamp(180px, 30vw, 260px); }
 .ts-chart-tip.is-flip-x { transform: translate(calc(-100% - 12px), calc(-100% - 8px)); }
 .ts-chart-tip.is-flip-y { transform: translate(12px, 12px); }
 .ts-chart-tip.is-flip-x.is-flip-y { transform: translate(calc(-100% - 12px), 12px); }

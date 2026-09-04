@@ -671,7 +671,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
               {dcaBook && hasRails ? (
                 <div>
                   <p className="ts-indicator-caption">valuation rails · log price with power-law bands</p>
-                  <div className="ts-chart">
+                  <div className="ts-chart ts-chart-sm">
                     <MultiTimeSeries
                       series={railsOverlay}
                       height={INDICATOR_CHART_H}
@@ -694,18 +694,20 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                       {ind.in_index ? ` · in index, weight ${ind.weight}` : " · unused extra, weight 0"}
                     </p>
                     {ind.points.length > 0 ? (
-                      <TimeSeries
-                        points={clipPoints(ind.points, data.period_start)}
-                        height={INDICATOR_CHART_H}
-                        scale="linear"
-                        tone="accent"
-                        fmt={(v) => fmtCompact(v)}
-                        view={chartView}
-                        onView={setViewFromChart}
-                        fullSpan={fullSpan}
-                        resetView={presetView}
-                        ariaLabel={`${ind.display_name} on the 0 to 100 risk scale`}
-                      />
+                      <div className="ts-chart ts-chart-sm">
+                        <TimeSeries
+                          points={clipPoints(ind.points, data.period_start)}
+                          height={INDICATOR_CHART_H}
+                          scale="linear"
+                          tone="accent"
+                          fmt={(v) => fmtCompact(v)}
+                          view={chartView}
+                          onView={setViewFromChart}
+                          fullSpan={fullSpan}
+                          resetView={presetView}
+                          ariaLabel={`${ind.display_name} on the 0 to 100 risk scale`}
+                        />
+                      </div>
                     ) : (
                       <p className="ts-panel-hint">no series (unused extra, weight 0)</p>
                     )}
@@ -739,7 +741,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
               ) : null}
               {dcaBook ? (
                 chartAllocated.length > 0 || chartCost.length > 0 ? (
-                  <div className="ts-chart">
+                  <div className="ts-chart ts-chart-sm">
                     <AllocatedVsCostBasisChart
                       allocated={chartAllocated}
                       costBasis={chartCost}
@@ -754,7 +756,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
                   </div>
                 ) : null
               ) : chartCost.length > 0 ? (
-                <div className="ts-chart">
+                <div className="ts-chart ts-chart-sm">
                   <MultiTimeSeries
                     series={[
                       ...(chartSpot.length
