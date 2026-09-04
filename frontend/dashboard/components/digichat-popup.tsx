@@ -81,8 +81,18 @@ export default function DigichatPopup({
     setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
   }, [open, config]);
 
-  useEffect(() => {
-    if (!open) setExpanded(false);
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    setExpanded(false);
+  }, []);
+
+  const togglePanel = useCallback(() => {
+    if (open) {
+      setOpen(false);
+      setExpanded(false);
+    } else {
+      setOpen(true);
+    }
   }, [open]);
 
   const sendPageContext = useCallback(() => {
@@ -126,11 +136,11 @@ export default function DigichatPopup({
         setExpanded(false);
         return;
       }
-      setOpen(false);
+      closePanel();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, expanded]);
+  }, [open, expanded, closePanel]);
 
   if (!config || !entitled) return null;
 
@@ -188,7 +198,7 @@ export default function DigichatPopup({
         aria-label={open ? 'Close digichat' : 'Open digichat'}
         aria-expanded={open}
         aria-controls="digichat-popup-panel"
-        onClick={() => setOpen((v) => !v)}
+        onClick={togglePanel}
         className={[
           'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
           'h-11 min-w-[10rem] cursor-pointer rounded-none border border-hair bg-surface',
