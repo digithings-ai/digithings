@@ -1,5 +1,5 @@
 /**
- * digichat popup embed for the digiquant dashboard (#3422).
+ * digichat popup embed for the digiquant dashboard (#3422 / #3581).
  *
  * Desk+ (plan “pro” in the issue = Desk / glass-box) get a bottom-right launcher
  * that iframes digichat `/embed?layout=embed` — same popup contract as digichat
@@ -41,12 +41,25 @@ export const DIGICHAT_THEME = 'digichat:theme';
 /** Keep in sync with digichat `DEFAULT_POPUP_PAGE_CONTEXT_MAX_CHARS`. */
 export const PAGE_CONTEXT_MAX_CHARS = 8_000;
 
+/**
+ * Sanitized HTML snapshot cap. Keep in sync with digichat
+ * `MAX_PAGE_CONTEXT_HTML_CHARS` — larger than text so structure survives.
+ */
+export const PAGE_CONTEXT_HTML_MAX_CHARS = 12_000;
+
+/** Launcher label matches digithings-web desktop CTA (`DtNav` / `.dc-nav-cta`). */
+export const DIGICHAT_LAUNCHER_LABEL = 'ask digichat';
+
+/** Open-state launcher label — same control toggles close / minimize. */
+export const DIGICHAT_LAUNCHER_CLOSE_LABEL = 'close';
+
 export type DigichatPopupTheme = 'light' | 'dark';
 
 export type DigichatPopupConfig = {
   origin: string;
   host: string;
   token?: string;
+  /** Always rectangular “ask digichat” chrome (#3581); `dot` kept for env back-compat. */
   mode: 'dot' | 'bar';
   pageContext: boolean;
   accent: string;
@@ -162,10 +175,12 @@ export function readDigichatPopupConfig(
   const host =
     env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST?.trim() || DEFAULT_DIGICHAT_EMBED_HOST;
   const token = env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN?.trim() || undefined;
+  // Default rectangular “ask digichat” chrome (#3581). Opt into legacy round
+  // launcher only with POPUP_MODE=dot.
   const mode =
-    env.NEXT_PUBLIC_DIGICHAT_POPUP_MODE?.trim().toLowerCase() === 'bar'
-      ? 'bar'
-      : 'dot';
+    env.NEXT_PUBLIC_DIGICHAT_POPUP_MODE?.trim().toLowerCase() === 'dot'
+      ? 'dot'
+      : 'bar';
   const pageContext = env.NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT !== '0';
   return {
     origin,
@@ -215,23 +230,83 @@ export function extractVisiblePageText(
   return (bodyText ?? '').replace(/\s+/g, ' ').trim().slice(0, maxChars);
 }
 
+/**
+ * Strip scripts/styles/handlers and truncate. Display as text in the embed
+ * preview — never re-hydrate as live DOM.
+ */
+export function sanitizePageHtml(
+  raw: string,
+  maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
+): string {
+  let s = raw
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1=$2#$2')
+    .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, '');
+  s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return s.slice(0, maxChars);
+}
+
+type PageHtmlDoc = {
+  querySelector(selectors: string): { cloneNode(deep?: boolean): unknown } | null;
+  body?: { cloneNode(deep?: boolean): unknown } | null;
+};
+
+/**
+ * Prefer `main` / `[role=main]`, else `body`. Drops the popup chrome so the
+ * model does not see its own launcher markup.
+ */
+export function extractPageHtml(
+  maxChars = PAGE_CONTEXT_HTML_MAX_CHARS,
+  doc: PageHtmlDoc | null | undefined =
+    typeof document !== 'undefined' ? document : null,
+): string {
+  if (!doc) return '';
+  const root =
+    doc.querySelector('main') ??
+    doc.querySelector('[role="main"]') ??
+    doc.body ??
+    null;
+  if (!root) return '';
+  const clone = root.cloneNode(true) as {
+    querySelectorAll?(sel: string): Iterable<{ remove(): void }>;
+    innerHTML?: string;
+  };
+  if (clone.querySelectorAll) {
+    for (const el of clone.querySelectorAll('[data-digichat-popup]')) {
+      el.remove();
+    }
+  }
+  return sanitizePageHtml(clone.innerHTML ?? '', maxChars);
+}
+
 export function buildPageContextMessage(
   text: string,
-  screenshotDataUrl?: string,
-  ts = Date.now(),
+  opts?: {
+    html?: string;
+    screenshotDataUrl?: string;
+    ts?: number;
+  },
 ): {
   type: typeof DIGICHAT_PAGE_CONTEXT;
   text: string;
   ts: number;
+  html?: string;
   screenshotDataUrl?: string;
 } {
+  const ts = opts?.ts ?? Date.now();
   const payload: {
     type: typeof DIGICHAT_PAGE_CONTEXT;
     text: string;
     ts: number;
+    html?: string;
     screenshotDataUrl?: string;
   } = { type: DIGICHAT_PAGE_CONTEXT, text, ts };
-  if (screenshotDataUrl) payload.screenshotDataUrl = screenshotDataUrl;
+  const html = opts?.html?.trim();
+  if (html) payload.html = html.slice(0, PAGE_CONTEXT_HTML_MAX_CHARS);
+  if (opts?.screenshotDataUrl) payload.screenshotDataUrl = opts.screenshotDataUrl;
   return payload;
 }
 
