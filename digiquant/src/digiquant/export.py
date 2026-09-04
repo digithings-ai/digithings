@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 from digiquant.models import ExportResult
-from digiquant.strategy_specs import _ALIAS_TO_CANONICAL
+from digiquant.strategy_aliases import resolve_strategy_name
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +37,7 @@ def _validate_export_dir(out_dir: Path) -> Path:
 
 
 def _canonical_strategy_name(strategy_name: str) -> str:
-    s = str(strategy_name).strip()
-    return _ALIAS_TO_CANONICAL.get(s, s)
+    return resolve_strategy_name(str(strategy_name).strip())
 
 
 def _write_nautilus_bundle_zip(
