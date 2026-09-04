@@ -208,7 +208,7 @@ export default function DigichatPopup({
         data-expanded={expanded ? '1' : '0'}
         className={[
           'pointer-events-auto fixed z-[2147483000] flex flex-col overflow-hidden',
-          'border border-hair bg-[#0a0e0c] shadow-[0_8px_32px_rgba(0,0,0,0.55)]',
+          'border border-hair bg-surface shadow-lg',
           open ? 'flex' : 'hidden',
           expanded
             ? 'inset-3 h-auto w-auto'
@@ -234,7 +234,7 @@ export default function DigichatPopup({
             title="digichat"
             src={iframeSrc}
             allow="clipboard-write"
-            className="min-h-0 w-full flex-1 border-0 bg-[#0a0e0c]"
+            className="min-h-0 w-full flex-1 border-0 bg-surface"
           />
         ) : null}
       </div>
@@ -253,12 +253,12 @@ export default function DigichatPopup({
         onBlur={() => setLauncherFocus(false)}
         className={[
           'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'flex h-11 items-center gap-2 rounded-none border-2 border-[#3dd6c4]',
-          'bg-[#0a0e0c] text-[#eceef0] shadow-[0_4px_20px_rgba(61,214,196,0.35)]',
+          'flex h-11 items-center gap-2 rounded-none border-2 border-accent',
+          'bg-surface text-ink shadow-lg ring-1 ring-accent/40',
           'cursor-pointer overflow-hidden',
           'transition-[width,padding,transform,box-shadow] duration-150 ease-out',
-          'hover:-translate-y-px hover:shadow-[0_6px_24px_rgba(61,214,196,0.5)]',
-          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3dd6c4]',
+          'hover:-translate-y-px hover:bg-accent/10 hover:ring-accent/70',
+          'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
           wide ? 'w-auto min-w-[11rem] px-3' : 'w-11 justify-center px-0',
         ].join(' ')}
       >
@@ -266,19 +266,19 @@ export default function DigichatPopup({
         {open ? (
           <span
             data-testid="digichat-launcher-label"
-            className="font-mono text-[0.78rem] tracking-tight text-[#3dd6c4]"
+            className="font-mono text-[0.78rem] tracking-tight text-accent"
           >
             {DIGICHAT_LAUNCHER_CLOSE_LABEL}
           </span>
         ) : typeActive ? (
           <span
             data-testid="digichat-launcher-label"
-            className="inline-flex min-w-[7.5rem] items-center font-mono text-[0.78rem] tracking-tight text-[#eceef0]"
+            className="inline-flex min-w-[7.5rem] items-center font-mono text-[0.78rem] tracking-tight text-ink"
           >
             {typed}
             <span
               aria-hidden="true"
-              className="ml-0.5 inline-block h-[0.9em] w-[0.45em] animate-pulse bg-[#3dd6c4]"
+              className="ml-0.5 inline-block h-[0.9em] w-[0.45em] animate-pulse bg-accent"
             />
           </span>
         ) : null}
