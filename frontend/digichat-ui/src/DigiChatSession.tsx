@@ -20,8 +20,13 @@ import {
   slashHelpText,
 } from "./slash-commands";
 import {
+  buildAnswerMailto,
   copyMarkdownWithFallback,
+  downloadHtml,
   downloadMarkdown,
+  downloadPlainText,
+  openMailtoWithFallback,
+  printTranscriptWithFallback,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
   type TranscriptTurn,
@@ -434,6 +439,13 @@ export function DigiChatSession({
           const isLastAssistant = m.role === "assistant" && i === lastAssistantIndex;
           const isLastUser = m.role === "user" && i === lastUserIndex;
           const isEditing = editingUserIndex === i;
+          const answerMarkdown =
+            m.role === "assistant"
+              ? serializeAssistantMarkdown(
+                  m.content,
+                  sources.map((h) => ({ title: h.title, path: h.path })),
+                )
+              : "";
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -468,29 +480,89 @@ export function DigiChatSession({
                     ) : null}
                     {/* Copy on page + embed: clipboard first; embed falls back to
                         .md download / digichat:copy postMessage / textarea (#3465).
-                        Regen only when the controller opts in (digigraph; #3466). */}
+                        Print / mailto / txt / html reuse the same serializers
+                        (#3510); print and mailto fall back to download when the
+                        embed blocks them. Regen only when the controller opts in
+                        (digigraph; #3466). */}
                     {!streaming && m.content ? (
                       <span className="dc-msg-actions">
                         <CopyButton
-                          text={serializeAssistantMarkdown(
-                            m.content,
-                            sources.map((h) => ({ title: h.title, path: h.path })),
-                          )}
+                          text={answerMarkdown}
                           className="dc-msg-copy"
                           ariaLabel="Copy answer as markdown"
                           filename="digichat-answer.md"
                         />
+                        <button
+                          type="button"
+                          className="dc-msg-copy"
+                          aria-label="Email answer"
+                          title={
+                            layout === "embed"
+                              ? "Downloads .md in embed (mail clients are often blocked in iframes)"
+                              : "Opens your mail client with the answer (truncated to fit); falls back to download"
+                          }
+                          onClick={() =>
+                            openMailtoWithFallback(buildAnswerMailto(answerMarkdown), {
+                              fallbackMarkdown: answerMarkdown,
+                              fallbackFilename: "digichat-answer.md",
+                              preferDownload: layout === "embed",
+                            })
+                          }
+                        >
+                          mail
+                        </button>
                         {i === messages.length - 1 && canExportThread ? (
-                          <button
-                            type="button"
-                            className="dc-msg-copy"
-                            aria-label="Download thread as markdown"
-                            onClick={() =>
-                              downloadMarkdown("digichat-thread.md", threadMarkdown)
-                            }
-                          >
-                            md
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="dc-msg-copy"
+                              aria-label="Download thread as markdown"
+                              onClick={() =>
+                                downloadMarkdown("digichat-thread.md", threadMarkdown)
+                              }
+                            >
+                              md
+                            </button>
+                            <button
+                              type="button"
+                              className="dc-msg-copy"
+                              aria-label="Download thread as text"
+                              onClick={() =>
+                                downloadPlainText("digichat-thread.txt", threadMarkdown)
+                              }
+                            >
+                              txt
+                            </button>
+                            <button
+                              type="button"
+                              className="dc-msg-copy"
+                              aria-label="Download thread as html"
+                              onClick={() =>
+                                downloadHtml("digichat-thread.html", threadMarkdown)
+                              }
+                            >
+                              html
+                            </button>
+                            <button
+                              type="button"
+                              className="dc-msg-copy"
+                              aria-label="Print transcript"
+                              title={
+                                layout === "embed"
+                                  ? "Downloads .md in embed (print is often blocked in iframes)"
+                                  : "Opens print preview (Save as PDF); falls back to download"
+                              }
+                              onClick={() =>
+                                printTranscriptWithFallback({
+                                  fallbackMarkdown: threadMarkdown,
+                                  fallbackFilename: "digichat-thread.md",
+                                  preferDownload: layout === "embed",
+                                })
+                              }
+                            >
+                              print
+                            </button>
+                          </>
                         ) : null}
                         {isLastAssistant && regenerate ? (
                           <button
