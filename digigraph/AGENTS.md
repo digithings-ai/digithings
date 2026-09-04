@@ -36,6 +36,7 @@ Before making any change to `digigraph/`:
 Beyond root `AGENTS.md`:
 
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
+- **Tool modules**: Register new tools from `orchestration/builtin.py`; put handlers in the matching `orchestration/*_tools.py` module (or add one). DigiSearch tool calls must use `vertical_orchestrator.digisearch_hub`, not ad-hoc HTTP shims.
 - **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
 - **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use digistore (`digistore.py`) for large data.
 - **Tool allowlist respected**: New tools must work correctly when `ToolContext.allowed_tool_names` is set to a subset. Never bypass the allowlist check.
