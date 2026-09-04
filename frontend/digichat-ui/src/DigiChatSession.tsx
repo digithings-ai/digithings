@@ -380,11 +380,16 @@ export function DigiChatSession({
                           type="button"
                           className="dc-msg-copy"
                           aria-label="Email answer"
-                          title="Opens your mail client with the answer (truncated to fit); falls back to download"
+                          title={
+                            layout === "embed"
+                              ? "Downloads .md in embed (mail clients are often blocked in iframes)"
+                              : "Opens your mail client with the answer (truncated to fit); falls back to download"
+                          }
                           onClick={() =>
                             openMailtoWithFallback(buildAnswerMailto(answerMarkdown), {
                               fallbackMarkdown: answerMarkdown,
                               fallbackFilename: "digichat-answer.md",
+                              preferDownload: layout === "embed",
                             })
                           }
                         >
@@ -426,11 +431,16 @@ export function DigiChatSession({
                               type="button"
                               className="dc-msg-copy"
                               aria-label="Print transcript"
-                              title="Opens print preview (Save as PDF); falls back to download"
+                              title={
+                                layout === "embed"
+                                  ? "Downloads .md in embed (print is often blocked in iframes)"
+                                  : "Opens print preview (Save as PDF); falls back to download"
+                              }
                               onClick={() =>
                                 printTranscriptWithFallback({
                                   fallbackMarkdown: threadMarkdown,
                                   fallbackFilename: "digichat-thread.md",
+                                  preferDownload: layout === "embed",
                                 })
                               }
                             >

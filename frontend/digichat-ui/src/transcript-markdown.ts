@@ -261,6 +261,17 @@ export function buildThreadMailto(markdown: string, opts?: { maxEncoded?: number
 
 export type MailtoOpenResult = "mailto" | "download";
 
+export type ExportFallbackOpts = {
+  fallbackMarkdown?: string;
+  fallbackFilename?: string;
+  /**
+   * When true (embed / sandboxed iframe), skip mailto/print and download
+   * immediately. Sandboxed embeds often expose `print` and allow `a.click()`
+   * without throwing, so a try/catch-only fallback would silently no-op.
+   */
+  preferDownload?: boolean;
+};
+
 /**
  * Open a `mailto:` URL; on blocked navigation fall back to a `.md` download
  * (same spirit as the #3465 clipboard fallback). Never throws when `document`
@@ -268,7 +279,7 @@ export type MailtoOpenResult = "mailto" | "download";
  */
 export function openMailtoWithFallback(
   mailtoUrl: string,
-  opts?: { fallbackMarkdown?: string; fallbackFilename?: string },
+  opts?: ExportFallbackOpts,
 ): MailtoOpenResult {
   const fallback = () => {
     if (opts?.fallbackMarkdown !== undefined && typeof document !== "undefined") {
@@ -279,7 +290,11 @@ export function openMailtoWithFallback(
       }
     }
   };
-  if (typeof document === "undefined") {
+  if (!mailtoUrl.startsWith("mailto:")) {
+    fallback();
+    return "download";
+  }
+  if (opts?.preferDownload || typeof document === "undefined") {
     fallback();
     return "download";
   }
@@ -304,10 +319,9 @@ export type PrintTranscriptResult = "print" | "download";
  * (no window, embed sandbox), fall back to a `.md` download so the action
  * is never a silent no-op.
  */
-export function printTranscriptWithFallback(opts?: {
-  fallbackMarkdown?: string;
-  fallbackFilename?: string;
-}): PrintTranscriptResult {
+export function printTranscriptWithFallback(
+  opts?: ExportFallbackOpts,
+): PrintTranscriptResult {
   const fallback = () => {
     if (opts?.fallbackMarkdown !== undefined && typeof document !== "undefined") {
       try {
@@ -317,6 +331,10 @@ export function printTranscriptWithFallback(opts?: {
       }
     }
   };
+  if (opts?.preferDownload) {
+    fallback();
+    return "download";
+  }
   if (typeof window !== "undefined" && typeof window.print === "function") {
     try {
       window.print();

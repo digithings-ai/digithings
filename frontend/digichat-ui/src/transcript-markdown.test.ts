@@ -224,6 +224,30 @@ describe("printTranscriptWithFallback / openMailtoWithFallback (#3510)", () => {
     expect(printTranscriptWithFallback()).toBe("download");
   });
 
+  it("preferDownload skips print even when window.print exists (embed)", () => {
+    const print = vi.fn();
+    const click = vi.fn();
+    const anchor = { href: "", download: "", rel: "", click, remove: vi.fn() };
+    vi.stubGlobal("window", { print });
+    vi.stubGlobal("document", {
+      createElement: () => anchor,
+      body: { appendChild: vi.fn() },
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: vi.fn(),
+    });
+    expect(
+      printTranscriptWithFallback({
+        preferDownload: true,
+        fallbackMarkdown: "# thread",
+        fallbackFilename: "digichat-thread.md",
+      }),
+    ).toBe("download");
+    expect(print).not.toHaveBeenCalled();
+    expect(click).toHaveBeenCalled();
+  });
+
   it("opens mailto via an anchor click without network", () => {
     const click = vi.fn();
     const anchor = { href: "", rel: "", click, remove: vi.fn() };
@@ -234,6 +258,50 @@ describe("printTranscriptWithFallback / openMailtoWithFallback (#3510)", () => {
     const url = buildMailtoUrl("digichat answer", "Hi");
     expect(openMailtoWithFallback(url)).toBe("mailto");
     expect(anchor.href).toBe(url);
+    expect(click).toHaveBeenCalled();
+  });
+
+  it("rejects non-mailto URLs and downloads fallback instead", () => {
+    const click = vi.fn();
+    const anchor = { href: "", download: "", rel: "", click, remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => anchor,
+      body: { appendChild: vi.fn() },
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: vi.fn(),
+    });
+    expect(
+      openMailtoWithFallback("https://evil.example/", {
+        fallbackMarkdown: "safe",
+        fallbackFilename: "digichat-answer.md",
+      }),
+    ).toBe("download");
+    expect(anchor.href).not.toBe("https://evil.example/");
+    expect(click).toHaveBeenCalled();
+  });
+
+  it("preferDownload skips mailto navigation (embed)", () => {
+    const click = vi.fn();
+    const anchor = { href: "", download: "", rel: "", click, remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => anchor,
+      body: { appendChild: vi.fn() },
+    });
+    vi.stubGlobal("URL", {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: vi.fn(),
+    });
+    const url = buildMailtoUrl("digichat answer", "Hi");
+    expect(
+      openMailtoWithFallback(url, {
+        preferDownload: true,
+        fallbackMarkdown: "Hi",
+        fallbackFilename: "digichat-answer.md",
+      }),
+    ).toBe("download");
+    expect(anchor.href).not.toBe(url);
     expect(click).toHaveBeenCalled();
   });
 });
