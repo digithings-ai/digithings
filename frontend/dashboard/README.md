@@ -219,21 +219,40 @@ secure WebSockets (`wss://*.supabase.co`).
 (`https://digithings.ai`, `digichat.digithings.ai`, loopback `:3005`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
 
-### digichat popup (Desk+ — #3422)
+### digichat popup (Desk+ — #3422 / #3581)
 
-Desk / Studio / Enterprise sessions see a bottom-right digichat launcher (Brief and
-Observer do not). The panel iframes digichat `/embed?layout=embed` with optional
-page-context (`digichat:page-context`) for the visible dashboard DOM — same contract
-as digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+Desk / Studio / Enterprise sessions see a bottom-right **ask digichat** rectangle
+launcher (Brief and Observer do not) — same casing as digithings-web’s desktop
+CTA. Click opens the embed panel; click again (label becomes **close**) dismisses
+it. The panel top-right **expand** / **collapse** toggles a near-fullscreen
+overlay; Escape collapses first, then closes.
+
+The panel iframes digichat `/embed?layout=embed` with page-context
+(`digichat:page-context`) for the visible dashboard DOM — sanitized **HTML**
+(preferred, ≤12k chars) plus visible text (≤8k). The embed shows a small
+“looking at this page” HTML preview; the model receives HTML+text via the existing
+prompt-prefix path (screenshot/vision multimodal deferred). Same contract as
+digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+
 Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
 plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in
 the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
 direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
 so Turbopack inlines them — passing whole `process.env` leaves the client empty
 and the launcher disappears after hydrate (#3561).
+Default launcher chrome is always the rectangular **ask digichat** control (#3581).
+`NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
+to a round ✦ launcher.
+
+**Local dogfood:** digichat on `http://127.0.0.1:3005`, dashboard on
+`http://127.0.0.1:4014/dashboard/` with `.env.local` pointing
+`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`, host `digiquant.io`,
+and the embed token matching digichat `DIGICHAT_EMBED_TENANTS`. Desk+ session
+required. Uses digichat’s default model path (`free_then_byok` / digigraph as
+configured on the tenant). See `.env.local.example`.
+
 Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
 BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
-See `.env.local.example`.
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
 `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the

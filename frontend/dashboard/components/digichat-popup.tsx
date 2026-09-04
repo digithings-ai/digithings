@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * Desk+ digichat popup (#3422) — bottom-right launcher + floating iframe panel.
+ * Desk+ digichat popup (#3422 / #3581) — bottom-right launcher + floating iframe.
  * Mirrors digichat `widget.js` (#3421) without loading an external script (CSP).
+ * Rectangular “ask digichat” chrome, expand/collapse, HTML page context.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +13,10 @@ import {
   buildPageContextMessage,
   buildThemeMessage,
   canUseDigichatPopup,
+  DIGICHAT_LAUNCHER_CLOSE_LABEL,
+  DIGICHAT_LAUNCHER_LABEL,
   DIGICHAT_READY,
+  extractPageHtml,
   extractVisiblePageText,
   readDigichatPopupConfig,
   readDocumentTheme,
@@ -47,6 +51,7 @@ export default function DigichatPopup({
 
   const entitled = canUseDigichatPopup(tier);
   const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const pageContextSentRef = useRef(false);
@@ -76,13 +81,31 @@ export default function DigichatPopup({
     setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
   }, [open, config]);
 
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    setExpanded(false);
+  }, []);
+
+  const togglePanel = useCallback(() => {
+    if (open) {
+      setOpen(false);
+      setExpanded(false);
+    } else {
+      setOpen(true);
+    }
+  }, [open]);
+
   const sendPageContext = useCallback(() => {
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const text = extractVisiblePageText();
+    const html = extractPageHtml();
     try {
-      win.postMessage(buildPageContextMessage(text), config.origin);
+      win.postMessage(
+        buildPageContextMessage(text, { html: html || undefined }),
+        config.origin,
+      );
       pageContextSentRef.current = true;
     } catch {
       /* allow retry on next ready */
@@ -108,15 +131,22 @@ export default function DigichatPopup({
   useEffect(() => {
     if (!open) return;
     function onKey(ev: KeyboardEvent) {
-      if (ev.key === 'Escape') setOpen(false);
+      if (ev.key !== 'Escape') return;
+      if (expanded) {
+        setExpanded(false);
+        return;
+      }
+      closePanel();
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [open, expanded, closePanel]);
 
   if (!config || !entitled) return null;
 
-  const mode = config.mode;
+  const launcherLabel = open
+    ? DIGICHAT_LAUNCHER_CLOSE_LABEL
+    : DIGICHAT_LAUNCHER_LABEL;
 
   return (
     <div
@@ -129,13 +159,27 @@ export default function DigichatPopup({
         role="dialog"
         aria-label="digichat"
         data-open={open ? '1' : '0'}
+        data-expanded={expanded ? '1' : '0'}
         className={[
-          'pointer-events-auto fixed right-5 bottom-[5.5rem] z-[2147483000]',
-          'h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-          'overflow-hidden bg-surface shadow-lg',
-          open ? 'block' : 'hidden',
+          'pointer-events-auto fixed z-[2147483000] flex flex-col overflow-hidden bg-surface shadow-lg',
+          open ? 'flex' : 'hidden',
+          expanded
+            ? 'inset-3 h-auto w-auto'
+            : 'right-5 bottom-[5.5rem] h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
         ].join(' ')}
       >
+        <div className="flex shrink-0 items-center justify-end gap-1 border-b border-hair px-2 py-1">
+          <button
+            type="button"
+            id="digichat-popup-expand"
+            aria-label={expanded ? 'Collapse digichat' : 'Expand digichat'}
+            aria-pressed={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="cursor-pointer border-0 bg-transparent px-2 py-1 font-mono text-[0.72rem] text-ink-mute hover:text-ink"
+          >
+            {expanded ? 'collapse' : 'expand'}
+          </button>
+        </div>
         {iframeSrc ? (
           <iframe
             ref={iframeRef}
@@ -143,28 +187,27 @@ export default function DigichatPopup({
             title="digichat"
             src={iframeSrc}
             allow="clipboard-write"
-            className="h-full w-full border-0 bg-transparent"
+            className="min-h-0 w-full flex-1 border-0 bg-transparent"
           />
         ) : null}
       </div>
       <button
         id="digichat-popup-launcher"
         type="button"
-        data-mode={mode}
+        data-mode="bar"
         aria-label={open ? 'Close digichat' : 'Open digichat'}
         aria-expanded={open}
         aria-controls="digichat-popup-panel"
-        onClick={() => setOpen((v) => !v)}
+        onClick={togglePanel}
         className={[
           'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'cursor-pointer border-0 bg-accent text-on-accent shadow-lg',
-          'transition-[transform,opacity] duration-150 ease-out hover:-translate-y-px',
-          mode === 'bar'
-            ? 'h-11 min-w-[10rem] rounded-[10px] px-4 text-sm font-semibold'
-            : 'h-14 w-14 rounded-full text-[22px] leading-[56px]',
+          'h-11 min-w-[10rem] cursor-pointer rounded-none border border-hair bg-surface',
+          'px-4 text-sm font-medium text-ink shadow-lg',
+          'transition-[transform,opacity,border-color,background-color] duration-150 ease-out',
+          'hover:-translate-y-px hover:border-ink-mute hover:bg-ink/[0.04]',
         ].join(' ')}
       >
-        {mode === 'bar' ? 'Ask digichat' : '✦'}
+        {launcherLabel}
       </button>
     </div>
   );
