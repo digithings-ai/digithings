@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: scheduled maintenance"
 
 # Weekly maintenance sweep: security scan, quality check, stale branch cleanup,
@@ -5,8 +6,6 @@ name: "Pipeline: scheduled maintenance"
 # trivial housekeeping directly.
 
 on:
-  schedule:
-    - cron: '0 08 * * 1'   # Every Monday 08:00 UTC
   workflow_dispatch:         # Manual trigger anytime
 
 permissions:

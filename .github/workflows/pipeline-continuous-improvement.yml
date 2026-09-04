@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: continuous improvement"
 
 # Weekly Claude-synthesized review of the past 7 days of activity. Surfaces
@@ -13,8 +14,6 @@ name: "Pipeline: continuous improvement"
 # Budget: 1 Claude invocation/week — negligible quota burn on Pro/Max.
 
 on:
-  schedule:
-    - cron: '0 22 * * 0'  # Every Sunday 22:00 UTC
   workflow_dispatch:       # Manual trigger anytime
 
 permissions:

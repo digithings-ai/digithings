@@ -38,6 +38,9 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 
 ## Long-lived branches
 
+
+**Org production clocks** live in the Cloudflare Worker `digithings-cron` (`frontend/digithings-cron`); the default branch stays `develop`.
+
 | Branch | Purpose | Protection |
 |--------|---------|------------|
 | `main` | What is actually deployed / released. | PR required (**0** approvals), no force-push, no deletion. One required status check: `Every commit reaching main was reviewed`. Linear history is **not** enforced. |

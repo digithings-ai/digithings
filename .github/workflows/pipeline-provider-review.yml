@@ -1,4 +1,5 @@
 # .github/workflows/pipeline-provider-review.yml
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: provider review"
 
 # Weekly automated LLM provider review.
@@ -11,8 +12,6 @@ name: "Pipeline: provider review"
 # Budget: 1 Claude invocation/week.
 
 on:
-  schedule:
-    - cron: '0 0 * * 0'   # Every Sunday 00:00 UTC
   workflow_dispatch:        # Manual trigger anytime
 
 permissions:
