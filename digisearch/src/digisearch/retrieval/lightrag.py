@@ -252,7 +252,7 @@ class LightRAGBackend:
         if hasattr(rag, "adelete_by_doc_id"):
             await rag.adelete_by_doc_id(document_ids)
             return
-# score:allow notimplementederror stub — LightRAG clients without adelete_by_doc_id
+        # score:allow notimplementederror stub — LightRAG clients without adelete_by_doc_id
         raise NotImplementedError(
             "LightRAG client has no adelete_by_doc_id; cannot honor RetrievalBackend.delete"
         )

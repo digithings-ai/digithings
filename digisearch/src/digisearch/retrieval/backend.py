@@ -10,7 +10,11 @@ HTTP ``/query`` router) — this protocol is document-oriented and async.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable  # score:allow untyped any — Document.metadata / RetrievalResult.metadata
+from typing import (  # score:allow untyped any — Document.metadata / RetrievalResult.metadata
+    Any,
+    Protocol,
+    runtime_checkable,
+)
 
 from digisearch.core.models import Document
 
