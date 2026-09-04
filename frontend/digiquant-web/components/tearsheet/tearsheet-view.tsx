@@ -25,6 +25,7 @@ import {
   ReturnsMatrix,
   RiskBandStrip,
   AllocationStepChart,
+  AllocatedVsCostBasisChart,
   SegToggle,
   TerminalMark,
   TimeSeries,
@@ -170,7 +171,9 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
   const [viewOverride, setViewOverride] = useState<ViewWindow | null>(null);
-  const [lookback, setLookback] = useState<LookbackPreset>(slug.includes("sdca") ? "all" : "1y");
+  const [lookback, setLookback] = useState<LookbackPreset>(() =>
+    (dataProp ? isDcaTearsheet(dataProp) : slug.includes("sdca")) ? "all" : "1y",
+  );
   const [mode, setMode] = useState<TearsheetMode>("charts");
   const [chartTabPick, setChartTab] = useState<ChartTab | null>(null);
   const [tableTab, setTableTab] = useState<TableTab>("stats");
@@ -286,7 +289,17 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
   const scale: ChartScale = scaleOverride ?? (dcaBook ? "log" : "linear");
   const chartTab =
     chartTabPick ??
-    (dcaBook && hasAccum ? "accumulation" : hasRails ? "rails" : hasPrice ? "price" : "equity");
+    (dcaBook
+      ? hasAccum
+        ? "accumulation"
+        : hasIndicators || hasRails
+          ? "indicators"
+          : "equity"
+      : hasRails
+        ? "rails"
+        : hasPrice
+          ? "price"
+          : "equity");
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, data?.label);
@@ -319,10 +332,10 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
   const chartTabOptions = useMemo(() => {
     const opts: { value: ChartTab; label: string }[] = [];
     if (dcaBook && hasAccum) opts.push({ value: "accumulation", label: "Fills" });
-    if (hasPrice) opts.push({ value: "price", label: "Price" });
-    if (hasRails) opts.push({ value: "rails", label: "Rails" });
+    if (hasPrice && !dcaBook) opts.push({ value: "price", label: "Price" });
+    if (hasRails && !dcaBook) opts.push({ value: "rails", label: "Rails" });
     if (hasRisk) opts.push({ value: "risk", label: dcaBook ? "Risk" : "Index" });
-    if (hasIndicators) opts.push({ value: "indicators", label: "Indicators" });
+    if (hasIndicators || (dcaBook && hasRails)) opts.push({ value: "indicators", label: "Indicators" });
     if (hasAccum && !dcaBook) opts.push({ value: "accumulation", label: "Allocation" });
     opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
     if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
@@ -651,9 +664,27 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
               </div>
             </div>
           ) : null}
-          {hasIndicators ? (
+          {hasIndicators || (dcaBook && hasRails) ? (
             <div className="ts-tab-pane" hidden={chartTab !== "indicators"}>
               <PrintHeading>Underlying indicators</PrintHeading>
+              {dcaBook && hasRails ? (
+                <div>
+                  <p className="ts-indicator-caption">valuation rails · log price with power-law bands</p>
+                  <div className="ts-chart">
+                    <MultiTimeSeries
+                      series={railsOverlay}
+                      height={CHART_H}
+                      scale={chartScale === "log" ? "log" : "linear"}
+                      fmt={fmtCompact}
+                      view={chartView}
+                      onView={setViewFromChart}
+                      fullSpan={fullSpan}
+                      resetView={presetView}
+                      ariaLabel={`${data.symbol} log price with valuation rails`}
+                    />
+                  </div>
+                </div>
+              ) : null}
               <div className="ts-indicator-grid">
                 {chartIndicators.map((ind) => (
                   <div key={ind.name} className={ind.in_index ? undefined : "ts-indicator-unused"}>
@@ -684,23 +715,44 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
           ) : null}
           {hasAccum ? (
             <div className="ts-tab-pane" hidden={chartTab !== "accumulation"}>
-              <PrintHeading>Fills</PrintHeading>
+              <PrintHeading>{dcaBook ? "Fills" : "Allocation"}</PrintHeading>
               {chartAllocated.length > 0 ? (
                 <div className="ts-chart">
                   <AllocationStepChart
                     allocated={chartAllocated}
                     markers={chartFills}
                     priceOverlay={chartSpot}
+                    markerAxis={dcaBook ? "price" : "allocated"}
                     height={CHART_H}
                     view={chartView}
                     onView={setViewFromChart}
                     fullSpan={fullSpan}
                     resetView={presetView}
-                    ariaLabel="Percent allocated (mark-to-market), step chart, with fill dots sized by fraction of book moved"
+                    ariaLabel={
+                      dcaBook
+                        ? "Price with fill dots at their actual fill price, sized by fraction of book moved"
+                        : "Percent allocated (mark-to-market), step chart, with fill dots sized by fraction of book moved"
+                    }
                   />
                 </div>
               ) : null}
-              {chartCost.length > 0 ? (
+              {dcaBook ? (
+                chartAllocated.length > 0 || chartCost.length > 0 ? (
+                  <div className="ts-chart">
+                    <AllocatedVsCostBasisChart
+                      allocated={chartAllocated}
+                      costBasis={chartCost}
+                      costScale={chartScale === "log" ? "log" : "linear"}
+                      height={Math.round(CHART_H * 0.55)}
+                      view={chartView}
+                      onView={setViewFromChart}
+                      fullSpan={fullSpan}
+                      resetView={presetView}
+                      ariaLabel="Percent allocated versus cost basis, independent axes"
+                    />
+                  </div>
+                ) : null
+              ) : chartCost.length > 0 ? (
                 <div className="ts-chart">
                   <MultiTimeSeries
                     series={[

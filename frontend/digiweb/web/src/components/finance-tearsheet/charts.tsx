@@ -2250,6 +2250,15 @@ export interface AllocationStepChartProps {
   resetView?: ViewWindow;
   interactive?: boolean;
   ariaLabel: string;
+  /**
+   * Which series the fill dots (and left axis) sit on. `"allocated"` (default)
+   * draws the % allocated step line with dots on it and price as a faint
+   * overlay — the original behaviour. `"price"` drops the allocated line
+   * entirely and draws price as the primary series (left axis, log-scale
+   * ticks) with dots sitting on the price line itself, so buy/sell fills read
+   * against the price they actually filled at.
+   */
+  markerAxis?: "allocated" | "price";
 }
 
 function stepPath(
@@ -2283,6 +2292,7 @@ function AllocationStepChartBody({
   resetView,
   interactive = true,
   ariaLabel,
+  markerAxis = "allocated",
 }: AllocationStepChartProps & { height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -2299,7 +2309,8 @@ function AllocationStepChartBody({
   const n = allocated.length;
   const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const yAt = (val: number) => pad.top + plotH - (val / 100) * plotH;
-  const allocPath = stepPath(allocated, xAt, yAt);
+  const priceIsPrimary = markerAxis === "price";
+  const allocPath = priceIsPrimary ? "" : stepPath(allocated, xAt, yAt);
   const dateIx = new Map(allocated.map((p, i) => [p.t.slice(0, 10), i]));
 
   const priceMap = new Map(pricePts.map((p) => [p.t, p.v]));
@@ -2322,6 +2333,10 @@ function AllocationStepChartBody({
     priceLine += `${drawingPrice ? "L" : "M"}${xAt(i).toFixed(1)} ${yPrice(v).toFixed(1)} `;
     drawingPrice = true;
   }
+  const priceTicks =
+    priceIsPrimary && priceVals.length > 0
+      ? logTicks(priceScale.inv(priceDom.lo), priceScale.inv(priceDom.hi), 4)
+      : [];
 
   const ticks = [0, 25, 50, 75, 100];
   const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
@@ -2347,12 +2362,18 @@ function AllocationStepChartBody({
         return;
       }
       const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 80);
+      const priceAtPt = priceMap.get(pt.t);
+      const value = priceIsPrimary
+        ? priceAtPt != null
+          ? fmtCompact(priceAtPt)
+          : `${pt.v.toFixed(1)}% allocated`
+        : `${pt.v.toFixed(1)}% allocated`;
       setHover({
         ...pos,
-        content: <SeriesTipContent date={pt.t} value={`${pt.v.toFixed(1)}% allocated`} />,
+        content: <SeriesTipContent date={pt.t} value={value} />,
       });
     },
-    [allocated, height, n, pad.left, pad.right, plotBottom, plotTop, vbW],
+    [allocated, height, n, pad.left, pad.right, plotBottom, plotTop, priceIsPrimary, priceMap, vbW],
   );
 
   return (
@@ -2370,32 +2391,45 @@ function AllocationStepChartBody({
             <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
           </clipPath>
         </defs>
-        {ticks.map((tv) => (
-          <g key={`g${tv}`}>
-            <line x1={pad.left} y1={yAt(tv)} x2={vbW - pad.right} y2={yAt(tv)} className="ts-grid" />
-            <text x={pad.left - 8} y={axisLabelY(yAt(tv), plotTop, plotBottom)} textAnchor="end" className="ts-axis">
-              {tv}%
-            </text>
-          </g>
-        ))}
+        {priceIsPrimary
+          ? priceTicks.map((tv) => (
+              <g key={`g${tv}`}>
+                <line x1={pad.left} y1={yPrice(tv)} x2={vbW - pad.right} y2={yPrice(tv)} className="ts-grid" />
+                <text x={pad.left - 8} y={axisLabelY(yPrice(tv), plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+                  {fmtCompact(tv)}
+                </text>
+              </g>
+            ))
+          : ticks.map((tv) => (
+              <g key={`g${tv}`}>
+                <line x1={pad.left} y1={yAt(tv)} x2={vbW - pad.right} y2={yAt(tv)} className="ts-grid" />
+                <text x={pad.left - 8} y={axisLabelY(yAt(tv), plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+                  {tv}%
+                </text>
+              </g>
+            ))}
         {priceLine ? (
           <g clipPath={`url(#${clipId})`} data-chart-layer="price-overlay">
-            <path d={priceLine} fill="none" className="ts-line ts-price-faint" />
+            <path d={priceLine} fill="none" className={priceIsPrimary ? "ts-line ts-tone-mute" : "ts-line ts-price-faint"} />
           </g>
         ) : null}
-        <g clipPath={`url(#${clipId})`}>
-          <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
-        </g>
+        {allocPath ? (
+          <g clipPath={`url(#${clipId})`}>
+            <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
+          </g>
+        ) : null}
         <g clipPath={`url(#${clipId})`} data-chart-layer="fill-markers">
           {markers.map((m, i) => {
             const idx = dateIx.get(m.t.slice(0, 10));
             if (idx == null) return null;
             const r = 3 + 10 * Math.sqrt(Math.min(m.book_frac, 0.25));
+            const priceAtIdx = priceMap.get(allocated[idx].t);
+            const cy = priceIsPrimary && priceAtIdx != null ? yPrice(priceAtIdx) : yAt(allocated[idx].v);
             return (
               <circle
                 key={`${m.side}-${m.t}-${i}`}
                 cx={xAt(idx)}
-                cy={yAt(allocated[idx].v)}
+                cy={cy}
                 r={r}
                 className={m.side === "buy" ? "ts-fill-dot ts-fill-dot-buy" : "ts-fill-dot ts-fill-dot-sell"}
                 data-side={m.side}
@@ -2408,6 +2442,188 @@ function AllocationStepChartBody({
           return (
             <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
               {(allocated[i].t || "").slice(0, 10)}
+            </text>
+          );
+        })}
+      </Svg>
+    </ChartHoverShell>
+  );
+}
+
+export interface AllocatedVsCostBasisChartProps {
+  /** % allocated (mark-to-market), left axis 0-100. */
+  allocated: TearsheetSeriesPoint[];
+  /** Cost basis in quote currency, right axis. */
+  costBasis: TearsheetSeriesPoint[];
+  costScale?: "linear" | "log";
+  height?: number;
+  view?: ViewWindow;
+  onView?: (v: ViewWindow) => void;
+  fullSpan?: [string, string];
+  resetView?: ViewWindow;
+  interactive?: boolean;
+  ariaLabel: string;
+}
+
+/** % allocated (left, 0-100) and cost basis (right, own scale) as two
+ *  independent lines sharing one time axis — the allocation curve reads on
+ *  its own, decoupled from any fill markers. */
+export function AllocatedVsCostBasisChart(props: AllocatedVsCostBasisChartProps) {
+  const { allocated, costBasis, height = 320 } = props;
+  if ((!allocated || allocated.length === 0) && (!costBasis || costBasis.length === 0)) {
+    return <Empty height={height} msg="no data" />;
+  }
+  return <AllocatedVsCostBasisChartBody {...props} height={height} />;
+}
+
+function AllocatedVsCostBasisChartBody({
+  allocated: allAllocated,
+  costBasis: allCostBasis,
+  costScale = "linear",
+  height,
+  view,
+  onView,
+  fullSpan,
+  resetView,
+  interactive = true,
+  ariaLabel,
+}: AllocatedVsCostBasisChartProps & { height: number }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<ChartHoverTip | null>(null);
+  const { vbW, pad: layoutPad } = useChartLayout(wrapRef, height, false);
+  const pad = { ...layoutPad, right: Math.max(layoutPad.right, 64) };
+  const clipId = `ts-alloc-cost-clip-${useId().replace(/:/g, "")}`;
+  const allocated = sliceByView(allAllocated, view, fullSpan);
+  const costBasis = sliceByView(allCostBasis, view, fullSpan);
+  const control = viewHandlers(view, onView, pad, vbW, resetView);
+  const plotW = vbW - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+  const plotTop = pad.top;
+  const plotBottom = pad.top + plotH;
+
+  const dates = allocated.length >= costBasis.length ? allocated : costBasis;
+  const n = dates.length;
+  const xAt = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAlloc = (val: number) => pad.top + plotH - (val / 100) * plotH;
+  const dateIx = new Map(dates.map((p, i) => [p.t, i]));
+  let allocPath = "";
+  let startedAlloc = false;
+  for (const p of allocated) {
+    const idx = dateIx.get(p.t);
+    if (idx == null) continue;
+    const x = xAt(idx).toFixed(1);
+    const y = yAlloc(p.v).toFixed(1);
+    allocPath += startedAlloc ? `H${x} V${y} ` : `M${x} ${y} `;
+    startedAlloc = true;
+  }
+
+  const costMap = new Map(costBasis.map((p) => [p.t, p.v]));
+  const costVals = costBasis.map((p) => p.v).filter((v): v is number => v != null && v > 0);
+  const costScaleFn = makeScale(costScale === "log" ? "log" : "linear");
+  const costDom =
+    costVals.length > 0 ? dataDomain(costVals, costScaleFn, { padRatio: 0.08 }) : { lo: 0, hi: 1 };
+  const yCost = (val: number) =>
+    pad.top + plotH - ((costScaleFn.f(val) - costDom.lo) / (costDom.hi - costDom.lo)) * plotH;
+  let costPath = "";
+  let drawingCost = false;
+  for (const p of costBasis) {
+    const idx = dateIx.get(p.t);
+    if (idx == null || p.v == null || (costScale === "log" && !(p.v > 0))) {
+      drawingCost = false;
+      continue;
+    }
+    costPath += `${drawingCost ? "L" : "M"}${xAt(idx).toFixed(1)} ${yCost(p.v).toFixed(1)} `;
+    drawingCost = true;
+  }
+  const costTicks =
+    costVals.length > 0
+      ? costScale === "log"
+        ? logTicks(costScaleFn.inv(costDom.lo), costScaleFn.inv(costDom.hi), 4)
+        : [costDom.lo, (costDom.lo + costDom.hi) / 2, costDom.hi].map((v) => costScaleFn.inv(v))
+      : [];
+
+  const allocTicks = [0, 25, 50, 75, 100];
+  const idxs = n === 0 ? [] : [0, Math.floor((n - 1) / 2), n - 1];
+
+  const onChartMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (e.buttons !== 0) {
+        setHover(null);
+        return;
+      }
+      const wrap = wrapRef.current;
+      if (!wrap || n === 0) return;
+      const { x: vbX, y: vbY } = viewBoxPoint(e.clientX, e.clientY, e.currentTarget, vbW, height);
+      if (vbX < pad.left || vbX > vbW - pad.right || vbY < plotTop || vbY > plotBottom) {
+        setHover(null);
+        return;
+      }
+      const frac = plotFraction(e.clientX, e.currentTarget, pad.left, pad.right, vbW);
+      const idx = n === 1 ? 0 : Math.round(frac * (n - 1));
+      const pt = dates[idx];
+      if (!pt) {
+        setHover(null);
+        return;
+      }
+      const cost = costMap.get(pt.t);
+      const pos = positionHoverTip(e.clientX, e.clientY, wrap, 200, 80);
+      setHover({
+        ...pos,
+        content: <SeriesTipContent date={pt.t} value={cost != null ? fmtCompact(cost) : ""} />,
+      });
+    },
+    [costMap, dates, height, n, pad.left, pad.right, plotBottom, plotTop, vbW],
+  );
+
+  return (
+    <ChartHoverShell hover={interactive ? hover : null} wrapRef={wrapRef}>
+      <Svg
+        height={height}
+        vbW={vbW}
+        control={control}
+        onMouseMove={interactive ? onChartMouseMove : undefined}
+        onMouseLeave={interactive ? () => setHover(null) : undefined}
+        ariaLabel={ariaLabel}
+      >
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={pad.left} y={plotTop} width={plotW} height={plotH} />
+          </clipPath>
+        </defs>
+        {allocTicks.map((tv) => (
+          <g key={`ga${tv}`}>
+            <line x1={pad.left} y1={yAlloc(tv)} x2={vbW - pad.right} y2={yAlloc(tv)} className="ts-grid" />
+            <text x={pad.left - 8} y={axisLabelY(yAlloc(tv), plotTop, plotBottom)} textAnchor="end" className="ts-axis">
+              {tv}%
+            </text>
+          </g>
+        ))}
+        {costTicks.map((tv, i) => (
+          <text
+            key={`gc${i}`}
+            x={vbW - pad.right + 8}
+            y={axisLabelY(yCost(tv), plotTop, plotBottom)}
+            textAnchor="start"
+            className="ts-axis ts-axis-mute"
+          >
+            {fmtCompact(tv)}
+          </text>
+        ))}
+        {costPath ? (
+          <g clipPath={`url(#${clipId})`} data-chart-layer="cost-basis">
+            <path d={costPath} fill="none" className="ts-line ts-line-dashed ts-tone-mute" />
+          </g>
+        ) : null}
+        {allocPath ? (
+          <g clipPath={`url(#${clipId})`}>
+            <path d={allocPath} fill="none" className="ts-line ts-tone-accent" data-chart-layer="alloc-step" />
+          </g>
+        ) : null}
+        {idxs.map((i, k) => {
+          const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+          return (
+            <text key={`x${k}`} x={xAt(i)} y={height - 10} textAnchor={anchor} className="ts-axis">
+              {(dates[i].t || "").slice(0, 10)}
             </text>
           );
         })}
