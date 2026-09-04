@@ -126,9 +126,12 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
-| `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
+| `tearsheet.py` | Plotly HTML tearsheet orchestration (`create_tearsheet`); helpers split in #1185 |
+| `tearsheet_extract.py` | Equity/fill/drawdown extraction from Nautilus reports (#1185) |
+| `tearsheet_stats.py` | Categorized / full / risk HTML stats tables (#1185) |
+| `tearsheet_page.py` | Tearsheet HTML page layout + CSS/JS (#1185) |
 | `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
-| `sweep.py` | Grid sweep loop (not VectorBT fast path) |
+| `strategy_aliases.py` | Canonical alias → registry-name map + `resolve_param_spec_name` (SDCA `btc_sdca` → `sdca` for optimize specs) (#1185) |
 | `cli/` | `digiquant backtest | optimize | export | strategy | prices | policy-replay` CLI |
 
 ---
@@ -231,6 +234,24 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 Human decision write (`record_policy_governance_decision`) is **not** an MCP tool —
 only the DigiAuth HTTP boundary may record decisions. There is no
 promote/activate/set-live/rollback-live tool on any surface.
+
+#### MCP vs HTTP-only (#1185)
+
+MCP tools above are the discoverable agent surface. They wrap `service.py` (and
+SDCA helpers) — the same functions HTTP uses for the pipeline twin routes.
+**HTTP-only** (no MCP twin; do not invent a tool for these without a new issue):
+
+| HTTP route | Why not MCP |
+|---|---|
+| `GET /health`, `GET /healthz` | Liveness probes |
+| `GET /check_drift` | ADDM operator diagnostic |
+| `POST /backtest/start`, `GET /backtest/{id}/progress`, `GET /backtest/{id}/result` | Streaming / long-poll job API |
+| `POST /v1/dashboard/policy_governance_decisions` | DigiAuth human decision write |
+| Frozen `/v1/olympus/policy_*` aliases | Legacy dual-route; not canonical |
+
+Orchestrator HTTP (`/v1/orchestrator_tools`, `/v1/orchestrator_invoke`) exposes the
+same tool *schemas* as MCP for digigraph hub dispatch — not a second hidden
+pipeline.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
@@ -490,7 +511,24 @@ digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One e
 
 ### Strategy Registry
 
-`strategies/registry.py` maintains two module-level dicts: `_REGISTRY` (name → `StrategySpec`) and `_ALIASES` (alias → canonical name). Registration is done at import time in each strategy module via `register(...)`. The registry does not persist between processes; optimization workers (when `ProcessPoolExecutor` is used) import the strategy modules fresh in each subprocess.
+Static aliases live in `strategy_aliases.py` (`STRATEGY_ALIASES`: alias →
+registry canonical; `PARAM_SPEC_NAMES`: registry canonical →
+`STRATEGY_PARAM_SPECS` key when they differ — today only `btc_sdca` → `sdca`).
+`resolve_strategy_name` / `resolve_param_spec_name` are the public resolvers
+used by CLI, optimize, export, and tests. Do not add a second private alias
+dict.
+
+`strategies/registry.py` maintains `_REGISTRY` (name → `StrategySpec`) and
+runtime `_ALIASES` from `register(..., aliases=...)`. `resolve_strategy_name`
+prefers the static map, then runtime aliases. Registration is done at import
+time in each strategy module. The registry does not persist between processes;
+optimization workers (when `ProcessPoolExecutor` is used) import the strategy
+modules fresh in each subprocess.
+
+**Extension pattern:** add the alias to `STRATEGY_ALIASES` (so optimize/export
+work without Nautilus), pass the same names in `register(..., aliases=...)`
+for `list_strategies`, and if the optimize param-spec key differs from the
+registry name, add a `PARAM_SPEC_NAMES` entry.
 
 `StrategySpec` holds:
 - `strategy_cls`: the `Strategy` subclass

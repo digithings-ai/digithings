@@ -60,7 +60,8 @@ thread state. On mount it merges `localStorage` threads with a server `GET
 /api/conversations` call, **hydrates the auto-selected remote thread** via
 `GET /api/conversations/[id]` before mounting the composer (when local cache is
 missing or older than the server summary `updatedAt`), then renders a shadcn
-Sidebar with conversation list, New chat button, rename/delete overflow menus, and
+Sidebar with conversation list, New chat button, title search filter, date
+buckets (Today / Yesterday / Last 7 days / Older), rename/delete overflow menus, and
 the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
 (`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
 refuses to flush a remote thread that is still `hydrated: false`, and the API
