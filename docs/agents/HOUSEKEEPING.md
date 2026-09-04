@@ -74,7 +74,7 @@ the broader delegation framework.
 | Agent PR auto-merge | `agent-pr-automerge.yml` | on `automerge-agent` label + green CI | Squash auto-merge for agent PRs clearing the path-based safety gate (`verify_agent_automerge_pr.py`) |
 | Agent PR finalizer | `agent-pr-finalizer.yml` | daily 07:00 UTC + manual | Backstop for agent PRs; triage, fix dispatch, automerge when eligible |
 | PR quality gate | **removed** | — | A `/simplify` + `/review` checkbox gate on `task/*` merges existed as `pr-quality-gate.yml` from #131 (`abc7e541`) until #378 (`5abc4f41`) replaced it with the finish-task skill. Nothing enforces it in CI today. Listed rather than deleted so the gap is visible instead of assumed-covered. |
-| PR issue linkage | removed 2026-08 per ADR-0024 (was `check-linkage` in `ci-pr-hygiene.yml`) | — | Convention only: `task/<N>-slug` branch or `Fixes #N` in PR body; nothing enforces it |
+| PR issue linkage | removed 2026-08 per `docs/adr/0024-drop-pr-linkage-enforcement.md` (was `check-linkage` in `ci-pr-hygiene.yml`) | — | Convention only: `task/<N>-slug` branch or `Fixes #N` in PR body; nothing enforces it |
 
 ## Escalation paths
 
