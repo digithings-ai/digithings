@@ -122,7 +122,17 @@
       .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
       .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
       .replace(/<!--[\s\S]*?-->/g, "")
-      .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, "")
+      .replace(/<input\b[^>]*>/gi, function (tag) {
+        return tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+      })
+      .replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi, function (tag) {
+        return tag.replace(/>[\s\S]*?</, "><");
+      })
+      .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "$1")
+      .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, "$1=$2#$2")
+      .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, "$1=#")
       .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, "");
     return html.replace(/\n{3,}/g, "\n\n").trim().slice(0, maxHtmlChars);
   }

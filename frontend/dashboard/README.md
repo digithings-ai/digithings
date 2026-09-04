@@ -240,8 +240,9 @@ the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
 direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
 so Turbopack inlines them — passing whole `process.env` leaves the client empty
 and the launcher disappears after hydrate (#3561).
-Default launcher mode is rectangular `bar`; set `NEXT_PUBLIC_DIGICHAT_POPUP_MODE=dot`
-only for the legacy round ✦ control.
+Default launcher chrome is always the rectangular **ask digichat** control (#3581).
+`NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
+to a round ✦ launcher.
 
 **Local dogfood:** digichat on `http://127.0.0.1:3005`, dashboard on
 `http://127.0.0.1:4014/dashboard/` with `.env.local` pointing

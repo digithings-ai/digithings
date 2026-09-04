@@ -232,7 +232,8 @@ export function extractVisiblePageText(
 
 /**
  * Strip scripts/styles/handlers and truncate. Display as text in the embed
- * preview — never re-hydrate as live DOM.
+ * preview — never re-hydrate as live DOM. Also drops hidden/password controls
+ * and input values so HTML context matches the “already visible” text rule.
  */
 export function sanitizePageHtml(
   raw: string,
@@ -242,8 +243,20 @@ export function sanitizePageHtml(
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\son\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    // hidden / password fields are not “visible text”
+    .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, '')
+    .replace(/<input\b[^>]*>/gi, (tag) =>
+      tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, ''),
+    )
+    .replace(
+      /<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,
+      (tag) => tag.replace(/>[\s\S]*?</, '><'),
+    )
+    // handlers may appear after whitespace or `/` (`<svg/onload=…>`)
+    .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '$1')
     .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, '$1=$2#$2')
+    .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, '$1=#')
     .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, '');
   s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   return s.slice(0, maxChars);
@@ -277,6 +290,16 @@ export function extractPageHtml(
   if (clone.querySelectorAll) {
     for (const el of clone.querySelectorAll('[data-digichat-popup]')) {
       el.remove();
+    }
+    for (const el of clone.querySelectorAll(
+      'input[type="hidden"], input[type="password"], input[type=hidden], input[type=password]',
+    )) {
+      el.remove();
+    }
+    for (const el of clone.querySelectorAll('input, textarea')) {
+      const input = el as { removeAttribute?(n: string): void; textContent?: string | null };
+      input.removeAttribute?.('value');
+      if ('textContent' in input) input.textContent = '';
     }
   }
   return sanitizePageHtml(clone.innerHTML ?? '', maxChars);

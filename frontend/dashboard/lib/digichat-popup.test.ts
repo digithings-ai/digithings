@@ -181,14 +181,25 @@ describe('page context + theme helpers', () => {
     );
   });
 
-  it('sanitizes page HTML and strips scripts/handlers', () => {
+  it('sanitizes page HTML and strips scripts/handlers/hidden values', () => {
     const dirty =
-      '<main><script>alert(1)</script><p onclick="x()">Hi</p><style>.x{}</style></main>';
+      '<main><script>alert(1)</script><p onclick="x()">Hi</p>' +
+      '<input type="hidden" name="t" value="csrf-live">' +
+      '<input type="password" value="secret">' +
+      '<input type="text" value="typed">' +
+      '<svg/onload=alert(1)></svg>' +
+      '<style>.x{}</style></main>';
     const clean = sanitizePageHtml(dirty);
     expect(clean).toContain('<p>Hi</p>');
     expect(clean).not.toContain('script');
     expect(clean).not.toContain('onclick');
     expect(clean).not.toContain('style');
+    expect(clean).not.toContain('csrf-live');
+    expect(clean).not.toContain('secret');
+    expect(clean).not.toContain('type="hidden"');
+    expect(clean).not.toContain('type="password"');
+    expect(clean).not.toContain('value="typed"');
+    expect(clean).not.toContain('onload');
   });
 
   it('caps HTML length', () => {

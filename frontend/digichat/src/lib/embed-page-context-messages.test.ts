@@ -74,13 +74,18 @@ describe("embed-page-context-messages", () => {
     ).toBe("a b");
   });
 
-  it("sanitizes HTML before accept", () => {
+  it('sanitizes HTML before accept and drops hidden/password values', () => {
     const clean = sanitizePageHtml(
-      '<div onclick="x()"><script>bad()</script><p>ok</p></div>',
+      '<div onclick="x()"><script>bad()</script>' +
+        '<input type="hidden" value="csrf">' +
+        '<input type="text" value="seen">' +
+        '<p>ok</p></div>',
     );
     expect(clean).toContain("<p>ok</p>");
     expect(clean).not.toContain("script");
     expect(clean).not.toContain("onclick");
+    expect(clean).not.toContain("csrf");
+    expect(clean).not.toContain('value="seen"');
   });
 
   it("formats prompt with HTML preferred over text-only, without inlining screenshot bytes", () => {
