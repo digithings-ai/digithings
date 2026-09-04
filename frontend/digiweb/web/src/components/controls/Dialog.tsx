@@ -4,7 +4,8 @@
  * Dialog; this file only skins it. Sibling of Sheet (which wraps the same
  * primitive as a side panel): same part vocabulary (Trigger/Close/Portal/
  * Overlay/Content/Header/Footer/Title/Description), one new prop —
- * `tone="danger"` tints the title for confirm/delete flows.
+ * `tone="danger"` tints the title for confirm/delete flows (footer actions
+ * keep their own dress — style a danger primary with Button danger).
  *
  * Unlike the compat-skinned controls, Dialog wears the canon dress directly
  * (there is no digichat dialog look to reproduce): radius 0, hairline,
@@ -16,6 +17,8 @@
  */
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
+
+import { cx, cxBase } from "./cx";
 
 function XIcon({ className }: { className?: string }) {
   return (
@@ -52,10 +55,12 @@ export function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
 }
 
 export function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) {
+  // Compat alias: Base UI names this part Backdrop; Overlay preserves the
+  // digichat ui/* API. cxBase keeps a function-form className working.
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
-      className={className ? `ctl-dialog-overlay ${className}` : "ctl-dialog-overlay"}
+      className={cxBase("ctl-dialog-overlay", className)}
       {...props}
     />
   );
@@ -80,10 +85,10 @@ export function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         data-tone={tone}
-        className={className ? `ctl-dialog-popup ctl-pop ${className}` : "ctl-dialog-popup ctl-pop"}
+        className={cxBase("ctl-dialog-popup ctl-pop", className)}
         {...props}
       >
-        <div className="ctl-dialog-card" data-tone={tone} role="presentation">
+        <div className="ctl-dialog-card" data-tone={tone}>
           {children}
           {showCloseButton && (
             <DialogPrimitive.Close
@@ -104,7 +109,7 @@ export function DialogHeader({ className, ...props }: React.ComponentProps<"div"
   return (
     <div
       data-slot="dialog-header"
-      className={className ? `ctl-dialog-header ${className}` : "ctl-dialog-header"}
+      className={cx("ctl-dialog-header", className)}
       {...props}
     />
   );
@@ -114,7 +119,7 @@ export function DialogFooter({ className, ...props }: React.ComponentProps<"div"
   return (
     <div
       data-slot="dialog-footer"
-      className={className ? `ctl-dialog-footer ${className}` : "ctl-dialog-footer"}
+      className={cx("ctl-dialog-footer", className)}
       {...props}
     />
   );
@@ -124,7 +129,7 @@ export function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={className ? `ctl-dialog-title ${className}` : "ctl-dialog-title"}
+      className={cxBase("ctl-dialog-title", className)}
       {...props}
     />
   );
@@ -134,7 +139,7 @@ export function DialogDescription({ className, ...props }: DialogPrimitive.Descr
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={className ? `ctl-dialog-description ${className}` : "ctl-dialog-description"}
+      className={cxBase("ctl-dialog-description", className)}
       {...props}
     />
   );

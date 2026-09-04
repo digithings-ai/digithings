@@ -24,6 +24,16 @@ type ControlProps = {
   "aria-invalid"?: boolean | string;
 };
 
+export type FieldProps = {
+  label: ReactNode;
+  hint?: ReactNode;
+  error?: ReactNode;
+  htmlFor?: string;
+  required?: boolean;
+  className?: string;
+  children: ReactNode;
+};
+
 export function Field({
   label,
   hint,
@@ -32,28 +42,28 @@ export function Field({
   required = false,
   className,
   children,
-}: {
-  label: ReactNode;
-  hint?: ReactNode;
-  error?: ReactNode;
-  htmlFor?: string;
-  required?: boolean;
-  className?: string;
-  children: ReactNode;
-}) {
+}: FieldProps) {
   const autoId = useId();
-  const controlId = htmlFor ?? `${autoId}-control`;
+  // Resolve the control id FIRST: a child with its own id wins, and the
+  // label follows it — never the synthetic id.
+  const childId = isValidElement<ControlProps>(children) ? children.props.id : undefined;
+  const controlId = htmlFor ?? childId ?? `${autoId}-control`;
   const hintId = `${autoId}-hint`;
   const errorId = `${autoId}-error`;
-  const describedBy = [error ? errorId : null, hint && !error ? hintId : null]
+  const describedBy = [
+    isValidElement<ControlProps>(children) ? children.props["aria-describedby"] : null,
+    error ? errorId : null,
+    hint && !error ? hintId : null,
+  ]
     .filter(Boolean)
     .join(" ");
 
   const control = isValidElement<ControlProps>(children)
     ? cloneElement(children as ReactElement<ControlProps>, {
-        id: (children as ReactElement<ControlProps>).props.id ?? controlId,
+        id: childId ?? controlId,
         ...(describedBy ? { "aria-describedby": describedBy } : null),
         ...(error ? { "aria-invalid": true } : null),
+        ...(required ? { "aria-required": true } : null),
       })
     : children;
 
@@ -62,9 +72,12 @@ export function Field({
       <Label htmlFor={controlId}>
         {label}
         {required ? (
-          <span aria-hidden="true" className="ctl-field-required">
-            {" *"}
-          </span>
+          <>
+            <span aria-hidden="true" className="ctl-field-required">
+              {" *"}
+            </span>
+            <span className="ctl-sr"> (required)</span>
+          </>
         ) : null}
       </Label>
       {control}

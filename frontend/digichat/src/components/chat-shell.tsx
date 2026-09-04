@@ -94,6 +94,10 @@ export function ChatShell({
   const [threadQuery, setThreadQuery] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  // Tracks whether the active rename gesture already resolved (Enter/Escape)
+  // so the input's onBlur — which also fires on unmount — doesn't commit
+  // after a cancel or double-commit after Enter.
+  const renameHandledRef = useRef(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -234,6 +238,7 @@ export function ChatShell({
       }
       setActiveId(id);
       setByokMode(false);
+      setRenamingId(null);
     },
     [threads],
   );
@@ -257,6 +262,7 @@ export function ChatShell({
     });
     setActiveId(id);
     setByokMode(false);
+    setRenamingId(null);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -291,6 +297,7 @@ export function ChatShell({
         });
         return next;
       });
+      setRenamingId(null);
     },
     [serverPersistence, userId],
   );
@@ -309,6 +316,22 @@ export function ChatShell({
       scheduleServerSave(id);
     },
     [userId, scheduleServerSave],
+  );
+
+  const cancelRename = useCallback(() => {
+    renameHandledRef.current = true;
+    setRenamingId(null);
+  }, []);
+  const commitRename = useCallback(
+    (id: string, currentTitle: string, draft: string) => {
+      renameHandledRef.current = true;
+      const next = draft.trim();
+      // Dirty check: equal/empty drafts close without a write (no reorder,
+      // no PUT for a no-op).
+      if (next && next !== currentTitle) renameThread(id, next);
+      setRenamingId(null);
+    },
+    [renameThread],
   );
 
   const clearActiveThread = useCallback(() => {
@@ -470,7 +493,11 @@ export function ChatShell({
                             <input
                               className="dc-sidebar-rename"
                               value={renameDraft}
-                              autoFocus
+                              ref={(el) => {
+                                // No autoFocus: it scroll-jumps the sidebar.
+                                // Focus without scrolling once mounted.
+                                if (el && renamingId === t.id) el.focus({ preventScroll: true });
+                              }}
                               maxLength={120}
                               aria-label="Rename chat"
                               onClick={(e) => e.stopPropagation()}
@@ -478,19 +505,18 @@ export function ChatShell({
                                 e.stopPropagation();
                                 if (e.key === "Enter") {
                                   e.preventDefault();
-                                  renameThread(t.id, renameDraft);
-                                  setRenamingId(null);
+                                  commitRename(t.id, t.title, renameDraft);
                                 } else if (e.key === "Escape") {
                                   e.preventDefault();
-                                  setRenamingId(null);
+                                  cancelRename();
                                 }
                               }}
                               onChange={(e) => setRenameDraft(e.target.value)}
                               onBlur={() => {
-                                if (renamingId === t.id) {
-                                  renameThread(t.id, renameDraft);
-                                  setRenamingId(null);
-                                }
+                                // Blur after Enter/Escape already resolved, or a
+                                // no-op draft: close without writing.
+                                if (renameHandledRef.current) return;
+                                commitRename(t.id, t.title, renameDraft);
                               }}
                             />
                           ) : (
@@ -510,6 +536,7 @@ export function ChatShell({
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
                               onClick={() => {
+                                renameHandledRef.current = false;
                                 setRenamingId(t.id);
                                 setRenameDraft(t.title);
                               }}

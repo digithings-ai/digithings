@@ -16,9 +16,16 @@ export function StrategyLibraryLive() {
 
   useEffect(() => {
     let alive = true;
-    void fetchStrategyIndex().then((all) => {
-      if (alive) setStrategies(all);
-    });
+    void fetchStrategyIndex()
+      .then((all) => {
+        if (alive) setStrategies(all);
+      })
+      .catch(() => {
+        // A throw must not stick on perpetual loading: fall through to the
+        // honest-empty state (fetchStrategyIndex already returns [] for
+        // known no-data cases; this covers aborts and network failures).
+        if (alive) setStrategies([]);
+      });
     return () => {
       alive = false;
     };

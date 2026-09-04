@@ -98,8 +98,17 @@ export {
 } from "./DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./TagsInput";
 export { SearchBar, type SearchBarProps } from "./SearchBar";
-export { Field } from "./Field";
-export { Checkbox, RadioGroup, Radio, Switch } from "./Selection";
+export { Field, type FieldProps } from "./Field";
+export {
+  Checkbox,
+  RadioGroup,
+  Radio,
+  Switch,
+  type CheckboxProps,
+  type RadioGroupProps,
+  type RadioProps,
+  type SwitchProps,
+} from "./Selection";
 export {
   Select,
   SelectTrigger,
@@ -108,5 +117,8 @@ export {
   SelectItem,
   SelectItemIndicator,
   SelectSeparator,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectPopupProps,
 } from "./Select";
 export { Slider, sliderFill, type SliderProps } from "./Slider";

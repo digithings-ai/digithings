@@ -40,6 +40,8 @@ export function buildMailtoHref(email: string, subject?: string): string {
 const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
 
 const emptySubscribe = () => () => {};
+const getMountedSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 export function ContactMailto({
   email,
@@ -68,9 +70,21 @@ export function ContactMailto({
   // useSyncExternalStore, not setState-in-effect.
   const mounted = useSyncExternalStore(
     emptySubscribe,
-    () => true,
-    () => false,
+    getMountedSnapshot,
+    getServerSnapshot,
   );
+
+  if (
+    process.env.NODE_ENV !== "production" &&
+    showAddress &&
+    children == null
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "ContactMailto with showAddress and no children renders an empty, " +
+        "unlabeled link until JS runs — pass fallback children on static pages.",
+    );
+  }
 
   const readyHref = mounted ? buildMailtoHref(email, subject) : null;
   const addressText = mounted && showAddress ? email : null;

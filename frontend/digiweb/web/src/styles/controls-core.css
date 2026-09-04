@@ -1825,6 +1825,21 @@
     min-width: 0;
   }
 
+  /* Screen-reader-only (required) marker. Deliberately NOT Tailwind's
+     `.sr-only`: that utility only exists in an app whose own sources use
+     it (see .tm-sr) — shared components carry their own. */
+  .ctl-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .ctl-field-required {
     color: var(--ink-soft);
   }
@@ -1869,11 +1884,6 @@
     transition: border-color 0.15s var(--ease), background-color 0.15s var(--ease);
   }
 
-  .ctl-check[data-checked] {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
   /* the indicator mounts only when checked — the glyph lives in ::after */
   .ctl-check-indicator::after {
     content: "✓";
@@ -1883,16 +1893,6 @@
     font-size: 0.62rem;
     line-height: 1;
     color: var(--on-accent);
-  }
-
-  .ctl-check:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-
-  .ctl-check[data-disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .ctl-radio-group {
@@ -1917,26 +1917,12 @@
     transition: border-color 0.15s var(--ease);
   }
 
-  .ctl-radio[data-checked] {
-    border-color: var(--accent);
-  }
-
   /* the indicator mounts only when checked */
   .ctl-radio-dot {
     position: absolute;
     inset: 3px;
     border-radius: 999px;
     background: var(--accent);
-  }
-
-  .ctl-radio:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-
-  .ctl-radio[data-disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .ctl-switch {
@@ -1954,11 +1940,6 @@
     transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
   }
 
-  .ctl-switch[data-checked] {
-    background: var(--accent-weak);
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-  }
-
   .ctl-switch-knob {
     position: absolute;
     top: 2px;
@@ -1970,21 +1951,6 @@
     background: var(--ink-mute);
     transition: transform 0.2s var(--ease), background-color 0.2s var(--ease);
   }
-
-  .ctl-switch[data-checked] .ctl-switch-knob {
-    transform: translateX(14px);
-    background: var(--accent);
-  }
-
-  .ctl-switch:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
-
-  .ctl-switch[data-disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 }
 
 
@@ -1993,6 +1959,7 @@
    (surface, hair ring, soft shadow) with the shared .ctl-pop travel. */
 @layer components {
   .ctl-select {
+    font: inherit;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
@@ -2015,17 +1982,6 @@
     color: var(--ink-mute);
   }
 
-  .ctl-select:focus-visible {
-    outline: none;
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
-  }
-
-  .ctl-select[data-disabled] {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
   .ctl-select-value {
     flex: 1;
     min-width: 0;
@@ -2033,10 +1989,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .ctl-select-value[data-placeholder] {
-    color: var(--ink-mute);
   }
 
   .ctl-select-positioner {
@@ -2068,15 +2020,6 @@
     color: var(--ink-soft);
     cursor: default;
     outline: none;
-  }
-
-  .ctl-select-item[data-highlighted] {
-    background: color-mix(in srgb, var(--ink) 6%, transparent);
-    color: var(--ink);
-  }
-
-  .ctl-select-item[data-selected] {
-    color: var(--accent);
   }
 
   .ctl-select-check {
@@ -2210,12 +2153,6 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-
-  .ctl-table[data-density="compact"] .ctl-table-th,
-  .ctl-table[data-density="compact"] .ctl-table-td {
-    padding-top: 0.32rem;
-    padding-bottom: 0.32rem;
-  }
 }
 
 /* row wash is state, not default — unlayered so it keeps beating utilities */
@@ -2253,10 +2190,6 @@
     text-decoration: none;
   }
 
-  .ctl-crumbs-link:hover {
-    color: var(--ink);
-  }
-
   .ctl-crumbs-current {
     color: var(--ink);
   }
@@ -2290,22 +2223,11 @@
     cursor: pointer;
   }
 
-  .ctl-pagination-item:hover,
-  .ctl-pagination-step:hover:not(:disabled) {
-    color: var(--ink);
-    border-color: var(--hair-strong);
-  }
-
   .ctl-pagination-item.is-current {
     background: var(--ink);
     border-color: var(--ink);
     color: var(--bg);
     font-weight: 600;
-    cursor: default;
-  }
-
-  .ctl-pagination-step:disabled {
-    opacity: 0.4;
     cursor: default;
   }
 
@@ -2316,6 +2238,115 @@
 }
 
 
+
+/* ── states (unlayered: must beat call-site utilities) ── */
+
+  .ctl-check[data-checked] {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .ctl-check:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-check[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-radio[data-checked] {
+    border-color: var(--accent);
+  }
+
+  .ctl-radio:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-radio[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-switch[data-checked] {
+    background: var(--accent-weak);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+  }
+
+  .ctl-switch[data-checked] .ctl-switch-knob {
+    transform: translateX(14px);
+    background: var(--accent);
+  }
+
+  .ctl-switch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .ctl-switch[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ctl-select:focus-visible {
+    outline: none;
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  }
+
+  .ctl-select[data-disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .ctl-select-value[data-placeholder] {
+    color: var(--ink-mute);
+  }
+
+  .ctl-select-item[data-highlighted] {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    color: var(--ink);
+  }
+
+  .ctl-select-item[data-selected] {
+    color: var(--accent);
+  }
+
+  .ctl-table[data-density="compact"] .ctl-table-th,
+  .ctl-table[data-density="compact"] .ctl-table-td {
+    padding-top: 0.32rem;
+    padding-bottom: 0.32rem;
+  }
+
+  .ctl-crumbs-link:hover {
+    color: var(--ink);
+  }
+
+  .ctl-pagination-item:hover,
+  .ctl-pagination-step:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--hair-strong);
+  }
+
+  .ctl-pagination-step:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+/* F7: universal focus ring on wayfinding controls */
+.ctl-crumbs-link:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.ctl-pagination-item:focus-visible,
+.ctl-pagination-step:focus-visible {
+  outline: none;
+  border-color: var(--hair-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 /* ── reduced motion ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

@@ -115,8 +115,9 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
           return (
             <ChatThinking
               key={i}
-              label={reasoningLive ? "Thinking…" : "Reasoning"}
+              label="Reasoning"
               live={reasoningLive}
+              defaultOpen={reasoningLive}
             >
               <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
                 {part.text}
@@ -140,18 +141,17 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
           const label = toolLabel(part);
           const runState = "state" in part ? (part as { state?: string }).state : undefined;
+          // Conservative mapping: only a completed output reads as success.
+          // Anything not yet known-good (streaming input, available args,
+          // unknown states) reads as running, never as a green check.
+          const status =
+            runState === "output-error" || runState === "output-denied"
+              ? "error"
+              : runState === "output-available"
+                ? "ok"
+                : "running";
           return (
-            <ChatToolCall
-              key={i}
-              name={label}
-              status={
-                runState === "output-error"
-                  ? "error"
-                  : runState === "input-streaming"
-                    ? "running"
-                    : "ok"
-              }
-            >
+            <ChatToolCall key={i} name={label} status={status}>
               <pre className="mt-2 max-h-56 overflow-auto rounded-none border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                 {JSON.stringify(part, null, 2)}
               </pre>

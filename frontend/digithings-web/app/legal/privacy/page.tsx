@@ -157,13 +157,14 @@ export default function PrivacyPage() {
               <div className="mt-[1.2rem] grid gap-[1rem] text-[1rem] leading-[1.75] text-ink-soft">
                 <p>
                   To ask what data we hold about you, request deletion of data we control, or raise
-                  another privacy question, email{" "}
+                  another privacy question,{" "}
                   <ContactMailto email={DT_CONTACT_EMAIL}
                     className="text-accent [text-underline-offset:2px] hover:text-ink"
                     subject="digithings%20privacy%20request"
                     showAddress
+                    ariaLabel="Email us about privacy"
                   >
-                    us
+                    email us
                   </ContactMailto>
                   . We may need enough information to verify and act on the request.
                 </p>

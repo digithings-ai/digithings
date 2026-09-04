@@ -65,7 +65,9 @@ export function toChartTime(iso: string): Time {
 
 /** Token reads off the host element, with SSR-safe fallbacks mirroring the
  *  dark theme in @digithings/design/tokens.css (the sanctioned cssVar
- *  fallback pattern — see scripts/check_frontend_canon.py). Pass `null`
+ *  fallback pattern — see scripts/check_frontend_canon.py). Fallbacks track
+ *  tokens.css:161,166,175,182-183; the light theme intentionally renders
+ *  from the dark snapshot until the client re-reads. Pass `null`
  *  (or call on the server) to get the fallback palette verbatim. */
 export function readFinancePalette(host: HTMLElement | null): FinanceChartPalette {
   const cs = host && typeof window !== "undefined" ? getComputedStyle(host) : null;
@@ -73,8 +75,8 @@ export function readFinancePalette(host: HTMLElement | null): FinanceChartPalett
     cs?.getPropertyValue(name).trim() || fallback;
   return {
     ink: cssVar("--ink", "#ECEEF0"),
-    inkMute: cssVar("--ink-mute", "#8A9097"),
-    hair: cssVar("--hair", "rgba(255,255,255,0.1)"),
+    inkMute: cssVar("--ink-mute", "#7D8389"),
+    hair: cssVar("--hair", "rgba(255,255,255,0.09)"),
     accent: cssVar("--accent", "#3dd6c4"),
     up: cssVar("--up", "#3DD6C4"),
     down: cssVar("--down", "#E5533E"),

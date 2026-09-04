@@ -555,11 +555,6 @@
     transition: opacity 0.15s ease;
   }
 
-  .ctl-dialog-overlay[data-starting-style],
-  .ctl-dialog-overlay[data-ending-style] {
-    opacity: 0;
-  }
-
   .ctl-dialog-popup {
     position: fixed;
     inset: 0;
@@ -588,10 +583,6 @@
     color: var(--ink);
     margin: 0;
     padding-right: 2rem;
-  }
-
-  .ctl-dialog-card[data-tone="danger"] .ctl-dialog-title {
-    color: var(--danger);
   }
 
   .ctl-dialog-description {
@@ -631,16 +622,33 @@
     padding: 0;
   }
 
-  .ctl-dialog-x:hover {
-    color: var(--ink);
-  }
-
   .ctl-dialog-x svg {
     width: 1rem;
     height: 1rem;
   }
 }
 
+
+/* ── states (unlayered: must beat call-site utilities) ── */
+
+  .ctl-dialog-overlay[data-starting-style],
+  .ctl-dialog-overlay[data-ending-style] {
+    opacity: 0;
+  }
+
+  .ctl-dialog-card[data-tone="danger"] .ctl-dialog-title {
+    color: var(--danger);
+  }
+
+  .ctl-dialog-x:hover {
+    color: var(--ink);
+  }
+
+.ctl-dialog-x:focus-visible {
+  outline: none;
+  color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 /* ── reduced motion: no travel, instant states ───────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .ctl-pop[data-open],

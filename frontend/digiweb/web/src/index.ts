@@ -208,8 +208,19 @@ export {
 } from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
-export { Field } from "./components/controls/Field";
-export { Checkbox, RadioGroup, Radio, Switch } from "./components/controls/Selection";
+// Newer controls import by file rather than the family barrel above; both
+// barrels export the same names, direct file imports skip one hop.
+export { Field, type FieldProps } from "./components/controls/Field";
+export {
+  Checkbox,
+  RadioGroup,
+  Radio,
+  Switch,
+  type CheckboxProps,
+  type RadioGroupProps,
+  type RadioProps,
+  type SwitchProps,
+} from "./components/controls/Selection";
 export {
   Select,
   SelectTrigger,
@@ -218,6 +229,9 @@ export {
   SelectItem,
   SelectItemIndicator,
   SelectSeparator,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectPopupProps,
 } from "./components/controls/Select";
 export { Slider, sliderFill, type SliderProps } from "./components/controls/Slider";
 

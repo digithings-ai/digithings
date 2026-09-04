@@ -16,11 +16,18 @@ import { Radio as RadioPrimitive } from "@base-ui/react/radio";
 import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 
-export function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
+import { cxBase } from "./cx";
+
+export type CheckboxProps = CheckboxPrimitive.Root.Props;
+export type RadioGroupProps = RadioGroupPrimitive.Props;
+export type RadioProps = RadioPrimitive.Root.Props;
+export type SwitchProps = SwitchPrimitive.Root.Props;
+
+export function Checkbox({ className, ...props }: CheckboxProps) {
   return (
     <CheckboxPrimitive.Root
       data-slot="checkbox"
-      className={className ? `ctl-check ${className}` : "ctl-check"}
+      className={cxBase("ctl-check", className)}
       {...props}
     >
       <CheckboxPrimitive.Indicator
@@ -31,21 +38,21 @@ export function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) 
   );
 }
 
-export function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
+export function RadioGroup({ className, ...props }: RadioGroupProps) {
   return (
     <RadioGroupPrimitive
       data-slot="radio-group"
-      className={className ? `ctl-radio-group ${className}` : "ctl-radio-group"}
+      className={cxBase("ctl-radio-group", className)}
       {...props}
     />
   );
 }
 
-export function Radio({ className, ...props }: RadioPrimitive.Root.Props) {
+export function Radio({ className, ...props }: RadioProps) {
   return (
     <RadioPrimitive.Root
       data-slot="radio"
-      className={className ? `ctl-radio ${className}` : "ctl-radio"}
+      className={cxBase("ctl-radio", className)}
       {...props}
     >
       <RadioPrimitive.Indicator data-slot="radio-indicator" className="ctl-radio-dot" />
@@ -53,11 +60,11 @@ export function Radio({ className, ...props }: RadioPrimitive.Root.Props) {
   );
 }
 
-export function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
+export function Switch({ className, ...props }: SwitchProps) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
-      className={className ? `ctl-switch ${className}` : "ctl-switch"}
+      className={cxBase("ctl-switch", className)}
       {...props}
     >
       <SwitchPrimitive.Thumb data-slot="switch-thumb" className="ctl-switch-knob" />

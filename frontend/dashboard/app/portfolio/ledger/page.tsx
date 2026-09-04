@@ -54,22 +54,25 @@ function LedgerBody() {
   if (loading) return <PageSkeleton />;
   if (error || !data) {
     return (
-      <div className={`${SUBPAGE_MAX} py-12`}>
-        <EmptyState
-          variant="error"
-          className="mx-auto max-w-md"
-          title="Ledger is temporarily unavailable"
-          body={error || 'Failed to load'}
-          action={
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
-            >
-              Retry
-            </button>
-          }
-        />
+      <div className="flex min-h-full flex-col">
+        <PortfolioSectionNav active="ledger" />
+        <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+          <EmptyState
+            variant="error"
+            className="mx-auto max-w-md"
+            title="Ledger is temporarily unavailable"
+            body={error || 'Failed to load'}
+            action={
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+              >
+                Retry
+              </button>
+            }
+          />
+        </div>
       </div>
     );
   }

@@ -8,10 +8,14 @@
  *
  * Compose: Select > (SelectTrigger > SelectValue) + SelectPopup > SelectItem
  * (each with SelectItemText; picked rows also take SelectItemIndicator).
- * `placeholder` renders dim until a value is picked.
+ * `placeholder` renders dim until a value is picked. SelectPopup takes
+ * `positionerProps` for anchor placement; SelectTrigger takes
+ * `showChevron={false}` when the caller supplies its own icon.
  */
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import type { ReactNode } from "react";
+
+import { cxBase } from "./cx";
 
 function ChevronDown({ className }: { className?: string }) {
   return (
@@ -30,6 +34,18 @@ function ChevronDown({ className }: { className?: string }) {
   );
 }
 
+export type SelectProps<Value, Multiple extends boolean | undefined = false> =
+  SelectPrimitive.Root.Props<Value, Multiple>;
+export type SelectTriggerProps = SelectPrimitive.Trigger.Props & {
+  showChevron?: boolean;
+};
+export type SelectPopupProps = SelectPrimitive.Popup.Props & {
+  positionerProps?: Omit<
+    React.ComponentProps<typeof SelectPrimitive.Positioner>,
+    "children"
+  >;
+};
+
 export function Select<Value, Multiple extends boolean | undefined = false>({
   ...props
 }: SelectPrimitive.Root.Props<Value, Multiple>) {
@@ -38,17 +54,18 @@ export function Select<Value, Multiple extends boolean | undefined = false>({
 
 export function SelectTrigger({
   className,
+  showChevron = true,
   children,
   ...props
-}: SelectPrimitive.Trigger.Props) {
+}: SelectTriggerProps) {
   return (
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
-      className={className ? `ctl-select ${className}` : "ctl-select"}
+      className={cxBase("ctl-select", className)}
       {...props}
     >
       {children}
-      <ChevronDown />
+      {showChevron ? <ChevronDown /> : null}
     </SelectPrimitive.Trigger>
   );
 }
@@ -57,18 +74,26 @@ export function SelectValue({ className, ...props }: SelectPrimitive.Value.Props
   return (
     <SelectPrimitive.Value
       data-slot="select-value"
-      className={className ? `ctl-select-value ${className}` : "ctl-select-value"}
+      className={cxBase("ctl-select-value", className)}
       {...props}
     />
   );
 }
 
-export function SelectPopup({ className, ...props }: SelectPrimitive.Popup.Props) {
+export function SelectPopup({
+  className,
+  positionerProps,
+  ...props
+}: SelectPopupProps) {
   return (
-    <SelectPrimitive.Positioner data-slot="select-positioner" className="ctl-select-positioner">
+    <SelectPrimitive.Positioner
+      data-slot="select-positioner"
+      className="ctl-select-positioner"
+      {...positionerProps}
+    >
       <SelectPrimitive.Popup
         data-slot="select-popup"
-        className={className ? `ctl-select-popup ctl-pop ${className}` : "ctl-select-popup ctl-pop"}
+        className={cxBase("ctl-select-popup ctl-pop", className)}
         {...props}
       />
     </SelectPrimitive.Positioner>
@@ -83,7 +108,7 @@ export function SelectItem({
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
-      className={className ? `ctl-select-item ${className}` : "ctl-select-item"}
+      className={cxBase("ctl-select-item", className)}
       {...props}
     >
       <SelectPrimitive.ItemText data-slot="select-item-text" className="ctl-select-item-text">
@@ -93,9 +118,19 @@ export function SelectItem({
   );
 }
 
-export function SelectItemIndicator({ children }: { children?: ReactNode }) {
+export function SelectItemIndicator({
+  children,
+  ...props
+}: { children?: ReactNode } & Omit<
+  React.ComponentProps<typeof SelectPrimitive.ItemIndicator>,
+  "children"
+>) {
   return (
-    <SelectPrimitive.ItemIndicator data-slot="select-item-indicator" className="ctl-select-check">
+    <SelectPrimitive.ItemIndicator
+      data-slot="select-item-indicator"
+      className="ctl-select-check"
+      {...props}
+    >
       {children ?? (
         <svg
           viewBox="0 0 16 16"
@@ -117,7 +152,7 @@ export function SelectSeparator({ className, ...props }: SelectPrimitive.Separat
   return (
     <SelectPrimitive.Separator
       data-slot="select-separator"
-      className={className ? `ctl-select-separator ${className}` : "ctl-select-separator"}
+      className={cxBase("ctl-select-separator", className)}
       {...props}
     />
   );
