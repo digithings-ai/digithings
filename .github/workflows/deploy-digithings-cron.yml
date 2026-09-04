@@ -1,0 +1,50 @@
+# Deploys the thin digithings-cron Worker (org production clocks, #3579).
+# No Containers. Secrets GH_DISPATCH_TOKEN / CRON_KICK_SECRET are set once via
+# `wrangler secret put` — this workflow only needs CLOUDFLARE_API_TOKEN + ACCOUNT_ID.
+name: "Deploy: digithings-cron"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/digithings-cron/**"
+      - ".github/workflows/deploy-digithings-cron.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-digithings-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install package dependencies
+        working-directory: frontend/digithings-cron
+        run: npm install
+
+      - name: Test + typecheck
+        working-directory: frontend/digithings-cron
+        run: |
+          npm test
+          npm run typecheck
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend/digithings-cron
+          command: deploy
+          wranglerVersion: "^4.28.0"
