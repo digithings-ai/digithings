@@ -78,6 +78,16 @@ vi.mock("@/hooks/use-byok-key", async (importOriginal) => {
 // builds, not real markdown/echarts/quant-strip rendering.
 vi.mock("@digithings/digichat-ui", () => ({
   ChatActivities: () => null,
+  matchingSlashCommands: () => [],
+  nextPaletteIndex: (current: number, delta: number, length: number) => {
+    if (length <= 0) return 0;
+    return ((current + delta) % length + length) % length;
+  },
+  citationHits: () => [],
+  copyMarkdownWithFallback: vi.fn(),
+  downloadMarkdown: vi.fn(),
+  serializeAssistantMarkdown: () => "",
+  serializeThreadMarkdown: () => "",
 }));
 
 import { ChatPanel } from "./chat-panel";

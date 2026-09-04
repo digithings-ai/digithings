@@ -42,9 +42,19 @@ export {
 export {
   parseSlashInput,
   matchingSlashCommands,
+  slashHelpText,
+  nextPaletteIndex,
+  formatCliSettingLine,
+  isLangCode,
   SLASH_COMMANDS,
+  LANG_CODES,
   LANG_LABELS,
+  LANG_CHOICES,
   type SlashDef,
+  type SlashId,
+  type SlashVisibility,
+  type CliSettingRow,
+  type LangCode,
 } from "./slash-commands";
 export type {
   DigiChatActivity,
