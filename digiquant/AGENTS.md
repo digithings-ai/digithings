@@ -50,6 +50,9 @@ Beyond root `AGENTS.md`:
 | `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
+| `digiquant/tearsheet_extract.py` | Same Nautilus report boundary as `tearsheet.py` (#1185 split) | Defer — same as tearsheet |
+| `digiquant/tearsheet_stats.py` | HTML stats from Nautilus/Pandas-origin metrics (#1185) | Defer — same as tearsheet |
+| `digiquant/tearsheet_page.py` | HTML page assembly for Plotly tearsheet (#1185) | Defer — same as tearsheet |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
 | `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
 | `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
@@ -126,6 +129,22 @@ When touching `digiquant/src/digiquant/dashboard/` **or** `frontend/dashboard/` 
    sizes; H9 `commit_run` is the portfolio terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
 7. Tests: `pytest tests/dq/dashboard/ tests/dq/research/ tests/dq/portfolio/ -m unit -v`
+
+---
+
+## Strategy aliases (#1185)
+
+Canonical map: `digiquant.strategy_aliases` (`STRATEGY_ALIASES`,
+`resolve_strategy_name`, `resolve_param_spec_name`). Optimize param-spec keys
+may differ from the registry name (`btc_sdca` → `sdca`). When adding an alias:
+
+1. Add it to `STRATEGY_ALIASES` (so optimize/export/CLI resolve without Nautilus).
+2. Pass the same names in `register(..., aliases=...)`.
+3. If the optimize key differs from the registry name, add `PARAM_SPEC_NAMES`.
+4. Do not invent a second private alias dict in `strategy_specs` / `export`.
+
+`sweep.py` was deleted — use `run_optimize(..., param_grid=...)` for grid
+evaluation.
 
 ---
 
@@ -246,9 +265,17 @@ on the extra-indicator allowlist.
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
 
-On-chain extras (#1086): `digiquant_fetch_bitview_series` is the ingest tool
-(Bitview/BRK `mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL;
-no HTML scrape; fail-soft). They are not composite votes yet. Coin Metrics
+On-chain extras (#1086): Bitview/BRK is the free ingest source (`mvrv`,
+`asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL; no HTML scrape;
+fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
+`digiquant onchain fetch-bitview` write parquet under `data/onchain/bitview/`
+and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
+job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
+tracker). Local **MVRV-Z** + companion z-series live in
+`strategies/sdca/onchain_valuation.py` (`OnChainValuationProvider`) and are
+consumable by `compute_composite_risk` — **not published composite votes yet**
+(null-rule would halt SDCA on a Bitview gap). Coverage is BTC-rich; ETH/SOL
+fall back to basic `rolling_z` via `resolve_sdca_valuation_tier`. Coin Metrics
 community CC BY-NC stays research-only.
 
 `pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the

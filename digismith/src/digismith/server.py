@@ -64,4 +64,4 @@ def status(request: Request) -> SmithStatus:
 
 
 register_fastapi_error_handlers(app, service="digismith")
-setup_otel_fastapi(app, service_name="digismith")
+setup_otel_fastapi(app, service_name="digismith", service_version=__version__)

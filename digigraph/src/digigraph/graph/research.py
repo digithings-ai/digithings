@@ -349,7 +349,11 @@ def _run_document_rag_path(
     from digigraph.orchestration import ToolContext, execute
     from digigraph.skills import get_tools_for_skills
 
-    skill_ids = cfg.get_enabled_skills() if cfg else ["search", "project_rag"]
+    skill_ids = list(cfg.get_enabled_skills() if cfg else ["search", "project_rag"])
+    # Opt-in web skill (#3420) — not in digiproject.yaml by default; appended only
+    # when this request enabled web search so corpus-only deploys stay corpus-only.
+    if state.get("enable_web_search") and "web" not in skill_ids:
+        skill_ids.append("web")
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
     # empty allowlist → None and silently opens every tool — the documented

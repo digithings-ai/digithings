@@ -75,9 +75,18 @@ fred:
     - id: DTWEXBGS
       title: "Trade-weighted US dollar (broad)"
       unit: index
+    # Macro-liquidity regime gauge (#1085) — M2 + DXY + labor + mfg activity.
+    - id: M2SL
+      title: "M2 money stock (seasonally adjusted)"
+      unit: billions_usd
     - id: UNRATE
       title: "Unemployment rate"
       unit: percent
+    # FRED does not carry live ISM PMI; MANEMP YoY is the manufacturing-activity
+    # vote in MacroLiquidityModel (named ``pmi`` in the blend for consumers).
+    - id: MANEMP
+      title: "All employees, manufacturing (SA)"
+      unit: thousands_persons
     - id: CPIAUCSL
       title: "CPI all urban consumers"
       unit: index

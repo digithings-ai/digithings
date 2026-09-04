@@ -521,6 +521,39 @@
   background: color-mix(in srgb, var(--accent, var(--fg)) 24%, transparent);
 }
 
+.dc-sidebar-search {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+.dc-sidebar-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid var(--border-color, var(--hair));
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.dc-sidebar-search input::placeholder {
+  color: var(--text-secondary);
+}
+.dc-sidebar-search input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent, var(--fg)) 50%, var(--border-color, var(--hair)));
+}
+.dc-sidebar-empty {
+  margin: 0 0 var(--space-4);
+  padding: 0 2px;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .dc-sidebar-thread {
   display: flex;
   justify-content: space-between;
@@ -712,4 +745,19 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   background: var(--ink);
   color: var(--bg);
   border-color: var(--ink);
+}
+
+/* Opt-in web search toggle (#3420) — footer control when tenant allows. */
+.dc-web-search-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  color: var(--muted-foreground, var(--fg-muted, #888));
+  cursor: pointer;
+  user-select: none;
+}
+.dc-web-search-toggle input {
+  accent-color: var(--ink, currentColor);
 }

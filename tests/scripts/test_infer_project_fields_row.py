@@ -54,11 +54,6 @@ def test_default_row_is_phase3_cross_cutting_task_p2_sonnet(mod: Any) -> None:
 @pytest.mark.parametrize(
     ("label", "phase"),
     [
-        ("phase-0", "Phase 2 — Hardening"),
-        ("phase-2", "Phase 2 — Hardening"),
-        ("phase-3", "Phase 3 — Domain unification"),
-        ("phase-4", "Phase 4 — research on digigraph"),
-        ("phase-5", "Phase 5 — research tiering"),
         ("client-pilot", "Client Pilot"),
     ],
 )
@@ -67,6 +62,17 @@ def test_phase_labels_map_to_board_phase_strings(
 ) -> None:
     row = mod.infer_row(7, _labels(label))
     assert row[1] == phase
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "label",
+    ["phase-0", "phase-2", "phase-3", "phase-4", "phase-5"],
+)
+def test_retired_phase_labels_fall_back_to_default(mod: Any, label: str) -> None:
+    """Board cleanup 2026-09 deleted phase-* labels: infer must default."""
+    row = mod.infer_row(7, _labels(label, "component:website"))
+    assert row[1] == "Phase 3 — Domain unification"
 
 
 @pytest.mark.unit
@@ -80,6 +86,9 @@ def test_phase_labels_map_to_board_phase_strings(
         ("component:digiquant", "digiquant"),
         ("component:digikey", "digikey"),
         ("component:digismith", "digismith"),
+        ("component:digiclaw", "digiclaw"),
+        ("component:digibase", "digibase"),
+        ("component:digivault", "digivault"),
     ],
 )
 def test_component_labels_set_board_area(mod: Any, label: str, area: str) -> None:
@@ -103,17 +112,33 @@ def test_epic_sets_kind_and_p1(mod: Any) -> None:
 
 
 @pytest.mark.unit
-def test_phase0_sets_kind_feature_and_p1(mod: Any) -> None:
+def test_retired_phase0_confirms_no_special_kind_or_priority(
+    mod: Any,
+) -> None:
+    """Board cleanup 2026-09: phase-0 no longer maps to Feature/P1."""
     row = mod.infer_row(5, _labels("phase-0", "component:website"))
-    assert row[1] == "Phase 2 — Hardening"
-    assert row[3] == "Feature"
-    assert row[4] == "P1"
+    assert row[1] == "Phase 3 — Domain unification"
+    assert row[3] == "Task"
+    assert row[4] == "P2"
 
 
 @pytest.mark.unit
-def test_risk_high_selects_opus(mod: Any) -> None:
-    row = mod.infer_row(8, _labels("agent-task", "risk:high"))
+def test_claude_tier_component_selects_opus(mod: Any) -> None:
+    """Label simplification 2026-09: model follows the dispatch tier (digikey is claude-tier)."""
+    row = mod.infer_row(8, _labels("agent-task", "component:digikey"))
     assert row[5] == "opus"
+
+
+@pytest.mark.unit
+def test_cursor_tier_component_selects_sonnet(mod: Any) -> None:
+    row = mod.infer_row(8, _labels("agent-task", "component:digiquant"))
+    assert row[5] == "sonnet"
+
+
+@pytest.mark.unit
+def test_retired_risk_label_no_longer_selects_opus(mod: Any) -> None:
+    row = mod.infer_row(8, _labels("agent-task", "risk:high"))
+    assert row[5] == "sonnet"
 
 
 @pytest.mark.unit
@@ -125,7 +150,7 @@ def test_first_matching_component_wins(mod: Any) -> None:
 
 @pytest.mark.unit
 def test_cli_prints_tab_separated_row(mod: Any) -> None:
-    labels = json.dumps(_labels("agent-task", "component:digigraph", "risk:high"))
+    labels = json.dumps(_labels("agent-task", "component:digigraph"))
     done = subprocess.run(
         [sys.executable, str(SCRIPT), "99", labels],
         capture_output=True,
@@ -134,7 +159,7 @@ def test_cli_prints_tab_separated_row(mod: Any) -> None:
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == "\t".join(
-        ("99", "Phase 3 — Domain unification", "digigraph", "Task", "P2", "opus")
+        ("99", "Phase 3 — Domain unification", "digigraph", "Task", "P2", "sonnet")
     )
 
 

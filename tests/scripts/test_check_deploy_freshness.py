@@ -39,7 +39,7 @@ FRESHNESS_JOBS = [
     pytest.param(
         "freshness",
         "https://digiquant.io/build-info.json",
-        "component:digiquant-web",
+        "component:digiquant",
         id="digiquant.io",
     ),
     pytest.param(

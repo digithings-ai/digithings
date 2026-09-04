@@ -31,6 +31,8 @@ agents:
   allowed_tools:
     - digisearch
     - digivault_search_notes
+    # Present so request opt-in can activate it; stripped unless enable_web_search (#3420).
+    - web_search
   research_system_prompt: |
     You are a documentation and help assistant powered by digigraph. Answer only from
     what you retrieve. You get several tool rounds per question — use them.
