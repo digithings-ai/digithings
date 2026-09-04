@@ -11,7 +11,9 @@ vi.mock('@/lib/use-entitlement', () => ({
 
 import DigichatPopup from './digichat-popup';
 import {
+  DIGICHAT_PAGE_CONTEXT,
   DIGICHAT_READY,
+  DIGICHAT_THEME,
   type DigichatPopupConfig,
 } from '@/lib/digichat-popup';
 
@@ -120,7 +122,12 @@ describe('DigichatPopup', () => {
     ) as HTMLButtonElement;
     act(() => reopenedTrigger.click());
     expect(document.body.querySelector('#digichat-popup-iframe')).toBe(iframe);
-    expect(postMessage.mock.calls.length).toBeGreaterThan(readyCallCount);
+    const reopenTypes = postMessage.mock.calls
+      .slice(readyCallCount)
+      .map(([message]) => (message as { type?: string }).type);
+    expect(reopenTypes).toEqual(
+      expect.arrayContaining([DIGICHAT_THEME, DIGICHAT_PAGE_CONTEXT]),
+    );
   });
 
   it('renders nothing when config is null', () => {
