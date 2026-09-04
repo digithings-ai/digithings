@@ -140,7 +140,7 @@ COPILOT_TEMPLATE = """\
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 
@@ -233,7 +233,7 @@ alwaysApply: true
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, `code-review`, or `review-and-ship` when that policy needs a hatch. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
 
 ---
 

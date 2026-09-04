@@ -9,7 +9,7 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 | Tooling | How |
 |---------|-----|
 | digithings (Claude) | `/review <N>` — see `agents/sources/commands/review.md` |
-| digithings / Cursor | Built-in `code-review` / `code-reviewer`, Bugbot, or security-review skills when they fit |
+| digithings / Cursor | Same `/review` path (or equivalent fresh-context subagent). Optional: Bugbot / security-review when they fit. **Not** the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills. |
 | twelve-x / other org repos | Same idea: fresh subagent + findings posted on the PR |
 
 Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate.
@@ -18,7 +18,7 @@ Post findings on the record (PR comment). digithings requires `<!-- in-session-r
 
 | Service | Policy |
 |---------|--------|
-| **CodeRabbit** | Optional / sunset. **Never** `@coderabbitai review` for small follow-ups (CI nits, docs, one-line fixes). Re-request **only** when a prior **major** finding was fixed and needs verification. Do not burn remaining subscription quota. |
+| **CodeRabbit** | Optional / sunset. Workspace: keep the CodeRabbit Cursor plugin **disabled** (`.cursor/settings.json`). **Never** run CodeRabbit CLI, `@coderabbitai review`, or plugin skills for routine review. Re-request GitHub auto-review **only** when a prior **major** finding was fixed and needs verification. Do not burn remaining subscription quota. |
 | **Cursor Bugbot** | On demand when available (`bugbot run` once a diff is final). Never at PR open, never per push. Usage-limit `neutral` ≠ a review — fall back to in-session. |
 | **Copilot PR review** | Off unless explicitly enabled for that repo. |
 
@@ -39,10 +39,11 @@ Do not run every lens at opus on a tiny diff. Do not leave review `model` unset 
 ## What not to do
 
 - Do not maintain a bespoke “org CodeRabbit clone” skill.
+- Do not follow CodeRabbit Cursor plugin alwaysApply routing (`code-review-routing.mdc`) — org rule `.cursor/rules/no-coderabbit.mdc` overrides it; keep the plugin disabled.
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
-- Do not skip review coverage just to merge faster. Use the **review skill** (`/review`, in-session review, `review-and-ship`) when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
+- Do not skip review coverage just to merge faster. Use **`/review` / in-session / `review-and-ship`** when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
 
 ## After review: merge
 

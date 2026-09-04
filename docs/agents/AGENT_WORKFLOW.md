@@ -52,7 +52,7 @@ Run `ruff check . && ruff format --check .` after all Python changes.
 
 ## 4. Quality bar
 
-Review, not a self-score. Use review skills (`/review`, `code-review`, `review-and-ship`) and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. `make score` is optional (human/CI). Do not treat a passing self-score as a substitute for review.
+Review, not a self-score. Use `/review` / in-session / `review-and-ship` and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin. `make score` is optional (human/CI). Do not treat a passing self-score as a substitute for review.
 
 ---
 
@@ -102,7 +102,7 @@ Stay on the PR until it can merge. Do not invent a numbered ritual for this.
 
 - Required CI green. On red checks, use `fix-ci` (and `fix-merge-conflicts` if the branch is not `CLEAN`).
 - Unresolved review threads triaged (fixed or refuted on the record).
-- **Review skill** (`/review`, `code-review`, `review-and-ship`) when [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) needs a hatch. Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment. Skip a full pass on a typo-only one-liner if another hatch already applies.
+- **Review** (`/review`, in-session, `review-and-ship`) when [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) needs a hatch. Author session must not review its own work. `reviewed:agent` still needs the `<!-- in-session-review -->` findings comment. Skip a full pass on a typo-only one-liner if another hatch already applies. Do not route through CodeRabbit.
 - **Deslop / simplify** when the diff introduced slop or needless complexity — not on every one-liner.
 
 ---

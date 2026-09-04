@@ -28,7 +28,7 @@ Once a PR is open, stay on it until it can merge. **Merge-ready** means required
 
 Use these skills **where they are relevant**, not on every diff:
 
-- **Review** (`/review`, `code-review`, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies.
+- **Review** (`/review`, in-session fresh-context, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies. Do **not** route through the CodeRabbit Cursor plugin.
 - **Deslop / simplify** — when the diff introduced AI slop or needless complexity. Not every one-liner.
 
 Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies.
@@ -125,7 +125,7 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 ## Quality bar
 
-The quality bar is **review**, not a self-score. Use review skills (`/review`, `code-review`, `review-and-ship`) and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy.
+The quality bar is **review**, not a self-score. Use `/review` / in-session review / `review-and-ship` and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin `code-review` skill.
 
 `make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
 
@@ -160,12 +160,15 @@ June 2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/doc
 The Copilot request job was removed from `ci.yml` when that subscription lapsed
 (#1894). Usage-limit `neutral` is not a review — run `/review` instead.
 
-**CodeRabbit is optional / sunset.** While it still runs, it auto-reviews only
-bases listed in [`.coderabbit.yaml`](.coderabbit.yaml) (`develop` default plus
-`main`, `module/*`, `release/*`). Do **not** `@coderabbitai review` for CI nits,
-docs, or one-line fixes. Re-request **only** when a prior **major** finding was
-fixed and needs verification. A green CodeRabbit status check is not an approving
-review — check `gh pr view --json reviewDecision` / open threads before merge.
+**CodeRabbit is optional / sunset.** Keep the CodeRabbit Cursor plugin **disabled**
+in [`.cursor/settings.json`](.cursor/settings.json); [`.cursor/rules/no-coderabbit.mdc`](.cursor/rules/no-coderabbit.mdc)
+overrides plugin alwaysApply routing if it is re-enabled. While the GitHub App
+still runs, it auto-reviews only bases listed in [`.coderabbit.yaml`](.coderabbit.yaml)
+(`develop` default plus `main`, `module/*`, `release/*`). Do **not** run CodeRabbit
+CLI, `@coderabbitai review`, or plugin skills for CI nits, docs, or one-line fixes.
+Re-request **only** when a prior **major** finding was fixed and needs verification.
+A green CodeRabbit status check is not an approving review — check
+`gh pr view --json reviewDecision` / open threads before merge.
 
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
