@@ -32,6 +32,7 @@ describe('DigichatPopup', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     document.documentElement.setAttribute('data-theme', 'dark');
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
@@ -39,6 +40,7 @@ describe('DigichatPopup', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
 
   it('renders nothing for Brief (below Desk)', () => {
@@ -50,18 +52,39 @@ describe('DigichatPopup', () => {
     expect(container.querySelector('[data-digichat-popup]')).toBeNull();
   });
 
-  it('renders ask digichat rectangle launcher for Desk+', () => {
+  it('renders compact logo launcher for Desk+', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
     });
     const btn = container.querySelector('#digichat-popup-launcher');
     expect(btn).not.toBeNull();
-    expect(btn?.textContent).toBe('ask digichat');
-    expect(btn?.getAttribute('data-mode')).toBe('bar');
+    expect(btn?.getAttribute('data-mode')).toBe('icon');
+    expect(btn?.getAttribute('aria-label')).toBe('Open digichat');
     expect(btn?.getAttribute('aria-expanded')).toBe('false');
+    expect(btn?.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('[data-testid="digichat-launcher-label"]')).toBeNull();
   });
 
-  it('opens panel, toggles close label, and sets iframe src on click', () => {
+  it('types ask digichat on hover', () => {
+    act(() => {
+      root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
+    });
+    const btn = container.querySelector(
+      '#digichat-popup-launcher',
+    ) as HTMLButtonElement;
+    act(() => {
+      btn.focus();
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    const label = container.querySelector(
+      '[data-testid="digichat-launcher-label"]',
+    );
+    expect(label?.textContent).toBe('ask digichat');
+  });
+
+  it('opens panel, shows close label, and sets iframe src on click', () => {
     act(() => {
       root.render(createElement(DigichatPopup, { tier: 'desk', config: CFG }));
     });
@@ -72,7 +95,10 @@ describe('DigichatPopup', () => {
       btn.click();
     });
     expect(btn.getAttribute('aria-expanded')).toBe('true');
-    expect(btn.textContent).toBe('close');
+    expect(
+      container.querySelector('[data-testid="digichat-launcher-label"]')
+        ?.textContent,
+    ).toBe('close');
     const iframe = container.querySelector(
       '#digichat-popup-iframe',
     ) as HTMLIFrameElement;
@@ -128,7 +154,7 @@ describe('DigichatPopup', () => {
       btn.click();
     });
     expect(btn.getAttribute('aria-expanded')).toBe('false');
-    expect(btn.textContent).toBe('ask digichat');
+    expect(btn.getAttribute('aria-label')).toBe('Open digichat');
   });
 
   it('renders nothing when config is null', () => {
