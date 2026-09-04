@@ -151,24 +151,25 @@ if [[ -z "$COMPONENT" && -z "$TITLE" ]]; then
 fi
 
 # ── Default exec tier derivation ───────────────────────────────────────────────
-# Heuristic matches agents.yml:tier_routing. See docs/agents/EXECUTION_TIERS.md.
+# Tier comes from tiers in scripts/project_routing.json (label simplification
+# 2026-09: exec:*/risk:* labels retired; dispatch fires on agent-task and the
+# tier is a property of the component). See docs/agents/EXECUTION_TIERS.md.
 derive_exec_tier() {
-  local risk="$1" comp="$2" type="$3"
-  if [[ "$risk" == "high" ]] || [[ "$comp" == "digikey" ]]; then
-    echo "claude"; return
-  fi
-  # chore/style at risk:low used to route to exec:copilot. That tier lost its
-  # dispatcher when the Copilot subscription lapsed (#1904), so deriving it here
-  # minted issues onto a queue with no consumer.
-  if [[ "$type" == "chore" || "$type" == "style" ]] && [[ "$risk" == "low" ]]; then
-    echo "cursor"; return
-  fi
-  echo "cursor"
+  local comp="$1"
+  python3 -c "
+import json, sys
+try:
+    routing = json.load(open('${REPO_ROOT}/scripts/project_routing.json'))
+except Exception:
+    print('cursor'); sys.exit()
+tiers = routing.get('tiers', {})
+print(tiers.get('component:$comp', tiers.get('default', 'cursor')))
+"
 }
 
 EXEC_TIER_EXPLICIT=true
 if [[ -z "$EXEC_TIER" ]]; then
-  EXEC_TIER=$(derive_exec_tier "$RISK" "$COMPONENT" "$TYPE")
+  EXEC_TIER=$(derive_exec_tier "$COMPONENT")
   EXEC_TIER_EXPLICIT=false
 fi
 
@@ -226,7 +227,8 @@ if [[ -z "$BODY" ]] && ! $DRAFT; then
 fi
 
 # ── Build labels ──────────────────────────────────────────────────────────────
-LABELS="agent-task,component:${COMPONENT},risk:${RISK},exec:${EXEC_TIER}"
+# Label simplification 2026-09: bare minimum — risk:*/exec:* retired.
+LABELS="agent-task,component:${COMPONENT}"
 
 # ── Confirmation ──────────────────────────────────────────────────────────────
 if ! $DRAFT; then

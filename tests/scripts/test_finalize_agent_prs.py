@@ -109,9 +109,21 @@ def test_an_unlinked_pr_needs_a_human(monkeypatch: pytest.MonkeyPatch) -> None:
     assert action.state == "needs_human"
 
 
-def test_the_needs_human_label_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_retired_needs_human_label_no_longer_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Label simplification 2026-09 retired needs-human-review: it is inert now."""
     action = _evaluate(_pr(labels=[{"name": "needs-human-review"}]), monkeypatch)
+    assert action.state == "ready_merge", f"got {action.state!r} — {action.reason}"
+
+
+def test_a_claude_tier_issue_needs_a_human(monkeypatch: pytest.MonkeyPatch) -> None:
+    """digikey-component issues route claude-tier (supervised) — no automerge."""
+    monkeypatch.setattr(fap, "_issue_labels", lambda repo, num: ["component:digikey"])
+    action = fap.evaluate_pr("digithings-ai/digithings", _pr(), fetch_base=False)
     assert action.state == "needs_human"
+    assert "claude-tier" in action.reason
+    """Label simplification 2026-09 retired needs-human-review: it is inert now."""
+    action = _evaluate(_pr(labels=[{"name": "needs-human-review"}]), monkeypatch)
+    assert action.state == "ready_merge", f"got {action.state!r} — {action.reason}"
 
 
 def test_an_already_labelled_pr_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -77,8 +77,8 @@ jobs:
             --jq '[.workflow_runs[] | {name, url: .html_url, at: .created_at}]' \
             > /tmp/digest/workflow-failures.json 2>/dev/null || echo "[]" > /tmp/digest/workflow-failures.json
 
-          # Open housekeeping trackers (to avoid re-suggesting things already tracked)
-          gh issue list --repo "$REPO" --label housekeeping --state open --limit 50 \
+          # Open [housekeeping-auto] trackers (to avoid re-suggesting things already tracked)
+          gh issue list --repo "$REPO" --state open --search "[housekeeping-auto] in:title" --limit 50 \
             --json number,title,body > /tmp/digest/open-trackers.json
 
           PR_COUNT=$(jq 'length' /tmp/digest/prs.json)
@@ -113,7 +113,7 @@ jobs:
             - open-trackers.json  — existing open housekeeping tracker issues (do not duplicate)
 
             Also read docs/agents/EXECUTION_TIERS.md and docs/agents/HOUSEKEEPING.md for the
-            delegation tiers and current housekeeping coverage so your suggestions slot into
+            dispatch tiers and current automation coverage so your suggestions slot into
             the right tier.
 
             Produce one markdown digest and WRITE IT TO: /tmp/digest/digest-body.md
@@ -136,7 +136,7 @@ jobs:
             ### <N>. <pattern name>
             - **Evidence**: PRs #X, #Y, #Z (or commit SHAs, or workflow runs)
             - **Suggestion**: <concrete action the team should take>
-            - **Tier**: exec:cursor / exec:claude (which tier should execute)
+            - **Tier**: cursor / claude (dispatch tier from `tiers` in scripts/project_routing.json)
             - **Effort**: S / M / L / XL
             - **Would close**: <count> repeat findings OR <describes failure mode>
 
@@ -187,7 +187,7 @@ jobs:
 
           candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
-              "--label", "housekeeping", "--state", "open",
+              "--state", "open", "--search", "Continuous-improvement digest in:title",
               "--json", "number,body"
           ]))
           existing = [c for c in candidates if marker in (c.get("body") or "")]
@@ -200,7 +200,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", os.environ["TITLE"],
-                                  "--label", "exec:claude,housekeeping,maintenance,component:root,type:research,priority:low,risk:low",
+                                  "--label", "agent-task,component:root,priority:low",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())

@@ -69,13 +69,9 @@ jobs:
             echo "PR #$NUM not issue-linked — skipping autolabel"
             exit 0
           fi
-          ISSUE_NUM=$(printf '%s' "$TEXT" | grep -Eoi '(fixes|closes|resolves)[[:space:]]+#[0-9]+' | head -1 | grep -Eo '[0-9]+')
-          BLOCKED=$(gh issue view "$ISSUE_NUM" --repo "$REPO" --json labels \
-            --jq '[.labels[].name] | (index("risk:high") != null) or (index("needs-human") != null)')
-          if [[ "$BLOCKED" == "true" ]]; then
-            echo "Issue #$ISSUE_NUM is human-gated — skipping autolabel"
-            exit 0
-          fi
+          # Label simplification 2026-09: no label-based human gate remains.
+          # Merge-time safety is path-based (scripts/verify_agent_automerge_pr.py
+          # deny-list: digikey/, brokers/, live-trading, workflows), enforced below.
           HEAD_BRANCH=$(echo "$PR" | jq -r '.headRefName')
           HEAD_SHA=$(echo "$PR" | jq -r '.headRefOid')
           if ! python3 scripts/agent_pr_checks.py "$REPO" "$NUM" "$HEAD_BRANCH" "$HEAD_SHA"; then

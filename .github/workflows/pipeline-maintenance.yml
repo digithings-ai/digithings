@@ -78,7 +78,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "security:finding,maintenance,component:root,risk:high,exec:claude" \
+            --label "security:finding,agent-task,component:root,priority:high" \
             --body "## Security Finding
 
           pip-audit found **${COUNT}** CVE(s) in Python dependencies.
@@ -174,7 +174,7 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "cleanup,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --label "agent-task,component:root,priority:medium" \
             --body "## Stale Branch Cleanup
 
           Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
@@ -231,13 +231,13 @@ jobs:
           PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
         run: |
           TITLE="[housekeeping] Broken internal doc links — $(date +%Y-%m-%d)"
-          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
             --search "Broken internal doc links in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
           [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --label "agent-task,component:root,priority:medium" \
             --body "## Broken Internal Doc Links
 
           \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
@@ -297,13 +297,13 @@ jobs:
           PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
         run: |
           TITLE="[housekeeping] agents-init drift detected — $(date +%Y-%m-%d)"
-          EXISTING=$(gh issue list --repo "$REPO" --label "housekeeping" --state open \
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
             --search "agents-init drift in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
           [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --label "agent-task,component:root,priority:medium" \
             --body "## agents-init Drift
 
           Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
@@ -451,9 +451,10 @@ jobs:
           PY
 
   # ── 7. Label-coverage drift ─────────────────────────────────────────────────
-  # Every non-epic open issue should have: exec:*, priority:*, complexity:*,
-  # component:*, risk:*. Find drift and raise one tracker issue per week
-  # (dedup via HTML-comment marker).
+  # Every open issue should have: priority:*, component:*. (Label
+  # simplification 2026-09: exec:*/risk:*/type:*/complexity* retired; priority
+  # and component need judgment, so no auto-stub — just file the tracker.)
+  # Find drift and raise one tracker issue per week (dedup via HTML-comment marker).
   label-coverage:
     name: Label coverage drift
     runs-on: ubuntu-latest
@@ -473,8 +474,7 @@ jobs:
           python3 <<'PY'
           import json, os, subprocess
 
-          required_prefixes = ["exec:", "priority:", "component:"]
-          required_nonepic  = ["complexity:", "risk:"]
+          required_prefixes = ["priority:", "component:"]
 
           def fetch_issues():
               return json.loads(subprocess.check_output([
@@ -491,48 +491,11 @@ jobs:
                   for pfx in required_prefixes:
                       if not any(l.startswith(pfx) for l in labels):
                           missing.append(pfx.rstrip(":"))
-                  if "epic" not in labels:
-                      for pfx in required_nonepic:
-                          if not any(l.startswith(pfx) for l in labels):
-                              missing.append(pfx.rstrip(":"))
                   if missing:
                       result.append((issue["number"], issue["title"], missing))
               return result
 
-          issues = fetch_issues()
-          drift = find_drift(issues)
-
-          # Auto-stub safe defaults for issues that are only missing complexity/risk.
-          # exec, priority, and component require human/agent judgment — skip those.
-          auto_fixed = []
-          for issue in issues:
-              labels = {l["name"] for l in issue["labels"]}
-              to_add = []
-              if "epic" not in labels:
-                  if not any(l.startswith("complexity:") for l in labels):
-                      to_add.append("complexity:M")
-                  if not any(l.startswith("risk:") for l in labels):
-                      to_add.append("risk:low")
-              if to_add:
-                  result = subprocess.run([
-                      "gh", "issue", "edit", str(issue["number"]),
-                      "--repo", os.environ["REPO"],
-                      "--add-label", ",".join(to_add),
-                  ], capture_output=True, text=True)
-                  if result.returncode != 0:
-                      stderr = result.stderr.strip()
-                      stdout = result.stdout.strip()
-                      detail = "\n".join(filter(None, [stdout, stderr]))
-                      print(f"::warning::Failed to add labels {to_add} to #{issue['number']}: {detail}")
-                  else:
-                      auto_fixed.append((issue["number"], to_add))
-
-          if auto_fixed:
-              print(f"Auto-stubbed defaults on {len(auto_fixed)} issue(s):")
-              for n, added in auto_fixed:
-                  print(f"  #{n}: {', '.join(added)}")
-              # Re-fetch and recalculate drift with updated labels.
-              drift = find_drift(fetch_issues())
+          drift = find_drift(fetch_issues())
 
           if not drift:
               print("✓ Label coverage clean — no drift.")
@@ -543,9 +506,11 @@ jobs:
 
           # Dedup by the marker in the issue body, not by title — any human
           # filing a similarly-titled issue would collide with a title-search.
+          # (Label simplification 2026-09: dedup by title prefix instead of the
+          # retired housekeeping label.)
           candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
-              "--label", "housekeeping", "--state", "open",
+              "--state", "open", "--search", "[housekeeping-auto] label coverage drift in:title",
               "--json", "number,body"
           ]))
           existing = [c for c in candidates if marker in (c.get("body") or "")]
@@ -553,7 +518,7 @@ jobs:
               marker,
               f"## Label coverage drift ({len(drift)} issues missing required labels)",
               "",
-              "Every non-epic open issue should carry `exec:*`, `priority:*`, `component:*`, `complexity:*`, and `risk:*`. Missing labels break the agent-delegation framework (see `docs/agents/EXECUTION_TIERS.md`).",
+              "Every open issue should carry `priority:*` and `component:*`. Dispatch tier comes from the component via `tiers` in `scripts/project_routing.json`.",
               "",
               "## Offenders",
               "",
@@ -564,7 +529,7 @@ jobs:
               body_lines.append(f"- …and {len(drift) - 100} more")
           body_lines.append("")
           body_lines.append("## Task")
-          body_lines.append("Apply the missing labels. For `complexity` and `risk` on unclear issues, default to `complexity:M` and `risk:low` — escalate to `exec:claude` if genuinely ambiguous.")
+          body_lines.append("Apply the missing labels. Priority and component need judgment — escalate genuinely ambiguous cases in a comment.")
           body = "\n".join(body_lines)
 
           if existing:
@@ -575,7 +540,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
+                                  "--label", "agent-task,component:root,priority:medium",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -655,10 +620,12 @@ jobs:
 
           body = "\n".join(lines)
 
-          # Dedup by marker in body (same pattern as label-coverage job)
+          # Dedup by marker in body (same pattern as label-coverage job).
+          # Label simplification 2026-09: dedup by title search instead of the
+          # retired housekeeping label.
           candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
-              "--label", "housekeeping", "--state", "open",
+              "--state", "open", "--search", "scheduled-workflow failures in:title",
               "--json", "number,body"
           ]))
           existing = [c for c in candidates if marker in (c.get("body") or "")]
@@ -671,7 +638,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
+                                  "--label", "agent-task,component:root,priority:medium",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -758,7 +725,7 @@ jobs:
 
           candidates = json.loads(subprocess.check_output([
               "gh", "issue", "list", "--repo", os.environ["REPO"],
-              "--label", "housekeeping", "--state", "open",
+              "--state", "open", "--search", "potential duplicate issue pair in:title",
               "--json", "number,body"
           ]))
           existing = [c for c in candidates if marker in (c.get("body") or "")]
@@ -772,7 +739,7 @@ jobs:
               r = subprocess.run([
                   "gh", "issue", "create", "--repo", os.environ["REPO"],
                   "--title", title,
-                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
+                  "--label", "agent-task,component:root,priority:medium",
                   "--body", body,
               ], capture_output=True, text=True)
               print(r.stdout.strip())
@@ -823,8 +790,9 @@ jobs:
           added = 0
           for issue in issues:
               labels = {l["name"] for l in issue["labels"]}
-              # Only backfill issues that have exec:* labels — these are tracked issues.
-              if not any(l.startswith("exec:") for l in labels):
+              # Only backfill agent-task issues — these are tracked issues.
+              # (Label simplification 2026-09: exec:* retired, agent-task fires dispatch.)
+              if "agent-task" not in labels:
                   continue
               r = subprocess.run([
                   "gh", "project", "item-add", proj,

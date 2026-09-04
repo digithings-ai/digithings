@@ -89,7 +89,7 @@ jobs:
             printf '**Commit:** `%s`\n' "$SHORT_SHA"
             printf '**Triggered by:** @%s\n' "$ACTOR"
             printf '**Run:** %s\n\n' "$RUN_URL"
-            printf '> **Auto-dispatch:** `exec:cursor` triggers Cursor agent dispatch on issue open.\n\n'
+            printf '> **Auto-dispatch:** the `agent-task` label triggers agent dispatch on issue open (tier from `tiers` in `scripts/project_routing.json`).\n\n'
             printf '## Task\n\n'
             printf '1. Fetch the failure logs: `gh run view --log-failed %s`\n' "$RUN_ID"
             printf '2. Identify the root cause (lint error, test failure, doc link, agents-init drift, etc.)\n'
@@ -108,7 +108,7 @@ jobs:
           URL=$(gh issue create \
             --repo "$REPO" \
             --title "$TITLE" \
-            --label "ci:failure,maintenance,component:root,risk:low,exec:cursor" \
+            --label "ci:failure,agent-task,component:root,priority:medium" \
             --body-file /tmp/triage-body.md)
 
           echo "Created: $URL"

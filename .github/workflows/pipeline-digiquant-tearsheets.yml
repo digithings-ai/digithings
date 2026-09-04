@@ -108,7 +108,9 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp = new Date().toISOString().slice(0, 16);
             const title = "digiquant-tearsheets — recurring failures";
-            const labels = ["ci-failure", "component:digiquant", "pipeline:tearsheets"];
+            // Label simplification 2026-09: pipeline:* retired. Tracker dedup
+            // is by exact title + marker; agent-task keeps dispatch firing.
+            const labels = ["ci-failure", "component:digiquant", "agent-task", "priority:medium"];
             const marker = "<!-- digiquant-tearsheets-tracker -->";
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
@@ -116,10 +118,9 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
-              labels: "ci-failure,pipeline:tearsheets",
               per_page: 100,
             });
-            const tracker = existing.find((i) => (i.body || "").includes(marker));
+            const tracker = existing.find((i) => i.title === title && (i.body || "").includes(marker));
 
             if (tracker) {
               const MAX_LINES = 20;
