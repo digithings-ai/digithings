@@ -265,9 +265,17 @@ on the extra-indicator allowlist.
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
 
-On-chain extras (#1086): `digiquant_fetch_bitview_series` is the ingest tool
-(Bitview/BRK `mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL;
-no HTML scrape; fail-soft). They are not composite votes yet. Coin Metrics
+On-chain extras (#1086): Bitview/BRK is the free ingest source (`mvrv`,
+`asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL; no HTML scrape;
+fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
+`digiquant onchain fetch-bitview` write parquet under `data/onchain/bitview/`
+and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
+job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
+tracker). Local **MVRV-Z** + companion z-series live in
+`strategies/sdca/onchain_valuation.py` (`OnChainValuationProvider`) and are
+consumable by `compute_composite_risk` — **not published composite votes yet**
+(null-rule would halt SDCA on a Bitview gap). Coverage is BTC-rich; ETH/SOL
+fall back to basic `rolling_z` via `resolve_sdca_valuation_tier`. Coin Metrics
 community CC BY-NC stays research-only.
 
 `pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
