@@ -312,7 +312,16 @@
 
 /* ---- tables: trade log, breakdowns, pivot statistics ---- */
 @layer components {
-  .ts-table-wrap { width: 100%; overflow-x: auto; }
+  .ts-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--hair-2) transparent;
+  }
+  .ts-table-wrap::-webkit-scrollbar { height: 8px; }
+  .ts-table-wrap::-webkit-scrollbar-track { background: transparent; }
+  .ts-table-wrap::-webkit-scrollbar-thumb { background: var(--hair-2); border-radius: 0; }
+  .ts-table-wrap::-webkit-scrollbar-thumb:hover { background: var(--ink-mute); }
   .ts-table-scroll { max-height: 520px; overflow-y: auto; }
   .ts-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
   .ts-num { text-align: right; }
