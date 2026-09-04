@@ -40,7 +40,7 @@ class TestSdcaCycleWindows:
         assert names["2022_trough"].kind == CycleKind.TROUGH
         assert names["2022_trough"].start <= date(2022, 11, 21) <= names["2022_trough"].end
         assert names["2025_peak"].kind == CycleKind.PEAK
-        assert names["2025_peak"].start <= date(2025, 1, 20) <= names["2025_peak"].end
+        assert names["2025_peak"].start <= date(2025, 10, 6) <= names["2025_peak"].end
 
     def test_rejects_empty(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
@@ -54,6 +54,26 @@ class TestSdcaCycleWindows:
                 start=date(2020, 2, 1),
                 end=date(2020, 1, 1),
             )
+
+    def test_btc_medium_term_v1_starts_2018_and_is_narrower_than_long_term(self) -> None:
+        medium = SdcaCycleWindows.btc_medium_term_v1()
+        assert len(medium.windows) > 0
+        for w in medium.windows:
+            assert w.start >= date(2018, 1, 1)
+            assert (w.end - w.start) < _dt.timedelta(days=90)  # narrower than btc_v1's +/-45d span
+
+    def test_btc_medium_term_v1_is_strictly_alternating(self) -> None:
+        # The zigzag construction guarantees this; it's also the property
+        # Chris asked for directly: "every top, there should be a bottom
+        # signal" (2026-09-04 chart review).
+        medium = SdcaCycleWindows.btc_medium_term_v1()
+        kinds = [w.kind for w in medium.windows]
+        for prev_kind, next_kind in zip(kinds, kinds[1:]):
+            assert prev_kind != next_kind
+
+    def test_btc_medium_term_v1_peaks_and_troughs_are_balanced(self) -> None:
+        medium = SdcaCycleWindows.btc_medium_term_v1()
+        assert abs(len(medium.peaks()) - len(medium.troughs())) <= 1
 
 
 class TestCycleOverlapScore:
