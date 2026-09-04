@@ -8,12 +8,15 @@ import {
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
   digichatPopupEnvFromProcess,
+  extractPageHtml,
   extractVisiblePageText,
   isDigichatPopupEnabled,
+  PAGE_CONTEXT_HTML_MAX_CHARS,
   PAGE_CONTEXT_MAX_CHARS,
   readDigichatPopupConfig,
   readDocumentTheme,
   resolveDigichatEmbedOrigin,
+  sanitizePageHtml,
 } from './digichat-popup';
 
 describe('digichatPopupEnvFromProcess', () => {
@@ -93,7 +96,7 @@ describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
     ).toBe(false);
   });
 
-  it('enables when origin, CSP, and token are set', () => {
+  it('enables when origin, CSP, and token are set (default bar chrome)', () => {
     const env = {
       NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
       NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: 'tok_test',
@@ -104,6 +107,7 @@ describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
     expect(cfg!.origin).toBe('https://digithings.ai');
     expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
     expect(cfg!.token).toBe('tok_test');
+    expect(cfg!.mode).toBe('bar');
     expect(cfg!.pageContext).toBe(true);
     expect(cfg!.suggestions.length).toBeGreaterThan(0);
   });
@@ -127,6 +131,16 @@ describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
     expect(cfg!.origin).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
     expect(cfg!.host).toBe('localhost');
     expect(cfg!.token).toBeUndefined();
+    expect(cfg!.mode).toBe('bar');
+  });
+
+  it('opts into legacy dot launcher only when MODE=dot', () => {
+    const cfg = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'localhost',
+      NEXT_PUBLIC_DIGICHAT_POPUP_MODE: 'dot',
+    });
+    expect(cfg!.mode).toBe('dot');
   });
 });
 
@@ -137,7 +151,7 @@ describe('buildDigichatEmbedSrc', () => {
         origin: 'https://digithings.ai',
         host: 'digiquant.io',
         token: 'tok_test',
-        mode: 'dot',
+        mode: 'bar',
         pageContext: true,
         accent: '#3dd6c4',
         welcome: 'hello',
@@ -167,11 +181,68 @@ describe('page context + theme helpers', () => {
     );
   });
 
-  it('builds page-context and theme postMessage payloads', () => {
-    expect(buildPageContextMessage('hi', undefined, 1)).toEqual({
+  it('sanitizes page HTML and strips scripts/handlers/hidden values', () => {
+    const dirty =
+      '<main><script>alert(1)</script><p onclick="x()">Hi</p>' +
+      '<input type="hidden" name="t" value="csrf-live">' +
+      '<input type="password" value="secret">' +
+      '<input type="text" value="typed">' +
+      '<svg/onload=alert(1)></svg>' +
+      '<style>.x{}</style></main>';
+    const clean = sanitizePageHtml(dirty);
+    expect(clean).toContain('<p>Hi</p>');
+    expect(clean).not.toContain('script');
+    expect(clean).not.toContain('onclick');
+    expect(clean).not.toContain('style');
+    expect(clean).not.toContain('csrf-live');
+    expect(clean).not.toContain('secret');
+    expect(clean).not.toContain('type="hidden"');
+    expect(clean).not.toContain('type="password"');
+    expect(clean).not.toContain('value="typed"');
+    expect(clean).not.toContain('onload');
+  });
+
+  it('caps HTML length', () => {
+    const long = `<div>${'y'.repeat(PAGE_CONTEXT_HTML_MAX_CHARS + 40)}</div>`;
+    expect(sanitizePageHtml(long).length).toBe(PAGE_CONTEXT_HTML_MAX_CHARS);
+  });
+
+  it('extracts main HTML from a document-like root', () => {
+    const html = extractPageHtml(200, {
+      querySelector(sel: string) {
+        if (sel === 'main') {
+          return {
+            cloneNode() {
+              return {
+                querySelectorAll() {
+                  return [];
+                },
+                innerHTML: '<h1>Brief</h1><p>House book</p>',
+              };
+            },
+          };
+        }
+        return null;
+      },
+      body: null,
+    });
+    expect(html).toContain('<h1>Brief</h1>');
+    expect(html).toContain('House book');
+  });
+
+  it('builds page-context and theme postMessage payloads with optional html', () => {
+    expect(buildPageContextMessage('hi', { ts: 1 })).toEqual({
       type: 'digichat:page-context',
       text: 'hi',
       ts: 1,
+    });
+    expect(
+      buildPageContextMessage('hi', { html: '<main>x</main>', ts: 2 }),
+    ).toEqual({
+      type: 'digichat:page-context',
+      text: 'hi',
+      html: '<main>x</main>',
+      ts: 2,
     });
     expect(buildThemeMessage('light', 2)).toEqual({
       type: 'digichat:theme',
