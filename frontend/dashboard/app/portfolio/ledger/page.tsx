@@ -4,6 +4,7 @@ import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 import PageSkeleton from '@/components/page-skeleton';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EmptyState } from '@digithings/web';
 import { LockedSurface } from '@/components/locked-surface';
 import { useDashboard } from '@/lib/dashboard-context';
 import { can, type PlanTier } from '@/lib/entitlements';
@@ -53,8 +54,22 @@ function LedgerBody() {
   if (loading) return <PageSkeleton />;
   if (error || !data) {
     return (
-      <div className="flex h-screen items-center justify-center text-down">
-        {error || 'Failed to load'}
+      <div className={`${SUBPAGE_MAX} py-12`}>
+        <EmptyState
+          variant="error"
+          className="mx-auto max-w-md"
+          title="Ledger is temporarily unavailable"
+          body={error || 'Failed to load'}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+            >
+              Retry
+            </button>
+          }
+        />
       </div>
     );
   }
