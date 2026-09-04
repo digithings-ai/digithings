@@ -289,7 +289,9 @@ export function DailyBriefWorkspace({
       ? `${book.cashPct.toFixed(0)}% cash · accounting tip`
       : performanceSsot?.investedDefinition === 'book_weights'
         ? `${book.cashPct.toFixed(0)}% cash · book weights`
-        : `${book.cashPct.toFixed(0)}% cash`;
+        : performanceSsot?.investedDefinition === 'portfolio_metrics'
+          ? `${book.cashPct.toFixed(0)}% cash · metrics`
+          : `${book.cashPct.toFixed(0)}% cash`;
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows

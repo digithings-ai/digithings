@@ -26,7 +26,9 @@ export type InvestedDefinition =
   /** Sum of non-CASH `positions.weight_pct` on the committed book date. */
   | 'book_weights'
   /** Stale/secondary — `portfolio_metrics.invested_pct` when NAV tip missing. */
-  | 'portfolio_metrics';
+  | 'portfolio_metrics'
+  /** No invested source available — do not claim accounting tip. */
+  | 'unavailable';
 
 export interface PerformanceSsotMeta {
   /** Dominant series contract for the NAV chart / tip. */
@@ -108,7 +110,10 @@ export function resolveInvestedPct(args: {
       definition: 'portfolio_metrics',
     };
   }
-  return { investedPct: null, definition: 'accounting_nav_tip' };
+  return {
+    investedPct: null,
+    definition: 'unavailable',
+  };
 }
 
 /** Headline KPIs from the persisted accounting NAV series (no live overlay). */
@@ -131,8 +136,9 @@ export function persistedHeadlinesFromNav(
   const tip = sorted.at(-1) ?? null;
   const prior = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
 
+  // Match Tearsheet `periodReturnPct`: need ≥2 finite NAV points for since-inception %.
   const sinceInceptionPct =
-    first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
+    sorted.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
 
   let dayReturnPct: number | null = null;
   if (tip?.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {

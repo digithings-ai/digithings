@@ -99,4 +99,38 @@ describe('performance SSOT (#3580)', () => {
     expect(isLiveMarksOverlay(null)).toBe(false);
     expect(isLiveMarksOverlay(0.12)).toBe(true);
   });
+
+  it('returns null since-inception for a single NAV row (matches Tearsheet)', () => {
+    const brief = persistedHeadlinesFromNav([
+      { date: '2026-09-04', nav: 99.4, invested_pct: 40.5 },
+    ]);
+    const tearsheet = buildPerformanceTearsheet({
+      nav: [{ date: '2026-09-04', nav: 99.4, cash_pct: 59.5, invested_pct: 40.5 }],
+      positions: [],
+      metrics: null,
+      attribution: [],
+    });
+    expect(brief.sinceInceptionPct).toBeNull();
+    expect(tearsheet.netReturnPct).toBeNull();
+  });
+
+  it('ignores CASH when deciding marksUnstamped', () => {
+    const meta = buildPerformanceSsotMeta({
+      navRows: [
+        {
+          date: '2026-09-04',
+          nav: 99.4,
+          invested_pct: 40.5,
+          day_return_pct: 0,
+          source: 'finalized_accounting',
+          contract: 'finalized_accounting',
+        },
+      ],
+      metricsAsOf: '2026-09-04',
+      snapshotDate: '2026-09-04',
+      positionDates: ['2026-09-04'],
+      positionMetricsAsOf: ['2026-09-04'], // equities stamped; CASH excluded by caller
+    });
+    expect(meta.marksUnstamped).toBe(false);
+  });
 });

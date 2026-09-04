@@ -84,7 +84,7 @@ never a silent second truth.
 | Concern | Canonical source | Notes |
 |---|---|---|
 | **NAV chart** | `public_accounting_nav_history` (`ACCOUNTING_NAV_VIEW`) | Fail closed on query error (#3029). Tip contract badge: `finalized_accounting` vs `legacy_estimate`. |
-| **Headline returns** | Same accounting NAV tip via `getPerformanceBundle` / `buildPerformanceTearsheet` / `persistedHeadlinesFromNav` | Brief without live overlay must match Tearsheet within 0.05 pp. |
+| **Headline returns** | Same accounting NAV tip via shared pure helpers (`persistedHeadlinesFromNav` / `buildPerformanceTearsheet`); Tearsheet loads through `getPerformanceBundle` | Brief without live overlay must match Tearsheet within 0.05 pp. Brief rebuilds from dashboard snapshots of the same view (not a second fetch). |
 | **Invested %** | Accounting NAV tip `invested_pct` | Fallback: book weights → `portfolio_metrics.invested_pct`. Never mix live weights with book weights silently. |
 | **Book as-of date** | `committedBookDate(daily_snapshots.date, positions.date)` | Portfolio / Ledger / Brief book chrome. Do not imply marks refreshed when `metrics_as_of` is null. |
 | **Ledger events** | `position_events` (house book) | Session day on Brief; full stream on Ledger. |

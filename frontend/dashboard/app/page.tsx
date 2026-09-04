@@ -174,9 +174,11 @@ export default function OverviewPage() {
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
   const positionDates = (data.position_history ?? []).map((row) => row.date);
-  const bookWeightInvestedPct = positions
-    .filter((p) => p.ticker.trim().toUpperCase() !== 'CASH')
-    .reduce((sum, p) => sum + (p.weight_actual ?? 0), 0);
+  const openBookPositions = positions.filter((p) => p.ticker.trim().toUpperCase() !== 'CASH');
+  const bookWeightInvestedPct = openBookPositions.reduce(
+    (sum, p) => sum + (p.weight_actual ?? 0),
+    0
+  );
   const persisted = persistedHeadlinesFromNav(performanceHistoryResolved, {
     bookWeightInvestedPct,
     metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
@@ -194,7 +196,7 @@ export default function OverviewPage() {
       data.server_portfolio_metrics?.as_of_date ?? data.server_portfolio_metrics?.date ?? null,
     snapshotDate: latestDate,
     positionDates,
-    positionMetricsAsOf: positions.map((p) => p.metrics_as_of ?? null),
+    positionMetricsAsOf: openBookPositions.map((p) => p.metrics_as_of ?? null),
     bookWeightInvestedPct,
     metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
   });
@@ -215,13 +217,13 @@ export default function OverviewPage() {
   const priceAsOf = liveOverlay
     ? (liveKpis?.priceAsOfDate ?? bookAsOf)
     : (persisted.navAsOf ?? bookAsOf);
-  // Excess / alpha / IR: live overlay when active; else honest endpoint blurb.
-  // Alpha/IR stay fail-closed without live overlap — never invent.
+  // Excess / alpha / IR: only live path when overlay active (badge). Persisted excess
+  // uses the honest endpoint blurb — never silently pull live excess without a badge.
   const excessPct = liveOverlay
     ? (liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null)
-    : (benchmarkBlurb?.excessPct ?? liveKpis?.excessReturnPct ?? null);
+    : (benchmarkBlurb?.excessPct ?? null);
   const benchTicker =
-    liveKpis?.benchmarkTicker ??
+    (liveOverlay ? liveKpis?.benchmarkTicker : null) ??
     benchmarkBlurb?.ticker ??
     (excessPct != null ? DEFAULT_BRIEF_BENCHMARK_TICKER : null);
 
