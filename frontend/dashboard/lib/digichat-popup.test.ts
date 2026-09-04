@@ -7,6 +7,7 @@ import {
   DEFAULT_DIGICHAT_EMBED_HOST,
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
+  digichatPopupEnvFromProcess,
   extractVisiblePageText,
   isDigichatPopupEnabled,
   PAGE_CONTEXT_MAX_CHARS,
@@ -14,6 +15,22 @@ import {
   readDocumentTheme,
   resolveDigichatEmbedOrigin,
 } from './digichat-popup';
+
+describe('digichatPopupEnvFromProcess', () => {
+  it('exposes direct NEXT_PUBLIC_DIGICHAT_* keys for Turbopack inlining', () => {
+    const env = digichatPopupEnvFromProcess();
+    expect(Object.keys(env).sort()).toEqual(
+      [
+        'NEXT_PUBLIC_DIGICHAT_EMBED_HOST',
+        'NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN',
+        'NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN',
+        'NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT',
+        'NEXT_PUBLIC_DIGICHAT_POPUP',
+        'NEXT_PUBLIC_DIGICHAT_POPUP_MODE',
+      ].sort(),
+    );
+  });
+});
 
 describe('canUseDigichatPopup', () => {
   it('is Desk+ only (glass-box / issue “pro+”)', () => {

@@ -73,13 +73,27 @@ export function canUseDigichatPopup(tier: PlanTier): boolean {
 }
 
 /**
+ * Direct `process.env.NEXT_PUBLIC_*` reads so Turbopack/Next can compile-time
+ * inline them into the client bundle (same pattern as `lib/supabase.ts`).
+ * Passing whole `process.env` and indexing `env.NEXT_PUBLIC_*` does **not**
+ * get inlined — SSR then shows the launcher and hydration removes it (#3561).
+ */
+export function digichatPopupEnvFromProcess(): Record<string, string | undefined> {
+  return {
+    NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN,
+    NEXT_PUBLIC_DIGICHAT_EMBED_HOST: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_HOST,
+    NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN: process.env.NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN,
+    NEXT_PUBLIC_DIGICHAT_POPUP: process.env.NEXT_PUBLIC_DIGICHAT_POPUP,
+    NEXT_PUBLIC_DIGICHAT_POPUP_MODE: process.env.NEXT_PUBLIC_DIGICHAT_POPUP_MODE,
+    NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT: process.env.NEXT_PUBLIC_DIGICHAT_PAGE_CONTEXT,
+  };
+}
+
+/**
  * @returns absolute origin, or null if unset/invalid
  */
 export function resolveDigichatEmbedOrigin(
-  env: Record<string, string | undefined> = process.env as Record<
-    string,
-    string | undefined
-  >,
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): string | null {
   const raw = env.NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN?.trim();
   if (!raw) return null;
@@ -94,10 +108,7 @@ export function resolveDigichatEmbedOrigin(
 
 /** Origin for iframe + CSP: env when valid, else production default. */
 export function digichatEmbedOriginForDashboard(
-  env: Record<string, string | undefined> = process.env as Record<
-    string,
-    string | undefined
-  >,
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): string {
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
 }
@@ -127,10 +138,7 @@ export function embedHostRequiresToken(host: string): boolean {
  * and none is configured (avoids a wrong-tenant gated embed).
  */
 export function isDigichatPopupEnabled(
-  env: Record<string, string | undefined> = process.env as Record<
-    string,
-    string | undefined
-  >,
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): boolean {
   if (env.NEXT_PUBLIC_DIGICHAT_POPUP === '0') return false;
   const wants =
@@ -147,10 +155,7 @@ export function isDigichatPopupEnabled(
 }
 
 export function readDigichatPopupConfig(
-  env: Record<string, string | undefined> = process.env as Record<
-    string,
-    string | undefined
-  >,
+  env: Record<string, string | undefined> = digichatPopupEnvFromProcess(),
 ): DigichatPopupConfig | null {
   if (!isDigichatPopupEnabled(env)) return null;
   const origin = digichatEmbedOriginForDashboard(env);
