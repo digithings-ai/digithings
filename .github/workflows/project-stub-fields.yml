@@ -13,9 +13,10 @@
 #   Infers phase/area/kind/priority/model from existing labels and opens a PR
 #   that appends a row to project_fields.tsv.
 #
-# Job 2 (stub-tsv-phase): fires on `issues.labeled` when any phase-N label is applied
-#   to an issue that is NOT labeled `housekeeping`. Opens the same kind of stub PR.
-#   Skips if the issue already has `agent-task` (job 1 covers that case).
+# Job 2 (stub-tsv-phase): fires on `issues.labeled` when the client-pilot label
+#   is applied to an issue that is NOT labeled `housekeeping`. Opens the same
+#   kind of stub PR. Skips if the issue already has `agent-task` (job 1 covers
+#   that case). (phase-N labels were deleted in the 2026-09 board cleanup.)
 #
 # Job 3 (reap-stub-branch): fires on `pull_request.closed` (merged or closed
 #   unmerged) for any `bot/stub-tsv-<N>` head branch and deletes it via the API.
@@ -146,18 +147,16 @@ jobs:
           fi
 
   stub-tsv-phase:
-    name: Append inferred row for non-agent-task phase-labeled issues
+    name: Append inferred row for non-agent-task client-pilot issues
     # Paused: require STUB_TSV_ENABLED=true. Original condition kept below for restore.
-    # Fire when a phase-N or client-pilot label is applied, but NOT for agent-task (job 1 covers that)
+    # Fire when the client-pilot label is applied, but NOT for agent-task (job 1 covers that)
     # and NOT for housekeeping issues (those are exempt from project-field requirements).
+    # (phase-N labels were deleted in the 2026-09 board cleanup.)
     if: |
       vars.STUB_TSV_ENABLED == 'true' &&
       github.event.label.name != 'agent-task' &&
       github.event.label.name != 'housekeeping' &&
-      (
-        startsWith(github.event.label.name, 'phase-') ||
-        github.event.label.name == 'client-pilot'
-      )
+      github.event.label.name == 'client-pilot'
     runs-on: ubuntu-latest
 
     steps:

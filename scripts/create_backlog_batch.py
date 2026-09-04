@@ -1555,8 +1555,9 @@ def create_issue(issue: dict, dry_run: bool = False) -> str | None:
     # Board cleanup 2026-09: complexity:*, stage:*, enhancement, model:*,
     # exec:copilot labels were deleted from the repo — drop them here so
     # re-runs don't fail on unknown labels. (enhancement folds to type:feature;
-    # model choice is session policy, not a label.)
-    retired_prefixes = ("complexity:", "stage:", "model:")
+    # model choice is session policy, not a label.) phase-*/quota:*/pending:*
+    # never appear in batch entries but are filtered too as cheap insurance.
+    retired_prefixes = ("complexity:", "stage:", "model:", "phase-", "quota:", "pending:")
     retired_exact = {"enhancement", "exec:copilot"}
     labels_extra = [
         lbl for lbl in labels_extra

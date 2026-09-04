@@ -45,7 +45,7 @@ jobs:
           ISSUES=$(gh issue list --repo "$REPO" --state open --label "pending:quota" --label "exec:cursor" --json number --jq '.[].number')
           for N in $ISSUES; do
             echo "Re-dispatching cursor task #$N"
-            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota"
-            gh issue edit "$N" --repo "$REPO" --remove-label "exec:cursor"
+            gh issue edit "$N" --repo "$REPO" --remove-label "pending:quota" || true
+            gh issue edit "$N" --repo "$REPO" --remove-label "exec:cursor" || true
             gh issue edit "$N" --repo "$REPO" --add-label "exec:cursor"
           done
