@@ -4,10 +4,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildMailtoUrl,
+  buildThreadMailto,
   copyMarkdownWithFallback,
   downloadMarkdown,
+  markdownToHtmlDocument,
+  markdownToPlainText,
+  openMailtoWithFallback,
+  printTranscriptWithFallback,
   serializeAssistantMarkdown,
   serializeThreadMarkdown,
+  truncateForMailto,
+  MAILTO_MAX_ENCODED_LEN,
+  MAILTO_TRUNCATION_NOTE,
 } from "./transcript-markdown";
 
 describe("serializeAssistantMarkdown", () => {
@@ -141,5 +150,90 @@ describe("copyMarkdownWithFallback", () => {
 describe("downloadMarkdown", () => {
   it("throws without a document (node unit env)", () => {
     expect(() => downloadMarkdown("x.md", "y")).toThrow(/document/);
+  });
+});
+
+describe("truncateForMailto (#3510)", () => {
+  it("passes short bodies through untouched", () => {
+    expect(truncateForMailto("Hello world")).toEqual({ text: "Hello world", truncated: false });
+  });
+
+  it("cuts long bodies to the URL budget and appends the truncation note", () => {
+    const result = truncateForMailto("x".repeat(5000));
+    expect(result.truncated).toBe(true);
+    expect(result.text).toContain(MAILTO_TRUNCATION_NOTE);
+    expect(encodeURIComponent(result.text).length).toBeLessThanOrEqual(
+      MAILTO_MAX_ENCODED_LEN,
+    );
+  });
+
+  it("measures multi-byte chars after encoding, not by length", () => {
+    const result = truncateForMailto("€".repeat(2000));
+    expect(result.truncated).toBe(true);
+    expect(encodeURIComponent(result.text).length).toBeLessThanOrEqual(
+      MAILTO_MAX_ENCODED_LEN,
+    );
+  });
+});
+
+describe("buildMailtoUrl (#3510)", () => {
+  it("encodes a short subject + body with no network", () => {
+    const url = buildMailtoUrl("digichat answer", "Hello & goodbye");
+    expect(url.startsWith("mailto:?subject=digichat%20answer&body=")).toBe(true);
+    expect(url).toContain(encodeURIComponent("Hello & goodbye"));
+  });
+
+  it("thread mailto stays truncation-safe and keeps the .md fallback note", () => {
+    const url = buildThreadMailto("y".repeat(4000));
+    expect(url).toContain(encodeURIComponent(MAILTO_TRUNCATION_NOTE));
+    const bodyParam = url.split("&body=")[1] ?? "";
+    expect(bodyParam.length).toBeLessThanOrEqual(MAILTO_MAX_ENCODED_LEN);
+  });
+});
+
+describe("markdownToPlainText / markdownToHtmlDocument (#3510)", () => {
+  it("strips fence delimiters but keeps code content", () => {
+    const txt = markdownToPlainText("See:\n\n```python\nprint(1)\n```\n");
+    expect(txt).not.toContain("```");
+    expect(txt).toContain("print(1)");
+  });
+
+  it("wraps escaped markdown in a minimal html doc without a renderer", () => {
+    const html = markdownToHtmlDocument("# hi <b>", "digichat transcript");
+    expect(html).toContain("<pre>");
+    expect(html).toContain("&lt;b&gt;");
+    expect(html).not.toContain("<b>");
+  });
+});
+
+describe("printTranscriptWithFallback / openMailtoWithFallback (#3510)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("calls window.print when available", () => {
+    const print = vi.fn();
+    vi.stubGlobal("window", { print });
+    expect(printTranscriptWithFallback()).toBe("print");
+    expect(print).toHaveBeenCalled();
+  });
+
+  it("falls back to download when print is unavailable", () => {
+    vi.stubGlobal("window", undefined);
+    expect(printTranscriptWithFallback()).toBe("download");
+  });
+
+  it("opens mailto via an anchor click without network", () => {
+    const click = vi.fn();
+    const anchor = { href: "", rel: "", click, remove: vi.fn() };
+    vi.stubGlobal("document", {
+      createElement: () => anchor,
+      body: { appendChild: vi.fn() },
+    });
+    const url = buildMailtoUrl("digichat answer", "Hi");
+    expect(openMailtoWithFallback(url)).toBe("mailto");
+    expect(anchor.href).toBe(url);
+    expect(click).toHaveBeenCalled();
   });
 });

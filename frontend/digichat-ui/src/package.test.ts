@@ -24,4 +24,25 @@ describe("@digithings/digichat-ui package surface", () => {
     expect(session).toMatch(/\.dc-send\s*\{[^}]*background:\s*var\(--ink\)/s);
     expect(session).toMatch(/\.dc-send\s*\{[^}]*color:\s*var\(--bg\)/s);
   });
+
+  it("print transcript hides chrome but keeps turn text + sources (#3510)", () => {
+    const css = readFileSync(join(root, "src/styles/session.css"), "utf8");
+    expect(css).toContain("@media print");
+    const printBlock = css.slice(css.indexOf("@media print"));
+    for (const selector of [
+      ".dc-form",
+      ".dc-slash",
+      ".dc-msg-actions",
+      ".dc-msg-copy",
+      ".dc-stop",
+      ".dc-activities",
+      ".dc-quota-banner",
+      ".dc-byok-flow",
+      ".dc-intro-byok",
+    ]) {
+      expect(printBlock).toContain(selector);
+    }
+    // Turn text + Sources cards stay printable.
+    expect(printBlock).not.toContain(".dc-source-cards");
+  });
 });
