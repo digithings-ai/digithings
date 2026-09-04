@@ -219,6 +219,13 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional tenant/workspace id for index isolation or filters (enterprise).",
     )
+    skip_rerank: bool = Field(
+        default=False,
+        description=(
+            "When true, skip optional DIGISEARCH_RERANK_ENABLED second pass. "
+            "Set by digisearch_fetch_all so partial pages are not reordered (#2441)."
+        ),
+    )
 
     @field_validator("mode", mode="before")
     @classmethod
@@ -386,6 +393,7 @@ def run_query(req: QueryRequest) -> QueryResponse:
         workspace_id=(
             req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
         ),
+        skip_rerank=bool(req.skip_rerank),
     )
     response = query_index(q, index_name=req.index_name)
     results = response.results
@@ -522,6 +530,7 @@ def _query_request_from_digisearch_args(
     mode: str = "hybrid",
     skip: int = 0,
     include_total_count: bool = False,
+    skip_rerank: bool = False,
 ) -> QueryRequest:
     qtext = str(args.get("query") or "").strip()
     idx = (args.get("index_name") or default_index or "default").strip() or "default"
@@ -550,6 +559,7 @@ def _query_request_from_digisearch_args(
         summarize_if_over=summarize_if_over,
         skip=skip,
         include_total_count=include_total_count,
+        skip_rerank=skip_rerank,
     )
 
 
@@ -619,6 +629,8 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 mode=mode,
                 skip=skip,
                 include_total_count=True,
+                # Exhaustive pagination must not reorder each partial page (#2441).
+                skip_rerank=True,
             )
             resp = run_query(qreq)
             payload = resp.model_dump(mode="json")

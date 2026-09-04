@@ -157,6 +157,28 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
 _stub_index: dict[str, list[Chunk]] = {"default": []}
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
+    """Optional second-pass rerank gated by DIGISEARCH_RERANK_ENABLED (#2441).
+
+    Off by default. ``Query.skip_rerank`` suppresses even when the flag is on
+    (fetch_all pagination shares this call chain and must not reorder pages).
+    """
+    if query.skip_rerank or not _env_truthy("DIGISEARCH_RERANK_ENABLED"):
+        return resp
+    if not resp.results:
+        return resp
+    from digisearch.search.reranker import Reranker
+
+    provider = (os.environ.get("DIGISEARCH_RERANK_PROVIDER") or "bge").strip().lower() or "bge"
+    reranker = Reranker(provider=provider)
+    resp.results = reranker.rerank(query.text, resp.results, top_n=query.top_k)
+    return resp
+
+
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     """Route a query through registered backends; optional in-memory stub when explicitly enabled."""
     start = time.perf_counter()
@@ -190,7 +212,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
                     "top_k": query.top_k,
                 },
             )
-            return resp
+            return _maybe_rerank(query, resp)
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
@@ -209,11 +231,11 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
                 "backend": None,
             },
         )
-        return SearchResponse(results=[], facets=None, backend=None)
+        return _maybe_rerank(query, SearchResponse(results=[], facets=None, backend=None))
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return _maybe_rerank(query, SearchResponse(results=[], facets=None, backend=BACKEND_STUB))
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -241,7 +263,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
         out.append(Result(chunk=c, score=0.9, rank=rank))
         if len(out) >= query.top_k:
             break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+    return _maybe_rerank(query, SearchResponse(results=out, facets=None, backend=BACKEND_STUB))
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
