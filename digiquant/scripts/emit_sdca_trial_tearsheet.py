@@ -61,21 +61,40 @@ _TRIAL_STRATEGY_KEY = "sdca"  # registry alias for SdcaStrategy — see module d
 _CUSTOM_PRESET_NAME = "_trial_custom_curve"
 
 
-def _install_curve_nodes_patch(curve_nodes: list[float], long_only: bool) -> None:
+def _install_curve_nodes_patch(
+    *, curve_nodes: list[float] | None, shape_params: dict | None, long_only: bool
+) -> None:
     """Make ``presets.load_preset(_CUSTOM_PRESET_NAME)`` return a synthetic preset.
 
     ``run_and_write`` imports ``load_preset`` fresh (``from ...presets import
     load_preset``) on every call, so patching the module attribute before
     calling it is picked up — this process only ever makes one such call.
+    ``chart_series.py`` instead binds its own module-level reference
+    (``from ...presets import load_preset`` at import time), which the
+    ``presets`` module patch alone does not reach — so it's patched too.
+
+    Exactly one of ``curve_nodes``/``shape_params`` is set (enforced by the
+    CLI's mutually exclusive group). A shape-built preset keeps
+    ``preset.shape`` populated, so ``chart_series.knees_from_preset`` (used by
+    the tearsheet's buy/sell-zone overlay) can report real knees; a raw-node
+    preset can't be inverted back to knees, so ``preset.shape`` stays
+    ``None`` and that overlay is unavailable for --curve-nodes trials.
     """
+    from digiquant.strategies.sdca import chart_series as chart_series_mod
     from digiquant.strategies.sdca import presets as presets_mod
+    from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
     from digiquant.strategies.sdca.presets import SdcaPreset
 
-    custom = SdcaPreset(
-        curve_nodes=tuple(float(n) for n in curve_nodes),
-        long_only=long_only,
-        description="Trial curve — ad-hoc nodes from emit_sdca_trial_tearsheet.py, not a catalog preset.",
-    )
+    description = "Trial curve — ad-hoc from emit_sdca_trial_tearsheet.py, not a catalog preset."
+    if shape_params is not None:
+        shape = SdcaCurveShape(**shape_params)
+        custom = SdcaPreset(
+            curve_nodes=shape.to_nodes(), shape=shape, long_only=long_only, description=description
+        )
+    else:
+        custom = SdcaPreset(
+            curve_nodes=tuple(float(n) for n in curve_nodes), long_only=long_only, description=description
+        )
     original_load_preset = presets_mod.load_preset
 
     def patched_load_preset(name: str):
@@ -84,6 +103,7 @@ def _install_curve_nodes_patch(curve_nodes: list[float], long_only: bool) -> Non
         return original_load_preset(name)
 
     presets_mod.load_preset = patched_load_preset
+    chart_series_mod.load_preset = patched_load_preset
 
 
 def _install_rolling_window_patch(rolling_window: int, rolling_min_samples: int | None) -> None:
@@ -174,10 +194,18 @@ def main() -> None:
     preset_group.add_argument(
         "--curve-nodes", help="JSON array of 21 floats (risk 0..100 in steps of 5) — an ad-hoc curve"
     )
+    preset_group.add_argument(
+        "--curve-shape",
+        help='JSON object with the 6 SdcaCurveShape params, e.g. output from curve_optimize.py: '
+        '\'{"buy_max_rate": 35.0, "buy_knee_risk": 45.0, "sell_knee_risk": 50.0, '
+        '"sell_max_rate": 25.0, "buy_curvature": 1.5, "sell_curvature": 1.0}\'. '
+        "Preferred over --curve-nodes when you have shape params: it keeps the tearsheet's "
+        "buy/sell-knee overlay working (--curve-nodes can't be inverted back to knees).",
+    )
     parser.add_argument(
         "--long-only",
         action="store_true",
-        help="Only used with --curve-nodes (a named --preset carries its own long_only).",
+        help="Only used with --curve-nodes/--curve-shape (a named --preset carries its own long_only).",
     )
     parser.add_argument("--risk-model", default="btc_power_law", help="Risk model id (default: btc_power_law)")
     parser.add_argument("--price-source", choices=("yahoo", "coinbase"), default="yahoo")
@@ -191,10 +219,12 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     args = parser.parse_args()
 
-    if not args.preset and not args.curve_nodes:
-        parser.error("one of --preset or --curve-nodes is required")
-    if args.long_only and not args.curve_nodes:
-        parser.error("--long-only only applies to --curve-nodes (a --preset carries its own long_only)")
+    if not args.preset and not args.curve_nodes and not args.curve_shape:
+        parser.error("one of --preset, --curve-nodes, or --curve-shape is required")
+    if args.long_only and not args.curve_nodes and not args.curve_shape:
+        parser.error(
+            "--long-only only applies to --curve-nodes/--curve-shape (a --preset carries its own long_only)"
+        )
     if args.rolling_min_samples is not None and args.rolling_window is None:
         parser.error("--rolling-min-samples requires --rolling-window")
 
@@ -214,6 +244,15 @@ def main() -> None:
         if not isinstance(curve_nodes, list) or len(curve_nodes) != 21:
             parser.error(f"--curve-nodes must be a JSON array of 21 floats, got {curve_nodes!r}")
 
+    shape_params = None
+    if args.curve_shape:
+        try:
+            shape_params = json.loads(args.curve_shape)
+        except json.JSONDecodeError as exc:
+            parser.error(f"--curve-shape is not valid JSON: {exc}")
+        if not isinstance(shape_params, dict):
+            parser.error("--curve-shape must be a JSON object")
+
     cache_dir = args.cache_dir or (
         DEFAULT_CACHE_COINBASE if args.price_source == "coinbase" else DEFAULT_CACHE_YAHOO
     )
@@ -225,9 +264,12 @@ def main() -> None:
 
     load_repo_env()
 
-    preset_name = _CUSTOM_PRESET_NAME if curve_nodes is not None else str(args.preset)
-    if curve_nodes is not None:
-        _install_curve_nodes_patch(curve_nodes, args.long_only)
+    is_custom = curve_nodes is not None or shape_params is not None
+    preset_name = _CUSTOM_PRESET_NAME if is_custom else str(args.preset)
+    if is_custom:
+        _install_curve_nodes_patch(
+            curve_nodes=curve_nodes, shape_params=shape_params, long_only=args.long_only
+        )
     if args.rolling_window is not None:
         _install_rolling_window_patch(args.rolling_window, args.rolling_min_samples)
 
