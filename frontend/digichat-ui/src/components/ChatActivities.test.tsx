@@ -36,7 +36,7 @@ describe("ChatActivities — tool calls render in the canon grammar", () => {
   it("renders an in-flight load tool call with a caret, not Searching… copy", () => {
     const html = render([{ kind: "tool_call", name: "digivault_get_note", query: "docs/auth.md" }]);
 
-    expect(html).toContain("Load document");
+    expect(html).toContain("Load vault note");
     // Body is folded on SSR; projection uses Working… (asserted in activity-view tests).
     expect(html).not.toContain("Searching…");
     expect(html).toContain("aria-expanded");

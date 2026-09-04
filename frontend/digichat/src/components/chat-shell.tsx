@@ -60,12 +60,14 @@ async function fetchConversationBody(
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
-  { cmd: "/key", hint: "BYOK (CLI)" },
+  { cmd: "/byok", hint: "BYOK (CLI)" },
+  { cmd: "/websearch", hint: "toggle web search" },
+  { cmd: "/settings", hint: "CLI settings panel" },
   { cmd: "/model", hint: "<id>" },
   { cmd: "/clear", hint: "clear thread" },
   { cmd: "/scope", hint: "show JWT scopes" },
   { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/settings", hint: "alias for /key" },
+  { cmd: "/key", hint: "alias for /byok" },
 ];
 
 function formatTimestamp(iso: string): string {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatCliSettingLine,
   isLangCode,
   LANG_LABELS,
   matchingSlashCommands,
+  nextPaletteIndex,
   parseSlashInput,
   slashHelpText,
 } from "./slash-commands";
@@ -12,11 +14,19 @@ describe("parseSlashInput", () => {
     expect(parseSlashInput("how does auth work")).toEqual({ kind: "none" });
   });
 
-  it("waits on empty /search and /docs instead of sending", () => {
+  it("waits on empty /search and /vault instead of sending", () => {
     const search = parseSlashInput("/search");
     expect(search).toMatchObject({ kind: "incomplete", prefix: "/search " });
-    const docs = parseSlashInput("/docs   ");
-    expect(docs).toMatchObject({ kind: "incomplete", prefix: "/docs " });
+    const vault = parseSlashInput("/vault   ");
+    expect(vault).toMatchObject({ kind: "incomplete", prefix: "/vault " });
+  });
+
+  it("keeps /docs as a vault alias", () => {
+    expect(parseSlashInput("/docs notes")).toMatchObject({
+      kind: "command",
+      command: { id: "vault", forceTool: "digivault_search_notes" },
+      arg: "notes",
+    });
   });
 
   it("uses the user string as the argument — no model hint", () => {
@@ -41,46 +51,28 @@ describe("parseSlashInput", () => {
     });
     expect(parseSlashInput("/digivault original notes")).toMatchObject({
       kind: "command",
-      command: { id: "docs", forceTool: "digivault_search_notes" },
+      command: { id: "vault", forceTool: "digivault_search_notes" },
       arg: "original notes",
     });
   });
 
-  it("parses client-only /help /new /lang", () => {
+  it("parses client-only /help /new /lang /websearch /settings /byok", () => {
     expect(parseSlashInput("/help")).toMatchObject({ kind: "command", command: { id: "help" } });
     expect(parseSlashInput("/new")).toMatchObject({ kind: "command", command: { id: "new" } });
+    expect(parseSlashInput("/websearch")).toMatchObject({
+      kind: "command",
+      command: { id: "websearch" },
+    });
+    expect(parseSlashInput("/settings")).toMatchObject({
+      kind: "command",
+      command: { id: "settings" },
+    });
+    expect(parseSlashInput("/byok")).toMatchObject({ kind: "command", command: { id: "byok" } });
+    expect(parseSlashInput("/key")).toMatchObject({ kind: "command", command: { id: "byok" } });
     expect(parseSlashInput("/lang de")).toMatchObject({
       kind: "command",
       command: { id: "lang" },
       arg: "de",
-    });
-  });
-
-  it("parses client-only /copy and /export without a forceTool (#3511)", () => {
-    expect(parseSlashInput("/copy")).toMatchObject({
-      kind: "command",
-      command: { id: "copy" },
-      arg: "",
-    });
-    const copy = parseSlashInput("/copy");
-    if (copy.kind !== "command") throw new Error("expected command");
-    expect(copy.command.forceTool).toBeUndefined();
-
-    expect(parseSlashInput("/export")).toMatchObject({
-      kind: "command",
-      command: { id: "export" },
-      arg: "",
-    });
-    const exp = parseSlashInput("/export");
-    if (exp.kind !== "command") throw new Error("expected command");
-    expect(exp.command.forceTool).toBeUndefined();
-  });
-
-  it("keeps /export last as an argument, not a separate command (#3511)", () => {
-    expect(parseSlashInput("/export last")).toMatchObject({
-      kind: "command",
-      command: { id: "export" },
-      arg: "last",
     });
   });
 
@@ -90,41 +82,44 @@ describe("parseSlashInput", () => {
 });
 
 describe("matchingSlashCommands", () => {
-  it("lists public copy for a bare slash", () => {
-    const hints = matchingSlashCommands("/").map((c) => c.hint);
+  it("lists public copy for a bare slash including Vault / Web search / BYOK / Settings", () => {
+    const matches = matchingSlashCommands("/", { webSearch: true, byok: true });
+    const hints = matches.map((c) => c.hint);
     expect(hints).toContain("Search the knowledge base");
-    expect(hints).toContain("Find original documents");
+    expect(hints).toContain("Vault");
+    expect(hints).toContain("Web search");
+    expect(hints).toContain("BYOK");
+    expect(hints).toContain("Settings");
+  });
+
+  it("hides websearch unless the tenant allows it", () => {
+    expect(matchingSlashCommands("/", { webSearch: false }).map((c) => c.id)).not.toContain(
+      "websearch",
+    );
+    expect(matchingSlashCommands("/", { webSearch: true }).map((c) => c.id)).toContain(
+      "websearch",
+    );
   });
 
   it("narrows as the user types a prefix", () => {
-    expect(matchingSlashCommands("/se").map((c) => c.id)).toEqual(["search"]);
+    expect(matchingSlashCommands("/se").map((c) => c.id)).toEqual(["search", "settings"]);
+    expect(matchingSlashCommands("/sear").map((c) => c.id)).toEqual(["search"]);
     expect(matchingSlashCommands("/search foo")).toEqual([]);
-  });
-
-  it("surfaces /copy and /export in the embed palette (#3511)", () => {
-    expect(matchingSlashCommands("/c").map((c) => c.id)).toContain("copy");
-    expect(matchingSlashCommands("/e").map((c) => c.id)).toContain("export");
-    expect(matchingSlashCommands("/copy").map((c) => c.id)).toEqual(["copy"]);
-    expect(matchingSlashCommands("/export").map((c) => c.id)).toEqual(["export"]);
-    const hints = matchingSlashCommands("/").map((c) => c.hint);
-    expect(hints).toContain("Copy last answer as markdown");
-    expect(hints).toContain("Download thread as markdown");
+    expect(matchingSlashCommands("/va").map((c) => c.id)).toEqual(["vault"]);
   });
 });
 
 describe("slashHelpText", () => {
-  it("uses public copy, not raw tool ids", () => {
-    const help = slashHelpText();
+  it("uses public Vault copy, not Docs or raw tool ids", () => {
+    const help = slashHelpText({ webSearch: true, byok: true });
     expect(help).toContain("/search — Search the knowledge base");
-    expect(help).toContain("/docs — Find original documents");
+    expect(help).toContain("/vault — Vault");
+    expect(help).toContain("/websearch — Web search");
+    expect(help).toContain("/byok — BYOK");
+    expect(help).toContain("/settings — Settings");
     expect(help).not.toContain("digisearch");
     expect(help).not.toContain("digivault_get_note");
-  });
-
-  it("lists /copy and /export (#3511)", () => {
-    const help = slashHelpText();
-    expect(help).toContain("/copy — Copy last answer as markdown");
-    expect(help).toContain("/export — Download thread as markdown");
+    expect(help).not.toContain("/docs —");
   });
 });
 
@@ -139,5 +134,44 @@ describe("LANG_LABELS", () => {
   it("names every curated code in English", () => {
     expect(LANG_LABELS.de).toBe("German");
     expect(LANG_LABELS.en).toBe("English");
+  });
+});
+
+describe("nextPaletteIndex", () => {
+  it("wraps Up/Down through the palette (#3556)", () => {
+    expect(nextPaletteIndex(0, 1, 3)).toBe(1);
+    expect(nextPaletteIndex(2, 1, 3)).toBe(0);
+    expect(nextPaletteIndex(0, -1, 3)).toBe(2);
+    expect(nextPaletteIndex(0, 1, 0)).toBe(0);
+  });
+});
+
+describe("formatCliSettingLine", () => {
+  it("renders toggle and choice rows for the settings panel", () => {
+    expect(
+      formatCliSettingLine(
+        {
+          id: "websearch",
+          label: "Web search",
+          description: "External cites",
+          kind: "toggle",
+          value: true,
+        },
+        true,
+      ),
+    ).toBe("> [on] Web search — External cites");
+    expect(
+      formatCliSettingLine(
+        {
+          id: "lang",
+          label: "Language",
+          description: "presets",
+          kind: "choice",
+          value: "de",
+          options: [{ value: "de", label: "German" }],
+        },
+        false,
+      ),
+    ).toBe("  Language: German — presets");
   });
 });
