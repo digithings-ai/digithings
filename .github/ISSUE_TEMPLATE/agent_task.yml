@@ -6,7 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use labels such as `component:digigraph` and `risk:low` / `risk:med` / `risk:high`.
+        Add labels `component:<name>` and `priority:<critical|high|medium|low>`.
+        Dispatch tier comes from the component (`tiers` in `scripts/project_routing.json`).
         Conventions: `docs/agent-backlog/README.md`.
   - type: dropdown
     id: component
@@ -26,25 +27,22 @@ body:
     validations:
       required: true
   - type: dropdown
-    id: risk
+    id: priority
     attributes:
-      label: Risk
+      label: Priority
       options:
         - low
-        - med
+        - medium
         - high
+        - critical
     validations:
       required: true
-  - type: dropdown
-    id: exec
+  - type: markdown
     attributes:
-      label: Execution tier
-      description: "Minimum-capability ceiling. See docs/agents/EXECUTION_TIERS.md. cursor = one-paragraph spec, clear acceptance; claude = judgment, cross-module, or human-gated. (exec:copilot was retired 2026-08-05 with the subscription.)"
-      options:
-        - cursor
-        - claude
-    validations:
-      required: true
+      value: |
+        Dispatch tier is derived from the component (`tiers` in `scripts/project_routing.json`):
+        `component:digikey` runs supervised locally, everything else auto-executes.
+        See `docs/agents/EXECUTION_TIERS.md`.
   - type: textarea
     id: goal
     attributes:

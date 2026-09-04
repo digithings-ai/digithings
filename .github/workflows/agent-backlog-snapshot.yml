@@ -35,6 +35,6 @@ jobs:
             Auto-generated weekly refresh of `docs/agent-backlog/generated-snapshot.md`.
 
             Triggered by the [Agent backlog snapshot](../actions/workflows/agent-backlog-snapshot.yml) scheduled workflow.
-          labels: "housekeeping,automerge-docs"
+          labels: "automerge-docs"
           add-paths: docs/agent-backlog/generated-snapshot.md
           delete-branch: true

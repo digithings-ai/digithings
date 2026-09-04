@@ -142,11 +142,9 @@ def test_get_ingest_chunker_default_wraps_semantic(monkeypatch: pytest.MonkeyPat
 @pytest.mark.unit
 def test_cli_default_honors_digisearch_chunker_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Omitting --chunker must apply DIGISEARCH_CHUNKER (not hard-code semantic)."""
-    from digisearch.cli import _pick_chunker
-
     monkeypatch.setenv("DIGISEARCH_CHUNKER", "token")
     clear_chunker_cache()
-    picked = _pick_chunker(None)
+    picked = get_ingest_chunker(None)
     assert isinstance(picked, SegmentAwareChunker)
     assert isinstance(picked.inner, BackendDocumentChunker)
     assert isinstance(picked.inner.backend, ChonkieTokenChunker)
