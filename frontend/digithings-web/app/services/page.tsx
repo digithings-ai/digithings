@@ -82,15 +82,15 @@ export default function ServicesPage() {
         <section className="section section-alt">
           <div className="wrap grid gap-[3rem] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.5fr)]">
             <div>
-              <span className="kicker">{"// how an engagement starts"}</span>
-              <h2 className="mt-[0.8rem] max-w-[18ch] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
-                Scope the outcome before the work.
-              </h2>
-              <p className="mt-[1.1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
-                Tell us what you run today, what you want to build, and which constraints matter.
-                We will determine whether digithings fits and define the deliverables, dependencies,
-                responsibilities, timing, and price in writing before work begins.
-              </p>
+              <Reveal className="section-head">
+                <span className="kicker">{"// how an engagement starts"}</span>
+                <h2>Scope the outcome before the work.</h2>
+                <p>
+                  Tell us what you run today, what you want to build, and which constraints matter.
+                  We will determine whether digithings fits and define the deliverables,
+                  dependencies, responsibilities, timing, and price in writing before work begins.
+                </p>
+              </Reveal>
               <p className="mt-[1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
                 There are no public package prices or service-level commitments because the work is
                 scoped for each environment. The repository remains available whether or not you

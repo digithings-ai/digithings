@@ -29,9 +29,9 @@ export default function ContactPage() {
             <Reveal>
               <div style={{ textAlign: "center" }}>
                 <span className="kicker">{"// contact"}</span>
-                <h2 className="dq-title" style={{ marginInline: "auto" }}>
-                  Own it, or have it run for you.
-                </h2>
+                <h1 className="dq-title" style={{ marginInline: "auto" }}>
+                  Self-host free, or have it run for you.
+                </h1>
                 <p className="dq-sub" style={{ marginInline: "auto" }}>
                   digiquant is open core. Self-manage the whole stack at no cost, or let us
                   manage it for you. Same engine either way — the difference is who keeps
@@ -50,7 +50,7 @@ export default function ContactPage() {
                   variant="hero"
                   nameAs="h3"
                   className="h-full"
-                  name="Self hosted"
+                  name="Self-hosted"
                   priceLine={
                     <>
                       open core · <span className="text-accent">free</span>

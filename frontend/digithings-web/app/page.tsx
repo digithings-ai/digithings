@@ -314,17 +314,15 @@ export default function Home() {
 
         <section className="section text-center" id="contact">
           <Reveal className="wrap">
-            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-              Contact
+            <div className="section-head center">
+              <div className="kicker">Contact</div>
+              <h2>Questions, enterprise, or partnership.</h2>
+              <p>
+                The whole monorepo is MIT-licensed and public — take it and run it yourself. What
+                we sell is the integration work: fitting these modules to the stack you already
+                have, on your own infrastructure.
+              </p>
             </div>
-            <h2 className="mt-[0.6rem] font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal leading-[1.12] tracking-[-0.01em] text-ink">
-              Questions, enterprise, or partnership.
-            </h2>
-            <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
-              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
-              sell is the integration work: fitting these modules to the stack you already have,
-              on your own infrastructure.
-            </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
               <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20inquiry">
                 Email us <span aria-hidden="true">→</span>

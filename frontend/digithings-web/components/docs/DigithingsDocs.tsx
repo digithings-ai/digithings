@@ -359,7 +359,7 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
   );
 }
 
-export function DocsLayout() {
+export function DigithingsDocs() {
   return (
     <DocsShell
       nav={NAV}
