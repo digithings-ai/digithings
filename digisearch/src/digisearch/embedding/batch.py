@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 _EMBED_RETRY_ERRORS = (OSError, RuntimeError, TimeoutError, ValueError, TypeError)
 
 
-class BatchEmbedder:
+class BatchEmbedder(EmbeddingProvider):
     """Wraps EmbeddingProvider with batching, rate limit, retry."""
 
     def __init__(

@@ -88,8 +88,14 @@ def query(
 ) -> None:
     """Run a search query."""
     from digisearch.core.models import Query
+    from digisearch.embedding.factory import normalize_query_mode
     from digisearch.search._stub import query_index
 
+    try:
+        mode = normalize_query_mode(mode)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
     q = Query(text=text, top_k=top_k, mode=mode)
     response = query_index(q, index_name=index)
     for i, r in enumerate(response.results, 1):

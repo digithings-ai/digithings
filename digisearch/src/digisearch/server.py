@@ -163,7 +163,14 @@ class QueryRequest(BaseModel):
     text: str = Field(..., min_length=1, description="Search query text")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
-    mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
+    mode: str = Field(
+        default="hybrid",
+        pattern="^(keyword|vector|hybrid)$",
+        description=(
+            "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
+            "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
+        ),
+    )
     format: str = Field(
         default="default",
         description="default | table — table returns formatted markdown in response.formatted",
@@ -268,7 +275,14 @@ class ResearchTurnRequest(BaseModel):
     user_message: str = Field(..., min_length=1, description="User question or search intent")
     index_name: str = Field(default="default", description="Index/collection name")
     top_k: int = Field(default=10, ge=1, le=100)
-    mode: str = Field(default="hybrid", description="keyword | vector | hybrid")
+    mode: str = Field(
+        default="hybrid",
+        pattern="^(keyword|vector|hybrid)$",
+        description=(
+            "keyword | vector | hybrid — capability hint. Chroma/Vectorize/stub "
+            "coerce keyword/hybrid to vector-only ANN (see ARCHITECTURE)."
+        ),
+    )
     filter: str | None = Field(default=None, description="Raw OData filter when index allows")
     filters: list[dict[str, Any]] | None = Field(
         default=None,
@@ -336,11 +350,17 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
 def run_query(req: QueryRequest) -> QueryResponse:
     """Core query implementation; shared by ``POST /query`` and orchestrator invoke."""
     from digisearch.core.standard_hits import normalize_query_hit
+    from digisearch.embedding.factory import effective_query_mode, normalize_query_mode
+
+    try:
+        mode = normalize_query_mode(req.mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     q = Query(
         text=req.text,
         top_k=req.top_k,
-        mode=req.mode,
+        mode=mode,
         filters=_build_query_filters(req),
         columns=req.columns,
         facets=req.facets,
@@ -374,6 +394,18 @@ def run_query(req: QueryRequest) -> QueryResponse:
 
         formatted = format_results_table(out_results, req.text, top_k=req.top_k)
     total = response.total_count if response.total_count is not None else len(results)
+    effective = effective_query_mode(mode, response.backend)
+    if effective != mode:
+        logger.info(
+            "query.mode coerced for backend",
+            extra={
+                "operation": "query_mode",
+                "requested_mode": mode,
+                "effective_mode": effective,
+                "backend": response.backend,
+                "index_name": req.index_name,
+            },
+        )
     return QueryResponse(
         results=out_results,
         query=req.text,

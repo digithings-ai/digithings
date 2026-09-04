@@ -13,13 +13,19 @@ from digisearch.embedding.base import EmbeddingProvider
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingCache:
+class EmbeddingCache(EmbeddingProvider):
     """Cache embeddings by content hash. SQLite backend."""
 
     def __init__(self, provider: EmbeddingProvider, db_path: str | Path | None = None) -> None:
         self.provider = provider
-        self._path = db_path or os.environ.get("DIGISEARCH_CACHE_PATH", ".digisearch_embed_cache.db")
+        self._path = db_path or os.environ.get(
+            "DIGISEARCH_CACHE_PATH", ".digisearch_embed_cache.db"
+        )
         self._conn: sqlite3.Connection | None = None
+
+    @property
+    def dimensions(self) -> int:
+        return self.provider.dimensions
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
@@ -31,9 +37,7 @@ class EmbeddingCache:
 
     def _model_namespace(self) -> str:
         """Prefix cache keys with provider identity so model swaps invalidate hits (REM-103)."""
-        model_id = getattr(self.provider, "model_id", None) or getattr(
-            self.provider, "model", None
-        )
+        model_id = getattr(self.provider, "model_id", None) or getattr(self.provider, "model", None)
         if model_id:
             return f"{model_id}:{self.provider.dimensions}"
         return f"{type(self.provider).__name__}:{self.provider.dimensions}"
@@ -110,5 +114,7 @@ class EmbeddingCache:
         # Verify all slots were filled (guards against provider returning partial results)
         missing = [i for i, r in enumerate(result) if r is None]
         if missing:
-            raise ValueError(f"Embeddings missing for {len(missing)} text(s) at indices: {missing[:10]}")
+            raise ValueError(
+                f"Embeddings missing for {len(missing)} text(s) at indices: {missing[:10]}"
+            )
         return result  # type: ignore[return-value]  # all None slots are filled above
