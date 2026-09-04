@@ -118,8 +118,9 @@ export function DigiChatSession({
     paletteMode.kind === "choices" ? paletteMode.options : ([] as readonly { value: string; label: string }[]);
 
   useEffect(() => {
+    if (paletteMode.kind === "choices") return;
     setPaletteIndex(0);
-  }, [input]);
+  }, [input, paletteMode.kind]);
 
   useEffect(() => {
     if (!input.startsWith("/")) {
@@ -259,7 +260,11 @@ export function DigiChatSession({
       ]);
       return;
     }
-    onWebSearchToggle?.();
+    if (!onWebSearchToggle) {
+      setLocalNotes((notes) => [...notes, "Web search cannot be changed here."]);
+      return;
+    }
+    onWebSearchToggle();
     const next = !webSearchEnabled;
     setLocalNotes((notes) => [
       ...notes,

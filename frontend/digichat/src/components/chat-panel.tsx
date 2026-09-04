@@ -627,11 +627,14 @@ export function ChatPanel({
       cmd: cmd.names[0],
       hint: cmd.hint,
       activate: () => {
-        if (cmd.id === "websearch") {
-          void onSubmit({ preventDefault() {} } as React.FormEvent, "/websearch");
-          return;
-        }
-        if (cmd.id === "byok" || cmd.id === "settings") {
+        if (
+          cmd.id === "websearch" ||
+          cmd.id === "byok" ||
+          cmd.id === "settings" ||
+          cmd.id === "help" ||
+          cmd.id === "copy" ||
+          cmd.id === "export"
+        ) {
           void onSubmit({ preventDefault() {} } as React.FormEvent, cmd.names[0]);
           return;
         }

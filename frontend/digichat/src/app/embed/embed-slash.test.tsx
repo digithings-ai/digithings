@@ -72,6 +72,7 @@ describe("public /embed slash surface (#3418)", () => {
         placeholder="ask digichat…"
         showByok={false}
         showIntro={false}
+        languageCode="fr"
         onLanguageChange={onLanguageChange}
         chat={{ messages: [], busy: false, error: null, send: () => {} }}
       />,
@@ -79,10 +80,12 @@ describe("public /embed slash surface (#3418)", () => {
     const box = screen.getByRole("textbox");
     await user.type(box, "/lang");
     await user.keyboard("{Enter}");
-    expect(screen.getByText("German")).toBeTruthy();
-    await user.keyboard("{ArrowDown}");
+    // Current preset (French) stays highlighted after dive-in — not reset to English.
+    const frBtn = screen.getByRole("button", { name: /fr\s+French/i });
+    expect(frBtn.className).toMatch(/dc-slash-item-active/);
+    await user.keyboard("{ArrowUp}");
     await user.keyboard("{Enter}");
-    expect(onLanguageChange).toHaveBeenCalledWith("de");
+    expect(onLanguageChange).toHaveBeenCalledWith("es");
   });
 
   it("/websearch toggles when allowed and refuses when not (#3556)", async () => {
