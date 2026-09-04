@@ -111,15 +111,16 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
     },
     # SDCA (#3174 + remaining-book curve search): six SdcaCurveShape params
     # plus power-law/macro/oscillator weights in [0, 1] (composite normalizes).
-    # Curve bounds are widened so remaining-book rates can concentrate at
-    # extremes (max 40%/day, knees at/inside the published 25/70 dead zone,
-    # curvature up to 5). Zero extra weight = disabled.
+    # Curve bounds match curve_optimize.CURVE_SEARCH_BOUNDS: max 40%/day, knees
+    # widened past the published 25/70 dead zone (buy up to 45, sell down to
+    # 50) so the search can reach wider active zones, curvature up to 5.
+    # Zero extra weight = disabled.
     # Default power_law=1 / extras=0 matches today's BTC charts unless settings
     # freeze a composite (published BTC is power law 1.0 + M2 0.5 + DXY 0.5).
     "sdca": {
         "buy_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
-        "buy_knee_risk": (8.0, 25.0, 15.0, 1.0, "float"),
-        "sell_knee_risk": (70.0, 92.0, 80.0, 1.0, "float"),
+        "buy_knee_risk": (8.0, 45.0, 15.0, 1.0, "float"),
+        "sell_knee_risk": (50.0, 92.0, 80.0, 1.0, "float"),
         "sell_max_rate": (3.0, 40.0, 15.0, 1.0, "float"),
         "buy_curvature": (1.0, 5.0, 2.0, 0.5, "float"),
         "sell_curvature": (1.0, 5.0, 3.0, 0.5, "float"),

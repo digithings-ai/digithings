@@ -2,13 +2,14 @@
 
 Index members stay at published ``settings.json`` weights (power law 1.0 +
 M2 0.5 + DXY 0.5). Search is over ``SdcaCurveShape`` only. Objective is
-``total_return_pct`` (highest backtest return). vs-flat-DCA is logged, never
-the headline, and never used to set ``beats_flat_dca_oos``.
+``risk_adjusted_return`` (``total_return_pct / max_drawdown_pct``), so the
+search rewards a smoother equity curve, not just raw return. vs-flat-DCA and
+vs-lump-sum are logged, never used to set ``beats_flat_dca_oos``.
 
-Concentration uses fixed published cheap/rich bands (risk < 25 / risk > 70)
-plus deeper bands (risk < 15 / risk > 85) and dollar-weighted mean risk:
-remaining-book already only buys below the trial's own buy knee, so that
-fraction is tautological unless the band is independent of the trial.
+Concentration (fixed published cheap/rich bands, risk < 25 / risk > 70, plus
+deeper bands risk < 15 / risk > 85) is reported for transparency but is not a
+hard feasibility gate: it is anchored to the *published* curve's knees, so it
+would reject a wider-knee candidate outright regardless of performance.
 """
 
 from __future__ import annotations
@@ -44,24 +45,26 @@ PUBLISHED_BUY_KNEE = 25.0
 PUBLISHED_SELL_KNEE = 70.0
 DEEP_CHEAP_RISK = 15.0
 DEEP_RICH_RISK = 85.0
+_DRAWDOWN_EPSILON = 0.5  # floor (pct points) so a ~0 drawdown doesn't blow up the ratio
 
 CURVE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
     "buy_max_rate": (3.0, 40.0),
-    "buy_knee_risk": (8.0, 25.0),
-    "sell_knee_risk": (70.0, 92.0),
+    "buy_knee_risk": (8.0, 45.0),
+    "sell_knee_risk": (50.0, 92.0),
     "sell_max_rate": (3.0, 40.0),
     "buy_curvature": (1.0, 5.0),
     "sell_curvature": (1.0, 5.0),
 }
 
-# Coarse grid: widened vs the published 3% / 25 / 70 / curv 1+2 clip.
+# Coarse grid: widened vs the published 3% / 25 / 70 / curv 1+2 clip, and past
+# the old 25/70 knee caps so trial-and-error's wide-zone shapes are sampled.
 DEFAULT_COARSE_GRID: dict[str, tuple[float, ...]] = {
     "buy_max_rate": (8.0, 15.0, 25.0, 35.0),
-    "buy_knee_risk": (10.0, 15.0, 20.0, 25.0),
-    "sell_knee_risk": (70.0, 80.0, 88.0),
+    "buy_knee_risk": (10.0, 15.0, 20.0, 25.0, 35.0, 45.0),
+    "sell_knee_risk": (50.0, 55.0, 60.0, 70.0, 80.0, 88.0),
     "sell_max_rate": (8.0, 15.0, 25.0, 35.0),
-    "buy_curvature": (1.0, 2.0, 3.5),
-    "sell_curvature": (2.0, 3.5),
+    "buy_curvature": (1.0, 1.5, 2.0, 3.5),
+    "sell_curvature": (1.0, 1.5, 2.0, 3.5),
 }
 
 _SHAPE_KEYS = (
@@ -75,12 +78,19 @@ _SHAPE_KEYS = (
 
 
 class CurveOptimizeGates(BaseModel):
-    """Hard gates. Return is maximized only among trials that pass."""
+    """Hard gates. Risk-adjusted return is maximized only among trials that pass.
+
+    ``min_buy_frac_cheap``/``min_sell_frac_rich`` default to 0 (off): they are
+    measured against the fixed *published* knees (``PUBLISHED_BUY_KNEE``/
+    ``PUBLISHED_SELL_KNEE``), not a candidate's own knee, so a nonzero floor
+    here would reject a wide-knee candidate outright regardless of
+    performance. Set them explicitly to re-enable as a sanity check.
+    """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
-    min_buy_frac_cheap: float = Field(0.99, ge=0.0, le=1.0)
-    min_sell_frac_rich: float = Field(0.99, ge=0.0, le=1.0)
+    min_buy_frac_cheap: float = Field(0.0, ge=0.0, le=1.0)
+    min_sell_frac_rich: float = Field(0.0, ge=0.0, le=1.0)
     require_2025_sells: bool = True
     require_sells: bool = True
     min_sell_max_rate: float = Field(1.0, gt=0.0)
@@ -106,12 +116,16 @@ class FillConcentration(BaseModel):
 
 
 class CurveTrialScore(BaseModel):
-    """One curve on the frozen index. vs-flat is logged, not the objective."""
+    """One curve on the frozen index. Objective is ``risk_adjusted_return``."""
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     shape: SdcaCurveShape
     total_return_pct: float
+    max_drawdown_pct: float = Field(ge=0.0, description="abs(dca_max_drawdown_pct) * 100")
+    risk_adjusted_return: float = Field(
+        description="total_return_pct / max(max_drawdown_pct, epsilon)"
+    )
     vs_lump_pct: float
     vs_flat_dca_pct: float
     concentration: FillConcentration
@@ -333,9 +347,13 @@ def score_shape_on_index(
     )
     conc = fill_concentration(frame)
     reasons = _reject_reasons(shape, conc, g)
+    max_drawdown_pct = abs(report.dca_max_drawdown_pct) * 100.0
+    risk_adjusted_return = report.total_return_pct / max(max_drawdown_pct, _DRAWDOWN_EPSILON)
     return CurveTrialScore(
         shape=shape,
         total_return_pct=report.total_return_pct,
+        max_drawdown_pct=max_drawdown_pct,
+        risk_adjusted_return=risk_adjusted_return,
         vs_lump_pct=report.vs_lump_pct,
         vs_flat_dca_pct=report.vs_flat_dca_pct,
         concentration=conc,
@@ -394,25 +412,27 @@ def search_curve(
         raise ValueError("no valid curve trials to evaluate")
     feasible = [s for s in ranked if s.feasible]
     pool = feasible or ranked
-    unconstrained = max(pool, key=lambda s: s.total_return_pct)
-    concentrated = [
-        s
-        for s in feasible
-        if beats_baseline_concentration(s.concentration, baseline_score.concentration)
-    ]
-    # Persist candidate is max return among concentration-beating trials, not the
-    # unconstrained drip (higher remaining-book rates at the same knees can raise
-    # return while spreading fills through the cheap/rich bands).
-    best = max(concentrated, key=lambda s: s.total_return_pct) if concentrated else unconstrained
+    # "Unconstrained" here means before any concentration preference (feasibility
+    # gates like no_sells/negative_cash still apply via `pool`). Objective is
+    # risk_adjusted_return, not raw total_return_pct, so the winner also reflects
+    # the smoother equity curve wider zones tend to produce.
+    unconstrained = max(pool, key=lambda s: s.risk_adjusted_return)
+    # Concentration is reported, not a hard filter for `best`: it's measured
+    # against the fixed published knees, so it would reject a wide-knee winner
+    # outright regardless of risk-adjusted performance.
+    best = unconstrained
     beat_ret = best.total_return_pct > baseline_score.total_return_pct + 1e-9
+    beat_risk_adj = best.risk_adjusted_return > baseline_score.risk_adjusted_return + 1e-9
     beat_conc = beats_baseline_concentration(best.concentration, baseline_score.concentration)
-    persist_ok = bool(best.feasible and beat_ret and beat_conc)
+    persist_ok = bool(best.feasible and beat_risk_adj)
     notes = (
         f"Frozen index weights {frozen_weights.model_dump()}. "
-        f"Objective=total_return_pct among concentration-beating trials "
-        f"evaluator={evaluator}. "
-        f"Unconstrained max return={unconstrained.total_return_pct:.4f} "
-        f"shape={params_from_shape(unconstrained.shape)}. "
+        f"Objective=risk_adjusted_return (total_return_pct / max_drawdown_pct) "
+        f"among feasible trials, evaluator={evaluator}. "
+        f"best risk_adjusted_return={best.risk_adjusted_return:.4f} "
+        f"(return={best.total_return_pct:.2f}%, drawdown={best.max_drawdown_pct:.2f}%) "
+        f"shape={params_from_shape(best.shape)}. "
+        f"beats_baseline_concentration={beat_conc} (reported, not gated). "
         f"vs-flat-DCA logged only (best={best.vs_flat_dca_pct:.4f}). "
         "beats_flat_dca_oos is not set from this in-sample search. "
         "Do not --push-supabase from this command."

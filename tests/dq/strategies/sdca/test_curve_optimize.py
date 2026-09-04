@@ -168,12 +168,16 @@ class TestFillConcentration:
 
 
 class TestSearchSpace:
-    def test_bounds_are_wider_than_published_3_pct_25_70(self) -> None:
+    def test_bounds_reach_past_the_published_25_70_knees(self) -> None:
+        """Knee bounds now extend past the published dead zone (not just up to it),
+        so the search can reach the wider active zones that fix vs-Buy&Hold
+        underperformance — see curve_trial.py manual trials."""
         assert CURVE_SEARCH_BOUNDS["buy_max_rate"][1] >= 30.0
         assert CURVE_SEARCH_BOUNDS["sell_max_rate"][1] >= 30.0
         assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][0] <= 10.0
-        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] <= PUBLISHED_BUY_KNEE
-        assert CURVE_SEARCH_BOUNDS["sell_knee_risk"][0] >= PUBLISHED_SELL_KNEE
+        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] > PUBLISHED_BUY_KNEE
+        assert CURVE_SEARCH_BOUNDS["sell_knee_risk"][0] < PUBLISHED_SELL_KNEE
+        assert CURVE_SEARCH_BOUNDS["buy_knee_risk"][1] < CURVE_SEARCH_BOUNDS["sell_knee_risk"][0]
         assert CURVE_SEARCH_BOUNDS["buy_curvature"][1] >= 4.0
         assert CURVE_SEARCH_BOUNDS["sell_curvature"][1] >= 4.0
 
@@ -185,9 +189,9 @@ class TestSearchSpace:
         assert hi_sell >= 30.0
         lo_bk, hi_bk, _, _, _ = specs["buy_knee_risk"]
         lo_sk, hi_sk, _, _, _ = specs["sell_knee_risk"]
-        assert hi_bk < lo_sk
-        assert hi_bk <= PUBLISHED_BUY_KNEE
-        assert lo_sk >= PUBLISHED_SELL_KNEE
+        assert (lo_bk, hi_bk) == CURVE_SEARCH_BOUNDS["buy_knee_risk"]
+        assert (lo_sk, hi_sk) == CURVE_SEARCH_BOUNDS["sell_knee_risk"]
+        assert hi_bk < lo_sk  # dead zone stays non-empty even at the widest knees
 
     def test_sample_trials_stay_in_bounds_and_keep_dead_zone(self) -> None:
         trials = sample_curve_trials(
@@ -209,7 +213,7 @@ class TestSearchSpace:
 
 
 class TestSearchAndPersist:
-    def test_search_picks_higher_return_among_concentrated(self) -> None:
+    def test_search_picks_higher_risk_adjusted_return(self) -> None:
         dates, prices, risk = _v_cycle()
         baseline = _published_shape()
         clustered = _shape(
@@ -246,17 +250,22 @@ class TestSearchAndPersist:
             baseline=baseline,
             frozen_weights=published_indicator_weights(),
         )
+        clustered_score = score_shape_on_index(dates, prices, risk, clustered, 1000.0)
         assert result.num_evaluations == 2
         assert result.beats_flat_dca_oos is False
-        assert result.best.total_return_pct >= result.baseline.total_return_pct
-        assert result.best.concentration.buy_mean_risk is not None
-        assert result.baseline.concentration.buy_mean_risk is not None
-        assert (
-            result.best.concentration.buy_mean_risk <= result.baseline.concentration.buy_mean_risk
+        # best is whichever trial has the higher risk_adjusted_return, not
+        # necessarily the higher raw total_return_pct or the more concentrated one.
+        assert result.best.risk_adjusted_return == pytest.approx(
+            max(result.baseline.risk_adjusted_return, clustered_score.risk_adjusted_return)
         )
 
-    def test_higher_return_drip_does_not_win_over_concentrated(self) -> None:
-        """A long risk≈20 plateau lets a 25-knee linear dump cash before the bottom."""
+    def test_best_is_picked_by_risk_adjusted_return_not_raw_return(self) -> None:
+        """A long risk≈20 plateau lets a 25-knee linear dump cash before the bottom.
+
+        Objective is risk_adjusted_return (total_return_pct / max_drawdown_pct), so
+        `best` can differ from whichever trial has the higher raw total_return_pct —
+        unlike the old concentration-gated selection, this is checked directly
+        against both trials' own scores rather than assumed via a fixed knee."""
         n_plateau, n_bottom, n_mid, n_rich = 50, 20, 15, 30
         prices: list[float] = []
         risks: list[float] = []
@@ -330,8 +339,12 @@ class TestSearchAndPersist:
         assert clustered_score.concentration.buy_mean_risk is not None
         assert drip_score.concentration.buy_mean_risk is not None
         assert clustered_score.concentration.buy_mean_risk < drip_score.concentration.buy_mean_risk
-        assert result.best.shape.buy_knee_risk == pytest.approx(12.0)
-        assert result.unconstrained_return_pct >= result.best.total_return_pct - 1e-9
+        # best is whichever of the two has the higher risk_adjusted_return.
+        assert result.best.risk_adjusted_return == pytest.approx(
+            max(drip_score.risk_adjusted_return, clustered_score.risk_adjusted_return)
+        )
+        # unconstrained is the same max over the feasible pool used for `best`.
+        assert result.unconstrained_return_pct == pytest.approx(result.best.total_return_pct)
 
     def test_persist_requires_return_and_concentration(self, tmp_path: Path) -> None:
         dates, prices, risk = _v_cycle()
