@@ -105,7 +105,12 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
     try:
         from digisearch.indexes.backends.vectorize import VectorizeBackend
 
-        backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
+        backend = VectorizeBackend(
+            index_name,
+            account_id=account_id,
+            api_token=api_token,
+            embedding_provider=_resolved_embedding_provider(),
+        )
         results = backend.query(query)
     except Exception as exc:
         # str(exc) carries the underlying failure detail (e.g. "vectorize query
@@ -113,6 +118,13 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
         # raised message, so re-raising it here cannot leak one either.
         raise VectorizeBackendError(str(exc)) from exc
     return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
+
+
+def _resolved_embedding_provider() -> object:
+    """Same configured provider the ingest pipeline uses (raw, not cache-wrapped)."""
+    from digisearch.embedding.factory import resolve_backend_embedding_provider
+
+    return resolve_backend_embedding_provider()
 
 
 @register_backend
@@ -123,14 +135,13 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     if not chroma_path and not chroma_host:
         return None
     try:
-        from digisearch.embedding.providers.minilm import get_default_minilm_embedder
         from digisearch.indexes.backends.chroma import ChromaBackend
 
         port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
         backend = ChromaBackend(
             name=index_name,
             persist_path=chroma_path,
-            embedding_provider=get_default_minilm_embedder(),
+            embedding_provider=_resolved_embedding_provider(),
             chroma_host=chroma_host,
             chroma_port=int(port_raw),
         )
@@ -254,7 +265,10 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         from digisearch.indexes.backends.vectorize import VectorizeBackend
 
         backend = VectorizeBackend(
-            index_name, account_id=vectorize_account, api_token=vectorize_token
+            index_name,
+            account_id=vectorize_account,
+            api_token=vectorize_token,
+            embedding_provider=_resolved_embedding_provider(),
         )
         backend.add(chunks)
         return BACKEND_VECTORIZE
@@ -263,13 +277,12 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     chroma_host = os.environ.get("CHROMA_HOST")
     if chroma_host and not chroma_path:
         try:
-            from digisearch.embedding.providers.minilm import get_default_minilm_embedder
             from digisearch.indexes.backends.chroma import ChromaBackend
 
             port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
             backend = ChromaBackend(
                 name=index_name,
-                embedding_provider=get_default_minilm_embedder(),
+                embedding_provider=_resolved_embedding_provider(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )
@@ -282,14 +295,13 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
             raise
     if chroma_path:
         try:
-            from digisearch.embedding.providers.minilm import get_default_minilm_embedder
             from digisearch.indexes.backends.chroma import ChromaBackend
 
             port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
             backend = ChromaBackend(
                 name=index_name,
                 persist_path=chroma_path,
-                embedding_provider=get_default_minilm_embedder(),
+                embedding_provider=_resolved_embedding_provider(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )

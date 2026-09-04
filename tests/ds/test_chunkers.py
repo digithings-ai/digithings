@@ -196,6 +196,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     / Vectorize filter paragraphs in ARCHITECTURE.md; RecursiveChunker unchanged.
     Hashes only (count still 46) for #2437 Chroma EmbeddingProvider / schema
     versioning docs in §(f) — fixture prose only.
+    Re-recorded at count 45 for #1189 (canonical ``pipeline/ingest.py`` docs +
+    module map in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
+    Re-recorded at count 46 for #1177 (embed pipeline factory + query.mode
+    semantics docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -209,21 +215,21 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2a6c63aff18cb155",
         "05ee1579bfb41def",
         "657dd9b7e8689cb3",
-        "dbbea9505a0aa65e",
-        "2e3197f02d87ecc8",
+        "6f61da3b9ed54d44",
+        "cd2c6e3f30505620",
         "5c44b3a1c81aaae0",
-        "bfb4594d4666aba2",
-        "33d2f55bb06380b5",
-        "912f5c5541f4c2ea",
-        "25d821be8951a9d6",
-        "fc372c3eb08daea4",
-        "16584e006bbec980",
+        "4fe2b5f10b829673",
+        "e446cea04444b3a8",
+        "214d58d9d1d9d220",
+        "90a5a2d345e53200",
+        "24d4f4910f267916",
+        "8b3750ac2215c89e",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "941a8a3c77732354",
-        "3f839068d9b0bad1",
-        "d27956f583c6cd8c",
+        "bb49fa9bd8d8d792",
+        "a0c037931c01430e",
+        "12edc9da027739e1",
         "819ebadc3320ecc2",
         "5a207132fd65bced",
         "8d9cefe0c746a4da",
@@ -231,19 +237,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
-        "5b438889eafdfbb9",
-        "44f158c16c20596f",
-        "0d565dcd93278ab7",
-        "c01731fed9b486f9",
-        "ae1e6da2f77138e0",
-        "c945e162a543358e",
-        "96c4e4c20cd1b0a1",
+        "00bffb9020b848f5",
+        "078cbca3f2c3b3e1",
+        "8e8ba68329d0d6db",
+        "6b71a6ae799786a7",
+        "e5be9f0e5832575d",
+        "5276cf81c056f97a",
+        "3e4e414a6f3c0c5e",
         "b8242daa43601ada",
         "c25b30546ac6978d",
         "6bab3662a2e1ea3f",
         "5849d4f9b080523c",
-        "dccc3e4f6ff514e6",
-        "1bc8e963fdd4c124",
+        "ab408a6bb633b68c",
+        "4884286f97333dfd",
         "a0c3eeac2a656b2f",
         "f58c6d8a261323d6",
         "a2a8fe99c2eece30",

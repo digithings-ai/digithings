@@ -20,7 +20,7 @@ doc blindly; it has drifted from reality before (that's the story this section t
 
 | Check name | Workflow | What it validates |
 |---|---|---|
-| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled`. Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
+| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled` **except advisory `score`** (#3528: optional rubric; red `score / score` is visible but non-blocking). Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
 | `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
 | `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
 
