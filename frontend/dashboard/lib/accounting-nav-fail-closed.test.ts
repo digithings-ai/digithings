@@ -19,6 +19,7 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
     expect(src).toContain('AccountingNavContractError');
     expect(src).toContain('if (navQuery.error)');
     expect(src).toMatch(/throw new AccountingNavContractError/);
+    expect(src).toContain('getPerformanceBundle');
   });
 
   it('dashboard asserts accounting NAV query ok before mapping rows', () => {

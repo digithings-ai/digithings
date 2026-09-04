@@ -30,6 +30,7 @@ import {
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
+import { resolveInvestedPct } from '@/lib/performance-ssot';
 import AllocationsTab from './tabs/AllocationsTab';
 import ThesesTab from './tabs/ThesesTab';
 import PageSkeleton from '@/components/page-skeleton';
@@ -197,6 +198,17 @@ export default function PortfolioShellInner() {
       </div>
     );
 
+  const tipInvested = data.portfolio.snapshots.at(-1)?.invested_pct ?? null;
+  const bookWeightInvestedPct = positions
+    .filter((p) => p.ticker.trim().toUpperCase() !== 'CASH')
+    .reduce((sum, p) => sum + (p.weight_actual ?? 0), 0);
+  const holdingsInvestedPct = resolveInvestedPct({
+    tipInvestedPct: tipInvested,
+    bookWeightInvestedPct,
+    metricsInvestedPct:
+      data.server_portfolio_metrics?.invested_pct ?? metrics.total_invested ?? null,
+  }).investedPct;
+
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active={sectionActive} />
@@ -206,9 +218,7 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
-            investedPct={
-              data?.server_portfolio_metrics?.invested_pct ?? metrics?.total_invested ?? null
-            }
+            investedPct={holdingsInvestedPct}
             decisions={decisions}
             positionHistory={positionHistory}
             thesisById={thesisById}

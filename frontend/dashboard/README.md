@@ -19,7 +19,9 @@ finance-tearsheet grammars directly in `app/globals.css`:
 ```
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
-return metrics, a base-zero portfolio path, current-book contribution, and
+return metrics via `getPerformanceBundle` (same `public_accounting_nav_history`
+series and `performance-ssot` helpers as Brief — #3580), a base-zero portfolio path,
+current-book contribution, and
 open-position outcomes. Closed / trimmed fills live on **Ledger** (single source
 of truth) — the tearsheet links there instead of duplicating a Closed positions
 tab. Its command band uses the same compact as-of stamp as Holdings and shows one
@@ -48,6 +50,8 @@ aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark a
 excess return when the comparison changes.
 The dashboard keeps its finance-tearsheet variants and shell print rules app-side at the
 bottom of `globals.css`.
+
+Performance SSOT table: [`lib/TABLES.md`](lib/TABLES.md) § Performance SSOT.
 
 The root layout scopes the page to the digiquant accent and blueprint
 background:
