@@ -92,6 +92,8 @@ export function ChatShell({
   const [collapsed, setCollapsed] = useState(false);
   const [byokMode, setByokMode] = useState(false);
   const [threadQuery, setThreadQuery] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -463,7 +465,38 @@ export function ChatShell({
                         tabIndex={0}
                         aria-pressed={t.id === activeId}
                       >
-                        <span className="dc-sidebar-thread-title">{t.title}</span>
+                        <span className="dc-sidebar-thread-title">
+                          {renamingId === t.id ? (
+                            <input
+                              className="dc-sidebar-rename"
+                              value={renameDraft}
+                              autoFocus
+                              maxLength={120}
+                              aria-label="Rename chat"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  renameThread(t.id, renameDraft);
+                                  setRenamingId(null);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  setRenamingId(null);
+                                }
+                              }}
+                              onChange={(e) => setRenameDraft(e.target.value)}
+                              onBlur={() => {
+                                if (renamingId === t.id) {
+                                  renameThread(t.id, renameDraft);
+                                  setRenamingId(null);
+                                }
+                              }}
+                            />
+                          ) : (
+                            t.title
+                          )}
+                        </span>
                         <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
                         <DropdownMenu>
                           <DropdownMenuTrigger
@@ -477,8 +510,8 @@ export function ChatShell({
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
                               onClick={() => {
-                                const next = window.prompt("Rename chat", t.title);
-                                if (next != null) renameThread(t.id, next);
+                                setRenamingId(t.id);
+                                setRenameDraft(t.title);
                               }}
                             >
                               <Pencil className="size-3.5" />

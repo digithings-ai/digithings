@@ -8,7 +8,11 @@ import { type StrategyIndexEntry } from "./types";
 import { fetchStrategyIndex } from "@/lib/live/strategies";
 
 export function StrategyLibraryLive() {
-  const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+  // null until the first fetch settles: the static export prerenders the
+  // loading state, so server HTML and the first client render agree (no
+  // hydration mismatch); the honest-empty state only renders after a
+  // completed load returns zero rows.
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[] | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -20,5 +24,5 @@ export function StrategyLibraryLive() {
     };
   }, []);
 
-  return <StrategyLibrary strategies={strategies} />;
+  return <StrategyLibrary strategies={strategies ?? []} loading={strategies === null} />;
 }
