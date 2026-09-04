@@ -30,7 +30,9 @@ extra.
 | `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`, `NoteRow` (shared list-notes shape — not the same shape as `Note`, hence the distinct name — returned by both `SupabaseStore.list_notes` and `D1Store.list_notes`. `scripts/vectorize_sync.py` reads only `D1Store.list_notes` since #2239 repointed it from Supabase to D1; `SupabaseStore.list_notes` now has exactly one caller, `scripts/d1_sync.py --from-supabase`'s one-time backfill), `VaultSearchHit` (shared ranked-hit shape for both `SupabaseStore.search` and `D1Store.search`), `NoteDetail` (one note whole: body + frontmatter together — what a by-path fetch returns; also carries `segment_label` as its own top-level field, mirrored by `D1Store.get_note` out of `frontmatter["segment_label"]` — there is no dedicated D1 column for it, unlike `segment_index` — because the original Task 3 brief documented `{vault_path, title, body_markdown, frontmatter, segment_label}` as the returned shape and a consumer reading `segment_label` at that top level would otherwise find nothing, #2239 review). |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
-| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `prune_children(parent_doc, keep_names, subdir)` for scoped docs_onboard convergence, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/vault.py` | `Vault` / `FilesystemStore` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `prune_children(parent_doc, keep_names, subdir)` for scoped docs_onboard convergence, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`, `neighbors`). `FilesystemStore` is the explicit filesystem `VaultStore` name (#1142); `Vault` remains the public type. |
+| `digivault/store.py` | `VaultStore` protocol (#1142) — `list_notes`, `read_text`, `backlinks`, `search_by_tag`, `neighbors`, `reindex`, `create_note`, `set_frontmatter`, `rename`. Implemented by `FilesystemStore` and `PostgresStore`. |
+| `digivault/postgres_store.py` | `PostgresStore` — read/write `knowledge_notes` filtered by a `vault` namespace column; backlinks/tags/neighbors from the `wikilinks`/`tags` columns (no markdown parse at serve time). Optional `[supabase]` extra, lazily imported via `from_env`. Migration 118. |
 | `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Optional `path_prefix` filter for multi-tenant corpora. Query tokens drop common English stopwords so a broad, question-shaped query does not score every note. Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC (optional `path_prefix`; migration 068). Optional `[supabase]` extra, lazily imported. |
 | `digivault/d1_errors.py` | `D1StoreError(RuntimeError)` — isolated in its own module so it stays importable even if importing `d1_store.py` fails (mirrors `digisearch`'s `vectorize_errors.py`). |
@@ -47,19 +49,24 @@ extra.
 
 ```python
 from digivault import (
-    Vault, VaultError, VaultConfig,
+    Vault, FilesystemStore, VaultStore, VaultError, VaultConfig,
     Note, LinkRef, LintReport, ValidationIssue,
     parse_links, rewrite_target,
     split_frontmatter, dump_frontmatter, set_keys,
 )
 
-vault = Vault("docs/vision")
+vault = FilesystemStore("docs/vision")  # or Vault(...) — same filesystem backend
 vault.list_notes()              # -> list[Note] (with backlinks)
 vault.backlinks("digigraph")    # -> tuple[str, ...]
+vault.neighbors("digigraph")    # -> tuple[str, ...]  (outlinks ∪ backlinks)
 vault.search_by_tag("module")   # -> list[Note]
 vault.create_note("execution", frontmatter={"title": "execution"}, body="see [[digiquant]]")
 vault.rename("research", "research-research")   # rewrites every inbound [[research]]
 report = vault.lint()           # -> LintReport(ok, note_count, issues)
+
+# Postgres-backed knowledge vault (migration 118; needs digivault[supabase]):
+# from digivault.postgres_store import PostgresStore
+# store = PostgresStore.from_env(vault="finance")
 ```
 
 ## Service topology
@@ -256,14 +263,18 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `Vault.prune_children` update the in-memory link and parent-child indexes
   incrementally. This keeps bulk ingest linear while preserving a fresh index at
   the next request boundary.
-- **Storage is pluggable (filesystem + Supabase).** digivault owns *how knowledge
-  is organized and traversed* (frontmatter, wikilinks, backlinks, taxonomy). The
-  on-disk `Vault(root)` is the default; `Vault.from_sources` builds the same index
-  from any `(rel_path, text)` source, and `supabase_store.SupabaseStore` reads a
-  vault out of Postgres (`architecture_notes` / `knowledge_notes`, #1087) — read-only,
-  reconstructed via `dump_frontmatter`, served to agents through the anon key.
-  `digistore` (when it ships) will own *where bytes live* beneath this; the two
-  remain complementary — digivault sits above digistore, not replacing it.
+- **Storage is pluggable (filesystem + Postgres + Supabase read path).** digivault
+  owns *how knowledge is organized and traversed* (frontmatter, wikilinks,
+  backlinks, taxonomy). The on-disk `Vault` / `FilesystemStore` is the default
+  `VaultStore` (#1142). `PostgresStore` serves `knowledge_notes` filtered by the
+  `vault` namespace column, building the link graph from stored `wikilinks` /
+  `tags` (no markdown parse at serve time; migration 118).
+  `Vault.from_sources` still builds the same index from any `(rel_path, text)`
+  source, and `supabase_store.SupabaseStore` remains the read-only FTS path for
+  `architecture_notes` / legacy callers (#1087) — reconstructed via
+  `dump_frontmatter`, served through the anon key. `digistore` (when it ships)
+  will own *where bytes live* beneath this; the two remain complementary —
+  digivault sits above digistore, not replacing it.
 - **Wikilinks, not standard links.** The vault speaks Obsidian `[[...]]`. The
   repo's `scripts/check_doc_links.py` validates only `[text](path)` links, so
   digivault owns wikilink validation via `lint` (wired into `make vault-check`
