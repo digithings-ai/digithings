@@ -202,13 +202,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Re-recorded at count 46 for #1177 (embed pipeline factory + query.mode
     semantics docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 47 for #2441 (DIGISEARCH_RERANK_ENABLED / BGE v2-m3
+    wiring docs in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 46
+    assert len(chunks) == 47
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -231,9 +234,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "a0c037931c01430e",
         "12edc9da027739e1",
         "819ebadc3320ecc2",
-        "5a207132fd65bced",
-        "8d9cefe0c746a4da",
-        "3f0cb2fd8839c77a",
+        "9febcd11d9848e18",
+        "8c403dc89d35fe82",
+        "d60ae7116f9e57ec",
+        "ec4e79e9d9714f36",
         "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
@@ -244,16 +248,16 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "e5be9f0e5832575d",
         "5276cf81c056f97a",
         "3e4e414a6f3c0c5e",
-        "b8242daa43601ada",
-        "c25b30546ac6978d",
-        "6bab3662a2e1ea3f",
-        "5849d4f9b080523c",
-        "ab408a6bb633b68c",
-        "4884286f97333dfd",
+        "79e1479908a647a2",
+        "5881d77c9811fa5d",
+        "217c7d169b90a8be",
+        "e98012ae08e70074",
+        "c66bb2bf8f97d7a2",
+        "87effdcfaaee2a76",
         "a0c3eeac2a656b2f",
-        "f58c6d8a261323d6",
-        "a2a8fe99c2eece30",
-        "deae7c288ab01590",
+        "44050a77e280c022",
+        "79ae674b8661ea64",
+        "fc586dc7c2348d1e",
         "ac8dbe83a57bf4f4",
         "8b8c754092fe534f",
         "059d9ccf5c138f8c",
