@@ -14,6 +14,13 @@ on:
   issues:
     types: [labeled, opened, reopened]
 
+# Smoke test #3533-Phase-4: GitHub can deliver opened+labeled for one issue in
+# the same second. Serialize per issue (no cancel: the survivor must see the
+# first run's comment) — the pre-post re-check below does the dedup.
+concurrency:
+  group: cursor-dispatch-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write
@@ -96,6 +103,14 @@ jobs:
           COMPONENT: ${{ steps.gate.outputs.component }}
           SLUG: ${{ steps.gate.outputs.slug }}
         run: |
+          # Re-check immediately before posting: a concurrent run may have posted
+          # while this run was queued behind the concurrency group.
+          LAST_MENTION=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments \
+            --jq '[.comments[] | select(.body | contains("@cursor")) | .createdAt] | max // empty')
+          if [[ -n "$LAST_MENTION" ]] && [[ "$LAST_MENTION" > "$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)" ]]; then
+            echo "An @cursor mention appeared while queued ($LAST_MENTION) — skipping duplicate."
+            exit 0
+          fi
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "\
           @cursor Execute this issue (cursor-tier dispatch).
 
