@@ -235,18 +235,20 @@ export function summarizeFilteredTrades(rows: TradeHistoryRow[]): TradeHistorySu
   };
 }
 
-function cmpNullableString(a: string | null, b: string | null, mul: number): number {
-  if (a === null && b === null) return 0;
-  if (a === null) return 1;
-  if (b === null) return -1;
-  return mul * a.localeCompare(b);
-}
-
 function cmpNullableNumber(a: number | null, b: number | null, mul: number): number {
   if (a === null && b === null) return 0;
   if (a === null) return 1;
   if (b === null) return -1;
   return mul * (a - b);
+}
+
+/** First finite number in a formatted level string (handles bands like `148.2–148.6`). */
+export function levelSortKey(value: string | null): number | null {
+  if (value === null) return null;
+  const match = value.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const n = Number(match[0]);
+  return Number.isFinite(n) ? n : null;
 }
 
 const RESULT_ORDER: Record<TradeResult, number> = { right: 0, wrong: 1, live: 2 };
@@ -267,11 +269,11 @@ export function sortTradeHistory(
       case 'bias':
         return mul * biasLabel(a.direction).localeCompare(biasLabel(b.direction));
       case 'entry':
-        return cmpNullableString(a.entryBand, b.entryBand, mul);
+        return cmpNullableNumber(levelSortKey(a.entryBand), levelSortKey(b.entryBand), mul);
       case 'stop':
-        return cmpNullableString(a.stop, b.stop, mul);
+        return cmpNullableNumber(levelSortKey(a.stop), levelSortKey(b.stop), mul);
       case 'target':
-        return cmpNullableString(a.target, b.target, mul);
+        return cmpNullableNumber(levelSortKey(a.target), levelSortKey(b.target), mul);
       case 'active':
         return cmpNullableNumber(a.sessions, b.sessions, mul);
       case 'impact':

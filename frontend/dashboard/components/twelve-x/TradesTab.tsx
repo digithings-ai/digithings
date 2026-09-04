@@ -184,7 +184,11 @@ export default function TradesTab({
       </p>
 
       {history.length === 0 ? (
-        <p className="px-1 text-sm text-ink-mute">No trade ideas published yet.</p>
+        <p className="px-1 text-sm text-ink-mute">
+          {ideas.length === 0
+            ? 'No trade ideas published yet.'
+            : 'No scored trade ideas yet (missing rates / unscored rows are hidden).'}
+        </p>
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 px-1" role="group" aria-label="Filter trades">
@@ -269,7 +273,8 @@ export default function TradesTab({
               value={formatHoldPct(summary.avgReturnWrongs)}
             />
             <span className="self-end font-mono text-[10px] text-ink-mute">
-              {filtered.length} shown
+              {filtered.length} matching
+              {visible.length < filtered.length ? ` · showing ${visible.length}` : ''}
               {summary.liveCount > 0 ? ` · ${summary.liveCount} live` : ''}
             </span>
           </div>

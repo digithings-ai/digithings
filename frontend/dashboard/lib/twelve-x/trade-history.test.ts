@@ -44,8 +44,8 @@ function evalRow(
     status: 'resolved',
     entry_date: '2026-07-24',
     exit_date: '2026-07-31',
-    entry_px: 147.1,
-    exit_px: 148.9,
+    entry_fix: 147.1,
+    exit_fix: 148.9,
     ret: 0.012,
     hold_return: 0.012,
     sigma_entry: 0.005,
@@ -93,7 +93,7 @@ describe('assembleTradeHistory', () => {
           direction: 'short',
           status: 'open',
           exit_date: null,
-          exit_px: null,
+          exit_fix: null,
           directional_win: null,
           hit: null,
         }),
@@ -253,5 +253,19 @@ describe('filterTradeHistory + summarizeFilteredTrades', () => {
     const impacts = sorted.map((r) => r.holdReturn);
     expect(impacts[0]).toBeCloseTo(0.012);
     expect(impacts[impacts.length - 1]).toBeCloseTo(-0.008);
+  });
+
+  it('sorts entry bands by first numeric level, not lexicographically', () => {
+    const rows: TradeHistoryRow[] = [
+      { ...base[0], runDate: '2026-08-01', rank: 1, entryBand: '100.0–101.0' },
+      { ...base[0], runDate: '2026-08-01', rank: 2, entryBand: '12.5–13.0' },
+      { ...base[0], runDate: '2026-08-01', rank: 3, entryBand: '9.5–10.0' },
+    ];
+    const sorted = sortTradeHistory(rows, 'entry', 'asc');
+    expect(sorted.map((r) => r.entryBand)).toEqual([
+      '9.5–10.0',
+      '12.5–13.0',
+      '100.0–101.0',
+    ]);
   });
 });
