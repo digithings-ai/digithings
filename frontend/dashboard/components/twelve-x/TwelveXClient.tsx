@@ -161,7 +161,7 @@ export function resolveTab(urlTab: string | null): TwelveXTab {
   return 'today';
 }
 
-/** Read a query param from the live URL (client only) — used once to seed state. */
+/** Read a query param from the live URL — client only, and only after mount. */
 function readParam(key: string): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get(key);
