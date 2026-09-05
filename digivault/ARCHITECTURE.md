@@ -268,7 +268,10 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   backlinks, taxonomy). The on-disk `Vault` / `FilesystemStore` is the default
   `VaultStore` (#1142). `PostgresStore` serves `knowledge_notes` filtered by the
   `vault` namespace column, building the link graph from stored `wikilinks` /
-  `tags` (no markdown parse at serve time; migration 118).
+  `tags` (no markdown parse at serve time; migration 118). Table uniqueness is
+  `(vault, vault_path)` only — duplicate filename stems in different directories
+  are legal, matching the filesystem vault's `_duplicates` / `duplicate_note`
+  lint (#3603).
   `Vault.from_sources` still builds the same index from any `(rel_path, text)`
   source, and `supabase_store.SupabaseStore` remains the read-only FTS path for
   `architecture_notes` / legacy callers (#1087) — reconstructed via

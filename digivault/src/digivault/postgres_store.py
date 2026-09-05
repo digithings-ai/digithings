@@ -281,8 +281,9 @@ class PostgresStore:
         ):
             raise VaultError(f"Note path already exists: {vault_path!r}")
         row = self._row_payload(clean, vault_path, fm, body)
-        # Insert (not upsert): create must fail if (vault, vault_path) or
-        # (vault, slug) already exists — never silently overwrite another slug.
+        # Insert (not upsert): create must fail if (vault, vault_path) already
+        # exists — never silently overwrite another note. Duplicate slugs in
+        # different directories are legal at the table (#3603).
         self._client.table(self._table).insert(row).execute()
         self.reindex()
         created = self._notes.get(clean)
