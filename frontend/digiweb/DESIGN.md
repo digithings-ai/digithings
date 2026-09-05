@@ -259,7 +259,7 @@ Borders are uniformly 1px hairline; the only thicker strokes are decorative chev
 ### Inputs / Fields
 - **Style:** `0` radius, hairline border, `--bg`-colored fill (canvas cut into the surrounding surface), mono type regardless of field type.
 - **Focus:** border tints toward accent (~55%) plus a 3–4px accent-tinted glow ring.
-- **Error:** the entire recipe swaps to `--down` — border, ring, and (via a wrapper class hook) the field's own text.
+- **Error:** the entire recipe swaps to `--danger` — border, ring, and (via a wrapper class hook) the field's own text. (`--up`/`--down` are P&L-only per the tokens.css house rule; `--danger` is the distinct non-financial red.)
 - **Disabled:** `opacity: 0.5–0.55`, `not-allowed` cursor.
 
 ### Navigation
@@ -281,7 +281,7 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 ## Do's and Don'ts
 
 ### Do:
-- **Do** build under the `[data-theme]`-scoped token system (`--bg` / `--surface` / `--ink` family, `--r-sm/md/lg` = 8/12/16px) — this is the normative, currently-shipping scale.
+- **Do** build under the `[data-theme]`-scoped token system (`--bg` / `--surface` / `--ink` family, `--r-sm/md/lg` = 0) — this is the normative, currently-shipping scale.
 - **Do** treat Geist Mono as the production display/body default; treat `serif-legacy` / Fraunces as reference-app furniture or a rare editorial escape hatch, not a target to copy onto product heroes.
 - **Do** keep money colors (`--up`/`--down`/`--warn`) fixed to their own token or literal, never `var(--accent)` — a livery switch must never repaint a P&L number.
 - **Do** give every interactive control the same focus recipe: `outline: none` plus a 2–4px `color-mix(var(--accent) or var(--down), ~50%, transparent)` box-shadow ring.

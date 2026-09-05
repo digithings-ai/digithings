@@ -12,9 +12,8 @@
  * Dashboard CTA is a plain <a href="/dashboard/"> (separate export).
  * Desktop: teal mark only. Sheet: Open dashboard.
  */
-import { NavShell, GitHubGlyph } from "@digithings/web";
+import { NavShell, GitHubGlyph, DigiquantMark } from "@digithings/web";
 import { Brand, DQ_NAV_PRIMARY } from "@/app/_nav";
-import { DigiquantMark } from "./DashboardMark";
 
 export function SiteNav() {
   return (

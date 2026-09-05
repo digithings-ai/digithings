@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import releases from "../../digiweb/design/releases.json";
+import releases from "@digithings/design/releases.json";
 
 describe("tagged frontend releases feed", () => {
   it("is a non-empty list of real GitHub release rows", () => {
