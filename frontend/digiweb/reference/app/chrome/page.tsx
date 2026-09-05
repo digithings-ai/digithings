@@ -1,10 +1,12 @@
 import "./chrome.css";
 import { AnnouncementBarReference } from "@/components/announcement-bar-reference";
+import { BreadcrumbsReference } from "@/components/chrome/breadcrumbs-reference";
 import { CommandPaletteReference } from "@/components/command-palette-reference";
 import { FooterReference } from "@/components/footer-reference";
 import { ModuleCardReference } from "@/components/chrome/module-card-reference";
 import { NavMenuReference } from "@/components/chrome/nav-menu-reference";
 import { NavShellReference } from "@/components/chrome/nav-shell-reference";
+import { PaginationReference } from "@/components/chrome/pagination-reference";
 import { ScrollNavReference } from "@/components/scroll-nav-reference";
 import { SocialsReference } from "@/components/socials-reference";
 import { TabsReference } from "@/components/tabs-reference";
@@ -31,6 +33,8 @@ export default function ChromePage() {
       <ScrollNavReference />
       <NavShellReference />
       <NavMenuReference />
+      <BreadcrumbsReference />
+      <PaginationReference />
       <ModuleCardReference />
       <SocialsReference />
       <FooterReference />

@@ -12,6 +12,7 @@ import { RepoActivityReference } from "@/components/repo-activity-reference";
 import { RoadmapGanttReference } from "@/components/roadmap-gantt-reference";
 import { SortableTableReference } from "@/components/sortable-table-reference";
 import { StatCounterReference } from "@/components/stat-counter-reference";
+import { TableReference } from "@/components/table-reference";
 
 const DECK: CardDeckItem[] = [
   {
@@ -77,8 +78,8 @@ export default function DataPage() {
           Numbers, <em>glance-readable.</em>
         </h1>
         <p>
-          Data display grammar: dot-matrix stats, the card deck, and precision tables — mono
-          numerals, hairline rows, honest units.
+          Data display grammar: dot-matrix stats, the card deck, plain ledgers and precision
+          tables — mono numerals, hairline rows, honest units.
         </p>
       </header>
 
@@ -101,6 +102,7 @@ export default function DataPage() {
       <ChangelogRailReference />
       <RepoActivityReference />
       <SortableTableReference />
+      <TableReference />
       <ConvictionReference />
       <RoadmapGanttReference />
       <PricingReference />

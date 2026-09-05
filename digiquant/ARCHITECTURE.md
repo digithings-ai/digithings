@@ -1906,8 +1906,8 @@ portfolio imports from research runtime.
 
 **Not in v1:** a portfolio-lite env fork, `build_portfolio_phases_lite`, `run_type=baseline|delta`
 graph forks, `phase7cd` bull/bear stack, phase9 evolution LLM on the daily path, or a
-`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all` (Sunday cron
-sets this automatically) — not a separate graph.
+`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all`
+(manual `workflow_dispatch` / CLI) — not a separate graph or Sunday force.
 
 #### Responsibility boundary (research vs portfolio positioning)
 
@@ -2113,7 +2113,8 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   plus `digiquant.research.graph.ResearchInput` (`cadence=daily`, `refresh_scope`).
 - **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
   `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
-  or Sunday cron (see `.github/workflows/pipeline-digiquant.yml`).
+  via manual `workflow_dispatch` / CLI (see `.github/workflows/pipeline-digiquant.yml`).
+  House clocks run daily with `refresh_scope=none` by default.
 - Skills under `digiquant/src/digiquant/research/skills/` (alt-data, institutional,
   macro, asset-class, equity, sector-research, digest, …).
   Loaded via `digiquant.research.skills.load_skill`.

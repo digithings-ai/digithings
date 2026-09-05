@@ -11,7 +11,8 @@ import {
   type OdometerStat,
   type StackItem,
 } from "@digithings/web";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
@@ -201,8 +202,11 @@ export default function Home() {
           <div className="wrap">
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
-              {/* nowrap from md up so the claim holds one line; it still wraps on
-                  phones, where forcing one line would shrink it to nothing.
+              {/* No nowrap here: the head is 56ch wide and the headline at full
+                  clamp size is wider, so forcing one line overflows the box to
+                  the right and reads off-center (text-align:center anchors
+                  overflowing nowrap text at the left edge). It wraps to two
+                  centered lines instead.
                   "Nine", not "Eleven" (full-UI-suite critique, P2): the
                   #metrics section one screen above states, and the odometer
                   literally renders, "9" shipped modules — a scanning reader
@@ -212,7 +216,7 @@ export default function Home() {
                   The 9-shipped/2-roadmap split already lives in the body copy
                   below; the headline now matches the number it is standing
                   next to. */}
-              <h2 className="md:whitespace-nowrap">Nine modules. One toolkit.</h2>
+              <h2 className="text-balance">Nine modules. One toolkit.</h2>
               <p>
                 The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more
@@ -313,27 +317,25 @@ export default function Home() {
 
         <section className="section text-center" id="contact">
           <Reveal className="wrap">
-            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
-              Contact
+            <div className="section-head center">
+              <div className="kicker">Contact</div>
+              <h2>Questions, enterprise, or partnership.</h2>
+              <p>
+                The whole monorepo is MIT-licensed and public — take it and run it yourself. What
+                we sell is the integration work: fitting these modules to the stack you already
+                have, on your own infrastructure.
+              </p>
             </div>
-            <h2 className="mt-[0.6rem] font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal leading-[1.12] tracking-[-0.01em] text-ink">
-              Questions, enterprise, or partnership.
-            </h2>
-            <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
-              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
-              sell is the integration work: fitting these modules to the stack you already have,
-              on your own infrastructure.
-            </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
-              <ContactMailto className="btn btn-primary" subject="digithings%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20inquiry">
                 Email us <span aria-hidden="true">→</span>
               </ContactMailto>
-              <ContactMailto className="btn btn-ghost" subject="digithings%20enterprise">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20enterprise">
                 Enterprise
               </ContactMailto>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto
+              <ContactMailto email={DT_CONTACT_EMAIL}
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
               >
