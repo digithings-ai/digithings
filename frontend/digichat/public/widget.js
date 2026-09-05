@@ -262,6 +262,7 @@
       document.querySelector('[role="main"]') ||
       document.body;
     if (!root) return { html: "", text: "" };
+    if (shouldDrop(root, true)) return { html: "", text: "" };
     var clone = root.cloneNode(true);
     pruneFromLive(root, clone);
     sanitizeInPlace(clone);

@@ -187,4 +187,21 @@ describe("extractPageHtml / extractPageContext — live DOM (#3602)", () => {
     expect(html).not.toContain("Ask digichat launcher");
     expect(html).not.toContain("chrome");
   });
+
+  it("drops a hidden main root instead of serializing its children", () => {
+    document.body.innerHTML =
+      "<main hidden><p>HIDDEN-MAIN-SECRET</p></main><p>outside</p>";
+    const { html, text } = extractPageContext();
+    expect(html).toBe("");
+    expect(text).toBe("");
+  });
+
+  it("drops a hidden body fallback root instead of serializing visible children", () => {
+    document.body.innerHTML = "<p>BODY-HIDDEN-CHILD</p>";
+    document.body.setAttribute("hidden", "");
+    const { html, text } = extractPageContext();
+    document.body.removeAttribute("hidden");
+    expect(html).toBe("");
+    expect(text).toBe("");
+  });
 });

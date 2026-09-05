@@ -343,7 +343,7 @@ export function extractPageContext(
   if (!doc) return { html: "", text: "" };
   const liveRoot = pageContextRoot(doc);
   if (!liveRoot) return { html: "", text: "" };
-  if (shouldDrop(liveRoot, { useComputedStyle: true }) && liveRoot !== doc.body) {
+  if (shouldDrop(liveRoot, { useComputedStyle: true })) {
     return { html: "", text: "" };
   }
   const clone = liveRoot.cloneNode(true) as Element;
