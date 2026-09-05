@@ -13,4 +13,5 @@ model_list:
       model: openai/auto
       api_base: os.environ/OMNIROUTE_API_BASE
       api_key: os.environ/OMNIROUTE_API_KEY
-      configurable_clientside_auth_params: ["api_key", "api_base"]
+      configurable_clientside_auth_params:
+        - api_key

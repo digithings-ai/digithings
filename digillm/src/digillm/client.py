@@ -120,12 +120,14 @@ _MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "120
 # ── Provider registry ─────────────────────────────────────────────────────────
 # Maps a ``provider/`` model prefix to its OpenAI-compatible base_url + the env
 # var holding its API key. House traffic does **not** use this table: when
-# ``OPENAI_API_BASE`` points at LiteLLM, prefixes stay on the wire as model ids.
-# BYOK through LiteLLM puts the user's key/base in ``extra_body`` (clientside
-# credentials). The CLI OpenRouter rewrite of ``OPENAI_API_BASE`` is **not**
-# LiteLLM — registered prefixes open vendor clients there, and BYOK uses the
-# user Bearer directly. The registry is diagnostics-only without a LiteLLM
-# base. Do not default callers onto a hosted marketplace.
+# ``OPENAI_API_BASE`` points at a declared LiteLLM proxy, prefixes stay on the
+# wire as model ids. BYOK through LiteLLM puts the user's key/base in
+# ``extra_body`` (clientside credentials) only for those declared proxies.
+# Direct vendor bases, Ollama, and the CLI OpenRouter rewrite of
+# ``OPENAI_API_BASE`` are **not** LiteLLM — registered prefixes open vendor
+# clients there, and BYOK uses the user Bearer directly. The registry is
+# diagnostics-only without a LiteLLM base. Do not default callers onto a
+# hosted marketplace.
 
 _EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
     "xai": {
@@ -281,11 +283,12 @@ _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SE
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
-    When a LiteLLM proxy is configured (``OPENAI_API_BASE`` set and not
-    ``openrouter.ai``), this is always that proxy client — house key as Bearer,
-    BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
-    The leftover CLI OpenRouter rewrite is a default base, not LiteLLM: BYOK
-    then returns an *uncached* client at the user's ``base_url``.
+    When a declared LiteLLM proxy is configured (``OPENAI_API_BASE`` on the
+    trusted-proxy allowlist), this is always that proxy client — house key as
+    Bearer, BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
+    The leftover CLI OpenRouter rewrite, a direct vendor ``OPENAI_API_BASE``,
+    and Ollama are not LiteLLM: BYOK then returns an *uncached* client at the
+    user's ``base_url``.
     Otherwise returns a client cached by ``(api_key, base_url)`` so the httpx
     connection pool is reused; the cache key embeds both env-derived values so
     the client is recreated automatically when either changes (e.g. in tests).
@@ -320,9 +323,65 @@ def _api_base_is_openrouter() -> bool:
     return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
 
 
+# Documented LiteLLM listen URLs. A non-empty ``DIGILLM_TRUSTED_LITELLM_BASES``
+# (comma-separated) replaces this tuple so an operator can pin a single proxy.
+# ``OPENAI_API_BASE`` is a trusted proxy only when it canonicalizes to one of
+# these — never merely because it is set and is not OpenRouter (#3605).
+_DEFAULT_TRUSTED_LITELLM_BASES = (
+    "http://127.0.0.1:4000/v1",
+    "http://localhost:4000/v1",
+    "http://[::1]:4000/v1",
+    "http://litellm:4000/v1",
+    "http://host.docker.internal:4000/v1",
+)
+
+# Catalog ``baseUrl`` values from ``config/byok-providers.json``, trailing slash
+# stripped. digillm does not read that file (standalone library); tests pin
+# this set to the catalog so a new provider cannot silently skip the regex.
+_BYOK_CATALOG_API_BASES = frozenset(
+    {
+        "https://openrouter.ai/api/v1",
+        "https://api.openai.com/v1",
+        "https://api.anthropic.com/v1",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "https://api.x.ai/v1",
+    }
+)
+
+
+def _canonical_llm_base(url: str) -> str:
+    """Lowercase origin+port, dropping a trailing ``/v1`` so allowlist matches both forms."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.endswith("/v1"):
+        return lower[: -len("/v1")].rstrip("/")
+    return lower
+
+
+def _trusted_litellm_bases() -> frozenset[str]:
+    extra = (os.environ.get("DIGILLM_TRUSTED_LITELLM_BASES") or "").strip()
+    raw = (
+        [part.strip() for part in extra.split(",") if part.strip()]
+        if extra
+        else list(_DEFAULT_TRUSTED_LITELLM_BASES)
+    )
+    return frozenset(filter(None, (_canonical_llm_base(item) for item in raw)))
+
+
 def _litellm_proxy_configured() -> bool:
-    """True when ``OPENAI_API_BASE`` is a LiteLLM (or other non-OpenRouter) proxy."""
-    return _default_base_configured() and not _api_base_is_openrouter()
+    """True when ``OPENAI_API_BASE`` is an explicitly declared LiteLLM proxy.
+
+    The allowlist is :data:`_DEFAULT_TRUSTED_LITELLM_BASES` unless
+    ``DIGILLM_TRUSTED_LITELLM_BASES`` replaces it. Direct vendor endpoints
+    (OpenAI, OpenRouter, Ollama :11434, …) are not proxies even when they
+    speak the OpenAI protocol.
+    """
+    base = (os.environ.get("OPENAI_API_BASE") or "").strip()
+    if not base:
+        return False
+    return _canonical_llm_base(base) in _trusted_litellm_bases()
 
 
 # OpenRouter org slugs used as house ``model_name`` keys in ``config/litellm.yaml``.
@@ -350,24 +409,32 @@ def _use_default_base_client(model: str) -> bool:
     LiteLLM: every prefix (caller → digillm → LiteLLM). Leftover OpenRouter rewrite:
     house OpenRouter slugs that collide with the registry (``anthropic/``, leftover
     ``openrouter/``) stay on the default client so ``anthropic/claude-sonnet-5`` does
-    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients.
+    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients. Any
+    other non-proxy ``OPENAI_API_BASE`` (direct OpenAI, Ollama, …) is not treated
+    as LiteLLM.
     """
     provider, _ = _parse_provider_prefix(model)
     if provider is None or not _default_base_configured():
         return False
     if _litellm_proxy_configured():
         return True
-    return provider in {"anthropic", "openrouter"}
+    if _api_base_is_openrouter():
+        return provider in {"anthropic", "openrouter"}
+    return False
 
 
 def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
     """Attach LiteLLM clientside credentials when BYOK is bound on the proxy path.
 
-    Only when ``OPENAI_API_BASE`` is a LiteLLM proxy, not the leftover OpenRouter
-    rewrite. HTTP still authenticates to LiteLLM with the house proxy key.
-    ``extra_body`` ``api_key`` / ``api_base`` are LiteLLM's request-level
-    pass-through so the proxy uses the user's token against that vendor or the
-    user's own OpenAI-compat endpoint. No-op without LiteLLM or without BYOK.
+    Only when ``OPENAI_API_BASE`` is a declared LiteLLM proxy. HTTP still
+    authenticates to LiteLLM with the house proxy key. ``extra_body``
+    ``api_key`` / ``api_base`` are LiteLLM's request-level pass-through so the
+    proxy spends the user's token at the catalog provider host. ``api_base``
+    outside :data:`_BYOK_CATALOG_API_BASES` is refused here — LiteLLM's regex
+    allowlist is the second gate. BYOK requests also set
+    ``cache: {no-cache, no-store}`` so LiteLLM's shared proxy cache cannot
+    reuse one principal's response for another. No-op without LiteLLM or
+    without BYOK.
     """
     if not _litellm_proxy_configured():
         return kwargs
@@ -375,10 +442,20 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
     if not byok_override:
         return kwargs
     api_key, base_url = byok_override
+    catalog_base = base_url.rstrip("/")
+    if catalog_base not in _BYOK_CATALOG_API_BASES:
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} is not a catalog provider host; "
+            "clientside pass-through is limited to config/byok-providers.json bases."
+        )
     merged = dict(kwargs)
     extra = dict(merged.get("extra_body") or {})
     extra["api_key"] = api_key
-    extra["api_base"] = base_url.rstrip("/")
+    extra["api_base"] = catalog_base
+    cache = dict(extra.get("cache") or {})
+    cache["no-cache"] = True
+    cache["no-store"] = True
+    extra["cache"] = cache
     merged["extra_body"] = extra
     return merged
 
@@ -405,9 +482,9 @@ def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | No
 def get_client_for_model(model: str) -> OpenAI:
     """Return the OpenAI client for ``model`` (the single public client entry point).
 
-    LiteLLM (``OPENAI_API_BASE`` set and not ``openrouter.ai``): house and BYOK
-    use :func:`get_client`. Registered prefixes are LiteLLM ``model_name`` keys.
-    BYOK keys ride ``extra_body``.
+    Declared LiteLLM proxy (``OPENAI_API_BASE`` on the trusted-proxy allowlist):
+    house and BYOK use :func:`get_client`. Registered prefixes are LiteLLM
+    ``model_name`` keys. BYOK keys ride ``extra_body``.
 
     Default base set (including leftover OpenRouter rewrite): house
     ``anthropic/`` / leftover ``openrouter/`` stay on :func:`get_client` so

@@ -894,12 +894,22 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Model routing:** callers must pass a concrete model string. digiquant
   phase pins in `config/digiquant_models.yaml` are **unprefixed** OpenRouter
   slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
-  always caller → digillm → LiteLLM → vendor (or the user's OpenAI-compat
-  endpoint). House keys and BYOK keys both stay on that path: BYOK is passed
-  through LiteLLM as request `api_key` / `api_base` (clientside credentials),
-  not as a direct vendor HTTP client. Registered prefixes (`openrouter/`,
-  `gemini/`, `anthropic/`, `xai/`) are leftover caller spellings and
-  no-proxy diagnostics — they do not skip a LiteLLM `OPENAI_API_BASE`. The
+  always caller → digillm → LiteLLM → vendor. House keys and BYOK keys both
+  stay on that path when `OPENAI_API_BASE` is a **declared** LiteLLM proxy
+  (documented `:4000` URLs, or `DIGILLM_TRUSTED_LITELLM_BASES`): BYOK is
+  passed through LiteLLM as request `api_key` / `api_base` (clientside
+  credentials) plus `cache: {no-cache, no-store}`, not as a direct vendor
+  HTTP client. `api_base` is regex-pinned per model group to the catalog
+  host in `config/byok-providers.json`; arbitrary upstreams are rejected even
+  if port 4000 is later exposed. Advertised BYOK presets are themselves
+  `model_name` groups (native provider adapter for Anthropic / Gemini / xAI /
+  OpenAI; OpenRouter adapter for the OpenRouter picker slugs). Registered
+  prefixes (`openrouter/`, `gemini/`, `anthropic/`, `xai/`) are leftover
+  caller spellings and no-proxy diagnostics — they do not skip a declared
+  LiteLLM proxy. A non-empty `OPENAI_API_BASE` that is merely not
+  `openrouter.ai` (direct OpenAI, Ollama `:11434`) is **not** LiteLLM; BYOK
+  then uses the user Bearer against the catalog vendor URL so a foreign
+  provider secret is never placed in `extra_body` toward the wrong host. The
   leftover CLI rewrite (`apply_digiquant_openrouter_env` in
   `digigraph/src/digigraph/model_config.py`) points the default base at
   `openrouter.ai`; that is not LiteLLM, so prefixed BYOK uses the user Bearer
@@ -910,7 +920,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
   via `get_grounding_model()`. Optional OmniRoute is a separate overlay
   (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
   default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
-- Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
+- Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`). BYOK must not share that cache across principals — digillm sends `no-cache` / `no-store` on every BYOK proxy request.
 
 ### 9.7 digivault
 
@@ -957,7 +967,8 @@ digigraph:
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience claim |
 | `DIGIKEY_PUBLIC_KEY_PEM` | (empty) | Static PEM alternative to JWKS |
-| `OPENAI_API_BASE` | `http://litellm:4000/v1` | LLM proxy base URL |
+| `OPENAI_API_BASE` | `http://litellm:4000/v1` | LLM proxy base URL. BYOK clientside pass-through only when this value is a declared LiteLLM proxy (`DIGILLM_TRUSTED_LITELLM_BASES` or the documented `:4000` defaults). |
+| `DIGILLM_TRUSTED_LITELLM_BASES` | (unset → documented `:4000` URLs) | Replaces the default LiteLLM proxy allowlist when set (comma-separated). |
 | `OPENAI_API_KEY` | (from `.env`) | API key for LLM proxy (fallback to `LITELLM_PROXY_API_KEY`) |
 | `LITELLM_PROXY_API_KEY` | (from `.env`) | LiteLLM bearer; overrides `OPENAI_API_KEY` for proxy calls |
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
