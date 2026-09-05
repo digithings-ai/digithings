@@ -74,6 +74,7 @@ from digiquant.strategies.sdca.stage_a import (
     CombinedCycleOverlapScore,
     combined_cycle_overlap_score,
     optimize_stage_a_weights_combined,
+    optimize_stage_a_weights_combined_multi_ratio,
     risk_from_weighted_z,
 )
 from digiquant.strategies.sdca.weight_search import search_oscillator_periods_by_cycle_overlap
@@ -446,18 +447,23 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         _print_score("  score", result_lw.score)
         print()
 
-    # Step 4b: reweight the all-9 aggregate with a diversification floor.
-    # Green-lit by Chris ("Green light, go ahead with the floor-diversified
-    # optimized weight version") after reviewing Stage 3b's all-9
-    # equal-weight result. search_names_all9 has 8 names vs. search_names'
-    # 6, so the brute-force grid blows up from 4**6 (*4 power_law
-    # candidates = 16384 evals) to 4**8 (*4 = 262144 evals) -- benchmarked
-    # at ~0.0136s/eval, this stage alone takes on the order of an hour.
-    # Only the base 3:1 ratio is run here; the 2:1/5:1 sensitivity sweep
-    # (Stage 5b) is deferred as a follow-up given the ~3x additional
-    # runtime that would require.
-    print("=== Stage 4b: aggregate reweight over ALL indicators (floor-diversified, 3:1) ===\n")
-    final_result_all9 = optimize_stage_a_weights_combined(
+    # Step 4b/5b: reweight the all-9 aggregate with a diversification floor,
+    # at all three long:medium ratios in one pass. Green-lit by Chris
+    # ("Green light, go ahead with the floor-diversified optimized weight
+    # version") after reviewing Stage 3b's all-9 equal-weight result, then
+    # ("We could play around with the ratio, see what it gives") for the
+    # sensitivity sweep. search_names_all9 has 8 names vs. search_names' 6,
+    # so the brute-force grid blows up from 4**6 (*4 power_law candidates =
+    # 16384 evals) to 4**8 (*4 = 262144 evals) -- benchmarked at
+    # ~0.0136s/eval, ~1 hour. Re-running that per ratio (as Stage 5 does for
+    # the cheap surviving-7 search) would cost ~3 hours; instead
+    # optimize_stage_a_weights_combined_multi_ratio scores every evaluated
+    # candidate under all three ratios in the same pass, since the expensive
+    # part (composite risk + long/medium overlap scores) doesn't depend on
+    # the ratio -- only the final weighted-sum objective does. One ~1 hour
+    # pass yields 2:1, 3:1, and 5:1 together.
+    all9_ratios = ((2.0, 1.0), (3.0, 1.0), (5.0, 1.0))
+    all9_by_ratio = optimize_stage_a_weights_combined_multi_ratio(
         dates,
         power_law_z=final_power_law_z,
         extra_z=final_extra_z_all9,
@@ -466,10 +472,11 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         search_names=search_names_all9,
         grid=grid,
         power_law_grid=grid,
-        long_weight=long_weight,
-        medium_weight=medium_weight,
+        ratios=all9_ratios,
         min_weight_floor=floor,
     )
+    final_result_all9 = all9_by_ratio[(long_weight, medium_weight)]
+    print("=== Stage 4b: aggregate reweight over ALL indicators (floor-diversified, 3:1) ===\n")
     print(f"  evaluated: {final_result_all9.num_evaluations} combinations")
     print(f"  weights: {final_result_all9.weights.model_dump()}")
     _print_score("score", final_result_all9.score)
@@ -478,6 +485,15 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         f"medium={final_result.score.medium.objective:.2f} combined={final_result.score.objective:.2f}"
     )
     print()
+
+    print("=== Stage 5b: long:medium ratio sensitivity (all-9, floor-diversified) ===\n")
+    for lw, mw in all9_ratios:
+        if (lw, mw) == (long_weight, medium_weight):
+            continue
+        result_lw = all9_by_ratio[(lw, mw)]
+        print(f"  ratio {lw:g}:1 -> weights: {result_lw.weights.model_dump()}")
+        _print_score("  score", result_lw.score)
+        print()
 
     # Summary table.
     print("=== Summary ===\n")
@@ -498,10 +514,13 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
             f"{label:<28} {result_lw.score.long.objective:>8.2f} "
             f"{result_lw.score.medium.objective:>8.2f} {result_lw.score.objective:>10.2f}"
         )
-    print(
-        f"{'reweighted all-9 (3:1)':<28} {final_result_all9.score.long.objective:>8.2f} "
-        f"{final_result_all9.score.medium.objective:>8.2f} {final_result_all9.score.objective:>10.2f}"
-    )
+    for lw, mw in sorted(all9_by_ratio):
+        result_lw = all9_by_ratio[(lw, mw)]
+        label = f"reweighted all-9 ({lw:g}:1)"
+        print(
+            f"{label:<28} {result_lw.score.long.objective:>8.2f} "
+            f"{result_lw.score.medium.objective:>8.2f} {result_lw.score.objective:>10.2f}"
+        )
 
 
 if __name__ == "__main__":

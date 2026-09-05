@@ -270,3 +270,31 @@ that could both be read as "the baseline."
        diagnostic search script and export/visualization, not in production
        config. Neither is a validated trading candidate; this remains a
        diagnostic **index**, not a curve/threshold-tested strategy.
+
+   - Sixth pass (2026-09-05, same session: Chris asked "We could play around
+     with the ratio, see what it gives" re: the all-9 floor-diversified
+     search's deferred 2:1/5:1 sweep from the Fifth pass):
+     - Rather than re-running the ~1 hour, 262,144-evaluation brute-force
+       search two more times (~3 hours total, mirroring how Stage 5 sweeps
+       the cheap surviving-7 search), added
+       `optimize_stage_a_weights_combined_multi_ratio()` to `stage_a.py`.
+       For a fixed weight candidate, computing its composite risk series and
+       long/medium `cycle_overlap_score()`s is the expensive part and does
+       not depend on the long:medium ratio — only the final
+       `objective = long_weight * long.objective + medium_weight *
+       medium.objective` scalar combination does. The new function evaluates
+       each candidate once and scores it under every requested ratio in the
+       same pass, so a full N-ratio sweep costs the same ~1 hour as a single
+       ratio. `run_dual_timeframe_composite_search.py`'s Stage 4b/5b now
+       calls this once for `((2.0, 1.0), (3.0, 1.0), (5.0, 1.0))`.
+     - Result: the winning mix is **identical across all three ratios** —
+       same as Stage 5 found for the surviving-7 case — `power_law=1.0,
+       sma_band=1.0, monthly_rsi=1.0` at the ceiling, `m2, rs_eth, dxy,
+       weekly_rsi, weekly_macd, monthly_macd` all floored at `0.25`. Only the
+       objective's scale shifts with the ratio: long=46.96 medium=23.58,
+       combined=117.51 (2:1) / 164.47 (3:1) / 258.39 (5:1). The 3:1 row
+       exactly reproduces the Fifth pass's single-ratio result, confirming
+       the multi-ratio refactor is correct. Since the weight mix doesn't
+       move across ratios, no visualization change was needed — the
+       Fifth pass's `floor_diversified_all9` panel (built from the 3:1 mix)
+       already represents all three.

@@ -21,6 +21,7 @@ from digiquant.strategies.sdca.stage_a import (
     cycle_overlap_score,
     optimize_stage_a_weights,
     optimize_stage_a_weights_combined,
+    optimize_stage_a_weights_combined_multi_ratio,
     risk_from_weighted_z,
 )
 
@@ -529,3 +530,115 @@ class TestOptimizeStageAWeightsCombined:
         assert with_floor.weights.weekly_rsi == pytest.approx(0.25)
         assert with_floor.weights.sma_band == pytest.approx(0.25)
         assert with_floor.weights.power_law == pytest.approx(1.0)
+
+    def test_multi_ratio_matches_single_ratio_per_ratio(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(90, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t", kind=CycleKind.TROUGH, start=start, end=date(2020, 1, 25)
+                ),
+                CycleWindow(
+                    name="p", kind=CycleKind.PEAK, start=date(2020, 3, 1), end=date(2020, 3, 30)
+                ),
+            )
+        )
+        power_law = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        weekly_rsi = [-3.0 if d <= date(2020, 1, 25) else 3.0 for d in dates]
+        ratios = ((2.0, 1.0), (3.0, 1.0), (5.0, 1.0))
+
+        multi = optimize_stage_a_weights_combined_multi_ratio(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": weekly_rsi},
+            long_windows=windows,
+            medium_windows=windows,
+            search_names=("weekly_rsi",),
+            grid=(0.0, 0.5, 1.0),
+            power_law_grid=(0.0, 0.5, 1.0),
+            ratios=ratios,
+        )
+        assert set(multi.keys()) == set(ratios)
+        for lw, mw in ratios:
+            single = optimize_stage_a_weights_combined(
+                dates,
+                power_law_z=power_law,
+                extra_z={"weekly_rsi": weekly_rsi},
+                long_windows=windows,
+                medium_windows=windows,
+                search_names=("weekly_rsi",),
+                grid=(0.0, 0.5, 1.0),
+                power_law_grid=(0.0, 0.5, 1.0),
+                long_weight=lw,
+                medium_weight=mw,
+            )
+            got = multi[(lw, mw)]
+            assert got.weights.power_law == pytest.approx(single.weights.power_law)
+            assert got.weights.weekly_rsi == pytest.approx(single.weights.weekly_rsi)
+            assert got.score.objective == pytest.approx(single.score.objective)
+
+    def test_multi_ratio_respects_diversification_floor(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(90, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t", kind=CycleKind.TROUGH, start=start, end=date(2020, 1, 25)
+                ),
+                CycleWindow(
+                    name="p", kind=CycleKind.PEAK, start=date(2020, 3, 1), end=date(2020, 3, 30)
+                ),
+            )
+        )
+        power_law = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        zeros = [0.0] * len(dates)
+
+        multi = optimize_stage_a_weights_combined_multi_ratio(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": zeros, "sma_band": zeros},
+            long_windows=windows,
+            medium_windows=windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+            power_law_grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+            ratios=((2.0, 1.0), (5.0, 1.0)),
+            min_weight_floor=0.25,
+        )
+        for lw, mw in ((2.0, 1.0), (5.0, 1.0)):
+            result = multi[(lw, mw)]
+            assert result.weights.weekly_rsi == pytest.approx(0.25)
+            assert result.weights.sma_band == pytest.approx(0.25)
+            assert result.weights.power_law == pytest.approx(1.0)
+
+    def test_multi_ratio_rejects_empty_or_nonpositive_ratios(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(30, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(name="t", kind=CycleKind.TROUGH, start=start, end=dates[9]),
+                CycleWindow(name="p", kind=CycleKind.PEAK, start=dates[20], end=dates[29]),
+            )
+        )
+        power_law = [0.0] * len(dates)
+        with pytest.raises(ValueError, match="non-empty"):
+            optimize_stage_a_weights_combined_multi_ratio(
+                dates,
+                power_law_z=power_law,
+                extra_z={},
+                long_windows=windows,
+                medium_windows=windows,
+                search_names=(),
+                ratios=(),
+            )
+        with pytest.raises(ValueError, match="positive"):
+            optimize_stage_a_weights_combined_multi_ratio(
+                dates,
+                power_law_z=power_law,
+                extra_z={},
+                long_windows=windows,
+                medium_windows=windows,
+                search_names=(),
+                ratios=((0.0, 1.0),),
+            )
