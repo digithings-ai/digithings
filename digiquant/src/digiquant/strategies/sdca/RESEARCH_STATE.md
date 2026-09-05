@@ -192,3 +192,46 @@ that could both be read as "the baseline."
      long-/medium-term cycle windows shaded behind them, for Chris to
      eyeball confluence before deciding on an equal-weight or
      floor-diversified aggregate index. Pending his review as of this entry.
+
+   - Fourth pass (2026-09-05, same session: Chris visually reviewed the
+     confluence dashboard, confirmed `monthly_rsi=2` is usable ("it bottoms
+     out on both long- and medium-term lows... We could use it"), asked
+     whether `monthly_length=14` (the classic RSI period) had been tried
+     since he expected it to behave like `power_law` — a pure long-term
+     top/bottom mapper — then gave a scoped green light: "go ahead with the
+     equal-weight index"):
+     - `monthly_length=14`'s best score (pulled from the widened grid's own
+       `all_scores`, `daily_length=5`) is long=16.34, medium=8.43,
+       combined=57.46 — far below both `power_law` (225.24 solo) and
+       `monthly_rsi=2` (205.52 solo), despite visually mapping the same
+       long-term turns as `power_law`. Every `monthly_length` in the grid
+       from 5 up scores in the same low ~57-86 band; only lengths 2-4 (near
+       the grid floor) score high. Hypothesis: the cycle-overlap objective
+       rewards how sharply an indicator hits extreme z-values right at pin
+       dates, not just directional correctness — a slower RSI(14) tracks the
+       right shape but under-scores because it doesn't spike as hard at the
+       pin. Not a promotion candidate, kept in the confluence dashboard only
+       as a side-by-side visual comparison against `monthly_rsi=2`.
+     - Built Stage 3b in `run_dual_timeframe_composite_search.py`: an
+       equal-weight composite over **all nine** indicators (the surviving-7
+       from Stage 3, plus `monthly_rsi=2` and `monthly_macd` at their Stage
+       2b winning periods), 1/9 weight each — promoting both monthly
+       indicators from diagnostic-only into a real weighted composite, per
+       Chris's green light. Does not touch Stages 4-5 (floor-diversified
+       reweight), which stay scoped to the surviving-7 mix pending a
+       separate green light — Chris's own instructions describe that as the
+       next, not-yet-authorized step.
+       Result: long=33.25, medium=14.49, combined=114.23 (3:1) — beats the
+       surviving-7 equal-weight baseline (long=27.65, medium=14.19,
+       combined=97.15) on every axis, with the gain concentrated in the
+       long-term score (+20%), consistent with both monthly indicators being
+       long-cycle-biased.
+     - Exported this composite's `composite_z` series (not the `[0,100]`
+       risk rescaling, so it plots on the same -3..3 axis as every other
+       indicator) via `export_indicator_confluence_data.py` and added it to
+       the confluence dashboard as a headline "Equal-Weight Index (all 9)"
+       panel, plotted first. Still pending Chris's visual review.
+     - `monthly_rsi`/`monthly_macd` remain excluded from
+       `EXTRA_INDICATOR_NAMES`/`build_extra_indicators()`/settings.json —
+       this equal-weight-all9 composite exists only in the diagnostic search
+       script and export/visualization, not in production config.

@@ -25,6 +25,7 @@ from pathlib import Path
 import polars as pl
 
 from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight, compute_composite_risk
 from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import rs_eth_confluence_z
 from digiquant.strategies.sdca.optimize import (
@@ -142,11 +143,35 @@ def export(data_path: Path = DEFAULT_DATA_PATH) -> dict:
             slow_window=p["rs_eth"]["slow_window"], fast_window=p["rs_eth"]["fast_window"],
         ).to_list()
 
+    # Equal-weight composite over ALL indicators (Stage 3b in
+    # run_dual_timeframe_composite_search.py, 2026-09-05 run): promotes
+    # monthly_rsi/monthly_macd from diagnostic-only into a real weighted
+    # composite, per Chris's green light after visually validating
+    # monthly_rsi=2 in this dashboard. Plotted as composite_z (not the
+    # [0,100] risk rescaling) so it sits on the same -3..3 axis as every
+    # other indicator here. Combined cycle-overlap score: long=33.25,
+    # medium=14.49, combined=114.23 (3:1) vs. the surviving-7 equal-weight
+    # baseline's long=27.65, medium=14.19, combined=97.15.
+    all9_names = ["m2", "dxy", "weekly_rsi", "weekly_macd", "sma_band", "monthly_rsi", "monthly_macd"]
+    if eth_available:
+        all9_names.insert(1, "rs_eth")
+    eq_weight = 1.0 / (len(all9_names) + 1)
+    all9_weighted = [
+        IndicatorWeight(name="power_law", z=pl.Series(indicators["power_law"], dtype=pl.Float64), weight=eq_weight)
+    ] + [
+        IndicatorWeight(name=n, z=pl.Series(indicators[n], dtype=pl.Float64), weight=eq_weight)
+        for n in all9_names
+    ]
+    indicators["equal_weight_all9"] = compute_composite_risk(all9_weighted)["composite_z"].to_list()
+
     return {
         "dates": [d.isoformat() for d in dates],
         "price": prices,
         "indicators": indicators,
-        "params": {**p, **m, **COMPARISON_PARAMS},
+        "params": {
+            **p, **m, **COMPARISON_PARAMS,
+            "equal_weight_all9": {"n_indicators": len(all9_names) + 1},
+        },
         "long_windows": _window_json(SdcaCycleWindows.btc_v1()),
         "medium_windows": _window_json(SdcaCycleWindows.btc_medium_term_v1()),
     }

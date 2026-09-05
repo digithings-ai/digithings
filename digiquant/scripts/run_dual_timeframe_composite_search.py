@@ -307,6 +307,7 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         ("monthly_rsi", MONTHLY_RSI_CANDIDATES, compute_monthly_rsi_z, "weekly_rsi"),
         ("monthly_macd", MONTHLY_MACD_CANDIDATES, compute_monthly_macd_z, "weekly_macd"),
     ]
+    monthly_best_params: dict[str, dict[str, int]] = {}
     for name, candidates, compute_fn, weekly_counterpart in monthly_tunable:
         result = search_oscillator_periods_by_cycle_overlap(
             dates,
@@ -320,6 +321,7 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
             long_weight=long_weight,
             medium_weight=medium_weight,
         )
+        monthly_best_params[name] = result.best.params
         beats_noise = result.best.score.objective > noise_objective
         status = "OK" if beats_noise else "DROP (<= noise baseline)"
         print(f"[{name}] {status} (not fed into steps 3-5 -- comparison only)")
@@ -364,6 +366,40 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
     print("=== Stage 3: equal-weight composite (baseline for reweighting) ===\n")
     print(f"  weights: {equal_weights.model_dump()}")
     _print_score("score", equal_score)
+    print()
+
+    # Step 3b: equal-weight composite over ALL indicators, adding
+    # monthly_rsi/monthly_macd (their Stage 2b winning periods) alongside the
+    # surviving 7. Promoted from diagnostic-only to a real weighted composite
+    # per Chris's explicit green light after visually validating
+    # monthly_rsi=2 against the confluence dashboard ("Green light, go ahead
+    # with the equal-weight index"). Does not touch Stage 4/5 below, which
+    # remain scoped to the surviving-7 mix pending a separate green light.
+    final_extra_z_all9 = dict(final_extra_z)
+    final_extra_z_all9["monthly_rsi"] = compute_monthly_rsi_z(monthly_best_params["monthly_rsi"])
+    final_extra_z_all9["monthly_macd"] = compute_monthly_macd_z(monthly_best_params["monthly_macd"])
+
+    search_names_all9 = search_names + ("monthly_rsi", "monthly_macd")
+    n_total_all9 = len(search_names_all9) + 1  # +1 for power_law
+    eq_weight_all9 = 1.0 / n_total_all9
+    equal_weights_all9 = SdcaCompositeWeights(
+        power_law=eq_weight_all9, **{n: eq_weight_all9 for n in search_names_all9}
+    )
+    equal_risk_all9 = risk_from_weighted_z(
+        dates, final_power_law_z, final_extra_z_all9, equal_weights_all9
+    )
+    equal_score_all9 = combined_cycle_overlap_score(
+        dates, equal_risk_all9, long_windows, medium_windows,
+        long_weight=long_weight, medium_weight=medium_weight,
+    )
+    print("=== Stage 3b: equal-weight composite over ALL indicators (incl. monthly_rsi/macd) ===\n")
+    print(f"  search_names: {search_names_all9}")
+    print(f"  weights: {equal_weights_all9.model_dump()}")
+    _print_score("score", equal_score_all9)
+    print(
+        f"  vs. Stage 3 (surviving-7) baseline: long={equal_score.long.objective:.2f} "
+        f"medium={equal_score.medium.objective:.2f} combined={equal_score.objective:.2f}"
+    )
     print()
 
     # Step 4: reweight the aggregate with a diversification floor.
@@ -416,8 +452,12 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
     print(header)
     print("-" * len(header))
     print(
-        f"{'equal-weight baseline':<28} {equal_score.long.objective:>8.2f} "
+        f"{'equal-weight baseline (7)':<28} {equal_score.long.objective:>8.2f} "
         f"{equal_score.medium.objective:>8.2f} {equal_score.objective:>10.2f}"
+    )
+    print(
+        f"{'equal-weight all-9':<28} {equal_score_all9.long.objective:>8.2f} "
+        f"{equal_score_all9.medium.objective:>8.2f} {equal_score_all9.objective:>10.2f}"
     )
     for lw, result_lw in sorted(sensitivity_results.items()):
         label = f"reweighted ({lw:g}:1)"
