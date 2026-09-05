@@ -2,8 +2,6 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
-import { AT_OPEN_EDT_CRON, AT_OPEN_EST_CRON } from "./et-open";
-
 export type Job = {
   id: string;
   cron: string;
@@ -65,11 +63,11 @@ function rd(
 /** All org production clocks. Source of truth alongside wrangler [triggers]. */
 export const JOBS: readonly Job[] = [
   // --- digithings: digiquant prices ---
-  wd("prices-at-open-13", AT_OPEN_EDT_CRON, DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-at-open-13", "40 13 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "at-open" },
     etOpenGate: true,
   }),
-  wd("prices-at-open-14", AT_OPEN_EST_CRON, DIGITHINGS, "pipeline-digiquant-prices.yml", {
+  wd("prices-at-open-14", "40 14 * * MON-FRI", DIGITHINGS, "pipeline-digiquant-prices.yml", {
     inputs: { mode: "at-open" },
     etOpenGate: true,
   }),

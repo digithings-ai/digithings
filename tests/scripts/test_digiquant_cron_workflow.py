@@ -84,10 +84,10 @@ class TestExecutionCronSpecIsProbeOnly:
         assert crons == ["15 12 * * *"]
         house_crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert house_crons == [
-            "17 9 * * 1-5",
-            "17 10 * * 1-5",
-            "17 11 * * 1-5",
-            "17 12 * * 1-5",
+            "17 9 * * MON-FRI",
+            "17 10 * * MON-FRI",
+            "17 11 * * MON-FRI",
+            "17 12 * * MON-FRI",
         ]
         assert "0 12 * * *" not in house_crons
         assert "0 12 * * *" not in crons
@@ -150,10 +150,10 @@ class TestHouseScheduleRetriesOffPeak:
         jobs = _worker_jobs()
         crons = [jobs[f"house-run-{hour:02d}"] for hour in (9, 10, 11, 12)]
         assert crons == [
-            "17 9 * * 1-5",
-            "17 10 * * 1-5",
-            "17 11 * * 1-5",
-            "17 12 * * 1-5",
+            "17 9 * * MON-FRI",
+            "17 10 * * MON-FRI",
+            "17 11 * * MON-FRI",
+            "17 12 * * MON-FRI",
         ]
         for cron in crons:
             minute, _hour, *_rest = cron.split()
