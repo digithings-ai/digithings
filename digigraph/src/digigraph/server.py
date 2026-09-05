@@ -20,7 +20,7 @@ from digibase.http import install_request_id_logging, install_request_id_middlew
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from digigraph import __version__
