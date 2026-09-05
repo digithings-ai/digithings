@@ -15,13 +15,18 @@
  * handles series that cross zero (cumulative P&L). The series surfaces
  * (CandlestickChart, TimeSeries, TradeReturnChart) share one normalized
  * ViewWindow: drag-pan / double-click reset stay synced across charts, with
- * lookback presets matched back via `matchLookbackPreset`. Wheel input is
- * gesture-routed: a plain two-finger scroll (any axis, no ctrlKey)
- * PANS through time — this is also what makes a trackpad horizontal swipe
- * do something, where it used to be silently dropped — and only a pinch or
- * ctrl+wheel ZOOMS, with the per-frame zoom step capped so a trackpad's
- * bursty, high-frequency deltas (pinch or momentum scroll) can't make the
- * view jump/flicker the way an uncapped exponential factor would.
+ * lookback presets matched back via `matchLookbackPreset`. Wheel input
+ * splits by axis, not by a single dominant-axis-per-frame classifier:
+ * vertical delta (mouse wheel, trackpad two-finger scroll, or pinch/
+ * ctrl+wheel) ZOOMS, centred on the cursor; horizontal delta PANS through
+ * time — this is also what makes a trackpad horizontal swipe do something,
+ * where it used to be silently dropped. Splitting by axis instead of
+ * picking one winner per frame matters because a real hand gesture is never
+ * perfectly axis-locked — a classifier re-run every frame flips its pick on
+ * that noise alone, which is what reads as flicker/stutter. The zoom step
+ * is also capped per frame so a trackpad's bursty, high-frequency deltas
+ * (pinch or momentum scroll) can't make the view jump the way an uncapped
+ * exponential factor would.
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
@@ -591,10 +596,12 @@ function plotFraction(
 interface ViewControl {
   /** plot-area right inset (differs per chart). */
   padRight: number;
-  /** Wheel input, pre-accumulated over one animation frame. A pinch or
-   *  ctrl+wheel zooms (centred on cursor clientX); a plain two-finger scroll
-   *  on either axis pans through time instead — see this file's header
-   *  comment. */
+  /** Wheel input, pre-accumulated over one animation frame. Vertical delta
+   *  (mouse wheel, trackpad two-finger scroll, or pinch/ctrl+wheel) zooms,
+   *  centred on cursor clientX; horizontal delta pans through time — the two
+   *  axes are independent, not a single dominant-axis pick, so a gesture
+   *  that's mostly one axis with a little noise on the other doesn't flip
+   *  behaviour frame to frame. See this file's header comment. */
   onWheel: (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => void;
   /** Drag-pan start — Pointer Events (not mouse-only), so a single-finger
    *  touch drag pans the same as a mouse drag. Touch pinch-zoom has no
@@ -641,36 +648,54 @@ function viewHandlers(
   const resetView = resetTo ?? { lo: 0, hi: 1 };
 
   const onWheel = (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => {
-    if (ctrl) {
-      // Pinch (trackpad) or ctrl+wheel (mouse) — deliberate zoom, centred on
-      // the cursor. Wheel up (deltaY < 0) zooms in; down zooms out. The
-      // factor is capped per frame (see MAX_WHEEL_ZOOM_FACTOR) so a bursty
-      // pinch gesture can't make the view jump.
-      const span = hi - lo;
-      const cursor = lo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
-      const rawFactor = Math.exp(deltaY * 0.0011);
+    // Vertical and horizontal input each drive one, independent axis of
+    // control — vertical zooms, horizontal pans — rather than picking a
+    // single "dominant axis" for the whole frame. A real trackpad gesture is
+    // never perfectly axis-locked, so a winner-take-all classifier flips its
+    // pick from frame to frame on the noise alone, which is what reads as
+    // flicker/stutter; two independent channels stay stable because neither
+    // one's noise can steal the other's job. A diagonal gesture (rare, and
+    // usually just imprecision on an intended horizontal/vertical move)
+    // naturally does a bit of both, which reads as normal, not chaotic.
+    let curLo = lo;
+    let curHi = hi;
+
+    if (deltaY !== 0) {
+      // Vertical scroll (real mouse wheel, trackpad two-finger scroll, or a
+      // pinch/ctrl+wheel) zooms, centred on the cursor. Wheel up
+      // (deltaY < 0) zooms in; down zooms out. Chrome/Safari report pinch
+      // deltas at a much smaller magnitude than an equivalent scroll, so
+      // ctrl gets a boosted sensitivity to feel equally responsive. The
+      // factor is capped per frame (MAX_WHEEL_ZOOM_FACTOR) so a bursty
+      // pinch or momentum scroll can't make the view jump.
+      const span = curHi - curLo;
+      const cursor = curLo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
+      const sensitivity = ctrl ? 0.011 : 0.0011;
+      const rawFactor = Math.exp(deltaY * sensitivity);
       const factor = Math.max(1 / MAX_WHEEL_ZOOM_FACTOR, Math.min(MAX_WHEEL_ZOOM_FACTOR, rawFactor));
-      const nlo = cursor - (cursor - lo) * factor;
-      const nhi = cursor + (hi - cursor) * factor;
-      onView(clampView(nlo, nhi));
-      return;
+      const nlo = cursor - (cursor - curLo) * factor;
+      const nhi = cursor + (curHi - cursor) * factor;
+      ({ lo: curLo, hi: curHi } = clampView(nlo, nhi));
     }
-    // Plain two-finger scroll, either axis — pan through time. Scroll
-    // semantics (not drag semantics): the view moves WITH the gesture, same
-    // as scrolling a page down reveals content below. Whichever axis carries
-    // the gesture drives it, so both a horizontal swipe and a vertical
-    // scroll over the chart scrub through time instead of doing nothing or
-    // zooming unexpectedly.
-    const rect = target.getBoundingClientRect();
-    const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
-    if (plotPxW === 0) return;
-    const span = hi - lo;
-    const d = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
-    let dFrac = (d / plotPxW) * span;
-    // Clamp so the shift TRANSLATES (keeps window width) against the [0,1]
-    // edges instead of narrowing — same edge behaviour as drag-pan below.
-    dFrac = Math.max(-lo, Math.min(1 - hi, dFrac));
-    onView(clampView(lo + dFrac, hi + dFrac));
+
+    if (deltaX !== 0) {
+      // Horizontal scroll pans through time. Scroll semantics (not drag
+      // semantics): the view moves WITH the gesture, same as scrolling a
+      // page down reveals content below.
+      const rect = target.getBoundingClientRect();
+      const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
+      if (plotPxW > 0) {
+        const span = curHi - curLo;
+        let dFrac = (deltaX / plotPxW) * span;
+        // Clamp so the shift TRANSLATES (keeps window width) against the
+        // [0,1] edges instead of narrowing — same edge behaviour as
+        // drag-pan below.
+        dFrac = Math.max(-curLo, Math.min(1 - curHi, dFrac));
+        ({ lo: curLo, hi: curHi } = clampView(curLo + dFrac, curHi + dFrac));
+      }
+    }
+
+    onView({ lo: curLo, hi: curHi });
   };
 
   // Pointer Events (not mouse-only): the same handler drives mouse drag AND
