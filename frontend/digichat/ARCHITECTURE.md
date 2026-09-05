@@ -3,6 +3,13 @@
 > **Scope:** Production Next.js 16 BFF + React 19 chat UI at `frontend/digichat/`.
 > Marketing parent is `frontend/digithings-web` `/chat` → iframe `/embed` (not the deleted `frontend/website/`).
 
+> **Release line:** published package is **1.4.0**. This branch is **digichat 2.0**
+> (assistant-ui + AI SDK v7 + standard UI parts). Do **not** merge to `develop`
+> until the 2.0 cut. 1.5 on `develop` is non-UI only. See
+> [ADR-0028](../../docs/adr/0028-digichat-web-foundation-and-opencode-distribution.md)
+> and [#3626](https://github.com/digithings-ai/digithings/issues/3626).
+> AG-UI is out of scope.
+
 ---
 
 ## 1. Overview
