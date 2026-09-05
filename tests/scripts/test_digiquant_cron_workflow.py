@@ -174,7 +174,7 @@ class TestHouseScheduleRetriesOffPeak:
         dispatch = triggers.get("repository_dispatch")
         assert isinstance(dispatch, dict)
         types = dispatch.get("types")
-        assert types == ["olympus-daily"]
+        assert types == ["digiquant-baseline"]
 
     def test_already_committed_gate_skips_the_llm_job(self) -> None:
         house = yaml.safe_load(HOUSE.read_text(encoding="utf-8"))
