@@ -9,13 +9,38 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * transition, exercised the same way app/system/page.test.ts asserts its page chrome.
  */
 import { buildPerformanceTearsheet } from '@/lib/observability-queries';
+import type { PerformanceSsotMeta } from '@/lib/performance-ssot';
 
 const sample = buildPerformanceTearsheet({
   nav: [{ date: '2026-06-23', nav: 99.32, cash_pct: 25, invested_pct: 75 }],
   positions: [],
   metrics: null,
   attribution: [],
+  accountingNav: [
+    {
+      date: '2026-06-23',
+      nav: 99.32,
+      cash_pct: 25,
+      invested_pct: 75,
+      day_return_pct: 0,
+      source: 'legacy_nav_history',
+      contract: 'legacy_estimate',
+    },
+  ],
 });
+
+const sampleSsot: PerformanceSsotMeta = {
+  navContract: 'legacy_estimate',
+  navAsOf: '2026-06-23',
+  tipDayReturnPct: 0,
+  tipInvestedPct: 75,
+  metricsAsOf: null,
+  metricsLagDays: null,
+  metricsLagging: false,
+  bookAsOf: '2026-06-23',
+  marksUnstamped: false,
+  investedDefinition: 'accounting_nav_tip',
+};
 
 vi.mock('@/lib/observability-queries', async () => {
   const actual =
@@ -24,7 +49,9 @@ vi.mock('@/lib/observability-queries', async () => {
     );
   return {
     ...actual,
-    fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
+    getPerformanceBundle: vi.fn(() =>
+      Promise.resolve({ tearsheet: sample, ssot: sampleSsot })
+    ),
     fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
   };
 });
@@ -36,19 +63,18 @@ vi.mock('@/lib/use-entitlement', () => ({
   usePlanTier: () => 'enterprise',
 }));
 
+let stateCall = 0;
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');
-  // The page declares useState in source order: [data, setData] then [error, setError].
-  // Seed the FIRST useState with the resolved tearsheet (loaded state) and leave the
-  // SECOND (error) at its initial null, so the first render is the loaded view.
-  let call = 0;
+  // PerformancePage useState order: data → ssot → error.
   return {
     ...actual,
     useEffect: (fn: () => void) => fn(),
     useState: <T,>(init: T) => {
-      const isFirst = call === 0;
-      call += 1;
-      return [isFirst ? (sample as unknown as T) : init, vi.fn()] as [T, (v: T) => void];
+      stateCall += 1;
+      if (stateCall === 1) return [sample as unknown as T, vi.fn()] as [T, (v: T) => void];
+      if (stateCall === 2) return [sampleSsot as unknown as T, vi.fn()] as [T, (v: T) => void];
+      return [init, vi.fn()] as [T, (v: T) => void];
     },
   };
 });
@@ -58,6 +84,7 @@ import { createElement } from 'react';
 import PerformancePage from './page';
 
 beforeEach(() => {
+  stateCall = 0;
   vi.clearAllMocks();
 });
 
@@ -66,5 +93,6 @@ describe('/portfolio/performance route', () => {
     const html = renderToStaticMarkup(createElement(PerformancePage));
     expect(html).toContain('Performance');
     expect(html).toContain('Download performance tear sheet as PDF');
+    expect(html).toContain('legacy estimate');
   });
 });

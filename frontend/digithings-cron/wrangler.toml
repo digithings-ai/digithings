@@ -1,0 +1,57 @@
+# digithings-cron — org-wide production clocks (issue #3579).
+# Thin Worker: Cron Triggers → GitHub workflow_dispatch / repository_dispatch.
+# No Containers / Durable Objects. Deploy from main only.
+# wrangler deploy is the source of truth for [triggers] crons.
+name = "digithings-cron"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+DRY_RUN = "0"
+
+# Secrets (wrangler secret put; never commit values):
+#   GH_DISPATCH_TOKEN   — Actions write on digithings-ai/digithings + digithings-ai/twelve-x
+#   CRON_KICK_SECRET    — optional; enables POST /kick
+
+[triggers]
+crons = [
+  "40 13 * * MON-FRI",
+  "40 14 * * MON-FRI",
+  "7,22,37,52 13-21 * * MON-FRI",
+  "19 */2 * * MON-FRI",
+  "19 22 * * SUN",
+  "27 21 * * MON-FRI",
+  "17 9 * * MON-FRI",
+  "17 10 * * MON-FRI",
+  "17 11 * * MON-FRI",
+  "17 12 * * MON-FRI",
+  "17 12 * * SUN",
+  "5 22 * * *",
+  "12 0 * * *",
+  "40 22 * * *",
+  "15 12 * * *",
+  "8 22 * * SUN",
+  "8 8 * * MON",
+  "9 0 * * SUN",
+  "11 7 * * *",
+  "13 6 * * MON",
+  "21 6 * * *",
+  "10 6 * * MON",
+  "23 9 * * *",
+  "27 7 * * *",
+  "33 6 * * MON",
+  "17 6 * * *",
+  "7 0 * * MON-FRI",
+  "12 7 * * MON-FRI",
+  "4 */4 * * *",
+  "30 5 * * *",
+  "8 7 * * SAT",
+  "30 17 * * MON-FRI",
+  "3 6,18 * * *",
+  "52 * * * MON-FRI"
+]

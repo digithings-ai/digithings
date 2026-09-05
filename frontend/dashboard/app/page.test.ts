@@ -157,7 +157,7 @@ describe('Today (Overview) page', () => {
   it('surfaces live KPI excess/alpha/IR on the Brief scoreboard when SPY series exists', () => {
     useLiveBriefKpisMock.mockReturnValue({
       liveNav: 101.2,
-      liveVsMarkPct: 0,
+      liveVsMarkPct: 0.5,
       priceAsOfDate: '2026-06-24',
       dayReturnPct: 0.3,
       sinceInceptionPct: 1.2,
@@ -177,9 +177,39 @@ describe('Today (Overview) page', () => {
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('live marks');
     expect(html).toContain('vs SPY');
     expect(html).toContain('+1.8%');
     expect(html).toContain('+0.5%'); // alpha rounded via signedPct
     expect(html).toContain('0.32');
+  });
+
+  it('shows metrics-lag chrome when portfolio_metrics trails the book tip', () => {
+    const data = makeData([]);
+    data.portfolio.meta.last_updated = '2026-09-04';
+    data.portfolio.snapshots = [
+      {
+        date: '2026-09-04',
+        nav: 99.4,
+        invested_pct: 40.5,
+        contract: 'legacy_estimate',
+        source: 'legacy_nav_history',
+      },
+    ];
+    data.server_portfolio_metrics = {
+      invested_pct: 79,
+      date: '2026-09-01',
+      as_of_date: '2026-09-01',
+    };
+    data.position_history = [{ date: '2026-09-04', ticker: 'SPY', weight_pct: 40, category: null, thesis_id: null }];
+    data.positions = [
+      { ticker: 'SPY', name: 'SPY', weight_actual: 40.5, conviction: 2, metrics_as_of: null },
+    ];
+    useDashboardMock.mockReturnValue({ data, loading: false, error: null });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('metrics lag');
+    expect(html).toContain('marks unstamped');
+    expect(html).toContain('accounting tip');
+    expect(html).not.toContain('>79%<');
   });
 });

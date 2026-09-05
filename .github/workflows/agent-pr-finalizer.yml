@@ -9,11 +9,10 @@
 # widen because fix_via is still branch-aware — only cursor/* PRs get the
 # Cursor-agent fix-dispatch path (scripts/finalize_agent_prs.py:evaluate_pr), everything
 # else just gets a "needs fix" comment with no automated remediation attempted.
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Agent: PR finalizer"
 
 on:
-  schedule:
-    - cron: "0 7 * * *"  # 07:00 UTC daily
   workflow_dispatch:
     inputs:
       dry_run:
@@ -123,7 +122,8 @@ jobs:
                       f"**Manual review required** — not enabling auto-merge.\n\nReason: {reason}"
                   )
                   if not dry_run:
-                      gh("pr", "edit", str(pr), "--repo", repo, "--add-label", "needs-human-review")
+                      # Label simplification 2026-09: needs-human-review retired.
+                      # The comment is the record; no label to apply.
                       gh("pr", "comment", str(pr), "--repo", repo, "--body", body)
                   else:
                       print(body)

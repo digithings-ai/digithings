@@ -46,7 +46,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
@@ -65,6 +65,21 @@ Sign in / Sign up, footer Create an account / Sign in. Compact places the
 strength meter, and sign-in Forgot password. Specimens live on the reference
 account page (`AuthCardProposals`) as a layout catalog. The dashboard login
 screen imports compact `AuthCard` (`frontend/dashboard/components/login-screen.tsx`).
+
+`DigichatLauncher` (`web/src/components/chat/DigichatLauncher.tsx`, CSS
+`./styles/digichat-launcher.css`) is the standard embedded-chat entry point.
+Its idle state is a 30px square using the canonical compact `TerminalMark`;
+hover/focus types `digichat` in the shared mono chrome size while preserving
+height and border. Opening runs a two-step expansion out of that square — the
+square widens into a composer-height bar, then the bar lifts to full height —
+and closing reverses both steps. It dismisses via its header, Escape, or the
+transparent outside-click backdrop. `CLOSE_MS` in the component mirrors the
+close animation duration in the sheet; reduced-motion closes immediately.
+After the first open, the hidden panel keeps its children mounted so an iframe
+conversation survives close/reopen. It portals to `document.body` by default
+to escape transformed/backdrop-filter app shells; `portal={false}` contains
+reference specimens. Product apps pass the iframe or other chat body as
+`children` rather than forking launcher behavior.
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own

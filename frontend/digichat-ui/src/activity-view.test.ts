@@ -42,7 +42,7 @@ describe("toCanonRows — tool calls", () => {
     const row = onlyRow([{ kind: "tool_call", name: "digivault_get_note", query: "docs/auth.md" }]);
     expect(row).toMatchObject({
       kind: "tool",
-      name: "Load document",
+      name: "Load vault note",
       status: "running",
       lines: ["Working…"],
     });
@@ -132,11 +132,11 @@ describe("toCanonRows — tool calls", () => {
     const docs = onlyRow([
       { kind: "tool_result", name: "digivault_search_notes", query: "jwt", count: 0, hits: [] },
     ]);
-    expect(docs).toMatchObject({ name: "Find original documents" });
+    expect(docs).toMatchObject({ name: "Vault" });
     const load = onlyRow([
       { kind: "tool_result", name: "digivault_get_note", query: "1 note", count: 1, hits: [] },
     ]);
-    expect(load).toMatchObject({ name: "Load document" });
+    expect(load).toMatchObject({ name: "Load vault note" });
   });
 
   it("does not echo the same query on the following row", () => {

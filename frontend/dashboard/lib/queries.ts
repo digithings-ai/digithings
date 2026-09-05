@@ -840,15 +840,27 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   // Fail closed: never drop NAV into [] when the contracted accounting view errors —
   // that previously rendered empty Performance charts as if the book had no history (#3029).
   assertAccountingNavQueryOk(navRes.error);
-  const navHistory: TableRow<'nav_history'>[] = (
-    (navRes.data ?? []) as AccountingNavRow[]
-  ).map((row) => {
+  const accountingNavRows = (navRes.data ?? []) as AccountingNavRow[];
+  const navHistory: TableRow<'nav_history'>[] = accountingNavRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
     return {
       date: shaped.date,
       nav: shaped.nav,
       cash_pct: shaped.cash_pct,
       invested_pct: shaped.invested_pct,
+    };
+  });
+  // Keep contract/source/day_return on the dashboard snapshot series for Brief SSOT badges (#3580).
+  const navSnapshots = accountingNavRows.map((row) => {
+    const shaped = accountingNavToHistoryShape(row);
+    return {
+      date: shaped.date,
+      nav: Number(shaped.nav),
+      cash_pct: shaped.cash_pct != null ? Number(shaped.cash_pct) : null,
+      invested_pct: shaped.invested_pct != null ? Number(shaped.invested_pct) : null,
+      source: shaped.source,
+      contract: shaped.contract,
+      day_return_pct: row.day_return_pct != null ? Number(row.day_return_pct) : null,
     };
   });
   const metricsRow = metricsRes.data as TableRow<'portfolio_metrics'> | null;
@@ -1351,12 +1363,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
         benchmarks: Object.keys(benchmarks),
         latest_snapshot_run_type,
       },
-      snapshots: navHistory.map((h) => ({
-        date: h.date,
-        nav: Number(h.nav),
-        cash_pct: h.cash_pct != null ? Number(h.cash_pct) : null,
-        invested_pct: h.invested_pct != null ? Number(h.invested_pct) : null,
-      })),
+      snapshots: navSnapshots,
       strategy: {
         // Prefer the short `regime_label` string (e.g. "Risk-Off Consolidation")
         // over the full `market_regime_snapshot` paragraph — that is a multi-

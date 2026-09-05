@@ -129,48 +129,6 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "ProductGraphRunRequest": {
-        "additionalProperties": false,
-        "description": "HTTP body for ``POST /v1/product_graphs/{name}/runs``.",
-        "properties": {
-          "cadence": {
-            "default": "daily",
-            "title": "Cadence",
-            "type": "string"
-          },
-          "dry_run": {
-            "default": true,
-            "title": "Dry Run",
-            "type": "boolean"
-          },
-          "refresh_scope": {
-            "default": "none",
-            "title": "Refresh Scope",
-            "type": "string"
-          },
-          "run_date": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Date"
-          },
-          "watchlist": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Watchlist",
-            "type": "array"
-          }
-        },
-        "title": "ProductGraphRunRequest",
-        "type": "object"
-      },
       "ResumeThreadRequest": {
         "additionalProperties": false,
         "description": "Body for POST /threads/{thread_id}/resume.",
@@ -995,85 +953,6 @@
           }
         },
         "summary": "List Models",
-        "tags": [
-          "openai-compatible"
-        ]
-      }
-    },
-    "/v1/product_graphs": {
-      "get": {
-        "description": "List digigraph product graphs (digiquant research/portfolio scheduled path, #3415).",
-        "operationId": "v1_list_product_graphs_v1_product_graphs_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response V1 List Product Graphs V1 Product Graphs Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "V1 List Product Graphs",
-        "tags": [
-          "openai-compatible"
-        ]
-      }
-    },
-    "/v1/product_graphs/{graph_name}/runs": {
-      "post": {
-        "description": "Start one product-graph run (dry compile by default).\n\ndigigraph owns the LangGraph entry; digiquant owns domain compile/apply via\n``POST /v1/orchestrator_invoke``. Full apply is refused until cutover.",
-        "operationId": "v1_run_product_graph_v1_product_graphs__graph_name__runs_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "graph_name",
-            "required": true,
-            "schema": {
-              "title": "Graph Name",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProductGraphRunRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response V1 Run Product Graph V1 Product Graphs  Graph Name  Runs Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "V1 Run Product Graph",
         "tags": [
           "openai-compatible"
         ]

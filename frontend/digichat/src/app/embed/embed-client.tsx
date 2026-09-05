@@ -874,31 +874,15 @@ function EmbedChat({
     </header>
   ) : null;
 
-  const footerSlot =
-    tenantAllowsWeb || footerAttribution ? (
-      <>
-        {tenantAllowsWeb ? (
-          <label className="dc-web-search-toggle">
-            <input
-              type="checkbox"
-              checked={webSearchPref}
-              onChange={toggleWebSearch}
-              aria-label="Enable web search"
-            />
-            <span>Web search {webSearchPref ? "on" : "off"} (External cites)</span>
-          </label>
-        ) : null}
-        {footerAttribution ? (
-          <p className="dc-attribution">
-            powered by digichat — a{" "}
-            <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
-              digithings
-            </a>{" "}
-            product.
-          </p>
-        ) : null}
-      </>
-    ) : null;
+  const footerSlot = footerAttribution ? (
+    <p className="dc-attribution">
+      powered by digichat — a{" "}
+      <a href="https://digithings.ai" target="_blank" rel="noreferrer noopener">
+        digithings
+      </a>{" "}
+      product.
+    </p>
+  ) : null;
 
   const showByokOnError =
     !handshakeError &&
@@ -945,6 +929,10 @@ function EmbedChat({
       }}
       headerSlot={headerSlot}
       onLanguageChange={setLanguage}
+      languageCode={language}
+      webSearchAllowed={tenantAllowsWeb}
+      webSearchEnabled={webSearchPref}
+      onWebSearchToggle={tenantAllowsWeb ? toggleWebSearch : undefined}
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
@@ -1056,7 +1044,8 @@ function PaywallCard({
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
-        stays in session memory only (refresh clears it). Or open the full digichat app.
+        stays in session memory only (refresh clears it). After a chat starts, type{" "}
+        <code className="font-mono">/byok</code> anytime. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -1066,7 +1055,7 @@ function PaywallCard({
           onClick={() => setShowBYOK(true)}
         >
           <Key className="mr-1.5 size-3.5" />
-          Bring your own key
+          Bring your own key (/byok)
         </Button>
         <a
           href="https://digithings.ai/chat"

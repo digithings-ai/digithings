@@ -86,6 +86,8 @@ export interface BenchmarkComparison {
 
 export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
 
+export type PerformanceNavContract = 'finalized_accounting' | 'legacy_estimate' | 'empty';
+
 export interface PerformanceTearsheet {
   currentNav: number | null;
   netReturnPct: number | null;
@@ -102,6 +104,13 @@ export interface PerformanceTearsheet {
   contributionSeries: ContributionReturnPoint[];
   currentHoldings: PerformanceHoldingRow[];
   historicalHoldings: PerformanceHoldingRow[];
+  /**
+   * SSOT chrome (#3580) — series contract + metrics lag. Optional for fixtures
+   * that only exercise chart/KPI math; production `getPerformanceBundle` always sets it.
+   */
+  navContract?: PerformanceNavContract;
+  metricsLagging?: boolean;
+  tipInvestedPct?: number | null;
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */

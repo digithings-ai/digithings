@@ -307,8 +307,10 @@ class ChromaBackend(DigiIndex):
                 "duration_ms": int((time.perf_counter() - perf_start) * 1000),
                 "outcome": "ok",
                 "collection": self.name,
-                "top_k": n,
+                "requested_mode": query.mode,
+                "effective_mode": "vector",
                 "result_count": len(out),
+                "top_k": n,
             },
         )
         return out

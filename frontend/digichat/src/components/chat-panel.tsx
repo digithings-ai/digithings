@@ -37,8 +37,15 @@ import {
   writeWebSearchPref,
 } from "@/lib/web-search-pref";
 import { cn } from "@/lib/utils";
-import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
+import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, matchingSlashCommands, nextPaletteIndex, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
+
+const APP_SLASH_EXTRA: Array<{ cmd: string; hint: string }> = [
+  { cmd: "/clear", hint: "clear thread" },
+  { cmd: "/history", hint: "focus sidebar" },
+  { cmd: "/scope", hint: "show JWT scopes" },
+  { cmd: "/model", hint: "model via /byok" },
+];
 
 /** Per-thread pending turn mode — module map, not a ref (#3475 / #1339). */
 const pendingTurnModeByThread = new Map<string, "regenerate" | "edit_last_user">();
@@ -198,6 +205,14 @@ export function ChatPanel({
   const [systemNotes, setSystemNotes] = useState<SystemNote[]>([]);
   const [editingLastUser, setEditingLastUser] = useState(false);
   const [editDraft, setEditDraft] = useState("");
+  const [cliSettingsOpen, setCliSettingsOpen] = useState(false);
+  const [cliSettingsIndex, setCliSettingsIndex] = useState(0);
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const [paletteTextKey, setPaletteTextKey] = useState(text);
+  if (text !== paletteTextKey) {
+    setPaletteTextKey(text);
+    setPaletteIndex(0);
+  }
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editTextareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -346,17 +361,120 @@ export function ChatPanel({
   }, []);
 
   const onSubmit = useCallback(
-    async (e: React.FormEvent) => {
+    async (e: React.FormEvent, overrideText?: string) => {
       e.preventDefault();
-      const t = text.trim();
-      if (!t || busy) return;
+      const t = (overrideText ?? text).trim();
+      if (!t) return;
 
       if (t.startsWith("/")) {
+        const [rawName, ...rest] = t.split(/\s+/);
+        const name = rawName.toLowerCase();
+        const arg = rest.join(" ").trim();
+        // #3511: client-only transcript aliases — never POST to the transport.
+        // Settled-only while busy: drop the in-flight assistant partial.
+        if (name === "/copy" || name === "/export") {
+          setText("");
+          const settled =
+            busy && messages.length > 0 && messages[messages.length - 1]?.role === "assistant"
+              ? messages.slice(0, -1)
+              : messages;
+          const lastSettledAssistant = [...settled]
+            .reverse()
+            .find((m) => m.role === "assistant" && messagePlainText(m).trim());
+          if (name === "/copy") {
+            if (!lastSettledAssistant) {
+              pushSystemNote("No assistant answer to copy yet.");
+              return;
+            }
+            const plain = messagePlainText(lastSettledAssistant);
+            const sources =
+              lastSettledAssistant.role === "assistant"
+                ? citationHits(messageActivities(lastSettledAssistant)).map((h) => ({
+                    title: h.title,
+                    path: h.path,
+                  }))
+                : undefined;
+            const markdown = serializeAssistantMarkdown(plain, sources);
+            if (!markdown.trim()) {
+              pushSystemNote("No assistant answer to copy yet.");
+              return;
+            }
+            const result = await copyMarkdownWithFallback(markdown, {
+              filename: "digichat-answer.md",
+            });
+            pushSystemNote(
+              result === "clipboard"
+                ? "Copied last answer to clipboard."
+                : result === "download"
+                  ? "Clipboard blocked — saved last answer as digichat-answer.md."
+                  : result === "postMessage"
+                    ? "Copied last answer (parent frame)."
+                    : "Clipboard blocked — answer selected below, press ⌘C / ctrl+C.",
+            );
+            return;
+          }
+          const sub = arg.toLowerCase();
+          if (sub && sub !== "last") {
+            pushSystemNote("Use /export or /export last.");
+            return;
+          }
+          if (sub === "last") {
+            if (!lastSettledAssistant) {
+              pushSystemNote("Nothing to export yet.");
+              return;
+            }
+            const plain = messagePlainText(lastSettledAssistant);
+            const sources = citationHits(messageActivities(lastSettledAssistant)).map((h) => ({
+              title: h.title,
+              path: h.path,
+            }));
+            const md = serializeAssistantMarkdown(plain, sources);
+            if (!md.trim()) {
+              pushSystemNote("Nothing to export yet.");
+              return;
+            }
+            try {
+              downloadMarkdown("digichat-answer.md", md);
+              pushSystemNote("Exported last answer as digichat-answer.md.");
+            } catch {
+              pushSystemNote("Export failed in this browser.");
+            }
+            return;
+          }
+          const turns = settled
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => {
+              const content = messagePlainText(m);
+              if (m.role === "assistant") {
+                return {
+                  role: "assistant" as const,
+                  content,
+                  sources: citationHits(messageActivities(m)).map((h) => ({
+                    title: h.title,
+                    path: h.path,
+                  })),
+                };
+              }
+              return { role: "user" as const, content };
+            });
+          const md = serializeThreadMarkdown(turns);
+          if (!md.trim()) {
+            pushSystemNote("Nothing to export yet.");
+            return;
+          }
+          try {
+            downloadMarkdown("digichat-thread.md", md);
+            pushSystemNote("Exported thread as digichat-thread.md.");
+          } catch {
+            pushSystemNote("Export failed in this browser.");
+          }
+          return;
+        }
+        if (busy) return;
         setText("");
-        const [name] = t.split(/\s+/);
         if (name === "/help") {
           pushSystemNote(
-            "available: /help, /clear, /key, /model <id>, /history, /settings, /scope",
+            "available: /help, /clear, /byok, /websearch, /settings, /model <id>, /history, /scope, /copy, /export, /key",
           );
           return;
         }
@@ -366,10 +484,26 @@ export function ChatPanel({
           return;
         }
         if (name === "/model") {
-          pushSystemNote("model selector is part of /key.");
+          pushSystemNote("model selector is part of /byok.");
           return;
         }
-        if (name === "/key" || name === "/settings") {
+        if (name === "/websearch") {
+          if (!webSearchAllowed) {
+            pushSystemNote("Web search is not enabled for this tenant.");
+            return;
+          }
+          const next = !webSearchPref;
+          writeWebSearchPref("auth", next);
+          setWebSearchPref(next);
+          pushSystemNote(`Web search ${next ? "on" : "off"} (External cites).`);
+          return;
+        }
+        if (name === "/settings") {
+          setCliSettingsOpen(true);
+          setCliSettingsIndex(0);
+          return;
+        }
+        if (name === "/byok" || name === "/key") {
           onByokModeChange?.(true);
           return;
         }
@@ -380,10 +514,21 @@ export function ChatPanel({
         return;
       }
 
+      if (busy) return;
       setText("");
       await sendMessage({ text: t });
     },
-    [text, busy, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
+    [
+      text,
+      busy,
+      messages,
+      sendMessage,
+      onSlashCommand,
+      onByokModeChange,
+      pushSystemNote,
+      webSearchAllowed,
+      webSearchPref,
+    ],
   );
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
@@ -469,6 +614,43 @@ export function ChatPanel({
   ]);
 
   const startsWithSlash = text.trimStart().startsWith("/");
+  const slashVisibility = { webSearch: webSearchAllowed, byok: true };
+  const sharedSlashMatches = matchingSlashCommands(text, slashVisibility).filter((c) =>
+    ["websearch", "byok", "settings", "help", "copy", "export"].includes(c.id),
+  );
+  const q = text.trim().toLowerCase();
+  const extraMatches =
+    q.startsWith("/") && !/\s/.test(q)
+      ? APP_SLASH_EXTRA.filter((row) => row.cmd.startsWith(q) || q.startsWith(row.cmd))
+      : [];
+  const paletteRows: Array<{ cmd: string; hint: string; activate: () => void }> = [
+    ...sharedSlashMatches.map((cmd) => ({
+      cmd: cmd.names[0],
+      hint: cmd.hint,
+      activate: () => {
+        if (
+          cmd.id === "websearch" ||
+          cmd.id === "byok" ||
+          cmd.id === "settings" ||
+          cmd.id === "help" ||
+          cmd.id === "copy" ||
+          cmd.id === "export"
+        ) {
+          void onSubmit({ preventDefault() {} } as React.FormEvent, cmd.names[0]);
+          return;
+        }
+        setText(cmd.needsArg ? `${cmd.names[0]} ` : cmd.names[0]);
+        textareaRef.current?.focus();
+      },
+    })),
+    ...extraMatches.map((row) => ({
+      cmd: row.cmd,
+      hint: row.hint,
+      activate: () => {
+        void onSubmit({ preventDefault() {} } as React.FormEvent, row.cmd);
+      },
+    })),
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -480,7 +662,8 @@ export function ChatPanel({
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>
               <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
-                digichat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
+                digichat ready. Ask a question or type <code className="font-mono">/help</code> for
+                commands — <code className="font-mono">/byok</code> anytime for your own key.
               </div>
             </div>
           ) : null}
@@ -651,6 +834,25 @@ export function ChatPanel({
               initialModel={byokModel}
             />
           ) : null}
+
+          {cliSettingsOpen && !byokMode ? (
+            <div className="dc-term-row dc-term-row-assistant" role="dialog" aria-label="Settings">
+              <span className="dc-term-marker">▸</span>
+              <pre className="dc-term-body font-mono text-xs" style={{ color: "var(--text-secondary)" }}>
+                {[
+                  "settings",
+                  webSearchAllowed
+                    ? `${cliSettingsIndex === 0 ? ">" : " "} [websearch ${webSearchPref ? "on" : "off"}] Web search — External cites`
+                    : null,
+                  `${cliSettingsIndex === (webSearchAllowed ? 1 : 0) ? ">" : " "} BYOK → ${byokIsSet ? "update" : "configure"} — /byok`,
+                  "",
+                  "Up/Down · Enter flip/open · Esc close",
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              </pre>
+            </div>
+          ) : null}
         </div>
 
         {showJump ? (
@@ -677,22 +879,27 @@ export function ChatPanel({
 
       <QuantComparisonStrip messages={messages} conversationId={threadId} />
 
-      {webSearchAllowed ? (
-        <label className="dc-web-search-toggle">
-          <input
-            type="checkbox"
-            checked={webSearchPref}
-            onChange={() => {
-              setWebSearchPref((prev) => {
-                const next = !prev;
-                writeWebSearchPref("auth", next);
-                return next;
-              });
-            }}
-            aria-label="Enable web search"
-          />
-          <span>Web search {webSearchPref ? "on" : "off"} (External cites)</span>
-        </label>
+      {paletteRows.length ? (
+        <ul className="dc-slash mb-1 list-none border-b border-border/40 px-2 py-1" role="listbox" aria-label="Slash commands">
+          {paletteRows.map((row, i) => (
+            <li key={`${row.cmd}-${row.hint}`}>
+              <button
+                type="button"
+                role="option"
+                className={cn(
+                  "flex w-full gap-3 px-1 py-1 text-left text-xs",
+                  i === paletteIndex && "text-[var(--accent)]",
+                )}
+                aria-selected={i === paletteIndex}
+                onMouseEnter={() => setPaletteIndex(i)}
+                onClick={() => row.activate()}
+              >
+                <span className="font-mono min-w-[5.5rem]">{row.cmd}</span>
+                <span className="opacity-70">{row.hint}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       <form onSubmit={onSubmit} className="app-input mt-2">
@@ -708,6 +915,44 @@ export function ChatPanel({
           rows={1}
           disabled={busy || byokMode}
           onKeyDown={(e) => {
+            if (cliSettingsOpen) {
+              const rowCount = webSearchAllowed ? 2 : 1;
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                setCliSettingsIndex((i) =>
+                  nextPaletteIndex(i, e.key === "ArrowDown" ? 1 : -1, rowCount),
+                );
+                return;
+              }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (webSearchAllowed && cliSettingsIndex === 0) {
+                  void onSubmit(e, "/websearch");
+                } else {
+                  setCliSettingsOpen(false);
+                  onByokModeChange?.(true);
+                }
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setCliSettingsOpen(false);
+                return;
+              }
+            }
+            if (paletteRows.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault();
+              setPaletteIndex((i) =>
+                nextPaletteIndex(i, e.key === "ArrowDown" ? 1 : -1, paletteRows.length),
+              );
+              return;
+            }
+            if (paletteRows.length && e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const row = paletteRows[paletteIndex] ?? paletteRows[0];
+              row?.activate();
+              return;
+            }
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void onSubmit(e);
