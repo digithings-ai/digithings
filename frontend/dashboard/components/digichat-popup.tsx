@@ -22,8 +22,7 @@ import {
   buildThemeMessage,
   canUseDigichatPopup,
   DIGICHAT_READY,
-  extractPageHtml,
-  extractVisiblePageText,
+  extractPageContext,
   readDigichatPopupConfig,
   readDocumentTheme,
   type DigichatPopupConfig,
@@ -94,8 +93,7 @@ export default function DigichatPopup({
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    const text = extractVisiblePageText();
-    const html = extractPageHtml();
+    const { html, text } = extractPageContext();
     try {
       win.postMessage(
         buildPageContextMessage(text, { html: html || undefined }),

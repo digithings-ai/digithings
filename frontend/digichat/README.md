@@ -56,9 +56,15 @@ Bottom-right **dot** or **bar** launcher that opens a floating panel iframes `/e
 | `data-origin` | digichat origin when the script is not served from digichat |
 | `data-token` | Optional tenant embed token |
 | `data-theme` / `data-accent` | Optional UI pins |
-| `data-page-context` | `1` — after `digichat:ready`, post visible `document.body.innerText` (+ best-effort screenshot) as `digichat:page-context` |
+| `data-page-context` | `1` — after `digichat:ready`, post structurally sanitized visible-page HTML + text (+ best-effort screenshot) as `digichat:page-context` |
 
-Page context uses only content already visible on the host page (no behind-auth scrape). The embed prepends it to the next user turn once.
+Page context is a privacy boundary, not a scrape. The sender walks the live DOM
+(prefer `main` / `[role=main]`) and drops hidden/inert/`aria-hidden` nodes,
+password and autofill controls, scripts, and anything marked
+`data-digichat-private`. The embed receiver re-applies the same tag/attribute
+allowlist and size caps (`src/lib/page-context-sanitize.ts`). The snapshot is
+never rendered as live HTML; it is prepended to the next user turn once as
+prompt text. See ARCHITECTURE.md (page-context privacy contract).
 
 ### Production marketing path (#266 / CHR-68)
 
