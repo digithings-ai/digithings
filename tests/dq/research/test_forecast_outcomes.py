@@ -432,3 +432,86 @@ class TestPreflightReflectWiring:
         )
         assert node(state) == {}
         assert calls == ["decision_log", "forecast_outcomes"]
+
+
+class TestReturnFractionQuantize:
+    def test_quantize_return_fraction_fits_forecast_outcome_bounds(self) -> None:
+        """Long Decimal division must not trip ForecastOutcome decimal_max_digits."""
+        from uuid import uuid4
+
+        from digiquant.portfolio.models.forecast_calibration import (
+            ForecastOutcome,
+            SessionPriceSnapshot,
+            forecast_outcome_content_hash,
+            forecast_outcome_id,
+        )
+
+        long = Decimal("123.4567890123456789012345") / Decimal("987.6543210987654321")
+        q = fo._quantize_return_fraction(long)
+        assert q.as_tuple().exponent >= -8
+        # Digit count within ReturnFraction max_digits=16 (sign ignored).
+        digits = "".join(str(d) for d in q.as_tuple().digits)
+        assert len(digits) <= 16
+
+        # Smoke: constructing ForecastOutcome with quantized fields does not raise.
+        ref = SessionPriceSnapshot(
+            session_date=date(2026, 7, 15),
+            price=Decimal("100.00000000"),
+            observed_at=TS,
+            known_at=TS,
+        )
+        mat = SessionPriceSnapshot(
+            session_date=date(2026, 8, 13),
+            price=Decimal("103.33333333"),
+            observed_at=CUTOFF,
+            known_at=CUTOFF,
+        )
+        forecast_mean = fo._quantize_return_fraction(Decimal("0.02"))
+        realized = fo._quantize_return_fraction((mat.price - ref.price) / ref.price)
+        residual = fo._quantize_return_fraction(realized - forecast_mean)
+        base_id = uuid4()
+        eff_id = uuid4()
+        draft = {
+            "base_forecast_id": base_id,
+            "effective_forecast_id": eff_id,
+            "ticker": "TEST",
+            "horizon_sessions": 21,
+            "reference_session": ref.session_date,
+            "maturity_session": mat.session_date,
+            "reference_snapshot": ref,
+            "maturity_snapshot": mat,
+            "forecast_mean_return": forecast_mean,
+            "realized_return": realized,
+            "signed_residual": residual,
+            "positive_label": realized > 0,
+            "status": OutcomeStatus.RESOLVED,
+            "unavailable_reason": None,
+            "event_time": mat.observed_at,
+            "known_at": mat.known_at,
+        }
+        payload = {
+            "base_forecast_id": str(base_id),
+            "effective_forecast_id": str(eff_id),
+            "ticker": "TEST",
+            "horizon_sessions": 21,
+            "reference_session": ref.session_date.isoformat(),
+            "maturity_session": mat.session_date.isoformat(),
+            "reference_snapshot": ref.model_dump(mode="json"),
+            "maturity_snapshot": mat.model_dump(mode="json"),
+            "forecast_mean_return": str(forecast_mean),
+            "realized_return": str(realized),
+            "signed_residual": str(residual),
+            "positive_label": realized > 0,
+            "status": OutcomeStatus.RESOLVED.value,
+            "unavailable_reason": None,
+            "event_time": mat.observed_at.isoformat(),
+            "known_at": mat.known_at.isoformat(),
+        }
+        content_hash = forecast_outcome_content_hash(payload=payload)
+        outcome_id = forecast_outcome_id(
+            effective_forecast_id=eff_id,
+            maturity_session=mat.session_date,
+            content_hash=content_hash,
+        )
+        outcome = ForecastOutcome(outcome_id=outcome_id, content_hash=content_hash, **draft)
+        assert outcome.realized_return == realized

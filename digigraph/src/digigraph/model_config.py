@@ -910,6 +910,13 @@ def resolve_request_model(request_model: str) -> str:
       checking presence alone would let an unroutable-provider override this
       branch too — harmless only by the coincidence that server.py's 400 on
       unroutable providers (#1873) never lets one reach here today.
+    - unprefixed house digiquant slugs (``deepseek/…``, ``meta-llama/…``,
+      ``perplexity/…``, …) → returned unchanged. After #3414 these are not
+      registered provider prefixes; digillm sends them to ``OPENAI_API_BASE``
+      (LiteLLM, or the CLI/GHA OpenRouter rewrite). They must not fall through
+      to ``resolve_effective_model``, which prefers ``OLLAMA_MODEL`` /
+      ``model_modes`` local defaults (``ollama/qwen3:8b``) and would hand
+      OpenRouter an invalid model id.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -935,5 +942,13 @@ def resolve_request_model(request_model: str) -> str:
     # is bound" -- see the docstring note on ``push_byok_header`` vs ``set_byok``.
     byok = get_byok_override()
     if byok is not None and byok_provider_supported(byok[1]):
+        return request_model
+    # House digiquant pins (#3414) are unprefixed OpenRouter-style slugs such as
+    # ``deepseek/deepseek-v4-flash``. They are not registered providers, so the
+    # branch above does not keep them. Without this guard, ``resolve_effective_model``
+    # clobbers them with ``model_modes`` local defaults (``ollama/qwen3:8b``), which
+    # OpenRouter rejects ("not a valid model ID") on decision_log reflector and every
+    # other digiquant phase that goes through digigraph → digillm.
+    if "/" in request_model and not request_model.startswith("ollama/"):
         return request_model
     return resolve_effective_model(request_model)

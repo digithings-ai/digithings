@@ -209,6 +209,29 @@ class TestResolveRequestModel:
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:4000/v1")  # not :11434 → no strip
         assert resolve_request_model("openrouter/mistral/mistral-7b") == "ollama/qwen3:8b"
 
+    def test_house_digiquant_slug_not_clobbered_by_mode_defaults(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """Unprefixed house pins (#3414) must survive resolve_request_model.
+
+        Regression: after stripping ``openrouter/`` from digiquant pools, phase
+        models like ``deepseek/deepseek-v4-flash`` fell through to
+        ``resolve_effective_model``, which prefers ``model_modes`` local defaults
+        (``ollama/qwen3:8b``). OpenRouter then rejects the call as an invalid
+        model id — observed on decision_log reflector / preflight_reflect.
+        """
+        _clear_explicit_llm_env(monkeypatch)
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        monkeypatch.setenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+        assert resolve_request_model("deepseek/deepseek-v4-flash") == "deepseek/deepseek-v4-flash"
+        assert resolve_request_model("perplexity/sonar") == "perplexity/sonar"
+        # Explicit local ollama requests still go through effective-model resolution.
+        assert resolve_request_model("ollama/qwen3:8b") == "ollama/qwen3:8b"
+
     def test_plain_model_uses_effective_model(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
