@@ -1266,7 +1266,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `digiquant.dashboard.profile_config`. Optional nested
   `pipeline_schedule` / `execution_policy` (#3611) record workspace stage-day intent
   and calendar-vetoable execution constraints inside the same append-only payload
-  (no new table; stage gates and market-hours I/O are follow-on work).
+  (no new table). Stage gates (#3618) resolve today's `PipelineSchedule` inside
+  `digiquant.portfolio.chain.run_research_then_portfolio` (and the overlay path that
+  calls it): disabled research / deliberation / execution stages are skipped; typed
+  outcomes (`ran` | `disabled` | `deferred` | `failed`) persist on
+  `ResearchState.pipeline_stage_outcomes` and the diagnostics breakdown key
+  `pipeline_stages`. Calendar deferral is a typed thin hook
+  (`MarketCalendarContext`) — when unavailable, execution gates on schedule only.
+  Models: `digiquant.portfolio.stage_gates`. Market-hours venue I/O remains follow-on.
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user

@@ -47,8 +47,9 @@ Field validators live alongside the models. Models use `extra="forbid"` to catch
 - Example fixture: [`tests/dq/profiles/fixtures/example_asset_preferences.json`](../../../tests/dq/profiles/fixtures/example_asset_preferences.json)
 - Tests: [`tests/dq/profiles/test_asset_preferences.py`](../../../tests/dq/profiles/test_asset_preferences.py)
 
-### PipelineSchedule + ExecutionPolicy (#3611)
+### PipelineSchedule + ExecutionPolicy (#3611) + stage gates (#3618)
 - Models: [`pipeline_schedule.py`](../../src/digiquant/profiles/pipeline_schedule.py), [`execution_policy.py`](../../src/digiquant/profiles/execution_policy.py)
 - JSON schemas: [`schemas/pipeline_schedule.v1.json`](../schemas/pipeline_schedule.v1.json), [`schemas/execution_policy.v1.json`](../schemas/execution_policy.v1.json)
 - Tests: [`tests/dq/profiles/test_pipeline_schedule.py`](../../../tests/dq/profiles/test_pipeline_schedule.py)
 - Mirrored validators: Deno `digiquant/supabase/functions/_shared/profile-schemas.ts` and dashboard `frontend/dashboard/lib/settings/validate-profile.ts`
+- Stage gates (one graph): [`stage_gates.py`](../../src/digiquant/portfolio/stage_gates.py) — resolved inside `portfolio.chain` / overlay invoke; outcomes on `ResearchState.pipeline_stage_outcomes`; tests in [`tests/dq/portfolio/test_stage_gates.py`](../../../tests/dq/portfolio/test_stage_gates.py)

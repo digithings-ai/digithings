@@ -28,8 +28,17 @@ from digiquant.portfolio.graph import (
     ThesisGraphDeps,
     build_portfolio_graph,
 )
+from digiquant.portfolio.stage_gates import (
+    MarketCalendarContext,
+    PipelineStageReport,
+    pipeline_stages_breakdown,
+    plan_stage_gates,
+    resolve_pipeline_schedule,
+    with_stage_outcome,
+)
 from digiquant.research import diagnostics as _diagnostics
 from digiquant.research import provider_telemetry as _provider_telemetry
+from digiquant.research.diagnostics import register_breakdown_contributor
 from digiquant.research.graph import (
     ResearchGraphDeps,
     ResearchInput,
@@ -40,12 +49,16 @@ from digiquant.research.graph import (
 from digiquant.research.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
+    build_preflight_node,
 )
 from digiquant.research.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.research.phases.triage_phase import TriageDeps
 from digiquant.research.state import PhaseError, ResearchConfigBundle, ResearchState
 
 _logger = logging.getLogger(__name__)
+
+# Import-time registration: chain is on every house/overlay run path (#3618).
+register_breakdown_contributor(pipeline_stages_breakdown)
 
 __all__ = [
     "ChainDeps",
@@ -270,6 +283,47 @@ def _preflight_config(deps: ChainDeps) -> ResearchConfigBundle | None:
     return loaded if isinstance(loaded, ResearchConfigBundle) else None
 
 
+def _resolve_schedule_report(
+    state: ResearchState,
+    run_date: date,
+    *,
+    calendar: MarketCalendarContext | None = None,
+) -> PipelineStageReport:
+    """Resolve today's PipelineSchedule from the pinned profile (or daily defaults)."""
+    schedule, source = resolve_pipeline_schedule(state.config.profile_config)
+    if state.config.profile_config is None and state.config.profile_config_version_id is None:
+        # Unpinned house path before preflight — same defaults as house_profile_config.
+        source = "house_default"
+    return plan_stage_gates(
+        schedule,
+        run_date,
+        schedule_source=source,
+        calendar=calendar,
+    )
+
+
+def _run_preflight_only(state: ResearchState, deps: ChainDeps) -> ResearchState:
+    """Run the preflight node without the rest of the research graph.
+
+    Used when research is schedule-disabled so deliberation still gets a pinned
+    ProfileConfig + prior context. Fail-soft: preflight errors become chain errors.
+    """
+    try:
+        updates = build_preflight_node(deps.research.preflight)(state)
+        if isinstance(updates, dict):
+            return state.model_copy(update=updates)
+        return state
+    except Exception as exc:
+        _logger.exception("chain: preflight-only failed after research schedule skip")
+        _record_chain_error(state, "preflight", exc)
+        return state
+
+
+def _persist_stage_report(state: ResearchState, report: PipelineStageReport) -> ResearchState:
+    """Stamp ``pipeline_stage_outcomes`` on state (JSON dump for diagnostics)."""
+    return state.model_copy(update={"pipeline_stage_outcomes": report.model_dump(mode="json")})
+
+
 def _safe_invoke_graph(
     graph: Any, state: ResearchState, checkpointer: Any, thread_base: str | None, label: str
 ) -> ResearchState:
@@ -422,28 +476,91 @@ def run_research_then_portfolio(
             _run_beliefs_fold(state, deps, research_input)
             return state
 
-        # research: research only, no publish.
-        research_deps = ResearchGraphDeps(
-            preflight=deps.research.preflight,
-            publish=None,  # chain handles publish at the end
-            triage=deps.research.triage,
-            preflight_reflect=deps.research.preflight_reflect,
-        )
-        research_graph = build_research_graph(
-            deps=research_deps,
-            watchlist=research_input.watchlist,
-            checkpointer=checkpointer,
-        )
-        state = _safe_invoke_graph(research_graph, state, checkpointer, thread_base, "research")
+        # Workspace PipelineSchedule gates (#3618) — one graph, skip disabled stages.
+        # Calendar context is optional; when absent, execution gates on schedule only.
+        stage_report = _resolve_schedule_report(state, research_input.run_date)
+        research_enabled = stage_report.research.status != "disabled"
+        deliberation_enabled = stage_report.deliberation.status != "disabled"
+
+        if research_enabled:
+            # research: research only, no publish.
+            research_deps = ResearchGraphDeps(
+                preflight=deps.research.preflight,
+                publish=None,  # chain handles publish at the end
+                triage=deps.research.triage,
+                preflight_reflect=deps.research.preflight_reflect,
+            )
+            research_graph = build_research_graph(
+                deps=research_deps,
+                watchlist=research_input.watchlist,
+                checkpointer=checkpointer,
+            )
+            state = _safe_invoke_graph(research_graph, state, checkpointer, thread_base, "research")
+            research_crashed = any(
+                getattr(err, "phase", None) == "chain" and getattr(err, "node", None) == "research"
+                for err in (state.errors or [])
+            )
+            if research_crashed:
+                stage_report = with_stage_outcome(
+                    stage_report,
+                    "research",
+                    status="failed",
+                    reason="research_graph_error",
+                )
+            else:
+                stage_report = with_stage_outcome(
+                    stage_report,
+                    "research",
+                    status="ran",
+                    reason=None,
+                )
+            # Authoritative schedule after preflight pin (overlay custom schedule).
+            if state.config.profile_config is not None:
+                refreshed = _resolve_schedule_report(state, research_input.run_date)
+                stage_report = stage_report.model_copy(
+                    update={
+                        "schedule_source": refreshed.schedule_source,
+                        "execution": refreshed.execution,
+                    }
+                )
+                deliberation_enabled = refreshed.deliberation.status != "disabled"
+        else:
+            _logger.info(
+                "chain: research stage disabled by PipelineSchedule for %s (%s); "
+                "running preflight only",
+                research_input.run_date.isoformat(),
+                stage_report.weekday,
+            )
+            state = _run_preflight_only(state, deps)
+            stage_report = with_stage_outcome(
+                stage_report,
+                "research",
+                status="disabled",
+                reason="schedule_disabled",
+            )
+            if state.config.profile_config is not None:
+                refreshed = _resolve_schedule_report(state, research_input.run_date)
+                stage_report = stage_report.model_copy(
+                    update={
+                        "schedule_source": refreshed.schedule_source,
+                        "execution": refreshed.execution,
+                        "deliberation": refreshed.deliberation
+                        if refreshed.deliberation.status == "disabled"
+                        else stage_report.deliberation,
+                    }
+                )
+                deliberation_enabled = refreshed.deliberation.status != "disabled"
 
         # Research-sufficiency gate (#944): portfolio books a rebalance + decision_log rows
         # INSIDE its own graph (H9 commit-run), so it must NOT run when the research pass
         # produced no fresh research — otherwise the PM commits decisions on stale prior
-        # context. The Jun-20 incident: research crashed on empty LLM responses, the chain
-        # swallowed it (``_safe_invoke_graph``), and a pm-rebalance was written against
-        # 2-day-stale prices. Skipping records a chain error so the run is gated degraded and
-        # CI's outer retry fires; the terminal publish still flushes whatever research produced.
-        if _diagnostics.research_produced(state):
+        # context. Exception: research schedule-disabled still allows deliberation when
+        # enabled (preflight loaded priors; policy skip ≠ research crash).
+        research_ok_for_portfolio = (
+            stage_report.research.status == "disabled" or _diagnostics.research_produced(state)
+        )
+
+        if deliberation_enabled and research_ok_for_portfolio:
             portfolio_graph = build_portfolio_graph(
                 watchlist=list(
                     portfolio_watchlist
@@ -457,9 +574,39 @@ def run_research_then_portfolio(
             state = _safe_invoke_graph(
                 portfolio_graph, state, checkpointer, thread_base, "portfolio"
             )
+            if any(
+                getattr(err, "phase", None) == "chain" and getattr(err, "node", None) == "portfolio"
+                for err in (state.errors or [])
+            ):
+                stage_report = with_stage_outcome(
+                    stage_report,
+                    "deliberation",
+                    status="failed",
+                    reason="portfolio_graph_error",
+                )
+            else:
+                stage_report = with_stage_outcome(
+                    stage_report,
+                    "deliberation",
+                    status="ran",
+                    reason=None,
+                )
             # WP10.1: one-way shadow artifact after H9. Fail-soft — never reruns or
             # mutates the production booking path / graph.
             _maybe_export_shadow_allocation_artifact(state)
+        elif not deliberation_enabled:
+            _logger.info(
+                "chain: deliberation stage disabled by PipelineSchedule for %s (%s); "
+                "skipping portfolio",
+                research_input.run_date.isoformat(),
+                stage_report.weekday,
+            )
+            stage_report = with_stage_outcome(
+                stage_report,
+                "deliberation",
+                status="disabled",
+                reason="schedule_disabled",
+            )
         else:
             _logger.error(
                 "chain: research produced no research for %s; skipping portfolio — no rebalance booked",
@@ -473,6 +620,14 @@ def run_research_then_portfolio(
                     "rebalance on stale context"
                 ),
             )
+            stage_report = with_stage_outcome(
+                stage_report,
+                "deliberation",
+                status="failed",
+                reason="research_insufficient",
+            )
+
+        state = _persist_stage_report(state, stage_report)
 
         # Terminal phase — research artifacts only; portfolio terminal is H9 in-graph.
         state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
