@@ -46,13 +46,16 @@ and a full exit is just the case where that difference reaches zero.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import (
+    TYPE_CHECKING,
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous Supabase row dicts
 )
 from uuid import UUID, uuid5
+from zoneinfo import ZoneInfo
 
 from digiquant.portfolio.models.portfolio_ledger import (
     DecisionAction,
@@ -78,6 +81,9 @@ from digiquant.portfolio.writers.ledger_io import (
     ledger_enabled,
 )
 from digiquant.research.supabase_io import SupabaseClient
+
+if TYPE_CHECKING:
+    from digiquant.execution.market_hours import CalendarDayStatus, MarketSessionContext
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +196,22 @@ class Rejection:
 
 
 @dataclass(frozen=True)
+class DeferredOrder:
+    """Pending order left untouched because the venue session is closed (#3612).
+
+    Not a terminal rejection: the intent stays ``pending`` so a later open can fill it.
+    Never recorded as ``data_unavailable``.
+    """
+
+    symbol: str
+    order_intent_id: UUID
+    venue: str
+    reason: str | None
+    next_open: datetime | None
+    fail_closed: bool = False
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     """What one at-open run booked.
 
@@ -197,12 +219,17 @@ class ExecutionResult:
     fills" means "nothing traded". It is False when no ``portfolio_ledger_commits`` row
     exists for ``run_date`` — i.e. H9 never appended a chain for that date, so the ledger
     has no opinion and an empty result says nothing about the day.
+
+    ``deferred`` holds pending orders skipped because the venue calendar said closed
+    (or fail-closed on missing calendar data). Those rows are *not* written as
+    rejections.
     """
 
     authoritative: bool
     fills: list[Fill]
     rejections: list[Rejection]
     already_booked: list[str]
+    deferred: list[DeferredOrder] = field(default_factory=list)
 
 
 def _money(value: Decimal) -> Decimal:
@@ -604,6 +631,11 @@ def execute_pending_orders(
     executed_date: date,
     marks: dict[str, float | Decimal],
     now: datetime,
+    calendar_rows: Mapping[tuple[str, date], CalendarDayStatus]
+    | Sequence[Mapping[str, Any] | CalendarDayStatus]
+    | None = None,
+    session_at: datetime | None = None,
+    early_close_dates: set[date] | frozenset[date] | None = None,
 ) -> ExecutionResult:
     """Book fills for every pending order head on ``run_date``. The authoritative path.
 
@@ -612,6 +644,12 @@ def execute_pending_orders(
     decision date and ``executed_date`` the date the fill happened — normally the next
     trading morning, which is why they are separate parameters.
 
+    ``calendar_rows`` (optional) enables the venue-session gate (#3612): when a symbol's
+    venue is closed — or calendar data is missing (fail closed) — the order stays
+    ``pending`` and is reported on ``ExecutionResult.deferred``. Closed markets must not
+    become terminal ``data_unavailable`` rejections. When ``calendar_rows`` is omitted the
+    gate is skipped (legacy callers / tests that only assert fill math).
+
     Returns without writing when :func:`ledger_enabled` is off (the Phase-0 rollback
     switch) or when no commit exists for ``run_date``; both cases report
     ``authoritative=False`` so the caller can tell "the ledger declined to speak" from
@@ -619,7 +657,9 @@ def execute_pending_orders(
     """
     if not ledger_enabled():
         logger.info("portfolio ledger disabled — skipping authoritative paper execution")
-        return ExecutionResult(authoritative=False, fills=[], rejections=[], already_booked=[])
+        return ExecutionResult(
+            authoritative=False, fills=[], rejections=[], already_booked=[], deferred=[]
+        )
 
     if not ledger_is_authoritative(client=client, run_date=run_date):
         logger.warning(
@@ -627,7 +667,9 @@ def execute_pending_orders(
             "is not authoritative for that date and no fills will be booked",
             run_date.isoformat(),
         )
-        return ExecutionResult(authoritative=False, fills=[], rejections=[], already_booked=[])
+        return ExecutionResult(
+            authoritative=False, fills=[], rejections=[], already_booked=[], deferred=[]
+        )
 
     pending, all_orders = _pending_order_heads(client=client, run_date=run_date)
     actions, stale = _directions_by_order(client=client, run_date=run_date, order_rows=pending)
@@ -652,6 +694,17 @@ def execute_pending_orders(
     fills: list[Fill] = []
     rejections: list[Rejection] = []
     already_booked: list[str] = []
+    deferred: list[DeferredOrder] = []
+    # Default gate: 09:35 America/New_York on the execution date (matches the
+    # house at-open cron). Callers may pass ``session_at`` for intraday tests.
+    gate_at = session_at or datetime(
+        executed_date.year,
+        executed_date.month,
+        executed_date.day,
+        9,
+        35,
+        tzinfo=ZoneInfo("America/New_York"),
+    )
 
     # Sorted by (symbol, id), not symbol alone: `_rows_for_date` issues no ORDER BY, so
     # PostgREST's row order is unspecified, and a stable sort on symbol alone preserves
@@ -688,6 +741,31 @@ def execute_pending_orders(
                 )
             )
             continue
+
+        # Venue-session gate (#3612): closed / fail-closed → leave pending (defer).
+        # Must run before mark-based rejection so a holiday without opens is deferred,
+        # not terminal ``data_unavailable``.
+        if calendar_rows is not None:
+            # Lazy import: digiquant.execution.__init__ pulls router → this module.
+            from digiquant.execution.market_hours import is_execution_eligible
+
+            eligible, session_ctx = is_execution_eligible(
+                symbol,
+                gate_at,
+                calendar_rows,
+                early_close_dates=early_close_dates,
+            )
+            if not eligible:
+                deferred.append(_deferred_from_session(symbol, UUID(order_id), session_ctx))
+                logger.info(
+                    "portfolio ledger: deferring %s (%s) — venue %s closed (%s); "
+                    "order stays pending",
+                    symbol,
+                    order_id,
+                    session_ctx.venue,
+                    session_ctx.reason,
+                )
+                continue
 
         reason = _rejection_reason(
             order_id=order_id,
@@ -768,6 +846,20 @@ def execute_pending_orders(
         fills=fills,
         rejections=rejections,
         already_booked=already_booked,
+        deferred=deferred,
+    )
+
+
+def _deferred_from_session(
+    symbol: str, order_intent_id: UUID, session_ctx: MarketSessionContext
+) -> DeferredOrder:
+    return DeferredOrder(
+        symbol=symbol,
+        order_intent_id=order_intent_id,
+        venue=session_ctx.venue,
+        reason=session_ctx.reason,
+        next_open=session_ctx.next_open,
+        fail_closed=session_ctx.fail_closed,
     )
 
 

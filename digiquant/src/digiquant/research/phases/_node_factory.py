@@ -403,9 +403,9 @@ DataLayerScope = Literal["full", "portfolio", "ticker", "none"]
 - ``none``: drop ``market_context`` entirely (freshness probes only).
 """
 
-# Compact regime signals preflight folds into ``market_context`` (#801/#806).
+# Compact regime signals preflight folds into ``market_context`` (#801/#806/#3612).
 # Cheap and broadly useful, so every non-``full`` scope keeps them.
-_REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning")
+_REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning", "venue_sessions")
 
 # Bias fields carried in the slim delta snapshot (mirrors Phase6BiasRow's
 # regime + per-asset bias surface — the part a delta node needs to see

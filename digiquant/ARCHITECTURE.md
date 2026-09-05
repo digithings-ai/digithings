@@ -1273,7 +1273,20 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   selects the digithings **house** default (always-on, immutable); an overlay pin
   fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
   not fork the graph or cancel the house run. Models:
-  `digiquant.dashboard.profile_config`.
+  `digiquant.dashboard.profile_config`. Optional nested
+  `pipeline_schedule` / `execution_policy` (#3611) record workspace stage-day intent
+  and calendar-vetoable execution constraints inside the same append-only payload
+  (no new table). Stage gates (#3618) resolve today's `PipelineSchedule` inside
+  `digiquant.portfolio.chain.run_research_then_portfolio` (and the overlay path that
+  calls it): disabled research / deliberation stages are skipped (preflight hydrates
+  overlay `ProfileConfig` before the research skip). Typed outcomes
+  (`ran` | `disabled` | `deferred` | `failed`) persist on
+  `ResearchState.pipeline_stage_outcomes` and the diagnostics breakdown key
+  `pipeline_stages`. Execution is not invoked in this compose (`execute_at_open`
+  remains a separate job); the report records schedule eligibility / disable /
+  calendar-deferral. Calendar deferral is a typed thin hook
+  (`MarketCalendarContext`) — when unavailable, execution gates on schedule only.
+  Models: `digiquant.portfolio.stage_gates`. Market-hours venue I/O remains follow-on.
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
@@ -2687,6 +2700,16 @@ the grants would refuse anyway.
   via the public `marks: dict[str, float | Decimal]` signature) take the same decline —
   `_rejection_reason` checks `is_finite()` before any comparison so the executor does not
   raise (#2497).
+- **Venue session gate (#3612).** Before mark-based rejection or fill writes,
+  `execute_pending_orders` may consult :mod:`digiquant.execution.market_hours` (pure
+  calendar resolution over `trading_calendar` rows + `ticker_venues`). Closed sessions
+  (weekend, holiday, early close / outside hours) and fail-closed missing calendar data
+  leave the order `pending` and append a `DeferredOrder` on `ExecutionResult.deferred` —
+  never a terminal `data_unavailable` solely because the market is closed. CRYPTO is
+  24×7 without a row; FX weekends close from the weekday alone. `execute_at_open` loads
+  calendar rows and prints deferred outcomes. Preflight injects
+  `market_context["venue_sessions"]` for PM awareness (kept under portfolio/ticker
+  `data_layer_scope`). Live-venue refusals in `execution/policy.py` are untouched.
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
 declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
@@ -3399,7 +3422,11 @@ Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
 
 `digiquant/src/digiquant/execution/` (K4) routes approved portfolio order intents to an
 external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / positions
-append-only (D10). The internal `paper_internal` path is unchanged.
+append-only (D10). The internal `paper_internal` path is unchanged. Venue-session
+calendar resolution for deferred execution is `execution/market_hours.py` (#3612) —
+pure helpers over `trading_calendar` + `ticker_venues`; import that submodule
+directly (not via package `__init__`) to avoid circular imports with `execution_io`.
+Live-venue refusals in `execution/policy.py` are unchanged by the calendar gate.
 
 **Venue resolution (`policy.py`).** `resolve_venue(workspace_id, *, active_paper_brokers)`
 performs **no I/O**. House / system — `workspace_id is None` **or** the well-known

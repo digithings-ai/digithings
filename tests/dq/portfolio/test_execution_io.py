@@ -294,6 +294,157 @@ class TestAuthority:
         assert client.store == {}
 
 
+class TestSessionDeferral:
+    """Closed / fail-closed venues leave orders pending (#3612)."""
+
+    def test_holiday_defers_without_rejecting_even_when_marks_missing(self) -> None:
+        chain = _Chain()
+        order_id = chain.order(symbol="SPY", action="add", quantity="10")
+        client = chain.client()
+        calendar = [
+            {
+                "date": EXECUTED_DATE.isoformat(),
+                "venue": "NYSE",
+                "is_trading_day": False,
+                "reason": "holiday",
+            }
+        ]
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={},
+            now=NOW,
+            calendar_rows=calendar,
+        )
+
+        assert result.authoritative is True
+        assert result.fills == []
+        assert result.rejections == []
+        assert len(result.deferred) == 1
+        assert result.deferred[0].symbol == "SPY"
+        assert result.deferred[0].order_intent_id == UUID(order_id)
+        assert result.deferred[0].reason == "holiday"
+        assert client.store.get(ORDER_INTENTS, []) == []
+        assert client.store.get(PAPER_EXECUTIONS, []) == []
+
+    def test_missing_calendar_fail_closed_defers_equity(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="SPY", action="add", quantity="5")
+        client = chain.client()
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"SPY": Decimal("400.00")},
+            now=NOW,
+            calendar_rows=[],
+        )
+
+        assert result.fills == []
+        assert result.rejections == []
+        assert len(result.deferred) == 1
+        assert result.deferred[0].fail_closed is True
+        assert client.store.get(ORDER_INTENTS, []) == []
+
+    def test_open_session_still_rejects_missing_marks_as_data_unavailable(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="SPY", action="add", quantity="5")
+        client = chain.client()
+        calendar = [
+            {
+                "date": EXECUTED_DATE.isoformat(),
+                "venue": "NYSE",
+                "is_trading_day": True,
+                "reason": None,
+            }
+        ]
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={},
+            now=NOW,
+            calendar_rows=calendar,
+        )
+
+        assert result.deferred == []
+        assert len(result.rejections) == 1
+        assert result.rejections[0].reason == OrderRejectionReason.DATA_UNAVAILABLE
+
+    def test_crypto_fills_on_weekend_calendar(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="BTC-USD", action="add", quantity="1")
+        client = chain.client()
+        saturday = date(2026, 6, 13)
+        calendar = [
+            {
+                "date": saturday.isoformat(),
+                "venue": "NYSE",
+                "is_trading_day": False,
+                "reason": "weekend",
+            }
+        ]
+
+        result = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=saturday,
+            marks={"BTC-USD": Decimal("60000.00")},
+            now=datetime(2026, 6, 13, 12, 0, tzinfo=UTC),
+            calendar_rows=calendar,
+        )
+
+        assert result.deferred == []
+        assert len(result.fills) == 1
+        assert result.fills[0].symbol == "BTC-USD"
+
+    def test_deferred_then_open_day_fills_on_retry(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="SPY", action="add", quantity="10")
+        client = chain.client()
+        closed_cal = [
+            {
+                "date": EXECUTED_DATE.isoformat(),
+                "venue": "NYSE",
+                "is_trading_day": False,
+                "reason": "holiday",
+            }
+        ]
+        first = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"SPY": Decimal("400.00")},
+            now=NOW,
+            calendar_rows=closed_cal,
+        )
+        assert first.deferred and not first.fills
+
+        open_cal = [
+            {
+                "date": EXECUTED_DATE.isoformat(),
+                "venue": "NYSE",
+                "is_trading_day": True,
+                "reason": None,
+            }
+        ]
+        second = execute_pending_orders(
+            client=client,
+            run_date=RUN_DATE,
+            executed_date=EXECUTED_DATE,
+            marks={"SPY": Decimal("400.00")},
+            now=NOW,
+            calendar_rows=open_cal,
+        )
+        assert second.deferred == []
+        assert len(second.fills) == 1
+        assert second.fills[0].symbol == "SPY"
+
+
 class TestBuyFill:
     def test_add_books_fill_lot_and_terminal_order(self) -> None:
         chain = _Chain()
