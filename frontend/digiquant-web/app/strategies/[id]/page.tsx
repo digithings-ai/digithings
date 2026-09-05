@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return {
     title: `${name} · ${s.symbol} — digiquant tearsheet`,
     description: dca
-      ? `Backtest tearsheet for ${name} (${s.symbol}) — remaining-book SDCA on a composite valuation index. Illustrative Nautilus backtest; not a live strategy.`
+      ? `Backtest tearsheet for ${name} (${s.symbol}) — strategic DCA on a composite valuation index. Illustrative Nautilus backtest; not a live strategy.`
       : `Backtest tearsheet for ${name} (${s.symbol}) — equity, drawdown, and per-trade analytics.`,
   };
 }

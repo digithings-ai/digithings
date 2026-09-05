@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DirectionPill, dcaRateCopy, fmtNum, fmtPct, riskBandLabel, toneClass } from "@digithings/web";
+import { DirectionPill, fmtNum, fmtPct, toneClass } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
 import { isDcaTearsheet, lastAllocatedPct, ALLOCATED_KPI_LABEL } from "./dca";
 import {
@@ -18,7 +18,7 @@ function Toned({ v, children }: { v: number; children: ReactNode }) {
 /** Live position banner — always shown; flat when no open leg at period end. */
 export function CurrentPosition({ data, asset }: { data: TearsheetData; asset: string }) {
   if (isDcaTearsheet(data)) {
-    return <DcaCurrentSignal data={data} asset={asset} />;
+    return <DcaCurrentSignal data={data} />;
   }
   const open = openTrade(data.trades, data.period_end);
   const asOf = data.period_end;
@@ -84,16 +84,15 @@ export function CurrentPosition({ data, asset }: { data: TearsheetData; asset: s
   );
 }
 
-function DcaCurrentSignal({ data, asset }: { data: TearsheetData; asset: string }) {
+function DcaCurrentSignal({ data }: { data: TearsheetData }) {
   const asOf = data.period_end;
   const sig = data.current_signal;
   const risk = sig?.risk ?? data.dca?.avg_risk ?? null;
-  const band = sig?.band ?? riskBandLabel(risk);
   const rate = sig?.daily_rate_pct;
-  const rateCopy = dcaRateCopy(rate);
   const side =
     rate == null || Number.isNaN(rate) || rate === 0 ? "hold" : rate > 0 ? "buy" : "sell";
   const sideLabel = side === "buy" ? "Buy" : side === "sell" ? "Sell" : "Hold";
+  const ratePct = rate == null || Number.isNaN(rate) || rate === 0 ? null : fmtPct(Math.abs(rate));
   const allocated = lastAllocatedPct(data);
   const units = data.dca?.units_accumulated;
   const lastPrice = sig?.last_price ?? null;
@@ -108,15 +107,7 @@ function DcaCurrentSignal({ data, asset }: { data: TearsheetData; asset: string 
         <div className="ts-position-main">
           <span className="ts-position-dca-band">
             {sideLabel}
-            {rateCopy ? ` — ${rateCopy}` : ""}
-          </span>
-          <span className="ts-position-entry">
-            Remaining-book rate on{" "}
-            <span className="ts-position-asset">
-              <AssetLogoFor strategy={data.strategy} symbol={data.symbol} size={20} className="ts-position-logo" />
-              {asset}
-            </span>
-            {band ? ` · ${band}` : ""}
+            {ratePct ? ` ${ratePct}` : ""}
           </span>
         </div>
         <dl className="ts-position-stats">

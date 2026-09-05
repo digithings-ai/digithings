@@ -21,7 +21,6 @@ import {
   LOOKBACK_OPTIONS,
   MultiTimeSeries,
   PRINT_FULL_VIEW,
-  RISK_BANDS,
   ReturnsMatrix,
   RiskBandStrip,
   AllocationStepChart,
@@ -72,7 +71,7 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
-import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
+import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL } from "./dca";
 import { BacktestOnlyChip } from "./honesty";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
@@ -392,20 +391,9 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
           />
         );
       case "risk":
-        return (
-          <span className="ts-panel-hint">
-            {`accumulate starts at ${chartKnees.buy_knee_risk} · distribute starts at ${chartKnees.sell_knee_risk} · `}
-            {RISK_BANDS.map((b) => `${b.lo}–${b.hi} ${b.label}`).join(" · ")}
-          </span>
-        );
+        return null;
       case "indicators":
-        return (
-          <span className="ts-panel-hint">
-            {isValuationOnlyIndex(data?.indicator_weights)
-              ? "Power-law only. Extra indicators are unused (weight 0)."
-              : "Composite valuation index (power law + M2 + DXY + weekly log-MACD + RSI). Zero-weight extras are unused."}
-          </span>
-        );
+        return null;
       case "accumulation":
         return (
           <ChartLegend
@@ -445,7 +433,7 @@ export function TearsheetView({ slug, data: dataProp }: { slug: string; data?: T
         return _exhaustive;
       }
     }
-  }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasLump, scale]);
+  }, [chartTab, hasLump, scale]);
 
   if (err) return <TearsheetUnavailable slug={slug} message={err} />;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
