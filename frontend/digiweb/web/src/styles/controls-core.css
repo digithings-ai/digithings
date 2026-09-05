@@ -1754,6 +1754,64 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+/* ── Slider input — DigiWeb range mechanic (#3577)
+   Native <input type="range"> restyled like the reference specimen: 4px
+   track, accent fill supplied inline by the consumer, SQUARE thumb (sharp-
+   corner grammar — not OS accent-color pills / round knobs). Full <Slider/>
+   composite can wrap this later; apps may use `.ctl-slider-input` alone. */
+@layer components {
+  .ctl-slider-input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 0;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+
+  .ctl-slider-input:focus-visible {
+    outline: none;
+  }
+
+  .ctl-slider-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5px;
+    border-radius: 0;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--hair);
+    cursor: pointer;
+  }
+
+  .ctl-slider-input:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 1px var(--hair), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+
+  .ctl-slider-input::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 0;
+    background: var(--accent);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--hair);
+    cursor: pointer;
+  }
+
+  .ctl-slider-input:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 1px var(--hair), 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+
+  .ctl-slider-input::-moz-range-track {
+    height: 4px;
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
 /* ── reduced motion ─────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1766,3 +1824,4 @@
     animation: none;
   }
 }
+

@@ -771,14 +771,20 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
 
-**postMessage page-context (popup widget #3421).** Hosts that load
-`public/widget.js` may post `{ type: "digichat:page-context", text, screenshotDataUrl?, ts }`
+**postMessage page-context (popup widget #3421 / #3581).** Hosts that load
+`public/widget.js` (or the dashboard React popup) may post
+`{ type: "digichat:page-context", text, html?, screenshotDataUrl?, ts }`
 after `digichat:ready`. Accepted only from the immediate parent browsing-context
 origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
-registered third-party site can describe **its own already-visible** DOM. Text is
-capped (`embed-page-context-messages.ts`); screenshot data URLs are optional and
-never inlined into the model prompt (acknowledgment only). The embed prepends
-formatted context to the next `wrappedSend` once. Config/URL helpers:
+registered third-party site can describe **its own already-visible** DOM. Prefer
+sanitized **HTML** (≤12k) for structure; `text` (≤8k) remains required for
+back-compat. Caps live in `embed-page-context-messages.ts`. The embed never
+renders the context — a “looking at this page” preview box was tried and dropped
+(#3590): it ate the top third of a 400px popup to tell the visitor what page they
+were already looking at. Only the welcome line says context is attached; the
+embed prepends the formatted context to the next `wrappedSend` once. Screenshot
+data URLs are optional and acknowledged in the prompt only — vision multimodal /
+LiteLLM image parts are deferred. Config/URL helpers:
 `src/lib/embed-popup-config.ts`.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)

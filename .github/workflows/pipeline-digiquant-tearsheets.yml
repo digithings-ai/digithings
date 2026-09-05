@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant tearsheets"
 
 # Daily Slapper + BTC-SDCA tearsheet regeneration for digiquant.io
@@ -20,9 +21,6 @@ name: "Pipeline: digiquant tearsheets"
 # 4. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
-  schedule:
-    # 00:00 UTC — after Coinbase daily close; fresh signal for digiquant.io tearsheets
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:

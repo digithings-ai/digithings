@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Smoke: site"
 
 # Post-deploy smoke check for the static sites. Both digithings.ai and
@@ -22,8 +23,6 @@ name: "Smoke: site"
 # stale site cannot cancel or mask the other; see the comment on the second job.
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:

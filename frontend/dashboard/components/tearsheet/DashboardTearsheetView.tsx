@@ -18,6 +18,10 @@ import {
 } from './PortfolioPerformanceCharts';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { ledgerHref } from '@/lib/portfolio-url-state';
+import {
+  navContractBadgeLabel,
+  type PerformanceSsotMeta,
+} from '@/lib/performance-ssot';
 
 function ReturnValue({ value }: { value: number | null }) {
   if (value == null) return <>—</>;
@@ -151,7 +155,14 @@ function LedgerDoorway({ sellCount }: { sellCount: number }) {
   );
 }
 
-export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet }) {
+export function PerformanceTearsheetView({
+  data,
+  ssot = null,
+}: {
+  data: PerformanceTearsheet;
+  /** Optional full SSOT meta from `getPerformanceBundle` (#3580). */
+  ssot?: PerformanceSsotMeta | null;
+}) {
   const [, setPrinting] = useState(false);
   const [benchmarkTicker, setBenchmarkTicker] = useState(
     data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
@@ -177,12 +188,31 @@ export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet 
       ? `${data.inceptionDate}–${data.metricsAsOf}`
       : null;
   const sellCount = data.historicalHoldings.length;
+  const navContract = ssot?.navContract ?? data.navContract ?? null;
+  const metricsLagging = ssot?.metricsLagging ?? data.metricsLagging ?? false;
 
   return (
     <div className="ts-print-root space-y-0">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-hair pb-3">
         <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
         <div className="flex flex-wrap items-center gap-3">
+          {navContract && navContract !== 'empty' ? (
+            <span
+              data-testid="tearsheet-nav-contract-badge"
+              className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+            >
+              {navContractBadgeLabel(navContract)}
+            </span>
+          ) : null}
+          {metricsLagging ? (
+            <span
+              data-testid="tearsheet-metrics-lag-badge"
+              className="font-mono text-[0.62rem] uppercase tracking-wider text-warn"
+            >
+              metrics lag
+              {ssot?.metricsAsOf ? ` · ${ssot.metricsAsOf}` : ''}
+            </span>
+          ) : null}
           {data.benchmarkComparisons.length ? (
             <label
               data-testid="global-benchmark-control"
@@ -237,6 +267,9 @@ export function PerformanceTearsheetView({ data }: { data: PerformanceTearsheet 
           <strong className="font-medium text-accent">
             {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
           </strong>
+          {ssot?.navAsOf && ssot.navAsOf !== data.metricsAsOf ? (
+            <span data-testid="tearsheet-nav-as-of">nav tip {ssot.navAsOf}</span>
+          ) : null}
         </div>
       </section>
 
