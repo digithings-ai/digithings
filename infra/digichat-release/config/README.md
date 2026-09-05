@@ -32,5 +32,6 @@ Mounted read-only into LiteLLM and digigraph as `/app/config`.
 (`DIGICHAT_ENABLED_SERVICES=digigraph`).
 
 Provider keys belong in `.env.profile-a` / `.env.profile-a-bundle`
-(`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, optional `LITELLM_*`),
+(`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, optional `LITELLM_*`,
+optional house `CHEAPERINFERENCE_API_KEY` / `CHEAPERINFERENCE_API_BASE`),
 not in these YAML files.

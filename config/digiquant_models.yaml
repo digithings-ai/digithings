@@ -42,7 +42,13 @@
 # apply_digiquant_openrouter_env() sets OPENROUTER_ALLOWED_MODELS +
 # OPENROUTER_COST_QUALITY_TRADEOFF at chain startup, and points the default
 # client at OpenRouter's OpenAI-compat API only when OPENAI_API_BASE is unset
-# (CLI/GHA without a local proxy). Prefixes (openrouter/, gemini/, …) are
+# (CLI/GHA without a local proxy). Optional house savings: with
+# CHEAPERINFERENCE_API_KEY + DIGI_HOUSE_UPSTREAM=cheaperinference (or
+# CHEAPERINFERENCE_HOUSE=1), that rewrite prefers Cheaper Inference; digillm
+# maps DeepSeek/Gemini/GPT pins that exist on CI to bare ids and keeps
+# OpenRouter for perplexity/sonar, :online, meta-llama/*, and unmapped slugs.
+# LiteLLM overlay: config/litellm.cheaperinference.yaml (see docs/providers/
+# cheaperinference.md). Prefixes (openrouter/, gemini/, …) are
 # BYOK/diagnostics — do not put them on house pins.
 
 default_tier: cheap

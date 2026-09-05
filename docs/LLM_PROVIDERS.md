@@ -184,6 +184,7 @@ For users with GPU or Apple Silicon:
 - **LM Studio** — GUI + local OpenAI-compatible server. Best for non-CLI users.
 - **vLLM** — production-grade serving with PagedAttention. Deploy on your own GPU. LiteLLM: `openai/<model>` with `api_base`.
 - **OmniRoute** — optional self-hosted OpenAI-compat gateway (`localhost:20128/v1`). Off by default; see [providers/omniroute.md](providers/omniroute.md). Does **not** replace OpenRouter as the house default.
+- **Cheaper Inference** — hosted OpenAI-compat discount gateway (`api.cheaperinference.com/v1`). **digillm house default** when `CHEAPERINFERENCE_API_KEY` is set (LiteLLM overlay / CLI rewrite); force OpenRouter with `DIGI_HOUSE_UPSTREAM=openrouter`. See [providers/cheaperinference.md](providers/cheaperinference.md). OpenRouter remains fallback for sonar / `:online` / missing slugs. Distinct from OmniRoute.
 - **llama.cpp / llamafile** — CPU-only or constrained hardware.
 - **TGI (Text Generation Inference)** — Hugging Face's serving stack.
 

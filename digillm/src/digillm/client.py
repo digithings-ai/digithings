@@ -323,6 +323,67 @@ def _api_base_is_openrouter() -> bool:
     return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
 
 
+_DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
+
+# House OpenRouter-style slugs → Cheaper Inference bare catalog ids (verified 2026-09).
+# Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
+# meta-llama/*, perplexity/*, and all ``:online`` variants — those stay on OpenRouter.
+_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
+    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+    "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "openai/gpt-5.6-luna": "gpt-5.6-luna",
+    "openai/gpt-5.6-sol": "gpt-5.6-sol",
+}
+
+
+def _api_base_is_cheaperinference() -> bool:
+    """True when the default client talks to hosted Cheaper Inference (CLI/GHA)."""
+    return "cheaperinference.com" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+
+
+def cheaperinference_house_preferred() -> bool:
+    """True when house traffic should prefer hosted Cheaper Inference.
+
+    House default: ``CHEAPERINFERENCE_API_KEY`` present → prefer CI.
+    Force OpenRouter: ``DIGI_HOUSE_UPSTREAM=openrouter|or`` or
+    ``CHEAPERINFERENCE_HOUSE=0|false|no|off``.
+    Explicit CI: ``DIGI_HOUSE_UPSTREAM=cheaperinference|ci`` or
+    ``CHEAPERINFERENCE_HOUSE=1|true|yes|on`` (still requires the key).
+    Distinct from self-hosted OmniRoute (``OMNIROUTE_*``).
+    """
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
+    if not key:
+        return False
+    upstream = (os.environ.get("DIGI_HOUSE_UPSTREAM") or "").strip().lower()
+    if upstream in {"openrouter", "or"}:
+        return False
+    if upstream in {"cheaperinference", "ci"}:
+        return True
+    flag = (os.environ.get("CHEAPERINFERENCE_HOUSE") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    return True
+
+
+def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
+    """Return CI bare id for a mapped house slug, else ``None`` (stay OpenRouter)."""
+    if ":online" in model:
+        return None
+    return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
+
+
+def _openrouter_fallback_for_ci_miss(model: str) -> bool:
+    """CI is the default base but this house slug is not on the CI catalog."""
+    return (
+        _api_base_is_cheaperinference()
+        and _is_openrouter_backed_house_slug(model)
+        and cheaperinference_bare_id_for_house_slug(model) is None
+    )
+
+
 # Documented LiteLLM listen URLs. A non-empty ``DIGILLM_TRUSTED_LITELLM_BASES``
 # (comma-separated) replaces this tuple so an operator can pin a single proxy.
 # ``OPENAI_API_BASE`` is a trusted proxy only when it canonicalizes to one of
@@ -462,6 +523,11 @@ def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def _effective_model_id(model: str) -> str:
     """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    bare = cheaperinference_bare_id_for_house_slug(model)
+    if bare is not None and _api_base_is_cheaperinference():
+        return bare
+    if _openrouter_fallback_for_ci_miss(model):
+        return model
     provider, model_id = _parse_provider_prefix(model)
     if _use_default_base_client(model):
         return model
@@ -472,9 +538,23 @@ def _cost_controls_provider(parsed_provider: str | None, model: str) -> str | No
     """Attach OpenRouter extra_body for OpenRouter prefixes, a direct OR base, or
     OpenRouter-backed house slugs through LiteLLM. Not ``gpt-4o-mini`` / ``ollama/*``.
     """
+    if (
+        cheaperinference_bare_id_for_house_slug(model) is not None
+        and _api_base_is_cheaperinference()
+    ):
+        return None
+    if _openrouter_fallback_for_ci_miss(model):
+        return "openrouter"
     if parsed_provider == "openrouter" or _api_base_is_openrouter():
         return "openrouter"
     if _litellm_proxy_configured() and _is_openrouter_backed_house_slug(model):
+        # When LiteLLM proxies a CI-mapped slug, skip OR provider prefs — the
+        # overlay routes those to Cheaper Inference (drop_params alone is not enough).
+        if (
+            cheaperinference_bare_id_for_house_slug(model) is not None
+            and cheaperinference_house_preferred()
+        ):
+            return None
         return "openrouter"
     return parsed_provider
 
@@ -507,6 +587,15 @@ def get_client_for_model(model: str) -> OpenAI:
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+    # Cheaper Inference default base: mapped house slugs use get_client(); catalog
+    # misses (sonar / :online / maverick / grok-4.3|4.6 / anthropic) stay on OpenRouter.
+    if _openrouter_fallback_for_ci_miss(model):
+        provider = "openrouter"
+    elif (
+        cheaperinference_bare_id_for_house_slug(model) is not None
+        and _api_base_is_cheaperinference()
+    ):
+        return get_client()
     if provider is None or _use_default_base_client(model):
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

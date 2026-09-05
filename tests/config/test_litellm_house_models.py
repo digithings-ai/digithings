@@ -204,3 +204,62 @@ def test_omniroute_overlay_parses_and_is_optional() -> None:
     assert any(n.startswith("omniroute/") for n in names)
     for name in names:
         assert name.startswith("omniroute/"), name
+
+
+def test_default_litellm_yaml_does_not_enable_cheaperinference() -> None:
+    """CI overlay must stay opt-in — default litellm.yaml keeps OpenRouter upstreams."""
+    data = yaml.safe_load((CONFIG / "litellm.yaml").read_text(encoding="utf-8"))
+    leaked: list[str] = []
+    for entry in data["model_list"]:
+        params = entry.get("litellm_params") or {}
+        base = str(params.get("api_base") or "")
+        key = str(params.get("api_key") or "")
+        if "CHEAPERINFERENCE" in base or "CHEAPERINFERENCE" in key:
+            leaked.append(entry["model_name"])
+        if "cheaperinference.com" in base.lower():
+            leaked.append(entry["model_name"])
+    assert not leaked, f"Cheaper Inference must stay off by default; found {leaked}"
+
+
+def test_cheaperinference_overlay_parses_and_maps_house_slugs() -> None:
+    overlay = CONFIG / "litellm.cheaperinference.yaml"
+    assert overlay.is_file()
+    names = _model_names(overlay)
+    expected = {
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-pro",
+        "google/gemini-3.7-flash",
+        "openai/gpt-5.6-luna",
+        "openai/gpt-5.6-sol",
+    }
+    missing = sorted(expected - names)
+    assert not missing, f"CI overlay missing house slugs: {missing}"
+    # Must not claim OpenRouter-only pins
+    forbidden = {
+        "meta-llama/llama-4-maverick",
+        "perplexity/sonar",
+        "anthropic/claude-sonnet-5",
+        "x-ai/grok-4.3",
+        "x-ai/grok-4.6",
+    }
+    assert not (names & forbidden), names & forbidden
+    data = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    for entry in data["model_list"]:
+        params = entry["litellm_params"]
+        assert params.get("api_key") == "os.environ/CHEAPERINFERENCE_API_KEY", entry["model_name"]
+        assert params.get("api_base") == "os.environ/CHEAPERINFERENCE_API_BASE", entry["model_name"]
+        assert str(params.get("model", "")).startswith("openai/"), entry["model_name"]
+
+
+def test_merge_litellm_cheaperinference_replaces_mapped_keeps_openrouter() -> None:
+    from scripts.merge_litellm_cheaperinference import merge
+
+    merged = merge(CONFIG / "litellm.yaml", CONFIG / "litellm.cheaperinference.yaml")
+    by_name = {e["model_name"]: e for e in merged["model_list"] if isinstance(e, dict)}
+    flash = by_name["deepseek/deepseek-v4-flash"]["litellm_params"]
+    assert flash["api_key"] == "os.environ/CHEAPERINFERENCE_API_KEY"
+    assert flash["model"] == "openai/deepseek-v4-flash"
+    sonar = by_name["perplexity/sonar"]["litellm_params"]
+    assert sonar["api_key"] == "os.environ/OPENROUTER_API_KEY"
+    mav = by_name["meta-llama/llama-4-maverick"]["litellm_params"]
+    assert mav["api_key"] == "os.environ/OPENROUTER_API_KEY"
