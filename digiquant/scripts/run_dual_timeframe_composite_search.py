@@ -446,6 +446,39 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         _print_score("  score", result_lw.score)
         print()
 
+    # Step 4b: reweight the all-9 aggregate with a diversification floor.
+    # Green-lit by Chris ("Green light, go ahead with the floor-diversified
+    # optimized weight version") after reviewing Stage 3b's all-9
+    # equal-weight result. search_names_all9 has 8 names vs. search_names'
+    # 6, so the brute-force grid blows up from 4**6 (*4 power_law
+    # candidates = 16384 evals) to 4**8 (*4 = 262144 evals) -- benchmarked
+    # at ~0.0136s/eval, this stage alone takes on the order of an hour.
+    # Only the base 3:1 ratio is run here; the 2:1/5:1 sensitivity sweep
+    # (Stage 5b) is deferred as a follow-up given the ~3x additional
+    # runtime that would require.
+    print("=== Stage 4b: aggregate reweight over ALL indicators (floor-diversified, 3:1) ===\n")
+    final_result_all9 = optimize_stage_a_weights_combined(
+        dates,
+        power_law_z=final_power_law_z,
+        extra_z=final_extra_z_all9,
+        long_windows=long_windows,
+        medium_windows=medium_windows,
+        search_names=search_names_all9,
+        grid=grid,
+        power_law_grid=grid,
+        long_weight=long_weight,
+        medium_weight=medium_weight,
+        min_weight_floor=floor,
+    )
+    print(f"  evaluated: {final_result_all9.num_evaluations} combinations")
+    print(f"  weights: {final_result_all9.weights.model_dump()}")
+    _print_score("score", final_result_all9.score)
+    print(
+        f"  vs. Stage 4 (surviving-7) floor-diversified: long={final_result.score.long.objective:.2f} "
+        f"medium={final_result.score.medium.objective:.2f} combined={final_result.score.objective:.2f}"
+    )
+    print()
+
     # Summary table.
     print("=== Summary ===\n")
     header = f"{'config':<28} {'long':>8} {'medium':>8} {'combined':>10}"
@@ -465,6 +498,10 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
             f"{label:<28} {result_lw.score.long.objective:>8.2f} "
             f"{result_lw.score.medium.objective:>8.2f} {result_lw.score.objective:>10.2f}"
         )
+    print(
+        f"{'reweighted all-9 (3:1)':<28} {final_result_all9.score.long.objective:>8.2f} "
+        f"{final_result_all9.score.medium.objective:>8.2f} {final_result_all9.score.objective:>10.2f}"
+    )
 
 
 if __name__ == "__main__":

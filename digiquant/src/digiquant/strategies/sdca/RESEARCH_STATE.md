@@ -235,3 +235,38 @@ that could both be read as "the baseline."
        `EXTRA_INDICATOR_NAMES`/`build_extra_indicators()`/settings.json —
        this equal-weight-all9 composite exists only in the diagnostic search
        script and export/visualization, not in production config.
+
+   - Fifth pass (2026-09-05, same session: Chris reviewed the equal-weight
+     all-9 result and gave the next green light: "go ahead with the
+     floor-diversified optimized weight version"):
+     - Added Stage 4b to `run_dual_timeframe_composite_search.py`, extending
+       `optimize_stage_a_weights_combined()`'s existing floor-diversified
+       grid search (already used for the surviving-7 mix's Stage 4/5) to
+       `search_names_all9` (adds `monthly_rsi`, `monthly_macd` to the 6
+       surviving-7 extras — 8 names total). This is a brute-force search:
+       going from 6 to 8 search names blows the grid up from `4**6` to
+       `4**8` combinations (16,384 → 262,144 evaluations at the base 3:1
+       ratio) — benchmarked at ~0.0136s/eval, an estimated ~1 hour just for
+       the base ratio. Only the 3:1 base case is run in Stage 4b; the
+       2:1/5:1 ratio-sensitivity sweep (Stage 5 does this for the
+       surviving-7 mix) is deferred as a follow-up given the ~3x additional
+       runtime a full sweep would add. Launched as a background job.
+     - Result: winning mix is `power_law=1.0, sma_band=1.0, monthly_rsi=1.0`
+       (all at the grid ceiling) with `m2, rs_eth, dxy, weekly_rsi,
+       weekly_macd, monthly_macd` all floored at `0.25` — score long=46.96,
+       medium=23.58, combined=164.47 (3:1), beating the surviving-7
+       floor-diversified baseline (long=43.69, medium=24.88, combined=155.96)
+       on long-term and combined, at a small (-1.30) cost to the medium-term
+       score. `monthly_rsi` earning a ceiling weight alongside `power_law`
+       and `sma_band` — rather than being floored out like `monthly_macd`
+       and every non-anchor surviving-7 extra — is consistent with Chris's
+       own visual read of it as a strong long-term bottom/top marker.
+       Exported this composite's `composite_z` series (same pattern as
+       `equal_weight_all9`) via `export_indicator_confluence_data.py` and
+       added it to the confluence dashboard as a second headline panel.
+     - `monthly_rsi`/`monthly_macd` still remain excluded from
+       `EXTRA_INDICATOR_NAMES`/`build_extra_indicators()`/settings.json —
+       both this and the equal-weight-all9 composite exist only in the
+       diagnostic search script and export/visualization, not in production
+       config. Neither is a validated trading candidate; this remains a
+       diagnostic **index**, not a curve/threshold-tested strategy.

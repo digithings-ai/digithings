@@ -164,6 +164,31 @@ def export(data_path: Path = DEFAULT_DATA_PATH) -> dict:
     ]
     indicators["equal_weight_all9"] = compute_composite_risk(all9_weighted)["composite_z"].to_list()
 
+    # Floor-diversified, optimized-weight composite over all 9 indicators
+    # (Stage 4b in run_dual_timeframe_composite_search.py, 2026-09-05 run):
+    # extends the existing surviving-7 floor search (grid=(0,.25,.5,.75,1),
+    # floor=0.25) to include monthly_rsi/monthly_macd, per Chris's green
+    # light ("go ahead with the floor-diversified optimized weight
+    # version"). Winning mix: power_law/sma_band/monthly_rsi at the grid
+    # ceiling (1.0), everything else (m2, dxy, rs_eth, weekly_rsi,
+    # weekly_macd, monthly_macd) floored at 0.25. Combined cycle-overlap
+    # score: long=46.96, medium=23.58, combined=164.47 (3:1) vs. the
+    # surviving-7 floor-diversified baseline's long=43.69, medium=24.88,
+    # combined=155.96.
+    FLOOR_ALL9_WEIGHTS = {
+        "power_law": 1.0, "m2": 0.25, "rs_eth": 0.25, "dxy": 0.25,
+        "weekly_rsi": 0.25, "weekly_macd": 0.25, "sma_band": 1.0,
+        "monthly_rsi": 1.0, "monthly_macd": 0.25,
+    }
+    floor_all9_weighted = [
+        IndicatorWeight(name=n, z=pl.Series(indicators[n], dtype=pl.Float64), weight=w)
+        for n, w in FLOOR_ALL9_WEIGHTS.items()
+        if n in indicators
+    ]
+    indicators["floor_diversified_all9"] = compute_composite_risk(floor_all9_weighted)[
+        "composite_z"
+    ].to_list()
+
     return {
         "dates": [d.isoformat() for d in dates],
         "price": prices,
@@ -171,6 +196,7 @@ def export(data_path: Path = DEFAULT_DATA_PATH) -> dict:
         "params": {
             **p, **m, **COMPARISON_PARAMS,
             "equal_weight_all9": {"n_indicators": len(all9_names) + 1},
+            "floor_diversified_all9": {"weights": FLOOR_ALL9_WEIGHTS},
         },
         "long_windows": _window_json(SdcaCycleWindows.btc_v1()),
         "medium_windows": _window_json(SdcaCycleWindows.btc_medium_term_v1()),
