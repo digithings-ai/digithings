@@ -16,6 +16,7 @@ from itertools import product
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.cycle_windows import SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
     SdcaCompositeWeights,
@@ -23,6 +24,11 @@ from digiquant.strategies.sdca.indicator_catalog import (
     missing_extra_names,
 )
 from digiquant.strategies.sdca.risk_model import RiskModel
+from digiquant.strategies.sdca.stage_a import (
+    CombinedCycleOverlapScore,
+    combined_cycle_overlap_score,
+    risk_from_weighted_z,
+)
 from digiquant.strategies.sdca.walk_forward import (
     FoldScore,
     RailsFitter,
@@ -325,11 +331,107 @@ def search_oscillator_periods_by_backtest(
     )
 
 
+class CycleOverlapPeriodScore(BaseModel):
+    """One period-candidate's combined long+medium cycle-overlap score."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    params: dict[str, int]
+    score: CombinedCycleOverlapScore
+
+
+class CycleOverlapPeriodSearchResult(BaseModel):
+    """Ranked oscillator sub-parameter search for one indicator, cycle-overlap objective."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
+
+    indicator_name: str
+    best: CycleOverlapPeriodScore
+    all_scores: list[CycleOverlapPeriodScore]
+    num_evaluations: int = Field(ge=0)
+
+
+def search_oscillator_periods_by_cycle_overlap(
+    dates: Sequence[date],
+    *,
+    indicator_name: str,
+    param_candidates: Sequence[Mapping[str, int]],
+    compute_indicator_z: Callable[[Mapping[str, int]], Sequence[float | None]],
+    base_power_law_z: Sequence[float | None],
+    base_extra_z: Mapping[str, Sequence[float | None]],
+    long_windows: SdcaCycleWindows,
+    medium_windows: SdcaCycleWindows,
+    long_weight: float = 3.0,
+    medium_weight: float = 1.0,
+) -> CycleOverlapPeriodSearchResult:
+    """Search one indicator's construction periods against the combined objective.
+
+    Chris's step 2 ("optimize each indicator individually"): mirrors
+    ``search_oscillator_periods_by_backtest``'s shape (grid one indicator's
+    own periods, hold everything else fixed) but *solos* the indicator
+    (weight=1, every other indicator including ``power_law`` at 0, unless
+    ``indicator_name`` itself is ``"power_law"``) instead of probing it
+    alongside a base weight set, and scores each candidate via
+    ``stage_a.combined_cycle_overlap_score`` instead of a walk-forward
+    backtest — the dual-timeframe objective the aggregate composite must
+    ultimately fit, not in-sample return.
+
+    ``indicator_name == "power_law"`` is a special case: ``power_law`` is a
+    dedicated field on ``SdcaCompositeWeights``, not one of
+    ``EXTRA_INDICATOR_NAMES``, so soloing it means every extra at ``0.0``
+    (the model's own default) and the candidate z-series stands in for
+    ``base_power_law_z`` rather than an entry in ``extra_z``.
+    """
+    if not param_candidates:
+        raise ValueError("param_candidates must not be empty")
+    date_list = list(dates)
+    weights = (
+        SdcaCompositeWeights()
+        if indicator_name == "power_law"
+        else SdcaCompositeWeights(power_law=0.0, **{indicator_name: 1.0})
+    )
+
+    scores: list[CycleOverlapPeriodScore] = []
+    for params in param_candidates:
+        z_series = compute_indicator_z(params)
+        if len(z_series) != len(date_list):
+            raise ValueError(
+                f"compute_indicator_z({params!r}) returned {len(z_series)} values, "
+                f"expected {len(date_list)}"
+            )
+        if indicator_name == "power_law":
+            power_law_z: Sequence[float | None] = z_series
+            extra_z: Mapping[str, Sequence[float | None]] = base_extra_z
+        else:
+            power_law_z = base_power_law_z
+            extra_z = {**base_extra_z, indicator_name: z_series}
+        risk = risk_from_weighted_z(date_list, power_law_z, extra_z, weights)
+        score = combined_cycle_overlap_score(
+            date_list,
+            risk,
+            long_windows,
+            medium_windows,
+            long_weight=long_weight,
+            medium_weight=medium_weight,
+        )
+        scores.append(CycleOverlapPeriodScore(params=dict(params), score=score))
+    best = max(scores, key=lambda s: s.score.objective)
+    return CycleOverlapPeriodSearchResult(
+        indicator_name=indicator_name,
+        best=best,
+        all_scores=scores,
+        num_evaluations=len(scores),
+    )
+
+
 __all__ = [
+    "CycleOverlapPeriodScore",
+    "CycleOverlapPeriodSearchResult",
     "OscillatorPeriodScore",
     "OscillatorPeriodSearchResult",
     "StageABacktestResult",
     "optimize_stage_a_by_backtest",
     "search_names_with_data",
     "search_oscillator_periods_by_backtest",
+    "search_oscillator_periods_by_cycle_overlap",
 ]

@@ -72,22 +72,19 @@ through `build_risk_index()` as `composite_smoothing_window` /
 
 ## The gap
 
-Nothing above operates at the *strategy* level. Today there is exactly one
-composite risk index and one curve (`AccumDistCurve`) mapping it to a trade
-rate — a single system, not two pluggable ones. Specifically missing:
+Nothing above operates at the *strategy* level yet in terms of the buy/sell
+curve. Today there is exactly one composite risk index and one curve
+(`AccumDistCurve`) mapping it to a trade rate. Specifically missing:
 
-- **No medium-term cycle-window set.** `cycle_windows.py` only has long-term
-  pins. There's no equivalent "these are the medium-term pullback/rally zones"
-  data to optimize a medium-term indicator set against.
-- **No second, medium-term-tuned weight set.** Stage A optimizes one
-  `SdcaCompositeWeights` against the long-term windows. There's no sibling
-  process producing a second weight set tuned to catch medium-term turns.
-- **No combination layer.** Even with two composites in hand, nothing today
-  takes "medium-term risk" and "long-term risk" as two separate inputs and
-  produces a rate that's small/progressive in the middle and aggressive at
-  the extremes. `curve.py`'s `AccumDistCurve` is a single risk→rate map.
-- **No long-only / medium-only / combined switch.** The three-configuration
-  pluggability the user described doesn't exist as a strategy-level knob.
+- **No long-only / medium-only / combined curve switch.** The
+  three-configuration pluggability the user described doesn't exist as a
+  strategy-level knob — see step 5 below for how this now means switching
+  which timeframe(s) the *same* composite is scored/thresholded against,
+  not swapping between two different composites.
+- **Curve/threshold optimization is untouched.** The dual-timeframe work
+  below (steps 4-5) only optimizes the composite index itself. Buy/sell
+  curve shape, thresholds, and risk-adjusted-return tuning against that index
+  is explicitly a separate, later problem per Chris's ordering (2026-09-04).
 
 ## Proposed next steps, in order
 
@@ -125,25 +122,54 @@ rate — a single system, not two pluggable ones. Specifically missing:
    This only answers the cycle-overlap objective, not the backtest-return
    one `weight_search.py` actually ships with — see step 2's still-open
    reconciliation question before treating either weight set as a candidate.
-5. **Build the combination layer.** Recommended shape: two independent
-   `IndicatorWeight` sets → two independent `compute_composite_risk()` calls →
-   two risk scores (`risk_long`, `risk_medium`) → a combination function that
-   sums a small-rate curve driven by `risk_medium` with a large-rate curve
-   driven by `risk_long`, e.g. `rate = curve_medium(risk_medium) +
-   curve_long(risk_long)` with `curve_medium`'s max rate well below
-   `curve_long`'s. Two independent curves (not one 2D curve) keeps each
-   system independently inspectable, testable, and pluggable per the next
-   step.
-6. **Expose three configurations sharing one kernel.** A medium-only system
-   (`curve_medium` alone), a long-only system (`curve_long` alone, close to
-   what exists today), and the combined system (both). Same underlying
-   indicators, confluence blends, and cycle-window scoring; only the curve
-   wiring differs. This is the "pluggable into two types of systems" ask.
-7. **Validate each configuration** through the existing protocol
-   (`RESEARCH_STATE.md`'s "Standard trial protocol": curve_simulator go/no-go,
-   Nautilus walk-forward, tearsheet, compact metrics table, explicit accept
-   before touching `settings.json`). Update `RESEARCH_STATE.md`'s backlog and
-   "current best validated candidate" only on accept, per its existing rule.
+5. **Superseded and done (2026-09-05): single composite, dual-timeframe
+   combined objective — not the two-composite layer step 4's diagnostic
+   pointed toward.** Chris rejected the two-independent-composites design
+   directly: he wants **one** composite whose sub-indicators are individually
+   tuned so some fit long-term extremes and some fit medium-term pullbacks,
+   combined into a single index that navigates both at once, rather than two
+   composites combined downstream by two curves. Implemented:
+   - `stage_a.CombinedCycleOverlapScore` / `combined_cycle_overlap_score()`:
+     one objective scored against **one** risk series —
+     `objective = long_weight * long_score.objective + medium_weight *
+     medium_score.objective`, default ratio 3:1 (long:medium). This is a
+     heavy weighting, not a hard gate — "never miss the long-term value
+     areas" is enforced by making long-term dominate the objective, not by a
+     pass/fail constraint.
+   - `weight_search.search_oscillator_periods_by_cycle_overlap()`: Chris's
+     "optimize each indicator individually first" step — solos each tunable
+     indicator (weight=1, everything else off, including power_law when
+     tuning an extra) and grids its own `SdcaOscillatorSpec` period fields
+     against the combined objective. `m2`/`dxy` have no tunable periods and
+     pass through unchanged.
+   - `stage_a.optimize_stage_a_weights_combined()`: the aggregate-reweight
+     stage, with an explicit diversification floor (`min_weight_floor`) —
+     every surviving indicator's candidate weight grid excludes `0.0`
+     (applies to `power_law` too), so the final mix can never collapse onto a
+     single indicator. This is the deliberate hedge Chris asked for against
+     the power-law model degrading later: diversify the bet even though it
+     won't yield the single best in-sample result.
+   - End-to-end runner: `scripts/run_dual_timeframe_composite_search.py`,
+     implementing Chris's exact staging — equal weights start → solo-optimize
+     each indicator's periods against the combined objective → recombine at
+     equal weight → floor-diversified aggregate reweight → 2:1/3:1/5:1 ratio
+     sensitivity. See `RESEARCH_STATE.md` backlog item 6 for the first
+     real-data run's numbers — **diagnostic only, not an accepted
+     candidate**; curve/threshold optimization against this index is a
+     separate, later problem (Chris's explicit ordering).
+6. **Curve wiring for long-only / medium-only / combined stays open**, but
+   now means switching which `CycleWindow` set(s) the *same* single composite
+   is scored/thresholded against — not swapping between two different
+   composites as originally proposed above. Not yet built.
+7. **Validate the index, then separately the curve**, through the existing
+   protocol (`RESEARCH_STATE.md`'s "Standard trial protocol": curve_simulator
+   go/no-go, Nautilus walk-forward, tearsheet, compact metrics table,
+   explicit accept before touching `settings.json`). Update
+   `RESEARCH_STATE.md`'s backlog and "current best validated candidate" only
+   on accept, per its existing rule. Buy/sell curve fitting and
+   risk-adjusted-return optimization against the dual-timeframe index (Chris's
+   stage 5) hasn't started — the work so far only produces an index, not a
+   trading candidate.
 
 Note step 2 of `RESEARCH_STATE.md`'s own backlog — "joint period re-tuning of
 the five confluence indicators... never applied jointly" — is a prerequisite

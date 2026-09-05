@@ -9,6 +9,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import (
     EXTRA_INDICATOR_NAMES,
     ExtraIndicatorSources,
@@ -16,11 +17,14 @@ from digiquant.strategies.sdca.indicator_catalog import (
 )
 from digiquant.strategies.sdca.optimize import drop_extras_missing_sources
 from digiquant.strategies.sdca.risk_model import RiskModel
+from digiquant.strategies.sdca.stage_a import CombinedCycleOverlapScore
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
 from digiquant.strategies.sdca.weight_search import (
+    CycleOverlapPeriodSearchResult,
     optimize_stage_a_by_backtest,
     search_names_with_data,
     search_oscillator_periods_by_backtest,
+    search_oscillator_periods_by_cycle_overlap,
 )
 
 pytestmark = pytest.mark.unit
@@ -357,6 +361,131 @@ def test_period_search_rejects_mismatched_z_length() -> None:
                 vs_flat_dca_pct=0.0, vs_lump_pct=0.0, capital_deployed_pct=0.0, max_drawdown_pct=0.0
             ),
             shape=_SHAPE,
+        )
+
+
+def test_cycle_overlap_period_search_picks_the_best_synthetic_period() -> None:
+    """Mirrors test_period_search_picks_the_best_synthetic_period, cycle-overlap objective."""
+    dates = _dates(90)
+    n = len(dates)
+    trough_end = dates[19]
+    peak_start = dates[70]
+    windows = SdcaCycleWindows(
+        windows=(
+            CycleWindow(name="t", kind=CycleKind.TROUGH, start=dates[0], end=trough_end),
+            CycleWindow(name="p", kind=CycleKind.PEAK, start=peak_start, end=dates[-1]),
+        )
+    )
+    param_z = {5: 0.5, 14: 1.5, 30: 2.5}
+
+    def compute_indicator_z(params: dict) -> list[float]:
+        amp = param_z[params["period"]]
+        out = []
+        for d in dates:
+            if d <= trough_end:
+                out.append(amp)
+            elif d >= peak_start:
+                out.append(-amp)
+            else:
+                out.append(0.0)
+        return out
+
+    result = search_oscillator_periods_by_cycle_overlap(
+        dates,
+        indicator_name="weekly_rsi",
+        param_candidates=[{"period": 5}, {"period": 14}, {"period": 30}],
+        compute_indicator_z=compute_indicator_z,
+        base_power_law_z=[0.0] * n,
+        base_extra_z={},
+        long_windows=windows,
+        medium_windows=windows,
+    )
+    assert isinstance(result, CycleOverlapPeriodSearchResult)
+    assert result.indicator_name == "weekly_rsi"
+    assert result.best.params == {"period": 30}
+    assert result.num_evaluations == 3
+    assert len(result.all_scores) == 3
+    assert isinstance(result.best.score, CombinedCycleOverlapScore)
+
+
+def test_cycle_overlap_period_search_special_cases_power_law() -> None:
+    """power_law's candidate z-series must replace base_power_law_z, extras zeroed."""
+    dates = _dates(60)
+    n = len(dates)
+    trough_end = dates[14]
+    peak_start = dates[45]
+    windows = SdcaCycleWindows(
+        windows=(
+            CycleWindow(name="t", kind=CycleKind.TROUGH, start=dates[0], end=trough_end),
+            CycleWindow(name="p", kind=CycleKind.PEAK, start=peak_start, end=dates[-1]),
+        )
+    )
+
+    def compute_indicator_z(params: dict) -> list[float]:
+        amp = float(params["trend_window"]) / 100.0
+        out = []
+        for d in dates:
+            if d <= trough_end:
+                out.append(amp)
+            elif d >= peak_start:
+                out.append(-amp)
+            else:
+                out.append(0.0)
+        return out
+
+    result = search_oscillator_periods_by_cycle_overlap(
+        dates,
+        indicator_name="power_law",
+        param_candidates=[{"trend_window": 90}, {"trend_window": 250}],
+        compute_indicator_z=compute_indicator_z,
+        base_power_law_z=[0.0] * n,  # would score flat if wrongly used instead of z_series
+        base_extra_z={"weekly_rsi": [5.0] * n},  # would dominate if not zeroed by weights
+        long_windows=windows,
+        medium_windows=windows,
+    )
+    assert result.indicator_name == "power_law"
+    assert result.best.params == {"trend_window": 250}
+
+
+def test_cycle_overlap_period_search_rejects_empty_param_candidates() -> None:
+    dates = _dates()
+    windows = SdcaCycleWindows(
+        windows=(
+            CycleWindow(name="t", kind=CycleKind.TROUGH, start=dates[0], end=dates[9]),
+            CycleWindow(name="p", kind=CycleKind.PEAK, start=dates[20], end=dates[29]),
+        )
+    )
+    with pytest.raises(ValueError, match="param_candidates"):
+        search_oscillator_periods_by_cycle_overlap(
+            dates,
+            indicator_name="weekly_rsi",
+            param_candidates=[],
+            compute_indicator_z=lambda params: [0.0] * len(dates),
+            base_power_law_z=[0.0] * len(dates),
+            base_extra_z={},
+            long_windows=windows,
+            medium_windows=windows,
+        )
+
+
+def test_cycle_overlap_period_search_rejects_mismatched_z_length() -> None:
+    dates = _dates()
+    windows = SdcaCycleWindows(
+        windows=(
+            CycleWindow(name="t", kind=CycleKind.TROUGH, start=dates[0], end=dates[9]),
+            CycleWindow(name="p", kind=CycleKind.PEAK, start=dates[20], end=dates[29]),
+        )
+    )
+    with pytest.raises(ValueError, match="expected"):
+        search_oscillator_periods_by_cycle_overlap(
+            dates,
+            indicator_name="weekly_rsi",
+            param_candidates=[{"period": 5}],
+            compute_indicator_z=lambda params: [0.0] * (len(dates) - 1),
+            base_power_law_z=[0.0] * len(dates),
+            base_extra_z={},
+            long_windows=windows,
+            medium_windows=windows,
         )
 
 

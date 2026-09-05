@@ -90,17 +90,41 @@ that could both be read as "the baseline."
 5. Regenerate the stale `btc_optimized_provenance.json` (predates this
    session's confluence-indicator upgrades, so its cached numbers no longer
    describe the current code path).
-6. **Dual-timeframe valuation framework** (Chris's 2026-09-04 direction — see
+6. **Dual-timeframe valuation framework** (Chris's 2026-09-04 direction, then
+   redirected 2026-09-04→05 to a single composite — see
    `../DCA_VALUATION_FRAMEWORK.md`): composite smoothing landed
    (`compute_composite_risk`'s `smoothing_window`); a medium-term `CycleWindow`
    set landed (75-pivot zigzag, `cycle_windows.py`, chart-review-corrected
-   2026-09-04); the medium-term Stage A cycle-overlap pass now landed too, via
-   `scripts/run_stage_a_cycle_overlap.py` — **diagnostic only, not accepted as
-   a candidate**: long-term wants `power_law=1.0` alone (objective 64.2),
-   medium-term wants `power_law=0.0, sma_band=0.5` alone (objective 41.4),
-   confirming the two timeframes need separate composites. Still open:
-   reconcile Stage A cycle-overlap vs `weight_search.py` backtest-return as
-   the actual weight-selection objective (this diagnostic doesn't resolve
-   that); a two-composite (`risk_long`/`risk_medium`) combination curve; and
-   exposing medium-only / long-only / combined as sibling configurations of
-   the same kernel. See that doc for the full plan.
+   2026-09-04); the two-composite diagnostic (`scripts/run_stage_a_cycle_overlap.py`)
+   confirmed long-term (`power_law=1.0` alone, objective 64.2) and medium-term
+   (`power_law=0.0, sma_band=0.5` alone, objective 41.4) pull in different
+   directions — exactly why Chris rejected a two-composite architecture and
+   asked for one composite scored against both timeframes at once, weighted
+   3:1 toward long-term so long-term extremes are never missed while
+   medium-term zones are covered where possible, with a diversification floor
+   so the mix never collapses onto a single indicator (hedge against
+   power-law degrading later).
+
+   That single-composite search (`scripts/run_dual_timeframe_composite_search.py`,
+   `stage_a.optimize_stage_a_weights_combined()` +
+   `weight_search.search_oscillator_periods_by_cycle_overlap()`) has now run
+   once against real BTC-USD data — **diagnostic only, not an accepted
+   candidate**:
+   - Per-indicator period optimization (solo, against the combined objective)
+     kept all five tunable indicators: `power_law` (180d trend, anchor),
+     `weekly_rsi` (8/7), `weekly_macd` (12/26/12/26 — default periods won),
+     `sma_band` (120/30), `rs_eth` (60/20).
+   - Equal-weight recombination (7 indicators incl. `m2`/`dxy`,
+     1/7 each): long=25.76, medium=12.83, combined=90.12 (3:1 ratio).
+   - Floor-diversified aggregate reweight (floor 0.25): `power_law=1.0,
+     sma_band=1.0`, everything else (`m2`, `dxy`, `weekly_rsi`, `weekly_macd`,
+     `rs_eth`) floored at `0.25`. long=42.97, medium=24.00, combined=152.89 —
+     beats the equal-weight baseline on every axis.
+   - Ratio sensitivity (2:1 / 3:1 / 5:1): the winning weight mix above is
+     identical across all three ratios tried; only the combined objective's
+     scale changes (109.93 / 152.89 / 238.82). Ratio choice is still open —
+     Chris said he'd pick after seeing results — but isn't yet shown to change
+     *which* mix wins, only how much long-term is weighted in the reported
+     number.
+   Curve/threshold optimization against this index (Chris's explicitly
+   separate stage 5) hasn't started.

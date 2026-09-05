@@ -13,10 +13,14 @@ from digiquant.strategies.sdca.cycle_windows import (
 )
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.strategies.sdca.stage_a import (
+    CombinedCycleOverlapScore,
+    CombinedStageAResult,
     CycleOverlapScore,
     StageAResult,
+    combined_cycle_overlap_score,
     cycle_overlap_score,
     optimize_stage_a_weights,
+    optimize_stage_a_weights_combined,
     risk_from_weighted_z,
 )
 
@@ -302,3 +306,226 @@ class TestStageAWeightSearch:
         # composite_z = (0 + 3) / 2 = 1.5 → risk = 50 - 1.5 * 50/3 = 25
         assert risk[0] == pytest.approx(25.0)
         assert risk[1] == pytest.approx(25.0)
+
+
+class TestCombinedCycleOverlapScore:
+    def test_combined_score_matches_manual_weighted_sum(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(90, start)
+        long_windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t",
+                    kind=CycleKind.TROUGH,
+                    start=date(2020, 1, 1),
+                    end=date(2020, 1, 20),
+                ),
+                CycleWindow(
+                    name="p",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 3, 1),
+                    end=date(2020, 3, 20),
+                ),
+            )
+        )
+        medium_windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t2",
+                    kind=CycleKind.TROUGH,
+                    start=date(2020, 1, 25),
+                    end=date(2020, 2, 5),
+                ),
+                CycleWindow(
+                    name="p2",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 2, 15),
+                    end=date(2020, 2, 25),
+                ),
+            )
+        )
+        risk = []
+        for d in dates:
+            if d <= date(2020, 1, 20):
+                risk.append(10.0)
+            elif d >= date(2020, 3, 1):
+                risk.append(90.0)
+            else:
+                risk.append(50.0)
+        combined = combined_cycle_overlap_score(
+            dates, risk, long_windows, medium_windows, long_weight=3.0, medium_weight=1.0
+        )
+        assert isinstance(combined, CombinedCycleOverlapScore)
+        manual_long = cycle_overlap_score(dates, risk, long_windows)
+        manual_medium = cycle_overlap_score(dates, risk, medium_windows)
+        assert combined.long == manual_long
+        assert combined.medium == manual_medium
+        assert combined.objective == pytest.approx(
+            3.0 * manual_long.objective + 1.0 * manual_medium.objective
+        )
+
+    def test_rejects_nonpositive_weights(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(30, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t",
+                    kind=CycleKind.TROUGH,
+                    start=start,
+                    end=date(2020, 1, 10),
+                ),
+                CycleWindow(
+                    name="p",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 1, 20),
+                    end=date(2020, 1, 29),
+                ),
+            )
+        )
+        risk = [50.0] * len(dates)
+        with pytest.raises(ValueError, match="positive"):
+            combined_cycle_overlap_score(dates, risk, windows, windows, long_weight=0.0)
+
+
+class TestOptimizeStageAWeightsCombined:
+    def test_combined_optimizer_ratio_controls_which_timeframe_wins(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(120, start)
+        long_windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t_long",
+                    kind=CycleKind.TROUGH,
+                    start=dates[0],
+                    end=dates[19],
+                ),
+                CycleWindow(
+                    name="p_long",
+                    kind=CycleKind.PEAK,
+                    start=dates[100],
+                    end=dates[119],
+                ),
+            )
+        )
+        medium_windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t_medium",
+                    kind=CycleKind.TROUGH,
+                    start=dates[40],
+                    end=dates[49],
+                ),
+                CycleWindow(
+                    name="p_medium",
+                    kind=CycleKind.PEAK,
+                    start=dates[60],
+                    end=dates[69],
+                ),
+            )
+        )
+        long_days = set(dates[0:20]) | set(dates[100:120])
+        medium_days = set(dates[40:50]) | set(dates[60:70])
+
+        def _dummy(active_days: set[date], sign_days: set[date]) -> list[float]:
+            out = []
+            for d in dates:
+                if d not in active_days:
+                    out.append(0.0)
+                elif d in sign_days:
+                    out.append(3.0)
+                else:
+                    out.append(-3.0)
+            return out
+
+        long_trough_days = set(dates[0:20])
+        medium_trough_days = set(dates[40:50])
+        weekly_rsi = _dummy(long_days, long_trough_days)
+        sma_band = _dummy(medium_days, medium_trough_days)
+        power_law = [0.0] * len(dates)
+
+        result_long_favored = optimize_stage_a_weights_combined(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": weekly_rsi, "sma_band": sma_band},
+            long_windows=long_windows,
+            medium_windows=medium_windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 1.0),
+            power_law_grid=(0.0,),
+            long_weight=100.0,
+            medium_weight=1.0,
+        )
+        assert isinstance(result_long_favored, CombinedStageAResult)
+        assert result_long_favored.weights.weekly_rsi == pytest.approx(1.0)
+        assert result_long_favored.weights.sma_band == pytest.approx(0.0)
+
+        result_medium_favored = optimize_stage_a_weights_combined(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": weekly_rsi, "sma_band": sma_band},
+            long_windows=long_windows,
+            medium_windows=medium_windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 1.0),
+            power_law_grid=(0.0,),
+            long_weight=1.0,
+            medium_weight=100.0,
+        )
+        assert result_medium_favored.weights.weekly_rsi == pytest.approx(0.0)
+        assert result_medium_favored.weights.sma_band == pytest.approx(1.0)
+
+    def test_floor_grid_never_selects_zero_for_enabled_indicator(self) -> None:
+        start = date(2020, 1, 1)
+        dates = _dates(90, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t",
+                    kind=CycleKind.TROUGH,
+                    start=start,
+                    end=date(2020, 1, 25),
+                ),
+                CycleWindow(
+                    name="p",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 3, 1),
+                    end=date(2020, 3, 30),
+                ),
+            )
+        )
+        power_law = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        zeros = [0.0] * len(dates)
+
+        # power_law_grid is fixed at a single value here: when power_law is the
+        # sole nonzero-weight contributor, its own weight magnitude cancels out
+        # of the weighted average, so searching it would only add scoring ties
+        # that are irrelevant to what this test checks (the extras' floor).
+        without_floor = optimize_stage_a_weights_combined(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": zeros, "sma_band": zeros},
+            long_windows=windows,
+            medium_windows=windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+            power_law_grid=(1.0,),
+        )
+        assert without_floor.weights.weekly_rsi == pytest.approx(0.0)
+        assert without_floor.weights.sma_band == pytest.approx(0.0)
+        assert without_floor.weights.power_law == pytest.approx(1.0)
+
+        with_floor = optimize_stage_a_weights_combined(
+            dates,
+            power_law_z=power_law,
+            extra_z={"weekly_rsi": zeros, "sma_band": zeros},
+            long_windows=windows,
+            medium_windows=windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+            power_law_grid=(0.0, 0.25, 0.5, 0.75, 1.0),
+            min_weight_floor=0.25,
+        )
+        assert with_floor.weights.weekly_rsi == pytest.approx(0.25)
+        assert with_floor.weights.sma_band == pytest.approx(0.25)
+        assert with_floor.weights.power_law == pytest.approx(1.0)
