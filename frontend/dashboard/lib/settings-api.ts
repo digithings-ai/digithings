@@ -51,6 +51,8 @@ export type ProfileTip = {
   recorded_at: string | null;
   investment: Record<string, unknown> | null;
   assets: Record<string, unknown> | null;
+  pipeline_schedule?: Record<string, unknown> | null;
+  execution_policy?: Record<string, unknown> | null;
   watchlist?: string[];
   themes?: string[];
   research_budget_usd?: number | null;
@@ -183,6 +185,8 @@ export async function saveProfile(
     label: string;
     investment?: Record<string, unknown> | null;
     assets?: Record<string, unknown> | null;
+    pipeline_schedule?: Record<string, unknown> | null;
+    execution_policy?: Record<string, unknown> | null;
     watchlist?: string[];
     themes?: string[];
     research_budget_usd?: number | null;

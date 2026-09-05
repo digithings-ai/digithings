@@ -283,9 +283,11 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the
   reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
   Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
-- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs, plus a read of
-  `GET /settings/jobs` (skip reasons such as `no_credentials` are visible; remaining-hop
-  proof is `succeeded` only).
+- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs; a 7×3
+  weekday × stage (`research` / `deliberation` / `execution`) schedule grid and
+  execution-policy controls (calendar guard is non-bypassable — closed sessions defer);
+  plus a read of `GET /settings/jobs` (skip reasons such as `no_credentials` are
+  visible; remaining-hop proof is `succeeded` only).
 - **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save).
 - **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
   IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /

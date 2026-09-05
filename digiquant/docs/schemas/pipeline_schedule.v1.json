@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "DayStageFlags": {
+      "additionalProperties": false,
+      "description": "Per-day enablement for research, deliberation, and execution stages.",
+      "properties": {
+        "deliberation": {
+          "default": true,
+          "description": "Run portfolio deliberation (H1\u2013H9 intent) on this weekday.",
+          "title": "Deliberation",
+          "type": "boolean"
+        },
+        "execution": {
+          "default": true,
+          "description": "Schedule execution on this weekday. Still subject to the authoritative market-calendar veto \u2014 never forces a closed session.",
+          "title": "Execution",
+          "type": "boolean"
+        },
+        "research": {
+          "default": true,
+          "description": "Run research (evidence / source refresh) on this weekday.",
+          "title": "Research",
+          "type": "boolean"
+        }
+      },
+      "title": "DayStageFlags",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Seven-day \u00d7 three-stage schedule for the one daily graph (schema v1).\n\nDefaults enable research, deliberation, and execution every day. Execution\ndays remain calendar-vetoable via :class:`ExecutionPolicy` \u2014 a scheduled\nexecution on a closed market defers; it never overrides the calendar.",
+  "properties": {
+    "friday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "monday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "saturday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "schema_version": {
+      "default": 1,
+      "description": "Schema version; bump on breaking changes.",
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "sunday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "thursday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "tuesday": {
+      "$ref": "#/$defs/DayStageFlags"
+    },
+    "wednesday": {
+      "$ref": "#/$defs/DayStageFlags"
+    }
+  },
+  "required": [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday"
+  ],
+  "title": "PipelineSchedule",
+  "type": "object"
+}
