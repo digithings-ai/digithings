@@ -158,12 +158,18 @@ def _service_role_key() -> str:
 
 
 def _is_unique_conflict(exc: BaseException) -> bool:
+    """True for a unique-constraint hit, not every error whose text says "unique"."""
     code = str(getattr(exc, "code", "") or "")
     status = str(getattr(exc, "status", "") or getattr(exc, "status_code", "") or "")
-    text = str(exc).lower()
     if code in {"23505", "409"} or status in {"409"}:
         return True
-    return "duplicate" in text or "unique" in text or "already exists" in text
+    text = str(exc).lower()
+    return (
+        "duplicate key" in text
+        or "unique constraint" in text
+        or "duplicate vault_path" in text
+        or "duplicate slug" in text
+    )
 
 
 class PostgresStore:

@@ -465,6 +465,25 @@ def test_postgres_rename_does_not_overwrite_unindexed_destination() -> None:
     assert "[[n00]]" in bodies["hub"]
 
 
+def test_postgres_rename_propagates_non_conflict_insert_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schema/network error whose text happens to say "unique" is not a collision."""
+    client = _FakeClient([_note_row("n00", body="move me")])
+    store = PostgresStore(client, vault="finance")
+    original = _FakeQuery.execute
+
+    def execute(self: _FakeQuery) -> _Resp:
+        if self._op == "insert":
+            raise RuntimeError('column "unique_id" does not exist')
+        return original(self)
+
+    monkeypatch.setattr(_FakeQuery, "execute", execute)
+    with pytest.raises(RuntimeError, match="unique_id"):
+        store.rename("n00", "n01")
+    assert _bodies_by_slug(client)["n00"] == "move me"
+
+
 @pytest.mark.parametrize("page_size", [0, -1])
 def test_postgres_rejects_non_positive_page_size(page_size: int) -> None:
     with pytest.raises(ValueError, match=str(page_size)):
