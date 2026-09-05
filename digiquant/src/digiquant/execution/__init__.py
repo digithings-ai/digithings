@@ -4,6 +4,10 @@ Routes approved portfolio order intents to the configured venue after H9 /
 ``execute_at_open``, and mirrors external acks / fills / positions append-only
 (D10: broker is authoritative for external venues). The internal
 ``paper_internal`` path stays byte-for-byte unchanged.
+
+Venue-session calendar helpers live in :mod:`digiquant.execution.market_hours`
+(#3612) — import that submodule directly to avoid circular imports through this
+package ``__init__``.
 """
 
 from __future__ import annotations
