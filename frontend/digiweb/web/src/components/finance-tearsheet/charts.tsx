@@ -14,8 +14,14 @@
  * via [data-theme]). Supports linear / log / symlog y scales — symlog
  * handles series that cross zero (cumulative P&L). The series surfaces
  * (CandlestickChart, TimeSeries, TradeReturnChart) share one normalized
- * ViewWindow: wheel-zoom / drag-pan / double-click reset stay synced across
- * charts, with lookback presets matched back via `matchLookbackPreset`.
+ * ViewWindow: drag-pan / double-click reset stay synced across charts, with
+ * lookback presets matched back via `matchLookbackPreset`. Wheel input is
+ * gesture-routed: a plain two-finger scroll (any axis, no ctrlKey)
+ * PANS through time — this is also what makes a trackpad horizontal swipe
+ * do something, where it used to be silently dropped — and only a pinch or
+ * ctrl+wheel ZOOMS, with the per-frame zoom step capped so a trackpad's
+ * bursty, high-frequency deltas (pinch or momentum scroll) can't make the
+ * view jump/flicker the way an uncapped exponential factor would.
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
@@ -585,15 +591,24 @@ function plotFraction(
 interface ViewControl {
   /** plot-area right inset (differs per chart). */
   padRight: number;
-  /** wheel zoom, centred on cursor clientX, against the chart's own width. */
-  onWheel: (clientX: number, deltaY: number, target: Element) => void;
+  /** Wheel input, pre-accumulated over one animation frame. A pinch or
+   *  ctrl+wheel zooms (centred on cursor clientX); a plain two-finger scroll
+   *  on either axis pans through time instead — see this file's header
+   *  comment. */
+  onWheel: (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => void;
   /** Drag-pan start — Pointer Events (not mouse-only), so a single-finger
-   *  touch drag pans the same as a mouse drag. Pinch-zoom has no wheel
-   *  equivalent and is not implemented (see the P2 note in charts.tsx's
-   *  header comment). */
+   *  touch drag pans the same as a mouse drag. Touch pinch-zoom has no
+   *  gesture equivalent here and is not implemented (see the P2 note in
+   *  charts.tsx's header comment). */
   onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick: () => void;
 }
+
+/** Caps how far a single wheel-zoom frame can scale the view. Trackpad pinch
+ *  and momentum scroll can deliver a much larger accumulated delta in one
+ *  animation frame than a mouse-wheel notch ever does — left unclamped, the
+ *  exponential factor below spikes and the view visibly jumps/flickers. */
+const MAX_WHEEL_ZOOM_FACTOR = 1.25;
 
 /**
  * Which pointerId currently owns an active drag on a given chart <svg> —
@@ -625,14 +640,37 @@ function viewHandlers(
   const { lo, hi } = view;
   const resetView = resetTo ?? { lo: 0, hi: 1 };
 
-  const onWheel = (clientX: number, deltaY: number, target: Element) => {
+  const onWheel = (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => {
+    if (ctrl) {
+      // Pinch (trackpad) or ctrl+wheel (mouse) — deliberate zoom, centred on
+      // the cursor. Wheel up (deltaY < 0) zooms in; down zooms out. The
+      // factor is capped per frame (see MAX_WHEEL_ZOOM_FACTOR) so a bursty
+      // pinch gesture can't make the view jump.
+      const span = hi - lo;
+      const cursor = lo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
+      const rawFactor = Math.exp(deltaY * 0.0011);
+      const factor = Math.max(1 / MAX_WHEEL_ZOOM_FACTOR, Math.min(MAX_WHEEL_ZOOM_FACTOR, rawFactor));
+      const nlo = cursor - (cursor - lo) * factor;
+      const nhi = cursor + (hi - cursor) * factor;
+      onView(clampView(nlo, nhi));
+      return;
+    }
+    // Plain two-finger scroll, either axis — pan through time. Scroll
+    // semantics (not drag semantics): the view moves WITH the gesture, same
+    // as scrolling a page down reveals content below. Whichever axis carries
+    // the gesture drives it, so both a horizontal swipe and a vertical
+    // scroll over the chart scrub through time instead of doing nothing or
+    // zooming unexpectedly.
+    const rect = target.getBoundingClientRect();
+    const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
+    if (plotPxW === 0) return;
     const span = hi - lo;
-    const cursor = lo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
-    // Wheel up (deltaY < 0) zooms in; down zooms out. Centred on the cursor.
-    const factor = Math.exp(deltaY * 0.0011);
-    const nlo = cursor - (cursor - lo) * factor;
-    const nhi = cursor + (hi - cursor) * factor;
-    onView(clampView(nlo, nhi));
+    const d = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
+    let dFrac = (d / plotPxW) * span;
+    // Clamp so the shift TRANSLATES (keeps window width) against the [0,1]
+    // edges instead of narrowing — same edge behaviour as drag-pan below.
+    dFrac = Math.max(-lo, Math.min(1 - hi, dFrac));
+    onView(clampView(lo + dFrac, hi + dFrac));
   };
 
   // Pointer Events (not mouse-only): the same handler drives mouse drag AND
@@ -756,11 +794,13 @@ function decadeTicks(kind: ChartScale, realLo: number, realHi: number): number[]
   return ticks.length ? ticks : [realLo, realHi];
 }
 
-function normalizeWheelDelta(e: WheelEvent): number {
-  let dy = e.deltaY;
-  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) dy *= 16;
-  else if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) dy *= window.innerHeight;
-  return dy;
+/** Normalize a wheel event's raw delta on one axis to pixels. Line/page mode
+ *  (a real mouse wheel with OS-level line-scrolling) is rare on trackpads,
+ *  which report pixel deltas directly — this only matters for that case. */
+function normalizeWheelDelta(raw: number, mode: number): number {
+  if (mode === WheelEvent.DOM_DELTA_LINE) return raw * 16;
+  if (mode === WheelEvent.DOM_DELTA_PAGE) return raw * window.innerHeight;
+  return raw;
 }
 
 function Svg({
@@ -786,7 +826,9 @@ function Svg({
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
-  const wheelAccumRef = useRef<{ clientX: number; deltaY: number } | null>(null);
+  const wheelAccumRef = useRef<{ clientX: number; deltaX: number; deltaY: number; ctrl: boolean } | null>(
+    null,
+  );
   const wheelRafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -803,21 +845,23 @@ function Svg({
       const accum = wheelAccumRef.current;
       wheelAccumRef.current = null;
       if (!c || !accum) return;
-      c.onWheel(accum.clientX, accum.deltaY, el);
+      c.onWheel(accum.clientX, accum.deltaX, accum.deltaY, accum.ctrl, el);
     };
 
     const handler = (e: WheelEvent) => {
       if (!controlRef.current) return;
       e.preventDefault();
 
-      const dy = normalizeWheelDelta(e);
-      if (Math.abs(e.deltaX) > Math.abs(dy) * 1.25) return;
+      const dx = normalizeWheelDelta(e.deltaX, e.deltaMode);
+      const dy = normalizeWheelDelta(e.deltaY, e.deltaMode);
 
       if (wheelAccumRef.current) {
+        wheelAccumRef.current.deltaX += dx;
         wheelAccumRef.current.deltaY += dy;
         wheelAccumRef.current.clientX = e.clientX;
+        wheelAccumRef.current.ctrl = wheelAccumRef.current.ctrl || e.ctrlKey;
       } else {
-        wheelAccumRef.current = { clientX: e.clientX, deltaY: dy };
+        wheelAccumRef.current = { clientX: e.clientX, deltaX: dx, deltaY: dy, ctrl: e.ctrlKey };
       }
       if (wheelRafRef.current === null) {
         wheelRafRef.current = requestAnimationFrame(flushWheel);
