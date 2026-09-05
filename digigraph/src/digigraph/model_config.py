@@ -587,26 +587,59 @@ def get_grounding_model(*, segment: str = "grounding") -> str | None:
     return _pick_from_pool(pool, segment)
 
 
+def _cheaperinference_house_preferred() -> bool:
+    """Opt-in house preference for hosted Cheaper Inference when its API key is set.
+
+    ``DIGI_HOUSE_UPSTREAM=cheaperinference|ci`` or ``CHEAPERINFERENCE_HOUSE=1`` plus
+    ``CHEAPERINFERENCE_API_KEY``. OpenRouter remains the fallback for catalog misses
+    (see digillm). Distinct from self-hosted OmniRoute.
+    """
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
+    if not key:
+        return False
+    upstream = (os.environ.get("DIGI_HOUSE_UPSTREAM") or "").strip().lower()
+    if upstream in {"cheaperinference", "ci"}:
+        return True
+    flag = (os.environ.get("CHEAPERINFERENCE_HOUSE") or "").strip().lower()
+    return flag in {"1", "true", "yes", "on"}
+
+
 def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     """Apply house LLM routing + OpenRouter cost knobs from the active digiquant tier.
 
     When ``OPENAI_API_BASE`` is already set (Docker LiteLLM, stack-local), leave it
     alone — house pins are unprefixed slugs on that proxy's ``model_list``.
 
-    CLI / GHA without a local proxy: point the default client at OpenRouter's
-    OpenAI-compatible API and copy ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY``
-    when that is unset, so unprefixed pins do not hit api.openai.com.
+    CLI / GHA without a local proxy:
+    - If Cheaper Inference is preferred (key + ``DIGI_HOUSE_UPSTREAM`` /
+      ``CHEAPERINFERENCE_HOUSE``), point the default client at
+      ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
+      digillm rewrites mapped house slugs to bare CI ids and keeps OpenRouter for
+      sonar / ``:online`` / maverick / unmapped pins.
+    - Otherwise point at OpenRouter's OpenAI-compatible API and copy
+      ``OPENROUTER_API_KEY`` into ``OPENAI_API_KEY`` when that is unset, so
+      unprefixed pins do not hit api.openai.com.
 
     Also sets ``OPENROUTER_ALLOWED_MODELS`` and ``OPENROUTER_COST_QUALITY_TRADEOFF``
     when unset (or when *force*). Called at chain startup so CI picks up tier policy
     without duplicating values in ``digiquant-pipeline.yml``.
     """
     if not (os.environ.get("OPENAI_API_BASE") or "").strip():
-        os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
-        if not (os.environ.get("OPENAI_API_KEY") or "").strip():
-            or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
-            if or_key:
-                os.environ["OPENAI_API_KEY"] = or_key
+        if _cheaperinference_house_preferred():
+            ci_base = (os.environ.get("CHEAPERINFERENCE_API_BASE") or "").strip()
+            os.environ["OPENAI_API_BASE"] = (
+                ci_base or "https://api.cheaperinference.com/v1"
+            )
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                os.environ["OPENAI_API_KEY"] = (
+                    os.environ.get("CHEAPERINFERENCE_API_KEY") or ""
+                ).strip()
+        else:
+            os.environ["OPENAI_API_BASE"] = "https://openrouter.ai/api/v1"
+            if not (os.environ.get("OPENAI_API_KEY") or "").strip():
+                or_key = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+                if or_key:
+                    os.environ["OPENAI_API_KEY"] = or_key
     tier = get_digiquant_tier()
     tier_cfg = _load_digiquant_models().tiers.get(tier)
     if tier_cfg is None:
@@ -623,10 +656,11 @@ def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     ):
         os.environ["OPENROUTER_COST_QUALITY_TRADEOFF"] = str(or_cfg.cost_quality_tradeoff)
     logger.info(
-        "dashboard model tier=%s openrouter_pool=%s tradeoff=%s",
+        "dashboard model tier=%s openrouter_pool=%s tradeoff=%s openai_api_base=%s",
         tier,
         os.environ.get("OPENROUTER_ALLOWED_MODELS", ""),
         os.environ.get("OPENROUTER_COST_QUALITY_TRADEOFF", ""),
+        os.environ.get("OPENAI_API_BASE", ""),
     )
     return tier
 

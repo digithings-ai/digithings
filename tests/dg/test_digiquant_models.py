@@ -831,3 +831,36 @@ def test_unresolved_capability_returns_none_under_a_bound_byok_key(
         assert get_model_for_phase("macro") is None
     finally:
         pop_byok(tok)
+
+
+@pytest.mark.unit
+def test_apply_prefers_cheaperinference_when_flagged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_env(
+        monkeypatch,
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+        "OPENROUTER_ALLOWED_MODELS",
+        "OPENROUTER_COST_QUALITY_TRADEOFF",
+    )
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "cheaperinference")
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "cheap")
+    apply_digiquant_openrouter_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
+    assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
+    assert "deepseek/*" in os.environ["OPENROUTER_ALLOWED_MODELS"]
+
+
+@pytest.mark.unit
+def test_apply_ignores_cheaperinference_without_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY", "DIGI_HOUSE_UPSTREAM")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    apply_digiquant_openrouter_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
+    assert os.environ["OPENAI_API_KEY"] == "sk-or-test"

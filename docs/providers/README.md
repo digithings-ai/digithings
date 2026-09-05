@@ -60,6 +60,7 @@ Never commit `.env`. Use `.env.example` as the template and keep real keys out o
 |---|---|---|
 | Ollama (local) | [ollama_local.md](ollama_local.md) | Zero per-token cost, runs on Mac/GPU |
 | OmniRoute (self-hosted, optional) | [omniroute.md](omniroute.md) | Extra OpenAI-compat upstream; **off by default**, does not replace OpenRouter |
+| Cheaper Inference (hosted, optional) | [cheaperinference.md](cheaperinference.md) | House savings overlay; OpenRouter keeps sonar / `:online` / misses |
 
 ## After adding a provider
 
