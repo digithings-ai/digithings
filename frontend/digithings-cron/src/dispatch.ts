@@ -41,7 +41,9 @@ function isRateLimited(status: number, body: string): boolean {
 }
 
 function retryDelayMs(response: Response, attempt: number): number {
-  const seconds = Number(response.headers.get("Retry-After"));
+  const retryAfter = response.headers.get("Retry-After");
+  if (retryAfter === null) return attempt * 1_000;
+  const seconds = Number(retryAfter);
   if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1_000, 30_000);
   return attempt * 1_000;
 }
