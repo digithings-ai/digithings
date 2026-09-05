@@ -73,15 +73,17 @@ const METRICS: OdometerStat[] = [
 // a subset of these on a loop and added nothing. Rendered by the shared
 // StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
 // registry gets its real vendor mark, anything else degrades to a monogram
-// chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
-// single-path monochrome SVG, so they read as monograms — expected, not a bug.
-// Every slug below is verified against components/logos.ts.
+// chip. NautilusTrader, LiteLLM, Cheaper Inference, Chroma, Azure AI Search
+// and Assistant UI publish no single-path monochrome SVG, so they read as
+// monograms — expected, not a bug. Every slug below is verified against
+// components/logos.ts.
 const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
   {
     label: "orchestration & models",
     items: [
       { name: "LangGraph", icon: "langgraph" },
       { name: "LiteLLM", icon: null, mono: "LL" },
+      { name: "Cheaper Inference", icon: null, mono: "CI" },
       { name: "MCP", icon: "modelcontextprotocol" },
       { name: "OpenAI SDK", icon: "openai" },
       { name: "Pydantic", icon: "pydantic" },
@@ -109,6 +111,7 @@ const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
       { name: "Redis", icon: "redis" },
       { name: "Next.js", icon: "nextdotjs" },
       { name: "React", icon: "react" },
+      { name: "Assistant UI", icon: null, mono: "AU" },
     ],
   },
 ];
