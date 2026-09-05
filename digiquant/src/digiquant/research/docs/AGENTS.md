@@ -18,7 +18,7 @@ edit-mode continuity) → portfolio H1–H9 (thesis-first) → `commit_run`. Cos
 
 ### Step 1: Run mode
 - **Daily (default):** `python -m digiquant.portfolio.chain --cadence daily`
-- **Operator full refresh:** `--refresh-scope all` (Sunday cron sets this automatically)
+- **Operator full refresh:** `--refresh-scope all` (manual `workflow_dispatch` / CLI)
 - **Beliefs only:** `--refresh-scope beliefs`
 - **Deprecated shim:** `--run-type baseline|delta` (warns; use `--cadence daily` + `--refresh-scope`)
 - Prior context loads from **Supabase** `daily_snapshots` / `documents` via preflight

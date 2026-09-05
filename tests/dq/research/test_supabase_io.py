@@ -28,6 +28,7 @@ from digiquant.research.supabase_io import (
     query_pending_decisions,
     query_price_deltas,
     query_price_technicals_freshness,
+    query_returns_window,
     upsert_onchain_cohort_positioning,
 )
 
@@ -893,3 +894,159 @@ class TestLoadPriorBook:
             ]
         )
         assert weights == {"SPY": 20.0, "CASH": 80.0}
+
+
+@pytest.mark.unit
+class TestQueryReturnsWindowRetry:
+    """The 2026-08-29 daily run died on httpx.ReadTimeout here (#3078/#3299)."""
+
+    def _prices(self) -> list[dict[str, object]]:
+        base = date(2026, 8, 20)
+        return [
+            {
+                "date": (base + timedelta(days=offset)).isoformat(),
+                "ticker": "SPY",
+                "close": 100.0 + offset,
+            }
+            for offset in range(10)
+        ]
+
+    def _flaky(self, failures: int) -> FakeSupabaseClient:
+        import httpx
+
+        client = FakeSupabaseClient(canned_reads={"price_history": self._prices()})
+        state = {"attempts": 0}
+        orig_table = client.table
+
+        def _table(name: str):  # type: ignore[no-untyped-def]
+            query = orig_table(name)
+            inner = query.execute
+
+            def _execute():  # type: ignore[no-untyped-def]
+                state["attempts"] += 1
+                if state["attempts"] <= failures:
+                    raise httpx.ReadTimeout(
+                        "The read operation timed out",
+                        request=httpx.Request("GET", "https://x.supabase.co/rest/v1/t"),
+                    )
+                return inner()
+
+            query.execute = _execute  # type: ignore[method-assign]
+            return query
+
+        client.table = _table  # type: ignore[method-assign]
+        client.retry_attempts = state  # type: ignore[attr-defined]
+        return client
+
+    def test_two_timeouts_then_window_computes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import time
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky(failures=2)
+        out = query_returns_window(
+            client=client,
+            ticker="SPY",
+            start_date=date(2026, 8, 20),
+            holding_days=5,
+        )
+        assert out is not None
+        # 100.0 on 08-20 → 105.0 five trading days later.
+        assert out[0] == pytest.approx(0.05)
+        assert out[1] == date(2026, 8, 20)
+        assert out[2] == date(2026, 8, 25)
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]
+
+    def test_persistent_timeout_raises_to_fail_soft_caller(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import time
+
+        import httpx
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky(failures=10)
+        with pytest.raises(httpx.ReadTimeout):
+            query_returns_window(
+                client=client,
+                ticker="SPY",
+                start_date=date(2026, 8, 20),
+                holding_days=5,
+            )
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+class TestResolvePendingSkipsRowsOnPersistentOutage:
+    """Reties exhausted on one row must not block sibling rows (#3078/#3299)."""
+
+    def _pending_client(self) -> FakeSupabaseClient:
+        prices = [
+            {
+                "date": (date(2026, 8, 20) + timedelta(days=offset)).isoformat(),
+                "ticker": ticker,
+                "close": 100.0 + offset,
+            }
+            for ticker in ("SPY", "QQQ")
+            for offset in range(10)
+        ]
+        return FakeSupabaseClient(
+            canned_reads={
+                "price_history": prices,
+                "decision_log": [
+                    {
+                        "id": "row-1",
+                        "run_id": "run-1",
+                        "run_date": "2026-08-20",
+                        "ticker": "SPY",
+                        "stance": "buy",
+                        "conviction": 2,
+                        "thesis": "t",
+                        "benchmark": "QQQ",
+                        "holding_days": 5,
+                        "status": "pending",
+                    },
+                    {
+                        "id": "row-2",
+                        "run_id": "run-2",
+                        "run_date": "2026-08-20",
+                        "ticker": "QQQ",
+                        "stance": "buy",
+                        "conviction": 1,
+                        "thesis": "t",
+                        "benchmark": "SPY",
+                        "holding_days": 5,
+                        "status": "pending",
+                    },
+                ],
+            }
+        )
+
+    def test_first_row_outage_second_row_resolves(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import digiquant.research.decision_log as dl
+        import httpx
+
+        calls = {"n": 0}
+        real_window = dl.query_returns_window
+
+        def _flaky_then_ok(**kwargs):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            if calls["n"] <= 1:
+                # Row-1's first fetch fails persistently (its benchmark fetch
+                # is then skipped by the per-row continue).
+                raise httpx.ReadTimeout(
+                    "The read operation timed out",
+                    request=httpx.Request("GET", "https://x.supabase.co/rest/v1/t"),
+                )
+            return real_window(**kwargs)
+
+        monkeypatch.setattr(dl, "query_returns_window", _flaky_then_ok)
+
+        class _Reflection:
+            reflection = "resolved"
+
+        resolved = dl.resolve_pending(
+            client=self._pending_client(),
+            run_date=date(2026, 8, 28),
+            reflector=lambda _payload: _Reflection(),
+        )
+        assert resolved == 1

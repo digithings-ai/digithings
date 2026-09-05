@@ -9,7 +9,6 @@ from typing import (
 )
 
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
 from digiquant.dashboard.envcompat import (
@@ -81,6 +80,7 @@ from digiquant.research.phases._node_factory import (
 )
 from digiquant.research.state import PhaseError, PhasePortfolioState
 from digiquant.research.supabase_io import prior_book_current_weights
+from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 
@@ -940,7 +940,9 @@ def _h6_node_factory(
             ticker=ticker,
             analyst=analyst,
             amendment_terms_raw=amendment_terms,
-            amendment_reason=summary.conclusion or "h6_challenge_revision",
+            # Registry reason stays short: conclusion lives on the deliberation
+            # document itself; using it here tripped the 2000-char CHECK (#3299).
+            amendment_reason="h6_challenge_revision",
         )
         summary = _attach_evidence_amendment(
             summary,

@@ -1,10 +1,9 @@
 # Optional nightly / manual Compose health probe (REM-128).
 # Verifies core Python services respond on /healthz after `docker compose up --wait`.
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Smoke: stack"
 
 on:
-  schedule:
-    - cron: "0 7 * * *"
   workflow_dispatch:
 
 permissions:
@@ -26,6 +25,12 @@ jobs:
         run: |
           cp .env.example .env
           docker compose up -d --wait digikey digigraph digiquant digisearch digismith
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose logs --no-color litellm || true
+          docker compose ps -a || true
 
       - name: Probe /healthz
         run: |

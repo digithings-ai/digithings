@@ -30,6 +30,7 @@ Before making any change to `digisearch/`:
 - [ ] Confirm any new ingest path validates the `source` path before opening it (no path traversal)
 - [ ] Confirm chunker changes go through `digisearch.chunking` (`ChunkerBackend` / factory); do not hard-code a chunker in new ingest paths
 - [ ] Confirm never adding `pandas-ta` (deleted upstream); use `pandas-ta-classic` if TA is ever required
+- [ ] Confirm every `ChromaBackend(...)` construction site passes an explicit `embedding_provider` (default `MiniLMEmbedder` via `_get_default_embedder()`); do not omit the argument and rely on Chroma's bundled ONNX path
 
 ---
 
@@ -46,6 +47,8 @@ Beyond root `AGENTS.md`:
 - **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.
 - **Chunker selection is config-only**: use `DIGISEARCH_CHUNKER` or per-index `chunker:` — do not fork ingest code to swap backends.
+- **Single filesystem ingest path**: CLI, `POST /ingest`, and tests call `digisearch.pipeline.ingest.ingest_source` (or `ingest_paths`). Do not re-implement parse → sidecar → chunk → index in `server.py` / `cli.py`. research flat payloads stay on `research_ingest.py` (no segment wrapper) but share `index_chunks` for the backend write.
+- **Chroma embedding provider is mandatory**: every `ChromaBackend` construction must pass `embedding_provider` (default MiniLM). Never omit it so Chroma silently embeds with its bundled ONNX path. Partial embedding batches must raise — do not discard supplied vectors.
 
 ---
 
@@ -57,9 +60,43 @@ Beyond root `AGENTS.md`:
 | Short news wires / alerts where latency matters | **token** | `DIGISEARCH_CHUNKER=token` — `ChonkieTokenChunker` |
 | Rollback / characterization of pre-Chonkie behavior | `recursive` / `fixed` | Legacy `ingestion/chunkers/` via the same env var |
 
-`POST /ingest` and the CLI wrap the selected backend in `SegmentAwareChunker` so structural segments never cross chunk boundaries. research flat payloads use `get_document_chunker()` (no segment wrapper).
+`POST /ingest` and the CLI wrap the selected backend in `SegmentAwareChunker` so structural segments never cross chunk boundaries (via `pipeline.ingest.ingest_source`). research flat payloads use `get_document_chunker()` (no segment wrapper).
 
 Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chunker_backend()` in `digisearch.chunking.factory`.
+
+### Extending ingest
+
+- Filesystem ingest changes go in `digisearch/pipeline/ingest.py` only.
+- Keep HTTP/CLI as thin adapters (auth, path jail, Typer I/O).
+- Optional embed: `index_chunks` / `ingest_source` resolve
+  `EmbeddingCache → BatchEmbedder → EmbeddingProvider` via
+  `digisearch.embedding.factory.resolve_embedding_pipeline` when no explicit
+  `embedding_provider=` is passed. Set `DIGISEARCH_EMBEDDING_PROVIDER` /
+  config `embedding:` to select a provider; misconfiguration raises (no silent
+  no-op). `DIGISEARCH_EMBED=0` skips the pipeline-level step.
+
+---
+
+## RetrievalBackend selection guide (#402)
+
+Document-oriented async retrieval (separate from the HTTP `/query` DigiIndex router) is selected via env only:
+
+| Backend | When | Env |
+|---------|------|-----|
+| **pgvector** (default) | Existing Postgres + `vector` extension | omit or `DIGISEARCH_RETRIEVAL_BACKEND=pgvector` + `DIGISEARCH_DATABASE_URL` |
+| **lightrag** | Graph-enhanced upgrade path | `DIGISEARCH_RETRIEVAL_BACKEND=lightrag` + `pip install digisearch[lightrag]` |
+
+```python
+from digisearch.retrieval import get_retrieval_backend
+
+backend = get_retrieval_backend()  # reads DIGISEARCH_RETRIEVAL_BACKEND
+await backend.index(documents)
+hits = await backend.retrieve("revenue growth", top_k=10)
+```
+
+- LightRAG embeddings default to local/free (`ollama` / `nomic-embed-text`, or `DIGISEARCH_LIGHTRAG_EMBEDDING=minilm`) — not OpenAI.
+- Production pgvector needs a DSN and `CREATE EXTENSION vector` (human/infra). Without a DSN, `PgvectorBackend` uses an in-memory store for unit tests only.
+- Factory: `digisearch.retrieval.registry.get_retrieval_backend`. Protocol: `digisearch.retrieval.backend.RetrievalBackend`.
 
 ---
 
@@ -68,6 +105,9 @@ Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chu
 ```bash
 # Unit tests (no stack required)
 pytest tests/ -m unit -k "digisearch" -v
+
+# RetrievalBackend protocol + pgvector/lightrag adapters
+pytest -m unit -k retrieval_backend -v
 
 # Chunking / Chonkie backends
 pytest -m unit -k chunking -v

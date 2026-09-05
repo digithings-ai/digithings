@@ -483,6 +483,42 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": result.model_dump(mode="json"),
         }
 
+    if tool == "digiquant_compile_research_portfolio":
+        from datetime import date as _date
+        from datetime import datetime, timezone
+
+        from digiquant.portfolio.product_compile import compile_research_portfolio
+
+        raw_date = args.get("run_date")
+        try:
+            run_date = (
+                _date.fromisoformat(str(raw_date))
+                if raw_date
+                else datetime.now(timezone.utc).date()
+            )
+        except ValueError:
+            return {"ok": False, "error": "run_date must be ISO YYYY-MM-DD"}
+        watchlist = _normalize_symbols(args.get("watchlist") or [])
+        result = compile_research_portfolio(
+            run_date=run_date,
+            cadence=str(args.get("cadence") or "daily"),
+            refresh_scope=str(args.get("refresh_scope") or "none"),
+            watchlist=watchlist,
+            graph_name=str(args.get("graph_name") or "research-portfolio-chain"),
+        )
+        if not all(g.compiled for g in result.graphs):
+            return {
+                "ok": False,
+                "error": "research/portfolio graph compile failed",
+                "data": result.as_orchestrator_data(),
+            }
+        return {
+            "ok": True,
+            "service": "digiquant",
+            "tool": tool,
+            "data": result.as_orchestrator_data(),
+        }
+
     if tool in ("digiquant_run_pipeline", "digiquant_pipeline_delegate"):
         symbols = _normalize_symbols(args.get("symbols"))
         strategy = str(args.get("strategy_name") or "").strip()
@@ -522,7 +558,6 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             payload={"strategy_name": strategy, "symbols": symbols, "tool": tool},
         )
         return {"ok": True, "service": "digiquant", "tool": tool, "data": raw}
-
 
     if tool == "digiquant_build_sdca_risk_index":
         from digiquant.sdca_mcp import run_build_sdca_risk_index
@@ -978,4 +1013,4 @@ def api_run_pipeline(req: PipelineRequest) -> dict[str, Any]:
 app.include_router(v1)
 
 register_fastapi_error_handlers(app, service="digiquant")
-setup_otel_fastapi(app, service_name="digiquant")
+setup_otel_fastapi(app, service_name="digiquant", service_version=__version__)

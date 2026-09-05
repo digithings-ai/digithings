@@ -21,8 +21,18 @@ from digiquant.data.prices.correlation import pairwise_return_correlations
 from digiquant.data.prices.etf_flows import compute_etf_flows_proxy
 from digiquant.data.prices.fed_probabilities import fed_distribution_from_ladder
 from digiquant.data.prices.relative_strength import compute_relative_strength
+from digiquant.supabase_retry import run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
+
+
+class _SupabaseSelectError(Exception):
+    """A failed connector select, carrying the raw error for retry classification."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
 
 # Indicator columns surfaced to the agent (trend / momentum / regime). Not all 30+.
 TECHNICAL_COLUMNS: tuple[str, ...] = (
@@ -526,17 +536,28 @@ def query_data(
     from digibase.connectors.supabase import SupabaseConnector
 
     capped = max(1, min(int(limit), _MAX_QUERY_ROWS))
-    result = SupabaseConnector(client).select(
-        table,
-        safe_columns,
-        eq=_eq_for_query(table, eq),
-        gte=gte or None,
-        lte=lte or None,
-        in_=in_ or None,
-        order=order,
-        desc=desc,
-        limit=capped,
-    )
-    if not result.success:
-        return {"error": result.error}
+
+    def _select():  # type: ignore[no-untyped-def]
+        select_result = SupabaseConnector(client).select(
+            table,
+            safe_columns,
+            eq=_eq_for_query(table, eq),
+            gte=gte or None,
+            lte=lte or None,
+            in_=in_ or None,
+            order=order,
+            desc=desc,
+            limit=capped,
+        )
+        # The connector swallows transport faults into success=False — re-raise
+        # retryable ones so transient disconnects / PGRST002 / 502s retry 3×
+        # (#3299). Anything else still lands in the {"error": …} below.
+        if not select_result.success:
+            raise _SupabaseSelectError(select_result.error or "unknown select error")
+        return select_result
+
+    try:
+        result = run_with_supabase_retry(_select, operation=f"query_data {table}")
+    except _SupabaseSelectError as exc:
+        return {"error": exc.detail}
     return {"table": table, "row_count": len(result.rows), "rows": result.rows}

@@ -30,7 +30,9 @@ extra.
 | `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`, `NoteRow` (shared list-notes shape — not the same shape as `Note`, hence the distinct name — returned by both `SupabaseStore.list_notes` and `D1Store.list_notes`. `scripts/vectorize_sync.py` reads only `D1Store.list_notes` since #2239 repointed it from Supabase to D1; `SupabaseStore.list_notes` now has exactly one caller, `scripts/d1_sync.py --from-supabase`'s one-time backfill), `VaultSearchHit` (shared ranked-hit shape for both `SupabaseStore.search` and `D1Store.search`), `NoteDetail` (one note whole: body + frontmatter together — what a by-path fetch returns; also carries `segment_label` as its own top-level field, mirrored by `D1Store.get_note` out of `frontmatter["segment_label"]` — there is no dedicated D1 column for it, unlike `segment_index` — because the original Task 3 brief documented `{vault_path, title, body_markdown, frontmatter, segment_label}` as the returned shape and a consumer reading `segment_label` at that top level would otherwise find nothing, #2239 review). |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
-| `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `prune_children(parent_doc, keep_names, subdir)` for scoped docs_onboard convergence, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
+| `digivault/vault.py` | `Vault` / `FilesystemStore` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `prune_children(parent_doc, keep_names, subdir)` for scoped docs_onboard convergence, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`, `neighbors`). `FilesystemStore` is the explicit filesystem `VaultStore` name (#1142); `Vault` remains the public type. |
+| `digivault/store.py` | `VaultStore` protocol (#1142) — `list_notes`, `read_text`, `backlinks`, `search_by_tag`, `neighbors`, `reindex`, `create_note`, `set_frontmatter`, `rename`. Implemented by `FilesystemStore` and `PostgresStore`. |
+| `digivault/postgres_store.py` | `PostgresStore` — read/write `knowledge_notes` filtered by a `vault` namespace column; backlinks/tags/neighbors from the `wikilinks`/`tags` columns (no markdown parse at serve time). `reindex` pages with `.order("vault_path").range(...)` until a short page so PostgREST's max-rows cap cannot silently drop notes. `rename` inserts the destination (never upsert) so a collision cannot overwrite an existing `(vault, vault_path)`. `from_env` requires a service-role key — anon keys are refused because migration 118 enables RLS with no anon policy. Optional `[supabase]` extra, lazily imported via `from_env`. |
 | `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Optional `path_prefix` filter for multi-tenant corpora. Query tokens drop common English stopwords so a broad, question-shaped query does not score every note. Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC (optional `path_prefix`; migration 068). Optional `[supabase]` extra, lazily imported. |
 | `digivault/d1_errors.py` | `D1StoreError(RuntimeError)` — isolated in its own module so it stays importable even if importing `d1_store.py` fails (mirrors `digisearch`'s `vectorize_errors.py`). |
@@ -47,19 +49,24 @@ extra.
 
 ```python
 from digivault import (
-    Vault, VaultError, VaultConfig,
+    Vault, FilesystemStore, VaultStore, VaultError, VaultConfig,
     Note, LinkRef, LintReport, ValidationIssue,
     parse_links, rewrite_target,
     split_frontmatter, dump_frontmatter, set_keys,
 )
 
-vault = Vault("docs/vision")
+vault = FilesystemStore("docs/vision")  # or Vault(...) — same filesystem backend
 vault.list_notes()              # -> list[Note] (with backlinks)
 vault.backlinks("digigraph")    # -> tuple[str, ...]
+vault.neighbors("digigraph")    # -> tuple[str, ...]  (outlinks ∪ backlinks)
 vault.search_by_tag("module")   # -> list[Note]
 vault.create_note("execution", frontmatter={"title": "execution"}, body="see [[digiquant]]")
 vault.rename("research", "research-research")   # rewrites every inbound [[research]]
 report = vault.lint()           # -> LintReport(ok, note_count, issues)
+
+# Postgres-backed knowledge vault (migration 118; needs digivault[supabase]):
+# from digivault.postgres_store import PostgresStore
+# store = PostgresStore.from_env(vault="finance")
 ```
 
 ## Service topology
@@ -256,14 +263,28 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `Vault.prune_children` update the in-memory link and parent-child indexes
   incrementally. This keeps bulk ingest linear while preserving a fresh index at
   the next request boundary.
-- **Storage is pluggable (filesystem + Supabase).** digivault owns *how knowledge
-  is organized and traversed* (frontmatter, wikilinks, backlinks, taxonomy). The
-  on-disk `Vault(root)` is the default; `Vault.from_sources` builds the same index
-  from any `(rel_path, text)` source, and `supabase_store.SupabaseStore` reads a
-  vault out of Postgres (`architecture_notes` / `knowledge_notes`, #1087) — read-only,
-  reconstructed via `dump_frontmatter`, served to agents through the anon key.
-  `digistore` (when it ships) will own *where bytes live* beneath this; the two
-  remain complementary — digivault sits above digistore, not replacing it.
+- **Storage is pluggable (filesystem + Postgres + Supabase read path).** digivault
+  owns *how knowledge is organized and traversed* (frontmatter, wikilinks,
+  backlinks, taxonomy). The on-disk `Vault` / `FilesystemStore` is the default
+  `VaultStore` (#1142). `PostgresStore` serves `knowledge_notes` filtered by the
+  `vault` namespace column, building the link graph from stored `wikilinks` /
+  `tags` (no markdown parse at serve time; migration 118). Table uniqueness is
+  `(vault, vault_path)` only — duplicate filename stems in different directories
+  are legal, matching the filesystem vault's `_duplicates` / `duplicate_note`
+  lint (#3603). It pages `reindex` like `SupabaseStore.list_notes` (deterministic
+  `vault_path` order + `.range()` until a short page, default 500) so a vault
+  larger than PostgREST's row cap is indexed exactly once. `rename` inserts the
+  new `(vault, vault_path)` and fails on unique-constraint conflict without
+  modifying the source or the existing destination (#3606). `from_env` takes only
+  `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` (and rejects a JWT
+  whose `role` is not `service_role`); an anon-key-only configuration is a
+  config error, not an empty vault.
+  `Vault.from_sources` still builds the same index from any `(rel_path, text)`
+  source, and `supabase_store.SupabaseStore` remains the read-only FTS path for
+  `architecture_notes` / legacy callers (#1087) — reconstructed via
+  `dump_frontmatter`, served through the anon key. `digistore` (when it ships)
+  will own *where bytes live* beneath this; the two remain complementary —
+  digivault sits above digistore, not replacing it.
 - **Wikilinks, not standard links.** The vault speaks Obsidian `[[...]]`. The
   repo's `scripts/check_doc_links.py` validates only `[text](path)` links, so
   digivault owns wikilink validation via `lint` (wired into `make vault-check`
@@ -277,7 +298,7 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 | `DIGIVAULT_MCP_HOST` | MCP bind host (default `127.0.0.1`). |
 | `DIGIKEY_JWKS_URL` / `DIGIKEY_ISSUER` / `DIGIKEY_AUDIENCE` / `DIGIKEY_PUBLIC_KEY_PEM` | digikey JWT verification (shared convention). |
 | `DIGI_DISABLE_RATE_LIMIT` | `1`/`true`/`yes` disables the per-IP rate limiter (shared convention with digisearch/digigraph; tests only). |
-| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Fallback for `digivault_search_notes` only when neither D1 nor `DIGIVAULT_ROOT` is configured — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. |
+| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Fallback for `digivault_search_notes` only when neither D1 nor `DIGIVAULT_ROOT` is configured — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. `PostgresStore.from_env` does **not** accept the anon key: set `CORE_SUPABASE_SERVICE_KEY` or `SUPABASE_SERVICE_ROLE_KEY`. Migration 118 makes `knowledge_notes` service-role-only; an anon client would look like an empty vault. |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` + `D1_DATABASE_MAP` | Cloudflare account id, API token, and a JSON object `{"<vault-prefix>": "<database id>"}` mapping each corpus's vault prefix to its D1 database. `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` are canonical (wrangler's own conventional names, #2239 credential rename — the same pair Vectorize uses, see digisearch/ARCHITECTURE.md); each falls back to the legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`, then `D1_ACCOUNT_ID`/`D1_API_TOKEN`, names when unset (`_d1_credentials`), so the rename is zero-downtime — no coordinated secret rotation required before deploy. All three (the resolved account id, the resolved token, and `D1_DATABASE_MAP`) must be set for `_d1_configured()` to be true. When configured, D1 is authoritative for both `digivault_search_notes` and `POST /v1/notes/by-path` — it wins over `DIGIVAULT_ROOT` (the #2239 fix). Read only in `server.py` (`_open_d1_store`), never inside `D1Store`. A partial-config error names the canonical var (e.g. `CLOUDFLARE_ACCOUNT_ID`), not whichever legacy alias happened to be left unset — the credential is resolved to one value before the guard runs. **`D1_DATABASE_MAP` must not contain a `""` key** — `_open_d1_store` raises `D1StoreError` at config-read time if it does, regardless of which prefix was requested: a `""` entry would map every prefix that normalizes to empty (`None`, `""`, `"/"`, `"///"`, `"   "`, `".md"`) to a real database, which is precisely the cross-tenant fail-open the by-path route's `resolve_path_prefix` check exists to refuse (#2239 review). |
 | `DIGI_TENANT_CORPUS_MAP` | Optional. Same env var digigraph's `corpus_routing.py` reads (a JSON object keyed by tenant slug, each value carrying `vaultPathPrefix`/`vault_path_prefix` among sibling keys digivault ignores) — parsed independently by `tenant_scope.py` rather than imported from the digigraph package, so digivault stays installable standalone. Binds every caller-supplied `path_prefix` — checked once, before the D1/local-vault/Supabase precedence branch, so all three backends are covered uniformly — to the tenant named in the caller's verified JWT (`request.state.digi_auth.tenant_slug`, set by `DigiAuthMiddleware`, already installed here). Genuinely unset — the default, e.g. local dev, a self-hosted single-vault install — this is a no-op; every existing single-tenant deployment is unaffected. Set, it fails closed: a `path_prefix` that doesn't match the map's entry for the caller's tenant, or a tenant absent from the map entirely, is `403`. **Set but unparseable, non-object, or every entry individually malformed is `503`**, not silently treated as unset — `TenantCorpusMapError` keeps a config typo from disabling enforcement without telling anyone, mirroring `D1_DATABASE_MAP`'s own "some set, not all, is always an error" discipline above. Closes a gap CodeRabbit's review of promotion PR #2293 found: `digivault:read` alone let any caller name any prefix in `D1_DATABASE_MAP`, not just their own corpus's — digigraph's own #2265 fix only protects the model → digigraph leg, not a caller hitting this API directly. |
 
@@ -293,7 +314,10 @@ installs `digibase` + `digikey` + `digivault[service]` and runs the full set.
 `tmp_path` vault; Supabase-path tests fake `SupabaseStore` directly
 (constructor takes any `SupabaseClientProtocol`) — the real `supabase` package
 (`[supabase]` extra) is never required to run the suite, matching
-`test_supabase_store.py`'s convention. `test_d1_store.py` runs `D1Store`'s real
+`test_supabase_store.py`'s convention. `test_vault_store.py` fakes PostgREST
+`max-rows` truncation so `PostgresStore.reindex` pagination, cross-page
+backlinks/tags/`get_note`/`read_text`, rename collisions beyond page one, and
+service-role-only `from_env` are covered without a network (#3606). `test_d1_store.py` runs `D1Store`'s real
 SQL against an in-memory SQLite/FTS5 connection rather than canned fixtures, so
 a regression in the SQL text itself fails the test. `POST /v1/notes/by-path`
 tests cover the 403 (out-of-prefix), 404 (absent note), 503 (D1 unconfigured or

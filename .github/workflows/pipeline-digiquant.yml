@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant research"
 
 # Unified research+portfolio daily cron (replaces research-baseline/delta/monthly/fed-odds).
@@ -13,11 +14,6 @@ name: "Pipeline: digiquant research"
 # (Cloudflare cron / ops runner) — not a substitute for `workflow_dispatch`.
 
 on:
-  schedule:
-    - cron: "17 9 * * *"
-    - cron: "17 10 * * *"
-    - cron: "17 11 * * *"
-    - cron: "17 12 * * *"
   repository_dispatch:
     types: [olympus-daily]
   workflow_dispatch:
@@ -72,12 +68,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          today_dow=$(date -u +%u)   # 1=Mon .. 7=Sun
-
+          # Ordinary cron/repository_dispatch runs use refresh_scope=none.
+          # Only manual workflow_dispatch may force a refresh override.
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "${INPUT_REFRESH_SCOPE:-}" ]; then
             refresh_scope="${INPUT_REFRESH_SCOPE}"
-          elif [ "$today_dow" -eq 7 ]; then
-            refresh_scope="all"
           else
             refresh_scope="none"
           fi

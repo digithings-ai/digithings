@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant tearsheets"
 
 # Daily Slapper + BTC-SDCA tearsheet regeneration for digiquant.io
@@ -20,9 +21,6 @@ name: "Pipeline: digiquant tearsheets"
 # 4. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
-  schedule:
-    # 00:00 UTC — after Coinbase daily close; fresh signal for digiquant.io tearsheets
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 permissions:
@@ -89,11 +87,16 @@ jobs:
         # public figures lag reality by 3 days (end-date shift) so the live
         # position can't be read off the curve. No repo commit — the DB is the
         # delivery; digiquant.io reads strategy_tearsheets live.
+        # --cache-dir must match fetch_coinbase / export_sdca_macro defaults
+        # (digiquant/data/price-history). Explicit so the job still works while
+        # checkout stays on main (#1626) and DEFAULT_CACHE has not yet been
+        # promoted (#3472 — REPO_ROOT vs DIGIQUANT_ROOT mismatch).
         run: |
           uv run --frozen --no-sync python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
             --push-supabase \
-            --signal-delay-days 3
+            --signal-delay-days 3 \
+            --cache-dir digiquant/data/price-history
 
       - name: Update persistent failure issue
         if: failure()
@@ -103,15 +106,17 @@ jobs:
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp = new Date().toISOString().slice(0, 16);
             const title = "digiquant-tearsheets — recurring failures";
-            const labels = ["ci-failure", "component:digiquant", "pipeline:tearsheets"];
+            // Label simplification 2026-09: pipeline:* retired. Tracker dedup
+            // is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels = ["ci-failure", "component:digiquant", "agent-task", "priority:medium"];
             const marker = "<!-- digiquant-tearsheets-tracker -->";
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: "open",
-              labels: "ci-failure,pipeline:tearsheets",
               per_page: 100,
             });
             const tracker = existing.find((i) => (i.body || "").includes(marker));

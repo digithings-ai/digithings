@@ -1,13 +1,13 @@
 name: "Agent: dispatch replay"
 
-# Re-dispatches open issues whose exec:* label was applied at creation time
+# Re-dispatches open agent-task issues stuck without dispatch
 # (GitHub does not fire issues:labeled for labels set via gh issue create).
 # Also useful after fixing dispatch workflows or clearing quota flags.
 #
-# Tier C for Copilot was removed 2026-08-05 with the subscription: nothing dispatches
-# exec:copilot any more, so replaying it only bounced labels into a void.
-#         exec:cursor re-fires by bouncing the label, which triggers the Cursor Automation.
-#         exec:claude bounces the label to trigger the local-dispatch comment workflow.
+# Dispatch tiers come from tiers in scripts/project_routing.json:
+#         cursor tier re-fires by bouncing the label, which triggers the
+#         @cursor-mention dispatch workflow.
+#         claude tier bounces the label to trigger the local-dispatch comment workflow.
 #
 # Manual: Actions → Agent dispatch replay → Run workflow
 # Optional dry_run (default true) — set false to bounce labels and trigger dispatch.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "List only (true) or bounce exec:* labels to re-fire dispatch (false)"
+        description: "List only (true) or bounce agent-task labels to re-fire dispatch (false)"
         required: false
         default: "true"
         type: choice
@@ -24,7 +24,7 @@ on:
           - "true"
           - "false"
       tier:
-        description: "Which exec tier to replay"
+        description: "Which dispatch tier to replay (per tiers in scripts/project_routing.json)"
         required: false
         default: "all"
         type: choice
@@ -69,19 +69,35 @@ jobs:
             echo "  bounced ${label} on #${num}"
           }
 
+          # List open agent-task issues in the given dispatch tier (tiers from
+          # scripts/project_routing.json), as a JSON array on stdout.
           list_tier() {
-            local label="$1"
-            gh issue list --repo "$REPO" --state open --label "$label" \
-              --json number,title,assignees,labels --limit 200
+            local want="$1"
+            gh issue list --repo "$REPO" --state open --label "agent-task" \
+              --json number,title,assignees,labels --limit 200 | WANT="$want" python3 -c "
+          import json, sys, os
+          routing = json.load(open('scripts/project_routing.json'))
+          tiers = routing.get('tiers', {})
+          want = os.environ['WANT']
+          out = []
+          for i in json.load(sys.stdin):
+              names = [l['name'] for l in i.get('labels', [])]
+              comp = next((n for n in names if n.startswith('component:')), None)
+              # Fail closed like the dispatch workflows: unknown tier never joins
+              # the cursor list.
+              if tiers.get(comp, tiers.get('default', 'claude')) == want:
+                  out.append(i)
+          print(json.dumps(out))
+          "
           }
 
           echo "=== Agent dispatch replay (dry_run=${DRY_RUN}, tier=${TIER}) ==="
 
           if [[ "$TIER" == "all" || "$TIER" == "cursor" ]]; then
             echo ""
-            echo "--- exec:cursor (no Cursor Automation dispatch yet) ---"
-            # Tier C: bouncing exec:cursor fires the Cursor Automation.
-            list_tier "exec:cursor" | python3 -c "
+            echo "--- cursor tier (no Cloud Agent session yet) ---"
+            # Bouncing agent-task re-fires the @cursor-mention dispatch workflow.
+            list_tier "cursor" | python3 -c "
           import json, sys, subprocess, os
           repo = os.environ['REPO']
           token = os.environ['GH_TOKEN']
@@ -90,7 +106,7 @@ jobs:
               i for i in issues
               if 'pending:quota' not in [l['name'] for l in i.get('labels', [])]
           ]
-          # A dispatched cursor issue has a 'Cursor dispatch' or 'Cursor Automation' comment.
+          # A dispatched cursor issue has an '@cursor' dispatch comment.
           dispatched = []
           for iss in stuck:
               num = iss['number']
@@ -102,7 +118,7 @@ jobs:
                   dispatched.append(iss)
                   continue
               comments = json.loads(r.stdout).get('comments', [])
-              if not any('Cursor' in c.get('body', '') for c in comments):
+              if not any('@cursor' in c.get('body', '') for c in comments):
                   dispatched.append(iss)
           for iss in dispatched:
               print(f\"#{iss['number']}\t{iss['title'][:80]}\")
@@ -113,14 +129,14 @@ jobs:
           "
             while read -r num; do
               [[ -z "${num:-}" ]] && continue
-              bounce_label "$num" "exec:cursor"
+              bounce_label "$num" "agent-task"
             done < /tmp/cursor-stuck.txt 2>/dev/null || true
           fi
 
           if [[ "$TIER" == "all" || "$TIER" == "claude" ]]; then
             echo ""
-            echo "--- exec:claude (no local-dispatch comment yet) ---"
-            list_tier "exec:claude" | python3 -c "
+            echo "--- claude tier (no local-dispatch comment yet) ---"
+            list_tier "claude" | python3 -c "
           import json, sys, subprocess, os
           repo = os.environ['REPO']
           token = os.environ['GH_TOKEN']
@@ -136,7 +152,7 @@ jobs:
                   stuck.append(iss)
                   continue
               comments = json.loads(r.stdout).get('comments', [])
-              if not any('Tier 3' in c.get('body', '') for c in comments):
+              if not any('Tier 3' in c.get('body', '') or 'Claude tier' in c.get('body', '') for c in comments):
                   stuck.append(iss)
           for iss in stuck:
               print(f\"#{iss['number']}\t{iss['title'][:80]}\")
@@ -147,7 +163,7 @@ jobs:
           "
             while read -r num; do
               [[ -z "${num:-}" ]] && continue
-              bounce_label "$num" "exec:claude"
+              bounce_label "$num" "agent-task"
             done < /tmp/claude-stuck.txt 2>/dev/null || true
           fi
 

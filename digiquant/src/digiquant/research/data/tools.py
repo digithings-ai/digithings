@@ -23,8 +23,14 @@ from digiquant.research.data.queries import (
     get_vix_term_structure,
     query_data,
 )
+from digiquant.supabase_retry import run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
+
+
+class _UnknownToolError(ValueError):
+    """Unknown tool name — returned as Error:, never retried."""
+
 
 DATA_TOOLS: list[dict[str, Any]] = [
     {
@@ -190,62 +196,71 @@ def build_data_tool_dispatcher(
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:
-            if name == "query_data":
-                table = args.get("table")
-                if not table:
-                    return (
-                        "Error: query_data requires a 'table' argument. "
-                        "Allowed tables: price_history, price_technicals, "
-                        "macro_series_observations, positions, nav_history, theses, "
-                        "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
-                    )
-                # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
-                # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
-                # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
-                if table == "macro_series_observations":
-                    for filter_arg in ("eq", "gte", "lte"):
-                        filt = args.get(filter_arg)
-                        if isinstance(filt, dict) and "date" in filt:
-                            filt = dict(filt)
-                            filt["obs_date"] = filt.pop("date")
-                            args = {**args, filter_arg: filt}
-                    if args.get("order") == "date":
-                        args = {**args, "order": "obs_date"}
-                result = query_data(
-                    client=client,
-                    table=table,
-                    columns=str(args.get("columns", "*")),
-                    eq=args.get("eq"),
-                    gte=args.get("gte"),
-                    lte=args.get("lte"),
-                    in_=args.get("in_"),
-                    order=args.get("order"),
-                    desc=_coerce_bool(args.get("desc", True)),
-                    limit=int(args.get("limit", 50)),
-                    allowed_tables=allowed_tables,
-                )
-            elif name == "get_macro_series":
-                result = get_macro_series(
-                    client=client,
-                    series_ids=list(args.get("series_ids", [])),
-                    lookback=int(args.get("lookback", 6)),
-                )
-            elif name == "get_market_breadth":
-                # Readers filter <= as_of and take the newest row → "as of the run date".
-                result = get_market_breadth(client=client, run_date=as_of)
-            elif name == "get_sector_relative_strength":
-                result = get_sector_relative_strength(client=client, run_date=as_of)
-            elif name == "get_vix_term_structure":
-                result = get_vix_term_structure(client=client, run_date=as_of)
-            elif name == "get_etf_flows_proxy":
-                result = get_etf_flows_proxy(client=client, run_date=as_of)
-            elif name == "get_fed_rate_probabilities":
-                result = get_fed_rate_probabilities(client=client, run_date=as_of)
-            else:
-                return f"Error: unknown tool {name!r}"
-            return json.dumps(result, default=str)
+            result = run_with_supabase_retry(
+                lambda: _dispatch(name, args),
+                operation=f"data tool {name}",
+            )
+        except _UnknownToolError as exc:
+            return f"Error: {exc}"
         except Exception as exc:  # tool errors are returned to the model, not raised
             logger.warning("data tool %s failed: %s", name, exc)
             return f"Error: {name} failed: {exc}"
+        if isinstance(result, str):
+            return result  # already an Error: string (e.g. missing table arg)
+        return json.dumps(result, default=str)
+
+    def _dispatch(name: str, args: dict[str, Any]) -> Any:
+        if name == "query_data":
+            table = args.get("table")
+            if not table:
+                return (
+                    "Error: query_data requires a 'table' argument. "
+                    "Allowed tables: price_history, price_technicals, "
+                    "macro_series_observations, positions, nav_history, theses, "
+                    "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
+                )
+            # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
+            # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
+            # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
+            if table == "macro_series_observations":
+                for filter_arg in ("eq", "gte", "lte"):
+                    filt = args.get(filter_arg)
+                    if isinstance(filt, dict) and "date" in filt:
+                        filt = dict(filt)
+                        filt["obs_date"] = filt.pop("date")
+                        args = {**args, filter_arg: filt}
+                if args.get("order") == "date":
+                    args = {**args, "order": "obs_date"}
+            return query_data(
+                client=client,
+                table=table,
+                columns=str(args.get("columns", "*")),
+                eq=args.get("eq"),
+                gte=args.get("gte"),
+                lte=args.get("lte"),
+                in_=args.get("in_"),
+                order=args.get("order"),
+                desc=_coerce_bool(args.get("desc", True)),
+                limit=int(args.get("limit", 50)),
+                allowed_tables=allowed_tables,
+            )
+        if name == "get_macro_series":
+            return get_macro_series(
+                client=client,
+                series_ids=list(args.get("series_ids", [])),
+                lookback=int(args.get("lookback", 6)),
+            )
+        if name == "get_market_breadth":
+            # Readers filter <= as_of and take the newest row → "as of the run date".
+            return get_market_breadth(client=client, run_date=as_of)
+        if name == "get_sector_relative_strength":
+            return get_sector_relative_strength(client=client, run_date=as_of)
+        if name == "get_vix_term_structure":
+            return get_vix_term_structure(client=client, run_date=as_of)
+        if name == "get_etf_flows_proxy":
+            return get_etf_flows_proxy(client=client, run_date=as_of)
+        if name == "get_fed_rate_probabilities":
+            return get_fed_rate_probabilities(client=client, run_date=as_of)
+        raise _UnknownToolError(f"unknown tool {name!r}")
 
     return execute_tool

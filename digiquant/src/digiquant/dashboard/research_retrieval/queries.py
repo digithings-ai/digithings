@@ -33,6 +33,7 @@ from digiquant.dashboard.research_retrieval.store import LoadedResearchState
 from digiquant.dashboard.tenancy import house_workspace_id
 from digiquant.research.decision_log import fetch_recent_lessons
 from digiquant.research.supabase_io import SupabaseClient
+from digiquant.supabase_retry import run_with_supabase_retry
 
 logger = logging.getLogger(__name__)
 
@@ -396,19 +397,26 @@ def query_research(
                     pin_error=pin_error,
                 )
 
-    try:
+    def _fetch_rows() -> tuple[Any | None, Any, str, Any | None]:
         if key == DIGEST_DOCUMENT_KEY:
-            row, resolved_date = _query_digest_row(client, as_of_date=effective_as_of)
-            source = "daily_snapshots"
-            payload = row.get("snapshot") if isinstance(row, dict) else None
-        else:
-            row, resolved_date = _query_documents_row(
-                client,
-                document_key=key,
-                as_of_date=effective_as_of,
-            )
-            source = "documents"
-            payload = row.get("payload") if isinstance(row, dict) else None
+            digest_row, digest_date = _query_digest_row(client, as_of_date=effective_as_of)
+            digest_payload = digest_row.get("snapshot") if isinstance(digest_row, dict) else None
+            return digest_row, digest_date, "daily_snapshots", digest_payload
+        doc_row, doc_date = _query_documents_row(
+            client,
+            document_key=key,
+            as_of_date=effective_as_of,
+        )
+        doc_payload = doc_row.get("payload") if isinstance(doc_row, dict) else None
+        return doc_row, doc_date, "documents", doc_payload
+
+    try:
+        # Transient disconnects / PGRST002 / 502s retry 3× (#3299); anything
+        # else still fails fast into the structured error below.
+        row, resolved_date, source, payload = run_with_supabase_retry(
+            _fetch_rows,
+            operation=f"query_research {key}",
+        )
     except Exception as exc:  # return structured error to tool caller
         logger.warning("query_research failed for %s: %s", key, exc)
         return {"error": f"query_research failed: {exc}"}
@@ -450,18 +458,27 @@ def query_portfolio(
             )
 
     effective_as_of = as_of_date or run_date
-    try:
-        positions, resolved_date = _positions_for_as_of(
+
+    def _fetch_book() -> tuple[Any, Any, Any, Any, Any]:
+        book_positions, book_resolved = _positions_for_as_of(
             client,
             as_of_date=effective_as_of,
             ticker=ticker,
         )
-        nav = _nav_for_as_of(client, as_of_date=effective_as_of)
-        theses = _theses_for_as_of(client, as_of_date=effective_as_of)
-        lessons = fetch_recent_lessons(
+        book_nav = _nav_for_as_of(client, as_of_date=effective_as_of)
+        book_theses = _theses_for_as_of(client, as_of_date=effective_as_of)
+        book_lessons = fetch_recent_lessons(
             client=client,
             run_date=effective_as_of,
             watchlist=watchlist,
+        )
+        return book_positions, book_resolved, book_nav, book_theses, book_lessons
+
+    try:
+        # Same transient retry as query_research (#3299).
+        positions, resolved_date, nav, theses, lessons = run_with_supabase_retry(
+            _fetch_book,
+            operation="query_portfolio",
         )
     except Exception as exc:  # return structured error to tool caller
         logger.warning("query_portfolio failed: %s", exc)

@@ -4,6 +4,96 @@
    affordances (embedded charts/widgets/markdown, colour, collapse). Builder-
    first: clear hierarchy, minimal chrome, everything monospace-anchored. */
 
+/* ── embedded launcher specimen ───────────────────────────────────────── */
+
+.dcl-reference-stage {
+  position: relative;
+  min-height: 390px;
+  margin-top: 1.3rem;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  background: var(--bg);
+}
+
+.dcl-reference-copy {
+  display: flex;
+  max-width: 34rem;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.4rem;
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+}
+
+.dcl-reference-copy > span,
+.dcl-reference-status {
+  color: var(--ink-mute);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dcl-reference-copy strong {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.dcl-reference-copy p {
+  max-width: 29rem;
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.65;
+}
+
+.dcl-reference-chat {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.9rem;
+  background: var(--term-bg);
+  color: var(--term-ink);
+  font: 400 0.75rem/1.55 var(--font-mono);
+}
+
+.dcl-reference-status {
+  margin: 0;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--term-hair);
+}
+
+.dcl-reference-chat > div:not(.dcl-reference-composer) {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.35rem;
+}
+
+.dcl-reference-chat p {
+  margin: 0;
+}
+
+.dcl-reference-composer {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: auto;
+  padding: 0.7rem;
+  border: 1px solid var(--term-hair);
+  color: var(--term-mute);
+}
+
+.dcl-reference-composer > :first-child {
+  color: var(--accent);
+}
+
+.dcl-reference-caret {
+  width: 0.6em;
+  height: 0.9em;
+  background: var(--accent);
+}
+
 /* Chat shell — surface, turn, mark, stack, bubble, and lead migrated to
    token-backed Tailwind utilities across the seven chatbot-reference.tsx files
    (the @theme bridge in globals.css: bg-term-bg, border-term-hair, text-term-ink,

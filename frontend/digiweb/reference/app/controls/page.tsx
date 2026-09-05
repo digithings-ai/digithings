@@ -1,11 +1,13 @@
 import "./controls.css";
 import { AccordionReference } from "@/components/controls/accordion-reference";
 import { ControlsLayerReference } from "@/components/controls/controls-layer-reference";
+import { DialogReference } from "@/components/controls/dialog-reference";
 import { DropdownReference } from "@/components/controls/dropdown-reference";
 import { EmptyStatesReference } from "@/components/controls/empty-states-reference";
 import { FormFieldsReference } from "@/components/controls/form-fields-reference";
 import { NavButtonsReference } from "@/components/controls/nav-buttons-reference";
 import { SearchBarReference } from "@/components/controls/search-bar-reference";
+import { SelectReference } from "@/components/controls/select-reference";
 import { SkeletonReference } from "@/components/controls/skeleton-reference";
 import { SliderReference } from "@/components/controls/slider-reference";
 import { TagsInputReference } from "@/components/controls/tags-input-reference";
@@ -20,17 +22,19 @@ export default function ControlsPage() {
           Inputs, <em>with states.</em>
         </h1>
         <p>
-          The interactive atoms: dropdowns, search, wayfinding buttons and form fields — every one
-          keyboard-reachable, wearing the accent on focus and the money/livery colors only where
-          they mean something.
+          The interactive atoms: dropdowns, a centered dialog, search, wayfinding buttons and
+          form fields — every one keyboard-reachable, wearing the accent on focus and the
+          money/livery colors only where they mean something.
         </p>
       </header>
 
       <ControlsLayerReference />
       <DropdownReference />
+      <DialogReference />
       <SearchBarReference />
       <NavButtonsReference />
       <FormFieldsReference />
+      <SelectReference />
       <TooltipReference />
       <SliderReference />
       <TagsInputReference />

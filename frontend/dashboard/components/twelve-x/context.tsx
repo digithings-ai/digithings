@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import type { WatchlistApi } from './useWatchlist';
 
 /** The six twelve-x workspace tabs (How it works is the static explainer). */
-export type TwelveXTab = 'today' | 'consensus' | 'track-record' | 'events' | 'matrix' | 'how-it-works';
+export type TwelveXTab = 'today' | 'consensus' | 'trades' | 'events' | 'matrix' | 'how-it-works';
 
 /** A cross-surface navigation intent fired from any tab. */
 export type CrossLink =

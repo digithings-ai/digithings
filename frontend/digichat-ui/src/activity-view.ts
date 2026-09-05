@@ -112,9 +112,10 @@ const TOOL_LABELS: Record<string, string> = {
   digisearch: "Search the knowledge base",
   azure_ai_search: "Search the knowledge base",
   rag_sources: "Search the knowledge base",
-  digivault: "Find original documents",
-  digivault_search_notes: "Find original documents",
-  digivault_get_note: "Load document",
+  digivault: "Vault",
+  digivault_search_notes: "Vault",
+  digivault_get_note: "Load vault note",
+  web_search: "Web search (External)",
 };
 
 /** Wire ids whose in-flight fold should read "Searching…", not "Working…". */
@@ -124,6 +125,7 @@ const LOCATE_TOOL_NAMES = new Set([
   "rag_sources",
   "digivault",
   "digivault_search_notes",
+  "web_search",
 ]);
 
 /** Human labels for the head only — identity keys still use the wire tool id. */

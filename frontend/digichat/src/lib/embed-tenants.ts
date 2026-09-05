@@ -84,6 +84,12 @@ export type EmbedTenantConfig = {
    * Only an explicit `false` here turns it off for this tenant.
    */
   showLanguageSelector?: boolean;
+  /**
+   * When true, this tenant may offer opt-in web search (#3420). Default off —
+   * corpus-only. User preference is a separate localStorage flag; both must
+   * be on before digichat sends X-Digi-Enable-Web-Search.
+   */
+  webSearch?: boolean;
   /** page = full content chrome inside iframe; embed = compact iframe child. */
   layout?: "page" | "embed";
   /**
@@ -259,6 +265,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
+    throw new Error(`${ctx}: webSearch must be a boolean`);
+  }
   if (v.layout !== undefined && v.layout !== "page" && v.layout !== "embed") {
     throw new Error(`${ctx}: layout must be "page" or "embed"`);
   }
@@ -288,6 +297,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showByok: typeof v.showByok === "boolean" ? v.showByok : undefined,
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
+    webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
     layout: v.layout === "page" || v.layout === "embed" ? v.layout : undefined,
     llmAccess: LLM_ACCESS.includes(v.llmAccess as EmbedLlmAccess)
       ? (v.llmAccess as EmbedLlmAccess)

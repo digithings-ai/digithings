@@ -30,6 +30,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  filterThreadsByQuery,
+  groupThreadsByDate,
+} from "@/lib/conversation-sidebar";
+import {
   canFlushServerMessages,
   loadLocalThreads,
   mergeRemoteAndLocal,
@@ -56,31 +60,15 @@ async function fetchConversationBody(
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
-  { cmd: "/key", hint: "BYOK (CLI)" },
+  { cmd: "/byok", hint: "BYOK (CLI)" },
+  { cmd: "/websearch", hint: "toggle web search" },
+  { cmd: "/settings", hint: "CLI settings panel" },
   { cmd: "/model", hint: "<id>" },
   { cmd: "/clear", hint: "clear thread" },
   { cmd: "/scope", hint: "show JWT scopes" },
   { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/settings", hint: "alias for /key" },
+  { cmd: "/key", hint: "alias for /byok" },
 ];
-
-function groupByDate(threads: ChatThreadState[]): Array<{ label: string; items: ChatThreadState[] }> {
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
-  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000;
-  const buckets: Record<string, ChatThreadState[]> = { Today: [], Yesterday: [], "This week": [], Older: [] };
-  for (const t of threads) {
-    const ts = Date.parse(t.updatedAt);
-    if (Number.isNaN(ts) || ts >= todayStart) buckets.Today!.push(t);
-    else if (ts >= yesterdayStart) buckets.Yesterday!.push(t);
-    else if (ts >= weekStart) buckets["This week"]!.push(t);
-    else buckets.Older!.push(t);
-  }
-  return Object.entries(buckets)
-    .filter(([, v]) => v.length > 0)
-    .map(([label, items]) => ({ label, items }));
-}
 
 function formatTimestamp(iso: string): string {
   const d = new Date(iso);
@@ -103,6 +91,13 @@ export function ChatShell({
   const [ready, setReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [byokMode, setByokMode] = useState(false);
+  const [threadQuery, setThreadQuery] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  // Tracks whether the active rename gesture already resolved (Enter/Escape)
+  // so the input's onBlur — which also fires on unmount — doesn't commit
+  // after a cancel or double-commit after Enter.
+  const renameHandledRef = useRef(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -243,6 +238,7 @@ export function ChatShell({
       }
       setActiveId(id);
       setByokMode(false);
+      setRenamingId(null);
     },
     [threads],
   );
@@ -266,6 +262,7 @@ export function ChatShell({
     });
     setActiveId(id);
     setByokMode(false);
+    setRenamingId(null);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -300,6 +297,7 @@ export function ChatShell({
         });
         return next;
       });
+      setRenamingId(null);
     },
     [serverPersistence, userId],
   );
@@ -318,6 +316,22 @@ export function ChatShell({
       scheduleServerSave(id);
     },
     [userId, scheduleServerSave],
+  );
+
+  const cancelRename = useCallback(() => {
+    renameHandledRef.current = true;
+    setRenamingId(null);
+  }, []);
+  const commitRename = useCallback(
+    (id: string, currentTitle: string, draft: string) => {
+      renameHandledRef.current = true;
+      const next = draft.trim();
+      // Dirty check: equal/empty drafts close without a write (no reorder,
+      // no PUT for a no-op).
+      if (next && next !== currentTitle) renameThread(id, next);
+      setRenamingId(null);
+    },
+    [renameThread],
   );
 
   const clearActiveThread = useCallback(() => {
@@ -343,6 +357,10 @@ export function ChatShell({
     });
     scheduleServerSave(activeId);
   }, [activeId, userId, scheduleServerSave]);
+
+  const allowTruncateForThread = useCallback((threadId: string) => {
+    allowTruncateRef.current[threadId] = true;
+  }, []);
 
   const onMessagesCommit = useCallback(
     (threadId: string, messages: UIMessage[]) => {
@@ -404,7 +422,10 @@ export function ChatShell({
     return () => document.removeEventListener("keydown", onKey);
   }, [byokMode]);
 
-  const grouped = useMemo(() => groupByDate(threads), [threads]);
+  const grouped = useMemo(
+    () => groupThreadsByDate(filterThreadsByQuery(threads, threadQuery)),
+    [threads, threadQuery],
+  );
   const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
 
   if (!ready || !activeThread) {
@@ -431,61 +452,114 @@ export function ChatShell({
             + new chat
           </button>
 
-          {grouped.map((g) => (
-            <section key={g.label} className="app-sidebar-section">
-              <h3>{g.label}</h3>
-              <ul>
-                {g.items.map((t) => (
-                  <li key={t.id} style={{ padding: 0 }}>
-                    <div
-                      className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
-                      onClick={() => void openThread(t.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          void openThread(t.id);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      aria-pressed={t.id === activeId}
-                    >
-                      <span className="dc-sidebar-thread-title">{t.title}</span>
-                      <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          aria-label={`Actions for ${t.title}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => e.stopPropagation()}
-                          className="text-muted-foreground hover:text-foreground"
-                        >
-                          <MoreHorizontal className="size-3.5" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              const next = window.prompt("Rename chat", t.title);
-                              if (next != null) renameThread(t.id, next);
-                            }}
+          <label className="dc-sidebar-search">
+            <span className="sr-only">Search conversations</span>
+            <input
+              type="search"
+              value={threadQuery}
+              onChange={(e) => setThreadQuery(e.target.value)}
+              placeholder="Search chats…"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+
+          {grouped.length === 0 ? (
+            <p className="dc-sidebar-empty" role="status">
+              {threadQuery.trim() ? "No chats match that search." : "No chats yet."}
+            </p>
+          ) : (
+            grouped.map((g) => (
+              <section key={g.label} className="app-sidebar-section">
+                <h3>{g.label}</h3>
+                <ul>
+                  {g.items.map((t) => (
+                    <li key={t.id} style={{ padding: 0 }}>
+                      <div
+                        className={cn("dc-sidebar-thread", t.id === activeId && "is-active")}
+                        onClick={() => void openThread(t.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            void openThread(t.id);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={t.id === activeId}
+                      >
+                        <span className="dc-sidebar-thread-title">
+                          {renamingId === t.id ? (
+                            <input
+                              className="dc-sidebar-rename"
+                              value={renameDraft}
+                              ref={(el) => {
+                                // No autoFocus: it scroll-jumps the sidebar.
+                                // Focus without scrolling once mounted.
+                                if (el && renamingId === t.id) el.focus({ preventScroll: true });
+                              }}
+                              maxLength={120}
+                              aria-label="Rename chat"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => {
+                                e.stopPropagation();
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  commitRename(t.id, t.title, renameDraft);
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelRename();
+                                }
+                              }}
+                              onChange={(e) => setRenameDraft(e.target.value)}
+                              onBlur={() => {
+                                // Blur after Enter/Escape already resolved, or a
+                                // no-op draft: close without writing.
+                                if (renameHandledRef.current) return;
+                                commitRename(t.id, t.title, renameDraft);
+                              }}
+                            />
+                          ) : (
+                            t.title
+                          )}
+                        </span>
+                        <span className="dc-sidebar-thread-time">{formatTimestamp(t.updatedAt)}</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            aria-label={`Actions for ${t.title}`}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            className="text-muted-foreground hover:text-foreground"
                           >
-                            <Pencil className="size-3.5" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => void deleteThread(t.id)}
-                          >
-                            <Trash2 className="size-3.5" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
+                            <MoreHorizontal className="size-3.5" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                renameHandledRef.current = false;
+                                setRenamingId(t.id);
+                                setRenameDraft(t.title);
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => void deleteThread(t.id)}
+                            >
+                              <Trash2 className="size-3.5" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
 
           <section className="app-sidebar-section">
             <h3>Commands</h3>
@@ -576,6 +650,7 @@ export function ChatShell({
               initialMessages={activeThread.messages}
               onMessagesCommit={onMessagesCommit}
               onTitleDerived={onTitleDerived}
+              onAllowTruncate={allowTruncateForThread}
               byokMode={byokMode}
               onByokModeChange={setByokMode}
               onSlashCommand={(cmd) => {

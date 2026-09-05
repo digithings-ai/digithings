@@ -723,3 +723,75 @@ class TestRetrievalManifestPinning:
 
     def test_default_retrieval_manifest_mode_is_shadow(self) -> None:
         assert resolve_retrieval_manifest_mode() is RetrievalManifestMode.SHADOW
+
+
+@pytest.mark.unit
+class TestRetrievalTransientRetry:
+    """Disconnect / PGRST002 / 502 retry 3× before the Error contract (#3299)."""
+
+    def _flaky_documents(self, failures: int) -> FakeSupabaseClient:
+        import httpx
+
+        client = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    {
+                        "date": "2026-06-19",
+                        "document_key": "macro",
+                        "payload": {"headline": "Fri macro"},
+                    },
+                ]
+            }
+        )
+        state = {"attempts": 0}
+        orig_table = client.table
+
+        def _table(name: str):  # type: ignore[no-untyped-def]
+            query = orig_table(name)
+            inner = query.execute
+
+            def _execute():  # type: ignore[no-untyped-def]
+                state["attempts"] += 1
+                if state["attempts"] <= failures:
+                    raise httpx.ReadTimeout(
+                        "The read operation timed out",
+                        request=httpx.Request("GET", "https://x.supabase.co/rest/v1/t"),
+                    )
+                return inner()
+
+            query.execute = _execute  # type: ignore[method-assign]
+            return query
+
+        client.table = _table  # type: ignore[method-assign]
+        client.retry_attempts = state  # type: ignore[attr-defined]
+        return client
+
+    def test_query_research_retries_then_returns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import time
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky_documents(failures=2)
+        out = query_research(
+            client,
+            run_date=date(2026, 6, 20),
+            document_key="macro",
+            as_of_date=date(2026, 6, 19),
+        )
+        assert out["payload"] == {"headline": "Fri macro"}
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]
+
+    def test_query_research_gives_error_after_three_attempts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import time
+
+        monkeypatch.setattr(time, "sleep", lambda _s: None)
+        client = self._flaky_documents(failures=10)
+        out = query_research(
+            client,
+            run_date=date(2026, 6, 20),
+            document_key="macro",
+            as_of_date=date(2026, 6, 19),
+        )
+        assert "error" in out
+        assert client.retry_attempts["attempts"] == 3  # type: ignore[attr-defined]

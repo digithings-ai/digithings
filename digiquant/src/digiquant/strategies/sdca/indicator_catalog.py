@@ -16,7 +16,7 @@ macro row cannot null an unpublished path.
 Omitted on purpose (see ARCHITECTURE.md):
 - Mayer / 200w SMA — *r* ≈ 0.84 vs ``valuation_z`` (research PR #3232)
 - a second power-law residual ("alpha") — collinear with ``valuation_z``
-- on-chain MVRV/NUPL — #1086, no in-repo history
+- on-chain MVRV/SOPR — provider ready (#1086); not published votes yet
 - equity CAPE / Buffett / ERP — #3176 forbade equity RiskModel in v1
 - RS rotation pool — #1084; this module only uses ETH from the Coinbase cache
 """

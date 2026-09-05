@@ -35,6 +35,37 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 
 `/embed` is a **minimal, unauthenticated** chat surface iframed from marketing parents.
 
+### Popup widget (`/widget.js`) — #3421
+
+Bottom-right **dot** or **bar** launcher that opens a floating panel iframes `/embed?layout=embed` (same tenant registry / RAG corpus as full-page).
+
+```html
+<script
+  src="https://digithings.ai/widget.js"
+  data-host="digithings.ai"
+  data-mode="dot"
+  data-page-context="1"
+  async
+></script>
+```
+
+| Attribute | Purpose |
+|-----------|---------|
+| `data-host` | Embed tenant registry key (`?host=`) |
+| `data-mode` | `dot` (default) or `bar` |
+| `data-origin` | digichat origin when the script is not served from digichat |
+| `data-token` | Optional tenant embed token |
+| `data-theme` / `data-accent` | Optional UI pins |
+| `data-page-context` | `1` — after `digichat:ready`, post structurally sanitized visible-page HTML + text (+ best-effort screenshot) as `digichat:page-context` |
+
+Page context is a privacy boundary, not a scrape. The sender walks the live DOM
+(prefer `main` / `[role=main]`) and drops hidden/inert/`aria-hidden` nodes,
+password and autofill controls, scripts, and anything marked
+`data-digichat-private`. The embed receiver re-applies the same tag/attribute
+allowlist and size caps (`src/lib/page-context-sanitize.ts`). The snapshot is
+never rendered as live HTML; it is prepended to the next user turn once as
+prompt text. See ARCHITECTURE.md (page-context privacy contract).
+
 ### Production marketing path (#266 / CHR-68)
 
 Live digithings.ai chat is **`frontend/digithings-web`** (`app/chat/page.tsx` + `ChatEmbedShell`) → same-origin iframe:

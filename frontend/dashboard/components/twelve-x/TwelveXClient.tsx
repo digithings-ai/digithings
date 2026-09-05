@@ -25,6 +25,7 @@ import {
   getIntelligenceWhy,
   getLatestDigest,
   getMatrix,
+  getTradeIdeaArchive,
   getTradeIdeas,
   getTradeIdeaHistory,
   getTodayBriefs,
@@ -53,7 +54,7 @@ import ConsensusTab from './ConsensusTab';
 import EventsTab from './EventsTab';
 import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
-import TrackRecordTab from './TrackRecordTab';
+import TradesTab from './TradesTab';
 import BriefPanel from './BriefPanel';
 import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
@@ -65,7 +66,7 @@ type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
-  { id: 'track-record', Icon: ClipboardList, label: 'Track record' },
+  { id: 'trades', Icon: ClipboardList, label: 'Trades' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
   { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
@@ -112,13 +113,15 @@ export function TwelveXUnavailable({ configured }: { configured: boolean }) {
               : 'This environment is not connected to the FX research feed.'
           }
           action={
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-5 inline-flex items-center rounded-none border border-hair bg-ink px-4 py-2 text-sm font-medium text-bg transition-colors hover:bg-ink/90"
-            >
-              Retry
-            </button>
+            configured ? (
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+              >
+                Retry
+              </button>
+            ) : undefined
           }
         />
       </div>
@@ -140,6 +143,7 @@ interface TwelveXData {
   matrix: MatrixCell[];
   tradeIdeas: FxTradeIdeaRow[];
   tradeIdeaHistory: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
+  tradeIdeaArchive: FxTradeIdeaRow[];
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
@@ -150,7 +154,8 @@ interface TwelveXData {
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
-  if (urlTab === 'track-record') return 'track-record';
+  if (urlTab === 'trades') return 'trades';
+  if (urlTab === 'track-record') return 'trades'; // Legacy redirect
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
@@ -158,7 +163,7 @@ export function resolveTab(urlTab: string | null): TwelveXTab {
   return 'today';
 }
 
-/** Read a query param from the live URL (client only) — used once to seed state. */
+/** Read a query param from the live URL — client only, and only after mount. */
 function readParam(key: string): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get(key);
@@ -197,15 +202,31 @@ export default function TwelveXClient() {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(configured ? null : 'unconfigured');
 
-  // In-page navigation state — local, seeded once from the URL for deep links.
-  const [tab, setTabState] = useState<TwelveXTab>(() => resolveTab(readParam('tab')));
-  const [brief, setBrief] = useState<BriefTarget | null>(() => {
-    const sf = readParam('brief');
-    return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
-  });
-  const [view, setView] = useState<'briefs' | null>(() =>
-    readParam('view') === 'briefs' ? 'briefs' : null,
-  );
+  // In-page navigation state — local, adopted from the URL for deep links.
+  //
+  // It cannot be seeded in the initializers. This suite is a static export, so
+  // the prerendered HTML always carries the default tab, and React does not
+  // repair a mismatched *attribute* while hydrating — only the children. A
+  // `?tab=trades` link therefore rendered the Trades panel under a strip that
+  // still highlighted Today, and the next click lit a second tab, because the
+  // stale className was never written. Starting where the prerender started and
+  // adopting the URL on the first post-hydration commit makes it an ordinary
+  // update, which React does write out.
+  const [tab, setTabState] = useState<TwelveXTab>('today');
+  const [brief, setBrief] = useState<BriefTarget | null>(null);
+  const [view, setView] = useState<'briefs' | null>(null);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- the cascade is the
+     * point: this is the one render that has a URL to read, and it must land
+     * after hydration so React writes the highlight out. Runs once, on mount. */
+    const urlTab = resolveTab(readParam('tab'));
+    if (urlTab !== 'today') setTabState(urlTab);
+    const sourceFile = readParam('brief');
+    if (sourceFile) setBrief({ sourceFile, runDate: readParam('briefDate') });
+    if (readParam('view') === 'briefs') setView('briefs');
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   // Cross-link focus targets handed to the destination tabs.
   const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);
@@ -262,6 +283,7 @@ export default function TwelveXClient() {
           researchBriefs,
           ideaEval,
           consensusEval,
+          tradeIdeaArchive,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
@@ -271,6 +293,7 @@ export default function TwelveXClient() {
           getBriefs(30),
           getIdeaEval(),
           getConsensusEval(),
+          getTradeIdeaArchive(),
         ]);
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const intelRunDate = intelligence[0]?.run_date ?? undefined;
@@ -307,6 +330,7 @@ export default function TwelveXClient() {
           divergenceByCurrency,
           ideaEval,
           consensusEval,
+          tradeIdeaArchive,
         });
       } catch (err) {
         if (cancelled) return;
@@ -401,9 +425,10 @@ export default function TwelveXClient() {
             researchBriefs={data?.researchBriefs ?? []}
           />
         );
-      case 'track-record':
+      case 'trades':
         return (
-          <TrackRecordTab
+          <TradesTab
+            ideas={data?.tradeIdeaArchive ?? []}
             ideaEval={data?.ideaEval ?? []}
             consensusEval={data?.consensusEval ?? []}
           />

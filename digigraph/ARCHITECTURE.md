@@ -27,7 +27,7 @@ The following is built and functional as of this architecture review (March 2026
 
 | Area | State | Key Files |
 |------|-------|-----------|
-| FastAPI HTTP app | Built | `server.py` |
+| FastAPI HTTP app | Built | `server.py` + `http_api/` |
 | LangGraph `StateGraph[WorkflowState]` | Built | `graph/graph.py`, `graph/state.py` |
 | Research subgraph (LLM + tool loop) | Built | `graph/research.py`, `graph/research_subgraph.py` |
 | Two-tier context compaction | Built | `compaction.py` (wired from `graph/research.py`, `graph/research_agent.py`) |
@@ -36,7 +36,7 @@ The following is built and functional as of this architecture review (March 2026
 | Optimize node | Built | `graph/nodes.py` |
 | Supervisor node (opt-in via `DIGI_SUPERVISOR=1`) | Built | `graph/nodes.py` |
 | Orchestrator tool registry | Built | `orchestration/registry.py` |
-| Built-in tools + skills | Built | `orchestration/builtin.py` |
+| Built-in tools + skills | Built | `orchestration/builtin.py` + `*_tools.py` |
 | Vertical hub clients (digisearch, digiquant, digivault) | Built | `vertical_orchestrator/digisearch_hub.py`, `vertical_orchestrator/digiquant_hub.py`, `vertical_orchestrator/digivault_hub.py` |
 | SSE streaming via background thread + queue | Built | `server.py`, `workflow.py` |
 | LLM client (OpenAI SDK, LiteLLM compat) | Built | `digillm` (toolkit) + `llm_client.py` wrappers |
@@ -340,7 +340,11 @@ digigraph/src/digigraph/
 ├── chat_prompt.py               Flatten OpenAI chat messages → workflow prompt (multi-turn)
 ├── languages.py                 Curated X-Digi-Language directive (do not translate retrieval queries)
 ├── retrieval.py                 Force-tool aliases, vault-path extraction, auto digivault_get_note hop (batch ≤20)
-├── server.py                    FastAPI app, middleware stack, all HTTP routes
+├── server.py                    FastAPI app, middleware stack, HTTP route wiring
+├── http_api/                    Request helpers extracted from server.py
+│   ├── context.py               digikey field injection, thread config
+│   ├── chat_resolve.py          Chat option resolvers (headers/body)
+│   └── streaming.py             SSE chunk helpers + progressive workflow stream
 ├── workflow.py                  run_digigraph_workflow (sync + streaming variants)
 ├── models.py                    Pydantic I/O models (WorkflowRequest, WorkflowResult, ChatCompletion*)
 ├── models/                      Extended model subpackage (if present)
@@ -366,12 +370,22 @@ digigraph/src/digigraph/
 │   ├── nodes.py                 supervisor_node, strategy_validator_node, backtest_node, optimize_node
 │   ├── research.py              research_node, _run_document_rag_path, _run_quant_or_augmented_path
 │   ├── research_subgraph.py     build_research_subgraph() — research_inner + research_brief_builder
-│   └── research_brief.py        research_brief_builder_node
+│   ├── research_brief.py        research_brief_builder_node
+│   ├── product_graphs.py        digigraph product graphs (#3415) — research-portfolio-chain dry path
+│   └── pipeline_builder.py      phase-structured StateGraph compiler (digiquant research/portfolio consumer)
 ├── orchestration/
 │   ├── registry.py              ToolContext, register_tool, register_skill, get_tools, execute
-│   ├── builtin.py               All built-in tool + skill registrations; loads entry points
+│   ├── builtin.py               Tool/skill registration facade; re-exports for tests
+│   ├── tool_common.py           Shared digisearch preview/filter helpers
+│   ├── digisearch_tools.py      digisearch + research_delegate handlers
+│   ├── digivault_tools.py       digivault_search_notes / get_note handlers
+│   ├── agent_tools.py           visualization / analysis / data_* handlers
+│   ├── digistore_tools.py       digistore_list / digistore_profile
+│   ├── planning_tools.py        todo / create_plan
+│   ├── federated_tools.py       digiquant_pipeline_delegate
+│   ├── web_search_tools.py      web_search (External evidence)
 │   └── plugins.py               setuptools entry point loader (digigraph.tools)
-├── vertical_orchestrator/
+├── vertical_orchestrator/       Canonical hub path for vertical tool invoke
 │   ├── digisearch_hub.py        fetch_digisearch_tool_dicts, invoke_digisearch_tool
 │   ├── digiquant_hub.py         fetch_digiquant_tool_dicts, invoke_digiquant_tool
 │   └── digivault_hub.py         fetch_digivault_tool_dicts, invoke_digivault_tool
@@ -382,15 +396,24 @@ digigraph/src/digigraph/
 │   ├── data_prep/               run_data_prep_agent
 │   └── visualization/           run_visualization_agent, VISUALIZATION_AGENT_TOOL
 ├── tools/
-│   └── digisearch.py            Thin POST /query client (non-orchestrator call sites)
+│   └── digisearch.py            Thin POST /query client (research node only; not the tool path)
 ├── planning/
 │   └── executor.py              Plan executor: topo-sort, placeholder resolution, parallel steps
 ├── skills/
 │   └── __init__.py              get_tools_for_skills (delegates to registry)
 ├── formatters/
 │   └── __init__.py              get_stream_formatter, neutral and Open WebUI formatters
-└── connectors/                  (reserved for Phase 2 connector extensions)
 ```
+
+### 5.1.1 DigiSearch integration (single path)
+
+Built-in digisearch **tools** always go through `vertical_orchestrator/digisearch_hub.py`
+(`POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke`). Handlers live in
+`orchestration/digisearch_tools.py` and are registered from `orchestration/builtin.py`.
+
+The only remaining direct digisearch HTTP client is `tools/digisearch.py` (`POST /query`),
+used by the research-node utilities that do not go through the orchestrator tool loop.
+The obsolete `connectors/` package (`/v1/research_turn` / `/v1/workflow` shims) was removed.
 
 ### 5.2 LangGraph StateGraph
 
@@ -430,7 +453,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set. The `web` skill (`web_search` via digillm) activates only when `WorkflowState.enable_web_search` is true — digichat sends `X-Digi-Enable-Web-Search` after tenant + user opt-in (#3420); default off so web never mixes into corpus RAG silently. External cites use `evidence_tier: External` and supplement vault/search hits.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -751,7 +774,7 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 ### 8.3 digistore for LLM Context Reduction
 
-Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
+Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `orchestration/tool_common.py`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
 `digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
 
@@ -818,7 +841,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - **Legacy:** `tools/digisearch.py` uses `POST /query` for non-orchestrator call sites (e.g. `_run_quant_or_augmented_path` in `research.py`).
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header.
 - **Request correlation:** `X-Request-ID` forwarded from `ToolContext.request_id`.
-- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `builtin.py:34`.
+- **Filters:** `research_filters` and `evidence_tier_preference` from state are merged into every digisearch call by `_merged_digisearch_filters` in `orchestration/tool_common.py`.
 - **Env:** `DIGISEARCH_URL` (required; empty = digisearch tools disabled). In Docker: `http://digisearch:8002`.
 
 ### 9.2 digiquant
@@ -868,8 +891,36 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. research/portfolio phases route on **pinned** per-capability models from `config/digiquant_models.yaml` (`openrouter/openrouter/auto` — OpenRouter Auto Router — is reserved for the OpenRouter diagnostic scripts (`digiquant/scripts/research/openrouter_diagnose.py` and the preflight's structured-output probe), not phase routing and not grounding — `get_grounding_model()` resolves a web-search-capable model from the active tier's pools; see `digiquant/src/digiquant/research/docs/RUNBOOK.md` "OpenRouter model tiers"); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
-- Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
+- **Model routing:** callers must pass a concrete model string. digiquant
+  phase pins in `config/digiquant_models.yaml` are **unprefixed** OpenRouter
+  slugs listed as `model_name` entries in `config/litellm.yaml` so traffic is
+  always caller → digillm → LiteLLM → vendor. House keys and BYOK keys both
+  stay on that path when `OPENAI_API_BASE` is a **declared** LiteLLM proxy
+  (documented `:4000` URLs, or `DIGILLM_TRUSTED_LITELLM_BASES`): BYOK is
+  passed through LiteLLM as request `api_key` / `api_base` (clientside
+  credentials) plus `cache: {no-cache, no-store}`, not as a direct vendor
+  HTTP client. `api_base` is regex-pinned per model group to the catalog
+  host in `config/byok-providers.json`; arbitrary upstreams are rejected even
+  if port 4000 is later exposed. Advertised BYOK presets are themselves
+  `model_name` groups (native provider adapter for Anthropic / Gemini / xAI /
+  OpenAI; OpenRouter adapter for the OpenRouter picker slugs). Registered
+  prefixes (`openrouter/`, `gemini/`, `anthropic/`, `xai/`) are leftover
+  caller spellings and no-proxy diagnostics — they do not skip a declared
+  LiteLLM proxy. A non-empty `OPENAI_API_BASE` that is merely not
+  `openrouter.ai` (direct OpenAI, Ollama `:11434`) is **not** LiteLLM; BYOK
+  then uses the user Bearer against the catalog vendor URL so a foreign
+  provider secret is never placed in `extra_body` toward the wrong host. The
+  leftover CLI rewrite (`apply_digiquant_openrouter_env` in
+  `digigraph/src/digigraph/model_config.py`) points the default base at
+  `openrouter.ai`; that is not LiteLLM, so prefixed BYOK uses the user Bearer
+  against the vendor URL and leftover `gemini/` / `xai/` stay vendor clients.
+  `openrouter/auto`
+  remains the diagnostic auto-router id (preflight structured-output probe),
+  not a phase pin. Grounding uses unprefixed `:online` / `perplexity/*` slugs
+  via `get_grounding_model()`. Optional OmniRoute is a separate overlay
+  (`config/litellm.omniroute.yaml`, compose profile `omniroute`) — off by
+  default; do not cut house pins over to it. See `docs/providers/omniroute.md`.
+- Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`). BYOK must not share that cache across principals — digillm sends `no-cache` / `no-store` on every BYOK proxy request.
 
 ### 9.7 digivault
 
@@ -916,7 +967,8 @@ digigraph:
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience claim |
 | `DIGIKEY_PUBLIC_KEY_PEM` | (empty) | Static PEM alternative to JWKS |
-| `OPENAI_API_BASE` | `http://litellm:4000/v1` | LLM proxy base URL |
+| `OPENAI_API_BASE` | `http://litellm:4000/v1` | LLM proxy base URL. BYOK clientside pass-through only when this value is a declared LiteLLM proxy (`DIGILLM_TRUSTED_LITELLM_BASES` or the documented `:4000` defaults). |
+| `DIGILLM_TRUSTED_LITELLM_BASES` | (unset → documented `:4000` URLs) | Replaces the default LiteLLM proxy allowlist when set (comma-separated). |
 | `OPENAI_API_KEY` | (from `.env`) | API key for LLM proxy (fallback to `LITELLM_PROXY_API_KEY`) |
 | `LITELLM_PROXY_API_KEY` | (from `.env`) | LiteLLM bearer; overrides `OPENAI_API_KEY` for proxy calls |
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
@@ -1108,3 +1160,22 @@ research migration (issue #176, ADR-0009) is the first consumer.
 These primitives stay research-agnostic on purpose. Any sub-graph that wants
 phase-structured parallel research can reuse them by declaring its own
 phase list.
+
+## digigraph product graphs (#3415)
+
+Scheduled digiquant **research → portfolio** work is moving from the digiquant
+CLI sidecar (`python -m digiquant.portfolio.chain`) onto digigraph-owned product
+graphs so the product path is digigraph → digillm (LLM nodes use
+`digigraph.llm_client`). Domain graphs still compile inside digiquant; digigraph
+never imports digiquant Python packages.
+
+| Surface | Role |
+|---------|------|
+| `GET /v1/product_graphs` | List registered product graphs |
+| `POST /v1/product_graphs/{name}/runs` | Run one graph (dry compile by default) |
+| `graph/product_graphs.py` | `research-portfolio-chain` LangGraph + registry |
+| digiquant tool `digiquant_compile_research_portfolio` | Compile-only topology via `/v1/orchestrator_invoke` |
+
+First slice: dry run only. Full apply remains on `digiquant.portfolio.chain`
+until cutover. Prompt / structured-output walk for the same pass: #3424
+(`digiquant.dashboard.prompt_walk_inventory`).

@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.5.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.4.0...digichat-v1.5.0) (2026-09-05)
+
+
+### Features
+
+* **dashboard:** ask digichat chrome, expand, HTML page context ([#3581](https://github.com/digithings-ai/digithings/issues/3581)) ([2d6af38](https://github.com/digithings-ai/digithings/commit/2d6af38974f29f189602840717d55d2a51c45da5))
+* **dashboard:** ask digichat chrome, expand, HTML page context ([#3581](https://github.com/digithings-ai/digithings/issues/3581)) ([bad5a8f](https://github.com/digithings-ai/digithings/commit/bad5a8f03c8038dc086d9de1ae4b2365790b92d3))
+* **digichat:** add conversation sidebar search filter ([#205](https://github.com/digithings-ai/digithings/issues/205)) ([2012c45](https://github.com/digithings-ai/digithings/commit/2012c4598f5dc32e9c170b42609931880c92a85d))
+* **digichat:** conversation sidebar search ([#205](https://github.com/digithings-ai/digithings/issues/205)) ([6ccd72a](https://github.com/digithings-ai/digithings/commit/6ccd72a2d8a871d403d79918095e139f9ffa0577))
+* **digichat:** copy turns as markdown with embed-safe fallback ([#3465](https://github.com/digithings-ai/digithings/issues/3465)) ([0b20d4f](https://github.com/digithings-ai/digithings/commit/0b20d4f86aa3a670d66e9f6d098193e14f4ef5b7))
+* **digichat:** copy turns as markdown with embed-safe fallback ([#3465](https://github.com/digithings-ai/digithings/issues/3465)) ([91a5b40](https://github.com/digithings-ai/digithings/commit/91a5b40dcb8f2bcfe88f826981ae3fbca9a9ef41))
+* **digichat:** last-turn regen + edit on digigraph ([#3466](https://github.com/digithings-ai/digithings/issues/3466)) ([5c83a67](https://github.com/digithings-ai/digithings/commit/5c83a677067cfe363b3307d96352e72d706059c8))
+* **digichat:** last-turn regen + edit on digigraph ([#3466](https://github.com/digithings-ai/digithings/issues/3466)) ([716039e](https://github.com/digithings-ai/digithings/commit/716039e59ba8541e1ebbd60ea43ea7643cb296ea))
+* **digichat:** opt-in web search via digigraph+digillm ([#3420](https://github.com/digithings-ai/digithings/issues/3420)) ([e4fc1b9](https://github.com/digithings-ai/digithings/commit/e4fc1b910f2623b32483a5739e038a692b8dc9d6))
+* **digichat:** opt-in web search via digigraph+digillm ([#3420](https://github.com/digithings-ai/digithings/issues/3420)) ([299f794](https://github.com/digithings-ai/digithings/commit/299f794fae3c56a78a0582b54abb09e4e3a94efc))
+* **digichat:** popup widget embed (dot/bar) + page context ([#3421](https://github.com/digithings-ai/digithings/issues/3421)) ([78d5248](https://github.com/digithings-ai/digithings/commit/78d5248f2e8cda78411c64c054a72c27bccf1721))
+* **digichat:** popup widget launcher with optional page context ([#3421](https://github.com/digithings-ai/digithings/issues/3421)) ([739abe2](https://github.com/digithings-ai/digithings/commit/739abe253b21b427f04d422cea1746aa1d92052b))
+* **digichat:** slash palette for websearch, settings, BYOK ([4715a7c](https://github.com/digithings-ai/digithings/commit/4715a7cbe178ee36c72c6aed72f34a2d349c4e64))
+* **digichat:** slash palette for websearch, settings, BYOK ([#3556](https://github.com/digithings-ai/digithings/issues/3556)) ([5be95d2](https://github.com/digithings-ai/digithings/commit/5be95d28f414370c49cb95977b7d57129218bdfa))
+* **digichat:** thursday demo pack — embed harness, slash, originals ([#3435](https://github.com/digithings-ai/digithings/issues/3435)) ([1be8104](https://github.com/digithings-ai/digithings/commit/1be810476372b941e7e31e276f3c061c8a72380e))
+* **digichat:** turn mutation API for digigraph and Foundry ([#3475](https://github.com/digithings-ai/digithings/issues/3475)) ([f2f2ea5](https://github.com/digithings-ai/digithings/commit/f2f2ea52d9e363c95dcaff590cffe7fd05eb467e))
+* **digichat:** turn mutation API for digigraph and Foundry ([#3475](https://github.com/digithings-ai/digithings/issues/3475)) ([c3a391b](https://github.com/digithings-ai/digithings/commit/c3a391be82c5ff3a34ba5cc3e5a0a90aba31ef6a))
+* **digiweb:** frontend polish phase 1 + wave-1/2 component promotions ([a8306c5](https://github.com/digithings-ai/digithings/commit/a8306c50b162971e6b88ba593433e27a8112a724))
+* **digiweb:** wave-4 consume shared primitives in product apps ([d3c8a34](https://github.com/digithings-ai/digithings/commit/d3c8a34dd3d9e353957ff64dabd837a5f1af5021))
+* **frontends:** design polish phases 1-3 — staleness sweep, 11 shared primitives, per-site consistency ([0da3f41](https://github.com/digithings-ai/digithings/commit/0da3f4142277ac3713728868c3a658ae31e7e155))
+* **frontends:** wave-5 dead-code deletion across three apps ([02b8205](https://github.com/digithings-ai/digithings/commit/02b820547cacfaaa334559c7a61aeb123ae8832a))
+* **frontends:** wave-7 keyboard, shared transcript, hydration fix ([2568f20](https://github.com/digithings-ai/digithings/commit/2568f200567cde0c31ea9dcf4fedbd27d3a22a88))
+
+
+### Bug Fixes
+
+* **dashboard:** light the linked tab on deep links; drop embed page-context banner ([#3591](https://github.com/digithings-ai/digithings/issues/3591)) ([75fc586](https://github.com/digithings-ai/digithings/commit/75fc58686ef8b224e14225d7aa15d38d9382c13e))
+* **dashboard:** scrub hidden/password values from page HTML context ([149c25d](https://github.com/digithings-ai/digithings/commit/149c25d054ac03f70df1ea3e0273d9e595f29f6d))
+* **digichat:** align Foundry items.delete with OpenAI SDK arity ([#3475](https://github.com/digithings-ai/digithings/issues/3475)) ([38105fe](https://github.com/digithings-ai/digithings/commit/38105fe99c300fb4924742d367ae2df219dfcdb3))
+* **digichat:** align popup page-context caps and send paths ([#3421](https://github.com/digithings-ai/digithings/issues/3421)) ([a7cf098](https://github.com/digithings-ai/digithings/commit/a7cf09824a7e008f692e4eee4b84a0ad9b2cc5d0))
+* **digichat:** clear lint setState-in-effect on palette index ([6c0fc69](https://github.com/digithings-ai/digithings/commit/6c0fc69267bf030ac600729dab61e50cac12552b))
+* **digichat:** define page-context helper before BYOK effects ([#3421](https://github.com/digithings-ai/digithings/issues/3421)) ([7bee1a4](https://github.com/digithings-ai/digithings/commit/7bee1a4bfd54c2e96d5c8edbb6b890c900442933))
+* **digichat:** drop a hidden page-context root before serialize ([426cf73](https://github.com/digithings-ai/digithings/commit/426cf7391904bf219bea28faa5e610449d65d7aa))
+* **digichat:** fail-closed digigraph-only turn mutation chrome ([138b5c7](https://github.com/digithings-ai/digithings/commit/138b5c7c827226ca05e87f47ad041fd232d21a20))
+* **digichat:** narrow Foundry turnMode for TypeScript ([#3475](https://github.com/digithings-ai/digithings/issues/3475)) ([edd9b36](https://github.com/digithings-ai/digithings/commit/edd9b362eddd5bc4bc8ee95230f941c7cf3dfa9f))
+* **digichat:** palette Enter submit + preserve lang dive-in highlight ([ad8b441](https://github.com/digithings-ai/digithings/commit/ad8b441649b0d074ebf328f87274886feb60b72b))
+* **digichat:** replace QR favicon with D-in-block brand mark ([3d7012d](https://github.com/digithings-ai/digithings/commit/3d7012d684cd97f3f9c6cce12fca3f8d2028afb8)), closes [#3566](https://github.com/digithings-ai/digithings/issues/3566)
+* **digichat:** sanitize embed page-context with a DOM allowlist ([aa1c9c1](https://github.com/digithings-ai/digithings/commit/aa1c9c19d8870e8ec302df6ad0d025d2d090074b))
+* **digichat:** sanitize embed page-context with a DOM allowlist ([#3602](https://github.com/digithings-ai/digithings/issues/3602)) ([7aa5396](https://github.com/digithings-ai/digithings/commit/7aa53962be69856f32752dd775e2eb8be677453a))
+* **digichat:** sync OpenAPI and tenant-config fixtures for webSearch ([#3420](https://github.com/digithings-ai/digithings/issues/3420)) ([9fbb706](https://github.com/digithings-ai/digithings/commit/9fbb70698cc410ad2497b2802abea58b5f1807df))
+* **digichat:** update embed-ui-flags expectations for webSearch ([#3420](https://github.com/digithings-ai/digithings/issues/3420)) ([3a77eb4](https://github.com/digithings-ai/digithings/commit/3a77eb4de2928133833a469c416e7097cc9209e4))
+* **digichat:** web_search opt-in must not escalate allowlist ([#3420](https://github.com/digithings-ai/digithings/issues/3420)) ([49c7572](https://github.com/digithings-ai/digithings/commit/49c7572f88d7b00b7639852fecda91c5ebab020a))
+* **review:** address in-session review findings ([3017ef0](https://github.com/digithings-ai/digithings/commit/3017ef005d83e8018a519f0021524027da25177d))
+* **root:** hatch a commit that has no source pull request ([#3441](https://github.com/digithings-ai/digithings/issues/3441)) ([1ab152a](https://github.com/digithings-ai/digithings/commit/1ab152afd3ce04ec85e36e748a7dfe3966083170))
+
+
+### Performance Improvements
+
+* **root:** faster review-coverage check + retire greek package paths ([304cb6c](https://github.com/digithings-ai/digithings/commit/304cb6ccc37ca33d81ca78c3328cbba69d0ea0f6))
+
 ## [1.4.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.2...digichat-v1.4.0) (2026-09-02)
 
 

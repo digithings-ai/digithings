@@ -142,7 +142,7 @@ describe("assistant turn — settled", () => {
     expect(html).toContain("copy");
   });
 
-  it("hides copy on embed — clipboard is blocked in the cross-origin iframe", () => {
+  it("keeps copy + thread md on embed — clipboard falls back to download (#3465)", () => {
     const html = sessionWith(
       [
         { role: "user", content: "hi" },
@@ -151,7 +151,62 @@ describe("assistant turn — settled", () => {
       false,
       "embed",
     );
-    expect(html).not.toContain("dc-msg-copy");
+    expect(html).toContain("dc-msg-copy");
+    expect(html).toContain("Copy answer as markdown");
+    expect(html).toContain("Download thread as markdown");
+  });
+
+  it("exposes print / mailto / txt / html next to the md export (#3510)", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      false,
+      "embed",
+    );
+    expect(html).toContain("Email answer");
+    expect(html).toContain("Download thread as text");
+    expect(html).toContain("Download thread as html");
+    expect(html).toContain("Print transcript");
+    for (const label of [">mail</button>", ">txt</button>", ">html</button>", ">print</button>"]) {
+      expect(html).toContain(label);
+    }
+  });
+
+  it("hides regen and edit when the controller omits them (Foundry)", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      false,
+      "embed",
+    );
+    expect(html).not.toContain("Regenerate answer");
+    expect(html).not.toContain("Edit last message");
+  });
+
+  it("shows regen + edit on digigraph when the controller opts in (#3466)", () => {
+    const chat: DigiChatSessionProps["chat"] = {
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      busy: false,
+      error: null,
+      send: async () => {},
+      stop: () => {},
+      regenerate: () => {},
+      editLastUser: () => {},
+    };
+    const html = renderToStaticMarkup(
+      <DigiChatSession chat={chat} showIntro={false} layout="embed" />,
+    );
+    expect(html).toContain("Regenerate answer");
+    expect(html).toContain("Edit last message");
+    expect(html).toContain(">regen</button>");
+    expect(html).toContain(">edit</button>");
   });
 
   it("shows no caret when the turn is settled", () => {

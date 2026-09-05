@@ -72,7 +72,7 @@ export default async function OpenApiServicePage({
               <p className="m-0 font-mono text-[0.68rem] uppercase tracking-[0.14em] text-accent">
                 {"// openapi"}
               </p>
-              <h1 className="mb-[0.55rem] mt-[0.45rem] font-display text-[clamp(1.7rem,3.5vw,2.4rem)] font-normal tracking-[-0.02em] text-ink">
+              <h1 className="mb-[0.7rem] mt-[0.5rem] font-display text-[clamp(1.9rem,4vw,2.7rem)] font-normal tracking-[-0.02em] text-ink">
                 <ServiceWordmark id={entry.id} />
               </h1>
               <p className="m-0 max-w-[62ch] leading-[1.55] text-ink-soft">{entry.role}</p>

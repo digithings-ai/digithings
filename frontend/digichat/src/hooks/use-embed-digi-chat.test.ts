@@ -511,6 +511,134 @@ describe("useEmbedDigiChat reset (/new)", () => {
   });
 });
 
+describe("useEmbedDigiChat turn mutation (#3466)", () => {
+  const host = "https://digithings.ai";
+
+  beforeEach(() => {
+    takePendingForceTool(host);
+    vi.clearAllMocks();
+  });
+
+  it("exposes regenerate + editLastUser for digigraph (default)", () => {
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    expect(chat?.regenerate).toBeTypeOf("function");
+    expect(chat?.editLastUser).toBeTypeOf("function");
+    expect(chat?.onRetry).toBeTypeOf("function");
+    unmount();
+  });
+
+  it("omits regenerate + editLastUser + onRetry when allowClientTurnMutation is false", () => {
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(
+        baseEmbedOptions({ embedHost: host, allowClientTurnMutation: false }),
+      );
+    });
+    expect(chat?.regenerate).toBeUndefined();
+    expect(chat?.editLastUser).toBeUndefined();
+    expect(chat?.onRetry).toBeUndefined();
+    unmount();
+  });
+
+  it("exposes regenerate + editLastUser when Foundry opts into turn mutation", () => {
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(
+        baseEmbedOptions({ embedHost: host, allowClientTurnMutation: true }),
+      );
+    });
+    expect(chat?.regenerate).toBeTypeOf("function");
+    expect(chat?.editLastUser).toBeTypeOf("function");
+    unmount();
+  });
+
+  it("clears pending force-tool before regenerate (slash is send-only)", async () => {
+    const { useChat } = await import("@ai-sdk/react");
+    const regenerate = vi.fn();
+    vi.mocked(useChat).mockReturnValueOnce({
+      messages: [],
+      sendMessage: vi.fn(),
+      status: "ready",
+      error: undefined,
+      regenerate,
+      setMessages: vi.fn(),
+      stop: vi.fn(),
+    } as ReturnType<typeof useChat>);
+
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    setPendingForceTool(host, "digisearch");
+    chat?.regenerate?.();
+    expect(takePendingForceTool(host)).toBeUndefined();
+    expect(regenerate).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it("editLastUser truncates past the last user turn and sends without force-tool", async () => {
+    const { useChat } = await import("@ai-sdk/react");
+    const sendMessage = vi.fn();
+    const setMessages = vi.fn();
+    const prior: UIMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "old question" }] },
+      { id: "a1", role: "assistant", parts: [{ type: "text", text: "old answer" }] },
+    ];
+    vi.mocked(useChat).mockReturnValueOnce({
+      messages: prior,
+      sendMessage,
+      status: "ready",
+      error: undefined,
+      regenerate: vi.fn(),
+      setMessages,
+      stop: vi.fn(),
+    } as ReturnType<typeof useChat>);
+
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    setPendingForceTool(host, "digisearch");
+    chat?.editLastUser?.("fixed question");
+    expect(setMessages).toHaveBeenCalledWith([]);
+    expect(sendMessage).toHaveBeenCalledWith({
+      role: "user",
+      parts: [{ type: "text", text: "fixed question" }],
+    });
+    expect(takePendingForceTool(host)).toBeUndefined();
+    unmount();
+  });
+
+  it("editLastUser no-ops on empty text", async () => {
+    const { useChat } = await import("@ai-sdk/react");
+    const sendMessage = vi.fn();
+    const setMessages = vi.fn();
+    vi.mocked(useChat).mockReturnValueOnce({
+      messages: [
+        { id: "u1", role: "user", parts: [{ type: "text", text: "q" }] },
+      ],
+      sendMessage,
+      status: "ready",
+      error: undefined,
+      regenerate: vi.fn(),
+      setMessages,
+      stop: vi.fn(),
+    } as ReturnType<typeof useChat>);
+
+    let chat: ReturnType<typeof useEmbedDigiChat> | undefined;
+    const { unmount } = renderHookLocally(() => {
+      chat = useEmbedDigiChat(baseEmbedOptions({ embedHost: host }));
+    });
+    chat?.editLastUser?.("   ");
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+    unmount();
+  });
+});
+
 describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)", () => {
   // The embed widget used to gate this header on byokRequiresModel(provider),
   // so a visitor who pasted an OpenAI key and picked a model had the model

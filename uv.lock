@@ -1306,13 +1306,6 @@ all = [
     { name = "requests" },
     { name = "statsmodels" },
 ]
-atlas = [
-    { name = "httpx" },
-    { name = "jsonschema" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "supabase" },
-]
 brokers-alpaca = [
     { name = "alpaca-py" },
 ]
@@ -1365,7 +1358,15 @@ prices = [
     { name = "supabase" },
     { name = "yfinance" },
 ]
+research = [
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "supabase" },
+]
 visualization = [
+    { name = "matplotlib" },
     { name = "plotly" },
 ]
 
@@ -1385,18 +1386,19 @@ requires-dist = [
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
     { name = "digikey", editable = "digikey" },
-    { name = "digiquant", extras = ["atlas"], marker = "extra == 'dev'", editable = "digiquant" },
     { name = "digiquant", extras = ["indicators"], marker = "extra == 'dev'", editable = "digiquant" },
     { name = "digiquant", extras = ["m2"], marker = "extra == 'dev'", editable = "digiquant" },
     { name = "digiquant", extras = ["nautilus"], marker = "extra == 'all'", editable = "digiquant" },
+    { name = "digiquant", extras = ["research"], marker = "extra == 'dev'", editable = "digiquant" },
     { name = "exchange-calendars", marker = "extra == 'prices'", specifier = ">=4.5" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fredapi", marker = "extra == 'm2'", specifier = ">=0.5" },
-    { name = "httpx", marker = "extra == 'atlas'", specifier = ">=0.27" },
     { name = "httpx", marker = "extra == 'brokers-ibkr'", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'research'", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "jsonschema", marker = "extra == 'atlas'", specifier = ">=4.21" },
+    { name = "jsonschema", marker = "extra == 'research'", specifier = ">=4.21" },
     { name = "langgraph", specifier = ">=0.2" },
+    { name = "matplotlib", marker = "extra == 'visualization'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = ">=1.190,<2" },
     { name = "numpy", marker = "extra == 'indicators'", specifier = ">=1.26" },
@@ -1406,22 +1408,22 @@ requires-dist = [
     { name = "polars", specifier = ">=1.0" },
     { name = "pyarrow", marker = "extra == 'prices'", specifier = ">=15" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "python-dotenv", marker = "extra == 'atlas'", specifier = ">=1" },
     { name = "python-dotenv", marker = "extra == 'prices'", specifier = ">=1" },
-    { name = "pyyaml", marker = "extra == 'atlas'", specifier = ">=6" },
+    { name = "python-dotenv", marker = "extra == 'research'", specifier = ">=1" },
     { name = "pyyaml", marker = "extra == 'prices'", specifier = ">=6" },
+    { name = "pyyaml", marker = "extra == 'research'", specifier = ">=6" },
     { name = "requests", marker = "extra == 'nautilus'", specifier = ">=2.28" },
     { name = "requests", marker = "extra == 'prices'", specifier = ">=2.28" },
     { name = "statsmodels", marker = "extra == 'indicators'", specifier = ">=0.14" },
     { name = "statsmodels", marker = "extra == 'nautilus'", specifier = ">=0.14" },
-    { name = "supabase", marker = "extra == 'atlas'", specifier = ">=2.0" },
     { name = "supabase", marker = "extra == 'prices'", specifier = ">=2.0" },
+    { name = "supabase", marker = "extra == 'research'", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
     { name = "yfinance", marker = "extra == 'data'", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'm2'", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'prices'", specifier = ">=0.2" },
 ]
-provides-extras = ["nautilus", "indicators", "visualization", "data", "prices", "atlas", "optimize", "m2", "all", "dev", "mcp", "otel", "brokers-alpaca", "brokers-ibkr"]
+provides-extras = ["nautilus", "indicators", "visualization", "data", "prices", "research", "optimize", "m2", "all", "dev", "mcp", "otel", "brokers-alpaca", "brokers-ibkr"]
 
 [package.metadata.requires-dev]
 dev = [

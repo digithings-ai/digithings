@@ -6,6 +6,7 @@ import { ChatMarkdownReference } from "@/components/chatbot/chat-markdown-refere
 import { ChatThinkingReference } from "@/components/chatbot/chat-thinking-reference";
 import { ChatToolCallReference } from "@/components/chatbot/chat-toolcall-reference";
 import { ChatWidgetsReference } from "@/components/chatbot/chat-widgets-reference";
+import { DigichatLauncherReference } from "@/components/chatbot/digichat-launcher-reference";
 
 export default function ChatbotPage() {
   return (
@@ -26,6 +27,7 @@ export default function ChatbotPage() {
         </p>
       </header>
 
+      <DigichatLauncherReference />
       <ChatThinkingReference />
       <ChatToolCallReference />
       <ChatComposerReference />

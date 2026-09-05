@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Pipeline: digiquant prices"
 
 # Scheduled price + technicals ingest via the migrated digiquant.data.prices
@@ -27,45 +28,6 @@ name: "Pipeline: digiquant prices"
 #     at-open ships both crons and gates them on the ET wall clock (job `at-open-clock`).
 
 on:
-  schedule:
-    # Intraday quotes + technicals. 13:00–21:45 UTC is the UNION of the two ET
-    # sessions: 09:00–17:45 EDT and 08:00–16:45 EST. The old `13-20` was
-    # 09:00–16:45 EDT but 08:00–15:45 EST — in winter it stopped 15 min BEFORE the
-    # close, so the most-watched quarter hour of the session never refreshed.
-    - cron: '*/15 13-21 * * MON-FRI'
-    # EOD macro + full sector universe. 17:25 EDT / 16:25 EST — after the close in
-    # both offsets, where the old `0 21` was 16:00 EST, i.e. AT the winter bell.
-    # Constraints on this minute, all three binding:
-    #   * > 16:00 ET so the regular-session close has settled (25 min in winter);
-    #   * NOT a multiple of 15, so it never shares a minute with an intraday tick —
-    #     `digiquant-prices-intraday` is a per-job concurrency group and does not
-    #     cover this job, and two concurrent yfinance pulls are a rate-limit risk;
-    #   * done before 22:00 UTC, because pipeline-research-metrics.yml's `0 22` cron
-    #     documents that it must run after this ingest. Worst case at the 20-minute
-    #     timeout is 21:45, leaving ~15 min of margin (was ~40 min).
-    # Disjoint MINUTES is not disjoint RUNS: the 21:30 / 21:45 intraday ticks now
-    # overlap this job, where before the widening nothing ran alongside the sector
-    # fetch. Accepted — the overlapping pull is the ~40 watchlist ETFs, small next to
-    # the 189 single names here. Deliberately NOT fixed by adding eod-macro to the
-    # `digiquant-prices-intraday` group: queuing behind a 20-minute intraday timeout
-    # would push this job into the 22:00 metrics cron it has to precede.
-    - cron: '25 21 * * MON-FRI'
-    # REM-102 (superseded by #1775): record position_events at the US cash open.
-    # REM-102 chose a single `35 14` "EST-safe" because a pre-open run is the
-    # strictly worse failure — execute_at_open.py reads a NULL price_history.open
-    # and its HOLD pass skips tickers that already have a row, so NULL-priced rows
-    # cannot be repaired by a later run. That much was right; what it accepted was
-    # 10:35 EDT, i.e. 65 min late for ~8 months a year. Both crons now ship and
-    # `at-open-clock` admits the season-correct trigger once New York has reached
-    # 09:30. Schedule identity prevents the other cron from becoming a delayed
-    # duplicate, while the missing upper cutoff tolerates GitHub delivery lag.
-    - cron: '35 13 * * MON-FRI'
-    - cron: '35 14 * * MON-FRI'
-    # Current Yahoo FX daily candle. Minute 17 avoids the 15-minute equity
-    # quote pulls and top-of-hour GitHub congestion. Sunday 22:17 UTC catches
-    # the FX-week open; Monday-Friday refreshes every two hours.
-    - cron: '17 */2 * * MON-FRI'
-    - cron: '17 22 * * SUN'
   workflow_dispatch:
     inputs:
       mode:
@@ -136,13 +98,16 @@ jobs:
             const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp    = new Date().toISOString().slice(0, 16);
             const title    = 'digiquant-prices intraday — recurring failures';
-            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:prices', 'exec:cursor'];
+            // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
             const marker   = '<!-- digiquant-prices-intraday-tracker -->';
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner, repo: context.repo.repo,
-              state: 'open', labels: 'ci-failure,pipeline:prices', per_page: 100,
+              state: 'open', per_page: 100,
             });
             const tracker = existing.find(i => (i.body || '').includes(marker));
 
@@ -346,13 +311,16 @@ jobs:
             const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const stamp    = new Date().toISOString().slice(0, 10);
             const title    = 'digiquant-prices EOD macro — recurring failures';
-            const labels   = ['ci-failure', 'component:digiquant', 'pipeline:macro', 'exec:cursor'];
+            // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
             const marker   = '<!-- digiquant-prices-eod-macro-tracker -->';
             const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
 
-            const { data: existing } = await github.rest.issues.listForRepo({
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner, repo: context.repo.repo,
-              state: 'open', labels: 'ci-failure,pipeline:macro', per_page: 100,
+              state: 'open', per_page: 100,
             });
             const tracker = existing.find(i => (i.body || '').includes(marker));
 

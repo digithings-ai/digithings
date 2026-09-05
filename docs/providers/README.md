@@ -59,6 +59,7 @@ Never commit `.env`. Use `.env.example` as the template and keep real keys out o
 | Option | Guide | Best for |
 |---|---|---|
 | Ollama (local) | [ollama_local.md](ollama_local.md) | Zero per-token cost, runs on Mac/GPU |
+| OmniRoute (self-hosted, optional) | [omniroute.md](omniroute.md) | Extra OpenAI-compat upstream; **off by default**, does not replace OpenRouter |
 
 ## After adding a provider
 

@@ -154,7 +154,9 @@ re-point to `public_nav_history` in the browser. Apply migrations **072–074** 
 Private append-only versioned investment overlay pins for dashboard preflight. The
 digithings-owned **house** row (`profile_key='house'`, `is_house_default=true`) is the
 immutable always-on default run. Overlay rows may request different universe / risk /
-themes / budgets; they must not claim the house key or cancel/replace the house run.
+themes / budgets / pipeline schedule / execution policy; they must not claim the house
+key or cancel/replace the house run. `#3611` adds optional `pipeline_schedule` and
+`execution_policy` inside the existing jsonb `payload` (no migration).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -645,6 +647,15 @@ Settings / billing Edge Functions call the RPC via `service_role` when
 `_shared/supabase-admin.ts`), so pre-trigger users still bootstrap on first JWT
 settings call.
 
+**EXECUTE grants (#3461 / migration 117):** Supabase default-grants EXECUTE to
+`anon`/`authenticated`/`service_role` (not only `PUBLIC`). Migration 107's
+`REVOKE … FROM PUBLIC` alone left `anon` able to call the bootstrap definers.
+117 revokes `anon` (and `authenticated` on `ensure_personal_workspace` /
+`handle_new_auth_user_workspace`). Signed-in clients use `ensure_my_workspace()`;
+signup continues via the `auth.users` trigger + service_role edge-function path.
+`my_access()` keeps authenticated EXECUTE on purpose — lint 0029 is accepted for
+that RPC only (product entitlement snapshot; not callable by anon).
+
 ### Creator / client-product grants (108)
 
 Product gating without widening free Observer:
@@ -653,8 +664,8 @@ Product gating without widening free Observer:
 |--------|---------|
 | `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`brief`,`desk`,`studio`,`enterprise`) after migration 115. Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `studio` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
 | `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom dashboard products reuse the same table. 12x client emails via ops insert **or** hashed invite redeem (migration 112). Seed: creator → `fx_hub`. |
-| `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. |
-| `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math. |
+| `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. Authenticated EXECUTE retained (#3461); anon revoked. |
+| `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math; `search_path` pinned empty in 117. |
 | `product_invite_codes` | SHA-256 hex of invite codes (`product_key`, `code_hash`). service_role only. |
 | `product_invite_redemptions` | Who redeemed (user_id, email, source `env`\|`table`). Admin ledger. |
 | `product_invite_attempts` | Rate-limit ledger for redeem. |
@@ -1052,6 +1063,44 @@ in the same change.
   shipped no REVOKE at all and so left the platform-default DML grants standing — that
   omission was #1757, closed by migration 060 (see "Grants" below). Migration 066 starts with
   explicit `REVOKE ALL` on both its base table and public view, then grants view `SELECT` only.
+
+### Security / performance advisors — Now pile (#3461 / migration 117)
+
+Live `get_advisors` on core (2026-09-03) flagged mutable `search_path`, anon EXECUTE on
+workspace-bootstrap SECURITY DEFINER RPCs, and `auth.uid()` RLS initplan on the
+authenticated workspace policies. Migration **117** addresses that pile only:
+
+- Pins `search_path` on the listed triggers/helpers (and soft-alters live-only
+  `knowledge_notes_set_updated_at` when present).
+- Revokes anon EXECUTE on `ensure_*` / `handle_new_auth_user_workspace` / `my_access`
+  (see Observer bootstrap note above).
+- Recreates the 19 authenticated policies with `(SELECT auth.uid())` — same USING
+  semantics as 098/105/109.
+
+**Explicitly deferred / accepted (not in 117):**
+
+- Lint **0010** `security_definer_view` on `public_*` portfolio/price views — powers
+  digiquant.io public tape; invoker cutover is a separate issue.
+- Lint **0029** authenticated EXECUTE on `my_access()` — product need; documented above.
+- Leaked-password protection (HaveIBeenPwned) — Auth dashboard toggle, not SQL. Operator
+  must enable under Authentication → Providers → Email → Password → Leaked password
+  protection. [#3461](https://github.com/digithings-ai/digithings/issues/3461)
+- Unused indexes / unindexed FKs / RLS-enabled-no-policy service-role tables — out of
+  scope for this pass.
+
+### knowledge_notes vault namespace — migration 118 (#1142 / #3603)
+
+`public.knowledge_notes` is the digivault finance KB (live table predates the numbered
+chain as 20260625 / #1087). Migration **118** brings it into the chain:
+
+| Column / constraint | Policy |
+|---------------------|--------|
+| `vault text not null default 'finance'` | Namespace so one table holds multiple corpora. `COMMENT ON COLUMN` runs **after** `ADD COLUMN` so a pre-118 table does not abort. |
+| `UNIQUE (vault, vault_path)` | The only uniqueness. Duplicate filename stems in different directories are legal (filesystem vault `_duplicates`). **Do not** add `UNIQUE (vault, slug)` — live rows already have that shape and the index build aborts the whole file (and every later migration) under `psql --single-transaction`. |
+| `knowledge_notes_set_updated_at` | Canonical on both the fresh `CREATE TABLE` path and the live upgrade path (117 already soft-alters the function when present). |
+| Grants | `REVOKE ALL` from `PUBLIC` / `anon` / `authenticated`; `GRANT` DML to `service_role`. RLS is on with no client policies. Privilege revoke is the defense if RLS is later disabled. |
+
+Proof: `tests/dq/dashboard/test_migration_118_knowledge_notes_vault.py` (parse checks plus executable Postgres against fresh, pre-118 + duplicate stems, replay, and client ACL).
 
 ## Grants (migration 060, #1757)
 

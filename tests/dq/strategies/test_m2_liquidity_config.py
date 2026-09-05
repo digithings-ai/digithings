@@ -17,7 +17,10 @@ try:
 except ImportError:
     NAUTILUS_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(not NAUTILUS_AVAILABLE, reason="nautilus_trader not installed")
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(not NAUTILUS_AVAILABLE, reason="nautilus_trader not installed"),
+]
 
 
 def _write_signal_parquet(tmp_path, n: int = 400) -> tuple[str, int]:

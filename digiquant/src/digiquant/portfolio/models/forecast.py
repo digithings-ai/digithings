@@ -156,26 +156,30 @@ _FORECAST_TERMS_REQUIRED = (
 
 
 def unwrap_forecast_terms_payload(value: object) -> object:
-    """Unwrap LLM ``{terms: {...}}`` envelopes onto a flat ForecastTerms dict.
+    """Unwrap LLM ``{terms | amendment | forecast_amendment: {...}}`` envelopes.
 
     House GHA 33426508863: SLV/IAU H6 amendments nested economics under ``terms``
     (extra=forbid then rejected the wrapper and reported every required field
-    missing). Economics are never invented; leftover unknown keys still fail.
+    missing). Cheap models also emit the ``amendment`` / ``forecast_amendment``
+    spellings (#3299) — unwrap exactly one level for any of the three.
+    Economics are never invented; leftover unknown keys still fail.
     """
     if not isinstance(value, dict):
         return value
-    nested = value.get("terms")
-    if not isinstance(nested, dict):
-        return value
-    missing_top = [key for key in _FORECAST_TERMS_REQUIRED if key not in value]
-    if not missing_top or not any(key in nested for key in _FORECAST_TERMS_REQUIRED):
-        return value
-    merged = dict(nested)
-    for key, item in value.items():
-        if key == "terms":
+    for wrapper_key in ("terms", "amendment", "forecast_amendment"):
+        nested = value.get(wrapper_key)
+        if not isinstance(nested, dict):
             continue
-        merged[key] = item
-    return merged
+        missing_top = [key for key in _FORECAST_TERMS_REQUIRED if key not in value]
+        if not missing_top or not any(key in nested for key in _FORECAST_TERMS_REQUIRED):
+            continue
+        merged = dict(nested)
+        for key, item in value.items():
+            if key == wrapper_key:
+                continue
+            merged[key] = item
+        return merged
+    return value
 
 
 def fill_forecast_tenor_from_base(

@@ -65,13 +65,17 @@
 @import "@digithings/digichat-ui/styles/session.css";
 
 /* Tailwind never scans package sources — generate the token utilities the
-   shared chat components carry (MIGRATION.md rule 3). */
+   shared chat components carry (MIGRATION.md rule 3). Paths stay
+   file-relative on purpose: the scanner does not traverse the node_modules
+   workspace symlink. */
 @source "../../../digiweb/web/src/components/chat";
 /* … and the utilities the shared behavioral controls carry (#1419) — the
    @source is load-bearing for controls-overlay's components. */
 @source "../../../digiweb/web/src/components/controls";
 /* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
 @source "../../../digiweb/web/src/components/terminal";
+/* … and the shared ContactMailto's pending dim. */
+@source "../../../digiweb/web/src/components/contact";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -428,35 +432,6 @@
   color: var(--accent);
 }
 
-.dc-byok-tier-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0 0 0.5rem;
-}
-.dc-byok-tier-tab {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 2px 10px;
-  border-radius: 0;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-family-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.dc-byok-tier-tab:hover {
-  color: var(--text-primary);
-}
-.dc-byok-tier-tab-active {
-  border-color: color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
-  background: color-mix(in srgb, var(--accent, var(--fg)) 12%, transparent);
-  color: var(--text-primary);
-}
-
 .dc-sources {
   margin-top: var(--space-2);
   border: 1px solid var(--border-color);
@@ -521,6 +496,39 @@
   background: color-mix(in srgb, var(--accent, var(--fg)) 24%, transparent);
 }
 
+.dc-sidebar-search {
+  display: block;
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+.dc-sidebar-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1px solid var(--border-color, var(--hair));
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.dc-sidebar-search input::placeholder {
+  color: var(--text-secondary);
+}
+.dc-sidebar-search input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent, var(--fg)) 50%, var(--border-color, var(--hair)));
+}
+.dc-sidebar-empty {
+  margin: 0 0 var(--space-4);
+  padding: 0 2px;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .dc-sidebar-thread {
   display: flex;
   justify-content: space-between;
@@ -542,12 +550,29 @@
   background: color-mix(in srgb, var(--accent, var(--fg)) 14%, transparent);
   border-color: color-mix(in srgb, var(--accent, var(--fg)) 30%, transparent);
 }
+.dc-sidebar-thread:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent, var(--fg)) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--fg)) 25%, transparent);
+}
 .dc-sidebar-thread-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+}
+.dc-sidebar-rename {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent, var(--fg)) 55%, transparent);
+  border-radius: 0;
+  color: var(--text-primary);
+  font: inherit;
+  padding: 1px 4px;
+  margin: -2px -5px;
+  outline: none;
 }
 .dc-sidebar-thread-time {
   font-family: var(--font-family-mono);

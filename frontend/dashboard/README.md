@@ -19,7 +19,9 @@ finance-tearsheet grammars directly in `app/globals.css`:
 ```
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
-return metrics, a base-zero portfolio path, current-book contribution, and
+return metrics via `getPerformanceBundle` (same `public_accounting_nav_history`
+series and `performance-ssot` helpers as Brief — #3580), a base-zero portfolio path,
+current-book contribution, and
 open-position outcomes. Closed / trimmed fills live on **Ledger** (single source
 of truth) — the tearsheet links there instead of duplicating a Closed positions
 tab. Its command band uses the same compact as-of stamp as Holdings and shows one
@@ -48,6 +50,15 @@ aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark a
 excess return when the comparison changes.
 The dashboard keeps its finance-tearsheet variants and shell print rules app-side at the
 bottom of `globals.css`.
+
+Performance SSOT (#3580 / #3604): one accounting NAV series and one committed
+book date. Canonical metric-source matrix (source, date, units, null/fallback,
+stale/provenance) lives in [`lib/TABLES.md`](lib/TABLES.md) § Performance SSOT.
+Condensed: NAV / day / since-inception from the **tip** of
+`public_accounting_nav_history`; alpha/IR need ≥20 overlapping daily pairs;
+invested % is the tip (unclamped); live Brief marks are a `live marks` overlay
+and must never wear a `finalized accounting` badge; metrics↔NAV lag is
+symmetric (`metrics lag` / `nav lag`).
 
 The root layout scopes the page to the digiquant accent and blueprint
 background:
@@ -215,7 +226,50 @@ would never apply in production (#674).
 The dashboard CSP is scoped to `/dashboard*`; landing pages keep Google Fonts working.
 Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
 secure WebSockets (`wss://*.supabase.co`).
+`frame-src` allows digichat origins for the Desk+ research/portfolio popup (#3422)
+(`https://digithings.ai`, `digichat.digithings.ai`, loopback `:3005`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
+
+### digichat popup (Desk+ — #3422 / #3581 / #3587)
+
+Desk / Studio / Enterprise sessions see a bottom-right shared digiweb launcher
+(Brief and Observer do not). Idle is a 30px square compact terminal mark;
+hover/focus types `digichat` without changing its height or border. Clicking
+expands horizontally into a composer-height bar and then upward into the panel.
+The ×, Escape, and transparent outside-click backdrop reverse that expansion
+without blurring the dashboard. Closing hides rather than destroys the iframe,
+so the current conversation survives the next open.
+
+The panel iframes digichat `/embed?layout=embed` with page-context
+(`digichat:page-context`) for the visible dashboard DOM — structurally
+sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k). The sender
+walks the live DOM (computed style, `hidden` / `inert` / `aria-hidden`,
+password/autofill controls) and honors `data-digichat-private` opt-out regions;
+the embed receiver re-allowlists the HTML. Nothing is rendered for it in the
+panel (#3590); the model receives HTML+text via the existing prompt-prefix path
+(screenshot/vision multimodal deferred). Same contract as digichat `widget.js`
+(#3421 / #3602), implemented in-React so CSP stays `script-src 'self'`.
+
+Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
+plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in
+the CSP `frame-src` allowlist or the launcher stays off. Client reads must use
+direct `process.env.NEXT_PUBLIC_*` property access (`digichatPopupEnvFromProcess`)
+so Turbopack inlines them — passing whole `process.env` leaves the client empty
+and the launcher disappears after hydrate (#3561).
+Local dogfood: digichat on `http://127.0.0.1:3005` + dashboard
+`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`.
+`NEXT_PUBLIC_DIGICHAT_POPUP_MODE` is accepted for back-compat but no longer switches
+to a round ✦ launcher.
+
+**Local dogfood:** digichat on `http://127.0.0.1:3005`, dashboard on
+`http://127.0.0.1:4014/dashboard/` with `.env.local` pointing
+`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3005`, host `digiquant.io`,
+and the embed token matching digichat `DIGICHAT_EMBED_TENANTS`. Desk+ session
+required. Uses digichat’s default model path (`free_then_byok` / digigraph as
+configured on the tenant). See `.env.local.example`.
+
+Tenant grounding (digigraph → digillm, research/portfolio corpus, opt-in web search,
+BYOK) is configured on digichat via `DIGICHAT_EMBED_TENANTS` for host `digiquant.io`.
 
 **Deploy freshness (#1759):** `scripts/write-build-info.sh` writes
 `dist/build-info.json` (`site`, `commit`, `branch`, `builder`, `built_at`) into the
@@ -239,9 +293,11 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
   re-validation; saves append `olympus_profile_config` versions (never mutate; never the
   reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
   Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
-- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs, plus a read of
-  `GET /settings/jobs` (skip reasons such as `no_credentials` are visible; remaining-hop
-  proof is `succeeded` only).
+- **Pipeline** — overlay watchlist / themes / `research_budget_usd` knobs; a 7×3
+  weekday × stage (`research` / `deliberation` / `execution`) schedule grid and
+  execution-policy controls (calendar guard is non-bypassable — closed sessions defer);
+  plus a read of `GET /settings/jobs` (skip reasons such as `no_credentials` are
+  visible; remaining-hop proof is `succeeded` only).
 - **Keys** — BYOK LLM provider seal/revoke (fingerprint-only after save).
 - **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
   IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /

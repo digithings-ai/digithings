@@ -13,7 +13,7 @@
  * autonomous motion).
  */
 import { useEffect, useRef } from "react";
-import { DigiquantMark } from "./DashboardMark";
+import { DigiquantMark } from "@digithings/web";
 
 type Phase = [id: string, name: string, detail: string];
 

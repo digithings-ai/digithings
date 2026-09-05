@@ -261,3 +261,7 @@ issue	phase	area	kind	priority	model
 3248		digichat	Research	P2	opus
 3388	validate execution/tenancy on next house pipeline run	digiquant	Task	P1	sonnet
 3391	validate execution/tenancy on next house pipeline run	digiquant	Task	P1	sonnet
+3469		Cross-cutting	Bug	P1	sonnet
+3528		Cross-cutting	Bug	P1	sonnet
+3581		Website	Feature	P1	sonnet
+3619		Website	Task	P1	sonnet

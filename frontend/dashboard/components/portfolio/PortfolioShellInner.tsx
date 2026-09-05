@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EmptyState } from '@digithings/web';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
@@ -30,6 +31,8 @@ import {
   type PortfolioTabId,
 } from '@/lib/portfolio-url-state';
 import { normalizeThesisId } from '@/lib/thesis-id';
+import { isCashTicker } from '@/lib/book-reconciliation';
+import { resolveInvestedPct } from '@/lib/performance-ssot';
 import AllocationsTab from './tabs/AllocationsTab';
 import ThesesTab from './tabs/ThesesTab';
 import PageSkeleton from '@/components/page-skeleton';
@@ -192,10 +195,38 @@ export default function PortfolioShellInner() {
   if (loading) return <PageSkeleton />;
   if (error || !data || !metrics)
     return (
-      <div className="flex items-center justify-center h-screen text-danger">
-        {error || 'Failed to load'}
+      <div className="flex min-h-full flex-col">
+        <PortfolioSectionNav active={sectionActive} />
+        <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+          <EmptyState
+            variant="error"
+            className="mx-auto max-w-md"
+            title="Portfolio is temporarily unavailable"
+            body={error || 'Failed to load'}
+            action={
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+              >
+                Retry
+              </button>
+            }
+          />
+        </div>
       </div>
     );
+
+  const tipInvested = data.portfolio.snapshots.at(-1)?.invested_pct ?? null;
+  const bookWeightInvestedPct = positions
+    .filter((p) => !isCashTicker(p.ticker))
+    .reduce((sum, p) => sum + (p.weight_actual ?? 0), 0);
+  const holdingsInvestedPct = resolveInvestedPct({
+    tipInvestedPct: tipInvested,
+    bookWeightInvestedPct,
+    metricsInvestedPct:
+      data.server_portfolio_metrics?.invested_pct ?? metrics.total_invested ?? null,
+  }).investedPct;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -206,9 +237,7 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
-            investedPct={
-              data?.server_portfolio_metrics?.invested_pct ?? metrics?.total_invested ?? null
-            }
+            investedPct={holdingsInvestedPct}
             decisions={decisions}
             positionHistory={positionHistory}
             thesisById={thesisById}

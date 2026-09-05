@@ -14,6 +14,7 @@ import {
   type LivePerformanceKpis,
 } from '@digithings/web';
 import { pickBriefBenchmarkTicker } from '@/lib/benchmark-tickers';
+import { isCashTicker } from '@/lib/book-reconciliation';
 import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import { isQuoteFresh, quoteAgeMs, type LiveQuoteMap } from '@/lib/live-valuation';
 import type { BenchmarkHistoryMap, NavChartPoint, Position } from '@/lib/types';
@@ -58,13 +59,13 @@ export function useLiveBriefKpis(
     () =>
       positions
         .map((p) => p.ticker?.trim().toUpperCase())
-        .filter((t) => t && t !== 'CASH'),
+        .filter((t): t is string => Boolean(t) && !isCashTicker(t)),
     [positions]
   );
   const quotes = useLivePrices(tickers);
 
   return useMemo(() => {
-    if (!navHistory.length || !positions.length) return null;
+    if (!navHistory.length) return null;
     const benchTicker = benchmarks ? pickBriefBenchmarkTicker(benchmarks) : null;
     const benchmarkHistory =
       benchTicker && benchmarks?.[benchTicker]?.history
@@ -72,7 +73,7 @@ export function useLiveBriefKpis(
         : undefined;
 
     const kpiPositions = positions
-      .filter((p) => p.ticker?.trim().toUpperCase() !== 'CASH')
+      .filter((p) => p.ticker && !isCashTicker(p.ticker))
       .map((p) => {
         const ticker = p.ticker.trim().toUpperCase();
         const mark = p.current_price ?? null;

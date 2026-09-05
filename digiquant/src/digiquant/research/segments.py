@@ -65,6 +65,12 @@ _BIAS_SYNONYMS: dict[str, str] = {
     "strongly_bearish": "strong_bearish",
     "strongly_negative": "strong_bearish",
     "cautious": "neutral",
+    # Policy-stance hedges (#3299): Bias has no tightening/easing members, so
+    # hawkish/dovish resolve directionally; tightening maps to bearish too.
+    "hawkish": "bearish",
+    "dovish": "bullish",
+    "tightening": "bearish",
+    "easing": "bullish",
 }
 
 _BIAS_MEMBERS: frozenset[str] = frozenset(get_args(Bias))
@@ -130,9 +136,12 @@ _LITERAL_SYNONYMS: dict[str, tuple[str, ...]] = {
     "med": ("medium",),
     "strong": ("high",),
     "weak": ("low",),
-    # Macro-factor vocabulary (the four required Phase 3 axes).
-    "hawkish": ("tightening",),
-    "dovish": ("easing",),
+    # Macro-factor vocabulary (the four required Phase 3 axes). Hawkish/dovish
+    # carry the policy term first (PolicyFactor axes) and the directional Bias
+    # member second (#3299) — the normalizer picks the first candidate present
+    # on the target axis, so Bias resolves bearish/bullish without leakage.
+    "hawkish": ("tightening", "bearish"),
+    "dovish": ("easing", "bullish"),
     "sticky": ("hot",),
     "elevated": ("hot",),
     "disinflation": ("cooling",),

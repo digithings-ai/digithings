@@ -1,0 +1,97 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
+name: "Pipeline: digiquant on-chain"
+
+# Scheduled Bitview/BRK on-chain valuation ingest (#1086).
+# Lands mvrv / asopr_24h / puell_multiple / rhodl_ratio into
+# data/onchain/bitview/*.parquet and macro_series_observations (source=bitview).
+# Hosted bitview.space has no SLA — fail-soft + persistent failure tracker.
+# MVRV-Z is computed locally in sdca/onchain_valuation.py (not a Bitview series).
+# Does not enable on-chain as published SDCA composite votes.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: digiquant-onchain
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  bitview-ingest:
+    name: Bitview on-chain ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
+      - name: Fetch Bitview day1 series → parquet + macro store
+        run: |
+          uv run --frozen --no-sync python -m digiquant onchain fetch-bitview \
+            --cache-dir data/onchain/bitview \
+            --supabase
+      - name: Update persistent failure issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl   = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const stamp    = new Date().toISOString().slice(0, 16);
+            const title    = 'digiquant-onchain Bitview — recurring failures';
+            // Label simplification 2026-09: pipeline:*/exec:* retired. Tracker
+            // dedup is by body marker (paginate: the backlog exceeds one page);
+            // agent-task keeps dispatch firing.
+            const labels   = ['ci-failure', 'component:digiquant', 'agent-task', 'priority:medium'];
+            const marker   = '<!-- digiquant-onchain-bitview-tracker -->';
+            const failLine = `- ${stamp} — [run ${context.runId}](${runUrl})`;
+
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', per_page: 100,
+            });
+            const tracker = existing.find(i => (i.body || '').includes(marker));
+
+            if (tracker) {
+              const MAX_LINES = 20;
+              const body    = tracker.body || '';
+              const parts   = body.split('## Recent failures');
+              const header  = parts[0];
+              const tailRaw = (parts[1] || '').split('\n').filter(l => l.startsWith('- '));
+              const tail    = [failLine, ...tailRaw].slice(0, MAX_LINES).join('\n');
+              const newBody = `${header.trim()}\n\n## Recent failures (latest first)\n${tail}`;
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: tracker.number, body: newBody,
+              });
+            } else {
+              const body = [
+                marker,
+                '## Persistent tracker for digiquant-onchain Bitview failures',
+                '',
+                'Scheduled Bitview/BRK ingest (`40 22 * * *`) has been failing.',
+                'This issue is updated on each failed run instead of opening new issues.',
+                '',
+                '**Likely causes:** bitview.space outage (no SLA), BRK API shape drift, Supabase outage.',
+                'Self-host BRK for production resilience. NUPL is refused by design (monotone of MVRV).',
+                '',
+                '## Recent failures (latest first)',
+                failLine,
+              ].join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels,
+              });
+            }

@@ -16,11 +16,14 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+if TYPE_CHECKING:
+    from digisearch.search.reranker import Reranker
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +108,12 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
     try:
         from digisearch.indexes.backends.vectorize import VectorizeBackend
 
-        backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
+        backend = VectorizeBackend(
+            index_name,
+            account_id=account_id,
+            api_token=api_token,
+            embedding_provider=_resolved_embedding_provider(),
+        )
         results = backend.query(query)
     except Exception as exc:
         # str(exc) carries the underlying failure detail (e.g. "vectorize query
@@ -113,6 +121,13 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
         # raised message, so re-raising it here cannot leak one either.
         raise VectorizeBackendError(str(exc)) from exc
     return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
+
+
+def _resolved_embedding_provider() -> object:
+    """Same configured provider the ingest pipeline uses (raw, not cache-wrapped)."""
+    from digisearch.embedding.factory import resolve_backend_embedding_provider
+
+    return resolve_backend_embedding_provider()
 
 
 @register_backend
@@ -129,6 +144,7 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
         backend = ChromaBackend(
             name=index_name,
             persist_path=chroma_path,
+            embedding_provider=_resolved_embedding_provider(),
             chroma_host=chroma_host,
             chroma_port=int(port_raw),
         )
@@ -142,6 +158,41 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
 
 
 _stub_index: dict[str, list[Chunk]] = {"default": []}
+
+# Process-scoped Reranker instances so BGE CrossEncoder is not reloaded per query.
+_reranker_by_provider: dict[str, Reranker] = {}
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _get_reranker(provider: str) -> Reranker:
+    from digisearch.search.reranker import Reranker as _Reranker
+
+    cached = _reranker_by_provider.get(provider)
+    if cached is not None:
+        return cached
+    reranker = _Reranker(provider=provider)
+    _reranker_by_provider[provider] = reranker
+    return reranker
+
+
+def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
+    """Optional second-pass rerank gated by DIGISEARCH_RERANK_ENABLED (#2441).
+
+    Off by default. ``Query.skip_rerank`` suppresses even when the flag is on
+    (fetch_all pagination shares this call chain and must not reorder pages).
+    """
+    if query.skip_rerank or not _env_truthy("DIGISEARCH_RERANK_ENABLED"):
+        return resp
+    if not resp.results:
+        return resp
+
+    provider = (os.environ.get("DIGISEARCH_RERANK_PROVIDER") or "bge").strip().lower() or "bge"
+    reranker = _get_reranker(provider)
+    resp.results = reranker.rerank(query.text, resp.results, top_n=query.top_k)
+    return resp
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -177,7 +228,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
                     "top_k": query.top_k,
                 },
             )
-            return resp
+            return _maybe_rerank(query, resp)
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
@@ -196,11 +247,11 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
                 "backend": None,
             },
         )
-        return SearchResponse(results=[], facets=None, backend=None)
+        return _maybe_rerank(query, SearchResponse(results=[], facets=None, backend=None))
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return _maybe_rerank(query, SearchResponse(results=[], facets=None, backend=BACKEND_STUB))
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -228,7 +279,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
         out.append(Result(chunk=c, score=0.9, rank=rank))
         if len(out) >= query.top_k:
             break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
+    return _maybe_rerank(query, SearchResponse(results=out, facets=None, backend=BACKEND_STUB))
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
@@ -252,7 +303,10 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
         from digisearch.indexes.backends.vectorize import VectorizeBackend
 
         backend = VectorizeBackend(
-            index_name, account_id=vectorize_account, api_token=vectorize_token
+            index_name,
+            account_id=vectorize_account,
+            api_token=vectorize_token,
+            embedding_provider=_resolved_embedding_provider(),
         )
         backend.add(chunks)
         return BACKEND_VECTORIZE
@@ -266,6 +320,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
             port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
             backend = ChromaBackend(
                 name=index_name,
+                embedding_provider=_resolved_embedding_provider(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )
@@ -284,6 +339,7 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
             backend = ChromaBackend(
                 name=index_name,
                 persist_path=chroma_path,
+                embedding_provider=_resolved_embedding_provider(),
                 chroma_host=chroma_host,
                 chroma_port=int(port_raw),
             )

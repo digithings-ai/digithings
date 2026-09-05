@@ -38,6 +38,8 @@ services:
       - DIGIKEY_ALLOW_DEV_GLOBAL=${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
       - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     volumes:
       - digikey_data:/data
     depends_on:
@@ -79,6 +81,8 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
       interval: 15s
@@ -119,6 +123,8 @@ services:
       - DIGI_ENABLE_THREAD_API=${DIGI_ENABLE_THREAD_API:-0}
       - LITELLM_PROXY_API_KEY=${LITELLM_PROXY_API_KEY:-}
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - AUDIT_LOG_PATH=/audit/events.jsonl
     volumes:
       # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
@@ -158,6 +164,8 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - AUDIT_LOG_PATH=/app/results/audit/events.jsonl
       - EXPORT_OUTPUT_DIR=/app/results/exports
       - DIGIQUANT_DATA_DIR=/app/data
@@ -191,6 +199,8 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
       - CHROMA_PATH=/data/chroma
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
@@ -225,6 +235,8 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
@@ -251,8 +263,12 @@ services:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
-    environment:
-      - REDIS_URL=${REDIS_URL:-}
+    # Do not inject REDIS_URL with an empty default: an empty string makes
+    # LiteLLM main-stable treat Redis as configured and exit 3
+    # (ValueError: Redis URL must specify one of the following schemes).
+    # Leave the var unset for the default local cache. When using
+    # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
+    # env_file passes a real URL through.
     command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
     volumes:
       - ./config:/app/config:ro
@@ -283,6 +299,52 @@ services:
       retries: 5
       start_period: 5s
 
+  # ─── OmniRoute (optional profile: omniroute) — #3413 ───
+  # Off by default. Self-host OpenAI-compat at 127.0.0.1:20128/v1.
+  # Do not enable cookie / MITM / web-session providers. Do not cut digiquant
+  # house pins over to OmniRoute. See docs/providers/omniroute.md.
+  #
+  # Compose interpolates env for EVERY service at `docker compose config`,
+  # including inactive profiles — never use ${VAR:?} here or compose-validate
+  # fails without OMNIROUTE_AUTH_PASSWORD. Require the password only when the
+  # profile actually starts (omniroute-auth-guard below).
+  omniroute-auth-guard:
+    image: busybox:1.36
+    container_name: digi-omniroute-auth-guard
+    profiles:
+      - omniroute
+    environment:
+      - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$OMNIROUTE_AUTH_PASSWORD" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD is required to start the omniroute profile" >&2
+          exit 1
+        fi
+        if [ "$$OMNIROUTE_AUTH_PASSWORD" = "CHANGEME" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD must not be the vendor default" >&2
+          exit 1
+        fi
+  omniroute:
+    # Pin a version tag + index digest, never :latest (#3432 Gate 1).
+    image: diegosouzapw/omniroute:3.8.50@sha256:085c57adf499a8aaa9f35ccde95c0df9c11bd9ecd18d6c9edbf3b68b8079ba9d
+    container_name: digi-omniroute
+    profiles:
+      - omniroute
+    depends_on:
+      omniroute-auth-guard:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      - PORT=20128
+      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+      - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
+    volumes:
+      - omniroute_data:/app/data
+
   # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
@@ -298,6 +360,8 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
       - CHROMA_PATH=/data/chroma
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
@@ -454,8 +518,26 @@ services:
       retries: 3
       start_period: 20s
 
+  # ─── OpenTelemetry Collector (profile: otel; #222) ───
+  # Off by default. Start with: docker compose --profile otel up otel-collector
+  # Then set DIGI_OTEL_ENDPOINT=http://otel-collector:4318 in .env so services
+  # export spans via digibase.otel.setup_otel_fastapi (no-op when unset).
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: digi-otel-collector
+    profiles:
+      - otel
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+    volumes:
+      - ./docs/ops/otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+
+
 volumes:
   ollama_data:
+  omniroute_data:
   digichat_pg:
   digikey_data:
   digisearch_chroma:

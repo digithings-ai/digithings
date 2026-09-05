@@ -17,7 +17,6 @@ from typing import (  # score:allow untyped any — heterogeneous node-update di
     NamedTuple,
 )
 
-from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
@@ -63,6 +62,7 @@ from digiquant.research.state import (
 # exists so a new key costs one module plus one line, not an edit to the gate rules.
 from digiquant.research.telemetry import merge_fallback_breakdown  # noqa: F401
 from digiquant.research.triage import triage_decision_to_signal
+from digiquant.tool_rounds import run_olympus_research_agent as run_research_agent
 
 logger = logging.getLogger(__name__)
 
@@ -403,9 +403,9 @@ DataLayerScope = Literal["full", "portfolio", "ticker", "none"]
 - ``none``: drop ``market_context`` entirely (freshness probes only).
 """
 
-# Compact regime signals preflight folds into ``market_context`` (#801/#806).
+# Compact regime signals preflight folds into ``market_context`` (#801/#806/#3612).
 # Cheap and broadly useful, so every non-``full`` scope keeps them.
-_REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning")
+_REGIME_SIGNAL_KEYS: tuple[str, ...] = ("fed_odds", "onchain_positioning", "venue_sessions")
 
 # Bias fields carried in the slim delta snapshot (mirrors Phase6BiasRow's
 # regime + per-asset bias surface — the part a delta node needs to see

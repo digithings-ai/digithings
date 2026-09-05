@@ -32,16 +32,10 @@ export default function SettingsPage() {
   const tabs = useMemo(() => settingsTabsVisible(tier), [tier]);
   const visibleIds = useMemo(() => tabs.map((item) => item.id), [tabs]);
   const meta = data?.portfolio?.meta ?? null;
-  const [tab, setTab] = useState<SettingsTabId>(() => {
-    const ids = settingsTabsVisible(tier).map((item) => item.id);
-    if (typeof window === 'undefined') return defaultSettingsTab(tier);
-    return resolveSettingsTab(
-      window.location.search,
-      window.location.hash,
-      ids,
-      defaultSettingsTab(tier),
-    );
-  });
+  // Start where the prerender started; the effect below adopts the URL on the
+  // first post-hydration commit. Reading location here instead would hydrate a
+  // tab strip whose highlight React never writes out — see TwelveXClient.
+  const [tab, setTab] = useState<SettingsTabId>(() => defaultSettingsTab(tier));
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
   const activeTab = visibleIds.includes(tab) ? tab : defaultSettingsTab(tier);
 

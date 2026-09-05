@@ -6,14 +6,15 @@ the secrets it needs, how to test locally, and rollback / monitoring procedures.
 Companion workflows (in `.github/workflows/`):
 
 A single workflow, `pipeline-digiquant.yml`, drives all scheduled research + portfolio runs. The
-`resolve` job sets `refresh_scope` (Sunday → `all`, weekdays → `none`); the `run` job
-executes the unified research+portfolio pipeline via
+`resolve` job defaults `refresh_scope` to `none` for cron/`repository_dispatch`; only
+manual `workflow_dispatch` may force a refresh override. The `run` job executes the
+unified research+portfolio pipeline via
 `python -m digiquant.portfolio.chain --cadence daily`.
 
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
-| `pipeline-digiquant.yml` | `cron '17 9/10/11/12 * * *'` (off-peak UTC retries) | Sunday → `all`; else `none` | 240 min |
-| `pipeline-digiquant.yml` | `repository_dispatch` `olympus-daily` | same as schedule | 240 min |
+| `pipeline-digiquant.yml` | digithings-cron daily house clocks (`17 9/10/11/12 * * *`) | `none` | 240 min |
+| `pipeline-digiquant.yml` | `repository_dispatch` `olympus-daily` | `none` | 240 min |
 | `pipeline-digiquant.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `portfolio` \| `digest` \| `beliefs` | 240 min |
 | execution cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/execution-tenancy/execution-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`portfolio.chain` | n/a (probe) | 10 min |
 | `test-research-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/dashboard/{research,portfolio}/**`, `tests/dq/{research,portfolio}/**`, or `pipeline-digiquant.yml` | unit tests + ruff | 15 min |

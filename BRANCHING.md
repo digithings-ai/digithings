@@ -25,7 +25,7 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 - **`task/<N>-<slug>`** branches from its module branch (auto-detected from issue's `component:` label by `make task ISSUE=N`). PRs target the module branch.
 - **`module/<component>`** accumulates task PRs for a sprint, then PRs into `develop` as one batch. Use `make module-pr MODULE=<component>`.
 - **`develop`** is the integration branch. Holds cross-cutting work and module-sprint merges.
-- Some components skip the module tier and branch directly from `develop`. `scripts/project_routing.json` is the source of truth for which — read its `branches` map rather than trusting a list in prose (as of 2026-08-01: `component:root`, `component:digivault`, `component:website`, `component:digiquant-web`, `component:design-system`, and the `default` fallback).
+- Some components skip the module tier and branch directly from `develop`. `scripts/project_routing.json` is the source of truth for which — read its `branches` map rather than trusting a list in prose (as of 2026-09: `component:root`, `component:digivault`, `component:website`, and the `default` fallback).
 
 **Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
 **Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
@@ -37,6 +37,9 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 ```
 
 ## Long-lived branches
+
+
+**Org production clocks** live in the Cloudflare Worker `digithings-cron` (`frontend/digithings-cron`); the default branch stays `develop`.
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|

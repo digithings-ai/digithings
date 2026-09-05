@@ -52,7 +52,7 @@ export function PricingTierCard({
     <div
       className={cx(
         "border",
-        hero ? "rounded-[var(--r-md)] px-[1.8rem] py-[2rem]" : "rounded-none p-[1.1rem]",
+        hero ? "rounded-none px-[1.8rem] py-[2rem]" : "rounded-none p-[1.1rem]",
         accent ? "pricing-tier-accent" : "border-hair bg-surface",
         className,
       )}

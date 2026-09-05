@@ -71,6 +71,10 @@ export { DeckStack, DeckCard, type DeckStackProps, type DeckCardProps } from "./
 export { ChatTranscript, type ChatTranscriptProps } from "./components/chat/ChatTranscript";
 export { ChatMessage, type ChatMessageProps, type ChatRole, type ChatTone } from "./components/chat/ChatMessage";
 export { ChatStreamCursor, type ChatStreamCursorProps } from "./components/chat/ChatStreamCursor";
+export {
+  DigichatLauncher,
+  type DigichatLauncherProps,
+} from "./components/chat/DigichatLauncher";
 export { ChatMarkdown, type ChatMarkdownProps } from "./components/chat/ChatMarkdown";
 export {
   ChatMarkdownSource,
@@ -138,6 +142,26 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  Dialog,
+  DialogTrigger,
+  DialogClose,
+  DialogPortal,
+  DialogOverlay,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogDescription,
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+  Breadcrumbs,
+  Pagination,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -149,6 +173,10 @@ export {
   type DropdownMenuContentProps,
   type DropdownMenuItemProps,
   type SheetContentProps,
+  type DialogContentProps,
+  type TableDensity,
+  type Crumb,
+  type PaginationProps,
   type TooltipContentProps,
 } from "./components/controls";
 
@@ -184,6 +212,38 @@ export {
 } from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
+// Newer controls import by file rather than the family barrel above; both
+// barrels export the same names, direct file imports skip one hop.
+export { Field, type FieldProps } from "./components/controls/Field";
+export {
+  Checkbox,
+  RadioGroup,
+  Radio,
+  Switch,
+  type CheckboxProps,
+  type RadioGroupProps,
+  type RadioProps,
+  type SwitchProps,
+} from "./components/controls/Selection";
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectPopup,
+  SelectItem,
+  SelectItemIndicator,
+  SelectSeparator,
+  type SelectProps,
+  type SelectTriggerProps,
+  type SelectPopupProps,
+} from "./components/controls/Select";
+export { Slider, sliderFill, type SliderProps } from "./components/controls/Slider";
+
+// conviction family — dashboard F6 vocabulary, promoted verbatim
+export { ConvictionMeter, SignedConvictionBadge } from "./components/conviction";
+
+// contact family — Cloudflare-safe mailto link, promoted from the app forks
+export { ContactMailto, buildMailtoHref } from "./components/contact";
 
 // finance-charts family (#1450)
 export {
@@ -336,6 +396,7 @@ export {
   informationRatioFromDaily,
   olsBeta,
   overlappingDailyReturns,
+  navHistoryForLiveOverlap,
   relativeMetricsFromReturnSeries,
   sinceInceptionPctFromNav,
   MIN_OVERLAP_DAYS,

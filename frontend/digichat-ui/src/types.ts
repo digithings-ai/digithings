@@ -62,7 +62,20 @@ export type DigiChatController = {
   quotaPrompt?: boolean;
   send: (question: string, opts?: { forceTool?: string }) => void | Promise<void>;
   stop?: () => void;
+  /** Error-row retry only — not last-turn regenerate chrome. */
   onRetry?: () => void;
+  /**
+   * Re-answer the last user turn (drop trailing assistant, resend transcript).
+   * Omit on Foundry embeds until the turn-mutation API (#3475) — truncate-and-resend
+   * would append a duplicate user item on an append-only conversation.
+   */
+  regenerate?: () => void;
+  /**
+   * Replace the last user turn (and drop any following assistant), then send.
+   * Empty / whitespace-only text is a no-op. Omit on Foundry for the same reason
+   * as `regenerate`.
+   */
+  editLastUser?: (text: string) => void | Promise<void>;
   reset?: () => void;
   modelLabel?: string;
   providerIsSet?: boolean;
@@ -82,4 +95,12 @@ export type DigiChatSessionProps = DigiChatSessionConfig & {
   showIntro?: boolean;
   /** /lang on the embed — the session does not own language state. */
   onLanguageChange?: (code: string) => void;
+  /** Current language code for /settings and /lang dive-in highlight. */
+  languageCode?: string;
+  /** Tenant allows opt-in web search (#3420 / #3556). */
+  webSearchAllowed?: boolean;
+  /** User web-search preference (local). */
+  webSearchEnabled?: boolean;
+  /** Toggle web search when `/websearch` runs or settings flips it. */
+  onWebSearchToggle?: () => void;
 };

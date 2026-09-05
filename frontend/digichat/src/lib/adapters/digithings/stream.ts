@@ -133,6 +133,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
   activityDetail: ActivityDetail;
+  /** AbortSignal from the inbound request — Stop must cancel the digigraph fetch (#3475). */
+  signal?: AbortSignal;
 }) {
   const stripped = opts.messages.map((m) => {
     const { id: _omit, ...rest } = m;
@@ -177,6 +179,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           "X-Response-Format": "plain",
         },
         body: JSON.stringify(bodyPayload),
+        signal: opts.signal,
       });
       if (!res.ok) {
         // Log the upstream detail server-side; never stream it. A 500 body can

@@ -18,7 +18,17 @@ import {
 } from '@/components/today/daily-brief-workspace';
 import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
-// ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
+import { committedBookDate } from '@/lib/dashboard-ssot';
+import { isCashTicker } from '@/lib/book-reconciliation';
+import {
+  buildPerformanceSsotMeta,
+  isLiveMarksOverlay,
+  persistedHeadlinesFromNav,
+  persistedInsightMetrics,
+} from '@/lib/performance-ssot';
+// Performance SSOT (#3580): persisted headlines from the same accounting NAV
+// adapter as Tearsheet (`getPerformanceBundle` / public_accounting_nav_history).
+// Live marks are a badged overlay only — never a silent second truth.
 
 /**
  * Portfolio vs benchmark over the aligned return window (first portfolio point →
@@ -140,7 +150,7 @@ export default function OverviewPage() {
   const extrasByTicker: Record<string, string> = {};
   for (const pos of positions) {
     const key = pos.ticker.trim().toUpperCase();
-    if (!key || key === 'CASH') continue;
+    if (!key || isCashTicker(key)) continue;
     if (typeof pos.rationale === 'string' && pos.rationale.trim()) {
       extrasByTicker[key] = pos.rationale.trim();
     }
@@ -165,37 +175,66 @@ export default function OverviewPage() {
   });
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
-  // The book's own as-of (latest performance-history point) — deliberately NOT
-  // latestDate (the digest date): research publishes daily even when the
-  // book-persistence half is frozen (#1555), and book surfaces must carry
-  // their own date rather than borrow the digest's freshness.
-  const bookAsOf = liveKpis?.bookNavDate ?? (performanceHistoryResolved.length
-    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].date
-    : null);
-  const priceAsOf = liveKpis?.priceAsOfDate ?? bookAsOf;
-  // Percentage returns only — never lead with the base-100 NAV index.
-  // Prefer the shared live KPI path (same SSOT as digiquant landing / Performance
-  // relative helpers); fall back to snapshot ratio for inception only.
-  const initialPortfolioValue = performanceHistoryResolved.length
-    ? performanceHistoryResolved[0].nav
-    : null;
-  const latestPortfolioValue = liveKpis?.liveNav ?? (performanceHistoryResolved.length
-    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].nav
-    : null);
-  const sincePct =
-    liveKpis?.sinceInceptionPct ??
-    (latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
-      ? (latestPortfolioValue / initialPortfolioValue - 1) * 100
-      : null);
-  const sinceDate = liveKpis?.sinceInceptionStartDate ?? (performanceHistoryResolved.length
-    ? performanceHistoryResolved[0].date
-    : null);
-  const dailyRet = liveKpis?.dayReturnPct ?? null;
-  // Excess / alpha / IR: live KPI SSOT first; excess may fall back to the honest
-  // endpoint blurb. Alpha/IR stay fail-closed (need ≥20d overlap) — never invent.
-  const excessPct = liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null;
+  const positionDates = (data.position_history ?? []).map((row) => row.date);
+  const openBookPositions = positions.filter((p) => !isCashTicker(p.ticker));
+  const bookWeightInvestedPct = openBookPositions.reduce(
+    (sum, p) => sum + (p.weight_actual ?? 0),
+    0
+  );
+  const persisted = persistedHeadlinesFromNav(performanceHistoryResolved, {
+    bookWeightInvestedPct,
+    metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
+  });
+  const performanceSsot = buildPerformanceSsotMeta({
+    navRows: performanceHistoryResolved.map((row) => ({
+      date: row.date,
+      nav: row.nav,
+      cash_pct: row.cash_pct ?? null,
+      invested_pct: row.invested_pct ?? null,
+      day_return_pct: row.day_return_pct ?? null,
+      source: row.source ?? 'legacy_nav_history',
+      contract: row.contract ?? 'legacy_estimate',
+    })),
+    metricsAsOf:
+      data.server_portfolio_metrics?.as_of_date ?? data.server_portfolio_metrics?.date ?? null,
+    snapshotDate: latestDate,
+    positionDates,
+    positionMetricsAsOf: openBookPositions.map((p) => p.metrics_as_of ?? null),
+    bookWeightInvestedPct,
+    metricsInvestedPct: data.server_portfolio_metrics?.invested_pct ?? null,
+  });
+  // Book as-of = committedBookDate — never imply Sep-4 chrome on yesterday's book.
+  const bookAsOf =
+    committedBookDate(latestDate, positionDates) ??
+    performanceSsot.bookAsOf ??
+    persisted.navAsOf;
+  const liveOverlay = isLiveMarksOverlay(liveKpis?.liveVsMarkPct);
+  const spyHistory =
+    data.benchmarks?.[pickBriefBenchmarkTicker(data.benchmarks) ?? '']?.history?.map((p) => ({
+      date: p.date,
+      price: p.price,
+    })) ?? undefined;
+  const persistedInsights = persistedInsightMetrics(performanceHistoryResolved, spyHistory);
+  // Persisted path matches Tearsheet when live overlay is off; live marks are badged.
+  const sincePct = liveOverlay
+    ? (liveKpis?.sinceInceptionPct ?? persisted.sinceInceptionPct)
+    : persisted.sinceInceptionPct;
+  const sinceDate = liveOverlay
+    ? (liveKpis?.sinceInceptionStartDate ?? persisted.sinceInceptionStartDate)
+    : persisted.sinceInceptionStartDate;
+  const dailyRet = liveOverlay
+    ? (liveKpis?.dayReturnPct ?? persisted.dayReturnPct)
+    : persisted.dayReturnPct;
+  const priceAsOf = liveOverlay
+    ? (liveKpis?.priceAsOfDate ?? bookAsOf)
+    : (persisted.navAsOf ?? bookAsOf);
+  // Excess stays on the persisted aligned window unless live marks are badged.
+  // Alpha / IR are series metrics — render whenever overlap exists, overlay or not.
+  const excessPct = liveOverlay
+    ? (liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null)
+    : (benchmarkBlurb?.excessPct ?? persistedInsights.excessReturnPct);
   const benchTicker =
-    liveKpis?.benchmarkTicker ??
+    (liveOverlay ? liveKpis?.benchmarkTicker : null) ??
     benchmarkBlurb?.ticker ??
     (excessPct != null ? DEFAULT_BRIEF_BENCHMARK_TICKER : null);
 
@@ -220,8 +259,12 @@ export default function OverviewPage() {
           benchTicker,
           excessPct,
           excessAsOf: priceAsOf,
-          alphaPct: liveKpis?.alphaPct ?? null,
-          informationRatio: liveKpis?.informationRatio ?? null,
+          alphaPct: liveOverlay
+            ? (liveKpis?.alphaPct ?? persistedInsights.alphaPct)
+            : persistedInsights.alphaPct,
+          informationRatio: liveOverlay
+            ? (liveKpis?.informationRatio ?? persistedInsights.informationRatio)
+            : persistedInsights.informationRatio,
         }}
         metrics={{
           maxDrawdown:
@@ -229,9 +272,9 @@ export default function OverviewPage() {
           volatility:
             data.server_portfolio_metrics?.volatility ?? data.calculated?.volatility ?? null,
         }}
-        investedPct={
-          data.server_portfolio_metrics?.invested_pct ?? data.calculated?.total_invested ?? null
-        }
+        investedPct={persisted.investedPct}
+        performanceSsot={performanceSsot}
+        liveMarks={liveOverlay}
         positions={positions}
         actionables={strategy.actionableItems ?? []}
         risks={strategy.riskItems ?? []}
@@ -242,7 +285,7 @@ export default function OverviewPage() {
         ledgerDayEvents={selectBriefLedgerDayEvents(data.position_events, latestDate)}
         runHealth={latestDate ? runHealth : null}
         runDiagnostics={runDiagnostics}
-        positionDates={(data.position_history ?? []).map((row) => row.date)}
+        positionDates={positionDates}
       />
     </div>
   );

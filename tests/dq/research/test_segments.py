@@ -71,6 +71,20 @@ def test_bias_cautious_maps_to_neutral() -> None:
     assert _report(bias="cautious").bias == "neutral"
 
 
+def test_bias_hawkish_maps_to_bearish_not_tightening() -> None:
+    # Bias has no tightening member (#3299): policy-stance hedges resolve directionally.
+    assert _report(bias="hawkish").bias == "bearish"
+    assert _report(bias="Hawkish").bias == "bearish"
+
+
+def test_bias_dovish_maps_to_bullish() -> None:
+    assert _report(bias="dovish").bias == "bullish"
+
+
+def test_bias_tightening_maps_to_bearish() -> None:
+    assert _report(bias="tightening").bias == "bearish"
+
+
 class TestInternalBiasSynonyms:
     """Directional token on ResearchMemo; leftover flow_direction is extra, not schema."""
 

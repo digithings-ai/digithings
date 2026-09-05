@@ -15,11 +15,16 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  isWebSearchEnabled,
+  readWebSearchPref,
+  writeWebSearchPref,
+} from "@/lib/web-search-pref";
 import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
 import {
   useBYOKKey,
   type BYOKProvider,
@@ -75,6 +80,10 @@ import {
   parseThemeMessage,
   type EmbedTheme,
 } from "@/lib/embed-theme-messages";
+import {
+  formatPageContextForPrompt,
+  parsePageContextMessage,
+} from "@/lib/embed-page-context-messages";
 
 type Accent = "digithings" | "digiquant" | "digichat";
 
@@ -280,6 +289,50 @@ function EmbedChat({
   // eslint-disable-next-line react-hooks/refs -- see comment above
   languageRef.current = language;
   const getResponseLanguage = useCallback(() => languageRef.current, []);
+
+  // Opt-in web search (#3420) — tenant allow + user localStorage pref; default off.
+  // Adjust during render when scope changes (same pattern as trialUnlockedFor).
+  const webSearchScope = tenantCfg.slug || host?.trim() || "embed";
+  const [webSearchState, setWebSearchState] = useState<{
+    scope: string;
+    pref: boolean;
+  }>(() => ({ scope: webSearchScope, pref: false }));
+  if (webSearchState.scope !== webSearchScope) {
+    setWebSearchState({
+      scope: webSearchScope,
+      pref: typeof window !== "undefined" ? readWebSearchPref(webSearchScope) : false,
+    });
+  }
+  // Hydrate from localStorage once on the client (SSR starts false).
+  const [webHydrated, setWebHydrated] = useState(false);
+  if (typeof window !== "undefined" && !webHydrated) {
+    setWebHydrated(true);
+    const stored = readWebSearchPref(webSearchScope);
+    if (stored !== webSearchState.pref) {
+      setWebSearchState({ scope: webSearchScope, pref: stored });
+    }
+  }
+  const webSearchPref = webSearchState.pref;
+  const webSearchUserRef = useRef(webSearchPref);
+  // eslint-disable-next-line react-hooks/refs -- send-time read via getEnableWebSearch
+  webSearchUserRef.current = webSearchPref;
+  const tenantAllowsWeb = uiFlags.webSearch;
+  const getEnableWebSearch = useCallback(
+    () =>
+      isWebSearchEnabled({
+        tenantAllows: tenantAllowsWeb,
+        userPref: webSearchUserRef.current,
+      }),
+    [tenantAllowsWeb],
+  );
+  const toggleWebSearch = useCallback(() => {
+    setWebSearchState((prev) => {
+      const next = !prev.pref;
+      writeWebSearchPref(prev.scope, next);
+      return { scope: prev.scope, pref: next };
+    });
+  }, []);
+
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -372,6 +425,16 @@ function EmbedChat({
    * signal to gate the charge on.
    */
   const pendingGateChargeRef = useRef(false);
+  /** Visible-page context from popup widget (`digichat:page-context`); consumed once. */
+  const pageContextRef = useRef<string | null>(null);
+  const [pageContextAttached, setPageContextAttached] = useState(false);
+  const consumePageContextPrefix = useCallback((question: string): string => {
+    const ctx = pageContextRef.current;
+    if (!ctx) return question;
+    pageContextRef.current = null;
+    setPageContextAttached(false);
+    return `${ctx}\n\n---\n\nUser question:\n${question}`;
+  }, []);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -406,6 +469,12 @@ function EmbedChat({
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
+    getEnableWebSearch,
+    // Foundry is append-only until #3475 — never expose truncate-and-resend chrome.
+    // Digigraph and Foundry both support turn mutation via X-Digi-Turn-Mode (#3475).
+    // Missing backendType (gated default) must not enable regen/edit.
+    allowClientTurnMutation:
+      tenantCfg.backendType === "digigraph" || tenantCfg.backendType === "foundry",
   });
 
   // Charge the free-tier gate only once a gated send actually settles
@@ -470,7 +539,7 @@ function EmbedChat({
         heldQuestionRef.current = null;
         const forceTool = heldForceToolRef.current;
         heldForceToolRef.current = undefined;
-        void chat.send(held, forceTool ? { forceTool } : undefined);
+        void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
         if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
@@ -481,10 +550,21 @@ function EmbedChat({
       heldQuestionRef.current = null;
       const forceTool = heldForceToolRef.current;
       heldForceToolRef.current = undefined;
-      void chat.send(held, forceTool ? { forceTool } : undefined);
+      void chat.send(consumePageContextPrefix(held), forceTool ? { forceTool } : undefined);
       if (!ungated) pendingGateChargeRef.current = true;
     }
-  }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
+  }, [
+    byokIsSet,
+    byokKey,
+    byokProvider,
+    byokModel,
+    chat.busy,
+    chat.onRetry,
+    chat.send,
+    ungated,
+    gate,
+    consumePageContextPrefix,
+  ]);
 
   const openSettings = useCallback(() => {
     setQuotaPrompt(false);
@@ -582,6 +662,30 @@ function EmbedChat({
     return () => window.removeEventListener("message", onMessage);
   }, [firstPartyParentOrigins, seedApplied, chat.seed, chat.send]);
 
+  // Popup widget (#3421): accept visible-page context from the immediate parent
+  // after digichat:ready. Not first-party-only — registered third-party hosts
+  // describe their own already-visible DOM (no behind-auth scrape).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ancestorOrigins =
+      "ancestorOrigins" in window.location ? window.location.ancestorOrigins : null;
+    const parentOrigin = resolveReadyTargetOrigin({
+      ancestorOrigins,
+      referrer: document.referrer,
+    });
+    const onMessage = (event: MessageEvent) => {
+      const parsed = parsePageContextMessage(event, parentOrigin);
+      if (!parsed) return;
+      const formatted = formatPageContextForPrompt(parsed);
+      if (!formatted) return;
+      pageContextRef.current = formatted;
+      setPageContextAttached(true);
+      setHandshakeError(null);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
   // The upstream conversation id is the useful handle (it maps to the real backend
   // conversation); fall back to nothing rather than blocking the gate.
   //
@@ -625,14 +729,16 @@ function EmbedChat({
     sentHeldRef.current = question;
     const forceTool = heldForceToolRef.current;
     heldForceToolRef.current = undefined;
-    void chat.send(question, forceTool ? { forceTool } : undefined);
+    const hadCtx = pageContextRef.current != null;
+    void chat.send(consumePageContextPrefix(question), forceTool ? { forceTool } : undefined);
     if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
       byok: byokIsSet,
+      page_context: hadCtx,
     });
-  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet]);
+  }, [trialUnlocked, chat, ungated, gate, accent, byokIsSet, consumePageContextPrefix]);
 
   const reopenTrialForm = useCallback(() => {
     lastGatedPost.current = null;
@@ -684,16 +790,23 @@ function EmbedChat({
   }, [isTrialForm, host, unlockTrial]);
 
   const welcomeIntro = useMemo(() => {
-    if (uiParams.welcome) return uiParams.welcome;
-    if (tenantCfg.welcome) return tenantCfg.welcome;
-    if (ungated) {
-      return "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    let base: string;
+    if (uiParams.welcome) base = uiParams.welcome;
+    else if (tenantCfg.welcome) base = tenantCfg.welcome;
+    else if (ungated) {
+      base =
+        "Ask a question at the bottom of the page to get started.\n\nAsk anything about the docs — answers are grounded on the real documentation.";
+    } else {
+      base = DEFAULT_WELCOME.replace(
+        "the first few turns are free",
+        `the first ${EMBED_FREE_TURN_LIMIT} are free`,
+      );
     }
-    return DEFAULT_WELCOME.replace(
-      "the first few turns are free",
-      `the first ${EMBED_FREE_TURN_LIMIT} are free`,
-    );
-  }, [uiParams.welcome, tenantCfg.welcome, ungated]);
+    if (pageContextAttached) {
+      return `${base}\n\nPage context from this host is attached — ask about what you see on the page.`;
+    }
+    return base;
+  }, [uiParams.welcome, tenantCfg.welcome, ungated, pageContextAttached]);
 
   const placeholder = uiParams.placeholder ?? tenantCfg.placeholder ?? "ask digichat…";
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
@@ -719,15 +832,17 @@ function EmbedChat({
         setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
         return;
       }
-      void chat.send(question, opts);
+      const hadCtx = pageContextRef.current != null;
+      void chat.send(consumePageContextPrefix(question), opts);
       emit("embed_turn_submitted", {
         accent,
         turn: gate.turns + 1,
         byok: byokIsSet,
+        page_context: hadCtx,
       });
       if (!ungated) pendingGateChargeRef.current = true;
     },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
+    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContextPrefix],
   );
 
   /* At most one credit, and the footer wins — see resolveAttributionPlacement. */
@@ -814,6 +929,10 @@ function EmbedChat({
       }}
       headerSlot={headerSlot}
       onLanguageChange={setLanguage}
+      languageCode={language}
+      webSearchAllowed={tenantAllowsWeb}
+      webSearchEnabled={webSearchPref}
+      onWebSearchToggle={tenantAllowsWeb ? toggleWebSearch : undefined}
       footerSlot={footerSlot}
       settingsPanel={
         showByok && settingsOpen ? (
@@ -894,9 +1013,12 @@ function PaywallCard({
           For more, get in touch at{" "}
           <ContactMailto
             email={lockedContact}
+            showAddress
             className="font-medium underline"
             style={{ color: "var(--accent)" }}
-          />
+          >
+            our contact address
+          </ContactMailto>
           .
         </p>
       </div>
@@ -925,7 +1047,8 @@ function PaywallCard({
       </p>
       <p className="mb-3 text-xs text-muted-foreground">
         Bring your own OpenRouter, OpenAI, Anthropic, or Gemini key for unlimited chat — the key
-        stays in session memory only (refresh clears it). Or open the full digichat app.
+        stays in session memory only (refresh clears it). After a chat starts, type{" "}
+        <code className="font-mono">/byok</code> anytime. Or open the full digichat app.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -935,7 +1058,7 @@ function PaywallCard({
           onClick={() => setShowBYOK(true)}
         >
           <Key className="mr-1.5 size-3.5" />
-          Bring your own key
+          Bring your own key (/byok)
         </Button>
         <a
           href="https://digithings.ai/chat"
