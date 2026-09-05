@@ -6,6 +6,8 @@ import {
   derivePriceAsOfDate,
   inceptionSignAgreesWithBase100,
   MIN_OVERLAP_DAYS,
+  navHistoryForLiveOverlap,
+  overlappingDailyReturns,
   sinceInceptionPctFromNav,
   type LiveKpiPosition,
 } from './live-performance-kpis';
@@ -287,5 +289,81 @@ describe('computeLivePerformanceKpis', () => {
     expect(kpis.excessReturnPct).toBeNull();
     expect(kpis.alphaPct).toBeNull();
     expect(kpis.informationRatio).toBeNull();
+  });
+
+  it('keeps alpha/IR when a live mark on the next day supplies the last overlap pair', () => {
+    const { navHistory: full, benchmarkHistory: spy } = buildAlignedSeries(80);
+    // MIN_OVERLAP_DAYS return pairs need MIN_OVERLAP_DAYS+1 dates. Drop to that
+    // boundary, then live-mark a later calendar day so the extra observation counts.
+    const navHistory = full.slice(0, MIN_OVERLAP_DAYS);
+    const lastNav = navHistory[navHistory.length - 1]!;
+    const next = new Date(`${lastNav.date}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    const liveDate = next.toISOString().slice(0, 10);
+    const spyPlus = [
+      ...spy.filter((p) => p.date <= lastNav.date),
+      { date: liveDate, price: spy[spy.length - 1]!.price * 1.001 },
+    ];
+    const kpis = computeLivePerformanceKpis({
+      positions: positions.map((p) => ({
+        ...p,
+        isLive: true,
+        livePriceDate: liveDate,
+        metricsAsOf: lastNav.date,
+      })),
+      navHistory,
+      benchmarkHistory: spyPlus,
+      benchmarkTicker: 'SPY',
+    });
+    expect(navHistory.length).toBe(MIN_OVERLAP_DAYS);
+    expect(kpis.alphaPct).not.toBeNull();
+    expect(kpis.informationRatio).not.toBeNull();
+  });
+
+  it('keeps overlapping daily pairs when benchmark history is sparse (weekly holes)', () => {
+    const { navHistory, benchmarkHistory } = buildAlignedSeries(60);
+    const sparse = benchmarkHistory.filter((_, i) => i % 4 === 0);
+    const { port, bench } = overlappingDailyReturns(navHistory, sparse);
+    expect(port.length).toBeGreaterThanOrEqual(MIN_OVERLAP_DAYS);
+    expect(bench.length).toBe(port.length);
+    const kpis = computeLivePerformanceKpis({
+      positions: positions.map((p) => ({
+        ...p,
+        isLive: false,
+        livePriceDate: null,
+        metricsAsOf: navHistory[navHistory.length - 1]!.date,
+      })),
+      navHistory,
+      benchmarkHistory: sparse,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.alphaPct).not.toBeNull();
+    expect(kpis.informationRatio).not.toBeNull();
+  });
+});
+
+describe('navHistoryForLiveOverlap', () => {
+  it('appends a later live tip instead of dropping the last accounting row', () => {
+    const nav = [
+      { date: '2026-06-23', nav: 100 },
+      { date: '2026-06-24', nav: 101 },
+    ];
+    const out = navHistoryForLiveOverlap(nav, '2026-06-25', 102);
+    expect(out).toEqual([
+      { date: '2026-06-23', nav: 100 },
+      { date: '2026-06-24', nav: 101 },
+      { date: '2026-06-25', nav: 102 },
+    ]);
+  });
+
+  it('replaces the last row when the live tip shares the book date', () => {
+    const nav = [
+      { date: '2026-06-23', nav: 100 },
+      { date: '2026-06-24', nav: 101 },
+    ];
+    expect(navHistoryForLiveOverlap(nav, '2026-06-24', 101.5)).toEqual([
+      { date: '2026-06-23', nav: 100 },
+      { date: '2026-06-24', nav: 101.5 },
+    ]);
   });
 });

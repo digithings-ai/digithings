@@ -21,7 +21,7 @@ import type {
   RiskItem,
 } from '@/lib/types';
 import type { PlanTier } from '@/lib/entitlements';
-import { reconcileBook } from '@/lib/book-reconciliation';
+import { isCashTicker, reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { formatBriefWeightChange } from '@/lib/brief-book-event';
@@ -33,6 +33,7 @@ import {
 import { EntitledSurface } from '@/components/entitled-surface';
 import { PortfolioTeaserSurface } from '@/components/tier/portfolio-teaser-surface';
 import {
+  metricsDivergenceBadgeLabel,
   navContractBadgeLabel,
   type PerformanceSsotMeta,
 } from '@/lib/performance-ssot';
@@ -256,7 +257,7 @@ export function DailyBriefWorkspace({
   // decorative run-type / tone pills (#3036 follow-up).
   const book = reconcileBook(positions, { investedPct });
   const held = book.rows
-    .filter((position) => position.ticker.toUpperCase() !== 'CASH')
+    .filter((position) => !isCashTicker(position.ticker))
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
   const ledgerPreview = ledgerDayEvents.slice(0, LEDGER_DAY_PREVIEW);
@@ -282,14 +283,26 @@ export function DailyBriefWorkspace({
     decision.active[0] != null
       ? tickerDossierHref(decision.active[0].ticker)
       : buildPipelineHref({ date: digestDate, stage: 'selection', node: 'pm-rebalance' });
+  const cashForNote =
+    performanceSsot?.investedDefinition === 'accounting_nav_tip' &&
+    performanceSsot.tipCashPct != null
+      ? performanceSsot.tipCashPct
+      : book.cashPct;
   const investedNote =
     performanceSsot?.investedDefinition === 'accounting_nav_tip'
-      ? `${book.cashPct.toFixed(0)}% cash · accounting tip`
+      ? `${cashForNote.toFixed(0)}% cash · accounting tip`
       : performanceSsot?.investedDefinition === 'book_weights'
-        ? `${book.cashPct.toFixed(0)}% cash · book weights`
+        ? `${cashForNote.toFixed(0)}% cash · book weights`
         : performanceSsot?.investedDefinition === 'portfolio_metrics'
-          ? `${book.cashPct.toFixed(0)}% cash · metrics`
-          : `${book.cashPct.toFixed(0)}% cash`;
+          ? `${cashForNote.toFixed(0)}% cash · metrics`
+          : `${cashForNote.toFixed(0)}% cash`;
+  const showNavContract =
+    performanceSsot?.navContract &&
+    performanceSsot.navContract !== 'empty' &&
+    !(liveMarks && performanceSsot.navContract === 'finalized_accounting');
+  const divergenceLabel = performanceSsot
+    ? metricsDivergenceBadgeLabel(performanceSsot)
+    : null;
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows
@@ -351,7 +364,7 @@ export function DailyBriefWorkspace({
                 live marks
               </span>
             ) : null}
-            {performanceSsot?.navContract && performanceSsot.navContract !== 'empty' ? (
+            {showNavContract && performanceSsot ? (
               <span
                 data-testid="brief-nav-contract-badge"
                 className="font-mono text-[0.58rem] uppercase tracking-wider text-ink-mute"
@@ -359,12 +372,12 @@ export function DailyBriefWorkspace({
                 {navContractBadgeLabel(performanceSsot.navContract)}
               </span>
             ) : null}
-            {performanceSsot?.metricsLagging ? (
+            {divergenceLabel ? (
               <span
                 data-testid="brief-metrics-lag-badge"
                 className="font-mono text-[0.58rem] uppercase tracking-wider text-warn"
               >
-                metrics lag
+                {divergenceLabel}
               </span>
             ) : null}
             <AsOfBadge date={digestDate} />

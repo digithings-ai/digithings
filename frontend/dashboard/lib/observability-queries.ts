@@ -50,10 +50,13 @@ import {
   soldWeightPct,
 } from './position-event-economics';
 import { houseBook } from './house-workspace';
+import { isCashTicker } from './book-reconciliation';
+import { committedBookDate } from './dashboard-ssot';
 import {
   buildPerformanceSsotMeta,
   type PerformanceSsotMeta,
 } from './performance-ssot';
+import { fetchComparablePriceHistory } from './queries';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -228,7 +231,7 @@ function latestAttributionByTicker(
   const latest = new Map<string, TableRow<'position_attribution'>>();
   for (const row of [...rows].sort((a, b) => b.date.localeCompare(a.date))) {
     const ticker = row.ticker.toUpperCase();
-    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, row);
+    if (!isCashTicker(ticker) && !latest.has(ticker)) latest.set(ticker, row);
   }
   return latest;
 }
@@ -408,7 +411,7 @@ function buildPositionContributionSeries(
   const pricesByTicker = new Map<string, Array<{ date: string; price: number }>>();
   for (const row of positions) {
     const ticker = row.ticker.toUpperCase();
-    if (ticker === 'CASH' || !currentTickers.has(ticker)) continue;
+    if (isCashTicker(ticker) || !currentTickers.has(ticker)) continue;
     if (!snapshots.has(row.date)) snapshots.set(row.date, new Map());
     snapshots.get(row.date)!.set(ticker, row);
     if (row.current_price != null && row.current_price > 0) {
@@ -472,7 +475,7 @@ function latestPositionByTicker(
   const latest = new Map<string, TableRow<'positions'>>();
   for (const position of [...positions].sort((a, b) => b.date.localeCompare(a.date))) {
     const ticker = position.ticker.toUpperCase();
-    if (ticker !== 'CASH' && !latest.has(ticker)) latest.set(ticker, position);
+    if (!isCashTicker(ticker) && !latest.has(ticker)) latest.set(ticker, position);
   }
   return latest;
 }
@@ -504,14 +507,14 @@ export function buildPerformanceTearsheet(args: {
   const currentSnapshot = latestDateRows(args.positions);
   const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
   const currentPositions = currentSnapshot.rows
-    .filter((position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0)
+    .filter((position) => !isCashTicker(position.ticker) && position.weight_pct > 0)
     .map((position) => applyHoldingMarks(position, marksByTicker));
   const attributionByTicker = latestAttributionByTicker(args.attribution);
   const latestPosition = latestPositionByTicker(args.positions);
   const latestAttribution = latestDateRows(args.attribution);
   const currentTickers = new Set(
     (currentPositions.length ? currentPositions : latestAttribution.rows)
-      .filter((row) => row.ticker.toUpperCase() !== 'CASH')
+      .filter((row) => !isCashTicker(row.ticker))
       .map((row) => row.ticker.toUpperCase())
   );
   const positionByTicker = new Map(
@@ -582,10 +585,7 @@ export function buildPerformanceTearsheet(args: {
       ? 'derived'
       : 'unavailable';
 
-  const metricsAsOf =
-    derivedUsed
-      ? navAsc.at(-1)?.date ?? args.metrics?.as_of_date ?? args.metrics?.date ?? null
-      : args.metrics?.as_of_date ?? args.metrics?.date ?? null;
+  const metricsAsOf = args.metrics?.as_of_date ?? args.metrics?.date ?? null;
   const holdingsAsOf = currentSnapshot.date ?? latestAttribution.date;
   const ssot = attachTearsheetSsot({
     accountingNav: args.accountingNav,
@@ -628,8 +628,10 @@ function attachTearsheetSsot(args: {
   positions: TableRow<'positions'>[];
   holdingsAsOf: string | null;
 }): Pick<PerformanceTearsheet, 'navContract' | 'metricsLagging' | 'tipInvestedPct'> {
-  const openBook = args.holdingsAsOf
-    ? args.positions.filter((p) => p.date === args.holdingsAsOf && p.ticker.toUpperCase() !== 'CASH')
+  const bookAsOf = committedBookDate(args.snapshotDate, args.positions.map((p) => p.date));
+  const openBookDate = bookAsOf ?? args.holdingsAsOf;
+  const openBook = openBookDate
+    ? args.positions.filter((p) => p.date === openBookDate && !isCashTicker(p.ticker))
     : [];
   const navRows: AccountingNavRow[] =
     args.accountingNav ??
@@ -692,6 +694,19 @@ export async function getPerformanceBundle(
     };
   }
 
+  let snapshotDate = opts.snapshotDate ?? null;
+  if (snapshotDate == null) {
+    const snapRes = await supabase
+      .from('daily_snapshots')
+      .select('date')
+      .order('date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!snapRes.error) {
+      snapshotDate = (snapRes.data as { date?: string | null } | null)?.date ?? null;
+    }
+  }
+
   const navQuery = await supabase
     .from(ACCOUNTING_NAV_VIEW)
     .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
@@ -742,25 +757,18 @@ export async function getPerformanceBundle(
   const openTickers = [
     ...new Set(
       currentBook.rows
-        .filter((row) => row.ticker.toUpperCase() !== 'CASH' && row.weight_pct > 0)
+        .filter((row) => !isCashTicker(row.ticker) && row.weight_pct > 0)
         .map((row) => row.ticker.toUpperCase())
     ),
   ];
-  const [benchmarkRes, holdingMarksRes] = await Promise.all([
+  const [benchmarkMap, holdingMarksRes] = await Promise.all([
     navWindow.length >= 2
-      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-          'benchmark price_history',
-          (sb) =>
-            sb
-              .from('price_history')
-              .select('ticker,date,close')
-              .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
-              .gte('date', navWindow[0].date)
-              .lte('date', navWindow.at(-1)!.date)
-              .order('date', { ascending: true })
-              .limit(PERFORMANCE_HISTORY_LIMIT)
+      ? fetchComparablePriceHistory(
+          [...DASHBOARD_BENCHMARK_TICKERS],
+          navWindow[0].date,
+          navWindow.at(-1)!.date
         )
-      : Promise.resolve({ rows: [], ok: true as const }),
+      : Promise.resolve({}),
     openTickers.length
       ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
           'holding mark price_history',
@@ -774,6 +782,13 @@ export async function getPerformanceBundle(
         )
       : Promise.resolve({ rows: [], ok: true as const }),
   ]);
+  const benchmarkPrices = Object.entries(benchmarkMap).flatMap(([ticker, series]) =>
+    (series?.history ?? []).map((point) => ({
+      ticker,
+      date: point.date,
+      close: point.price,
+    }))
+  );
 
   const metricsRow = metricsRes.rows[0] ?? null;
   const tearsheet = buildPerformanceTearsheet({
@@ -782,18 +797,18 @@ export async function getPerformanceBundle(
     metrics: metricsRow,
     attribution: attributionRes.rows,
     events: eventsRes.rows,
-    benchmarkPrices: benchmarkRes.rows,
+    benchmarkPrices,
     holdingMarks: holdingMarksRes.rows,
     accountingNav: navRows,
-    snapshotDate: opts.snapshotDate ?? null,
+    snapshotDate,
   });
 
-  const openBook = currentBook.rows.filter((p) => p.ticker.toUpperCase() !== 'CASH');
+  const openBook = currentBook.rows.filter((p) => !isCashTicker(p.ticker));
   const bookWeightInvestedPct = openBook.reduce((sum, p) => sum + Number(p.weight_pct ?? 0), 0);
   const ssot = buildPerformanceSsotMeta({
     navRows,
     metricsAsOf: metricsRow?.as_of_date ?? metricsRow?.date ?? null,
-    snapshotDate: opts.snapshotDate ?? currentBook.date,
+    snapshotDate,
     positionDates: positionsRes.rows.map((p) => p.date),
     positionMetricsAsOf: openBook.map((p) => p.metrics_as_of ?? null),
     bookWeightInvestedPct,

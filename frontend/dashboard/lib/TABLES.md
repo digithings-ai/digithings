@@ -75,20 +75,39 @@ cells stay local until the gaps above are promoted.
 
 ---
 
-## Performance SSOT (#3580)
+## Performance SSOT (#3580 / #3604)
 
 One contracted series and one committed-book date across Brief, Tearsheet,
 Ledger, and Portfolio. Live marks on Brief are a **badged overlay** only —
-never a silent second truth.
+never a silent second truth. Provenance badges always describe the **source of
+the displayed numbers**, not “any historical finalized row exists.”
 
-| Concern | Canonical source | Notes |
-|---|---|---|
-| **NAV chart** | `public_accounting_nav_history` (`ACCOUNTING_NAV_VIEW`) | Fail closed on query error (#3029). Tip contract badge: `finalized_accounting` vs `legacy_estimate`. |
-| **Headline returns** | Same accounting NAV tip via shared pure helpers (`persistedHeadlinesFromNav` / `buildPerformanceTearsheet`); Tearsheet loads through `getPerformanceBundle` | Brief without live overlay must match Tearsheet within 0.05 pp. Brief rebuilds from dashboard snapshots of the same view (not a second fetch). |
-| **Invested %** | Accounting NAV tip `invested_pct` | Fallback: book weights → `portfolio_metrics.invested_pct`. Never mix live weights with book weights silently. |
-| **Book as-of date** | `committedBookDate(daily_snapshots.date, positions.date)` | Portfolio / Ledger / Brief book chrome. Do not imply marks refreshed when `metrics_as_of` is null. |
-| **Ledger events** | `position_events` (house book) | Session day on Brief; full stream on Ledger. |
-| **Persisted risk KPIs** | `portfolio_metrics` | Lag badge when `metrics.as_of` / `date` trails NAV tip by ≥1 day. Pipeline writers: `finalize_period_accounting` + `refresh_performance_metrics` (see #3563 / #3467 for `main` lock unblock). |
+**Divergence:** signed UTC calendar days `navAsOf − metricsAsOf`. Badge when
+`|lag| ≥ 1` day. Positive → `metrics lag`; negative → `nav lag` (finalizer
+stall). Units are whole calendar days, not trading sessions.
+
+**Alpha / IR overlap:** `MIN_OVERLAP_DAYS = 20` overlapping **daily return
+pairs** (typically 21 dates). Sparse or paginated benchmark history still
+renders when remaining overlap meets that floor. Benchmark prices for Tearsheet
+come from `fetchComparablePriceHistory` (paginated), not a single
+`limit(5000)` across all tickers.
+
+### Metric-source matrix
+
+| Metric | Source | Date | Units | Null / fallback | Stale / provenance |
+|---|---|---|---|---|---|
+| NAV chart | `public_accounting_nav_history` (`ACCOUNTING_NAV_VIEW`) | Each row `date` | Paper NAV index (not a headline $) | Fail closed on query error (#3029) — never empty-as-healthy | Tip badge from **latest dated row** only: `finalized accounting` vs `legacy estimate`. Mixed history with a legacy tip is **not** finalized. |
+| Day return | Accounting tip `day_return_pct`; else adjacent NAV ratio | Tip `date` | Percentage points, one session | Null when missing **or** adjacent gap `> MAX_DAY_RETURN_GAP_DAYS` (4 calendar days) | Live overlay (Brief) replaces the number only when `\|liveVsMarkPct\| > 0`, and then the tile is labeled `live marks` — never finalized accounting. |
+| Since inception | `(tipNav / firstNav − 1) · 100` on the same series | First NAV date → tip date | Percentage points | Null with fewer than 2 finite NAV points | Same overlay rule as day return. Brief persisted path must match Tearsheet within 0.05 pp when overlay is off. |
+| Excess return | `Rp − Rb` over the NAV-aligned benchmark window | Aligned start → NAV tip (or live mark date if later) | Percentage points | Null if benchmark series missing or window cannot align | Tearsheet recomputes when the operator picks another populated ticker. Brief uses persisted window unless live overlay is on. |
+| Alpha (Jensen) | `Rp − β·Rb`; β = OLS of overlapping daily returns | Same aligned window | Percentage points on the total-return window | Null when daily pairs `< MIN_OVERLAP_DAYS` — do not invent CAPM from endpoints | Persisted NAV + paginated/sparse bench still render when remaining overlap is valid. Overlay-off Brief must not blank these. |
+| Information ratio | `mean(daily excess) / sampleStd(daily excess) · √252` | Same overlap sample | Dimensionless annualized ratio | Null when overlap short or tracking error ≈ 0 | Same overlap floor as alpha. |
+| Invested % | Accounting NAV tip `invested_pct` | Tip date | % of NAV | Fallback: non-CASH `positions.weight_pct` on committed book → `portfolio_metrics.invested_pct` | Never mix live weights with book weights. Do **not** clamp `>100` under an `accounting_nav_tip` label. Cash footnote uses tip `cash_pct` when present. |
+| Book as-of | `committedBookDate(daily_snapshots.date, positions.date)` | Snapshot ∩ positions | Calendar date | Null when snapshot missing — do not silently substitute latest position date as “committed” | Distinct from NAV tip date. |
+| Marks / unrealized | Open-book `positions.metrics_as_of` + `current_price` / `price_history` close | `metrics_as_of` or close date | Unrealized % vs avg entry | Fail closed without basis or mark | `marksUnstamped` when the open book is empty or any row lacks `metrics_as_of`. Chrome must not imply a refresh. |
+| Live overlay (Brief only) | Fresh quotes via `computeLivePerformanceKpis` | Quote calendar date | % vs published marks | Overlay **off** when `liveVsMarkPct === 0` | Badge `live marks`. **Never** show `finalized accounting` on live numbers. |
+| `portfolio_metrics` lag | `as_of_date` / `date` vs NAV tip | Metrics stamp vs `navAsOf` | Signed UTC calendar days | No badge when either stamp missing | Symmetric: metrics behind NAV **and** NAV behind metrics. Tearsheet `metricsAsOf` is the metrics stamp — never overwritten with the NAV tip. Period end uses `ssot.navAsOf`. |
+| Ledger events | `position_events` (house book) | Event `date` | Fills / weight change | Empty session → honest empty copy | Session day on Brief; full stream on Ledger. |
 
 Code entrypoints:
 
