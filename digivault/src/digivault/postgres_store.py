@@ -8,6 +8,8 @@ once so those columns stay consistent with the stored markdown.
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 from pathlib import Path
 from typing import (  # score:allow untyped any — Supabase client/response shapes are dynamic
@@ -22,6 +24,8 @@ from digivault.vault import VaultError
 
 DEFAULT_TABLE = "knowledge_notes"
 DEFAULT_VAULT = "finance"
+# Matches SupabaseStore.list_notes: stay under PostgREST's default max-rows (1000).
+DEFAULT_PAGE_SIZE = 500
 
 _SELECT = (
     "slug,vault_path,title,note_type,status,tags,relevance,summary,"
@@ -111,16 +115,74 @@ def _normalize_str_list(value: Any) -> list[str]:
     return []
 
 
+def _jwt_role(token: str) -> str | None:
+    """Best-effort JWT ``role`` claim without verification (config guard only)."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    payload = parts[1]
+    pad = "=" * ((4 - len(payload) % 4) % 4)
+    try:
+        data = json.loads(base64.urlsafe_b64decode(payload + pad))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    role = data.get("role")
+    return str(role) if role else None
+
+
+def _service_role_key() -> str:
+    """Return the service-role key, or ``""`` if none is configured.
+
+    ``knowledge_notes`` is RLS service-role-only (migration 118). Anon keys
+    would otherwise yield a silently empty vault.
+    """
+    key = _first_env("CORE_SUPABASE_SERVICE_KEY", "SUPABASE_SERVICE_ROLE_KEY")
+    if key:
+        role = _jwt_role(key)
+        if role is not None and role != "service_role":
+            raise PostgresStoreError(
+                "CORE_SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) must be a "
+                f"service-role credential; got JWT role {role!r}. knowledge_notes "
+                "is service-role-only (migration 118)."
+            )
+        return key
+    if _first_env("CORE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"):
+        raise PostgresStoreError(
+            "PostgresStore requires a service-role key (CORE_SUPABASE_SERVICE_KEY "
+            "or SUPABASE_SERVICE_ROLE_KEY); anon keys cannot access knowledge_notes "
+            "(migration 118)."
+        )
+    return ""
+
+
+def _is_unique_conflict(exc: BaseException) -> bool:
+    """True for a unique-constraint hit, not every error whose text says "unique"."""
+    code = str(getattr(exc, "code", "") or "")
+    status = str(getattr(exc, "status", "") or getattr(exc, "status_code", "") or "")
+    if code in {"23505", "409"} or status in {"409"}:
+        return True
+    text = str(exc).lower()
+    return (
+        "duplicate key" in text
+        or "unique constraint" in text
+        or "duplicate vault_path" in text
+        or "duplicate slug" in text
+    )
+
+
 class PostgresStore:
     """:class:`~digivault.store.VaultStore` over ``public.knowledge_notes``.
 
     Inject a client for tests, or build one from the environment with
     :meth:`from_env`. Graph indexes come from ``wikilinks`` / ``tags`` columns.
 
-    ``rename`` issues multiple PostgREST calls and is not transactional — a
-    mid-flight failure can leave rewritten backlinks with a partially moved
-    note. Phase-1 callers should retry ``reindex`` / repair rather than assume
-    atomic rename (#1142).
+    ``rename`` inserts the destination row first (never upsert) so a collision
+    cannot overwrite an existing note, then rewrites inbound wikilinks and
+    deletes the source. Multiple PostgREST calls are still not transactional —
+    a mid-flight failure after a successful insert can leave both rows until
+    the caller retries ``reindex`` / repair (#1142, #3606).
     """
 
     def __init__(
@@ -129,13 +191,17 @@ class PostgresStore:
         *,
         vault: str = DEFAULT_VAULT,
         table: str = DEFAULT_TABLE,
+        page_size: int = DEFAULT_PAGE_SIZE,
     ) -> None:
         clean = vault.strip()
         if not clean:
             raise PostgresStoreError("vault namespace must be a non-empty string")
+        if page_size <= 0:
+            raise ValueError(f"page_size must be positive, got {page_size}")
         self._client = client
         self._vault = clean
         self._table = table
+        self._page_size = page_size
         self._notes: dict[str, Note] = {}
         self._bodies: dict[str, str] = {}
         self._rows_by_name: dict[str, dict[str, Any]] = {}
@@ -148,14 +214,13 @@ class PostgresStore:
         vault: str = DEFAULT_VAULT,
         table: str = DEFAULT_TABLE,
     ) -> PostgresStore:
-        """Build a store from ADR-0022 CORE_* credentials (service key preferred for writes)."""
+        """Build a store from ADR-0022 CORE_* service-role credentials.
+
+        Anon keys are refused: ``knowledge_notes`` is RLS service-role-only
+        (migration 118), so an anon client would look like an empty vault.
+        """
         url = _first_env("CORE_SUPABASE_URL", "SUPABASE_URL")
-        key = _first_env(
-            "CORE_SUPABASE_SERVICE_KEY",
-            "SUPABASE_SERVICE_ROLE_KEY",
-            "CORE_SUPABASE_ANON_KEY",
-            "SUPABASE_ANON_KEY",
-        )
+        key = _service_role_key()
         if not url or not key:
             raise PostgresStoreError(
                 "Postgres not configured: set CORE_SUPABASE_URL + CORE_SUPABASE_SERVICE_KEY "
@@ -177,15 +242,12 @@ class PostgresStore:
         return self._client.table(self._table).eq("vault", self._vault)
 
     def reindex(self) -> None:
-        """Rebuild the note / backlink / tag indexes from ``wikilinks`` and ``tags``."""
-        response = (
-            self._client.table(self._table)
-            .select(_SELECT)
-            .eq("vault", self._vault)
-            .order("vault_path")
-            .execute()
-        )
-        rows = _rows(response)
+        """Rebuild the note / backlink / tag indexes from ``wikilinks`` and ``tags``.
+
+        Pages with ``.order("vault_path").range(...)`` until a short page so rows
+        past PostgREST's max-rows cap are not silently dropped (#3606).
+        """
+        rows = self._fetch_all_rows()
         notes: dict[str, Note] = {}
         bodies: dict[str, str] = {}
         rows_by_name: dict[str, dict[str, Any]] = {}
@@ -232,6 +294,25 @@ class PostgresStore:
         }
         self._bodies = bodies
         self._rows_by_name = rows_by_name
+
+    def _fetch_all_rows(self) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        start = 0
+        page_size = self._page_size
+        while True:
+            page = (
+                self._client.table(self._table)
+                .select(_SELECT)
+                .eq("vault", self._vault)
+                .order("vault_path")
+                .range(start, start + page_size - 1)
+                .execute()
+            )
+            batch = _rows(page)
+            rows.extend(batch)
+            if len(batch) < page_size:
+                return rows
+            start += page_size
 
     def list_notes(self) -> list[Note]:
         return [self._notes[n] for n in sorted(self._notes)]
@@ -321,17 +402,27 @@ class PostgresStore:
         old_path = note.rel_path[:-3] if note.rel_path.endswith(".md") else note.rel_path
         new_path = str(Path(old_path).with_name(clean_new))
 
-        # Rewrite inbound bodies + wikilinks arrays, then move the note row.
+        fm, body = _fm.split_frontmatter(self.read_text(old_name))
+        new_row = self._row_payload(clean_new, new_path, fm, body)
+        # Insert first: a dest row omitted from a truncated index must not be
+        # overwritten, and a conflict must leave the source untouched (#3606).
+        try:
+            self._client.table(self._table).insert(new_row).execute()
+        except Exception as exc:
+            if _is_unique_conflict(exc):
+                raise VaultError(f"Target note already exists: {clean_new!r}") from exc
+            raise
+
         for src in note.backlinks:
             src_note = self._notes.get(src)
             if src_note is None:
                 continue
             rewritten = _wl.rewrite_target(self.read_text(src), old_name, clean_new)
-            fm, body = _fm.split_frontmatter(rewritten)
+            src_fm, src_body = _fm.split_frontmatter(rewritten)
             src_path = (
                 src_note.rel_path[:-3] if src_note.rel_path.endswith(".md") else src_note.rel_path
             )
-            src_row = self._row_payload(src, src_path, fm, body)
+            src_row = self._row_payload(src, src_path, src_fm, src_body)
             (
                 self._client.table(self._table)
                 .update(src_row)
@@ -340,9 +431,6 @@ class PostgresStore:
                 .execute()
             )
 
-        fm, body = _fm.split_frontmatter(self.read_text(old_name))
-        new_row = self._row_payload(clean_new, new_path, fm, body)
-        self._client.table(self._table).upsert(new_row, on_conflict="vault,vault_path").execute()
         (
             self._client.table(self._table)
             .delete()
