@@ -210,6 +210,22 @@ class TestMonthlyRsiZ:
         assert z1[f_idx] is not None
         assert z1[f_idx] != pytest.approx(z2[f_idx])
 
+    def test_short_length_boundary_does_not_crash(self) -> None:
+        """length=2 is RSI's mathematical floor (length=1 degenerates to a
+        single-delta RSI) -- the widened search grid tests down to 2, so
+        this must produce finite, clipped values rather than erroring or
+        emitting NaN/inf.
+        """
+        n = 1400
+        dates = _dates(n, start=date(2017, 1, 2))
+        close = pl.Series([100.0 + 8.0 * ((i % 40) - 20) for i in range(n)])
+        z = monthly_rsi_z(dates, close, length=2)
+        finite = [v for v in z.to_list() if v is not None]
+        assert len(finite) > 100
+        assert all(math.isfinite(v) for v in finite)
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
 
 class TestMonthlyMacdZ:
     def test_default_monthly_macd_weight_is_zero(self) -> None:

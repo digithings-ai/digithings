@@ -165,3 +165,30 @@ that could both be read as "the baseline."
    artifact on RSI) and an explicit decision from Chris before touching
    `EXTRA_INDICATOR_NAMES` or settings.json. Curve/threshold optimization
    against this index (Chris's explicitly separate stage 5) hasn't started.
+
+   - Third pass (2026-09-05, same session: "expand the monthly RSI grid"):
+     widened `MONTHLY_RSI_CANDIDATES`' `monthly_length` down to `2` (RSI's
+     mathematical floor — `length=1` degenerates to a single-delta RSI,
+     confirmed via `_wilder_rsi()`'s `ewm_mean` formula in
+     `price_oscillators.py`) from the prior floor of `3`, plus added `4`/`6`
+     for resolution (grid: `(2,3,4,5,6,7,9,12,14,18)` × 5 daily lengths, 50
+     combos). Added `test_short_length_boundary_does_not_crash` to
+     `test_price_oscillators.py` confirming `length=2` produces finite,
+     correctly clipped output. `monthly_macd`'s grid was left unchanged (its
+     winner isn't at an edge).
+     Result: **the edge-of-grid concern is reinforced, not resolved.** The
+     winner moved from `monthly_length=3` (score 170.71) to `monthly_length=2`
+     (long=58.89, medium=28.84, combined=205.52) — i.e. it tracked the new
+     floor rather than settling on an interior value. This is consistent with
+     `monthly_rsi` at very short lengths degenerating toward a near-binary
+     up-month/down-month signal that happens to line up well with this
+     specific, small set of cycle pins (5 long + 75 medium windows) — a
+     classic overfit signature. `monthly_rsi` stays diagnostic-only,
+     excluded from Stages 3-5, and is **not** a promotion candidate.
+     `monthly_macd`'s winner is unchanged and not suspect.
+     A visual confluence check (`scripts/export_indicator_confluence_data.py`
+     → standalone Chart.js dashboard, not checked into the repo) plots BTC
+     price against all nine indicators' full z-score histories with the
+     long-/medium-term cycle windows shaded behind them, for Chris to
+     eyeball confluence before deciding on an equal-weight or
+     floor-diversified aggregate index. Pending his review as of this entry.

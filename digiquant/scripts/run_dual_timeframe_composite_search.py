@@ -107,9 +107,14 @@ WEEKLY_MACD_CANDIDATES = [
 # with a completed-calendar-month long-term leg instead of a completed-ISO-
 # week one (see module docstring's step 2b) -- exploration only, not fed
 # into steps 3-5.
+# monthly_length widened further (2026-09-05): the first monthly pass's
+# winner (3) sat at the grid's short edge, so extend down to 2 (RSI's
+# mathematical floor -- length=1 degenerates to a single-delta RSI) and add
+# 4/6 for resolution, to see whether the score keeps climbing toward the
+# floor (overfit signal) or peaks at an interior value.
 MONTHLY_RSI_CANDIDATES = [
     {"monthly_length": w, "daily_length": d}
-    for w in (3, 5, 7, 9, 12, 14, 18)
+    for w in (2, 3, 4, 5, 6, 7, 9, 12, 14, 18)
     for d in (5, 7, 9, 10, 14)
 ]
 MONTHLY_MACD_CANDIDATES = [
