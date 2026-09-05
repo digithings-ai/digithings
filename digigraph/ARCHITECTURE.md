@@ -366,7 +366,9 @@ digigraph/src/digigraph/
 │   ├── nodes.py                 supervisor_node, strategy_validator_node, backtest_node, optimize_node
 │   ├── research.py              research_node, _run_document_rag_path, _run_quant_or_augmented_path
 │   ├── research_subgraph.py     build_research_subgraph() — research_inner + research_brief_builder
-│   └── research_brief.py        research_brief_builder_node
+│   ├── research_brief.py        research_brief_builder_node
+│   ├── product_graphs.py        digigraph product graphs (#3415) — research-portfolio-chain dry path
+│   └── pipeline_builder.py      phase-structured StateGraph compiler (digiquant research/portfolio consumer)
 ├── orchestration/
 │   ├── registry.py              ToolContext, register_tool, register_skill, get_tools, execute
 │   ├── builtin.py               All built-in tool + skill registrations; loads entry points
@@ -1126,3 +1128,22 @@ research migration (issue #176, ADR-0009) is the first consumer.
 These primitives stay research-agnostic on purpose. Any sub-graph that wants
 phase-structured parallel research can reuse them by declaring its own
 phase list.
+
+## digigraph product graphs (#3415)
+
+Scheduled digiquant **research → portfolio** work is moving from the digiquant
+CLI sidecar (`python -m digiquant.portfolio.chain`) onto digigraph-owned product
+graphs so the product path is digigraph → digillm (LLM nodes use
+`digigraph.llm_client`). Domain graphs still compile inside digiquant; digigraph
+never imports digiquant Python packages.
+
+| Surface | Role |
+|---------|------|
+| `GET /v1/product_graphs` | List registered product graphs |
+| `POST /v1/product_graphs/{name}/runs` | Run one graph (dry compile by default) |
+| `graph/product_graphs.py` | `research-portfolio-chain` LangGraph + registry |
+| digiquant tool `digiquant_compile_research_portfolio` | Compile-only topology via `/v1/orchestrator_invoke` |
+
+First slice: dry run only. Full apply remains on `digiquant.portfolio.chain`
+until cutover. Prompt / structured-output walk for the same pass: #3424
+(`digiquant.dashboard.prompt_walk_inventory`).

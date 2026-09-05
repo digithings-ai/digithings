@@ -32,6 +32,7 @@ from digigraph import __version__
 from digigraph.boundaries import GRAPH_RUNTIME_ERRORS, PROJECT_CONFIG_ERRORS, STREAM_SSE_ERRORS
 from digigraph.chat_prompt import messages_to_workflow_prompt
 from digigraph.formatters import get_stream_formatter
+from digigraph.graph.product_graphs import ProductGraphRunRequest
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
 from digigraph.models import (
@@ -239,6 +240,7 @@ _rate_limiter = _RateLimiter()
 _RATE_LIMITS: dict[str, tuple[int, int]] = {
     "/workflow": (10, 60),
     "/v1/chat/completions": (10, 60),
+    "/v1/product_graphs": (10, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
@@ -1151,6 +1153,50 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         content = result.message if result.success else f"Error: {result.message}"
     completion = _build_completion(req, content, prompt)
     return completion
+
+
+@v1.get("/product_graphs")
+def v1_list_product_graphs() -> dict:
+    """List digigraph product graphs (digiquant research/portfolio scheduled path, #3415)."""
+    from digigraph.graph.product_graphs import list_product_graphs
+
+    return {
+        "graphs": [s.model_dump(mode="json") for s in list_product_graphs()],
+        "version": 1,
+    }
+
+
+@v1.post("/product_graphs/{graph_name}/runs")
+def v1_run_product_graph(
+    graph_name: str,
+    req: ProductGraphRunRequest,
+    request: Request,
+) -> dict:
+    """Start one product-graph run (dry compile by default).
+
+    digigraph owns the LangGraph entry; digiquant owns domain compile/apply via
+    ``POST /v1/orchestrator_invoke``. Full apply is refused until cutover.
+    """
+    import os
+
+    from digigraph.graph.product_graphs import run_product_graph
+
+    digiquant_url = (os.environ.get("DIGIQUANT_URL") or "").strip() or None
+    bearer = getattr(request.state, "digi_bearer", None)
+    request_id = getattr(request.state, "request_id", None)
+    result = run_product_graph(
+        graph_name,
+        req,
+        digiquant_base_url=digiquant_url,
+        digi_bearer=bearer,
+        request_id=request_id,
+    )
+    if result.error and result.error.startswith("unknown product graph"):
+        raise HTTPException(status_code=404, detail=result.error)
+    payload = result.model_dump(mode="json")
+    if result.status == "error":
+        raise HTTPException(status_code=502, detail=payload)
+    return payload
 
 
 app.include_router(v1)
