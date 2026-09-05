@@ -334,10 +334,17 @@ class TestChainHonorsHydratedOverlaySchedule:
         with (
             patch("digiquant.portfolio.chain._run_preflight_only", side_effect=_hydrate),
             patch("digiquant.portfolio.chain.build_research_graph", side_effect=_capture_research),
-            patch("digiquant.portfolio.chain.build_portfolio_graph", side_effect=_capture_portfolio),
-            patch("digiquant.portfolio.chain._run_terminal_phase", side_effect=lambda *_a, **_k: _a[2]),
+            patch(
+                "digiquant.portfolio.chain.build_portfolio_graph", side_effect=_capture_portfolio
+            ),
+            patch(
+                "digiquant.portfolio.chain._run_terminal_phase", side_effect=lambda *_a, **_k: _a[2]
+            ),
             patch("digiquant.portfolio.chain._run_beliefs_fold"),
-            patch("digiquant.portfolio.chain._safe_invoke_graph", side_effect=lambda _g, state, *_a, **_k: state),
+            patch(
+                "digiquant.portfolio.chain._safe_invoke_graph",
+                side_effect=lambda _g, state, *_a, **_k: state,
+            ),
         ):
             final = run_research_then_portfolio(
                 research_input=ResearchInput(run_date=sunday, watchlist=("AAPL",)),
