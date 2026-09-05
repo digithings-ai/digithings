@@ -60,4 +60,4 @@ session_catchup; keep workflow_dispatch; add header pointing at digithings-cron.
 
 See src/jobs.ts for the full enabled map. market_context uses bucket inputs
 intraday / daily / weekly. agent-pr-finalizer dispatches with dry_run=false.
-House-run uses repository_dispatch event_type olympus-daily (leftover id only).
+House-run uses repository_dispatch event_type digiquant-baseline.

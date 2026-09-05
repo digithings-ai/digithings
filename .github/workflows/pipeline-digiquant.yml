@@ -10,12 +10,12 @@ name: "Pipeline: digiquant research"
 # House must finish before the 09:30 America/New_York open so at-open execution
 # can read today's book. Primary is 09:17 UTC (05:17 ET / 11:17 Italy in CEST);
 # retries at 10:17 / 11:17 / 12:17 skip when today's run already succeeded.
-# `repository_dispatch` type `olympus-daily` is the external watchdog hook
-# (Cloudflare cron / ops runner) — not a substitute for `workflow_dispatch`.
+# `repository_dispatch` type `digiquant-baseline` is the external watchdog hook
+# (Cloudflare Worker digithings-cron / ops runner) — not a substitute for `workflow_dispatch`.
 
 on:
   repository_dispatch:
-    types: [olympus-daily]
+    types: [digiquant-baseline]
   workflow_dispatch:
     inputs:
       refresh_scope:
@@ -229,7 +229,7 @@ jobs:
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          LANGSMITH_PROJECT: olympus-daily
+          LANGSMITH_PROJECT: digiquant-baseline
           # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
           # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
           OLYMPUS_SHADOW_ARTIFACT_MODE: export
