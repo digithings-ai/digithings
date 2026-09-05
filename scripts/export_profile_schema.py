@@ -18,11 +18,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "digiquant" / "src"))
 
 from digiquant.profiles.asset_preferences import AssetPreferences  # noqa: E402
+from digiquant.profiles.execution_policy import ExecutionPolicy  # noqa: E402
 from digiquant.profiles.investment_profile import InvestmentProfile  # noqa: E402
+from digiquant.profiles.pipeline_schedule import PipelineSchedule  # noqa: E402
 
 _SCHEMAS = (
     (InvestmentProfile, "investment_profile.v1.json"),
     (AssetPreferences, "asset_preferences.v1.json"),
+    (PipelineSchedule, "pipeline_schedule.v1.json"),
+    (ExecutionPolicy, "execution_policy.v1.json"),
 )
 
 

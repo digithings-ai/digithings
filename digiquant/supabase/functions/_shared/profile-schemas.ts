@@ -1,5 +1,6 @@
 /**
- * Server re-validation of InvestmentProfile / AssetPreferences v1.
+ * Server re-validation of InvestmentProfile / AssetPreferences /
+ * PipelineSchedule / ExecutionPolicy v1.
  *
  * Imports the REAL digiquant/docs/schemas/*.v1.json files (Deno JSON import) —
  * no hand-transcribed TS duplicate that can drift from Python.
@@ -11,9 +12,17 @@ import investmentProfileSchema from "../../../docs/schemas/investment_profile.v1
 import assetPreferencesSchema from "../../../docs/schemas/asset_preferences.v1.json" with {
   type: "json",
 };
+import pipelineScheduleSchema from "../../../docs/schemas/pipeline_schedule.v1.json" with {
+  type: "json",
+};
+import executionPolicySchema from "../../../docs/schemas/execution_policy.v1.json" with {
+  type: "json",
+};
 
 export const INVESTMENT_PROFILE_V1 = investmentProfileSchema as SchemaNode;
 export const ASSET_PREFERENCES_V1 = assetPreferencesSchema as SchemaNode;
+export const PIPELINE_SCHEDULE_V1 = pipelineScheduleSchema as SchemaNode;
+export const EXECUTION_POLICY_V1 = executionPolicySchema as SchemaNode;
 
 export type FieldError = { path: string; message: string };
 
@@ -24,6 +33,7 @@ export type ValidationResult =
 type SchemaNode = {
   type?: string;
   enum?: readonly string[];
+  const?: unknown;
   pattern?: string;
   minimum?: number;
   maximum?: number;
@@ -32,40 +42,54 @@ type SchemaNode = {
   properties?: Record<string, SchemaNode>;
   additionalProperties?: boolean | SchemaNode;
   required?: readonly string[];
+  $ref?: string;
+  $defs?: Record<string, SchemaNode>;
 };
 
 function fail(path: string, message: string): FieldError {
   return { path, message };
 }
 
+function resolveRef(root: SchemaNode, schema: SchemaNode): SchemaNode {
+  if (!schema.$ref) return schema;
+  const match = /^#\/\$defs\/(.+)$/.exec(schema.$ref);
+  if (!match) return schema;
+  const resolved = root.$defs?.[match[1]!];
+  return resolved ?? schema;
+}
+
 function validateNode(
+  root: SchemaNode,
   schema: SchemaNode,
   value: unknown,
   path: string,
   errors: FieldError[],
 ): void {
-  if (schema.type === "object") {
+  const resolved = resolveRef(root, schema);
+
+  if (resolved.type === "object") {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       errors.push(fail(path, "must be an object"));
       return;
     }
     const obj = value as Record<string, unknown>;
-    for (const req of schema.required ?? []) {
+    for (const req of resolved.required ?? []) {
       if (!(req in obj) || obj[req] === undefined) {
         errors.push(fail(path ? `${path}.${req}` : req, "required"));
       }
     }
-    const props = schema.properties ?? {};
+    const props = resolved.properties ?? {};
     for (const key of Object.keys(obj)) {
       if (!(key in props)) {
-        if (schema.additionalProperties === false) {
+        if (resolved.additionalProperties === false) {
           errors.push(fail(path ? `${path}.${key}` : key, "additional property not allowed"));
         } else if (
-          typeof schema.additionalProperties === "object" &&
-          schema.additionalProperties !== null
+          typeof resolved.additionalProperties === "object" &&
+          resolved.additionalProperties !== null
         ) {
           validateNode(
-            schema.additionalProperties,
+            root,
+            resolved.additionalProperties,
             obj[key],
             path ? `${path}.${key}` : key,
             errors,
@@ -73,46 +97,58 @@ function validateNode(
         }
         continue;
       }
-      validateNode(props[key]!, obj[key], path ? `${path}.${key}` : key, errors);
+      validateNode(root, props[key]!, obj[key], path ? `${path}.${key}` : key, errors);
     }
     return;
   }
 
-  if (schema.type === "array") {
+  if (resolved.type === "array") {
     if (!Array.isArray(value)) {
       errors.push(fail(path, "must be an array"));
       return;
     }
-    if (schema.items) {
-      value.forEach((item, i) => validateNode(schema.items!, item, `${path}[${i}]`, errors));
+    if (resolved.items) {
+      value.forEach((item, i) =>
+        validateNode(root, resolved.items!, item, `${path}[${i}]`, errors)
+      );
     }
     return;
   }
 
-  if (schema.type === "string") {
+  if (resolved.type === "string") {
     if (typeof value !== "string") {
       errors.push(fail(path, "must be a string"));
       return;
     }
-    if (schema.enum && !(schema.enum as readonly string[]).includes(value)) {
-      errors.push(fail(path, `must be one of: ${schema.enum.join(", ")}`));
+    if (resolved.const !== undefined && value !== resolved.const) {
+      errors.push(fail(path, `must be ${JSON.stringify(resolved.const)}`));
     }
-    if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
-      errors.push(fail(path, `must match ${schema.pattern}`));
+    if (resolved.enum && !(resolved.enum as readonly string[]).includes(value)) {
+      errors.push(fail(path, `must be one of: ${resolved.enum.join(", ")}`));
+    }
+    if (resolved.pattern && !new RegExp(resolved.pattern).test(value)) {
+      errors.push(fail(path, `must match ${resolved.pattern}`));
     }
     return;
   }
 
-  if (schema.type === "integer") {
+  if (resolved.type === "boolean") {
+    if (typeof value !== "boolean") {
+      errors.push(fail(path, "must be a boolean"));
+    }
+    return;
+  }
+
+  if (resolved.type === "integer") {
     if (typeof value !== "number" || !Number.isInteger(value)) {
       errors.push(fail(path, "must be an integer"));
       return;
     }
-    if (schema.minimum !== undefined && value < schema.minimum) {
-      errors.push(fail(path, `must be >= ${schema.minimum}`));
+    if (resolved.minimum !== undefined && value < resolved.minimum) {
+      errors.push(fail(path, `must be >= ${resolved.minimum}`));
     }
-    if (schema.maximum !== undefined && value > schema.maximum) {
-      errors.push(fail(path, `must be <= ${schema.maximum}`));
+    if (resolved.maximum !== undefined && value > resolved.maximum) {
+      errors.push(fail(path, `must be <= ${resolved.maximum}`));
     }
   }
 }
@@ -122,7 +158,7 @@ export function validateAgainstSchema(
   value: unknown,
 ): ValidationResult {
   const errors: FieldError[] = [];
-  validateNode(schema, value, "", errors);
+  validateNode(schema, schema, value, "", errors);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: value as Record<string, unknown> };
 }
@@ -133,6 +169,14 @@ export function validateInvestmentProfile(value: unknown): ValidationResult {
 
 export function validateAssetPreferences(value: unknown): ValidationResult {
   return validateAgainstSchema(ASSET_PREFERENCES_V1, value);
+}
+
+export function validatePipelineSchedule(value: unknown): ValidationResult {
+  return validateAgainstSchema(PIPELINE_SCHEDULE_V1, value);
+}
+
+export function validateExecutionPolicy(value: unknown): ValidationResult {
+  return validateAgainstSchema(EXECUTION_POLICY_V1, value);
 }
 
 /** Reserved house profile key — overlays must never claim it (fail closed). */

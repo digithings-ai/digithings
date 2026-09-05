@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "description": "Workspace execution constraints (schema v1).\n\nAttributes\n----------\nschema_version\n    Monotonic schema version. Increment only on breaking changes.\ncalendar_mode\n    How market availability is resolved. ``venue_calendar`` is the only v1\n    mode \u2014 the authoritative venue calendar always wins over schedule intent.\npermitted_venues\n    Preferred venue identifiers (upper-cased, de-duplicated). Empty means no\n    preference filter; the calendar still applies to whatever venue is chosen.\non_closed_session\n    Behavior when the applicable session is closed (or past an early close).\n    ``defer`` leaves valid intent pending \u2014 never force-opens a closed market.\nrespect_early_close\n    When true, treat post-early-close windows as closed for new execution.",
+  "properties": {
+    "calendar_mode": {
+      "const": "venue_calendar",
+      "default": "venue_calendar",
+      "description": "Authoritative venue calendar; scheduled execution cannot override closed sessions.",
+      "title": "Calendar Mode",
+      "type": "string"
+    },
+    "on_closed_session": {
+      "const": "defer",
+      "default": "defer",
+      "description": "Closed sessions defer pending intent; never force execution.",
+      "title": "On Closed Session",
+      "type": "string"
+    },
+    "permitted_venues": {
+      "description": "Preferred venues (upper-cased, de-duplicated). Empty = no preference filter; calendar still applies.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Permitted Venues",
+      "type": "array"
+    },
+    "respect_early_close": {
+      "default": true,
+      "description": "Treat early-close windows as closed for new execution afterward.",
+      "title": "Respect Early Close",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "default": 1,
+      "description": "Schema version; bump on breaking changes.",
+      "minimum": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "ExecutionPolicy",
+  "type": "object"
+}

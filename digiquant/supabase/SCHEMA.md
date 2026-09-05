@@ -154,7 +154,9 @@ re-point to `public_nav_history` in the browser. Apply migrations **072–074** 
 Private append-only versioned investment overlay pins for dashboard preflight. The
 digithings-owned **house** row (`profile_key='house'`, `is_house_default=true`) is the
 immutable always-on default run. Overlay rows may request different universe / risk /
-themes / budgets; they must not claim the house key or cancel/replace the house run.
+themes / budgets / pipeline schedule / execution policy; they must not claim the house
+key or cancel/replace the house run. `#3611` adds optional `pipeline_schedule` and
+`execution_policy` inside the existing jsonb `payload` (no migration).
 
 | Table | PK | Purpose |
 |-------|----|---------|
