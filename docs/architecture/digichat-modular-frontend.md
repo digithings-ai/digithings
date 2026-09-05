@@ -5,7 +5,7 @@
 > Foundry. Adapters only translate provider streams into shared digichat visuals.
 
 **Status:** Living architecture note (2026-08-09)
-**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [activity protocol](../superpowers/specs/2026-08-01-digichat-activity-protocol-design.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)
+**Related:** [ADR-0018](../adr/0018-digichat-path-routing.md), [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md), [renderer contract](digichat-renderer-contract.md), [activity protocol](../superpowers/specs/2026-08-01-digichat-activity-protocol-design.md), [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md)
 **Naming:** Digi module names are always lowercase in prose ([PR #2007](https://github.com/digithings-ai/digithings/pull/2007)).
 
 ---
