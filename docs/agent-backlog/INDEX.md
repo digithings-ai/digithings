@@ -14,6 +14,7 @@ Update this file when themes start/complete. Link **GitHub Issues** (not bare TO
 | Product rebrand (retire olympus / atlas / hermes / kairos) | in_progress | [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) | [Scope](../plans/2026-08-30-product-rebrand-scope.md) — [#3325](https://github.com/digithings-ai/digithings/pull/3325) on `develop`: public path `/dashboard/` only, workspace `frontend/dashboard`. Live Pages still `/olympus` until a human coordinates Pages+EF cutover. Python packages and SQL tables stay until later hops. |
 | Flagship follow-up (recovery / live-path insert / dashboard SSOT) | in_progress | [#3426](https://github.com/digithings-ai/digithings/issues/3426) | Must-fixes from reviews of #3328, #3329, #3337. One PR into `develop`. |
 | One-delta OrderIntent / `position_events` projection | in_progress | [#3454](https://github.com/digithings-ai/digithings/issues/3454) | Pre-commit book is the sole prior; house `position_events` reprojected from 2026-08-27. |
+| OpenCode as digichat CLI/TUI foundation | in_progress | [#3568](https://github.com/digithings-ai/digithings/issues/3568) | [ADR-0027](../adr/0027-opencode-digichat-cli-foundation.md) (proposed) · [adoption plan](../architecture/opencode-digichat-adoption.md) — research only; no product replacement yet |
 | _(example) digigraph hub mode_ | todo |  | |
 
 ## Quick links

@@ -156,6 +156,24 @@ describe("assistant turn — settled", () => {
     expect(html).toContain("Download thread as markdown");
   });
 
+  it("exposes print / mailto / txt / html next to the md export (#3510)", () => {
+    const html = sessionWith(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: "Auth uses RS256." },
+      ],
+      false,
+      "embed",
+    );
+    expect(html).toContain("Email answer");
+    expect(html).toContain("Download thread as text");
+    expect(html).toContain("Download thread as html");
+    expect(html).toContain("Print transcript");
+    for (const label of [">mail</button>", ">txt</button>", ">html</button>", ">print</button>"]) {
+      expect(html).toContain(label);
+    }
+  });
+
   it("hides regen and edit when the controller omits them (Foundry)", () => {
     const html = sessionWith(
       [

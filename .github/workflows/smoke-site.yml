@@ -1,3 +1,4 @@
+# Production clock: Cloudflare Worker digithings-cron (frontend/digithings-cron). Schedule removed #3579.
 name: "Smoke: site"
 
 # Post-deploy smoke check for the static sites. Both digithings.ai and
@@ -22,8 +23,6 @@ name: "Smoke: site"
 # stale site cannot cancel or mask the other; see the comment on the second job.
 
 on:
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -143,7 +142,7 @@ jobs:
           if [[ -n "$EXISTING" ]]; then
             gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
           else
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant-web" --body "$BODY"
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --label "component:digiquant" --body "$BODY"
           fi
 
   # digithings.ai gets its own job rather than a matrix over the two sites. A

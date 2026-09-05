@@ -112,9 +112,9 @@ const TOOL_LABELS: Record<string, string> = {
   digisearch: "Search the knowledge base",
   azure_ai_search: "Search the knowledge base",
   rag_sources: "Search the knowledge base",
-  digivault: "Find original documents",
-  digivault_search_notes: "Find original documents",
-  digivault_get_note: "Load document",
+  digivault: "Vault",
+  digivault_search_notes: "Vault",
+  digivault_get_note: "Load vault note",
   web_search: "Web search (External)",
 };
 

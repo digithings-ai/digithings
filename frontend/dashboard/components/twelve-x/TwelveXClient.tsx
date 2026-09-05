@@ -161,7 +161,7 @@ export function resolveTab(urlTab: string | null): TwelveXTab {
   return 'today';
 }
 
-/** Read a query param from the live URL (client only) — used once to seed state. */
+/** Read a query param from the live URL — client only, and only after mount. */
 function readParam(key: string): string | null {
   if (typeof window === 'undefined') return null;
   return new URLSearchParams(window.location.search).get(key);
@@ -200,15 +200,31 @@ export default function TwelveXClient() {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(configured ? null : 'unconfigured');
 
-  // In-page navigation state — local, seeded once from the URL for deep links.
-  const [tab, setTabState] = useState<TwelveXTab>(() => resolveTab(readParam('tab')));
-  const [brief, setBrief] = useState<BriefTarget | null>(() => {
-    const sf = readParam('brief');
-    return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
-  });
-  const [view, setView] = useState<'briefs' | null>(() =>
-    readParam('view') === 'briefs' ? 'briefs' : null,
-  );
+  // In-page navigation state — local, adopted from the URL for deep links.
+  //
+  // It cannot be seeded in the initializers. This suite is a static export, so
+  // the prerendered HTML always carries the default tab, and React does not
+  // repair a mismatched *attribute* while hydrating — only the children. A
+  // `?tab=trades` link therefore rendered the Trades panel under a strip that
+  // still highlighted Today, and the next click lit a second tab, because the
+  // stale className was never written. Starting where the prerender started and
+  // adopting the URL on the first post-hydration commit makes it an ordinary
+  // update, which React does write out.
+  const [tab, setTabState] = useState<TwelveXTab>('today');
+  const [brief, setBrief] = useState<BriefTarget | null>(null);
+  const [view, setView] = useState<'briefs' | null>(null);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- the cascade is the
+     * point: this is the one render that has a URL to read, and it must land
+     * after hydration so React writes the highlight out. Runs once, on mount. */
+    const urlTab = resolveTab(readParam('tab'));
+    if (urlTab !== 'today') setTabState(urlTab);
+    const sourceFile = readParam('brief');
+    if (sourceFile) setBrief({ sourceFile, runDate: readParam('briefDate') });
+    if (readParam('view') === 'briefs') setView('briefs');
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
 
   // Cross-link focus targets handed to the destination tabs.
   const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);

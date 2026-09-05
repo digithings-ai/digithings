@@ -1,11 +1,20 @@
 'use client';
 
 /**
- * Desk+ digichat popup (#3422) — bottom-right launcher + floating iframe panel.
- * Mirrors digichat `widget.js` (#3421) without loading an external script (CSP).
+ * Desk+ digichat popup (#3422) — dashboard adapter around digiweb's shared
+ * square-to-panel launcher. This file owns entitlement, embed URL, theme, and
+ * page-context messaging; @digithings/web owns all launcher chrome and motion.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DigichatLauncher } from '@digithings/web';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
@@ -13,6 +22,7 @@ import {
   buildThemeMessage,
   canUseDigichatPopup,
   DIGICHAT_READY,
+  extractPageHtml,
   extractVisiblePageText,
   readDigichatPopupConfig,
   readDocumentTheme,
@@ -49,6 +59,7 @@ export default function DigichatPopup({
   const [open, setOpen] = useState(false);
   const [iframeSrc, setIframeSrc] = useState('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeReadyRef = useRef(false);
   const pageContextSentRef = useRef(false);
   const themeRef = useRef<DigichatPopupTheme>('dark');
 
@@ -73,68 +84,73 @@ export default function DigichatPopup({
   useEffect(() => {
     if (!open || !config) return;
     pageContextSentRef.current = false;
-    setIframeSrc(buildDigichatEmbedSrc(config, themeRef.current));
-  }, [open, config]);
+    const nextSrc = buildDigichatEmbedSrc(config, themeRef.current);
+    if (nextSrc === iframeSrc) return;
+    iframeReadyRef.current = false;
+    setIframeSrc(nextSrc);
+  }, [open, config, iframeSrc]);
 
   const sendPageContext = useCallback(() => {
     if (!config?.pageContext || pageContextSentRef.current) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     const text = extractVisiblePageText();
+    const html = extractPageHtml();
     try {
-      win.postMessage(buildPageContextMessage(text), config.origin);
+      win.postMessage(
+        buildPageContextMessage(text, { html: html || undefined }),
+        config.origin,
+      );
       pageContextSentRef.current = true;
     } catch {
       /* allow retry on next ready */
     }
   }, [config]);
 
+  // A closed launcher retains its iframe so the conversation survives. On
+  // reopen, refresh the theme and page context without waiting for another
+  // `digichat:ready` event (the retained document will not emit one).
   useEffect(() => {
-    if (!config || !open) return;
+    if (!config || !open || !iframeReadyRef.current) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(buildThemeMessage(themeRef.current), config.origin);
+    sendPageContext();
+  }, [config, open, sendPageContext]);
+
+  useEffect(() => {
+    if (!config || !iframeSrc) return;
     function onMessage(ev: MessageEvent) {
       if (ev.origin !== config!.origin) return;
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== DIGICHAT_READY) return;
+      iframeReadyRef.current = true;
       const win = iframeRef.current?.contentWindow;
       if (win) {
         win.postMessage(buildThemeMessage(themeRef.current), config!.origin);
       }
-      sendPageContext();
+      if (open) sendPageContext();
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [config, open, sendPageContext]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(ev: KeyboardEvent) {
-      if (ev.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open]);
+  }, [config, iframeSrc, open, sendPageContext]);
 
   if (!config || !entitled) return null;
 
-  const mode = config.mode;
-
   return (
-    <div
-      data-digichat-popup="1"
-      className="pointer-events-none fixed inset-0 z-[2147483000]"
-      aria-live="polite"
-    >
-      <div
-        id="digichat-popup-panel"
-        role="dialog"
-        aria-label="digichat"
-        data-open={open ? '1' : '0'}
-        className={[
-          'pointer-events-auto fixed right-5 bottom-[5.5rem] z-[2147483000]',
-          'h-[min(640px,calc(100vh-7.5rem))] w-[min(400px,calc(100vw-1.5rem))]',
-          'overflow-hidden bg-surface shadow-lg',
-          open ? 'block' : 'hidden',
-        ].join(' ')}
+    <div data-digichat-popup="1" aria-live="polite">
+      <DigichatLauncher
+        ariaLabel="digichat dashboard assistant"
+        onOpenChange={setOpen}
+        style={
+          {
+            '--digichat-launcher-panel-width':
+              'min(400px, calc(100vw - 2.5rem))',
+            '--digichat-launcher-panel-height':
+              'min(640px, calc(100dvh - 2.5rem))',
+            zIndex: 2147483000,
+          } as CSSProperties
+        }
       >
         {iframeSrc ? (
           <iframe
@@ -146,26 +162,7 @@ export default function DigichatPopup({
             className="h-full w-full border-0 bg-transparent"
           />
         ) : null}
-      </div>
-      <button
-        id="digichat-popup-launcher"
-        type="button"
-        data-mode={mode}
-        aria-label={open ? 'Close digichat' : 'Open digichat'}
-        aria-expanded={open}
-        aria-controls="digichat-popup-panel"
-        onClick={() => setOpen((v) => !v)}
-        className={[
-          'pointer-events-auto fixed right-5 bottom-5 z-[2147483000]',
-          'cursor-pointer border-0 bg-accent text-on-accent shadow-lg',
-          'transition-[transform,opacity] duration-150 ease-out hover:-translate-y-px',
-          mode === 'bar'
-            ? 'h-11 min-w-[10rem] rounded-[10px] px-4 text-sm font-semibold'
-            : 'h-14 w-14 rounded-full text-[22px] leading-[56px]',
-        ].join(' ')}
-      >
-        {mode === 'bar' ? 'Ask digichat' : '✦'}
-      </button>
+      </DigichatLauncher>
     </div>
   );
 }

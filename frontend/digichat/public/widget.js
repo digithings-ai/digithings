@@ -101,6 +101,42 @@
     return raw.replace(/\s+/g, " ").trim().slice(0, maxChars);
   }
 
+  var maxHtmlChars = 12000;
+
+  /** Prefer main/role=main; strip scripts/handlers; never re-hydrate as live DOM. */
+  function extractPageHtml() {
+    var root =
+      document.querySelector("main") ||
+      document.querySelector('[role="main"]') ||
+      document.body;
+    if (!root) return "";
+    var clone = root.cloneNode(true);
+    var popup = clone.querySelectorAll
+      ? clone.querySelectorAll("[data-digichat-popup]")
+      : [];
+    for (var i = 0; i < popup.length; i++) {
+      if (popup[i].parentNode) popup[i].parentNode.removeChild(popup[i]);
+    }
+    var html = clone.innerHTML || "";
+    html = html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<input\b[^>]*\btype\s*=\s*(['"]?)(?:hidden|password)\1[^>]*>/gi, "")
+      .replace(/<input\b[^>]*>/gi, function (tag) {
+        return tag.replace(/\svalue\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+      })
+      .replace(/<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi, function (tag) {
+        return tag.replace(/>[\s\S]*?</, "><");
+      })
+      .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/([</])on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "$1")
+      .replace(/(href|src)\s*=\s*(['"])\s*javascript:[^'"]*\2/gi, "$1=$2#$2")
+      .replace(/(href|src)\s*=\s*javascript:[^\s>]*/gi, "$1=#")
+      .replace(/<\/?(?:iframe|object|embed|link|meta|base|noscript)\b[^>]*>/gi, "");
+    return html.replace(/\n{3,}/g, "\n\n").trim().slice(0, maxHtmlChars);
+  }
+
   /** Best-effort viewport capture; fails soft (CORS / tainted canvas). */
   function captureScreenshot(cb) {
     try {
@@ -223,12 +259,14 @@
       var win = iframe.contentWindow;
       if (!win) return;
       var text = extractVisibleText();
+      var html = extractPageHtml();
       captureScreenshot(function (shot) {
         var payload = {
           type: PAGE_CONTEXT,
           text: text,
           ts: Date.now(),
         };
+        if (html) payload.html = html;
         if (shot) payload.screenshotDataUrl = shot;
         try {
           win.postMessage(payload, origin);

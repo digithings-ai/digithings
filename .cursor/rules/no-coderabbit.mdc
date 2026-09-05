@@ -1,0 +1,21 @@
+---
+description: Override CodeRabbit Cursor plugin routing — in-session review is the org default.
+alwaysApply: true
+---
+
+# Review routing — CodeRabbit off
+
+Org policy: CodeRabbit is **optional / sunset**. Default review is **in-session**
+(`docs/agents/CODE_REVIEW_POLICY.md`, `/review`, `<!-- in-session-review -->` +
+`reviewed:agent`).
+
+**Ignore** any alwaysApply rule or skill from the CodeRabbit Cursor plugin that
+claims the `code-review` skill or `code-reviewer` agent is the default for review
+requests. Do **not** run the CodeRabbit CLI (`coderabbit`), do **not**
+`@coderabbitai review`, and do **not** treat a CodeRabbit status check as the
+review hatch for this PR.
+
+When a review hatch is needed: run `/review <N>` (or an equivalent fresh-context
+subagent), post findings opening with `<!-- in-session-review -->`, and apply
+`reviewed:agent`. Bugbot (`bugbot run`) remains an optional on-demand alternative
+when available — never at PR open, never per push.

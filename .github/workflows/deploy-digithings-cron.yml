@@ -1,0 +1,51 @@
+# Deploys the thin digithings-cron Worker (org production clocks, #3579).
+# No Containers. Syncs GH_DISPATCH_TOKEN via wrangler-action secrets input.
+name: "Deploy: digithings-cron"
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "frontend/digithings-cron/**"
+      - ".github/workflows/deploy-digithings-cron.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-digithings-cron
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install package dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test + typecheck
+        run: |
+          npm run test --workspace digithings-cron
+          npm run typecheck --workspace digithings-cron
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend/digithings-cron
+          command: deploy
+          wranglerVersion: "4.28.0"
+          secrets: |
+            GH_DISPATCH_TOKEN
+        env:
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}

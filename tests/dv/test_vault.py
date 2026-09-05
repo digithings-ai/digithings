@@ -103,6 +103,13 @@ def test_set_frontmatter(tmp_path: Path) -> None:
     assert note.frontmatter["status"] == "shipped"
 
 
+def test_neighbors(tmp_path: Path) -> None:
+    vault = _vault_with_notes(tmp_path)
+    assert vault.neighbors("c") == ("a", "b")
+    assert vault.neighbors("a") == ("b", "c")
+    assert vault.neighbors("missing") == ()
+
+
 def test_lint_clean_vault(tmp_path: Path) -> None:
     vault = _vault_with_notes(tmp_path)
     report = vault.lint()
