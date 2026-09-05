@@ -303,6 +303,8 @@ export function DailyBriefWorkspace({
   const divergenceLabel = performanceSsot
     ? metricsDivergenceBadgeLabel(performanceSsot)
     : null;
+  const investedDisplay =
+    investedPct != null && Number.isFinite(investedPct) ? investedPct : book.investedPct;
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows
@@ -467,7 +469,11 @@ export function DailyBriefWorkspace({
             <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
             <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
             <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
-            <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={investedNote} />
+            <Metric
+              label="Invested"
+              value={`${investedDisplay.toFixed(0)}%`}
+              note={investedNote}
+            />
           </dl>
         </BriefCardLink>
       </EntitledSurface>

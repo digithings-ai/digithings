@@ -489,6 +489,8 @@ describe('DailyBriefWorkspace', () => {
         }}
       />
     );
+    expect(html).toContain('137%');
     expect(html).toContain('12% cash · accounting tip');
+    expect(html).not.toMatch(/>Invested<\/dt><dd[^>]*>100%</);
   });
 });
