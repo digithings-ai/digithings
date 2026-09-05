@@ -28,7 +28,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { TableRow, ViewRow } from './database.types';
-import type { ResearchRunDiagnostics } from './types';
+import type { ResearchRunDiagnostics, BenchmarkHistoryMap } from './types';
 import type {
   BenchmarkComparison,
   PerformanceTearsheet,
@@ -768,7 +768,7 @@ export async function getPerformanceBundle(
           navWindow[0].date,
           navWindow.at(-1)!.date
         )
-      : Promise.resolve({}),
+      : Promise.resolve({} as BenchmarkHistoryMap),
     openTickers.length
       ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
           'holding mark price_history',
