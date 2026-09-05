@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import sys
+import types
 from pathlib import Path
 from typing import Any
 
 import pytest
-from digivault.postgres_store import PostgresStore
+from digivault.postgres_store import PostgresStore, PostgresStoreError
 from digivault.vault import VaultError
 
 from digivault import FilesystemStore, VaultStore
@@ -26,6 +30,7 @@ class _FakeQuery:
         self._payload: Any = None
         self._op = "select"
         self._order: str | None = None
+        self._range: tuple[int, int] | None = None
 
     def select(self, cols: str) -> _FakeQuery:
         self._op = "select"
@@ -37,6 +42,11 @@ class _FakeQuery:
 
     def order(self, key: str) -> _FakeQuery:
         self._order = key
+        return self
+
+    def range(self, start: int, end: int) -> _FakeQuery:
+        self._table.range_calls.append((start, end))
+        self._range = (start, end)
         return self
 
     def upsert(self, row: dict[str, Any], on_conflict: str | None = None) -> _FakeQuery:
@@ -66,6 +76,12 @@ class _FakeQuery:
             ]
             if self._order:
                 rows = sorted(rows, key=lambda r: str(r.get(self._order) or ""))
+            if self._range is not None:
+                start, end = self._range
+                rows = rows[start : end + 1]
+            elif self._table.max_rows is not None:
+                # Unpaginated select: PostgREST silently truncates at max-rows.
+                rows = rows[: self._table.max_rows]
             return _Resp(rows)
         if self._op == "upsert":
             row = dict(self._payload)
@@ -107,8 +123,10 @@ class _FakeQuery:
 
 
 class _FakeTable:
-    def __init__(self, rows: list[dict[str, Any]]) -> None:
+    def __init__(self, rows: list[dict[str, Any]], *, max_rows: int | None = None) -> None:
         self.rows = rows
+        self.max_rows = max_rows
+        self.range_calls: list[tuple[int, int]] = []
 
     def select(self, cols: str) -> _FakeQuery:
         return _FakeQuery(self).select(cols)
@@ -130,12 +148,47 @@ class _FakeTable:
 
 
 class _FakeClient:
-    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
-        self._table = _FakeTable(list(rows or []))
+    def __init__(
+        self, rows: list[dict[str, Any]] | None = None, *, max_rows: int | None = None
+    ) -> None:
+        self._table = _FakeTable(list(rows or []), max_rows=max_rows)
+
+    @property
+    def range_calls(self) -> list[tuple[int, int]]:
+        return self._table.range_calls
 
     def table(self, name: str) -> _FakeTable:
         del name
         return self._table
+
+
+def _note_row(
+    slug: str,
+    *,
+    vault: str = "finance",
+    body: str = "",
+    tags: list[str] | None = None,
+    wikilinks: list[str] | None = None,
+    title: str | None = None,
+) -> dict[str, Any]:
+    tags = list(tags or [])
+    wikilinks = list(wikilinks or [])
+    title = title or slug
+    return {
+        "vault": vault,
+        "slug": slug,
+        "vault_path": slug,
+        "title": title,
+        "note_type": "reference",
+        "status": "stub",
+        "tags": tags,
+        "relevance": [],
+        "summary": "",
+        "body_markdown": body,
+        "frontmatter": {"title": title, "tags": tags},
+        "sources": [],
+        "wikilinks": wikilinks,
+    }
 
 
 def _seed_filesystem(root: Path) -> FilesystemStore:
@@ -311,3 +364,152 @@ def test_filesystem_neighbors(tmp_path: Path) -> None:
     store = _seed_filesystem(tmp_path)
     assert store.neighbors("missing") == ()
     assert store.neighbors("b") == ("a", "c")
+
+
+_PAGE = 3
+_SUPABASE_ENV = (
+    "CORE_SUPABASE_URL",
+    "SUPABASE_URL",
+    "CORE_SUPABASE_ANON_KEY",
+    "CORE_SUPABASE_SERVICE_KEY",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+)
+
+
+def _paged_rows() -> list[dict[str, Any]]:
+    """Seven notes: page 1 is n00-n02 when page_size=3. n00 links to n06 (page 3)."""
+    rows = [_note_row(f"n{i:02d}", body=f"body-{i:02d}") for i in range(7)]
+    rows[0] = _note_row(
+        "n00",
+        body="see [[n06]]",
+        tags=["hub"],
+        wikilinks=["n06"],
+    )
+    rows[6] = _note_row("n06", body="leaf on last page", tags=["leaf"])
+    return rows
+
+
+def _clear_supabase_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in _SUPABASE_ENV:
+        monkeypatch.delenv(var, raising=False)
+
+
+def _unsigned_jwt(role: str) -> str:
+    def b64(payload: dict[str, str]) -> str:
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+    return f"{b64({'alg': 'none'})}.{b64({'role': role})}.sig"
+
+
+def test_postgres_reindex_indexes_every_row_across_postgrest_pages() -> None:
+    client = _FakeClient(_paged_rows(), max_rows=_PAGE)
+    store = PostgresStore(client, vault="finance", page_size=_PAGE)
+    names = [n.name for n in store.list_notes()]
+    assert names == [f"n{i:02d}" for i in range(7)]
+    assert len(set(names)) == 7
+    assert client.range_calls == [(0, 2), (3, 5), (6, 8)]
+
+
+def test_postgres_reads_span_page_boundaries() -> None:
+    store = PostgresStore(
+        _FakeClient(_paged_rows(), max_rows=_PAGE), vault="finance", page_size=_PAGE
+    )
+    leaf = store.get_note("n06")
+    assert leaf is not None
+    assert "leaf on last page" in store.read_text("n06")
+    assert store.backlinks("n06") == ("n00",)
+    assert [n.name for n in store.search_by_tag("leaf")] == ["n06"]
+    assert [n.name for n in store.search_by_tag("hub")] == ["n00"]
+
+
+def _bodies_by_slug(client: _FakeClient) -> dict[str, str]:
+    return {str(r["slug"]): str(r["body_markdown"]) for r in client._table.rows}
+
+
+def test_postgres_rename_collision_beyond_page_one_does_not_lose_data() -> None:
+    rows = _paged_rows()
+    rows.append(_note_row("zzz", body="must survive"))
+    rows.append(_note_row("hub", body="see [[n00]]", wikilinks=["n00"]))
+    client = _FakeClient(rows, max_rows=_PAGE)
+    store = PostgresStore(client, vault="finance", page_size=_PAGE)
+    assert store.get_note("zzz") is not None
+    with pytest.raises(VaultError, match="already exists"):
+        store.rename("n00", "zzz")
+    bodies = _bodies_by_slug(client)
+    assert bodies["n00"] == "see [[n06]]"
+    assert bodies["zzz"] == "must survive"
+    assert "[[n00]]" in bodies["hub"]
+
+
+def test_postgres_rename_does_not_overwrite_unindexed_destination() -> None:
+    """A dest row omitted from the in-memory index must still be protected.
+
+    Truncated reindex (or a race) plus upsert-on-conflict would clobber it (#3606).
+    """
+    client = _FakeClient(
+        [
+            _note_row("n00", body="move me"),
+            _note_row("hub", body="see [[n00]]", wikilinks=["n00"]),
+        ]
+    )
+    store = PostgresStore(client, vault="finance")
+    client._table.rows.append(_note_row("zzz", body="must survive"))
+    assert store.get_note("zzz") is None
+    with pytest.raises(VaultError, match="already exists"):
+        store.rename("n00", "zzz")
+    bodies = _bodies_by_slug(client)
+    assert bodies["n00"] == "move me"
+    assert bodies["zzz"] == "must survive"
+    assert "[[n00]]" in bodies["hub"]
+
+
+@pytest.mark.parametrize("page_size", [0, -1])
+def test_postgres_rejects_non_positive_page_size(page_size: int) -> None:
+    with pytest.raises(ValueError, match=str(page_size)):
+        PostgresStore(_FakeClient([]), vault="finance", page_size=page_size)
+
+
+def test_postgres_from_env_rejects_anon_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_supabase_env(monkeypatch)
+    monkeypatch.setenv("CORE_SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("CORE_SUPABASE_ANON_KEY", "anon-placeholder")
+    with pytest.raises(PostgresStoreError, match="service-role"):
+        PostgresStore.from_env()
+
+
+def test_postgres_from_env_rejects_anon_jwt_in_service_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_supabase_env(monkeypatch)
+    monkeypatch.setenv("CORE_SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("CORE_SUPABASE_SERVICE_KEY", _unsigned_jwt("anon"))
+    with pytest.raises(PostgresStoreError, match="anon"):
+        PostgresStore.from_env()
+
+
+def test_postgres_from_env_requires_url_and_service_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_supabase_env(monkeypatch)
+    with pytest.raises(PostgresStoreError, match="not configured"):
+        PostgresStore.from_env()
+
+
+def test_postgres_from_env_accepts_service_role_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_supabase_env(monkeypatch)
+    monkeypatch.setenv("CORE_SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("CORE_SUPABASE_SERVICE_KEY", _unsigned_jwt("service_role"))
+    captured: dict[str, str] = {}
+
+    def create_client(url: str, key: str) -> _FakeClient:
+        captured["url"] = url
+        captured["key"] = key
+        return _FakeClient()
+
+    fake_mod = types.ModuleType("supabase")
+    fake_mod.create_client = create_client  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "supabase", fake_mod)
+    store = PostgresStore.from_env(vault="finance")
+    assert captured["url"] == "https://example.supabase.co"
+    assert captured["key"] == _unsigned_jwt("service_role")
+    assert store.vault == "finance"
