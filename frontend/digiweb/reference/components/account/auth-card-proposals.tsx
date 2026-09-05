@@ -31,8 +31,22 @@ export function AuthCardProposals() {
             {`// ${id}`}
           </p>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,380px))] items-start gap-[1.2rem]">
-            <AuthCard layout={id} mode="signin" idPrefix={`acct-${id}-in`} />
-            <AuthCard layout={id} mode="signup" idPrefix={`acct-${id}-up`} />
+            <div id={`auth-${id}-signin`}>
+              <AuthCard
+                layout={id}
+                mode="signin"
+                idPrefix={`acct-${id}-in`}
+                switchHref={`#auth-${id}-signup`}
+              />
+            </div>
+            <div id={`auth-${id}-signup`}>
+              <AuthCard
+                layout={id}
+                mode="signup"
+                idPrefix={`acct-${id}-up`}
+                switchHref={`#auth-${id}-signin`}
+              />
+            </div>
           </div>
         </div>
       ))}

@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Reveal } from "@digithings/web";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead, RuledList, RuledRow } from "../_company/prose";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -81,15 +82,15 @@ export default function ServicesPage() {
         <section className="section section-alt">
           <div className="wrap grid gap-[3rem] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.5fr)]">
             <div>
-              <span className="kicker">{"// how an engagement starts"}</span>
-              <h2 className="mt-[0.8rem] max-w-[18ch] text-[clamp(1.8rem,4vw,3rem)] leading-[1.08] text-ink">
-                Scope the outcome before the work.
-              </h2>
-              <p className="mt-[1.1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
-                Tell us what you run today, what you want to build, and which constraints matter.
-                We will determine whether digithings fits and define the deliverables, dependencies,
-                responsibilities, timing, and price in writing before work begins.
-              </p>
+              <Reveal className="section-head">
+                <span className="kicker">{"// how an engagement starts"}</span>
+                <h2>Scope the outcome before the work.</h2>
+                <p>
+                  Tell us what you run today, what you want to build, and which constraints matter.
+                  We will determine whether digithings fits and define the deliverables,
+                  dependencies, responsibilities, timing, and price in writing before work begins.
+                </p>
+              </Reveal>
               <p className="mt-[1rem] max-w-[64ch] text-[1rem] leading-[1.75] text-ink-soft">
                 There are no public package prices or service-level commitments because the work is
                 scoped for each environment. The repository remains available whether or not you
@@ -122,7 +123,7 @@ export default function ServicesPage() {
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <ContactMailto className="btn btn-primary" subject="digithings%20services%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-primary" subject="digithings%20services%20inquiry">
                 Email about a project <span aria-hidden="true">→</span>
               </ContactMailto>
               <Link className="btn btn-ghost" href="/docs">
@@ -133,7 +134,7 @@ export default function ServicesPage() {
               </Link>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <ContactMailto
+              <ContactMailto email={DT_CONTACT_EMAIL}
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
                 showAddress
               >

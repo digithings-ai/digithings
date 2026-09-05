@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Reveal } from "@digithings/web";
 import { DtFooter } from "@/components/DtFooter";
 import { PageHead } from "../_company/prose";
-import { ContactMailto } from "@/components/ContactMailto";
+import { ContactMailto } from "@digithings/web";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -142,7 +143,7 @@ export default function TeamPage() {
               <Link className="btn btn-ghost" href="/services">
                 View services
               </Link>
-              <ContactMailto className="btn btn-ghost" subject="digithings%20inquiry">
+              <ContactMailto email={DT_CONTACT_EMAIL} className="btn btn-ghost" subject="digithings%20inquiry">
                 Contact digithings
               </ContactMailto>
             </div>

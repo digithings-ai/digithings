@@ -17,13 +17,8 @@ import {
   isTextUIPart,
   type UIMessage,
 } from "ai";
-import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
+import { ArrowDown, Copy, RefreshCw, Square, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { EChartsCard } from "@/components/echarts-card";
@@ -38,7 +33,7 @@ import {
 } from "@/lib/web-search-pref";
 import { cn } from "@/lib/utils";
 import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, matchingSlashCommands, nextPaletteIndex, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
-import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
+import { ChatMarkdown, ChatThinking, ChatToolCall, type CodeBlockOverride } from "@digithings/web";
 
 const APP_SLASH_EXTRA: Array<{ cmd: string; hint: string }> = [
   { cmd: "/clear", hint: "clear thread" },
@@ -116,17 +111,18 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         const isLast = i === message.parts.length - 1;
         if (part.type === ACTIVITY_PART_TYPE || part.type === "data-digigraphTrace") return null;
         if (isReasoningUIPart(part)) {
+          const reasoningLive = isStreaming && isLast;
           return (
-            <Collapsible key={i} className="rounded-none border border-border/60 bg-muted/30">
-              <CollapsibleTrigger className="flex w-full cursor-pointer items-center px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:bg-muted/50">
-                Reasoning
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap border-t border-border/40 px-3 py-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                  {part.text}
-                </pre>
-              </CollapsibleContent>
-            </Collapsible>
+            <ChatThinking
+              key={i}
+              label="Reasoning"
+              live={reasoningLive}
+              defaultOpen={reasoningLive}
+            >
+              <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs leading-relaxed text-muted-foreground">
+                {part.text}
+              </pre>
+            </ChatThinking>
           );
         }
         if (isTextUIPart(part)) {
@@ -144,18 +140,22 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         }
         if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
           const label = toolLabel(part);
+          const runState = "state" in part ? (part as { state?: string }).state : undefined;
+          // Conservative mapping: only a completed output reads as success.
+          // Anything not yet known-good (streaming input, available args,
+          // unknown states) reads as running, never as a green check.
+          const status =
+            runState === "output-error" || runState === "output-denied"
+              ? "error"
+              : runState === "output-available"
+                ? "ok"
+                : "running";
           return (
-            <Collapsible key={i} className="overflow-hidden">
-              <CollapsibleTrigger className="dc-term-chip cursor-pointer">
-                <Wrench className="size-3 shrink-0 opacity-80" />
-                <span className="truncate">{label}</span>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-none border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
-                  {JSON.stringify(part, null, 2)}
-                </pre>
-              </CollapsibleContent>
-            </Collapsible>
+            <ChatToolCall key={i} name={label} status={status}>
+              <pre className="mt-2 max-h-56 overflow-auto rounded-none border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                {JSON.stringify(part, null, 2)}
+              </pre>
+            </ChatToolCall>
           );
         }
         return null;
@@ -735,7 +735,7 @@ export function ChatPanel({
                   {!showEditForm ? (
                     <div
                       className={cn(
-                        "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100",
+                        "mt-2 flex flex-wrap items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100",
                         (isLastAssistant || isLastUser) && "opacity-100",
                       )}
                     >
@@ -978,24 +978,5 @@ export function ChatPanel({
         </span>
       </form>
     </div>
-  );
-}
-
-/** Kept for back-compat with any external importers. Renders a simple mono strip. */
-export function ChatChrome({
-  threadTitle,
-  userSubtitle,
-  leading,
-}: {
-  threadTitle: string;
-  userSubtitle: string;
-  leading?: React.ReactNode;
-}) {
-  return (
-    <header className="app-topbar">
-      {leading}
-      <span className="app-topbar-title">{threadTitle || "digichat"}</span>
-      <span className="app-topbar-meta">{userSubtitle}</span>
-    </header>
   );
 }

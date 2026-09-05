@@ -3,7 +3,7 @@ import { Footer, Reveal } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "../_nav";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { AmbientMesh } from "@/components/landing/AmbientMesh";
-import releases from "../../../digiweb/design/releases.json";
+import releases from "@digithings/design/releases.json";
 
 export const metadata: Metadata = {
   title: "changelog — tagged stack releases",
