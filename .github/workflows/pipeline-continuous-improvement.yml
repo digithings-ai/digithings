@@ -71,11 +71,21 @@ jobs:
           # Commit messages on develop past 7d (for simplify-findings / conventions)
           git log --since="7 days ago" origin/develop --format="=== %h %s%n%b%n" > /tmp/digest/commits.txt || true
 
-          # Failed automation runs past 7d. Production clocks now arrive as
-          # workflow_dispatch / repository_dispatch from digithings-cron.
-          gh api "/repos/$REPO/actions/runs?status=failure&created=>=$SINCE&per_page=100" \
-            --jq '[.workflow_runs[] | {name, url: .html_url, at: .created_at}]' \
-            > /tmp/digest/workflow-failures.json 2>/dev/null || echo "[]" > /tmp/digest/workflow-failures.json
+          # Failed automation runs past 7d. Query each production-clock event
+          # separately so PR/push failures cannot crowd cron dispatches out.
+          for EVENT in workflow_dispatch repository_dispatch; do
+            if ! gh api --paginate --slurp \
+              "/repos/$REPO/actions/runs?status=failure&event=$EVENT&created=>=$SINCE&per_page=100" \
+              2>/dev/null \
+              | jq '[.[].workflow_runs[] | {name, url: .html_url, at: .created_at}]' \
+                > "/tmp/digest/workflow-failures-$EVENT.json"; then
+              echo "[]" > "/tmp/digest/workflow-failures-$EVENT.json"
+            fi
+          done
+          jq -s 'add | sort_by(.at) | reverse' \
+            /tmp/digest/workflow-failures-workflow_dispatch.json \
+            /tmp/digest/workflow-failures-repository_dispatch.json \
+            > /tmp/digest/workflow-failures.json
 
           # Open [housekeeping-auto] trackers (to avoid re-suggesting things already tracked)
           gh issue list --repo "$REPO" --state open --search "[housekeeping-auto] in:title" --limit 50 \
