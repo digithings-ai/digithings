@@ -17,16 +17,21 @@
  * ViewWindow: drag-pan / double-click reset stay synced across charts, with
  * lookback presets matched back via `matchLookbackPreset`. Wheel input
  * splits by axis, not by a single dominant-axis-per-frame classifier:
- * vertical delta (mouse wheel, trackpad two-finger scroll, or pinch/
- * ctrl+wheel) ZOOMS, centred on the cursor; horizontal delta PANS through
- * time — this is also what makes a trackpad horizontal swipe do something,
- * where it used to be silently dropped. Splitting by axis instead of
- * picking one winner per frame matters because a real hand gesture is never
- * perfectly axis-locked — a classifier re-run every frame flips its pick on
- * that noise alone, which is what reads as flicker/stutter. The zoom step
- * is also capped per frame so a trackpad's bursty, high-frequency deltas
- * (pinch or momentum scroll) can't make the view jump the way an uncapped
- * exponential factor would.
+ * vertical delta (mouse wheel, trackpad two-finger scroll, or a pinch —
+ * Chrome/Safari report a pinch gesture as a wheel event too) ZOOMS, centred
+ * on the cursor; horizontal delta PANS through time — this is also what
+ * makes a trackpad horizontal swipe do something, where it used to be
+ * silently dropped. Splitting by axis instead of picking one winner per
+ * frame matters because a real hand gesture is never perfectly axis-locked
+ * — a classifier re-run every frame flips its pick on that noise alone,
+ * which is what reads as flicker/stutter. The zoom step is also capped per
+ * frame so a trackpad's bursty, high-frequency deltas (pinch or momentum
+ * scroll) can't make the view jump the way an uncapped exponential factor
+ * would. Below a small deadzone, a frame's delta on either axis is treated
+ * as sensor noise rather than intent — a trackpad keeps firing wheel events
+ * for a while after the fingers lift, and that momentum tail doesn't decay
+ * to zero monotonically, so feeding it straight into the zoom/pan math reads
+ * as a gesture that's already ended visibly flickering in and out.
  */
 import { type ReactNode, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { fmtCompact, fmtMoney, fmtNum, fmtPct, toneClass } from "./format";
@@ -597,12 +602,13 @@ interface ViewControl {
   /** plot-area right inset (differs per chart). */
   padRight: number;
   /** Wheel input, pre-accumulated over one animation frame. Vertical delta
-   *  (mouse wheel, trackpad two-finger scroll, or pinch/ctrl+wheel) zooms,
-   *  centred on cursor clientX; horizontal delta pans through time — the two
-   *  axes are independent, not a single dominant-axis pick, so a gesture
-   *  that's mostly one axis with a little noise on the other doesn't flip
+   *  (mouse wheel, trackpad two-finger scroll, or a pinch — Chrome/Safari
+   *  report a pinch gesture as a wheel event too) zooms, centred on cursor
+   *  clientX; horizontal delta pans through time — the two axes are
+   *  independent, not a single dominant-axis pick, so a gesture that's
+   *  mostly one axis with a little noise on the other doesn't flip
    *  behaviour frame to frame. See this file's header comment. */
-  onWheel: (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => void;
+  onWheel: (clientX: number, deltaX: number, deltaY: number, target: Element) => void;
   /** Drag-pan start — Pointer Events (not mouse-only), so a single-finger
    *  touch drag pans the same as a mouse drag. Touch pinch-zoom has no
    *  gesture equivalent here and is not implemented (see the P2 note in
@@ -616,6 +622,21 @@ interface ViewControl {
  *  animation frame than a mouse-wheel notch ever does — left unclamped, the
  *  exponential factor below spikes and the view visibly jumps/flickers. */
 const MAX_WHEEL_ZOOM_FACTOR = 1.25;
+
+/** exp(deltaY * this) is the per-frame zoom factor, before the cap above. */
+const WHEEL_ZOOM_SENSITIVITY = 0.0011;
+
+/** Per-frame delta (normalized pixels) below which wheel input is treated as
+ *  sensor noise, not intent, on BOTH axes. A trackpad keeps delivering wheel
+ *  events for a while after the fingers lift — a decaying "momentum" tail —
+ *  and those deltas don't settle to zero monotonically; they jitter sign as
+ *  they decay, most visibly on a pinch (its delta is scale-change-based, and
+ *  small hand tremor flips its sign at low amplitude). Feed that jitter
+ *  straight into the exponential zoom factor and a gesture that already
+ *  ended keeps visibly zooming in and out on its own — this deadzone is what
+ *  turns that into a clean stop. A deliberate gesture is always well above
+ *  it. */
+const WHEEL_DEADZONE = 1.5;
 
 /**
  * Which pointerId currently owns an active drag on a given chart <svg> —
@@ -647,7 +668,7 @@ function viewHandlers(
   const { lo, hi } = view;
   const resetView = resetTo ?? { lo: 0, hi: 1 };
 
-  const onWheel = (clientX: number, deltaX: number, deltaY: number, ctrl: boolean, target: Element) => {
+  const onWheel = (clientX: number, deltaX: number, deltaY: number, target: Element) => {
     // Vertical and horizontal input each drive one, independent axis of
     // control — vertical zooms, horizontal pans — rather than picking a
     // single "dominant axis" for the whole frame. A real trackpad gesture is
@@ -660,25 +681,32 @@ function viewHandlers(
     let curLo = lo;
     let curHi = hi;
 
-    if (deltaY !== 0) {
+    // Trackpads keep delivering wheel events for a while after the fingers
+    // lift — a decaying "momentum" tail — and those deltas don't settle to
+    // zero monotonically; they jitter sign as they decay (most visibly on a
+    // pinch, where the reported delta is scale-change-based and small hand
+    // tremor flips its sign). Below this threshold, treat a frame's delta as
+    // that noise floor rather than intent: it's what turns "zoom, then the
+    // momentum tail flickers in and out" into a clean stop. A deliberate
+    // gesture is always well above it.
+    const belowNoiseFloor = (d: number) => Math.abs(d) < WHEEL_DEADZONE;
+
+    if (!belowNoiseFloor(deltaY)) {
       // Vertical scroll (real mouse wheel, trackpad two-finger scroll, or a
-      // pinch/ctrl+wheel) zooms, centred on the cursor. Wheel up
-      // (deltaY < 0) zooms in; down zooms out. Chrome/Safari report pinch
-      // deltas at a much smaller magnitude than an equivalent scroll, so
-      // ctrl gets a boosted sensitivity to feel equally responsive. The
-      // factor is capped per frame (MAX_WHEEL_ZOOM_FACTOR) so a bursty
-      // pinch or momentum scroll can't make the view jump.
+      // pinch — Chrome/Safari report a pinch gesture as a wheel event too)
+      // zooms, centred on the cursor. Wheel up (deltaY < 0) zooms in; down
+      // zooms out. The factor is capped per frame (MAX_WHEEL_ZOOM_FACTOR) so
+      // a bursty pinch or momentum scroll can't make the view jump.
       const span = curHi - curLo;
       const cursor = curLo + plotFraction(clientX, target, pad.left, pad.right, vbW) * span;
-      const sensitivity = ctrl ? 0.011 : 0.0011;
-      const rawFactor = Math.exp(deltaY * sensitivity);
+      const rawFactor = Math.exp(deltaY * WHEEL_ZOOM_SENSITIVITY);
       const factor = Math.max(1 / MAX_WHEEL_ZOOM_FACTOR, Math.min(MAX_WHEEL_ZOOM_FACTOR, rawFactor));
       const nlo = cursor - (cursor - curLo) * factor;
       const nhi = cursor + (curHi - cursor) * factor;
       ({ lo: curLo, hi: curHi } = clampView(nlo, nhi));
     }
 
-    if (deltaX !== 0) {
+    if (!belowNoiseFloor(deltaX)) {
       // Horizontal scroll pans through time. Scroll semantics (not drag
       // semantics): the view moves WITH the gesture, same as scrolling a
       // page down reveals content below.
@@ -851,9 +879,7 @@ function Svg({
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
-  const wheelAccumRef = useRef<{ clientX: number; deltaX: number; deltaY: number; ctrl: boolean } | null>(
-    null,
-  );
+  const wheelAccumRef = useRef<{ clientX: number; deltaX: number; deltaY: number } | null>(null);
   const wheelRafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -870,7 +896,7 @@ function Svg({
       const accum = wheelAccumRef.current;
       wheelAccumRef.current = null;
       if (!c || !accum) return;
-      c.onWheel(accum.clientX, accum.deltaX, accum.deltaY, accum.ctrl, el);
+      c.onWheel(accum.clientX, accum.deltaX, accum.deltaY, el);
     };
 
     const handler = (e: WheelEvent) => {
@@ -884,9 +910,8 @@ function Svg({
         wheelAccumRef.current.deltaX += dx;
         wheelAccumRef.current.deltaY += dy;
         wheelAccumRef.current.clientX = e.clientX;
-        wheelAccumRef.current.ctrl = wheelAccumRef.current.ctrl || e.ctrlKey;
       } else {
-        wheelAccumRef.current = { clientX: e.clientX, deltaX: dx, deltaY: dy, ctrl: e.ctrlKey };
+        wheelAccumRef.current = { clientX: e.clientX, deltaX: dx, deltaY: dy };
       }
       if (wheelRafRef.current === null) {
         wheelRafRef.current = requestAnimationFrame(flushWheel);
