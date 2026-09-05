@@ -22,6 +22,27 @@ export DIGIQUANT_URL="${DIGIQUANT_URL:-}"
 export DIGISMITH_URL="${DIGISMITH_URL:-}"
 export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
+# House default: merge Cheaper Inference overlay when key present (unless forced OR).
+export LITELLM_CONFIG="${LITELLM_CONFIG:-/app/config/litellm.yaml}"
+_ci_key="${CHEAPERINFERENCE_API_KEY:-}"
+_upstream="$(printf '%s' "${DIGI_HOUSE_UPSTREAM:-}" | tr '[:upper:]' '[:lower:]')"
+_ci_house="$(printf '%s' "${CHEAPERINFERENCE_HOUSE:-}" | tr '[:upper:]' '[:lower:]')"
+_force_or=0
+case "$_upstream" in openrouter|or) _force_or=1 ;; esac
+case "$_ci_house" in 0|false|no|off) _force_or=1 ;; esac
+if [ -n "$_ci_key" ] && [ "$_force_or" -eq 0 ]; then
+  export CHEAPERINFERENCE_API_BASE="${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}"
+  if [ -f /app/scripts/merge_litellm_cheaperinference.py ] \
+    && [ -f /app/config/litellm.cheaperinference.yaml ] \
+    && [ -f /app/config/litellm.yaml ]; then
+    python3 /app/scripts/merge_litellm_cheaperinference.py \
+      --base /app/config/litellm.yaml \
+      --overlay /app/config/litellm.cheaperinference.yaml \
+      -o /app/config/litellm.runtime.yaml \
+      && export LITELLM_CONFIG=/app/config/litellm.runtime.yaml \
+      || echo "cheaperinference: merge failed; using default litellm.yaml" >&2
+  fi
+fi
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 # THIS line is the container's real DIGI_ALLOWED_TOOLS fallback, not wrangler.toml's

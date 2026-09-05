@@ -1,8 +1,9 @@
 # Cheaper Inference (hosted)
 
 **Cost:** usage-based wallet. Cheaper Inference is a **hosted** OpenAI-compatible
-discount gateway (`https://api.cheaperinference.com/v1`). It is **opt-in** for
-house digiquant savings — distinct from self-hosted [OmniRoute](omniroute.md).
+discount gateway (`https://api.cheaperinference.com/v1`). It is the **digillm house
+default** whenever `CHEAPERINFERENCE_API_KEY` is set — distinct from self-hosted
+[OmniRoute](omniroute.md) (`OMNIROUTE_*`).
 
 **Best for:** routing house DeepSeek / Gemini Flash / GPT-5.6 pins through a
 cheaper upstream while keeping OpenRouter for catalog misses (`perplexity/sonar`,
@@ -15,7 +16,8 @@ bypass.
 
 ## Guardrails
 
-- Secrets via env only (`.env`, GitHub Actions secrets). Never commit keys.
+- Secrets via env only (`.env`, GitHub Actions secrets, Cloudflare `wrangler secret`).
+  Never commit keys.
 - Key prefix: `ci_live_…`. Base: `https://api.cheaperinference.com/v1`.
 - **Do not** cut quality-tier Anthropic pins to CI without a bake-off.
 - **Do not** confuse this with OmniRoute (`OMNIROUTE_*`, `docs/providers/omniroute.md`).
@@ -25,21 +27,27 @@ bypass.
 ## 1. Credentials
 
 ```bash
-# .env
+# .env — key alone enables house default
 CHEAPERINFERENCE_API_KEY=ci_live_...
 CHEAPERINFERENCE_API_BASE=https://api.cheaperinference.com/v1
-# Prefer CI for mapped house pins (OpenRouter keeps sonar / :online / misses):
-DIGI_HOUSE_UPSTREAM=cheaperinference
-# alias: CHEAPERINFERENCE_HOUSE=1
+# Force OpenRouter for house traffic even when the CI key is set:
+# DIGI_HOUSE_UPSTREAM=openrouter
+# (alias off) CHEAPERINFERENCE_HOUSE=0
 ```
 
 GitHub Actions: repository secret `CHEAPERINFERENCE_API_KEY` and optional var/secret
-`CHEAPERINFERENCE_API_BASE`. `pipeline-digiquant.yml` passes both into the job env;
-`.github/digiquant-pipeline.yml` sets `DIGI_HOUSE_UPSTREAM=cheaperinference`.
+`CHEAPERINFERENCE_API_BASE`. `pipeline-digiquant.yml` passes both into the job env.
+`.github/digiquant-pipeline.yml` may still set `DIGI_HOUSE_UPSTREAM=cheaperinference`
+explicitly; that is redundant once the key is present.
+
+### Force OpenRouter
+
+Set `DIGI_HOUSE_UPSTREAM=openrouter` (or `or`), or `CHEAPERINFERENCE_HOUSE=0`.
 
 ## 2. LiteLLM overlay (stack / proxy)
 
-LiteLLM has no include directive. Merge the overlay over the default config:
+LiteLLM has no include directive. Merge the overlay over the default config when
+the CI key is present (house default):
 
 ```bash
 python scripts/merge_litellm_cheaperinference.py -o /tmp/litellm.merged.yaml
@@ -49,6 +57,10 @@ python scripts/merge_litellm_cheaperinference.py -o /tmp/litellm.merged.yaml
 Overlay file: `config/litellm.cheaperinference.yaml`. Matching `model_name` keys
 are replaced; OpenRouter entries for sonar / `:online` / maverick / grok-4.3|4.6 /
 anthropic remain from `config/litellm.yaml`.
+
+The digithings Cloudflare stack container merges this overlay at boot when
+`CHEAPERINFERENCE_API_KEY` is set (unless OpenRouter is forced). Put the key/base
+via `wrangler secret put CHEAPERINFERENCE_API_KEY` (and optional base).
 
 Mapped house slugs → CI bare ids:
 
@@ -69,13 +81,14 @@ remap), `anthropic/claude-sonnet-5` (bake-off).
 `apply_digiquant_openrouter_env()` (chain startup + validate-providers preflight):
 
 - If `OPENAI_API_BASE` is already set (LiteLLM), leave it alone.
-- Else if Cheaper Inference is preferred (key + flag), set `OPENAI_API_BASE` /
-  `OPENAI_API_KEY` from `CHEAPERINFERENCE_*`.
+- Else if Cheaper Inference is preferred (`CHEAPERINFERENCE_API_KEY` set and not
+  forced to OpenRouter), set `OPENAI_API_BASE` / `OPENAI_API_KEY` from
+  `CHEAPERINFERENCE_*`.
 - Else keep the OpenRouter rewrite (unchanged).
 
 digillm then rewrites mapped house slugs to bare CI ids on the CI base, and routes
 catalog misses to the OpenRouter client (`OPENROUTER_API_KEY` still required for
-grounding).
+grounding / unmapped pins).
 
 ## 4. Verify
 

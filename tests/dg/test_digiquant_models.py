@@ -855,12 +855,32 @@ def test_apply_prefers_cheaperinference_when_flagged(
 
 
 @pytest.mark.unit
-def test_apply_ignores_cheaperinference_without_flag(
+def test_apply_defaults_to_cheaperinference_when_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY", "DIGI_HOUSE_UPSTREAM")
+    """Key alone is enough — DIGI_HOUSE_UPSTREAM opt-in no longer required."""
+    _clear_env(
+        monkeypatch,
+        "OPENAI_API_BASE",
+        "OPENAI_API_KEY",
+        "DIGI_HOUSE_UPSTREAM",
+        "CHEAPERINFERENCE_HOUSE",
+    )
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    apply_digiquant_openrouter_env()
+    assert os.environ["OPENAI_API_BASE"] == "https://api.cheaperinference.com/v1"
+    assert os.environ["OPENAI_API_KEY"] == "ci_live_test"
+
+
+@pytest.mark.unit
+def test_apply_forces_openrouter_when_upstream_openrouter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_env(monkeypatch, "OPENAI_API_BASE", "OPENAI_API_KEY")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    monkeypatch.setenv("CHEAPERINFERENCE_API_KEY", "ci_live_test")
+    monkeypatch.setenv("DIGI_HOUSE_UPSTREAM", "openrouter")
     apply_digiquant_openrouter_env()
     assert os.environ["OPENAI_API_BASE"] == "https://openrouter.ai/api/v1"
     assert os.environ["OPENAI_API_KEY"] == "sk-or-test"

@@ -28,7 +28,11 @@ import os
 from pathlib import Path
 
 import yaml
-from digillm import get_provider_api_key_env, is_registered_provider
+from digillm import (
+    cheaperinference_house_preferred,
+    get_provider_api_key_env,
+    is_registered_provider,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from digigraph.llm_auth import (
@@ -588,20 +592,13 @@ def get_grounding_model(*, segment: str = "grounding") -> str | None:
 
 
 def _cheaperinference_house_preferred() -> bool:
-    """Opt-in house preference for hosted Cheaper Inference when its API key is set.
+    """House default prefers Cheaper Inference when ``CHEAPERINFERENCE_API_KEY`` is set.
 
-    ``DIGI_HOUSE_UPSTREAM=cheaperinference|ci`` or ``CHEAPERINFERENCE_HOUSE=1`` plus
-    ``CHEAPERINFERENCE_API_KEY``. OpenRouter remains the fallback for catalog misses
-    (see digillm). Distinct from self-hosted OmniRoute.
+    Delegates to :func:`digillm.client.cheaperinference_house_preferred`. Force
+    OpenRouter with ``DIGI_HOUSE_UPSTREAM=openrouter``. OpenRouter remains the
+    fallback for catalog misses. Distinct from self-hosted OmniRoute.
     """
-    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
-    if not key:
-        return False
-    upstream = (os.environ.get("DIGI_HOUSE_UPSTREAM") or "").strip().lower()
-    if upstream in {"cheaperinference", "ci"}:
-        return True
-    flag = (os.environ.get("CHEAPERINFERENCE_HOUSE") or "").strip().lower()
-    return flag in {"1", "true", "yes", "on"}
+    return cheaperinference_house_preferred()
 
 
 def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
@@ -611,8 +608,8 @@ def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     alone — house pins are unprefixed slugs on that proxy's ``model_list``.
 
     CLI / GHA without a local proxy:
-    - If Cheaper Inference is preferred (key + ``DIGI_HOUSE_UPSTREAM`` /
-      ``CHEAPERINFERENCE_HOUSE``), point the default client at
+    - If Cheaper Inference is the house default (``CHEAPERINFERENCE_API_KEY`` set,
+      unless ``DIGI_HOUSE_UPSTREAM=openrouter``), point the default client at
       ``CHEAPERINFERENCE_API_BASE`` (default ``https://api.cheaperinference.com/v1``).
       digillm rewrites mapped house slugs to bare CI ids and keeps OpenRouter for
       sonar / ``:online`` / maverick / unmapped pins.
@@ -627,9 +624,7 @@ def apply_digiquant_openrouter_env(*, force: bool = False) -> str:
     if not (os.environ.get("OPENAI_API_BASE") or "").strip():
         if _cheaperinference_house_preferred():
             ci_base = (os.environ.get("CHEAPERINFERENCE_API_BASE") or "").strip()
-            os.environ["OPENAI_API_BASE"] = (
-                ci_base or "https://api.cheaperinference.com/v1"
-            )
+            os.environ["OPENAI_API_BASE"] = ci_base or "https://api.cheaperinference.com/v1"
             if not (os.environ.get("OPENAI_API_KEY") or "").strip():
                 os.environ["OPENAI_API_KEY"] = (
                     os.environ.get("CHEAPERINFERENCE_API_KEY") or ""

@@ -9,6 +9,7 @@
 |------|------|
 | `config/litellm.yaml` | LiteLLM router: house digiquant OpenRouter slugs, OpenAI, Ollama Cloud, local Ollama. Add new entries here. |
 | `config/litellm.omniroute.yaml` | Optional OmniRoute overlay — **not** loaded by default (#3413). |
+| `config/litellm.cheaperinference.yaml` | Hosted Cheaper Inference overlay — house default when `CHEAPERINFERENCE_API_KEY` is set (merge via script / stack boot). |
 | `config/litellm.cheaperinference.yaml` | Optional hosted Cheaper Inference overlay — **not** loaded by default; merge via `scripts/merge_litellm_cheaperinference.py`. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
 

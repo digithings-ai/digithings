@@ -5,9 +5,11 @@
 env:
   # Tier policy: config/digiquant_models.yaml (cheap|balanced|quality).
   # apply_digiquant_openrouter_env() in chain startup sets OPENROUTER_* from tier.
-  # Prefer hosted Cheaper Inference for mapped house pins when the secret is set
-  # (OpenRouter keeps sonar / :online / maverick / unmapped). See docs/providers/cheaperinference.md.
+  # House default: CHEAPERINFERENCE_API_KEY (GHA secret) → Cheaper Inference for
+  # mapped pins (OpenRouter keeps sonar / :online / maverick / unmapped).
+  # DIGI_HOUSE_UPSTREAM=openrouter forces OpenRouter. See docs/providers/cheaperinference.md.
   OLYMPUS_MODEL_TIER: "cheap"
+  # Explicit (redundant when secret is set); use "openrouter" to force OR.
   DIGI_HOUSE_UPSTREAM: "cheaperinference"
 
   # Enforced for the first time by #1767 — before it, H4 passed the whole H3 thesis

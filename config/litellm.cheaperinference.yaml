@@ -1,10 +1,11 @@
-# OPTIONAL LiteLLM overlay — hosted Cheaper Inference (house savings).
-# Not loaded by default. Distinct from self-hosted OmniRoute (litellm.omniroute.yaml).
+# LiteLLM overlay — hosted Cheaper Inference (digillm house default when keyed).
+# Merge when CHEAPERINFERENCE_API_KEY is set (stack entrypoint does this automatically).
+# Distinct from self-hosted OmniRoute (litellm.omniroute.yaml / OMNIROUTE_*).
 #
 # Merge over config/litellm.yaml with:
 #   python scripts/merge_litellm_cheaperinference.py > /tmp/litellm.merged.yaml
 # then LITELLM_CONFIG=/tmp/litellm.merged.yaml (or pass --config).
-# See docs/providers/cheaperinference.md.
+# Force OpenRouter: DIGI_HOUSE_UPSTREAM=openrouter. See docs/providers/cheaperinference.md.
 #
 # House pins keep OpenRouter-style model_name keys (digiquant_models.yaml).
 # CI catalog uses bare ids — map only models that exist there.
