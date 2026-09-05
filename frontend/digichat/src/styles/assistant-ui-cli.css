@@ -1,0 +1,8 @@
+/**
+ * assistant-ui CLI skin — bind primitives to the existing session / cursor
+ * tokens. Do not introduce a second brand.
+ */
+[data-thread-root],
+.dc-session {
+  font-family: var(--font-family-mono);
+}

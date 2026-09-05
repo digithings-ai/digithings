@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * @deprecated digichat 2.0 first-party `/chat` and `/embed` render through
+ * assistant-ui (`CliThread`). This CLI session remains for digithings-web
+ * `/chat` until that surface migrates. Do not add new features here.
+ */
+
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChatStreamCursor, ChatToolCall } from "@digithings/web";
 import {

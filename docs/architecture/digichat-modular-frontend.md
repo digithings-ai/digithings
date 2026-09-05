@@ -14,7 +14,7 @@
 
 digichat is a **modular frontend + BFF**:
 
-1. **Shared UI** — `@digithings/digichat-ui` (`DigiChatSession`, `ChatActivities`)
+1. **Shared UI** — `@digithings/digichat-ui` CSS + `ChatActivities`; digichat 2.0 `/chat` and `/embed` render through assistant-ui (`CliThread`). `DigiChatSession` remains for digithings-web until that surface migrates.
 2. **Activity contract** — `ActivitySpan` → `DigiChatActivity`; server-side `activityDetail` gate
 3. **Tenant registry** — `DIGICHAT_EMBED_TENANTS` (hostname → branding + policy + backend)
 4. **Provider adapters** — translate backend wire formats into the activity vocabulary
@@ -22,7 +22,7 @@ digichat is a **modular frontend + BFF**:
 **Rules**
 
 - digichat UI never speaks digigraph / Foundry / OpenAI wire formats.
-- Each adapter’s job is **translation only** into `ActivitySpan` / `data-digichatActivity` + text stream.
+- Each adapter’s job is **translation only** into `ActivitySpan` then standard AI SDK UI parts (`writeStandardActivity`) + text stream.
 - digithings tenants must use `backend.type: digigraph`. digigraph owns digivault, digisearch, and digillm.
 - digivault / digisearch are **not** digichat HTTP backends — they are digigraph tools; digichat only has activity mappers under `adapters/digithings/activity/`.
 - Client (non-digithings) embeds use `backend.type: foundry`.

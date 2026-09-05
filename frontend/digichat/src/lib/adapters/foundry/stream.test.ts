@@ -380,7 +380,8 @@ describe("createFoundryStreamResponse", () => {
     });
     const out = await drain(res);
 
-    expect(out).toContain('"type":"data-externalConversation"');
+    expect(out).toContain('"type":"data-conversation"');
+    expect(out).not.toContain('"type":"data-externalConversation"');
     expect(out).toContain('"conversationId":"conv_9"');
     // exactly one searching trace, not two (dedup fix)
     expect(out.split("Searching knowledge base…").length - 1).toBe(1);
@@ -750,8 +751,9 @@ describe("createFoundryStreamResponse activity detail", () => {
 
   it("streams documents at full", async () => {
     const body = await run("full");
-    expect(body).toContain("data-digichatActivity");
+    expect(body).toContain("source-url");
     expect(body).toContain("https://x/a");
+    expect(body).not.toContain("data-digichatActivity");
   });
 
   // Foundry builds its span literal directly from upstream annotations rather
@@ -794,13 +796,15 @@ describe("createFoundryStreamResponse activity detail", () => {
   // The gate is server-side: a labels tenant must not receive the titles at all.
   it("withholds documents at labels", async () => {
     const body = await run("labels");
-    expect(body).toContain("data-digichatActivity");
+    expect(body).toContain("documentsWithheld");
     expect(body).not.toContain("https://x/a");
+    expect(body).not.toContain("data-digichatActivity");
   });
 
   it("emits no activity parts at off", async () => {
     const body = await run("off");
     expect(body).not.toContain("data-digichatActivity");
+    expect(body).not.toContain("tool-input-start");
     expect(body).toContain("done");
   });
 

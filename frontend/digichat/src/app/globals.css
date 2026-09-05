@@ -63,6 +63,7 @@
 @import "@digithings/web/styles/controls-overlay.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
+@import "../styles/assistant-ui-cli.css";
 
 /* Tailwind never scans package sources — generate the token utilities the
    shared chat components carry (MIGRATION.md rule 3). */

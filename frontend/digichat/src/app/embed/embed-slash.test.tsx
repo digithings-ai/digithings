@@ -19,7 +19,7 @@ describe("public /embed slash surface (#3418)", () => {
     expect(embedClientSrc).not.toMatch(/LanguageSelect/);
     expect(embedClientSrc).toMatch(/onLanguageChange=\{setLanguage\}/);
     expect(embedClientSrc).toMatch(/forceTool/);
-    expect(embedClientSrc).toMatch(/reset: chat\.reset/);
+    expect(embedClientSrc).toMatch(/onReset=\{chat\.reset\}/);
   });
 
   it("lists public search and Vault copy without private names", async () => {

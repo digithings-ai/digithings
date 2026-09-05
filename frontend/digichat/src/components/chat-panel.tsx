@@ -12,11 +12,12 @@ import {
 } from "react";
 import { useChat } from "@ai-sdk/react";
 import {
-  DefaultChatTransport,
   isReasoningUIPart,
   isTextUIPart,
   type UIMessage,
 } from "ai";
+import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
+import { AssistantRuntimeProvider, ThreadPrimitive } from "@assistant-ui/react";
 import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,7 @@ import {
   writeWebSearchPref,
 } from "@/lib/web-search-pref";
 import { cn } from "@/lib/utils";
-import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, matchingSlashCommands, nextPaletteIndex, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
+import { ChatActivities, citationHits, copyMarkdownWithFallback, downloadMarkdown, matchingSlashCommands, nextPaletteIndex, parseSlashInput, serializeAssistantMarkdown, serializeThreadMarkdown } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
 const APP_SLASH_EXTRA: Array<{ cmd: string; hint: string }> = [
@@ -49,6 +50,7 @@ const APP_SLASH_EXTRA: Array<{ cmd: string; hint: string }> = [
 
 /** Per-thread pending turn mode — module map, not a ref (#3475 / #1339). */
 const pendingTurnModeByThread = new Map<string, "regenerate" | "edit_last_user">();
+const pendingForceByThread = new Map<string, string>();
 
 function setPendingTurnMode(threadId: string, mode?: "regenerate" | "edit_last_user"): void {
   const key = threadId.trim();
@@ -62,6 +64,20 @@ function takePendingTurnMode(threadId: string): "regenerate" | "edit_last_user" 
   const mode = pendingTurnModeByThread.get(key);
   pendingTurnModeByThread.delete(key);
   return mode;
+}
+
+function setPendingForceTool(threadId: string, tool?: string): void {
+  const key = threadId.trim();
+  if (!key) return;
+  if (tool) pendingForceByThread.set(key, tool);
+  else pendingForceByThread.delete(key);
+}
+
+function takePendingForceTool(threadId: string): string | undefined {
+  const key = threadId.trim();
+  const tool = pendingForceByThread.get(key);
+  pendingForceByThread.delete(key);
+  return tool;
 }
 
 const MAX_INPUT_LINES = 5;
@@ -243,7 +259,7 @@ export function ChatPanel({
 
   const transport = useMemo(
     () =>
-      new DefaultChatTransport<UIMessage>({
+      new AssistantChatTransport<UIMessage>({
         api: p("/api/chat"),
         credentials: "include",
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
@@ -252,6 +268,10 @@ export function ChatPanel({
           const turnMode = takePendingTurnMode(threadId);
           if (turnMode) {
             h.set("X-Digi-Turn-Mode", turnMode);
+          }
+          const forceTool = takePendingForceTool(threadId);
+          if (forceTool && !turnMode) {
+            h.set("X-Digi-Force-Tool", forceTool);
           }
           h.set("X-Digi-Run-Id", crypto.randomUUID());
           if (
@@ -283,8 +303,7 @@ export function ChatPanel({
     [threadId, byokKey, byokProvider, byokModel, webSearchAllowed, webSearchPref],
   );
 
-  const { messages, sendMessage, status, stop, error, regenerate, setMessages } =
-    useChat<UIMessage>({
+  const chat = useChat<UIMessage>({
       id: threadId,
       messages: initialMessages,
       transport,
@@ -305,6 +324,8 @@ export function ChatPanel({
         }
       },
     });
+  const { messages, sendMessage, status, stop, error, regenerate, setMessages } = chat;
+  const runtime = useAISDKRuntime(chat);
 
   const busy = status === "streaming" || status === "submitted";
   const isStreaming = status === "streaming";
@@ -474,7 +495,7 @@ export function ChatPanel({
         setText("");
         if (name === "/help") {
           pushSystemNote(
-            "available: /help, /clear, /byok, /websearch, /settings, /model <id>, /history, /scope, /copy, /export, /key",
+            "available: /help, /clear, /search, /vault, /byok, /websearch, /settings, /model <id>, /history, /scope, /copy, /export, /key",
           );
           return;
         }
@@ -510,6 +531,12 @@ export function ChatPanel({
         if (onSlashCommand && onSlashCommand(t)) {
           return;
         }
+        const parsed = parseSlashInput(t);
+        if (parsed.kind === "command" && parsed.command.forceTool) {
+          setPendingForceTool(threadId, parsed.command.forceTool);
+          await sendMessage({ text: parsed.arg });
+          return;
+        }
         pushSystemNote(`Unknown command \`${name}\`. Type /help.`);
         return;
       }
@@ -528,6 +555,7 @@ export function ChatPanel({
       pushSystemNote,
       webSearchAllowed,
       webSearchPref,
+      threadId,
     ],
   );
 
@@ -653,10 +681,11 @@ export function ChatPanel({
   ];
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <AssistantRuntimeProvider runtime={runtime}>
+    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-1 flex-col">
       {headerSlot}
 
-      <div className="relative min-h-0 flex-1">
+      <ThreadPrimitive.Viewport className="relative min-h-0 flex-1" autoScroll={false}>
         <div ref={scrollRef} className="h-full overflow-y-auto rounded-none border border-border/40 dc-term-pane">
           {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
             <div className="dc-term-row dc-term-row-assistant">
@@ -875,7 +904,7 @@ export function ChatPanel({
             </Button>
           </div>
         ) : null}
-      </div>
+      </ThreadPrimitive.Viewport>
 
       <QuantComparisonStrip messages={messages} conversationId={threadId} />
 
@@ -977,7 +1006,8 @@ export function ChatPanel({
           )}
         </span>
       </form>
-    </div>
+    </ThreadPrimitive.Root>
+    </AssistantRuntimeProvider>
   );
 }
 

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
+import type { AssistantRuntime } from "@assistant-ui/react";
+import type { UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
@@ -11,10 +13,9 @@ import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/
 import { resolveLanguageCode } from "@/lib/languages";
 import {
   ACTIVITY_PART_TYPE,
-  sanitizeActivitySpan,
-  toDigiChatActivity,
-  type ActivitySpan,
+  messageActivities,
 } from "@/lib/chat-activity";
+import { conversationIdFromParts } from "@/lib/ui-stream-parts";
 
 /** Read ?token= / ?host= at send time — useChat transport is frozen on first render (#1339). */
 function readEmbedUrlAuth(): { token?: string; host?: string } {
@@ -161,24 +162,22 @@ export function uiMessageToDigiChat(
     .map((part) => part.text)
     .join("");
 
-  const spans = message.parts
-    .filter((part): part is { type: typeof ACTIVITY_PART_TYPE; data: unknown } =>
-      part.type === ACTIVITY_PART_TYPE
-    )
-    .map((part) => sanitizeActivitySpan(part.data))
-    .filter((span): span is ActivitySpan => span !== null);
-
-  // Activity parts win outright: during a deploy a single message could carry
-  // both shapes, and rendering both would double every step.
-  const hasActivityParts = message.parts.some((part) => part.type === ACTIVITY_PART_TYPE);
-  const activities = hasActivityParts
-    ? toDigiChatActivity(spans, opts)
-    : legacyTraceActivities(message);
+  const activities = messageActivities(message, opts);
+  const hasActivityParts = message.parts.some(
+    (part) =>
+      part.type === ACTIVITY_PART_TYPE ||
+      part.type === "data-status" ||
+      part.type === "reasoning" ||
+      part.type === "source-url" ||
+      part.type === "source-document" ||
+      (typeof part.type === "string" && part.type.startsWith("tool-")),
+  );
+  const resolved = hasActivityParts ? activities : legacyTraceActivities(message);
 
   return {
     role: message.role === "user" ? "user" : "assistant",
     content: text,
-    activities: activities.length ? activities : undefined,
+    activities: resolved.length ? resolved : undefined,
   };
 }
 
@@ -234,10 +233,11 @@ export function useEmbedDigiChat({
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
   rawError: Error | undefined;
+  runtime: AssistantRuntime;
 } {
   const transport = useMemo(
     () =>
-      new DefaultChatTransport({
+      new AssistantChatTransport({
         api: p("/api/chat"),
         prepareSendMessagesRequest: ({ messages, body }) => {
           const urlAuth = readEmbedUrlAuth();
@@ -331,24 +331,21 @@ export function useEmbedDigiChat({
     ],
   );
 
-  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({
+  const chat = useChat<UIMessage>({
     transport,
   });
+  const runtime = useAISDKRuntime(chat);
+  const { messages, sendMessage, status, error, regenerate, setMessages, stop } = chat;
 
   useEffect(() => {
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
-    for (const part of last.parts) {
-      if (part.type === "data-externalConversation") {
-        const id = (part as { data?: { conversationId?: string } }).data?.conversationId;
-        if (id) {
-          try {
-            window.sessionStorage.setItem(conversationStorageKey(embedHost), id);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
+    const id = conversationIdFromParts(last.parts);
+    if (!id) return;
+    try {
+      window.sessionStorage.setItem(conversationStorageKey(embedHost), id);
+    } catch {
+      /* ignore */
     }
   }, [messages, embedHost]);
 
@@ -471,5 +468,6 @@ export function useEmbedDigiChat({
       ? { regenerate: doRegenerate, editLastUser }
       : {}),
     seed,
+    runtime,
   };
 }

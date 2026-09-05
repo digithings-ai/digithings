@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { type ReactNode } from "react";
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { UIMessage } from "ai";
@@ -10,8 +11,8 @@ import {
 } from "@/hooks/use-byok-key";
 
 // prepareSendMessagesRequest is a closure built inside useMemo(() => new
-// DefaultChatTransport({...})) in chat-panel.tsx — same situation as
-// use-embed-digi-chat.test.ts. Capture the real config DefaultChatTransport is
+// AssistantChatTransport({...})) in chat-panel.tsx — same situation as
+// use-embed-digi-chat.test.ts. Capture the real config AssistantChatTransport is
 // constructed with so the assertions below run against the actual closure,
 // not a reimplementation of it.
 type PrepareSendMessagesRequestResult = { headers: HeadersInit; body: unknown };
@@ -44,9 +45,6 @@ vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
   return {
     ...actual,
-    // `new DefaultChatTransport(...)` requires the mock to be constructible —
-    // an arrow-function mockImplementation would fail with "is not a
-    // constructor", so this uses `function` deliberately.
     DefaultChatTransport: vi.fn().mockImplementation(function (config: unknown) {
       capturedTransportConfig = config as {
         prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
@@ -57,6 +55,42 @@ vi.mock("ai", async (importOriginal) => {
     }),
   };
 });
+
+vi.mock("@assistant-ui/ai-sdk", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@assistant-ui/ai-sdk")>();
+  return {
+    ...actual,
+    AssistantChatTransport: vi.fn().mockImplementation(function (config: unknown) {
+      capturedTransportConfig = config as {
+        prepareSendMessagesRequest: PrepareSendMessagesRequestFn;
+      };
+      return new actual.AssistantChatTransport(
+        config as ConstructorParameters<typeof actual.AssistantChatTransport>[0],
+      );
+    }),
+    useAISDKRuntime: () => ({ kind: "runtime" }),
+  };
+});
+
+vi.mock("@assistant-ui/react", () => ({
+  AssistantRuntimeProvider: ({ children }: { children: ReactNode }) => children,
+  ThreadPrimitive: {
+    Root: ({ children, className }: { children?: ReactNode; className?: string }) => (
+      <div className={className}>{children}</div>
+    ),
+    Viewport: ({ children, className }: { children?: ReactNode; className?: string }) => (
+      <div className={className}>{children}</div>
+    ),
+    Empty: ({ children }: { children?: ReactNode }) => children,
+    Messages: () => null,
+  },
+  ComposerPrimitive: {
+    Root: ({ children }: { children?: ReactNode }) => children,
+    Input: "textarea",
+  },
+  MessagePrimitive: { Root: "div", Parts: () => null },
+  ActionBarPrimitive: { Root: "div", Copy: "button" },
+}));
 
 // Only useBYOKKey is faked — byokRequiresModel/BYOK_PROVIDER_LIST/etc. stay
 // real so this test exercises the actual predicate chat-panel.tsx now calls,
@@ -76,19 +110,13 @@ vi.mock("@/hooks/use-byok-key", async (importOriginal) => {
 
 // Mocked away entirely — this test only needs the transport config ChatPanel
 // builds, not real markdown/echarts/quant-strip rendering.
-vi.mock("@digithings/digichat-ui", () => ({
-  ChatActivities: () => null,
-  matchingSlashCommands: () => [],
-  nextPaletteIndex: (current: number, delta: number, length: number) => {
-    if (length <= 0) return 0;
-    return ((current + delta) % length + length) % length;
-  },
-  citationHits: () => [],
-  copyMarkdownWithFallback: vi.fn(),
-  downloadMarkdown: vi.fn(),
-  serializeAssistantMarkdown: () => "",
-  serializeThreadMarkdown: () => "",
-}));
+vi.mock("@digithings/digichat-ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@digithings/digichat-ui")>();
+  return {
+    ...actual,
+    ChatActivities: () => null,
+  };
+});
 
 import { ChatPanel } from "./chat-panel";
 
@@ -109,7 +137,7 @@ async function callPrepareSendMessagesRequest(
   render(<ChatPanel {...baseProps()} />);
   const config = readCapturedTransportConfig();
   if (!config) {
-    throw new Error("DefaultChatTransport was never constructed by ChatPanel");
+    throw new Error("AssistantChatTransport was never constructed by ChatPanel");
   }
   const result = await config.prepareSendMessagesRequest({ messages: [], id: "t1", body: undefined });
   return { headers: new Headers(result.headers), body: result.body };

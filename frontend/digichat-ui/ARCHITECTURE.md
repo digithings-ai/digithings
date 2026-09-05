@@ -1,10 +1,11 @@
 # @digithings/digichat-ui — architecture
 
-Shared digichat terminal-session UI. Two consumers render it today:
-**digichat** (`src/app/embed/page.tsx`, customer iframe embeds) and
-**digithings-web** (`components/DigiChatSession.tsx` → `/chat`, native Pages —
-no iframe). Both also `@import` this package's stylesheets from their
-`globals.css`.
+Shared digichat terminal-session UI (**deprecated for digichat 2.0**).
+
+digichat 2.0 (`/chat` and `/embed` in `frontend/digichat`) renders through
+assistant-ui (`CliThread`) with this package's `.dc-*` CSS. `DigiChatSession`
+remains for **digithings-web** `/chat` until that surface migrates — do not add
+new chrome here.
 
 Since #1450 (F3) the surfaces hold **zero forked copies** of this package's
 components: digithings-web deleted its local `miniMarkdown` / `MermaidBlock` /

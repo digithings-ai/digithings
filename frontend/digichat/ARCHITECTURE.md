@@ -34,14 +34,14 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 | Capability | Status |
 |---|---|
-| React 19 streaming chat (`useChat`, AI SDK v6) | Built |
+| React 19 streaming chat (`useChat` + assistant-ui, AI SDK v7) | Built |
 | Auth.js v5 — generic OIDC provider | Built |
 | Auth.js v5 — dev password provider (`DIGICHAT_DEV_AUTH`) | Built |
 | digikey JWT exchange (`bff_session` + `api_key` grants) | Built |
 | Machine API key auth (`digi_live_…`, hashed in Postgres) | Built |
 | Conversation persistence — localStorage (always on) | Built |
 | Conversation persistence — Postgres (optional) | Built |
-| digigraph activity stream (`data-digichatActivity` parts) | Built |
+| Standard UI stream parts (tool / source / reasoning / `data-status`) | Built |
 | Shared activity UI (rich vault hits + research brief) | Built |
 | digigraph digithings adapter (`adapters/digithings/`) | Built |
 | Foundry client adapter (`adapters/foundry/`) | Built |
@@ -75,11 +75,15 @@ refuses to flush a remote thread that is still `hydrated: false`, and the API
 returns **409 `would_truncate`** if a PUT would drop existing rows unless
 `allowTruncate: true` (used by `/clear` and by last-user edit — #3466).
 
-**AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
-`DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
-so upstream digigraph can correlate the same conversation across turns. Scroll
-stick-to-bottom with a "New messages" chip when scrolled up. Copy, Regenerate,
-and Edit-last-user actions on bubbles (first-party is always digigraph).
+**AI SDK `useChat` + assistant-ui** (`src/components/chat-panel.tsx`,
+`src/components/assistant-ui/cli-thread.tsx`): `@ai-sdk/react` with
+`AssistantChatTransport` (`@assistant-ui/ai-sdk`) pointed at `POST /api/chat`.
+Sends `X-Digichat-Session` so upstream digigraph can correlate the same
+conversation across turns. `/embed` renders `CliThread` (CLI-skinned
+assistant-ui primitives). First-party `/chat` still owns regen/edit chrome in
+`ChatPanel` wrapped by `AssistantRuntimeProvider`. Scroll stick-to-bottom with a
+"New messages" chip when scrolled up. Copy, Regenerate, and Edit-last-user
+actions on bubbles (first-party is always digigraph).
 
 **Conversation persistence** (`src/lib/thread-local.ts`, `src/lib/conversations-repo.ts`):
 Dual-path. `localStorage` is always written (versioned blob `{ v: 1, threads: [...] }`
@@ -183,7 +187,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-messages.ts` | Content coercion for digigraph OpenAI body |
 | `src/lib/digigraph-upstream.ts` | `resolvedigigraphUpstreamAuth` — JWT resolution |
 | `src/lib/digikey-exchange.ts` | digikey token exchange (both grant types) |
-| `src/lib/adapters/digithings/stream.ts` | digigraph SSE → `data-digichatActivity` |
+| `src/lib/adapters/digithings/stream.ts` | digigraph SSE → standard UI chunks (`ui-stream-parts.ts`) |
+| `src/lib/ui-stream-parts.ts` | ActivitySpan → tool / source / reasoning / `data-status` |
 | `src/lib/adapters/digithings/activity/` | digivault / digisearch activity mappers (digigraph tools) |
 | `src/lib/adapters/foundry/stream.ts` | Azure Foundry → AI SDK UI message stream |
 | `src/lib/adapters/shared/messages.ts` | Shared helpers (e.g. `lastUserMessageText`) |
@@ -220,7 +225,7 @@ probe).
 - Auth: Auth.js session cookie or `Authorization: Bearer <machine-key>`.
 - Request body: `{ messages: UIMessage[] }` (AI SDK UI message format). **Full conversation history after the intended truncation** — every prior user+assistant turn still on the client must be posted; the BFF forwards the entire array to digigraph (trace stream and `streamText` paths). Foundry `send` sends only the latest user text because Azure holds server-side conversation state; Foundry `regenerate` / `edit_last_user` mutate items then create a response without re-appending user text (#3475).
 - Notable request headers: `X-Digichat-Session` / `X-Session-Id` (stable UUID for upstream tracing), `X-Request-ID` (propagated to digigraph), `X-Digi-Turn-Mode` (`send` default | `regenerate` | `edit_last_user`), `X-Digi-Run-Id` (optional idempotency), `X-External-Conversation` (Foundry), `X-Digichat-Trace: 0` (opt out of trace stream), `X-Embed-Chat-Token` (optional per-tenant trial-gate token).
-- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus optional `data-digichatActivity` parts. Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
+- Response: Server-Sent Events (AI SDK UI message stream) — text deltas plus standard tool / `source-*` / reasoning / `data-status` parts (`x-vercel-ai-ui-message-stream: v1`). Mutation errors: `400 invalid_turn_mode`, `409 run_in_progress` / `run_id_replay`, Foundry `501 not_supported` when item delete/create is unavailable.
 - The route resolves upstream auth, builds a `createdigigraphClient`, then either (a) calls `createdigigraphTraceStreamResponse` for the trace path (passes `req.signal` so Stop aborts the digigraph fetch) or (b) calls `streamText` with `smoothStream` for the legacy path.
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
@@ -300,10 +305,11 @@ entire message set (delete all + re-insert by sequence index). No incremental ap
 
 ### AI SDK message format
 
-Messages conform to AI SDK v6 `UIMessage`: `{ id: string, role: "user"|"assistant",
-parts: UIPart[] }`. Parts include `TextUIPart`, `ReasoningUIPart`, `ToolInvocationUIPart`,
-and the custom `data-digichatActivity` part emitted by digigraph / digivault /
-foundry streams. Messages are stored verbatim as JSONB in
+Messages conform to AI SDK v7 `UIMessage`: `{ id: string, role: "user"|"assistant",
+parts: UIPart[] }`. Parts include `TextUIPart`, `ReasoningUIPart`, tool UI parts
+(`tool-{name}`), `source-url` / `source-document`, and unbranded `data-status`.
+1.4 `data-digichatActivity` is **read** only to hydrate old transcripts; 2.0
+does not emit it. Messages are stored verbatim as JSONB in
 `conversation_messages.payload`.
 
 ### BacktestResult parsing
@@ -377,7 +383,7 @@ BFF route handler
   │   ├─ POST {base}/v1/chat/completions  (raw fetch, no AI SDK client)
   │   ├─ iterateOpenAiSse: parse SSE frames
   │   │   ├─ delta.content  → text-delta parts
-  │   │   └─ delta.digigraph_trace → data-digichatActivity parts (typed mapper)
+  │   │   └─ delta.digigraph_trace → standard UI parts (typed mapper)
   │   └─ createUIMessageStreamResponse → SSE to browser
   │
   └─ Legacy path (DIGICHAT_TRACE_UI=0 or X-Digichat-Trace: 0)
@@ -696,11 +702,11 @@ registry there would leak every tenant's token.
 `src/lib/adapters/foundry/stream.ts` (`@azure/ai-projects` +
 `DefaultAzureCredential` — the container's own managed identity, no stored
 key). Conversation state lives in Foundry; the client echoes the conversation
-id via `X-External-Conversation` / `data-externalConversation`. For ordinary
+id via `X-External-Conversation` / `data-conversation`. For ordinary
 `send` turns the adapter appends last-user text. Regen/edit use conversation
 item delete/create when available (#3475); otherwise the BFF returns 501.
-Foundry maps `azure_ai_search` calls and returned chunks into the shared
-`data-digichatActivity` search/source rows. A reasoning disclosure appears
+Foundry maps `azure_ai_search` calls and returned chunks into standard
+tool / `source-*` / `data-status` parts. A reasoning disclosure appears
 only when the Foundry event includes summary text. Operators enable that
 summary on the agent definition: the Responses API refuses a per-call
 `reasoning.summary` request when using `agent_reference`. Empty reasoning
@@ -1093,9 +1099,9 @@ coerces AI SDK `ModelMessage` content to plain strings to avoid digigraph's stri
 digigraph SSE frames carry an optional `digigraph_trace` field on each
 `choices[0].delta`. The trace path maps typed payloads (`rag_sources`,
 `graph_update`, and opaque labels) through `mapdigigraphTraceToSpans` and emits
-only `data-digichatActivity` parts (legacy `data-digigraphTrace` dual-emit was
-removed in Phase 2). Auth `chat-panel` and embed both render via
-`@digithings/digichat-ui` `ChatActivities` (rich hits + `brief`).
+only standard tool / `source-*` / reasoning / `data-status` parts (`writeStandardActivity`).
+1.4 `data-digichatActivity` is not written. Auth `chat-panel` and embed both
+project those parts through `messageActivities` → `ChatActivities` (rich hits + `brief`).
 
 Session correlation: `X-Session-Id` (conversation UUID), `X-Request-ID` (per-request
 UUID), `X-digichat-Tenant`, `X-Digi-Caller: digichat` are forwarded to digigraph and

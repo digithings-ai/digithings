@@ -90,42 +90,43 @@ Honest one-liner: **speak the AI SDK UI stream because that is what assistant-ui
 DataStream / `useChatRuntime` consume. AG-UI is deferred and not needed. Do not
 invent a new dialect.**
 
-## What digichat emits today (`origin/develop`)
+## What this 2.0 branch emits
 
-`frontend/digichat/package.json`: `ai ^6.0.116`, `@ai-sdk/react ^3.0.118`,
-`@ai-sdk/openai ^3.0.41`. No `@assistant-ui/*`.
+`frontend/digichat/package.json`: `ai ^7`, `@ai-sdk/react ^4`, `@ai-sdk/openai ^4`,
+`@assistant-ui/react`, `@assistant-ui/ai-sdk`, `@assistant-ui/react-markdown`.
+Package version stays **1.4.0** until the owner cuts 2.0.
 
 `POST /api/chat` (also `/api/v1/chat`):
 
 - Request: `{ messages: UIMessage[] }` plus turn/session headers
-  (`X-Digi-Turn-Mode`, `X-Digichat-Session`, …).
+  (`X-Digi-Turn-Mode`, `X-Digichat-Session`, `X-Digi-Force-Tool`, …).
 - Default response: `createUIMessageStream` + `createUIMessageStreamResponse`
   in `src/lib/adapters/digithings/stream.ts`. That helper sets
   `x-vercel-ai-ui-message-stream: v1`. Text uses `text-start` / `text-delta` /
-  `text-end`. Activity uses `type: "data-digichatActivity"`.
-- Legacy path: `streamText(…).toUIMessageStreamResponse()` (AI SDK v6 instance
-  method; v7 prefers stateless `toUIMessageStream` +
-  `createUIMessageStreamResponse`).
+  `text-end`. Activity uses `writeStandardActivity` (tool / `source-*` /
+  reasoning / `data-status`). Foundry conversation id is `data-conversation`.
+- Legacy path: `streamText` + `toUIMessageStream` +
+  `createUIMessageStreamResponse` (AI SDK v7 stateless helpers).
 - The BFF **parses** digigraph OpenAI SSE (`iterateOpenAiSse`) and **writes**
   AI SDK UI chunks. The browser never sees `delta.digigraph_trace`.
+- Generic `useChat` clients do not need digichat vocabulary.
 
 AI SDK v6 → v7 is a library bump on the **same** UI-stream family, not a
-protocol replacement. It is part of **digichat 2.0** (#3626) together with
-assistant-ui: `ai@^7` / `@ai-sdk/react@^4` / `@assistant-ui/react-ai-sdk`.
-Do not fold that bump into 1.5. Until 2.0 lands, 1.4 stays on `ai ^6` /
+protocol replacement. It ships with assistant-ui as **digichat 2.0** (#3626).
+Until the 2.0 cut, `develop` / published 1.4 stays on `ai ^6` /
 `@ai-sdk/react ^3`.
 
-## `data-digichatActivity` (1.4 / 1.5 only)
+## `data-digichatActivity` (1.4 / 1.5 only; not on the 2.0 wire)
 
-`ACTIVITY_PART_TYPE = "data-digichatActivity"` is today’s AI SDK **Data
+`ACTIVITY_PART_TYPE = "data-digichatActivity"` is the 1.4 AI SDK **Data
 Parts** extension (`data: {"type":"data-<name>","data":…}`). The *payload*
 schema (`ActivitySpan` → `DigiChatActivity`, OTel GenAI field names, embed
-`activityDetail` gate) is product-specific and stays in the BFF mapper on
-the 1.x line.
+`activityDetail` gate) stays in the BFF mapper.
 
-**2.0 removes the branded type.** Map the same information onto standard
-AI SDK UI parts so a generic `useChat` / assistant-ui client needs no
-digichat vocabulary:
+**2.0 does not emit the branded type.** The same information is mapped onto
+standard AI SDK UI parts so a generic `useChat` / assistant-ui client needs no
+digichat vocabulary. Old persisted threads are still **read** via
+`messageActivities` fallback.
 
 | 1.4 span | 2.0 standard part |
 |----------|-------------------|
