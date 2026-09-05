@@ -18,7 +18,7 @@ export interface BookReconciliation {
 }
 
 /** CASH is the invested/cash split, never a held row. */
-function isCashTicker(ticker: string): boolean {
+export function isCashTicker(ticker: string): boolean {
   return ticker.trim().toUpperCase() === 'CASH';
 }
 

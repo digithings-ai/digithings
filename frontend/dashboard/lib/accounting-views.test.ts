@@ -23,11 +23,23 @@ describe('accounting-views helpers (#2599)', () => {
     expect(mapped.nav).toBe(101.5);
   });
 
-  it('labels a mixed calendar series by presence of finalized rows (not blended values)', () => {
+  it('labels a mixed calendar series from the tip row, never any historical finalized row', () => {
     expect(
       navSeriesContractLabel([
-        { source: 'legacy_nav_history', contract: 'legacy_estimate' },
-        { source: 'finalized_accounting', contract: 'finalized_accounting' },
+        { date: '2026-08-01', source: 'finalized_accounting', contract: 'finalized_accounting' },
+        { date: '2026-09-04', source: 'legacy_nav_history', contract: 'legacy_estimate' },
+      ])
+    ).toBe('legacy_estimate');
+    expect(
+      navSeriesContractLabel([
+        { date: '2026-09-04', source: 'legacy_nav_history', contract: 'legacy_estimate' },
+        { date: '2026-08-01', source: 'finalized_accounting', contract: 'finalized_accounting' },
+      ])
+    ).toBe('legacy_estimate');
+    expect(
+      navSeriesContractLabel([
+        { date: '2026-08-01', source: 'legacy_nav_history', contract: 'legacy_estimate' },
+        { date: '2026-09-04', source: 'finalized_accounting', contract: 'finalized_accounting' },
       ])
     ).toBe('finalized_accounting');
     expect(
