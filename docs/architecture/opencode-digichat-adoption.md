@@ -1,9 +1,13 @@
 # OpenCode as digichat CLI/TUI foundation — adoption plan
 
-**Status:** research / proposed (no product replacement this cycle)  
+> **Superseded:** [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md)
+> rejects OpenCode as digichat's UI/frontend foundation. This file is retained
+> as historical research and must not be used as an implementation plan.
+
+**Status:** superseded
 **Date:** 2026-09-04  
 **Issue:** [#3568](https://github.com/digithings-ai/digithings/issues/3568)  
-**Related ADR:** [ADR-0027](../adr/0027-opencode-digichat-cli-foundation.md)  
+**Related ADR:** [ADR-0027](../adr/0027-opencode-digichat-cli-foundation.md), superseded by [ADR-0028](../adr/0028-digichat-web-foundation-and-opencode-distribution.md)
 **Naming:** Digi product names are always lowercase in prose (`digichat`, `digisearch`, `digivault`, `digigraph`, `digithings`).
 
 This document is the agent-facing plan for adopting **OpenCode** as the CLI/TUI foundation for digichat. It is intentionally **docs-only**: do not replace digichat UI or ship a digichat CLI binary from this plan alone.

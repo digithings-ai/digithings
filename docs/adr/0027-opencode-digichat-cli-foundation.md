@@ -1,6 +1,6 @@
 # ADR 0027: OpenCode as digichat CLI/TUI foundation
 
-**Status:** proposed  
+**Status:** superseded by [ADR-0028](0028-digichat-web-foundation-and-opencode-distribution.md)
 **Date:** 2026-09-04
 
 ## Context
@@ -44,4 +44,4 @@ This ADR stays **proposed** until the Phase 1 spike in the architecture doc repo
 - Issue: [#3568](https://github.com/digithings-ai/digithings/issues/3568)
 - Architecture plan: [`docs/architecture/opencode-digichat-adoption.md`](../architecture/opencode-digichat-adoption.md)
 - digichat modular frontend: [`docs/architecture/digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md)
-- Supersedes / superseded by: —
+- Superseded by: [ADR-0028](0028-digichat-web-foundation-and-opencode-distribution.md)
