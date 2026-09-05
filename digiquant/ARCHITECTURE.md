@@ -1273,7 +1273,10 @@ entry until that cutover. Prompt / structured-output walk for the same pass:
   selects the digithings **house** default (always-on, immutable); an overlay pin
   fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
   not fork the graph or cancel the house run. Models:
-  `digiquant.dashboard.profile_config`.
+  `digiquant.dashboard.profile_config`. Optional nested
+  `pipeline_schedule` / `execution_policy` (#3611) record workspace stage-day intent
+  and calendar-vetoable execution constraints inside the same append-only payload
+  (no new table; stage gates and market-hours I/O are follow-on work).
   Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user

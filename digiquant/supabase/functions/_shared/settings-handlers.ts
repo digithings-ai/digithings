@@ -38,7 +38,9 @@ import {
 import {
   HOUSE_PROFILE_KEY,
   validateAssetPreferences,
+  validateExecutionPolicy,
   validateInvestmentProfile,
+  validatePipelineSchedule,
 } from "./profile-schemas.ts";
 import {
   createAdminClient,
@@ -283,6 +285,8 @@ function emptyProfileBody(
     recorded_at: null,
     investment: null,
     assets: null,
+    pipeline_schedule: null,
+    execution_policy: null,
     watchlist: [],
     themes: [],
     research_budget_usd: null,
@@ -332,6 +336,8 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
     recorded_at: row.recorded_at ?? null,
     investment: payload.investment ?? null,
     assets: payload.assets ?? null,
+    pipeline_schedule: payload.pipeline_schedule ?? null,
+    execution_policy: payload.execution_policy ?? null,
     watchlist: normalizeStringList(payload.watchlist).map((t) => t.toUpperCase()),
     themes: normalizeStringList(payload.themes).map((t) => t.toLowerCase()),
     research_budget_usd:
@@ -421,6 +427,8 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     label?: string;
     investment?: unknown;
     assets?: unknown;
+    pipeline_schedule?: unknown;
+    execution_policy?: unknown;
     expected_version_id?: string | null;
     supersedes_id?: string | null;
     watchlist?: string[];
@@ -470,6 +478,26 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     const assets = validateAssetPreferences(body.assets);
     if (!assets.ok) {
       return jsonError(400, "SCHEMA_INVALID", assets.errors[0]?.message ?? "invalid assets");
+    }
+  }
+  if (body.pipeline_schedule !== undefined && body.pipeline_schedule !== null) {
+    const schedule = validatePipelineSchedule(body.pipeline_schedule);
+    if (!schedule.ok) {
+      return jsonError(
+        400,
+        "SCHEMA_INVALID",
+        schedule.errors[0]?.message ?? "invalid pipeline_schedule",
+      );
+    }
+  }
+  if (body.execution_policy !== undefined && body.execution_policy !== null) {
+    const policy = validateExecutionPolicy(body.execution_policy);
+    if (!policy.ok) {
+      return jsonError(
+        400,
+        "SCHEMA_INVALID",
+        policy.errors[0]?.message ?? "invalid execution_policy",
+      );
     }
   }
 
@@ -534,6 +562,8 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     research_budget_usd: budgetParsed.value,
     investment: body.investment ?? null,
     assets: body.assets ?? null,
+    pipeline_schedule: body.pipeline_schedule ?? null,
+    execution_policy: body.execution_policy ?? null,
   };
 
   const { data: inserted, error: insertErr } = await deps.admin

@@ -1004,6 +1004,8 @@ Deno.test("GET profile: empty contract — 200 defaults, version_id null, no wri
   assertEquals(json.label, "");
   assertEquals(json.investment, null);
   assertEquals(json.assets, null);
+  assertEquals(json.pipeline_schedule, null);
+  assertEquals(json.execution_policy, null);
   assertEquals(store.profiles.length, 0);
 });
 
@@ -1254,6 +1256,69 @@ Deno.test("PATCH profile: rejects negative research_budget_usd", async () => {
   });
   assertEquals(status, 400);
   assertEquals(json.code, "INVALID_BUDGET");
+});
+
+Deno.test("PATCH profile: persists pipeline_schedule and execution_policy", async () => {
+  const store = freshStore();
+  const day = { research: true, deliberation: true, execution: true };
+  const schedule = {
+    schema_version: 1,
+    monday: day,
+    tuesday: day,
+    wednesday: day,
+    thursday: day,
+    friday: day,
+    saturday: { research: false, deliberation: false, execution: false },
+    sunday: day,
+  };
+  const policy = {
+    calendar_mode: "venue_calendar",
+    on_closed_session: "defer",
+    respect_early_close: true,
+    permitted_venues: ["NYSE"],
+  };
+  const { status, json } = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay A",
+    pipeline_schedule: schedule,
+    execution_policy: policy,
+  });
+  assertEquals(status, 200);
+  assertEquals(typeof json.version_id, "string");
+  const tip = store.profiles[0]!;
+  const payload = tip.payload as Record<string, unknown>;
+  assertEquals(
+    (payload.pipeline_schedule as { saturday: { execution: boolean } }).saturday
+      .execution,
+    false,
+  );
+  assertEquals(
+    (payload.execution_policy as { permitted_venues: string[] }).permitted_venues[0],
+    "NYSE",
+  );
+
+  const got = await call(store, "GET", "/profile");
+  assertEquals(got.status, 200);
+  assertEquals(
+    (got.json.pipeline_schedule as { saturday: { research: boolean } }).saturday
+      .research,
+    false,
+  );
+  assertEquals(
+    (got.json.execution_policy as { calendar_mode: string }).calendar_mode,
+    "venue_calendar",
+  );
+});
+
+Deno.test("PATCH profile: rejects invalid execution_policy calendar_mode", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay A",
+    execution_policy: { calendar_mode: "always_open" },
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "SCHEMA_INVALID");
 });
 
 Deno.test("POST keys/connect: seals with AAD workspace:provider:llm; no secret in response", async () => {
