@@ -100,7 +100,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
               related
             </Reveal>
             <div style={{ display: "flex", gap: ".6rem", flexWrap: "wrap" }}>
-              {s.related.map((rid) => <a key={rid} className="stack-chip" href={`/subsystems/${rid}`}>{subsystemById(rid)?.name ?? rid}</a>)}
+              {s.related.map((rid) => <Link key={rid} className="stack-chip" href={`/subsystems/${rid}`}>{subsystemById(rid)?.name ?? rid}</Link>)}
             </div>
           </div>
         </div>

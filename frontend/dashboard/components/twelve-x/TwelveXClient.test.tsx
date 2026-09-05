@@ -88,8 +88,13 @@ describe('TwelveXUnavailable', () => {
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('rounded-lg');
     expect(html).toContain('border-hair');
-    expect(html).toContain('bg-ink');
-    expect(html).toContain('text-bg');
+    // Unified with the DbUnavailable Retry cut: hairline border, accent
+    // text, ink-wash hover — not the old solid bg-ink/text-bg button.
+    // (The hover wash `hover:bg-ink/[0.06]` still mentions bg-ink, so assert
+    // on the old fill combo instead of the bare token.)
+    expect(html).toContain('text-accent');
+    expect(html).not.toContain('text-bg');
+    expect(html).not.toContain('bg-ink px-4');
   });
 
   it('uses presentation-safe copy when the feed is not configured', () => {
