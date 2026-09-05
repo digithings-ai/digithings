@@ -1,4 +1,4 @@
-"""DST correctness for `.github/workflows/pipeline-digiquant-prices.yml` (#1775).
+"""DST correctness for the digithings-cron prices schedules (#1775 / #3579).
 
 Every deadline the prices pipeline is trying to hit is an ``America/New_York``
 wall-clock event — the 09:30 ET open and the 16:00 ET close — but GitHub cron is
@@ -13,14 +13,10 @@ prove nothing about either season. Each schedule is expanded to UTC instants and
 converted to ET on representative dates in both offsets, including the first
 weekday after each 2026 transition, which is where this class of bug bites.
 
-The second half covers the two failure modes that are invisible in a green run:
-
-* a ``cron:`` whose ``github.event.schedule`` literal no longer appears in any
-  job's ``if:`` — the workflow still succeeds, having run nothing at all;
-* the ET gate that picks between the two at-open crons. The workflow command is
-    resolved to its helper and executed against an injected clock. The gate job
-    checks out the default-branch revision that supplied the schedule, while the
-    side-effecting writer remains pinned to released ``main``.
+The Worker owns the clocks after #3579, while the workflow remains manually
+dispatchable. These tests derive schedule literals from ``src/jobs.ts``, require
+exact parity with ``wrangler.toml``, and continue exercising the workflow's ET
+gate helper against an injected clock.
 """
 
 from __future__ import annotations
@@ -28,6 +24,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import tomllib
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,6 +36,8 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pipeline-digiquant-prices.yml"
+JOBS_SOURCE = REPO_ROOT / "frontend" / "digithings-cron" / "src" / "jobs.ts"
+WRANGLER = REPO_ROOT / "frontend" / "digithings-cron" / "wrangler.toml"
 
 ET = ZoneInfo("America/New_York")
 CASH_OPEN = time(9, 30)
@@ -57,19 +56,33 @@ def workflow() -> dict:
 
 
 @pytest.fixture(scope="module")
-def crons(workflow: dict) -> dict[str, list[str]]:
-    """Each job's scheduled crons, read out of the job's own ``if:`` guard.
+def worker_jobs() -> dict[str, str]:
+    """Read literal ``wd``/``rd`` job IDs and crons from the typed Worker map."""
+    pairs = re.findall(
+        r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        JOBS_SOURCE.read_text(encoding="utf-8"),
+        flags=re.DOTALL,
+    )
+    jobs = dict(pairs)
+    assert pairs and len(jobs) == len(pairs), "Worker job IDs must be unique literal strings"
+    return jobs
 
-    Deriving them rather than restating them is the point: a copy of the literals
-    here would make every assertion below a snapshot of whatever is currently
-    committed, and would keep passing after someone shifted a schedule by an hour.
-    """
-    scheduled = set(_schedules(workflow))
-    claimed = {
-        name: [c for c in _schedule_literals(job.get("if") or "") if c in scheduled]
-        for name, job in workflow["jobs"].items()
+
+@pytest.fixture(scope="module")
+def crons(worker_jobs: dict[str, str]) -> dict[str, list[str]]:
+    """Price clocks grouped by the behavior the DST assertions exercise."""
+    return {
+        "intraday": [worker_jobs["prices-intraday"]],
+        "fx-refresh": [
+            worker_jobs["prices-fx-refresh"],
+            worker_jobs["prices-fx-refresh-sun"],
+        ],
+        "eod-macro": [worker_jobs["prices-eod-macro"]],
+        "at-open-clock": [
+            worker_jobs["prices-at-open-13"],
+            worker_jobs["prices-at-open-14"],
+        ],
     }
-    return {name: found for name, found in claimed.items() if found}
 
 
 def _expand_field(spec: str, lo: int, hi: int) -> list[int]:
@@ -98,7 +111,7 @@ def _expand_field(spec: str, lo: int, hi: int) -> list[int]:
 def _utc_ticks(cron: str, day: date) -> list[datetime]:
     """Every UTC instant ``cron`` fires on ``day``."""
     minute, hour, dom, month, dow = cron.split()
-    if (dom, month, dow) != ("*", "*", "MON-FRI"):
+    if (dom, month) != ("*", "*") or dow not in {"MON-FRI", "1-5"}:
         raise ValueError(f"unsupported day fields in {cron!r}")
     if day.weekday() > 4:
         return []
@@ -119,9 +132,9 @@ def _et_ticks(cron: str, day: date) -> list[datetime]:
     return [t.astimezone(ET) for t in _utc_ticks(cron, day)]
 
 
-def _schedules(workflow: dict) -> list[str]:
-    # `on` is parsed as the boolean True by YAML 1.1.
-    return [entry["cron"] for entry in workflow[True]["schedule"]]
+def _configured_crons() -> list[str]:
+    parsed = tomllib.loads(WRANGLER.read_text(encoding="utf-8"))
+    return parsed["triggers"]["crons"]
 
 
 # --------------------------------------------------------------------------- #
@@ -212,56 +225,16 @@ def test_exactly_one_at_open_cron_lands_just_after_the_open(
 
 
 # --------------------------------------------------------------------------- #
-# cron <-> `if:` linkage — a mismatch here is a silent no-op, not a red run
+# Worker job map <-> deployed trigger linkage
 # --------------------------------------------------------------------------- #
 
 
-def test_every_cron_is_claimed_by_exactly_one_job(workflow: dict) -> None:
-    schedules = _schedules(workflow)
-    claims = {
-        cron: [name for name, job in workflow["jobs"].items() if cron in (job.get("if") or "")]
-        for cron in schedules
-    }
-    unclaimed = sorted(cron for cron, owners in claims.items() if not owners)
-    assert not unclaimed, f"crons no job runs: {unclaimed}"
-    contested = {cron: owners for cron, owners in claims.items() if len(owners) > 1}
-    assert not contested, f"crons claimed by several jobs: {contested}"
-
-
-def test_no_job_matches_a_schedule_that_no_longer_exists(workflow: dict) -> None:
-    """The failure mode of a cron rename: the job stops running and CI stays green."""
-    schedules = set(_schedules(workflow))
-    for name, job in workflow["jobs"].items():
-        expr = job.get("if") or ""
-        for literal in _schedule_literals(expr):
-            assert literal in schedules, f"job {name} waits on absent schedule {literal!r}"
-
-
-def _schedule_literals(expr: str) -> list[str]:
-    """Single-quoted operands of a ``github.event.schedule ==`` comparison."""
-    out: list[str] = []
-    for chunk in expr.split("github.event.schedule ==")[1:]:
-        _, _, rest = chunk.partition("'")
-        literal, _, _ = rest.partition("'")
-        out.append(literal)
-    return out
-
-
-def test_tracker_issue_bodies_quote_the_live_crons(workflow: dict) -> None:
-    """The failure-tracker steps hardcode their own cron in the issue body they open.
-
-    Two of them, and they are the copy an on-call reader trusts, so a stale literal
-    here sends whoever is triaging to a schedule that no longer exists.
-    """
-    schedules = set(_schedules(workflow))
-    quoted = [
-        match
-        for job in workflow["jobs"].values()
-        for step in job["steps"]
-        for match in re.findall(r"`([^`]*\* \* MON-FRI)`", str(step.get("with", {}).get("script")))
-    ]
-    assert len(quoted) == 2, f"expected two tracker bodies to quote a cron, found {len(quoted)}"
-    assert set(quoted) <= schedules, f"tracker bodies quote unscheduled crons: {quoted}"
+def test_worker_jobs_and_wrangler_triggers_have_exact_cron_parity(
+    worker_jobs: dict[str, str],
+) -> None:
+    configured = _configured_crons()
+    assert len(configured) == len(set(configured)), "wrangler has duplicate cron triggers"
+    assert set(worker_jobs.values()) == set(configured)
 
 
 # --------------------------------------------------------------------------- #

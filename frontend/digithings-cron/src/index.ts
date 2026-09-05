@@ -1,10 +1,10 @@
 /**
  * digithings-cron — org-wide Cloudflare Worker production clocks (#3579).
- * Cron Triggers fire workflow_dispatch / repository_dispatch against ref: main.
+ * Cron Triggers fire workflow_dispatch / repository_dispatch on the default branch.
  */
 import { dispatch } from "./dispatch";
 import type { Env } from "./env";
-import { isAtOrAfterEtOpen } from "./et-open";
+import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
 
 async function runJobsForCron(
@@ -16,9 +16,13 @@ async function runJobsForCron(
   const jobs = jobsForCron(cron);
   const started: string[] = [];
   const skipped: string[] = [];
+  const pending: Promise<unknown>[] = [];
 
+  if (jobs.length === 0) {
+    console.error(JSON.stringify({ cron, error: "unmapped_cron" }));
+  }
   for (const job of jobs) {
-    if (job.etOpenGate && !isAtOrAfterEtOpen(scheduledTime)) {
+    if (job.etOpenGate && !shouldDispatchAtOpen(cron, scheduledTime)) {
       skipped.push(job.id);
       console.log(
         JSON.stringify({
@@ -33,12 +37,16 @@ async function runJobsForCron(
       continue;
     }
     started.push(job.id);
-    ctx.waitUntil(
+    pending.push(
       dispatch(env, job, cron).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(JSON.stringify({ cron, job: job.id, error: msg }));
+        throw err;
       }),
     );
+  }
+  if (pending.length > 0) {
+    ctx.waitUntil(Promise.all(pending));
   }
   return { started, skipped };
 }

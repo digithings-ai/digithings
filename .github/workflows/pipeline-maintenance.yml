@@ -579,19 +579,26 @@ jobs:
           import json, os, subprocess
           from collections import Counter
 
-          # Fetch failed scheduled runs from past 7d. Server-side filter by
-          # event=schedule keeps the response small; --paginate handles
-          # repos with dense failure history.
+          # Fetch failed production runs from past 7d. Query each Cloudflare
+          # dispatch event separately so PR/push failures cannot crowd them out.
           since = os.environ["SINCE"]
-          resp = json.loads(subprocess.check_output([
-              "gh", "api",
-              f"/repos/{os.environ['REPO']}/actions/runs?status=failure&event=schedule&per_page=100"
-          ]))
+          pages = []
+          for event in ("workflow_dispatch", "repository_dispatch"):
+              event_pages = json.loads(subprocess.check_output([
+                  "gh", "api", "--paginate", "--slurp",
+                  (
+                      f"/repos/{os.environ['REPO']}/actions/runs"
+                      f"?status=failure&event={event}&created=>={since}&per_page=100"
+                  ),
+              ]))
+              pages.extend(event_pages)
           runs = [
               {"name": r["name"], "url": r["html_url"], "sha": r["head_sha"][:7], "at": r["created_at"]}
-              for r in resp.get("workflow_runs", [])
+              for page in pages
+              for r in page.get("workflow_runs", [])
               if r["created_at"] >= since
           ]
+          runs.sort(key=lambda run: run["at"], reverse=True)
 
           if not runs:
               print("✓ No scheduled-workflow failures in the past 7 days.")

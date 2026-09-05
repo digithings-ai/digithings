@@ -5,6 +5,7 @@ name: "Deploy: digithings-cron"
 on:
   push:
     branches:
+      - develop
       - main
     paths:
       - "frontend/digithings-cron/**"
@@ -29,14 +30,12 @@ jobs:
           node-version: "22"
 
       - name: Install package dependencies
-        working-directory: frontend/digithings-cron
-        run: npm install
+        run: npm ci --no-audit --no-fund
 
       - name: Test + typecheck
-        working-directory: frontend/digithings-cron
         run: |
-          npm test
-          npm run typecheck
+          npm run test --workspace digithings-cron
+          npm run typecheck --workspace digithings-cron
 
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
