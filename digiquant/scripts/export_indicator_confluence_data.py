@@ -68,6 +68,17 @@ MONTHLY_PARAMS: dict[str, dict[str, int]] = {
     "monthly_macd": {"monthly_fast": 4, "monthly_slow": 9, "daily_fast": 12, "daily_slow": 26},
 }
 
+# Comparison-only: Chris visually inspected monthly_length=2 in the
+# confluence dashboard and found it plausible (it bottoms out on both long-
+# and medium-term lows), but asked to also see monthly_length=14 (the
+# classic RSI period) since it visually maps long-term-only tops/bottoms,
+# like power_law. Its best daily_length (5) is pulled from the widened
+# grid's own results, not re-optimized here -- this is not a promotion
+# candidate, just a second line for side-by-side visual comparison.
+COMPARISON_PARAMS: dict[str, dict[str, int]] = {
+    "monthly_rsi_14": {"monthly_length": 14, "daily_length": 5},
+}
+
 
 def _window_json(windows: SdcaCycleWindows) -> list[dict[str, str]]:
     return [
@@ -113,6 +124,11 @@ def export(data_path: Path = DEFAULT_DATA_PATH) -> dict:
             monthly_fast=m["monthly_macd"]["monthly_fast"], monthly_slow=m["monthly_macd"]["monthly_slow"],
             daily_fast=m["monthly_macd"]["daily_fast"], daily_slow=m["monthly_macd"]["daily_slow"],
         ).to_list(),
+        "monthly_rsi_14": monthly_rsi_confluence_z(
+            date_s, price_s,
+            monthly_length=COMPARISON_PARAMS["monthly_rsi_14"]["monthly_length"],
+            daily_length=COMPARISON_PARAMS["monthly_rsi_14"]["daily_length"],
+        ).to_list(),
         "sma_band": sma_band_confluence_z(
             date_s, price_s,
             slow_window=p["sma_band"]["slow_window"], fast_window=p["sma_band"]["fast_window"],
@@ -130,7 +146,7 @@ def export(data_path: Path = DEFAULT_DATA_PATH) -> dict:
         "dates": [d.isoformat() for d in dates],
         "price": prices,
         "indicators": indicators,
-        "params": {**p, **m},
+        "params": {**p, **m, **COMPARISON_PARAMS},
         "long_windows": _window_json(SdcaCycleWindows.btc_v1()),
         "medium_windows": _window_json(SdcaCycleWindows.btc_medium_term_v1()),
     }
