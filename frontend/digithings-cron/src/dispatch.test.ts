@@ -140,7 +140,7 @@ describe("dispatch", () => {
     vi.stubGlobal("fetch", fetchMock);
     const job: Job = {
       id: "house-run-09",
-      cron: "17 9 * * MON-FRI",
+      cron: "17 9 * * *",
       repo: "digithings-ai/digithings",
       kind: "repository_dispatch",
       event_type: "olympus-daily",

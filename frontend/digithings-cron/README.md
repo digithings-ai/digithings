@@ -26,8 +26,10 @@ Set secrets from this directory with wrangler secret put (never echo values).
 
 ## Unique crons
 
-34 unique cron expressions in wrangler.toml [triggers]. Cron `17 12 * * MON-FRI` fires
-both digithings house-run-12 and twelve-x-new-york.
+34 unique cron expressions in wrangler.toml [triggers]. House research/portfolio
+retries (`house-run-09`…`12`) use daily `DOW=*`; twelve-x-new-york stays
+weekday-only on `17 12 * * MON-FRI`. At-open price clocks remain `MON-FRI` with
+the ET open gate.
 
 ## Local
 

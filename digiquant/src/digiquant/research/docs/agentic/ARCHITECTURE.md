@@ -50,9 +50,9 @@ and **`documents`**.
 
 | Control | Behavior |
 |---------|----------|
-| **Cron** | `.github/workflows/pipeline-digiquant.yml` — `17 9/10/11/12 * * *` UTC (off-peak retries) |
-| **Sunday** | `refresh_scope=all` (operator full refresh) |
-| **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **Cron** | digithings-cron house clocks → `pipeline-digiquant.yml` — `17 9/10/11/12 * * *` UTC daily |
+| **Default** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **Full refresh** | Manual `workflow_dispatch` / `--refresh-scope all` (no Sunday force) |
 | **CLI** | `python -m digiquant.portfolio.chain --cadence daily [--refresh-scope …]` |
 | **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
@@ -79,7 +79,7 @@ phase-scoped blinding (spec §6.1).
 ### Sunday — Weekly Baseline (historical entry point)
 
 Entry point was: `python -m digiquant.portfolio.chain --run-type baseline`  
-**Current:** `--cadence daily --refresh-scope all` (Sunday cron sets `all` automatically).
+**Current:** `--cadence daily` by default; `--refresh-scope all` only via manual dispatch/CLI.
 
 ### Mon–Sat — Daily Delta (historical)
 
@@ -97,7 +97,7 @@ Do not schedule `monthly` runs or `phase_monthly` on the daily chain.
 
 Before any phase executes, the agent performs a structured context load:
 
-1. **Confirm cadence** — `python -m digiquant.portfolio.chain --cadence daily` (Sunday: `refresh_scope=all` via cron or `--refresh-scope all`)
+1. **Confirm cadence** — `python -m digiquant.portfolio.chain --cadence daily` (optional `--refresh-scope all` for operator full refresh)
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes
