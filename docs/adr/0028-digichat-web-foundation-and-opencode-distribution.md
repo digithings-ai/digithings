@@ -1,8 +1,9 @@
-# 0028. Keep digichat web-native; use OpenCode only as a distribution channel
+# 0028. Keep digichat web-native; assistant-ui is the chat foundation; OpenCode is distribution only
 
 ## Status
 
-Accepted — 2026-09-05
+Accepted — 2026-09-05 (amended the same day: owner selected assistant-ui and
+the AI SDK UI message stream; the bake-off is closed).
 
 Supersedes [ADR-0027](0027-opencode-digichat-cli-foundation.md).
 
@@ -83,29 +84,41 @@ remains whichever UI is selected.
    MCP endpoints and agent markdown files. Do not fork OpenCode, import its UI
    as digichat's frontend, call the product “opencode,” or imply upstream
    endorsement.
-4. **`assistant-ui` is the leading chat-layer candidate, not yet the selected
-   foundation.** Run a timeboxed bake-off against extending the existing
-   `digichat-ui`. Compare the same representative transcript, tool activities,
-   embed policy, keyboard navigation, accessibility, BFF persistence, and
-   terminal styling. The result requires a separate decision before either
-   implementation is adopted.
-5. **Bot profiles and the control plane are the platform roadmap.** Define
+4. **assistant-ui is the selected chat-layer foundation.** Customize and theme
+   it to a CLI look matching current digichat. Do not rebuild transcript,
+   composer, palette, markdown, attachments, or accessibility in-house. Keep
+   BFF persistence, auth, tenant/embed policy, and digigraph orchestration.
+   Assistant Cloud is the thinnest OSS surface around persistence and
+   observability — those stay in the BFF. This replaces the bake-off against
+   extending `digichat-ui`.
+5. **Bot profiles and the control plane remain the platform roadmap.** Define
    tenant-scoped profile identity, allowed tools, corpus/vault routing, system
    instructions, branding, backend choice, and conversation ownership
    independently of the renderer.
-6. **A renderer-neutral event protocol is deferred.** Agent Client Protocol
-   (ACP) is under separate investigation and may serve this role; this ADR makes
-   no claim about its suitability, license, or maintenance status.
+6. **Canonical renderer contract: the Vercel AI SDK UI message stream**
+   (`UIMessage` / `UIMessageChunk` SSE, `x-vercel-ai-ui-message-stream: v1`).
+   We are **not** inventing a digithings-only event dialect. assistant-ui
+   consumes this natively via `useChatRuntime` + `AssistantChatTransport` and
+   via DataStream. Other OSS `useChat` UIs speak it. The BFF already emits it
+   on `POST /api/chat`. Ranking, layer map, and `data-digichatActivity` mapping
+   live in
+   [digichat renderer contract](../architecture/digichat-renderer-contract.md).
+   **ACP is rejected as the canonical renderer contract** (editor/workspace
+   JSON-RPC, stdio-first, no citation/RAG part model) and is reserved as an
+   optional coding-agent/editor gateway. **AG-UI is not the pick**; it is an
+   explicit later adapter if a CopilotKit-class UI must attach to the same
+   backend.
 
-`assistant-ui` leads the bake-off because it is an MIT-licensed UI rather than
-an orchestrator, has first-class LangGraph integration, exposes unstyled
-composable React primitives, and offers `@assistant-ui/react-ink` and
-`@assistant-ui/react-native` renderers over the same runtime. Version 0.15.18
-was published 2026-09-03 and the repository had approximately 12,000 stars and
-active pushes when checked. Its caveat is material: the YC-backed company also
-sells Assistant Cloud, and open-library support is thinnest around persistence
-and observability. digichat's BFF already owns those responsibilities; the
-bake-off must prove that boundary rather than assume it.
+`assistant-ui` is selected because it is an MIT-licensed UI rather than an
+orchestrator, exposes unstyled composable React primitives, and lets
+digithings delegate transcript/composer/tool chrome instead of maintaining
+`digichat-ui`. First-class LangGraph, Ink, and React Native runtimes are
+available over the same component model, but the **browser** path talks to the
+BFF, not to LangGraph Cloud. Checked 2026-09-05: `@assistant-ui/react` 0.15.x
+on npm; AI SDK runtime overview targets v7 (`@assistant-ui/ai-sdk`, `ai@^7`)
+with a documented v6 pin. Caveat unchanged: Assistant Cloud is commercial and
+OSS support is thinnest around persistence and observability — keep those in
+the BFF.
 
 ## Rejected alternatives
 
@@ -152,6 +165,41 @@ Rejected because it preserves the dual-orchestrator conflict and adds a
 high-velocity fork tax. Configuring upstream OpenCode as a separate client
 distribution provides the useful coding-CLI channel without either cost.
 
+### A proprietary digithings event dialect
+
+Rejected. An earlier draft of this ADR deferred a “renderer-neutral” protocol
+and left room to formalize a house dialect. The owner wants the generally used
+open-source contract so the digichat backend can be used from any UI.
+`data-digichatActivity` stays as an AI SDK `data-*` part schema on that public
+stream, not as a second wire format.
+
+### OpenAI Chat Completions or Responses as the UI contract
+
+Rejected as the **renderer** contract. digigraph’s `POST /v1/chat/completions`
+is an OpenAI-compatible **model** API (and OpenAI Responses is not built). The
+owner’s impression that the stack already used “standardized OpenAI contracts”
+maps to that hop, plus LiteLLM. The BFF already translates those chunks into
+the AI SDK UI stream the browser consumes.
+
+### LangGraph `stream` / `useStream` as the public UI contract
+
+Rejected. That is digigraph’s internal graph runtime. Pointing UIs at it would
+bypass BFF auth, embed policy, and persistence. assistant-ui’s LangGraph
+adapter talks to LangGraph SDK/Cloud, which is the wrong ownership boundary.
+
+### ACP as the canonical renderer contract
+
+Rejected. ACP standardizes editor ↔ coding-agent JSON-RPC (stdio today). It is
+not a web chat UI stream and has no citation/RAG part model. Keep it optional
+as an editor/workspace gateway only.
+
+### AG-UI as the canonical renderer contract
+
+Not selected now. assistant-ui can speak AG-UI through
+`@assistant-ui/react-ag-ui`, and AG-UI has a LangGraph integration, but the
+native assistant-ui + existing BFF path is the AI SDK UI stream. Add AG-UI
+later if another OSS UI requires it.
+
 ### Other packaged chat foundations
 
 - Open WebUI is disqualified for white-labelled delivery: license clause 4
@@ -181,34 +229,38 @@ right architecture.
 
 - digigraph remains the sole orchestration brain; presentation cannot silently
   insert a second tool loop or context-compaction policy.
-- Existing BFF security, persistence, adapters, embeds, and distribution stay
-  load-bearing while the smaller chat layer can be evaluated independently.
+- The chat layer is delegated to OSS (assistant-ui) instead of growing
+  `digichat-ui`; the BFF still owns auth, persistence, tenant/embed policy,
+  and adapter translation.
+- The renderer contract is a public stream other UIs can consume; the BFF
+  already speaks it.
 - OpenCode remains available to teams that want its coding CLI, without a fork
   or runtime dependency.
-- The control-plane work can proceed without waiting for a renderer decision.
+- Bot-profile/control-plane work can proceed independently of the UI migration.
 
 **Negative / tradeoffs:**
 
-- digithings still owns a polished, accessible web shell and must fund either
-  the existing-UI extension or an `assistant-ui` migration.
-- Web and any future terminal client are distinct delivery surfaces. Shared
-  events and sessions are deferred rather than assumed.
+- A real assistant-ui migration (theme to CLI look, keep activity parts,
+  likely AI SDK v6 → v7) still has to land; this ADR does not implement it.
+- Web and any future terminal client remain distinct delivery surfaces. They
+  share the BFF UI-stream contract, not a PTY or ACP session.
 - An OpenCode distribution needs authenticated MCP ingress; the current
   unauthenticated digigraph MCP listener must not be exposed as the answer.
-- `assistant-ui` remains a candidate. This ADR intentionally does not authorize
-  a dependency migration.
+- Assistant Cloud must not become the persistence/observability path.
 
 **Follow-up:**
 
-- Open a bake-off spike for `assistant-ui` versus extending `digichat-ui`.
+- Implement assistant-ui + keep the AI SDK UI message stream:
+  [#3626](https://github.com/digithings-ai/digithings/issues/3626).
 - Define bot-profile/control-plane models and forwarding independently.
-- Hold [#3565](https://github.com/digithings-ai/digithings/issues/3565)
-  until the web-shell bake-off settles. Its product semantics remain useful,
-  but overlay/palette implementation may be throwaway.
+- Hold [#3565](https://github.com/digithings-ai/digithings/issues/3565) until
+  the assistant-ui migration lands. Its product semantics remain useful, but
+  overlay/palette implementation on `digichat-ui` would be throwaway.
 - Continue [#3602](https://github.com/digithings-ai/digithings/issues/3602);
   structural DOM sanitization for dashboard-to-digichat page context is
   renderer-independent.
-- Investigate ACP separately before deciding on a renderer-neutral protocol.
+- Optional later: AG-UI adapter on the BFF for CopilotKit-class clients. ACP
+  remains optional editor/workspace gateway only.
 
 Issue #3568 was closed as Done through PR #3570 while its “follow-up spike issue
 opened” criterion remained unchecked; no spike report exists. ADR-0027
@@ -217,11 +269,17 @@ therefore never advanced beyond proposed and is superseded rather than adopted.
 ## Links
 
 - Decision issue: [#3623](https://github.com/digithings-ai/digithings/issues/3623)
+- Implementation follow-up: [#3626](https://github.com/digithings-ai/digithings/issues/3626)
 - Superseded ADR: [ADR-0027](0027-opencode-digichat-cli-foundation.md)
 - Superseded research plan:
   [OpenCode as digichat CLI/TUI foundation](../architecture/opencode-digichat-adoption.md)
 - Existing frontend boundary:
   [digichat modular frontend](../architecture/digichat-modular-frontend.md)
+- Renderer contract (verified 2026-09-05):
+  [digichat renderer contract](../architecture/digichat-renderer-contract.md)
 - OpenCode server architecture: https://opencode.ai/docs/server/
 - OpenCode repository: https://github.com/anomalyco/opencode
 - assistant-ui repository: https://github.com/assistant-ui/assistant-ui
+- AI SDK UI stream protocol: https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol
+- assistant-ui DataStream: https://www.assistant-ui.com/docs/runtimes/custom/data-stream
+- assistant-ui AI SDK v7: https://www.assistant-ui.com/docs/runtimes/ai-sdk/v7
