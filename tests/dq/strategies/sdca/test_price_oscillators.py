@@ -24,6 +24,9 @@ from digiquant.strategies.sdca.price_oscillators import (
     daily_macd_z,
     daily_rsi_z,
     macd_confluence_z,
+    monthly_macd_confluence_z,
+    monthly_macd_z,
+    monthly_rsi_confluence_z,
     monthly_rsi_z,
     rsi_confluence_z,
     rsi_deadzone_z,
@@ -208,6 +211,41 @@ class TestMonthlyRsiZ:
         assert z1[f_idx] != pytest.approx(z2[f_idx])
 
 
+class TestMonthlyMacdZ:
+    def test_default_monthly_macd_weight_is_zero(self) -> None:
+        w = SdcaCompositeWeights()
+        assert w.monthly_macd == pytest.approx(0.0)
+        assert "monthly_macd" not in w.enabled_extras()
+
+    def test_mid_month_does_not_see_same_month_close(self) -> None:
+        # Default monthly_slow=26 needs >=26 completed months of warm-up
+        # before the slow EMA produces a value -- pick a spike month well
+        # past that (month ~32 from a 2016-01-04 start).
+        n = 7 * 200
+        dates = _dates(n, start=date(2016, 1, 4))
+        base = [100.0 + 4.0 * ((i % 30) - 15) for i in range(n)]
+        z1 = monthly_macd_z(dates, pl.Series(base))
+        spiked = base.copy()
+        idx = dates.to_list().index(date(2018, 8, 31))
+        spiked[idx] = 50_000.0
+        z2 = monthly_macd_z(dates, pl.Series(spiked))
+        mid_idx = dates.to_list().index(date(2018, 8, 15))
+        assert z1[mid_idx] is not None
+        assert z1[mid_idx] == pytest.approx(z2[mid_idx])
+        next_idx = dates.to_list().index(date(2018, 9, 1))
+        assert z1[next_idx] is not None
+        assert z1[next_idx] != pytest.approx(z2[next_idx])
+
+    def test_persistent_log_macd_does_not_renormalize_to_neutral(self) -> None:
+        n = 30 * 200
+        dates = _dates(n, start=date(2010, 1, 4))
+        close = pl.Series([1_000.0 * (1.0007**i) for i in range(n)])
+        z = monthly_macd_z(dates, close)
+        late = [v for v in z.to_list()[-800:] if v is not None]
+        assert len(late) > 100
+        assert sum(late) / len(late) < -0.5
+
+
 class TestDailyRsiZ:
     def test_oversold_daily_rsi_is_positive_z(self) -> None:
         n = 60
@@ -376,6 +414,64 @@ class TestRsiConfluenceZ:
         z_short = rsi_confluence_z(dates, close, weekly_length=8, daily_length=5).to_list()
         z_long = rsi_confluence_z(dates, close, weekly_length=8, daily_length=30).to_list()
         assert z_short != z_long
+
+
+class TestMonthlyRsiConfluenceZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 1600
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series(
+            [1000.0 - 0.5 * i + 15.0 * math.sin(i / 5.0) for i in range(n)]
+        )
+        z = monthly_rsi_confluence_z(dates, close, monthly_length=8, daily_length=10)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        n = 1800
+        dates = _dates(n, start=date(2016, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 900.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        monthly_length, daily_length = 8, 10
+        monthly = monthly_rsi_z(dates, close, length=monthly_length)
+        daily = daily_rsi_z(dates, close, length=daily_length)
+        confluence = monthly_rsi_confluence_z(
+            dates, close, monthly_length=monthly_length, daily_length=daily_length
+        )
+
+        saw_agreement = saw_disagreement = False
+        for m, d, c in zip(monthly.to_list(), daily.to_list(), confluence.to_list(), strict=True):
+            if m is None and d is None:
+                assert c is None
+                continue
+            if m is None:
+                assert c == pytest.approx(d, abs=1e-9)
+                continue
+            if d is None:
+                assert c == pytest.approx(m, abs=1e-9)
+                continue
+            base = 0.5 * m + 0.5 * d
+            if m == 0.0 or d == 0.0:
+                expected = base
+            elif (m > 0) == (d > 0):
+                frac = min(abs(m), abs(d)) / max(abs(m), abs(d))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
 
 
 class TestOscillatorSpecDailyRsiLength:
@@ -581,6 +677,59 @@ class TestMacdConfluenceZ:
         z_short = macd_confluence_z(dates, close, daily_fast=5, daily_slow=10).to_list()
         z_long = macd_confluence_z(dates, close, daily_fast=12, daily_slow=26).to_list()
         assert z_short != z_long
+
+
+class TestMonthlyMacdConfluenceZ:
+    def test_clipped_to_unit_interval(self) -> None:
+        n = 1600
+        dates = _dates(n, start=date(2018, 1, 1))
+        close = pl.Series([1000.0 - 0.5 * i + 15.0 * math.sin(i / 5.0) for i in range(n)])
+        z = monthly_macd_confluence_z(dates, close)
+        finite = [v for v in z.to_list() if v is not None]
+        assert finite
+        assert max(finite) <= 3.0 + 1e-9
+        assert min(finite) >= -3.0 - 1e-9
+
+    def test_matches_agreement_scaled_formula_across_history(self) -> None:
+        n = 1800
+        dates = _dates(n, start=date(2016, 1, 1))
+        close = pl.Series(
+            [
+                1000.0
+                + 800.0 * math.sin(2 * math.pi * i / 900.0)
+                + 80.0 * math.sin(2 * math.pi * i / 33.0)
+                for i in range(n)
+            ]
+        )
+        monthly = monthly_macd_z(dates, close)
+        daily = daily_macd_z(dates, close)
+        confluence = monthly_macd_confluence_z(dates, close)
+
+        saw_agreement = saw_disagreement = False
+        for m, d, c in zip(monthly.to_list(), daily.to_list(), confluence.to_list(), strict=True):
+            if m is None and d is None:
+                assert c is None
+                continue
+            if m is None:
+                assert c == pytest.approx(d, abs=1e-9)
+                continue
+            if d is None:
+                assert c == pytest.approx(m, abs=1e-9)
+                continue
+            base = 0.5 * m + 0.5 * d
+            if m == 0.0 or d == 0.0:
+                expected = base
+            elif (m > 0) == (d > 0):
+                frac = min(abs(m), abs(d)) / max(abs(m), abs(d))
+                expected = max(-3.0, min(3.0, base * (1.0 + 0.5 * frac)))
+                saw_agreement = True
+            else:
+                expected = max(-3.0, min(3.0, base * 0.5))
+                saw_disagreement = True
+            assert c == pytest.approx(expected, abs=1e-9)
+
+        assert saw_agreement, "fixture never hit the agreement branch"
+        assert saw_disagreement, "fixture never hit the disagreement branch"
 
 
 class TestOscillatorSpecDailyMacd:

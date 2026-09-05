@@ -66,6 +66,8 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
+    "monthly_rsi": "monthly_rsi_weight",
+    "monthly_macd": "monthly_macd_weight",
 }
 
 # User-facing labels. The fallback (``name.replace("_", " ")``) covers every
@@ -97,6 +99,16 @@ class SdcaCompositeWeights(BaseModel):
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
+    # Research-only (2026-09-05): monthly-cadence siblings of weekly_rsi/
+    # weekly_macd (price_oscillators.monthly_rsi_confluence_z /
+    # monthly_macd_confluence_z), added so the dual-timeframe search
+    # machinery (weight_search.search_oscillator_periods_by_cycle_overlap)
+    # can solo-score them the same way as any other named indicator. Not
+    # wired into build_extra_indicators/settings.json parsing yet -- that's
+    # a later step if the exploration in
+    # scripts/run_dual_timeframe_composite_search.py shows they earn it.
+    monthly_rsi: float = Field(0.0, ge=0.0)
+    monthly_macd: float = Field(0.0, ge=0.0)
 
     @model_validator(mode="after")
     def _at_least_one_positive(self) -> SdcaCompositeWeights:
@@ -112,6 +124,8 @@ class SdcaCompositeWeights(BaseModel):
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
+            ("monthly_rsi", self.monthly_rsi),
+            ("monthly_macd", self.monthly_macd),
         )
 
     def enabled_extras(self) -> dict[str, float]:

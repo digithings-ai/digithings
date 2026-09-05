@@ -153,10 +153,18 @@ curve. Today there is exactly one composite risk index and one curve
      implementing Chris's exact staging — equal weights start → solo-optimize
      each indicator's periods against the combined objective → recombine at
      equal weight → floor-diversified aggregate reweight → 2:1/3:1/5:1 ratio
-     sensitivity. See `RESEARCH_STATE.md` backlog item 6 for the first
-     real-data run's numbers — **diagnostic only, not an accepted
-     candidate**; curve/threshold optimization against this index is a
-     separate, later problem (Chris's explicit ordering).
+     sensitivity. A diagnostic-only Stage 2b compares new
+     `monthly_rsi_confluence_z()`/`monthly_macd_confluence_z()` kernels
+     (`price_oscillators.py`, monthly+daily confluence, same
+     `agreement_scaled_blend()` shape as the weekly versions) against their
+     weekly counterparts — these have dormant, zero-weight fields on
+     `SdcaCompositeWeights` for the search machinery's sake but are
+     deliberately excluded from `EXTRA_INDICATOR_NAMES`/
+     `build_extra_indicators()`/settings.json, so they never reach steps 3-5.
+     See `RESEARCH_STATE.md` backlog item 6 for both real-data runs' numbers —
+     **diagnostic only, not an accepted candidate**; curve/threshold
+     optimization against this index is a separate, later problem (Chris's
+     explicit ordering).
 6. **Curve wiring for long-only / medium-only / combined stays open**, but
    now means switching which `CycleWindow` set(s) the *same* single composite
    is scored/thresholded against — not swapping between two different

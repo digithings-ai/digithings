@@ -17,6 +17,17 @@ by default).
    indicator whose best score doesn't clear a noise baseline is dropped
    before step 4 (power_law is never dropped -- it's the anchor indicator
    and the explicit hedge floored back in at step 4).
+2b. Exploration only: solo-score ``monthly_rsi``/``monthly_macd``
+    (``price_oscillators.monthly_rsi_confluence_z`` /
+    ``monthly_macd_confluence_z`` -- completed-calendar-month long-term leg
+    instead of completed-ISO-week) against the same combined objective, for
+    a direct comparison against weekly_rsi/weekly_macd's own step-2 score.
+    Both have dormant, zero-weight fields on ``SdcaCompositeWeights`` (the
+    minimal hook this search machinery needs) but neither is in
+    ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json, so
+    neither participates in steps 3-5 below -- this only answers "does a
+    monthly cadence track the long-term cycle better than weekly," not
+    "should it ship."
 3. Recombine all individually-optimized, surviving indicators at equal
    weight -- the baseline the reweight stage must beat.
 4. Reweight the composite (``stage_a.optimize_stage_a_weights_combined``)
@@ -54,6 +65,8 @@ from digiquant.strategies.sdca.optimize import (
 from digiquant.strategies.sdca.power_law_zscore import power_law_confluence_z
 from digiquant.strategies.sdca.price_oscillators import (
     macd_confluence_z,
+    monthly_macd_confluence_z,
+    monthly_rsi_confluence_z,
     rsi_confluence_z,
     sma_band_confluence_z,
 )
@@ -76,17 +89,33 @@ PRICE_OSC_TUNABLE = ("weekly_rsi", "weekly_macd", "sma_band", "rs_eth")
 # power_law-trend 120d"), applied jointly for the first time here against
 # the combined long+medium objective.
 POWER_LAW_CANDIDATES = [{"trend_window": w} for w in (90, 120, 150, 180, 240, 365)]
+# Widened from the original ~4-combo grid: the first pass's winning periods
+# (8/7, and default 12/26 for MACD) barely moved off library defaults and
+# scored far below power_law/sma_band solo -- widen to see whether that's a
+# genuine optimum or just a grid too coarse to find a better one.
 WEEKLY_RSI_CANDIDATES = [
-    {"weekly_length": 14, "daily_length": 14},
-    {"weekly_length": 8, "daily_length": 7},
-    {"weekly_length": 10, "daily_length": 10},
-    {"weekly_length": 21, "daily_length": 14},
+    {"weekly_length": w, "daily_length": d}
+    for w in (5, 7, 8, 9, 10, 12, 14, 18, 21, 26)
+    for d in (5, 7, 9, 10, 14)
 ]
 WEEKLY_MACD_CANDIDATES = [
-    {"weekly_fast": 12, "weekly_slow": 26, "daily_fast": 12, "daily_slow": 26},
-    {"weekly_fast": 6, "weekly_slow": 13, "daily_fast": 6, "daily_slow": 13},
-    {"weekly_fast": 8, "weekly_slow": 17, "daily_fast": 8, "daily_slow": 17},
-    {"weekly_fast": 12, "weekly_slow": 26, "daily_fast": 8, "daily_slow": 17},
+    {"weekly_fast": wf, "weekly_slow": ws, "daily_fast": df, "daily_slow": ds}
+    for wf, ws in ((4, 9), (5, 10), (6, 13), (8, 17), (10, 21), (12, 26), (16, 35))
+    for df, ds in ((6, 13), (8, 17), (12, 26))
+]
+# New this round: same period space as the weekly grids above, but scored
+# with a completed-calendar-month long-term leg instead of a completed-ISO-
+# week one (see module docstring's step 2b) -- exploration only, not fed
+# into steps 3-5.
+MONTHLY_RSI_CANDIDATES = [
+    {"monthly_length": w, "daily_length": d}
+    for w in (3, 5, 7, 9, 12, 14, 18)
+    for d in (5, 7, 9, 10, 14)
+]
+MONTHLY_MACD_CANDIDATES = [
+    {"monthly_fast": wf, "monthly_slow": ws, "daily_fast": df, "daily_slow": ds}
+    for wf, ws in ((3, 6), (4, 9), (5, 10), (6, 13), (8, 17), (12, 26))
+    for df, ds in ((6, 13), (8, 17), (12, 26))
 ]
 SMA_BAND_CANDIDATES = [
     {"slow_window": 90, "fast_window": 20},
@@ -111,6 +140,15 @@ SPEC_FIELD_MAP = {
     },
     "sma_band": {"slow_window": "sma_band_window", "fast_window": "sma_band_fast_window"},
     "rs_eth": {"slow_window": "rs_eth_window", "fast_window": "rs_eth_fast_window"},
+    # Informational only -- these aren't real SdcaOscillatorSpec fields yet
+    # (see SdcaCompositeWeights.monthly_rsi/monthly_macd's docstring note).
+    "monthly_rsi": {"monthly_length": "monthly_rsi_length", "daily_length": "daily_rsi_length"},
+    "monthly_macd": {
+        "monthly_fast": "monthly_macd_fast",
+        "monthly_slow": "monthly_macd_slow",
+        "daily_fast": "macd_daily_fast",
+        "daily_slow": "macd_daily_slow",
+    },
 }
 
 
@@ -186,6 +224,18 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
             daily_fast=p["daily_fast"], daily_slow=p["daily_slow"],
         ).to_list()
 
+    def compute_monthly_rsi_z(p: dict[str, int]) -> list[float | None]:
+        return monthly_rsi_confluence_z(
+            date_s, price_s, monthly_length=p["monthly_length"], daily_length=p["daily_length"],
+        ).to_list()
+
+    def compute_monthly_macd_z(p: dict[str, int]) -> list[float | None]:
+        return monthly_macd_confluence_z(
+            date_s, price_s,
+            monthly_fast=p["monthly_fast"], monthly_slow=p["monthly_slow"],
+            daily_fast=p["daily_fast"], daily_slow=p["daily_slow"],
+        ).to_list()
+
     def compute_sma_band_z(p: dict[str, int]) -> list[float | None]:
         return sma_band_confluence_z(
             date_s, price_s, slow_window=p["slow_window"], fast_window=p["fast_window"],
@@ -212,6 +262,7 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
     # when the target indicator IS power_law (it solos the candidate z-series instead).
     default_power_law_z = compute_power_law_z({"trend_window": 180})
     best_params: dict[str, dict[str, int]] = {}
+    best_scores: dict[str, CombinedCycleOverlapScore] = {}
     surviving: list[str] = []
     for name, candidates, compute_fn in tunable:
         if compute_fn is None:
@@ -230,6 +281,7 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
             medium_weight=medium_weight,
         )
         best_params[name] = dict(result.best.params)
+        best_scores[name] = result.best.score
         beats_noise = result.best.score.objective > noise_objective
         if name != "power_law":
             if beats_noise:
@@ -244,6 +296,36 @@ def run(data_path: Path = DEFAULT_DATA_PATH) -> None:
         print()
 
     print(f"surviving extras after step 2: {surviving}\n")
+
+    print("=== Stage 2b: monthly RSI/MACD exploration (diagnostic only) ===\n")
+    monthly_tunable = [
+        ("monthly_rsi", MONTHLY_RSI_CANDIDATES, compute_monthly_rsi_z, "weekly_rsi"),
+        ("monthly_macd", MONTHLY_MACD_CANDIDATES, compute_monthly_macd_z, "weekly_macd"),
+    ]
+    for name, candidates, compute_fn, weekly_counterpart in monthly_tunable:
+        result = search_oscillator_periods_by_cycle_overlap(
+            dates,
+            indicator_name=name,
+            param_candidates=candidates,
+            compute_indicator_z=compute_fn,
+            base_power_law_z=default_power_law_z,
+            base_extra_z=base_extra_z,
+            long_windows=long_windows,
+            medium_windows=medium_windows,
+            long_weight=long_weight,
+            medium_weight=medium_weight,
+        )
+        beats_noise = result.best.score.objective > noise_objective
+        status = "OK" if beats_noise else "DROP (<= noise baseline)"
+        print(f"[{name}] {status} (not fed into steps 3-5 -- comparison only)")
+        print(f"  best params: {result.best.params}")
+        print(f"  SdcaOscillatorSpec fields (informational): {_spec_fields(name, result.best.params)}")
+        _print_score("score", result.best.score)
+        weekly_score = best_scores.get(weekly_counterpart)
+        if weekly_score is not None:
+            print(f"  vs. {weekly_counterpart} best params {best_params[weekly_counterpart]}:")
+            _print_score(f"  {weekly_counterpart} score", weekly_score)
+        print()
 
     # Step 3: recombine surviving indicators (their optimized periods) at equal weight.
     final_power_law_z = compute_power_law_z(best_params["power_law"])

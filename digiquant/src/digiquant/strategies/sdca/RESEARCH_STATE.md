@@ -108,23 +108,60 @@ that could both be read as "the baseline."
    That single-composite search (`scripts/run_dual_timeframe_composite_search.py`,
    `stage_a.optimize_stage_a_weights_combined()` +
    `weight_search.search_oscillator_periods_by_cycle_overlap()`) has now run
-   once against real BTC-USD data — **diagnostic only, not an accepted
+   twice against real BTC-USD data — **diagnostic only, not an accepted
    candidate**:
-   - Per-indicator period optimization (solo, against the combined objective)
-     kept all five tunable indicators: `power_law` (180d trend, anchor),
-     `weekly_rsi` (8/7), `weekly_macd` (12/26/12/26 — default periods won),
-     `sma_band` (120/30), `rs_eth` (60/20).
-   - Equal-weight recombination (7 indicators incl. `m2`/`dxy`,
-     1/7 each): long=25.76, medium=12.83, combined=90.12 (3:1 ratio).
-   - Floor-diversified aggregate reweight (floor 0.25): `power_law=1.0,
+   - First pass (coarse period grids): kept all five tunable indicators:
+     `power_law` (180d trend, anchor), `weekly_rsi` (8/7), `weekly_macd`
+     (12/26/12/26 — default periods won), `sma_band` (120/30), `rs_eth`
+     (60/20). Equal-weight recombination (7 indicators incl. `m2`/`dxy`, 1/7
+     each): long=25.76, medium=12.83, combined=90.12 (3:1 ratio).
+     Floor-diversified aggregate reweight (floor 0.25): `power_law=1.0,
      sma_band=1.0`, everything else (`m2`, `dxy`, `weekly_rsi`, `weekly_macd`,
      `rs_eth`) floored at `0.25`. long=42.97, medium=24.00, combined=152.89 —
-     beats the equal-weight baseline on every axis.
-   - Ratio sensitivity (2:1 / 3:1 / 5:1): the winning weight mix above is
-     identical across all three ratios tried; only the combined objective's
-     scale changes (109.93 / 152.89 / 238.82). Ratio choice is still open —
-     Chris said he'd pick after seeing results — but isn't yet shown to change
-     *which* mix wins, only how much long-term is weighted in the reported
-     number.
-   Curve/threshold optimization against this index (Chris's explicitly
-   separate stage 5) hasn't started.
+     beats the equal-weight baseline on every axis. Ratio sensitivity (2:1 /
+     3:1 / 5:1): identical winning mix across all three; only the combined
+     objective's scale changes (109.93 / 152.89 / 238.82).
+   - Second pass (2026-09-05, Chris's request: "widen the grid for
+     weekly_rsi and weekly_macd, also worth exploring is a monthly RSI and
+     monthly MACD for the longer term cycle"): widened `weekly_rsi`'s period
+     grid (50 combos, was ~4) and `weekly_macd`'s (21 combos, was ~4), and
+     added a diagnostic-only Stage 2b that solo-scores new
+     `monthly_rsi_confluence_z()`/`monthly_macd_confluence_z()` kernels
+     (`price_oscillators.py`) for direct comparison against their weekly
+     counterparts — these two monthly indicators are NOT in
+     `EXTRA_INDICATOR_NAMES`/`build_extra_indicators()`/settings.json, only
+     dormant zero-weight fields on `SdcaCompositeWeights` plus the
+     `WEIGHT_PARAM_BY_NAME` entries required by `two_stage.py`'s exhaustive
+     `freeze_weight_params()`. Results:
+     - Widened grids found different optima than the coarse pass:
+       `weekly_rsi` → `weekly_length=5, daily_length=5` (long=21.84,
+       medium=20.41, combined=85.93 solo) vs. the coarse pass's `8/7`;
+       `weekly_macd` → `weekly_fast=16, weekly_slow=35, daily_fast=12,
+       daily_slow=26` (long=39.61, medium=16.06, combined=134.88 solo) vs.
+       the coarse pass's `12/26/12/26` default. Both solo scores still trail
+       `sma_band` (196.83) and `power_law` (225.24) by a wide margin.
+     - `monthly_rsi` (Stage 2b, diagnostic): `monthly_length=3,
+       daily_length=7` scores long=50.87, medium=18.10, combined=170.71 —
+       notably higher than widened `weekly_rsi`'s 85.93, but `monthly_length=3`
+       sits at the short edge of its candidate grid `(3,5,7,9,12,14,18)`,
+       so this reads as a plausible overfit/edge-of-grid artifact rather
+       than a clean win. Needs a wider or shifted grid before trusting it.
+     - `monthly_macd` (Stage 2b, diagnostic): `monthly_fast=4,
+       monthly_slow=9, daily_fast=12, daily_slow=26` scores long=40.54,
+       medium=15.44, combined=137.05 — close to and slightly better than
+       widened `weekly_macd`'s 134.88, a much less suspicious comparison
+       (not at a grid edge).
+     - Stages 3-5 correctly exclude `monthly_rsi`/`monthly_macd` (weight=0.0
+       throughout) confirming the scoping decision held, and reproduce the
+       *identical* winning aggregate mix from the first pass: `power_law=1.0,
+       sma_band=1.0`, everything else floored at 0.25 — long=43.69,
+       medium=24.88, combined=155.96 (3:1). The widened weekly grids and
+       monthly exploration changed per-indicator solo scores but not which
+       mix wins the aggregate reweight. Ratio sensitivity again shows an
+       identical mix at 2:1/5:1, only the objective's scale changes
+       (112.26 / 155.96 / 243.34).
+   Neither monthly indicator has been proposed as a promotion candidate —
+   they'd need a wider monthly-period grid (to rule out the edge-of-grid
+   artifact on RSI) and an explicit decision from Chris before touching
+   `EXTRA_INDICATOR_NAMES` or settings.json. Curve/threshold optimization
+   against this index (Chris's explicitly separate stage 5) hasn't started.

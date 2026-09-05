@@ -16,6 +16,19 @@ damped toward 0 when they conflict. ``mtf_rsi_z`` (weekly/monthly blend)
 stays as a diagnostic. Do not affine-map ``(50−RSI)/50`` — that pegs a bull
 at the floor.
 
+``monthly_rsi_confluence_z``/``monthly_macd_confluence_z`` swap the long-term
+leg for **completed calendar months** instead of weeks (``monthly_rsi_z``,
+``monthly_macd_z``) — a slower cadence for the same dead-zone/log-MACD
+mapping, still confluenced against the same daily (medium-term) leg. These
+are research-only right now: dormant, zero-weight fields on
+``SdcaCompositeWeights`` (the minimal hook the period-search machinery
+needs) but not in ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/
+settings.json, scored in isolation by
+``scripts/run_dual_timeframe_composite_search.py`` against the weekly
+variants' own solo score, since a monthly cadence may or may not track BTC's
+multi-year cycle extremes better than weekly — that's an open question, not
+an assumption.
+
 ``weekly_macd`` is the same agreement-scaled pattern applied to log-MACD
 (``macd_confluence_z``): a weekly leg (``log10(EMA12)−log10(EMA26)`` on
 completed weekly closes) with a sloped diminishing top cap and bottom dead
@@ -345,6 +358,57 @@ def mtf_rsi_z(
     return pl.Series("weekly_rsi", blended, dtype=pl.Float64)
 
 
+def monthly_rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_length: int = _RSI_LENGTH,
+    daily_length: int = _RSI_DAILY_LENGTH,
+    monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+    dead_low: float = _RSI_DEAD_LOW,
+    dead_high: float = _RSI_DEAD_HIGH,
+    extreme_low: float = _RSI_EXTREME_LOW,
+    extreme_high: float = _RSI_EXTREME_HIGH,
+) -> pl.Series:
+    """Monthly (long-term) + daily (medium-term) RSI, amplified on agreement.
+
+    Same agreement-scaled blend as ``rsi_confluence_z``, with the long-term
+    leg aggregated to completed calendar months instead of weeks — a slower
+    cadence for the same multi-year cycle question. Research-only: has a
+    dormant, zero-weight field on ``SdcaCompositeWeights`` for the
+    period-search machinery, but not in ``EXTRA_INDICATOR_NAMES``/
+    ``build_extra_indicators``/settings.json.
+    """
+    monthly = monthly_rsi_z(
+        dates,
+        close,
+        length=monthly_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    daily = daily_rsi_z(
+        dates,
+        close,
+        length=daily_length,
+        dead_low=dead_low,
+        dead_high=dead_high,
+        extreme_low=extreme_low,
+        extreme_high=extreme_high,
+    )
+    return agreement_scaled_blend(
+        monthly,
+        daily,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="monthly_rsi",
+    )
+
+
 def daily_rsi_z(
     dates: pl.Series,
     close: pl.Series,
@@ -520,6 +584,40 @@ def weekly_macd_z(
     return _asof_to_daily(dates, weekly["week_end"], z).alias("weekly_macd")
 
 
+def monthly_macd_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    fast: int = _MACD_FAST,
+    slow: int = _MACD_SLOW,
+    signal: int = _MACD_SIGNAL,
+    z_window: int = _MACD_Z_WINDOW,
+    min_samples: int = _MACD_Z_MIN_SAMPLES,
+) -> pl.Series:
+    """Monthly log-MACD (completed months), same sloped top cap as ``weekly_macd_z``.
+
+    ``lmacd_top_cap`` is a function of calendar date, not bar count, so the
+    same secular top-decay applies unchanged to monthly bars.
+    """
+    del signal, z_window, min_samples
+    monthly = completed_monthly_closes(dates, close)
+    frame = pl.DataFrame({"close": monthly["close"]})
+    ema_fast = pl.col("close").ewm_mean(span=fast, adjust=False, min_samples=fast)
+    ema_slow = pl.col("close").ewm_mean(span=slow, adjust=False, min_samples=slow)
+    with_ema = frame.select(
+        ema_fast.clip(lower_bound=_SIGMA_FLOOR).alias("ema_fast"),
+        ema_slow.clip(lower_bound=_SIGMA_FLOOR).alias("ema_slow"),
+    )
+    lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+    month_ends = monthly["month_end"].to_list()
+    z_vals = [
+        None if v is None else _lmacd_to_z(float(v), lmacd_top_cap(month_end))
+        for v, month_end in zip(lmacd.to_list(), month_ends, strict=True)
+    ]
+    z = pl.Series("monthly_macd", z_vals, dtype=pl.Float64)
+    return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_macd")
+
+
 def daily_macd_z(
     dates: pl.Series,
     close: pl.Series,
@@ -590,6 +688,49 @@ def macd_confluence_z(
         agreement_boost=agreement_boost,
         disagreement_damp=disagreement_damp,
         name="weekly_macd",
+    )
+
+
+def monthly_macd_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_fast: int = _MACD_FAST,
+    monthly_slow: int = _MACD_SLOW,
+    daily_fast: int = _MACD_DAILY_FAST,
+    daily_slow: int = _MACD_DAILY_SLOW,
+    daily_z_window: int = _MACD_DAILY_Z_WINDOW,
+    daily_min_samples: int = _MACD_DAILY_Z_MIN_SAMPLES,
+    monthly_weight: float = _MACD_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _MACD_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _MACD_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + daily (medium-term) log-MACD, amplified on agreement.
+
+    Same agreement-scaled blend as ``macd_confluence_z``, with the long-term
+    leg aggregated to completed calendar months instead of weeks —
+    ``monthly_fast``/``monthly_slow`` spans are counted in months, so the
+    default 12/26 reaches roughly 1-2 years back rather than 3-6 months.
+    Research-only: has a dormant, zero-weight field on
+    ``SdcaCompositeWeights`` for the period-search machinery, but not in
+    ``EXTRA_INDICATOR_NAMES``/``build_extra_indicators``/settings.json.
+    """
+    monthly = monthly_macd_z(dates, close, fast=monthly_fast, slow=monthly_slow)
+    daily = daily_macd_z(
+        dates,
+        close,
+        fast=daily_fast,
+        slow=daily_slow,
+        z_window=daily_z_window,
+        min_samples=daily_min_samples,
+    )
+    return agreement_scaled_blend(
+        monthly,
+        daily,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="monthly_macd",
     )
 
 
@@ -689,6 +830,9 @@ __all__ = [
     "documented_warmup_calendar_days",
     "lmacd_top_cap",
     "macd_confluence_z",
+    "monthly_macd_confluence_z",
+    "monthly_macd_z",
+    "monthly_rsi_confluence_z",
     "monthly_rsi_z",
     "mtf_rsi_z",
     "price_oscillator_z_vectors",
