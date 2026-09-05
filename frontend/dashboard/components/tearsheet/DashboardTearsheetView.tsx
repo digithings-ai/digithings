@@ -19,6 +19,7 @@ import {
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 import { ledgerHref } from '@/lib/portfolio-url-state';
 import {
+  metricsDivergenceBadgeLabel,
   navContractBadgeLabel,
   type PerformanceSsotMeta,
 } from '@/lib/performance-ssot';
@@ -183,13 +184,17 @@ export function PerformanceTearsheetView({
     [portfolioReturnPct, benchmarkReturnPct, data.navSeries, benchmark]
   );
   const relativeReturnPct = relative.excessReturnPct ?? data.relativeReturnPct;
+  const periodEnd = ssot?.navAsOf ?? data.metricsAsOf;
   const performancePeriod =
-    data.inceptionDate && data.metricsAsOf
-      ? `${data.inceptionDate}–${data.metricsAsOf}`
-      : null;
+    data.inceptionDate && periodEnd ? `${data.inceptionDate}–${periodEnd}` : null;
   const sellCount = data.historicalHoldings.length;
   const navContract = ssot?.navContract ?? data.navContract ?? null;
   const metricsLagging = ssot?.metricsLagging ?? data.metricsLagging ?? false;
+  const divergenceLabel = ssot
+    ? metricsDivergenceBadgeLabel(ssot)
+    : metricsLagging
+      ? 'metrics lag'
+      : null;
 
   return (
     <div className="ts-print-root space-y-0">
@@ -204,12 +209,12 @@ export function PerformanceTearsheetView({
               {navContractBadgeLabel(navContract)}
             </span>
           ) : null}
-          {metricsLagging ? (
+          {divergenceLabel ? (
             <span
               data-testid="tearsheet-metrics-lag-badge"
               className="font-mono text-[0.62rem] uppercase tracking-wider text-warn"
             >
-              metrics lag
+              {divergenceLabel}
               {ssot?.metricsAsOf ? ` · ${ssot.metricsAsOf}` : ''}
             </span>
           ) : null}
@@ -263,9 +268,9 @@ export function PerformanceTearsheetView({
           />
         </dl>
         <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
-          <span>{performancePeriod ? 'period' : data.metricsAsOf ? 'as of' : 'status'}</span>
+          <span>{performancePeriod ? 'period' : periodEnd ? 'as of' : 'status'}</span>
           <strong className="font-medium text-accent">
-            {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
+            {performancePeriod ?? periodEnd ?? 'awaiting persisted metrics'}
           </strong>
           {ssot?.navAsOf && ssot.navAsOf !== data.metricsAsOf ? (
             <span data-testid="tearsheet-nav-as-of">nav tip {ssot.navAsOf}</span>

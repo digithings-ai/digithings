@@ -19,10 +19,12 @@ import {
 import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 import { committedBookDate } from '@/lib/dashboard-ssot';
+import { isCashTicker } from '@/lib/book-reconciliation';
 import {
   buildPerformanceSsotMeta,
   isLiveMarksOverlay,
   persistedHeadlinesFromNav,
+  persistedInsightMetrics,
 } from '@/lib/performance-ssot';
 // Performance SSOT (#3580): persisted headlines from the same accounting NAV
 // adapter as Tearsheet (`getPerformanceBundle` / public_accounting_nav_history).
@@ -148,7 +150,7 @@ export default function OverviewPage() {
   const extrasByTicker: Record<string, string> = {};
   for (const pos of positions) {
     const key = pos.ticker.trim().toUpperCase();
-    if (!key || key === 'CASH') continue;
+    if (!key || isCashTicker(key)) continue;
     if (typeof pos.rationale === 'string' && pos.rationale.trim()) {
       extrasByTicker[key] = pos.rationale.trim();
     }
@@ -174,7 +176,7 @@ export default function OverviewPage() {
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
   const positionDates = (data.position_history ?? []).map((row) => row.date);
-  const openBookPositions = positions.filter((p) => p.ticker.trim().toUpperCase() !== 'CASH');
+  const openBookPositions = positions.filter((p) => !isCashTicker(p.ticker));
   const bookWeightInvestedPct = openBookPositions.reduce(
     (sum, p) => sum + (p.weight_actual ?? 0),
     0
@@ -187,6 +189,7 @@ export default function OverviewPage() {
     navRows: performanceHistoryResolved.map((row) => ({
       date: row.date,
       nav: row.nav,
+      cash_pct: row.cash_pct ?? null,
       invested_pct: row.invested_pct ?? null,
       day_return_pct: row.day_return_pct ?? null,
       source: row.source ?? 'legacy_nav_history',
@@ -206,22 +209,30 @@ export default function OverviewPage() {
     performanceSsot.bookAsOf ??
     persisted.navAsOf;
   const liveOverlay = isLiveMarksOverlay(liveKpis?.liveVsMarkPct);
+  const spyHistory =
+    data.benchmarks?.[pickBriefBenchmarkTicker(data.benchmarks) ?? '']?.history?.map((p) => ({
+      date: p.date,
+      price: p.price,
+    })) ?? undefined;
+  const persistedInsights = persistedInsightMetrics(performanceHistoryResolved, spyHistory);
   // Persisted path matches Tearsheet when live overlay is off; live marks are badged.
   const sincePct = liveOverlay
     ? (liveKpis?.sinceInceptionPct ?? persisted.sinceInceptionPct)
     : persisted.sinceInceptionPct;
-  const sinceDate = liveKpis?.sinceInceptionStartDate ?? persisted.sinceInceptionStartDate;
+  const sinceDate = liveOverlay
+    ? (liveKpis?.sinceInceptionStartDate ?? persisted.sinceInceptionStartDate)
+    : persisted.sinceInceptionStartDate;
   const dailyRet = liveOverlay
     ? (liveKpis?.dayReturnPct ?? persisted.dayReturnPct)
     : persisted.dayReturnPct;
   const priceAsOf = liveOverlay
     ? (liveKpis?.priceAsOfDate ?? bookAsOf)
     : (persisted.navAsOf ?? bookAsOf);
-  // Excess / alpha / IR: only live path when overlay active (badge). Persisted excess
-  // uses the honest endpoint blurb — never silently pull live excess without a badge.
+  // Excess stays on the persisted aligned window unless live marks are badged.
+  // Alpha / IR are series metrics — render whenever overlap exists, overlay or not.
   const excessPct = liveOverlay
     ? (liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null)
-    : (benchmarkBlurb?.excessPct ?? null);
+    : (benchmarkBlurb?.excessPct ?? persistedInsights.excessReturnPct);
   const benchTicker =
     (liveOverlay ? liveKpis?.benchmarkTicker : null) ??
     benchmarkBlurb?.ticker ??
@@ -248,8 +259,12 @@ export default function OverviewPage() {
           benchTicker,
           excessPct,
           excessAsOf: priceAsOf,
-          alphaPct: liveOverlay ? (liveKpis?.alphaPct ?? null) : null,
-          informationRatio: liveOverlay ? (liveKpis?.informationRatio ?? null) : null,
+          alphaPct: liveOverlay
+            ? (liveKpis?.alphaPct ?? persistedInsights.alphaPct)
+            : persistedInsights.alphaPct,
+          informationRatio: liveOverlay
+            ? (liveKpis?.informationRatio ?? persistedInsights.informationRatio)
+            : persistedInsights.informationRatio,
         }}
         metrics={{
           maxDrawdown:

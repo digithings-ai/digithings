@@ -1,22 +1,38 @@
 /**
- * Performance SSOT (#3580) — Brief, Tearsheet, Ledger, and Portfolio share one
+ * Performance SSOT (#3580 / #3604) — Brief, Tearsheet, Ledger, and Portfolio share one
  * contracted series for NAV/returns and one committed-book date for positions.
  *
  * Live marks on Brief are an **opt-in overlay** (badged). They must never
  * silently replace the persisted accounting tip as a second truth.
  *
- * Canonical surfaces — see `TABLES.md` § Performance SSOT.
+ * Canonical surfaces — see `TABLES.md` § Performance SSOT (metric-source matrix).
  */
 
+import {
+  computeLivePerformanceKpis,
+  sinceInceptionPctFromNav,
+} from '@digithings/web';
 import {
   navSeriesContractLabel,
   type AccountingNavRow,
 } from './accounting-views';
 import { committedBookDate } from './dashboard-ssot';
-import { sinceInceptionPctFromNav } from '@digithings/web';
 
 /** Absolute tolerance (pp) for Brief persisted vs Tearsheet headline agreement. */
 export const PERSISTED_KPI_TOLERANCE_PP = 0.05;
+
+/**
+ * Calendar-day threshold for metrics↔NAV divergence chrome.
+ * Units: whole UTC calendar days between `YYYY-MM-DD` stamps. Symmetric.
+ */
+export const METRICS_DIVERGENCE_TOLERANCE_DAYS = 1;
+
+/**
+ * Maximum calendar-day gap for deriving day return from adjacent NAV rows
+ * when `day_return_pct` is missing. Covers a weekend + one holiday; wider
+ * gaps are finalizer holes, not a session return.
+ */
+export const MAX_DAY_RETURN_GAP_DAYS = 4;
 
 export type NavContractBadge = 'finalized_accounting' | 'legacy_estimate' | 'empty';
 
@@ -31,25 +47,31 @@ export type InvestedDefinition =
   | 'unavailable';
 
 export interface PerformanceSsotMeta {
-  /** Dominant series contract for the NAV chart / tip. */
+  /** Contract of the **displayed NAV tip**, not “any finalized row in history”. */
   navContract: NavContractBadge;
   /** Latest accounting NAV tip date. */
   navAsOf: string | null;
-  /** Tip day return from the accounting series (null when flat/missing). */
+  /** Tip day return from the accounting series (null when flat/missing/gapped). */
   tipDayReturnPct: number | null;
   /** Tip invested % from accounting NAV (preferred invested definition). */
   tipInvestedPct: number | null;
-  /** `portfolio_metrics.as_of_date` or `.date` when present. */
+  /** Tip cash % from accounting NAV when present. */
+  tipCashPct: number | null;
+  /** `portfolio_metrics.as_of_date` or `.date` when present — never overwritten with the NAV tip. */
   metricsAsOf: string | null;
-  /** Calendar days metrics lag behind the NAV tip (null when either missing). */
+  /**
+   * Signed calendar-day divergence: `navAsOf − metricsAsOf`.
+   * Positive = metrics behind the NAV tip; negative = NAV tip behind metrics.
+   * Null when either stamp is missing.
+   */
   metricsLagDays: number | null;
-  /** True when metrics are behind the NAV tip by ≥1 calendar day. */
+  /** True when |metricsLagDays| ≥ {@link METRICS_DIVERGENCE_TOLERANCE_DAYS}. */
   metricsLagging: boolean;
   /** Committed book date (`daily_snapshots.date` ∩ positions). */
   bookAsOf: string | null;
   /**
-   * True when any open-book position lacks `metrics_as_of` — chrome must not
-   * imply marks were refreshed for that date.
+   * True when the open book is empty or any open-book position lacks
+   * `metrics_as_of` — chrome must not imply marks were refreshed for that date.
    */
   marksUnstamped: boolean;
   investedDefinition: InvestedDefinition;
@@ -68,7 +90,7 @@ function finiteNav(nav: number | null | undefined): nav is number {
   return nav != null && Number.isFinite(nav) && nav > 0;
 }
 
-/** Calendar-day lag (UTC date strings YYYY-MM-DD). */
+/** Calendar-day difference (UTC date strings YYYY-MM-DD). later − earlier. */
 export function calendarDaysBetween(earlier: string, later: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(earlier) || !/^\d{4}-\d{2}-\d{2}$/.test(later)) {
     return null;
@@ -81,6 +103,7 @@ export function calendarDaysBetween(earlier: string, later: string): number | nu
 /**
  * Prefer accounting NAV tip invested %; else book weights; else metrics.
  * Never silently mix live weights with book weights for the Invested tile.
+ * Do not clamp >100 under an accounting-tip label — surface the tip value.
  */
 export function resolveInvestedPct(args: {
   tipInvestedPct: number | null | undefined;
@@ -88,7 +111,7 @@ export function resolveInvestedPct(args: {
   metricsInvestedPct: number | null | undefined;
 }): { investedPct: number | null; definition: InvestedDefinition } {
   if (args.tipInvestedPct != null && Number.isFinite(args.tipInvestedPct) && args.tipInvestedPct >= 0) {
-    return { investedPct: Math.min(100, args.tipInvestedPct), definition: 'accounting_nav_tip' };
+    return { investedPct: args.tipInvestedPct, definition: 'accounting_nav_tip' };
   }
   if (
     args.bookWeightInvestedPct != null &&
@@ -96,7 +119,7 @@ export function resolveInvestedPct(args: {
     args.bookWeightInvestedPct >= 0
   ) {
     return {
-      investedPct: Math.min(100, args.bookWeightInvestedPct),
+      investedPct: args.bookWeightInvestedPct,
       definition: 'book_weights',
     };
   }
@@ -106,7 +129,7 @@ export function resolveInvestedPct(args: {
     args.metricsInvestedPct >= 0
   ) {
     return {
-      investedPct: Math.min(100, args.metricsInvestedPct),
+      investedPct: args.metricsInvestedPct,
       definition: 'portfolio_metrics',
     };
   }
@@ -114,6 +137,19 @@ export function resolveInvestedPct(args: {
     investedPct: null,
     definition: 'unavailable',
   };
+}
+
+function derivedDayReturnPct(
+  tip: { date: string; nav: number; day_return_pct?: number | null },
+  prior: { date: string; nav: number } | null
+): number | null {
+  if (tip.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {
+    return tip.day_return_pct;
+  }
+  if (!prior || !(prior.nav > 0)) return null;
+  const gap = calendarDaysBetween(prior.date, tip.date);
+  if (gap == null || gap < 1 || gap > MAX_DAY_RETURN_GAP_DAYS) return null;
+  return (tip.nav / prior.nav - 1) * 100;
 }
 
 /** Headline KPIs from the persisted accounting NAV series (no live overlay). */
@@ -140,13 +176,6 @@ export function persistedHeadlinesFromNav(
   const sinceInceptionPct =
     sorted.length >= 2 && first && tip ? sinceInceptionPctFromNav(first.nav, tip.nav) : null;
 
-  let dayReturnPct: number | null = null;
-  if (tip?.day_return_pct != null && Number.isFinite(tip.day_return_pct)) {
-    dayReturnPct = tip.day_return_pct;
-  } else if (tip && prior && prior.nav > 0) {
-    dayReturnPct = (tip.nav / prior.nav - 1) * 100;
-  }
-
   const invested = resolveInvestedPct({
     tipInvestedPct: tip?.invested_pct ?? null,
     bookWeightInvestedPct: opts.bookWeightInvestedPct ?? null,
@@ -156,10 +185,40 @@ export function persistedHeadlinesFromNav(
   return {
     sinceInceptionPct,
     sinceInceptionStartDate: first?.date ?? null,
-    dayReturnPct,
+    dayReturnPct: tip ? derivedDayReturnPct(tip, prior) : null,
     navAsOf: tip?.date ?? null,
     investedPct: invested.investedPct,
     investedDefinition: invested.definition,
+  };
+}
+
+/**
+ * Excess / alpha / IR from persisted NAV + benchmark (no live overlay).
+ * Sparse or late-starting (paginated) benchmark series still render when the
+ * remaining overlapping daily pairs meet {@link MIN_OVERLAP_DAYS}.
+ */
+export function persistedInsightMetrics(
+  nav: ReadonlyArray<{ date: string; nav: number }>,
+  benchmarkHistory: ReadonlyArray<{ date: string; price: number }> | undefined
+): {
+  excessReturnPct: number | null;
+  alphaPct: number | null;
+  informationRatio: number | null;
+} {
+  const sorted = [...nav].filter((row) => finiteNav(row.nav));
+  if (sorted.length < 2 || !benchmarkHistory?.length) {
+    return { excessReturnPct: null, alphaPct: null, informationRatio: null };
+  }
+  const kpis = computeLivePerformanceKpis({
+    positions: [],
+    navHistory: sorted.map((row) => ({ date: row.date, nav: row.nav })),
+    benchmarkHistory,
+    benchmarkTicker: 'SPY',
+  });
+  return {
+    excessReturnPct: kpis.excessReturnPct,
+    alphaPct: kpis.alphaPct,
+    informationRatio: kpis.informationRatio,
   };
 }
 
@@ -167,6 +226,7 @@ export function buildPerformanceSsotMeta(args: {
   navRows: ReadonlyArray<
     Pick<AccountingNavRow, 'date' | 'source' | 'contract' | 'invested_pct' | 'day_return_pct'> & {
       nav?: number;
+      cash_pct?: number | null;
     }
   >;
   metricsAsOf: string | null | undefined;
@@ -188,21 +248,32 @@ export function buildPerformanceSsotMeta(args: {
     bookWeightInvestedPct: args.bookWeightInvestedPct ?? null,
     metricsInvestedPct: args.metricsInvestedPct ?? null,
   });
+  const prior = sorted.length >= 2 ? sorted[sorted.length - 2] : null;
+  const tipDay =
+    tip && finiteNav(tip.nav)
+      ? derivedDayReturnPct(
+          { date: tip.date, nav: tip.nav, day_return_pct: tip.day_return_pct },
+          prior && finiteNav(prior.nav) ? { date: prior.date, nav: prior.nav } : null
+        )
+      : tip?.day_return_pct != null && Number.isFinite(tip.day_return_pct)
+        ? tip.day_return_pct
+        : null;
 
   return {
     navContract: navSeriesContractLabel(sorted),
     navAsOf,
-    tipDayReturnPct:
-      tip?.day_return_pct != null && Number.isFinite(tip.day_return_pct)
-        ? tip.day_return_pct
-        : null,
+    tipDayReturnPct: tipDay,
     tipInvestedPct:
       tip?.invested_pct != null && Number.isFinite(tip.invested_pct) ? tip.invested_pct : null,
+    tipCashPct: tip?.cash_pct != null && Number.isFinite(tip.cash_pct) ? tip.cash_pct : null,
     metricsAsOf,
-    metricsLagDays: lag != null && lag > 0 ? lag : lag === 0 ? 0 : null,
-    metricsLagging: lag != null && lag >= 1,
+    metricsLagDays: lag,
+    metricsLagging:
+      lag != null && Math.abs(lag) >= METRICS_DIVERGENCE_TOLERANCE_DAYS,
     bookAsOf: committedBookDate(args.snapshotDate, args.positionDates),
-    marksUnstamped: args.positionMetricsAsOf.some((v) => v == null || String(v).trim() === ''),
+    marksUnstamped:
+      args.positionMetricsAsOf.length === 0 ||
+      args.positionMetricsAsOf.some((v) => v == null || String(v).trim() === ''),
     investedDefinition: invested.definition,
   };
 }
@@ -224,14 +295,31 @@ export function navContractBadgeLabel(contract: NavContractBadge): string {
   return 'no nav series';
 }
 
+/**
+ * Divergence chrome: equal-magnitude positive and negative lags both badge.
+ * Positive days → metrics behind NAV; negative → NAV tip behind metrics.
+ */
+export function metricsDivergenceBadgeLabel(
+  meta: Pick<PerformanceSsotMeta, 'metricsLagging' | 'metricsLagDays'>
+): string | null {
+  if (!meta.metricsLagging || meta.metricsLagDays == null) return null;
+  if (meta.metricsLagDays > 0) return 'metrics lag';
+  if (meta.metricsLagDays < 0) return 'nav lag';
+  return null;
+}
+
 /** Lag / marks chrome — never imply fresh marks when unstamped. */
 export function performanceFreshnessNote(meta: PerformanceSsotMeta): string | null {
   const parts: string[] = [];
   if (meta.navContract === 'legacy_estimate') {
-    parts.push('NAV series is legacy estimate (finalizer not producing tips)');
+    parts.push('NAV tip is legacy estimate (finalizer not producing tips)');
   }
-  if (meta.metricsLagging && meta.metricsAsOf && meta.navAsOf) {
-    parts.push(`metrics as of ${meta.metricsAsOf} (nav tip ${meta.navAsOf})`);
+  if (meta.metricsLagging && meta.metricsAsOf && meta.navAsOf && meta.metricsLagDays != null) {
+    if (meta.metricsLagDays > 0) {
+      parts.push(`metrics as of ${meta.metricsAsOf} (nav tip ${meta.navAsOf})`);
+    } else {
+      parts.push(`nav tip ${meta.navAsOf} (metrics as of ${meta.metricsAsOf})`);
+    }
   }
   if (meta.marksUnstamped) {
     parts.push('position marks unstamped (metrics_as_of null)');

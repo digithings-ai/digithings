@@ -57,4 +57,15 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
     expect(panelSrc).toContain('ContractBanner');
     expect(panelSrc).toContain('PositionsTable');
   });
+
+  it('tearsheet bundle paginates benchmark history via fetchComparablePriceHistory', () => {
+    const src = readFileSync(join(here, 'observability-queries.ts'), 'utf8');
+    expect(src).toContain('fetchComparablePriceHistory');
+    expect(src).toMatch(
+      /fetchComparablePriceHistory\(\s*\[\.\.\.DASHBOARD_BENCHMARK_TICKERS\]/
+    );
+    expect(src).not.toMatch(
+      /\.in\('ticker',\s*\[\.\.\.DASHBOARD_BENCHMARK_TICKERS\]\)[\s\S]{0,400}\.limit\(PERFORMANCE_HISTORY_LIMIT\)/
+    );
+  });
 });
