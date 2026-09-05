@@ -498,13 +498,21 @@ def test_drop_extras_missing_sources_zeros_plugins_only() -> None:
 
 
 def test_checked_in_weights_sidecar_searched_full_catalog() -> None:
+    """Guards that this frozen search run didn't silently skip a name from its
+    own recorded catalog. Compares against the sidecar's own ``catalog`` field
+    (the catalog as of that search), not the live EXTRA_INDICATOR_NAMES --
+    the production sidecar is a point-in-time artifact and monthly_rsi/
+    monthly_macd have been promoted into the research catalog but not yet
+    re-searched into production (RESEARCH_STATE.md: needs Chris's accept).
+    """
     payload = json.loads(
         (
             Path(__file__).resolve().parents[4]
             / "digiquant/src/digiquant/strategies/sdca/btc_composite_weights.json"
         ).read_text()
     )
-    assert set(payload["search_names"]) == set(EXTRA_INDICATOR_NAMES)
+    assert set(payload["search_names"]) == set(payload["catalog"])
+    assert set(payload["catalog"]).issubset(set(EXTRA_INDICATOR_NAMES))
     assert payload["num_evaluations"] >= 128
     kept = {k: v for k, v in payload["weights"].items() if k != "power_law" and v > 0}
     assert kept == {}

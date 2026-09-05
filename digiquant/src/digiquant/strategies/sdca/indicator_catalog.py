@@ -43,13 +43,21 @@ from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     agreement_scaled_blend,
     macd_confluence_z,
+    monthly_macd_confluence_z,
+    monthly_rsi_confluence_z,
     price_oscillator_z_vectors,
     rsi_confluence_z,
     sma_band_confluence_z,
 )
 
 MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
-PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
+PRICE_OSCILLATOR_NAMES: tuple[str, ...] = (
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band",
+    "monthly_rsi",
+    "monthly_macd",
+)
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
 BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
 EXTRA_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES + PRICE_OSCILLATOR_NAMES
@@ -79,6 +87,8 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
+    "monthly_rsi": "monthly RSI",
+    "monthly_macd": "monthly log-MACD",
 }
 
 
@@ -99,14 +109,11 @@ class SdcaCompositeWeights(BaseModel):
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
-    # Research-only (2026-09-05): monthly-cadence siblings of weekly_rsi/
-    # weekly_macd (price_oscillators.monthly_rsi_confluence_z /
-    # monthly_macd_confluence_z), added so the dual-timeframe search
-    # machinery (weight_search.search_oscillator_periods_by_cycle_overlap)
-    # can solo-score them the same way as any other named indicator. Not
-    # wired into build_extra_indicators/settings.json parsing yet -- that's
-    # a later step if the exploration in
-    # scripts/run_dual_timeframe_composite_search.py shows they earn it.
+    # Monthly-cadence siblings of weekly_rsi/weekly_macd
+    # (price_oscillators.monthly_rsi_confluence_z / monthly_macd_confluence_z).
+    # Wired into build_extra_indicators below; earned production status via
+    # the all-9 floor-diversified aggregate search in
+    # scripts/run_dual_timeframe_composite_search.py (RESEARCH_STATE.md).
     monthly_rsi: float = Field(0.0, ge=0.0)
     monthly_macd: float = Field(0.0, ge=0.0)
 
@@ -160,6 +167,8 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
+        monthly_rsi=float(params.get("monthly_rsi_weight", 0.0)),
+        monthly_macd=float(params.get("monthly_macd_weight", 0.0)),
     )
 
 
@@ -179,6 +188,8 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
+        monthly_rsi=float(payload.get("monthly_rsi", 0.0)),
+        monthly_macd=float(payload.get("monthly_macd", 0.0)),
     )
 
 
@@ -423,6 +434,38 @@ def build_extra_indicators(
                 ),
                 weight=weights.sma_band,
                 enabled=weights.sma_band > 0.0,
+            )
+        )
+    if allowlist is None or "monthly_rsi" in allowlist:
+        extras.append(
+            IndicatorWeight(
+                name="monthly_rsi",
+                z=monthly_rsi_confluence_z(
+                    dates,
+                    btc_price,
+                    monthly_length=spec.monthly_rsi_length,
+                    daily_length=spec.monthly_rsi_daily_length,
+                ),
+                weight=weights.monthly_rsi,
+                enabled=weights.monthly_rsi > 0.0,
+            )
+        )
+    if allowlist is None or "monthly_macd" in allowlist:
+        extras.append(
+            IndicatorWeight(
+                name="monthly_macd",
+                z=monthly_macd_confluence_z(
+                    dates,
+                    btc_price,
+                    monthly_fast=spec.monthly_macd_fast,
+                    monthly_slow=spec.monthly_macd_slow,
+                    daily_fast=spec.macd_daily_fast,
+                    daily_slow=spec.macd_daily_slow,
+                    daily_z_window=spec.macd_daily_z_window,
+                    daily_min_samples=spec.macd_daily_min_samples,
+                ),
+                weight=weights.monthly_macd,
+                enabled=weights.monthly_macd > 0.0,
             )
         )
     return extras

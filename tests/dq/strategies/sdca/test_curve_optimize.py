@@ -13,7 +13,9 @@ from digiquant.cli import main as digiquant_main
 from digiquant.strategies.sdca.backtest import run_backtest
 from digiquant.strategies.sdca.curve import AccumDistCurve
 from digiquant.strategies.sdca.curve_optimize import (
+    CONTINUOUS_CROSSING_EPS,
     CURVE_SEARCH_BOUNDS,
+    DEAD_ZONE_WIDTH_GRID,
     DEEP_CHEAP_RISK,
     DEEP_RICH_RISK,
     PUBLISHED_BUY_KNEE,
@@ -21,15 +23,23 @@ from digiquant.strategies.sdca.curve_optimize import (
     CurveOptimizeGates,
     FillConcentration,
     beats_baseline_concentration,
+    continuous_shape_ok,
+    continuous_shape_params,
+    dead_zone_shape_params,
     fill_concentration,
     persist_curve_winner,
     published_indicator_weights,
     round_shape_for_preset,
+    sample_continuous_curve_trials,
     sample_curve_trials,
+    score_dead_zone_width,
     score_shape_on_index,
+    search_continuous_curve,
     search_curve,
     shape_from_bounds_ok,
+    sweep_dead_zone_width,
 )
+from digiquant.strategies.sdca.curve import RISK_NODES
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategy_specs import get_param_specs
@@ -210,6 +220,220 @@ class TestSearchSpace:
             )
             assert shape.buy_knee_risk < shape.sell_knee_risk
             assert shape.sell_max_rate > 0.0
+
+
+class TestContinuousCurveParams:
+    def test_crossing_risk_splits_into_a_tiny_symmetric_knee_gap(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 20.0, 2.0, 2.0)
+        assert params["buy_knee_risk"] == pytest.approx(50.0 - CONTINUOUS_CROSSING_EPS / 2)
+        assert params["sell_knee_risk"] == pytest.approx(50.0 + CONTINUOUS_CROSSING_EPS / 2)
+        gap = params["sell_knee_risk"] - params["buy_knee_risk"]
+        assert gap == pytest.approx(CONTINUOUS_CROSSING_EPS)
+        assert gap < 5.0  # far below the RISK_NODES spacing
+
+    def test_rates_are_near_zero_but_nonzero_on_either_side_of_the_crossing(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 20.0, 2.0, 2.0)
+        shape = SdcaCurveShape(**params)
+        just_below = shape.rate_at(50.0 - CONTINUOUS_CROSSING_EPS)
+        just_above = shape.rate_at(50.0 + CONTINUOUS_CROSSING_EPS)
+        assert 0.0 < just_below < 0.01
+        assert -0.01 < just_above < 0.0
+
+    def test_continuous_shape_ok_ignores_old_disjoint_knee_bounds(self) -> None:
+        """A crossing near 15 puts sell_knee_risk far outside the old
+        CURVE_SEARCH_BOUNDS sell range [50, 92] -- that's fine here, since a
+        continuous fit's crossing point legitimately covers that whole middle
+        territory (there's no artificial dead zone constraining it)."""
+        params = continuous_shape_params(15.0, 20.0, 20.0, 2.0, 2.0)
+        assert not shape_from_bounds_ok(params)
+        assert continuous_shape_ok(params)
+
+    def test_continuous_shape_ok_still_rejects_out_of_bounds_rate(self) -> None:
+        params = continuous_shape_params(50.0, 999.0, 20.0, 2.0, 2.0)
+        assert not continuous_shape_ok(params)
+
+    def test_continuous_shape_ok_rejects_zero_sell_max_rate(self) -> None:
+        params = continuous_shape_params(50.0, 20.0, 0.0, 2.0, 2.0)
+        assert not continuous_shape_ok(params)
+
+
+class TestSampleContinuousCurveTrials:
+    def test_random_only_trials_deduped_and_within_bounds(self) -> None:
+        """Occasionally a high-curvature crossing lands so close to a RISK_NODES
+        point that the adjacent node's interpolated rate underflows below
+        SdcaCurveShape's own epsilon and gets rejected -- inherent to the
+        unchanged shape validator, not a defect in the generator, so a small
+        undercount vs n_random is expected rather than an exact match."""
+        trials = sample_continuous_curve_trials(n_random=40, seed=7, include_grid=False)
+        assert 35 <= len(trials) <= 40
+        for params in trials:
+            assert continuous_shape_ok(params)
+
+    def test_at_most_one_risk_node_ever_falls_in_the_dead_zone(self) -> None:
+        trials = sample_continuous_curve_trials(n_random=200, seed=3, include_grid=True)
+        assert len(trials) > 0
+        for params in trials:
+            shape = SdcaCurveShape(**params)
+            dead_nodes = [
+                r for r in RISK_NODES if shape.buy_knee_risk <= r <= shape.sell_knee_risk
+            ]
+            assert len(dead_nodes) <= 1
+
+    def test_grid_and_random_are_independent_knobs(self) -> None:
+        grid_only = sample_continuous_curve_trials(n_random=0, include_grid=True)
+        random_only = sample_continuous_curve_trials(n_random=10, seed=1, include_grid=False)
+        assert len(grid_only) > 0
+        assert 8 <= len(random_only) <= 10
+
+    def test_same_seed_is_deterministic(self) -> None:
+        a = sample_continuous_curve_trials(n_random=25, seed=11, include_grid=False)
+        b = sample_continuous_curve_trials(n_random=25, seed=11, include_grid=False)
+        assert a == b
+
+
+class TestSearchContinuousCurve:
+    def test_search_continuous_curve_picks_a_feasible_continuous_shape(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_continuous_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=60,
+            seed=5,
+            include_grid=False,
+        )
+        assert 50 <= result.num_evaluations <= 60
+        gap = result.best.shape.sell_knee_risk - result.best.shape.buy_knee_risk
+        assert gap == pytest.approx(CONTINUOUS_CROSSING_EPS)
+        assert result.beats_flat_dca_oos is False
+
+    def test_baseline_is_todays_published_curve(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = search_continuous_curve(
+            dates,
+            prices,
+            risk,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            n_random=20,
+            seed=9,
+            include_grid=False,
+        )
+        assert result.baseline.shape == _published_shape()
+
+
+class TestDeadZoneShapeParams:
+    def test_zero_width_collapses_to_a_tiny_symmetric_gap(self) -> None:
+        params = dead_zone_shape_params(50.0, 0.0, 15.0, 15.0, 1.5, 1.5)
+        assert params["sell_knee_risk"] - params["buy_knee_risk"] == pytest.approx(2e-6)
+        assert params["buy_knee_risk"] == pytest.approx(50.0, abs=1e-5)
+
+    def test_width_widens_a_symmetric_gap_around_crossing(self) -> None:
+        params = dead_zone_shape_params(50.0, 20.0, 15.0, 15.0, 1.5, 1.5)
+        assert params["buy_knee_risk"] == pytest.approx(40.0)
+        assert params["sell_knee_risk"] == pytest.approx(60.0)
+
+    def test_large_width_near_an_edge_clips_to_valid_knee_bounds(self) -> None:
+        params = dead_zone_shape_params(5.0, 50.0, 15.0, 15.0, 1.5, 1.5, knee_floor=0.5, knee_ceiling=99.5)
+        assert params["buy_knee_risk"] == pytest.approx(0.5)
+        assert params["buy_knee_risk"] < params["sell_knee_risk"]
+        # every width, including this clipped edge case, must yield a valid shape
+        SdcaCurveShape(**params)
+
+    def test_every_grid_width_yields_a_valid_shape_from_a_mid_crossing(self) -> None:
+        for width in DEAD_ZONE_WIDTH_GRID:
+            params = dead_zone_shape_params(50.0, width, 15.0, 15.0, 1.5, 1.5)
+            SdcaCurveShape(**params)
+
+
+class TestScoreDeadZoneWidth:
+    def test_trade_days_match_the_raw_backtest_report(self) -> None:
+        dates, prices, risk = _v_cycle()
+        shape = _shape(buy_knee_risk=45.0, sell_knee_risk=55.0)
+        report, _ = run_backtest(dates, prices, risk, AccumDistCurve(shape.to_nodes()), 1000.0)
+        scored = score_dead_zone_width(dates, prices, risk, shape, 10.0, 1000.0)
+        assert scored.trade_days == report.buy_days + report.sell_days
+        assert scored.buy_days == report.buy_days
+        assert scored.sell_days == report.sell_days
+        assert scored.width == 10.0
+
+    def test_long_only_shape_is_flagged_infeasible(self) -> None:
+        dates, prices, risk = _v_cycle()
+        shape = _shape(sell_max_rate=0.0)
+        scored = score_dead_zone_width(dates, prices, risk, shape, 45.0, 1000.0)
+        assert not scored.feasible
+        assert "long_only" in scored.reject_reasons
+
+
+class TestSweepDeadZoneWidth:
+    def _winner(self) -> SdcaCurveShape:
+        return SdcaCurveShape(
+            buy_max_rate=15.0,
+            buy_knee_risk=49.75,
+            sell_knee_risk=50.25,
+            sell_max_rate=15.0,
+            buy_curvature=1.5,
+            sell_curvature=1.5,
+        )
+
+    def test_recovers_the_winners_crossing_as_the_midpoint(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(0.5, 10.0, 50.0),
+        )
+        assert result.crossing_risk == pytest.approx(50.0)
+        assert [t.width for t in result.trials] == [0.5, 10.0, 50.0]
+
+    def test_continuous_baseline_is_the_winner_shape_unmodified(self) -> None:
+        dates, prices, risk = _v_cycle()
+        winner = self._winner()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            winner,
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(5.0,),
+        )
+        assert result.continuous_baseline.shape == winner
+        assert result.continuous_baseline.width == 0.0
+
+    def test_wider_dead_zone_trades_less_on_this_v_cycle(self) -> None:
+        dates, prices, risk = _v_cycle()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=published_indicator_weights(),
+            widths=(0.5, 50.0),
+        )
+        narrow, wide = result.trials
+        assert wide.trade_days <= narrow.trade_days
+
+    def test_frozen_weights_round_trip_into_the_result(self) -> None:
+        dates, prices, risk = _v_cycle()
+        weights = published_indicator_weights()
+        result = sweep_dead_zone_width(
+            dates,
+            prices,
+            risk,
+            self._winner(),
+            initial_cash=1000.0,
+            frozen_weights=weights,
+            widths=(1.0,),
+        )
+        assert result.frozen_weights == weights.model_dump()
 
 
 class TestSearchAndPersist:

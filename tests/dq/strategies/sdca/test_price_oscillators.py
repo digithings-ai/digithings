@@ -501,6 +501,45 @@ class TestOscillatorSpecDailyRsiLength:
         assert spec.daily_rsi_length == 7
 
 
+class TestOscillatorSpecMonthlyRsiFields:
+    def test_defaults_match_generic_rsi_constants(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.monthly_rsi_length == 14
+        assert spec.monthly_rsi_daily_length == 14
+
+    def test_monthly_rsi_daily_length_independent_of_weekly_daily_rsi_length(self) -> None:
+        """monthly_rsi_daily_length is a separate field from daily_rsi_length --
+        weekly_rsi's optimum (5) and monthly_rsi's optimum (7) conflict, so
+        each timeframe's daily leg must be settable independently.
+        """
+        spec = SdcaOscillatorSpec(
+            monthly_rsi_length=2,
+            monthly_rsi_daily_length=7,
+            daily_rsi_length=5,
+        )
+        assert spec.monthly_rsi_length == 2
+        assert spec.monthly_rsi_daily_length == 7
+        assert spec.daily_rsi_length == 5
+
+
+class TestOscillatorSpecMonthlyMacdFields:
+    def test_defaults_match_generic_macd_constants(self) -> None:
+        spec = SdcaOscillatorSpec()
+        assert spec.monthly_macd_fast == 12
+        assert spec.monthly_macd_slow == 26
+
+    def test_monthly_macd_independent_of_weekly_macd(self) -> None:
+        spec = SdcaOscillatorSpec(macd_fast=16, macd_slow=35, monthly_macd_fast=4, monthly_macd_slow=9)
+        assert spec.macd_fast == 16
+        assert spec.macd_slow == 35
+        assert spec.monthly_macd_fast == 4
+        assert spec.monthly_macd_slow == 9
+
+    def test_monthly_macd_slow_must_exceed_monthly_macd_fast(self) -> None:
+        with pytest.raises(ValueError, match="monthly_macd_slow"):
+            SdcaOscillatorSpec(monthly_macd_fast=10, monthly_macd_slow=10)
+
+
 class TestAgreementScaledBlend:
     def test_either_leg_zero_skips_amplify_damp(self) -> None:
         """A silent leg (z == 0) is not a disagreement, so the multiplier
@@ -936,7 +975,13 @@ class TestOscillatorSpecSmaBandFast:
 
 class TestCatalogWiring:
     def test_price_oscillators_listed_and_default_off(self) -> None:
-        assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
+        assert PRICE_OSCILLATOR_NAMES == (
+            "weekly_rsi",
+            "weekly_macd",
+            "sma_band",
+            "monthly_rsi",
+            "monthly_macd",
+        )
         assert set(PRICE_OSCILLATOR_NAMES).issubset(set(EXTRA_INDICATOR_NAMES))
         w = SdcaCompositeWeights()
         assert w.power_law == pytest.approx(1.0)
@@ -972,6 +1017,42 @@ class TestCatalogWiring:
         assert not by_name["weekly_macd"].enabled
         assert not by_name["sma_band"].enabled
         assert by_name["weekly_rsi"].z.len() == n
+
+    def test_positive_monthly_rsi_weight_emits_series(self) -> None:
+        n = 200
+        dates = _dates(n)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0 + 0.2 * i for i in range(n)]),
+            SdcaCompositeWeights(power_law=1.0, monthly_rsi=0.4),
+            ExtraIndicatorSources(),
+            window=20,
+            min_samples=10,
+        )
+        by_name = {e.name: e for e in extras}
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert by_name["monthly_rsi"].enabled
+        assert not by_name["monthly_macd"].enabled
+        assert not by_name["weekly_rsi"].enabled
+        assert by_name["monthly_rsi"].z.len() == n
+
+    def test_positive_monthly_macd_weight_emits_series(self) -> None:
+        n = 200
+        dates = _dates(n)
+        extras = build_extra_indicators(
+            dates,
+            pl.Series([100.0 + 0.2 * i for i in range(n)]),
+            SdcaCompositeWeights(power_law=1.0, monthly_macd=0.3),
+            ExtraIndicatorSources(),
+            window=20,
+            min_samples=10,
+        )
+        by_name = {e.name: e for e in extras}
+        assert set(by_name) == set(PRICE_OSCILLATOR_NAMES)
+        assert by_name["monthly_macd"].enabled
+        assert not by_name["monthly_rsi"].enabled
+        assert not by_name["weekly_macd"].enabled
+        assert by_name["monthly_macd"].z.len() == n
 
     def test_from_params_defaults_keep_btc_charts(self) -> None:
         w = composite_weights_from_params({"buy_max_rate": 10.0})

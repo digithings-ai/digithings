@@ -298,3 +298,56 @@ that could both be read as "the baseline."
        move across ratios, no visualization change was needed — the
        Fifth pass's `floor_diversified_all9` panel (built from the 3:1 mix)
        already represents all three.
+
+7. **Remaining-book curve Stage A/B fit on the all-9 floor-diversified index**
+   (Chris's 2026-09-05 direction, same session as item 6: "let's optimize the
+   trading strategy itself around this aggregate indicator... fit the best
+   buy and sell curves to the indicator which yield the highest risk adjusted
+   returns... I wouldn't want the thresholds to play a role. I think we could
+   just find the best buy and sell curves if it was a continuous thing and
+   then we could just clean up the middle area, which has the least impact
+   and just keep the edges"). Index is item 6's all-9 floor-diversified,
+   optimized-weight composite (Sixth pass), frozen via
+   `curve_optimize.load_frozen_index(..., weights=...)` rather than
+   `settings.json` — that composite hasn't been promoted into production.
+   **Diagnostic only, in-sample (`curve_simulator`), not a validated trading
+   candidate.**
+
+   - **Stage A** (`curve_optimize.search_continuous_curve` /
+     `sample_continuous_curve_trials`): a single free `crossing_risk` plus a
+     fixed `CONTINUOUS_CROSSING_EPS=0.5` gap (far below the 21-node
+     `RISK_NODES` 5-point spacing) produces an effectively continuous
+     buy/sell curve — no meaningful dead zone — reusing `SdcaCurveShape`
+     unchanged (its only invariant is a *strict* `buy_knee_risk <
+     sell_knee_risk`, no minimum gap). Objective is `risk_adjusted_return`
+     (`total_return_pct / max_drawdown_pct`), not raw return.
+   - **Stage B** (`curve_optimize.sweep_dead_zone_width` /
+     `score_dead_zone_width`): fixes Stage A's winning crossing point, rates,
+     and curvatures, then widens the knee gap (`width`) around that fixed
+     crossing, clipped to valid knee bounds. Scores `risk_adjusted_return`
+     against `trade_days` (`buy_days + sell_days`, read off the raw
+     `SdcaBacktestReport` — `CurveTrialScore` doesn't carry trade-count
+     fields) at each width, building the frontier for picking a realistic
+     trade cadence without letting the threshold shape the underlying fit.
+
+   First pass (`scripts/run_curve_stage_ab_search.py`, `n_random=400,
+   seed=42`, full 2018-01-01→2026-08-30 cache, `signal_delay_days=3`):
+   - Stage A winner: `buy_max_rate=35.0, buy_knee_risk≈39.75,
+     sell_knee_risk≈40.25, sell_max_rate=8.0, buy_curvature=1.5,
+     sell_curvature=3.5` (crossing ≈ risk 40). `risk_adjusted_return=56.60`
+     (`total_return_pct=2865.58%`, `max_drawdown_pct=50.63%`) vs. today's
+     published `btc_optimized` shape scored on this same index:
+     `risk_adjusted_return=4.55` — expected, since that curve was tuned
+     against the 3-weight validated baseline's index, not this one.
+   - Stage B frontier (width → risk_adjusted_return / trade_days):
+     `0.5→56.60/3102`, `3.0→55.18/3102`, `5.0→53.28/3102`,
+     `7.5→49.79/3102`, `10.0→45.32/2500`, `15.0→35.78/2500`,
+     `20.0→25.09/1822`, `25.0→13.47/1822`, `30.0→5.64/1173`; widths ≥40
+     turn infeasible (`no_2025_sells` — too few sell days survive in 2025
+     once the zone is this wide). Risk-adjusted return is nearly
+     flat through width ≈5–7.5 while trade_days hasn't dropped at all yet
+     (still 3102, one trade almost every day); the first real trade-count
+     cut arrives at width=10 (3102→2500, -19%) for a modest return cost
+     (56.60→45.32, -20%), and every wider step trades return away faster
+     than it buys back trade-count headroom. **Reported to Chris, not yet
+     accepted** — pending his pick of a practical width from this frontier.

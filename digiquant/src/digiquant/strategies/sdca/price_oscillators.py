@@ -133,6 +133,18 @@ class SdcaOscillatorSpec(BaseModel):
     There is no companion ``power_law_trend_min_samples``: unlike the other
     confluence legs, a partial-window regression is not a meaningful trend
     line, so the leg is null until a full window of history is available.
+    ``monthly_rsi_length``/``monthly_rsi_daily_length`` configure
+    ``monthly_rsi_confluence_z`` the same way ``rsi_length``/
+    ``daily_rsi_length`` configure ``rsi_confluence_z`` — the monthly long-term
+    leg plus its own daily leg. The daily leg is a **separate** field from
+    ``daily_rsi_length`` rather than shared: period search found weekly_rsi's
+    own optimum daily leg (5) and monthly_rsi's (7) disagree, and forcing one
+    shared value would degrade whichever indicator didn't get its own optimum.
+    ``monthly_macd_fast``/``monthly_macd_slow`` likewise configure
+    ``monthly_macd_confluence_z``'s long-term leg; its daily leg reuses
+    ``macd_daily_fast``/``macd_daily_slow`` since weekly_macd's and
+    monthly_macd's own optimal daily legs agree (12/26, matching the shared
+    default), so no split was needed there.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
@@ -156,6 +168,10 @@ class SdcaOscillatorSpec(BaseModel):
     rs_eth_fast_window: int = Field(_RS_ETH_FAST_WINDOW, ge=2)
     rs_eth_fast_min_samples: int = Field(_RS_ETH_FAST_MIN_SAMPLES, ge=2)
     power_law_trend_window: int = Field(_POWER_LAW_TREND_WINDOW, ge=3)
+    monthly_rsi_length: int = Field(_RSI_LENGTH, ge=2)
+    monthly_rsi_daily_length: int = Field(_RSI_DAILY_LENGTH, ge=2)
+    monthly_macd_fast: int = Field(_MACD_FAST, ge=2)
+    monthly_macd_slow: int = Field(_MACD_SLOW, ge=3)
 
     @model_validator(mode="after")
     def _ordered(self) -> SdcaOscillatorSpec:
@@ -163,6 +179,8 @@ class SdcaOscillatorSpec(BaseModel):
             raise ValueError("macd_slow must be greater than macd_fast")
         if self.macd_daily_slow <= self.macd_daily_fast:
             raise ValueError("macd_daily_slow must be greater than macd_daily_fast")
+        if self.monthly_macd_slow <= self.monthly_macd_fast:
+            raise ValueError("monthly_macd_slow must be greater than monthly_macd_fast")
         if self.macd_daily_min_samples > self.macd_daily_z_window:
             raise ValueError("macd_daily_min_samples must be <= macd_daily_z_window")
         if self.sma_band_min_samples > self.sma_band_window:
@@ -816,6 +834,22 @@ def price_oscillator_z_vectors(
             slow_min_samples=spec.sma_band_min_samples,
             fast_window=spec.sma_band_fast_window,
             fast_min_samples=spec.sma_band_fast_min_samples,
+        ).to_list(),
+        "monthly_rsi": monthly_rsi_confluence_z(
+            dates,
+            close,
+            monthly_length=spec.monthly_rsi_length,
+            daily_length=spec.monthly_rsi_daily_length,
+        ).to_list(),
+        "monthly_macd": monthly_macd_confluence_z(
+            dates,
+            close,
+            monthly_fast=spec.monthly_macd_fast,
+            monthly_slow=spec.monthly_macd_slow,
+            daily_fast=spec.macd_daily_fast,
+            daily_slow=spec.macd_daily_slow,
+            daily_z_window=spec.macd_daily_z_window,
+            daily_min_samples=spec.macd_daily_min_samples,
         ).to_list(),
     }
 

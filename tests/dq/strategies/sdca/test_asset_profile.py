@@ -200,13 +200,22 @@ class TestGenericTechnicalsFromAnyOhlcv:
             oscillators=profile.oscillators,
             allowlist=profile.extra_indicators,
         )
-        # weekly_macd is allowlist-gated only (like weekly_rsi/sma_band), so it's
-        # still materialized here for display even though its weight is 0.
+        # weekly_macd/monthly_rsi/monthly_macd are allowlist-gated only (like
+        # weekly_rsi/sma_band), so they're still materialized here for display
+        # even though their weight is 0.
         by_name = {e.name: e for e in extras}
-        assert set(by_name) == {"weekly_rsi", "weekly_macd", "sma_band"}
+        assert set(by_name) == {
+            "weekly_rsi",
+            "weekly_macd",
+            "sma_band",
+            "monthly_rsi",
+            "monthly_macd",
+        }
         assert by_name["weekly_rsi"].enabled
         assert by_name["sma_band"].enabled
         assert not by_name["weekly_macd"].enabled
+        assert not by_name["monthly_rsi"].enabled
+        assert not by_name["monthly_macd"].enabled
 
 
 class TestSecondAssetSmoke:

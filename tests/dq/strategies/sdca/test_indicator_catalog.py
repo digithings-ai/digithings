@@ -84,17 +84,16 @@ class TestSdcaCompositeWeights:
         assert "rolling_z" not in EXTRA_INDICATOR_NAMES
         assert "mayer" not in EXTRA_INDICATOR_NAMES
 
-    def test_monthly_rsi_and_macd_default_to_zero_and_dormant(self) -> None:
-        """Dormant fields for the dual-timeframe period-search machinery only --
-        not real production candidates yet, so they must stay out of
-        EXTRA_INDICATOR_NAMES even though the weights model accepts them.
+    def test_monthly_rsi_and_macd_default_to_zero_but_are_wired(self) -> None:
+        """Zero-weight by default (opt-in), but promoted into EXTRA_INDICATOR_NAMES
+        after the all-9 floor-diversified aggregate search (RESEARCH_STATE.md).
         """
         w = SdcaCompositeWeights()
         assert w.monthly_rsi == pytest.approx(0.0)
         assert w.monthly_macd == pytest.approx(0.0)
         assert w.enabled_extras() == {}
-        assert "monthly_rsi" not in EXTRA_INDICATOR_NAMES
-        assert "monthly_macd" not in EXTRA_INDICATOR_NAMES
+        assert "monthly_rsi" in EXTRA_INDICATOR_NAMES
+        assert "monthly_macd" in EXTRA_INDICATOR_NAMES
 
     def test_monthly_rsi_and_macd_participate_in_extra_items_when_set(self) -> None:
         w = SdcaCompositeWeights(power_law=0.0, monthly_rsi=1.0)
@@ -256,7 +255,13 @@ class TestBuildExtraIndicators:
             min_samples=5,
             roc_days=5,
         )
-        assert {e.name for e in extras} == {"weekly_rsi", "weekly_macd", "sma_band"}
+        assert {e.name for e in extras} == {
+            "weekly_rsi",
+            "weekly_macd",
+            "sma_band",
+            "monthly_rsi",
+            "monthly_macd",
+        }
         assert all(not e.enabled for e in extras)
 
     def test_zero_rs_eth_weight_still_materializes_when_eth_source_exists(self) -> None:
