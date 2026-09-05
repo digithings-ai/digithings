@@ -241,11 +241,14 @@ without blurring the dashboard. Closing hides rather than destroys the iframe,
 so the current conversation survives the next open.
 
 The panel iframes digichat `/embed?layout=embed` with page-context
-(`digichat:page-context`) for the visible dashboard DOM — sanitized **HTML**
-(preferred, ≤12k chars) plus visible text (≤8k). Nothing is rendered for it in
-the panel (#3590); the model receives HTML+text via the existing
-prompt-prefix path (screenshot/vision multimodal deferred). Same contract as
-digichat `widget.js` (#3421), implemented in-React so CSP stays `script-src 'self'`.
+(`digichat:page-context`) for the visible dashboard DOM — structurally
+sanitized **HTML** (preferred, ≤12k chars) plus visible text (≤8k). The sender
+walks the live DOM (computed style, `hidden` / `inert` / `aria-hidden`,
+password/autofill controls) and honors `data-digichat-private` opt-out regions;
+the embed receiver re-allowlists the HTML. Nothing is rendered for it in the
+panel (#3590); the model receives HTML+text via the existing prompt-prefix path
+(screenshot/vision multimodal deferred). Same contract as digichat `widget.js`
+(#3421 / #3602), implemented in-React so CSP stays `script-src 'self'`.
 
 Enable with `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` (or `NEXT_PUBLIC_DIGICHAT_POPUP=1`)
 plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` for host `digiquant.io`. Origin must be in

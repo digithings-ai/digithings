@@ -183,6 +183,8 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/digigraph-activity-map.ts` | Re-export of digithings activity mappers |
 | `src/lib/embed-gate-provider.ts` | Consume per-tenant embed chat access tokens |
 | `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
+| `src/lib/page-context-sanitize.ts` | Structural DOM allowlist for embed page-context HTML (#3602) |
+| `src/lib/embed-page-context-messages.ts` | `digichat:page-context` postMessage schema, caps, receiver sanitize |
 | `src/lib/conversations-repo.ts` | Drizzle query helpers (conversations + quant runs) |
 | `src/lib/thread-local.ts` | localStorage read/write/merge |
 | `src/lib/ecosystem.ts` | Endpoint resolution + SSRF guard |
@@ -771,21 +773,35 @@ parent browsing-context origin** (`location.ancestorOrigins[0]` or
 and caps live in `src/lib/embed-seed-messages.ts`. DataTap's `datatap:gated` /
 `datatap:unlocked` channel is unchanged.
 
-**postMessage page-context (popup widget #3421 / #3581).** Hosts that load
+**postMessage page-context (popup widget #3421 / #3581 / #3602).** Hosts that load
 `public/widget.js` (or the dashboard React popup) may post
 `{ type: "digichat:page-context", text, html?, screenshotDataUrl?, ts }`
 after `digichat:ready`. Accepted only from the immediate parent browsing-context
 origin (`resolveReadyTargetOrigin`) — not limited to first-party hosts, so a
 registered third-party site can describe **its own already-visible** DOM. Prefer
 sanitized **HTML** (≤12k) for structure; `text` (≤8k) remains required for
-back-compat. Caps live in `embed-page-context-messages.ts`. The embed never
-renders the context — a “looking at this page” preview box was tried and dropped
-(#3590): it ate the top third of a 400px popup to tell the visitor what page they
-were already looking at. Only the welcome line says context is attached; the
-embed prepends the formatted context to the next `wrappedSend` once. Screenshot
-data URLs are optional and acknowledged in the prompt only — vision multimodal /
-LiteLLM image parts are deferred. Config/URL helpers:
-`src/lib/embed-popup-config.ts`.
+back-compat. Caps live in `embed-page-context-messages.ts`.
+
+**Page-context privacy contract.** Regex tag-stripping is not the boundary.
+Sender and receiver both run the structural sanitizer in
+`src/lib/page-context-sanitize.ts` (widget.js ports the same DOM walk):
+
+| Side | Duty |
+|---|---|
+| Sender (`widget.js`, dashboard popup) | Clone `main` / `[role=main]` / `body`. Drop nodes that are not visible (computed style `display:none` / `visibility:hidden` / `opacity:0`, `hidden`, `inert`, `aria-hidden="true"`), password/hidden/autofill controls, scripts/styles/iframes/svg, popup chrome (`[data-digichat-popup]`), and host-marked private regions. Serialize an allowlisted fragment only. |
+| Receiver (`parsePageContextMessage`) | Enforce origin, type, age, and size caps. Re-parse `html` with `DOMParser` and apply the same tag/attribute allowlist (event handlers, framework metadata, secret-bearing query strings, javascript: URLs). Fail closed if `DOMParser` is missing. Never render the HTML as live DOM — prompt text only. |
+| Host opt-out | Mark a region `data-digichat-private` (any value). That subtree is omitted from HTML and derived visible text. |
+
+Allowlisted tags are layout/text (`p`, headings, lists, tables, `a`, …).
+Allowlisted attributes are presentation/a11y (`class`, `id`, `role`, `aria-*`,
+`href` with query/hash stripped). Inputs, textareas, and selects are dropped
+entirely so values cannot leak. The embed never renders the context — a
+“looking at this page” preview box was tried and dropped (#3590): it ate the
+top third of a 400px popup to tell the visitor what page they were already
+looking at. Only the welcome line says context is attached; the embed prepends
+the formatted context to the next `wrappedSend` once. Screenshot data URLs are
+optional and acknowledged in the prompt only — vision multimodal / LiteLLM
+image parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
 
 **postMessage theme.** digithings.ai `/chat` and `/chat/occ` (`ChatEmbedShell`)
 read the parent site's canon `html[data-theme]` (shared `ThemeProvider` /
