@@ -244,7 +244,23 @@ class TestWorkflowDailyCadence:
         assert '--run-type "monthly"' not in text
 
     def test_dashboard_workflow_schedule_is_daily(self) -> None:
-        text = _PIPELINE_WORKFLOW.read_text(encoding="utf-8")
-        assert 'cron: "17 9 * * *"' in text
-        assert 'cron: "17 12 * * *"' in text
-        assert 'cron: "0 12 * * *"' not in text
+        """Production clock is digithings-cron (#3579); house-run jobs keep the daily cadence."""
+        import re
+
+        jobs_src = (
+            Path(__file__).resolve().parents[3]
+            / "frontend"
+            / "digithings-cron"
+            / "src"
+            / "jobs.ts"
+        )
+        pairs = dict(
+            re.findall(
+                r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+                jobs_src.read_text(encoding="utf-8"),
+                flags=re.DOTALL,
+            )
+        )
+        assert pairs.get("house-run-09") == "17 9 * * MON-FRI"
+        assert pairs.get("house-run-12") == "17 12 * * MON-FRI"
+        assert "0 12 * * *" not in pairs.values()

@@ -681,43 +681,45 @@ class TestRefreshEventCumulativeHouseScope:
 
 
 class TestMetricsCronRunsEveryDay:
-    """The schedule half of #1833. The book cron is daily; the metrics cron was MON-SAT, so a
-    Sunday book was written and then never enriched — NULL permanently, not just until 22:00."""
+    """The schedule half of #1833. Production clock is digithings-cron (#3579); GHA schedule
+    removed. The Worker ``research-metrics`` job must stay daily so a Sunday book is enriched."""
+
+    @staticmethod
+    def _research_metrics_cron() -> str:
+        import re
+
+        jobs_src = (
+            Path(__file__).resolve().parents[3]
+            / "frontend"
+            / "digithings-cron"
+            / "src"
+            / "jobs.ts"
+        )
+        pairs = dict(
+            re.findall(
+                r'(?:wd|rd)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+                jobs_src.read_text(encoding="utf-8"),
+                flags=re.DOTALL,
+            )
+        )
+        cron = pairs.get("research-metrics")
+        assert cron, "Worker must schedule research-metrics"
+        return cron
 
     def test_the_cron_has_no_weekday_restriction(self) -> None:
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
+        cron = self._research_metrics_cron()
+        dow = cron.split()[4]
+        assert dow == "*", (
+            f"metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
+            "for an excluded day permanently unenriched (#1833)"
         )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        crons = [s["cron"] for s in doc[True]["schedule"]]  # `on:` parses as boolean True
-        assert crons, "the metrics workflow must keep a schedule"
-        for cron in crons:
-            dow = cron.split()[4]
-            assert dow == "*", (
-                f"metrics cron day-of-week is {dow!r}; a restricted schedule leaves the book "
-                "for an excluded day permanently unenriched (#1833)"
-            )
 
     def test_it_still_runs_after_the_eod_price_ingest(self) -> None:
         """22:00 UTC is load-bearing: the price cron writes closes at 21:00, so an earlier
         metrics run would carry the *previous* day forward on every trading day."""
-        import yaml
-
-        wf = (
-            Path(__file__).resolve().parents[3]
-            / ".github"
-            / "workflows"
-            / "pipeline-research-metrics.yml"
-        )
-        doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        for cron in [s["cron"] for s in doc[True]["schedule"]]:
-            minute, hour = cron.split()[0], cron.split()[1]
-            assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
+        cron = self._research_metrics_cron()
+        minute, hour = cron.split()[0], cron.split()[1]
+        assert (int(hour), int(minute)) >= (22, 0), f"{cron} runs before the 21:00 ingest"
 
 
 class TestResolveScheduledMetricsDate:
