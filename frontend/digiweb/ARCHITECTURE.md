@@ -46,7 +46,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 | Package | Directory | Provides |
 | ------- | --------- | -------- |
 | `@digithings/design` | `design/` | `tokens.css` — the palette/type/motion tokens every surface uses |
-| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
+| `@digithings/web` | `web/` | shared React layer (NavShell, `SocialRow` / `DIGITHINGS_SOCIALS`, DocsLayout/CodeTabs/EndpointDoc, Pricing/PricingMatrix, NumberedStages, PerfMetrics/StatCounter, TerminalManifest, RepoActivity, the chat family including `DigichatLauncher`, the controls layer [`dress` axis], the conviction primitives, Terminal, emblems, graph, ThemeProvider, MotionProvider, `AuthCard`, module data) + `styles/web-theme.css`, **the single `@theme inline` Tailwind bridge** |
 
 `SocialRow` (`web/src/components/SocialRow.tsx`, dress in `./styles/nav-shell.css`)
 is the quiet company-profile utility row: the same borderless `.btn-icon`
