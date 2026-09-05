@@ -13,8 +13,8 @@
 
 ## Caching (two layers)
 
-1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage.
-2. **digigraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
+1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage. **BYOK requests must not share this cache:** digillm sends `extra_body.cache = {no-cache: true, no-store: true}` on the proxy path (#3605).
+2. **digigraph in-process** — Non-tool, non-streaming, non-BYOK `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in digillm. This is **additional** to proxy caching, not a substitute. BYOK skips this layer too.
 
 ## Router fallbacks
 
