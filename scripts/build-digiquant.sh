@@ -76,6 +76,20 @@ if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_DASHBOARD_AUTH:-}" ]; then
   export NEXT_PUBLIC_DASHBOARD_AUTH=1
 fi
 echo "NEXT_PUBLIC_DASHBOARD_AUTH=${NEXT_PUBLIC_DASHBOARD_AUTH:-<unset>}"
+# Desk+ digichat popup (#3422 / #3638): default on so Pages does not bake a
+# silent no-op launcher. Kill with NEXT_PUBLIC_DIGICHAT_POPUP=0.
+if [ -z "${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-}" ]; then
+  export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai
+fi
+if [ -z "${NEXT_PUBLIC_DIGICHAT_EMBED_HOST:-}" ]; then
+  export NEXT_PUBLIC_DIGICHAT_EMBED_HOST=digiquant.io
+fi
+if [ -z "${NEXT_PUBLIC_DIGICHAT_POPUP:-}" ]; then
+  export NEXT_PUBLIC_DIGICHAT_POPUP=1
+fi
+echo "NEXT_PUBLIC_DIGICHAT_POPUP=${NEXT_PUBLIC_DIGICHAT_POPUP}"
+echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
+echo "NEXT_PUBLIC_DIGICHAT_EMBED_HOST=${NEXT_PUBLIC_DIGICHAT_EMBED_HOST}"
 npm --workspace frontend/dashboard run build
 mkdir -p dist/dashboard
 cp -r frontend/dashboard/out/. dist/dashboard/

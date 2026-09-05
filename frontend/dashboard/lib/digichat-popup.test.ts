@@ -11,6 +11,7 @@ import {
   DEFAULT_DIGICHAT_EMBED_ORIGIN,
   digichatEmbedOriginForDashboard,
   digichatPopupEnvFromProcess,
+  embedHostRequiresToken,
   extractPageHtml,
   extractVisiblePageText,
   isDigichatPopupEnabled,
@@ -71,23 +72,51 @@ describe('digichatEmbedOriginForDashboard', () => {
   });
 });
 
-describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
-  it('stays off without origin or explicit flag', () => {
-    expect(isDigichatPopupEnabled({})).toBe(false);
-    expect(readDigichatPopupConfig({})).toBeNull();
+describe('embedHostRequiresToken', () => {
+  it('skips tokens for loopback, first-party digithings, and digiquant.io', () => {
+    expect(embedHostRequiresToken('localhost')).toBe(false);
+    expect(embedHostRequiresToken('digithings.ai')).toBe(false);
+    expect(embedHostRequiresToken('digiquant.io')).toBe(false);
+    expect(embedHostRequiresToken('www.digiquant.io')).toBe(false);
   });
 
-  it('stays off when digiquant.io has origin but no token', () => {
+  it('requires a token for unknown third-party hosts', () => {
+    expect(embedHostRequiresToken('customer.example')).toBe(true);
+    expect(embedHostRequiresToken('')).toBe(true);
+  });
+});
+
+describe('isDigichatPopupEnabled / readDigichatPopupConfig', () => {
+  it('enables with default origin and digiquant.io host when env is unset', () => {
+    expect(isDigichatPopupEnabled({})).toBe(true);
+    const cfg = readDigichatPopupConfig({});
+    expect(cfg).not.toBeNull();
+    expect(cfg!.origin).toBe(DEFAULT_DIGICHAT_EMBED_ORIGIN);
+    expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
+    expect(cfg!.token).toBeUndefined();
+  });
+
+  it('enables for digiquant.io without an embed token', () => {
     expect(
       isDigichatPopupEnabled({
         NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
       }),
-    ).toBe(false);
+    ).toBe(true);
+    const cfg = readDigichatPopupConfig({
+      NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+    });
+    expect(cfg).not.toBeNull();
+    expect(cfg!.host).toBe(DEFAULT_DIGICHAT_EMBED_HOST);
+    expect(cfg!.token).toBeUndefined();
+  });
+
+  it('stays off for a third-party host without a token', () => {
     expect(
-      readDigichatPopupConfig({
-        NEXT_PUBLIC_DIGICHAT_POPUP: '1',
+      isDigichatPopupEnabled({
+        NEXT_PUBLIC_DIGICHAT_EMBED_HOST: 'customer.example',
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: 'https://digithings.ai',
       }),
-    ).toBeNull();
+    ).toBe(false);
   });
 
   it('stays off when ORIGIN is outside CSP frame-src', () => {
