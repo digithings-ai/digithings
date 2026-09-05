@@ -5,12 +5,16 @@
 [digichat modular frontend](digichat-modular-frontend.md),
 [`frontend/digichat/ARCHITECTURE.md`](../../frontend/digichat/ARCHITECTURE.md),
 implementation [#3626](https://github.com/digithings-ai/digithings/issues/3626)
-**Verified:** 2026-09-05 against live assistant-ui, AI SDK v7, AG-UI, LangGraph,
-ACP, and OpenAI docs, plus `origin/develop` `frontend/digichat`.
+(**digichat 2.0** — do not merge to `develop` until the 2.0 cut)
+**Verified:** 2026-09-05 against live assistant-ui, AI SDK v7, LangGraph,
+ACP, and OpenAI docs, plus `origin/develop` `frontend/digichat` **1.4.0**.
 
 This note records the public **renderer** contract. It does not invent a
-digithings-only event dialect. Implementation lives in a follow-up issue, not
-this ADR PR.
+digithings-only event dialect. Implementation is the 2.0 milestone (#3626),
+not a 1.5 ship. 1.5 on `develop` is non-UI only.
+
+**AG-UI** is deferred and not needed: assistant-ui consumes the AI SDK UI
+stream natively. Do not add `@ag-ui/*`.
 
 ## Decision
 
@@ -36,7 +40,7 @@ it into a UI stream.
 | digigraph HTTP | OpenAI-compatible **model** API | `POST /v1/chat/completions` (`stream: true` → `chat.completion.chunk` SSE). Optional `delta.digigraph_trace` / `delta.digigraph_error` are product extensions on that model stream, not a UI protocol |
 | digigraph LangGraph | Internal graph runtime | `graph.stream` / `astream` modes (`values`, `updates`, `messages`, `custom`, …). Thread APIs are opt-in (`DIGI_ENABLE_THREAD_API=1`) |
 | digigraph MCP | Agent ↔ tools | FastMCP on `:8766`; unauthenticated; not a renderer |
-| Foundry adapter | Client-embed backend | Translated into the same UI stream + `data-digichatActivity` |
+| Foundry adapter | Client-embed backend | Translated into the same UI stream (1.4: `data-digichatActivity`; 2.0: standard tool/`source-*`/`data-status` parts) |
 
 ```text
 UI  --UIMessage stream-->  digichat BFF  --OpenAI Chat Completions SSE-->  digigraph
@@ -66,7 +70,7 @@ Checked: [pick a runtime](https://www.assistant-ui.com/docs/runtimes/pick-a-runt
 | ExternalStoreRuntime | `@assistant-ui/react` | You own the store; no wire | Used underneath LangGraph / AG-UI adapters |
 | Assistant Transport | `@assistant-ui/react` | Full **agent state** snapshots + commands, not a message stream | Skip. We stream messages, not a second state machine |
 | LangGraph `useLangGraphRuntime` | `@assistant-ui/react-langgraph` | LangGraph SDK / Cloud (`unstable_createLangGraphStream`) | Skip as the public contract. It bypasses the BFF (auth, embed policy, persistence) and couples every UI to LangGraph Platform |
-| AG-UI `useAgUiRuntime` | `@assistant-ui/react-ag-ui` + `@ag-ui/client` | AG-UI events over `HttpAgent` | **Later adapter only.** First-class for CopilotKit-class UIs, not what assistant-ui’s AI SDK path speaks natively |
+| AG-UI `useAgUiRuntime` | `@assistant-ui/react-ag-ui` + `@ag-ui/client` | AG-UI events over `HttpAgent` | **Out of scope.** CopilotKit’s alternate protocol; not needed because assistant-ui consumes the AI SDK UI stream natively |
 
 ## Ranked contracts
 
@@ -76,15 +80,15 @@ UIs also speak, (3) what digigraph already produces, (4) maturity.
 | Option | Verdict |
 |--------|---------|
 | **c) AI SDK UI message stream (current BFF)** | **Pick.** Native for assistant-ui AI SDK + DataStream. Public, documented, already emitted by `POST /api/chat`. Other `useChat` UIs speak it. Custom activity is a `data-*` part on the same stream ([AI SDK stream protocol](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol)) |
-| e) AG-UI | Later adapter. Open agent↔UI protocol with a LangGraph integration and an assistant-ui runtime, but adopting it as canonical would rewrite the BFF away from a stream we already emit and assistant-ui already consumes. Interrupt/`resume[]` is still opt-in on the LangGraph bridge |
+| e) AG-UI | **Out of scope.** CopilotKit agent↔UI protocol. Not needed: assistant-ui’s AI SDK path already speaks the stream we emit. Do not add `@ag-ui/*` |
 | a) OpenAI Chat Completions SSE | Keep as the **digigraph model** API (Open WebUI, LiteLLM-shaped callers, OpenCode `model`). Not a renderer contract: `chat.completion.chunk` deltas have no UI part model, no `data-*`, no first-class citations/tool UI lifecycle |
 | b) OpenAI Responses API | Richer model events (`response.output_text.delta`, …). digigraph lists it **not built** (Phase 2). assistant-ui’s chat runtimes do not treat it as the `/api/chat` contract |
 | d) LangGraph `stream` / `useStream` | Keep **inside** digigraph. Public UIs must not speak it; that would skip the BFF |
 | f) ACP | **Rejected as canonical.** Editor↔coding-agent JSON-RPC (stdio today; remote still in progress). Markdown-centric, no citation/RAG part model. Optional later as an editor/workspace gateway only. Spec: https://agentclientprotocol.com/get-started/introduction |
 
 Honest one-liner: **speak the AI SDK UI stream because that is what assistant-ui
-DataStream / `useChatRuntime` consume; add an AG-UI adapter later if another UI
-needs it. Do not invent a new dialect.**
+DataStream / `useChatRuntime` consume. AG-UI is deferred and not needed. Do not
+invent a new dialect.**
 
 ## What digichat emits today (`origin/develop`)
 
@@ -106,25 +110,40 @@ needs it. Do not invent a new dialect.**
   AI SDK UI chunks. The browser never sees `delta.digigraph_trace`.
 
 AI SDK v6 → v7 is a library bump on the **same** UI-stream family, not a
-protocol replacement. Fold it into the assistant-ui migration: new assistant-ui
-projects target `ai@^7` / `@ai-sdk/react@^4` / `@assistant-ui/ai-sdk`. Until
-then a v6 pin (`@assistant-ui/react-ai-sdk@1.3.40`) can consume today’s BFF.
+protocol replacement. It is part of **digichat 2.0** (#3626) together with
+assistant-ui: `ai@^7` / `@ai-sdk/react@^4` / `@assistant-ui/react-ai-sdk`.
+Do not fold that bump into 1.5. Until 2.0 lands, 1.4 stays on `ai ^6` /
+`@ai-sdk/react ^3`.
 
-## `data-digichatActivity`
+## `data-digichatActivity` (1.4 / 1.5 only)
 
-`ACTIVITY_PART_TYPE = "data-digichatActivity"` is already the AI SDK **Data
+`ACTIVITY_PART_TYPE = "data-digichatActivity"` is today’s AI SDK **Data
 Parts** extension (`data: {"type":"data-<name>","data":…}`). The *payload*
 schema (`ActivitySpan` → `DigiChatActivity`, OTel GenAI field names, embed
-`activityDetail` gate) is product-specific and stays in the BFF mapper. That
-is using the public protocol’s extension point, not a proprietary wire.
+`activityDetail` gate) is product-specific and stays in the BFF mapper on
+the 1.x line.
 
-On assistant-ui, those parts arrive as `data-*` (DataStream `onData`, or AI SDK
-`UIMessage` parts). Theme them as CLI/tool rows. Do not rename the part type
-in the first migration unless a renderer forces it.
+**2.0 removes the branded type.** Map the same information onto standard
+AI SDK UI parts so a generic `useChat` / assistant-ui client needs no
+digichat vocabulary:
+
+| 1.4 span | 2.0 standard part |
+|----------|-------------------|
+| `execute_tool` started/completed/failed | `tool-{name}` (typed tool UI part) |
+| `retrieve` documents / hitCount | `source-document` / `source-url` plus tool result |
+| `reasoningDelta` | `reasoning` |
+| opaque `chat` progress | unbranded `data-status` (or transient status) |
+| embed `activityDetail` gate | still applied in the BFF before write |
+
+Keep retrieval, vault, and tool-progress *information* when those standard
+parts can carry it. Drop `data-digichatActivity` and similar branded custom
+types from the wire.
 
 ## Out of scope here
 
-- Implementing assistant-ui or rewriting the BFF
+- Merging the 2.0 implementation into `develop` before the 2.0 cut
+- 1.x UI chrome that 2.0 will replace (#3565 overlays/palette)
 - Making digigraph emit UI messages (it keeps Chat Completions)
 - Exposing unauthenticated MCP as a UI backend
-- ACP or AG-UI as the embed/`/chat` contract
+- ACP as the embed/`/chat` contract
+- AG-UI / `@ag-ui/*`
